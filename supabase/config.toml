@@ -1,0 +1,13 @@
+project_id = "local"
+
+# Minimal local Supabase config. Defaults are used for ports and services.
+# You can customize ports here if needed.
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+
+
