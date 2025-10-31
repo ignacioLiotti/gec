@@ -9,18 +9,16 @@ import {
 } from "../route";
 
 type RouteContext = {
-	params: {
-		id: string;
-	};
+    params: Promise<{
+        id: string;
+    }>;
 };
 
 export async function GET(
-	_request: Request,
-	context: RouteContext,
+    _request: Request,
+    context: RouteContext,
 ) {
-	const params = await Promise.resolve(context.params);
-
-	const obraId = params.id;
+    const { id: obraId } = await context.params;
 
 	if (!obraId || obraId === "undefined") {
 		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
@@ -73,12 +71,10 @@ export async function GET(
 }
 
 export async function PUT(
-	request: Request,
-	context: { params: Promise<RouteContext["params"]> },
+    request: Request,
+    { params }: { params: Promise<{ id: string }> },
 ) {
-	const params = await context.params;
-
-	const obraId = params.id;
+    const { id: obraId } = await params;
 
 	if (!obraId || obraId === "undefined") {
 		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
@@ -93,17 +89,21 @@ export async function PUT(
 		return NextResponse.json({ error: "No tenant" }, { status: 400 });
 	}
 
-	let body: unknown;
+    let body: unknown;
 	try {
 		body = await request.json();
 	} catch {
 		return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
 	}
 
-	const parsingResult = obraSchema.safeParse({
-		...body,
-		id: obraId,
-	});
+    const payload = (typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>)
+        : ({} as Record<string, unknown>));
+
+    const parsingResult = obraSchema.safeParse({
+        ...payload,
+        id: obraId,
+    });
 
 	if (!parsingResult.success) {
 		return NextResponse.json(

@@ -136,7 +136,7 @@ export default function ObraDetailPage() {
 				const payload: Obra = {
 					...value,
 					id: obraId,
-					onFinishSecondSendAt: toIsoDateTime(value.onFinishSecondSendAt) ?? null,
+					onFinishSecondSendAt: toIsoDateTime(value.onFinishSecondSendAt ?? null) ?? null,
 				};
 				const response = await fetch(`/api/obras/${obraId}`, {
 					method: "PUT",

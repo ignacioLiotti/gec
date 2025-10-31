@@ -158,7 +158,9 @@ export async function GET(request: Request) {
 		);
 	}
 
-	const detalleObras = (data ?? []).map(mapDbRowToObra);
+	const detalleObras = ((data ?? []) as unknown as DbObraRow[]).map(
+		mapDbRowToObra
+	);
 
 	if (!hasPagination) {
 		return NextResponse.json({ detalleObras, supportsConfigColumns });
@@ -262,7 +264,7 @@ export async function PUT(request: Request) {
 			.from("obras")
 			.select("id, n, porcentaje, designacion_y_ubicacion")
 			.eq("tenant_id", tenantId);
-		existingRows = fallback.data;
+		existingRows = fallback.data as any;
 		fetchExistingError = fallback.error;
 	}
 
@@ -419,7 +421,19 @@ export async function PUT(request: Request) {
 				fetchCompletedError
 			);
 		} else {
-			completedRows = fetchedCompleted ?? [];
+			const baseRows = (fetchedCompleted ?? []) as any[];
+			completedRows = baseRows.map((row) => ({
+				id: row.id,
+				n: row.n,
+				designacion_y_ubicacion: row.designacion_y_ubicacion,
+				porcentaje: row.porcentaje,
+				on_finish_first_message:
+					(row as DbObraRow).on_finish_first_message ?? null,
+				on_finish_second_message:
+					(row as DbObraRow).on_finish_second_message ?? null,
+				on_finish_second_send_at:
+					(row as DbObraRow).on_finish_second_send_at ?? null,
+			}));
 		}
 	}
 
