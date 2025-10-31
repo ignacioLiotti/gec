@@ -32,6 +32,39 @@ export default function UserMenu({ email }: UserMenuProps) {
   const [loading, setLoading] = useState(false);
   const isAuthed = Boolean(email);
 
+  const demoNotifications = useMemo(
+    () => [
+      {
+        id: "demo-1",
+        title: "Welcome to the app",
+        body: "Here are some quick tips to get started.",
+        type: "info",
+        created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+        read_at: null,
+        action_url: "#",
+      },
+      {
+        id: "demo-2",
+        title: "Document reminder",
+        body: "A document requires your attention.",
+        type: "warning",
+        created_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+        read_at: null,
+        action_url: "#",
+      },
+      {
+        id: "demo-3",
+        title: "Weekly summary ready",
+        body: "Your weekly activity summary is available.",
+        type: "success",
+        created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+        read_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        action_url: "#",
+      },
+    ],
+    []
+  );
+
   async function handleLogout() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
@@ -54,7 +87,10 @@ export default function UserMenu({ email }: UserMenuProps) {
           .order("created_at", { ascending: false })
           .limit(50);
         if (error) throw error;
-        if (!aborted) setNotifications(data ?? []);
+        if (!aborted) {
+          const items = data ?? [];
+          setNotifications(items.length ? items : demoNotifications);
+        }
       } catch (err) {
         // noop: keep UX simple
       } finally {
@@ -64,7 +100,7 @@ export default function UserMenu({ email }: UserMenuProps) {
     return () => {
       aborted = true;
     };
-  }, [dialogOpen, isAuthed]);
+  }, [dialogOpen, isAuthed, demoNotifications]);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read_at).length,

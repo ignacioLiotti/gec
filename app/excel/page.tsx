@@ -646,9 +646,24 @@ export default function ExcelPage() {
 														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(3) ? "none" : undefined }}>ENTIDAD CONTRATANTE
 															<ColumnResizer tableId="excel-inproc-table" colIndex={3} />
 														</th>
-														<th colSpan={2} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">FECHAS</th>
-														<th colSpan={3} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">IMPORTES (EN PESOS) A VALORES BÁSICOS</th>
-														<th colSpan={4} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">PLAZOS (EN MESES)</th>
+														{(() => {
+															const count = [4, 5].filter(i => !isHidden(i)).length;
+															return (
+																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">FECHAS</th>
+															);
+														})()}
+														{(() => {
+															const count = [6, 7, 8].filter(i => !isHidden(i)).length;
+															return (
+																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">IMPORTES (EN PESOS) A VALORES BÁSICOS</th>
+															);
+														})()}
+														{(() => {
+															const count = [9, 10, 11, 12].filter(i => !isHidden(i)).length;
+															return (
+																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">PLAZOS (EN MESES)</th>
+															);
+														})()}
 														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(13) ? "none" : undefined }}>%
 															<ColumnResizer tableId="excel-inproc-table" colIndex={13} />
 														</th>
@@ -703,7 +718,7 @@ export default function ExcelPage() {
 																<form.Field name={`detalleObras[${index}].designacionYUbicacion`}>
 																	{(subField) => (
 																		<td className="border-t border-r border-gray-200 p-0 align-center px-2 py-2 " style={{ display: isHidden(1) ? "none" : undefined }}>
-																			<Link href={`/excel/${field.state.value[index]?.id}`} className="">{subField.state.value}</Link>
+																			<Link href={`/excel/${field.state.value[index]?.id}`} className="cursor-pointer">{subField.state.value}</Link>
 																		</td>
 																	)}
 																</form.Field>
@@ -822,9 +837,24 @@ export default function ExcelPage() {
 														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(3) ? "none" : undefined }}>ENTIDAD CONTRATANTE
 															<ColumnResizer tableId="excel-completed-table" colIndex={3} />
 														</th>
-														<th colSpan={2} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">FECHAS</th>
-														<th colSpan={3} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">IMPORTES (EN PESOS) A VALORES BÁSICOS</th>
-														<th colSpan={4} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">PLAZOS (EN MESES)</th>
+														{(() => {
+															const count = [4, 5].filter(i => !isHidden(i)).length;
+															return (
+																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">FECHAS</th>
+															);
+														})()}
+														{(() => {
+															const count = [6, 7, 8].filter(i => !isHidden(i)).length;
+															return (
+																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">IMPORTES (EN PESOS) A VALORES BÁSICOS</th>
+															);
+														})()}
+														{(() => {
+															const count = [9, 10, 11, 12].filter(i => !isHidden(i)).length;
+															return (
+																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">PLAZOS (EN MESES)</th>
+															);
+														})()}
 														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(13) ? "none" : undefined }}>%
 															<ColumnResizer tableId="excel-completed-table" colIndex={13} />
 														</th>
@@ -879,7 +909,7 @@ export default function ExcelPage() {
 																<form.Field name={`detalleObras[${index}].designacionYUbicacion`}>
 																	{(subField) => (
 																		<td className="border-t border-r border-gray-200 p-0 align-center px-2 py-2 " style={{ display: isHidden(1) ? "none" : undefined }}>
-																			<Link href={`/excel/${field.state.value[index]?.id}`} className="">{subField.state.value}</Link>
+																			<Link href={`/excel/${field.state.value[index]?.id}`} className="cursor-pointer">{subField.state.value}</Link>
 																		</td>
 																	)}
 																</form.Field>

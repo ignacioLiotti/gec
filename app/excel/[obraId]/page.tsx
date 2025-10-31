@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
-import { sendDocumentReminderWorkflow } from "@/workflows/document-reminder";
 
 type Certificate = {
 	id: string;
@@ -182,7 +181,7 @@ export default function ObraDetailPage() {
 	}, []);
 
 	useEffect(() => {
-		(void async () => {
+		void (async () => {
 			try {
 				const supabase = createSupabaseBrowserClient();
 				const { data } = await supabase.auth.getUser();
@@ -254,13 +253,18 @@ export default function ObraDetailPage() {
 		if (!obraId || obraId === "undefined") return;
 		if (!doc.dueDate) return;
 		try {
-			await sendDocumentReminderWorkflow({
-				obraId,
-				obraName: null,
-				documentName: doc.name || "Documento",
-				dueDate: doc.dueDate,
-				notifyUserId: currentUserId,
+			const res = await fetch("/api/doc-reminders", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					obraId,
+					obraName: null,
+					documentName: doc.name || "Documento",
+					dueDate: doc.dueDate,
+					notifyUserId: currentUserId,
+				}),
 			});
+			if (!res.ok) throw new Error("Failed to schedule");
 			toast.success("Recordatorio programado para el día anterior al vencimiento");
 		} catch (err) {
 			console.error(err);
@@ -1268,6 +1272,84 @@ export default function ObraDetailPage() {
 											</div>
 										</div>
 									) : null}
+								</div>
+							</motion.section>
+						</TabsContent>
+
+						{/* Pendientes Tab */}
+						<TabsContent value="pendientes" className="space-y-6">
+							<motion.section
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ duration: 0.4 }}
+								className="rounded-lg border bg-card shadow-sm overflow-hidden"
+							>
+								<div className="bg-muted/50 px-6 py-4 border-b">
+									<div className="flex items-center justify-between">
+										<div>
+											<div className="flex items-center gap-2">
+												<FileText className="h-5 w-5 text-primary" />
+												<h2 className="text-lg font-semibold">Documentos pendientes</h2>
+											</div>
+											<p className="text-sm text-muted-foreground mt-1">Lista de tareas al completar la obra</p>
+										</div>
+									</div>
+								</div>
+
+								<div className="p-6 space-y-4">
+									<div className="overflow-x-auto rounded-lg border">
+										<table className="w-full text-sm">
+											<thead className="bg-muted/50">
+												<tr>
+													<th className="text-left font-medium py-3 px-4 border-b">Documento</th>
+													<th className="text-left font-medium py-3 px-4 border-b">Vencimiento</th>
+													<th className="text-left font-medium py-3 px-4 border-b">Hecho</th>
+												</tr>
+											</thead>
+											<tbody>
+												{pendingDocs.map((doc, idx) => (
+													<motion.tr
+														key={doc.id}
+														initial={{ opacity: 0, y: 8 }}
+														animate={{ opacity: 1, y: 0 }}
+														transition={{ delay: idx * 0.05 }}
+														className="border-b last:border-0"
+													>
+														<td className="py-3 px-4 min-w-[240px]">
+															<Input
+																type="text"
+																placeholder="Nombre del documento"
+																value={doc.name}
+																onChange={(e) => updatePendingDoc(idx, "name", e.target.value)}
+															/>
+														</td>
+														<td className="py-3 px-4 min-w-[200px]">
+															<Input
+																type="date"
+																value={doc.dueDate}
+																onChange={async (e) => {
+																	const nextValue = e.target.value;
+																	updatePendingDoc(idx, "dueDate", nextValue);
+																	await scheduleReminderForDoc({ ...doc, dueDate: nextValue });
+																}}
+															/>
+														</td>
+														<td className="py-3 px-4">
+															<input
+																type="checkbox"
+																checked={doc.done}
+																onChange={(e) => updatePendingDoc(idx, "done", e.target.checked)}
+																className="h-4 w-4"
+															/>
+														</td>
+													</motion.tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+									<p className="text-xs text-muted-foreground">
+										Al establecer una fecha, se agenda un recordatorio para el día anterior.
+									</p>
 								</div>
 							</motion.section>
 						</TabsContent>

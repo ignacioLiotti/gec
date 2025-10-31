@@ -48,7 +48,7 @@ type NavItem = {
 const navItems: NavItem[] = [
 	{
 		title: "Dashboard",
-		href: "/",
+		href: "/excel",
 		icon: Home,
 	},
 	{
