@@ -1,9 +1,11 @@
+import { notFound } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
 const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
 export default async function DevBootstrapPage() {
+  if (process.env.NODE_ENV === "production") notFound();
   const supabase = await createClient();
   const {
     data: { user },

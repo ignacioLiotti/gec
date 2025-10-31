@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
 	const res = NextResponse.next({ request: { headers: req.headers } });
 
 	const supabase = createServerClient(
@@ -30,6 +30,9 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
 	matcher: [
-		"/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+		{
+			source:
+				"/((?!_next/static|_next/image|favicon.ico|\\.well-known/workflow/.*).*)",
+		},
 	],
 };

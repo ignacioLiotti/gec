@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npx shadcn@latest add:*)",
       "Bash(npm run build:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm run dev)",
+      "Bash(curl -X POST http://localhost:3000/api/test -H \"Content-Type: application/json\")"
     ],
     "deny": [],
     "ask": []

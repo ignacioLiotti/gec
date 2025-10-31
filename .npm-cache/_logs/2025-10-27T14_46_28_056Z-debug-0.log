@@ -1,0 +1,38 @@
+0 verbose cli /home/ignacioliotti/.nvm/versions/node/v18.17.1/bin/node /home/ignacioliotti/.nvm/versions/node/v18.17.1/bin/npm
+1 info using npm@9.6.7
+2 info using node@v18.17.1
+3 timing npm:load:whichnode Completed in 1ms
+4 timing config:load:defaults Completed in 2ms
+5 timing config:load:file:/home/ignacioliotti/.nvm/versions/node/v18.17.1/lib/node_modules/npm/npmrc Completed in 1ms
+6 timing config:load:builtin Completed in 1ms
+7 timing config:load:cli Completed in 2ms
+8 timing config:load:env Completed in 0ms
+9 timing config:load:file:/mnt/c/Users/Usuario/Desktop/projects/multi-tenant/.npmrc Completed in 0ms
+10 timing config:load:project Completed in 5ms
+11 timing config:load:file:/home/ignacioliotti/.npmrc Completed in 0ms
+12 timing config:load:user Completed in 0ms
+13 timing config:load:file:/home/ignacioliotti/.nvm/versions/node/v18.17.1/etc/npmrc Completed in 0ms
+14 timing config:load:global Completed in 0ms
+15 timing config:load:setEnvs Completed in 0ms
+16 timing config:load Completed in 11ms
+17 timing npm:load:configload Completed in 11ms
+18 timing npm:load:mkdirpcache Completed in 1ms
+19 timing npm:load:mkdirplogs Completed in 2ms
+20 verbose title npm install
+21 verbose argv "install" "--package-lock-only" "--cache" "/mnt/c/Users/Usuario/Desktop/projects/multi-tenant/.npm-cache"
+22 timing npm:load:setTitle Completed in 1ms
+23 timing config:load:flatten Completed in 2ms
+24 timing npm:load:display Completed in 2ms
+25 verbose logfile logs-max:10 dir:/mnt/c/Users/Usuario/Desktop/projects/multi-tenant/.npm-cache/_logs/2025-10-27T14_46_28_056Z-
+26 verbose logfile /mnt/c/Users/Usuario/Desktop/projects/multi-tenant/.npm-cache/_logs/2025-10-27T14_46_28_056Z-debug-0.log
+27 timing npm:load:logFile Completed in 12ms
+28 timing npm:load:timers Completed in 0ms
+29 timing npm:load:configScope Completed in 0ms
+30 timing npm:load Completed in 31ms
+31 timing arborist:ctor Completed in 0ms
+32 timing idealTree:init Completed in 159ms
+33 timing idealTree:userRequests Completed in 0ms
+34 silly idealTree buildDeps
+35 timing idealTree:#root Completed in 1ms
+36 silly logfile done cleaning log files
+37 silly tarball no local data for https://registry.npmjs.org/@tailwindcss/oxide-wasm32-wasi/-/oxide-wasm32-wasi-4.1.14.tgz. Extracting by manifest.

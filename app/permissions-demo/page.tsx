@@ -1,6 +1,8 @@
+import { notFound } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function PermissionsDemoPage() {
+  if (process.env.NODE_ENV === "production") notFound();
   const supabase = await createClient();
   const {
     data: { user },

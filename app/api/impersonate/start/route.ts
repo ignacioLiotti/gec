@@ -35,6 +35,19 @@ export async function POST(req: NextRequest) {
 	if (!user)
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+	// Require requester to be owner/admin on at least one tenant
+	const { data: adminMembership, error: roleErr } = await supabase
+		.from("memberships")
+		.select("role")
+		.eq("user_id", user.id)
+		.in("role", ["owner", "admin"]) // enforce elevated roles only
+		.order("created_at", { ascending: true })
+		.limit(1)
+		.maybeSingle();
+	if (roleErr || !adminMembership) {
+		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+	}
+
 	const admin = createSupabaseAdminClient();
 	const { data: targetUser } = await admin.auth.admin.getUserById(targetUserId);
 	if (!targetUser || !targetUser.user?.email) {
@@ -57,7 +70,7 @@ export async function POST(req: NextRequest) {
 			{
 				httpOnly: true,
 				sameSite: "lax",
-				secure: false,
+				secure: process.env.NODE_ENV === "production",
 				path: "/",
 			}
 		);
@@ -65,7 +78,7 @@ export async function POST(req: NextRequest) {
 		res.cookies.set("impersonating", "1", {
 			httpOnly: false,
 			sameSite: "lax",
-			secure: false,
+			secure: process.env.NODE_ENV === "production",
 			path: "/",
 		});
 	}

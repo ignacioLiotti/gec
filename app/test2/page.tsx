@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import InstrumentsTable from "@/app/test2/instruments-table";
@@ -18,6 +19,7 @@ async function addInstrument(formData: FormData) {
 }
 
 export default async function Page() {
+  if (process.env.NODE_ENV === "production") notFound();
   const supabase = await createClient();
   const { data: instruments } = await supabase
     .from("instruments")

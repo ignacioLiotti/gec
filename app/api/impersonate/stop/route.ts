@@ -34,11 +34,13 @@ export async function POST(req: NextRequest) {
 		res.cookies.set("impersonator_session", "", {
 			httpOnly: true,
 			maxAge: 0,
+			secure: process.env.NODE_ENV === "production",
 			path: "/",
 		});
 		res.cookies.set("impersonating", "", {
 			httpOnly: false,
 			maxAge: 0,
+			secure: process.env.NODE_ENV === "production",
 			path: "/",
 		});
 	} catch {

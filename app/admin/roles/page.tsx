@@ -6,6 +6,7 @@ import RolePermissions from "./_components/role-permissions";
 import UserOverrides from "./_components/user-overrides";
 import PermissionsManager from "./_components/permissions-manager";
 import RoleRow from "./_components/role-row";
+import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 
 type Role = {
   id: string;
@@ -109,12 +110,19 @@ function RolesPanel({ roles, tenantId }: { roles: Role[]; tenantId: string }) {
         <CreateRoleForm onCreate={createRoleAction.bind(null, tenantId)} />
       </div>
       <div className="overflow-hidden rounded-md border">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed" data-table-id="roles-table">
+          <ColGroup tableId="roles-table" columns={3} />
           <thead className="bg-foreground/5">
             <tr className="text-left">
-              <th className="px-3 py-2">Key</th>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2 w-32">Actions</th>
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Key
+                <ColumnResizer tableId="roles-table" colIndex={0} />
+              </th>
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Name
+                <ColumnResizer tableId="roles-table" colIndex={1} />
+              </th>
+              <th className="relative px-3 py-2 w-32 whitespace-normal break-words align-top">Actions
+                <ColumnResizer tableId="roles-table" colIndex={2} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -123,7 +131,7 @@ function RolesPanel({ roles, tenantId }: { roles: Role[]; tenantId: string }) {
             ))}
             {roles.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-foreground/60" colSpan={3}>No roles yet.</td>
+                <td className="px-3 py-6 text-foreground/60 whitespace-normal break-words align-top" colSpan={3}>No roles yet.</td>
               </tr>
             )}
           </tbody>
@@ -138,23 +146,28 @@ function PermissionsPanel({ permissions }: { permissions: Permission[] }) {
     <section className="space-y-3">
       <h2 className="text-lg font-medium">Permissions</h2>
       <div className="overflow-hidden rounded-md border">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed" data-table-id="permissions-table">
+          <ColGroup tableId="permissions-table" columns={2} />
           <thead className="bg-foreground/5">
             <tr className="text-left">
-              <th className="px-3 py-2">Key</th>
-              <th className="px-3 py-2">Description</th>
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Key
+                <ColumnResizer tableId="permissions-table" colIndex={0} />
+              </th>
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Description
+                <ColumnResizer tableId="permissions-table" colIndex={1} />
+              </th>
             </tr>
           </thead>
           <tbody>
             {permissions.map((p) => (
               <tr key={p.id} className="border-t">
-                <td className="px-3 py-2 font-mono">{p.key}</td>
-                <td className="px-3 py-2">{p.description}</td>
+                <td className="px-3 py-2 font-mono whitespace-normal break-words align-top">{p.key}</td>
+                <td className="px-3 py-2 whitespace-normal break-words align-top">{p.description}</td>
               </tr>
             ))}
             {permissions.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-foreground/60" colSpan={2}>No permissions.</td>
+                <td className="px-3 py-6 text-foreground/60 whitespace-normal break-words align-top" colSpan={2}>No permissions.</td>
               </tr>
             )}
           </tbody>
