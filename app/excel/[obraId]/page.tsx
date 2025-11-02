@@ -8,20 +8,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
-import { 
-	ArrowLeft, 
-	Building2, 
-	Calendar, 
-	DollarSign, 
-	FileText, 
-	Mail, 
-	MapPin, 
-	Percent, 
+import {
+	ArrowLeft,
+	Building2,
+	Calendar,
+	DollarSign,
+	FileText,
+	Mail,
+	MapPin,
+	Percent,
 	Plus,
 	Receipt,
-	TrendingUp
+	TrendingUp,
+	Folder,
+	FolderPlus,
+	Upload,
+	Image as ImageIcon,
+	File as FileIcon,
+	Download
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
@@ -115,12 +122,437 @@ export default function ObraDetailPage() {
 	const mountedRef = useRef(true);
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-	type PendingDoc = { id: string; name: string; dueDate: string; done: boolean };
+	type PendingDoc = { id: string; name: string; poliza: string; dueDate: string; done: boolean };
 	const [pendingDocs, setPendingDocs] = useState<PendingDoc[]>([
-		{ id: "doc-1", name: "", dueDate: "", done: false },
-		{ id: "doc-2", name: "", dueDate: "", done: false },
-		{ id: "doc-3", name: "", dueDate: "", done: false },
+		{ id: "doc-1", name: "", poliza: "", dueDate: "", done: false },
+		{ id: "doc-2", name: "", poliza: "", dueDate: "", done: false },
+		{ id: "doc-3", name: "", poliza: "", dueDate: "", done: false },
 	]);
+
+	// Materiales state
+	type MaterialItem = {
+		id: string;
+		cantidad: number;
+		unidad: string;
+		material: string;
+		precioUnitario: number;
+	};
+
+	type MaterialOrder = {
+		id: string;
+		nroOrden: string;
+		solicitante: string;
+		gestor: string;
+		proveedor: string;
+		items: MaterialItem[];
+	};
+
+	const [materialOrders, setMaterialOrders] = useState<MaterialOrder[]>(() => [
+		{
+			id: "ord-1",
+			nroOrden: "OC-0001",
+			solicitante: "Juan Pérez",
+			gestor: "María López",
+			proveedor: "Materiales S.A.",
+			items: [
+				{ id: "i-1", cantidad: 10, unidad: "m²", material: "Cerámica blanco 60x60", precioUnitario: 4500 },
+				{ id: "i-2", cantidad: 25, unidad: "u", material: "Bolsa de cemento 50kg", precioUnitario: 9800 },
+			],
+		},
+		{
+			id: "ord-2",
+			nroOrden: "OC-0002",
+			solicitante: "Ana Gómez",
+			gestor: "Carlos Ruiz",
+			proveedor: "Ferretería Norte",
+			items: [
+				{ id: "i-3", cantidad: 100, unidad: "m", material: "Hierro del 8", precioUnitario: 1200 },
+				{ id: "i-4", cantidad: 50, unidad: "u", material: "Ladrillo hueco 18x18", precioUnitario: 750 },
+			],
+		},
+	]);
+
+	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
+	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
+	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
+
+	// Import OC from PDF
+	const importInputRef = useRef<HTMLInputElement | null>(null);
+	const [isImportingMaterials, setIsImportingMaterials] = useState(false);
+	const [importDialogOpen, setImportDialogOpen] = useState(false);
+	const [importResult, setImportResult] = useState<any | null>(null);
+
+	const triggerImportMaterials = useCallback(() => {
+		importInputRef.current?.click();
+	}, []);
+
+	const handleImportMaterials = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file || !obraId) return;
+		try {
+			setIsImportingMaterials(true);
+			const fd = new FormData();
+			fd.append("file", file);
+			const res = await fetch(`/api/obras/${obraId}/materials/import`, { method: "POST", body: fd });
+			if (!res.ok) {
+				const out = await res.json().catch(() => ({} as any));
+				setImportResult(out || { ok: false, error: "No se pudo importar" });
+				setImportDialogOpen(true);
+				throw new Error(out?.error || "No se pudo importar");
+			}
+			const out = await res.json();
+			setImportResult(out);
+			setImportDialogOpen(true);
+			// Map response to local state shape
+			const orderId = String(out.order?.id || `ord-${Date.now()}`);
+			const items = (out.items || []).map((it: any, idx: number) => ({
+				id: `${orderId}-i-${idx}`,
+				cantidad: Number(it.cantidad || 0),
+				unidad: String(it.unidad || ""),
+				material: String(it.material || ""),
+				precioUnitario: Number(it.precioUnitario || 0),
+			}));
+			const newOrd = {
+				id: orderId,
+				nroOrden: out.order?.nroOrden || orderId,
+				solicitante: out.order?.solicitante || "",
+				gestor: out.order?.gestor || "",
+				proveedor: out.order?.proveedor || "",
+				items,
+			} as MaterialOrder;
+			setMaterialOrders((prev) => [newOrd, ...prev]);
+			setExpandedOrders((prev) => new Set(prev).add(orderId));
+			setOrderFilters((prev) => ({ ...prev, [orderId]: "" }));
+			toast.success("Orden importada");
+		} catch (err) {
+			console.error(err);
+			const message = err instanceof Error ? err.message : "No se pudo importar";
+			if (!importDialogOpen) {
+				setImportResult({ ok: false, error: message });
+				setImportDialogOpen(true);
+			}
+			toast.error(message);
+		} finally {
+			setIsImportingMaterials(false);
+			if (importInputRef.current) importInputRef.current.value = "";
+		}
+	}, [obraId]);
+
+	// Add-order dialog state
+	const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
+
+	type NewOrderItemForm = {
+		cantidad: string;
+		unidad: string;
+		material: string;
+		precioUnitario: string;
+	};
+
+	type NewOrderForm = {
+		nroOrden: string;
+		solicitante: string;
+		gestor: string;
+		proveedor: string;
+		items: NewOrderItemForm[];
+	};
+
+	const emptyNewOrderForm: NewOrderForm = {
+		nroOrden: "",
+		solicitante: "",
+		gestor: "",
+		proveedor: "",
+		items: [
+			{ cantidad: "", unidad: "", material: "", precioUnitario: "" },
+		],
+	};
+
+	const [newOrder, setNewOrder] = useState<NewOrderForm>(() => ({ ...emptyNewOrderForm }));
+
+	const updateNewOrderMeta = useCallback(
+		(field: "nroOrden" | "solicitante" | "gestor" | "proveedor", value: string) => {
+			setNewOrder((prev) => ({ ...prev, [field]: value }));
+		},
+		[]
+	);
+
+	const addNewOrderItem = useCallback(() => {
+		setNewOrder((prev) => ({
+			...prev,
+			items: [...prev.items, { cantidad: "", unidad: "", material: "", precioUnitario: "" }],
+		}));
+	}, []);
+
+	const removeNewOrderItem = useCallback((index: number) => {
+		setNewOrder((prev) => {
+			const items = [...prev.items];
+			items.splice(index, 1);
+			return { ...prev, items };
+		});
+	}, []);
+
+	const updateNewOrderItem = useCallback((index: number, field: keyof NewOrderItemForm, value: string) => {
+		setNewOrder((prev) => {
+			const items = [...prev.items];
+			items[index] = { ...items[index], [field]: value };
+			return { ...prev, items };
+		});
+	}, []);
+
+	const handleCreateOrder = useCallback((event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		const orderId = `ord-${Date.now()}`;
+		const normalizedItems: MaterialItem[] = newOrder.items
+			.filter((it) => (it.material?.trim() ?? "").length > 0 && Number(it.cantidad) > 0)
+			.map((it, idx) => ({
+				id: `${orderId}-i-${idx}`,
+				cantidad: Number(it.cantidad) || 0,
+				unidad: it.unidad.trim(),
+				material: it.material.trim(),
+				precioUnitario: Number(it.precioUnitario) || 0,
+			}));
+
+		const order: MaterialOrder = {
+			id: orderId,
+			nroOrden: newOrder.nroOrden.trim() || orderId,
+			solicitante: newOrder.solicitante.trim(),
+			gestor: newOrder.gestor.trim(),
+			proveedor: newOrder.proveedor.trim(),
+			items: normalizedItems,
+		};
+
+		setMaterialOrders((prev) => [order, ...prev]);
+		setOrderFilters((prev) => ({ ...prev, [order.id]: "" }));
+		setExpandedOrders((prev) => {
+			const next = new Set(prev);
+			next.add(order.id);
+			return next;
+		});
+		setIsAddOrderOpen(false);
+		setNewOrder({ ...emptyNewOrderForm });
+	}, [newOrder]);
+
+	const toggleOrderExpanded = useCallback((orderId: string) => {
+		setExpandedOrders((prev) => {
+			const next = new Set(prev);
+			if (next.has(orderId)) next.delete(orderId); else next.add(orderId);
+			return next;
+		});
+	}, []);
+
+	const setOrderFilter = useCallback((orderId: string, value: string) => {
+		setOrderFilters((prev) => ({ ...prev, [orderId]: value }));
+	}, []);
+
+	const normalize = (v: string) => v.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+	const filteredOrders = useMemo(() => {
+		if (!globalMaterialsFilter.trim()) return materialOrders;
+		const q = normalize(globalMaterialsFilter);
+		return materialOrders
+			.map((order) => ({
+				...order,
+				items: order.items.filter((it) =>
+					normalize(it.material).includes(q) ||
+					normalize(it.unidad).includes(q)
+				),
+			}))
+			.filter((order) =>
+				normalize(order.nroOrden).includes(q) ||
+				normalize(order.solicitante).includes(q) ||
+				normalize(order.gestor).includes(q) ||
+				normalize(order.proveedor).includes(q) ||
+				order.items.length > 0
+			);
+	}, [materialOrders, globalMaterialsFilter]);
+
+	const getOrderItemsFiltered = useCallback((order: MaterialOrder): MaterialItem[] => {
+		const of = orderFilters[order.id]?.trim() ?? "";
+		if (!of) return order.items;
+		const q = normalize(of);
+		return order.items.filter((it) =>
+			normalize(it.material).includes(q) || normalize(it.unidad).includes(q)
+		);
+	}, [orderFilters]);
+
+	const getOrderTotal = useCallback((items: MaterialItem[]) => {
+		return items.reduce((acc, it) => acc + it.cantidad * it.precioUnitario, 0);
+	}, []);
+
+	// Load persisted material orders (if any)
+	const refreshMaterialOrders = useCallback(async () => {
+		if (!obraId) return;
+		try {
+			const res = await fetch(`/api/obras/${obraId}/materials`);
+			if (!res.ok) return;
+			const data = await res.json();
+			const orders = (data?.orders || []) as Array<any>;
+			if (orders.length > 0) {
+				const mapped: MaterialOrder[] = orders.map((o: any) => ({
+					id: String(o.id),
+					nroOrden: String(o.nroOrden || o.id),
+					solicitante: String(o.solicitante || ""),
+					gestor: String(o.gestor || ""),
+					proveedor: String(o.proveedor || ""),
+					items: (o.items || []).map((it: any, idx: number) => ({
+						id: `${o.id}-i-${idx}`,
+						cantidad: Number(it.cantidad || 0),
+						unidad: String(it.unidad || ""),
+						material: String(it.material || ""),
+						precioUnitario: Number(it.precioUnitario || 0),
+					})),
+				}));
+				setMaterialOrders(mapped);
+			}
+		} catch {
+			// no-op
+		}
+	}, [obraId]);
+
+	useEffect(() => {
+		void refreshMaterialOrders();
+	}, [refreshMaterialOrders]);
+
+	// Documents (Supabase Storage) state and handlers
+	const DOCUMENTS_BUCKET = "obra-documents";
+	const [docPathSegments, setDocPathSegments] = useState<string[]>([]);
+	const currentDocsPath = useMemo(() => {
+		if (!obraId) return "";
+		const base = String(obraId);
+		if (docPathSegments.length === 0) return base;
+		return `${base}/${docPathSegments.join('/')}`;
+	}, [obraId, docPathSegments]);
+
+	type StorageListItem = {
+		name: string;
+		id?: string;
+		updated_at?: string;
+		created_at?: string;
+		last_accessed_at?: string;
+		metadata?: { size?: number; mimetype?: string } | null;
+	};
+
+	const [docsLoading, setDocsLoading] = useState(false);
+	const [docsError, setDocsError] = useState<string | null>(null);
+	const [docItems, setDocItems] = useState<StorageListItem[]>([]);
+
+	const listDocuments = useCallback(async () => {
+		if (!obraId) return;
+		try {
+			setDocsLoading(true);
+			setDocsError(null);
+			const supabase = createSupabaseBrowserClient();
+			const { data, error } = await supabase.storage
+				.from(DOCUMENTS_BUCKET)
+				.list(currentDocsPath, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+			if (error) throw error;
+			setDocItems(data as unknown as StorageListItem[]);
+		} catch (err) {
+			console.error(err);
+			setDocsError("No se pudieron cargar los documentos (verifica que exista el bucket)");
+		} finally {
+			setDocsLoading(false);
+		}
+	}, [obraId, currentDocsPath]);
+
+	useEffect(() => {
+		if (obraId) {
+			void listDocuments();
+		}
+	}, [obraId, listDocuments]);
+
+	const goToFolder = useCallback((folder: string) => {
+		setDocPathSegments((prev) => [...prev, folder]);
+	}, []);
+
+	const goToIndex = useCallback((index: number) => {
+		setDocPathSegments((prev) => prev.slice(0, index));
+	}, []);
+
+	const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+	const [newFolderName, setNewFolderName] = useState("");
+
+	const handleCreateFolder = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		const folder = newFolderName.trim().replaceAll(/\/+|\\+/g, "-");
+		if (!folder) return;
+		try {
+			const supabase = createSupabaseBrowserClient();
+			const prefix = currentDocsPath ? `${currentDocsPath}/` : "";
+			const key = `${prefix}${folder}/.keep`;
+			const { error } = await supabase.storage
+				.from(DOCUMENTS_BUCKET)
+				.upload(key, new Blob([""], { type: "text/plain" }), { upsert: false });
+			if (error) throw error;
+			setIsCreateFolderOpen(false);
+			setNewFolderName("");
+			await listDocuments();
+			toast.success("Carpeta creada");
+		} catch (err) {
+			console.error(err);
+			toast.error("No se pudo crear la carpeta");
+		}
+	}, [newFolderName, currentDocsPath, listDocuments]);
+
+	const uploadInputRef = useRef<HTMLInputElement | null>(null);
+	const triggerUpload = useCallback(() => {
+		uploadInputRef.current?.click();
+	}, []);
+
+	const handleUploadFiles = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const files = e.target.files;
+		if (!files || files.length === 0) return;
+		try {
+			const supabase = createSupabaseBrowserClient();
+			const prefix = currentDocsPath ? `${currentDocsPath}/` : "";
+			await Promise.all(
+				Array.from(files).map(async (file) => {
+					const key = `${prefix}${file.name}`;
+					const { error } = await supabase.storage
+						.from(DOCUMENTS_BUCKET)
+						.upload(key, file, { upsert: false });
+					if (error) throw error;
+				})
+			);
+			await listDocuments();
+			toast.success("Archivos subidos");
+		} catch (err) {
+			console.error(err);
+			toast.error("No se pudieron subir los archivos");
+		} finally {
+			if (uploadInputRef.current) uploadInputRef.current.value = "";
+		}
+	}, [currentDocsPath, listDocuments]);
+
+	const [preview, setPreview] = useState<{ name: string; url: string } | null>(null);
+	const previewFile = useCallback(async (name: string, mimetype?: string) => {
+		try {
+			const supabase = createSupabaseBrowserClient();
+			const path = `${currentDocsPath}/${name}`;
+			const { data, error } = await supabase.storage
+				.from(DOCUMENTS_BUCKET)
+				.createSignedUrl(path, 60);
+			if (error) throw error;
+			setPreview({ name, url: data.signedUrl });
+		} catch (err) {
+			console.error(err);
+			toast.error("No se pudo previsualizar");
+		}
+	}, [currentDocsPath]);
+
+	const downloadFile = useCallback(async (name: string) => {
+		try {
+			const supabase = createSupabaseBrowserClient();
+			const path = `${currentDocsPath}/${name}`;
+			const { data, error } = await supabase.storage
+				.from(DOCUMENTS_BUCKET)
+				.createSignedUrl(path, 60);
+			if (error) throw error;
+			window.open(data.signedUrl, "_blank");
+		} catch (err) {
+			console.error(err);
+			toast.error("No se pudo descargar");
+		}
+	}, [currentDocsPath]);
 
 	const form = useForm({
 		defaultValues: emptyObra,
@@ -434,7 +866,7 @@ export default function ObraDetailPage() {
 		<div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
 			<div className="container max-w-7xl mx-auto p-6 space-y-6">
 				{/* Header */}
-				<motion.div 
+				<motion.div
 					initial={{ opacity: 0, y: -20 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.3 }}
@@ -453,7 +885,7 @@ export default function ObraDetailPage() {
 				</motion.div>
 
 				{routeError ? (
-					<motion.div 
+					<motion.div
 						initial={{ opacity: 0, scale: 0.95 }}
 						animate={{ opacity: 1, scale: 1 }}
 						className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
@@ -472,7 +904,7 @@ export default function ObraDetailPage() {
 						</div>
 					</motion.div>
 				) : loadError ? (
-					<motion.div 
+					<motion.div
 						initial={{ opacity: 0, scale: 0.95 }}
 						animate={{ opacity: 1, scale: 1 }}
 						className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
@@ -480,29 +912,37 @@ export default function ObraDetailPage() {
 						<p className="font-medium">{loadError}</p>
 					</motion.div>
 				) : (
-						<Tabs defaultValue="general" className="space-y-6">
-							<form.Subscribe selector={(state) => [state.values.porcentaje]}>
-								{([porcentaje]) => (
-									<TabsList className="grid w-full max-w-[700px] grid-cols-4">
-										<TabsTrigger value="general" className="gap-2">
-											<Building2 className="h-4 w-4" />
-											General
-										</TabsTrigger>
-										<TabsTrigger value="workflow" className="gap-2">
-											<Mail className="h-4 w-4" />
-											Workflow
-										</TabsTrigger>
-										<TabsTrigger value="certificates" className="gap-2">
-											<Receipt className="h-4 w-4" />
-											Certificados
-										</TabsTrigger>
-										<TabsTrigger value="pendientes" className="gap-2" disabled={(porcentaje as number) < 100}>
-											<FileText className="h-4 w-4" />
-											Pendientes
-										</TabsTrigger>
-									</TabsList>
-								)}
-							</form.Subscribe>
+					<Tabs defaultValue="general" className="space-y-6">
+						<form.Subscribe selector={(state) => [state.values.porcentaje]}>
+							{([porcentaje]) => (
+								<TabsList className="grid w-full max-w-[1000px] grid-cols-6">
+									<TabsTrigger value="general" className="gap-2">
+										<Building2 className="h-4 w-4" />
+										General
+									</TabsTrigger>
+									<TabsTrigger value="workflow" className="gap-2">
+										<Mail className="h-4 w-4" />
+										Workflow
+									</TabsTrigger>
+									<TabsTrigger value="certificates" className="gap-2">
+										<Receipt className="h-4 w-4" />
+										Certificados
+									</TabsTrigger>
+									<TabsTrigger value="pendientes" className="gap-2" disabled={(porcentaje as number) < 100}>
+										<FileText className="h-4 w-4" />
+										Pendientes
+									</TabsTrigger>
+									<TabsTrigger value="materiales" className="gap-2">
+										<FileText className="h-4 w-4" />
+										Materiales
+									</TabsTrigger>
+									<TabsTrigger value="documentos" className="gap-2">
+										<FileText className="h-4 w-4" />
+										Documentos
+									</TabsTrigger>
+								</TabsList>
+							)}
+						</form.Subscribe>
 
 						<TabsContent value="general" className="space-y-6">
 							<motion.form
@@ -627,7 +1067,7 @@ export default function ObraDetailPage() {
 								</div>
 
 								{/* Main Information Section */}
-								<motion.section 
+								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.25 }}
@@ -737,7 +1177,7 @@ export default function ObraDetailPage() {
 								</motion.section>
 
 								{/* Financial Section */}
-								<motion.section 
+								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.3 }}
@@ -920,7 +1360,7 @@ export default function ObraDetailPage() {
 								</motion.section>
 
 								{/* Action Buttons */}
-								<motion.div 
+								<motion.div
 									initial={{ opacity: 0 }}
 									animate={{ opacity: 1 }}
 									transition={{ delay: 0.35 }}
@@ -953,7 +1393,7 @@ export default function ObraDetailPage() {
 									form.handleSubmit();
 								}}
 							>
-								<motion.section 
+								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.1 }}
@@ -1042,7 +1482,7 @@ export default function ObraDetailPage() {
 								</motion.section>
 
 								{/* Action Buttons */}
-								<motion.div 
+								<motion.div
 									initial={{ opacity: 0 }}
 									animate={{ opacity: 1 }}
 									transition={{ delay: 0.15 }}
@@ -1064,7 +1504,7 @@ export default function ObraDetailPage() {
 
 						{/* Certificates Tab */}
 						<TabsContent value="certificates" className="space-y-6">
-							<motion.section 
+							<motion.section
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
 								transition={{ duration: 0.4 }}
@@ -1236,7 +1676,7 @@ export default function ObraDetailPage() {
 													</thead>
 													<tbody>
 														{certificates.map((cert, index) => (
-															<motion.tr 
+															<motion.tr
 																key={cert.id}
 																initial={{ opacity: 0, y: 10 }}
 																animate={{ opacity: 1, y: 0 }}
@@ -1276,6 +1716,356 @@ export default function ObraDetailPage() {
 							</motion.section>
 						</TabsContent>
 
+						{/* Materiales Tab */}
+						<TabsContent value="materiales" className="space-y-6">
+							<motion.section
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ duration: 0.4 }}
+								className="rounded-lg border bg-card shadow-sm overflow-hidden"
+							>
+								<div className="bg-muted/50 px-6 py-4 border-b">
+									<div className="flex items-center justify-between gap-4 flex-wrap">
+										<div>
+											<div className="flex items-center gap-2">
+												<FileText className="h-5 w-5 text-primary" />
+												<h2 className="text-lg font-semibold">Materiales</h2>
+											</div>
+											<p className="text-sm text-muted-foreground mt-1">Órdenes de materiales enviadas a la obra</p>
+										</div>
+										<div className="w-full sm:w-auto flex items-center gap-2">
+											<Input
+												placeholder="Filtrar por material, proveedor, solicitante o gestor"
+												value={globalMaterialsFilter}
+												onChange={(e) => setGlobalMaterialsFilter(e.target.value)}
+											/>
+											<Button variant="outline" className="whitespace-nowrap gap-2" onClick={triggerImportMaterials} disabled={isImportingMaterials}>
+												<Upload className="h-4 w-4" />
+												{isImportingMaterials ? "Importando..." : "Importar OC"}
+											</Button>
+											<input ref={importInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleImportMaterials} />
+											<Button className="whitespace-nowrap gap-2" onClick={() => setIsAddOrderOpen(true)}>
+												<Plus className="h-4 w-4" />
+												Nueva orden
+											</Button>
+										</div>
+									</div>
+								</div>
+
+								<div className="p-6 space-y-4">
+									{filteredOrders.length === 0 ? (
+										<div className="text-center py-10 text-muted-foreground text-sm">
+											No se encontraron órdenes con el filtro aplicado
+										</div>
+									) : (
+										<div className="space-y-3">
+											{filteredOrders.map((order, idx) => {
+												const itemsFiltered = getOrderItemsFiltered(order);
+												const totalOrden = getOrderTotal(itemsFiltered);
+												const isOpen = expandedOrders.has(order.id);
+												return (
+													<div key={order.id} className="border rounded-lg overflow-hidden">
+														<button
+															onClick={() => toggleOrderExpanded(order.id)}
+															className="w-full text-left bg-muted/40 px-4 py-3 flex items-center justify-between hover:bg-muted/60 transition-colors"
+														>
+															<div className="flex flex-col sm:flex-row sm:items-center gap-3">
+																<div className="font-semibold">N° de orden: {order.nroOrden}</div>
+																<div className="text-sm text-muted-foreground">Solicitante: {order.solicitante}</div>
+																<div className="text-sm text-muted-foreground">Gestor: {order.gestor}</div>
+																<div className="text-sm text-muted-foreground">Proveedor: {order.proveedor}</div>
+															</div>
+															<div className="text-sm font-semibold font-mono">
+																$ {totalOrden.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+															</div>
+														</button>
+														<motion.div
+															initial={false}
+															animate={{ height: isOpen ? 'auto' : 0, opacity: isOpen ? 1 : 0 }}
+															transition={{ duration: 0.25 }}
+															className="overflow-hidden"
+														>
+															<div className="p-4 space-y-4">
+																<div className="flex items-center justify-between gap-3 flex-wrap">
+																	<div className="text-sm text-muted-foreground">
+																		{order.items.length} ítems en la orden
+																	</div>
+																	<div className="w-full sm:w-auto">
+																		<Input
+																			placeholder="Filtrar materiales de esta orden"
+																			value={orderFilters[order.id] ?? ""}
+																			onChange={(e) => setOrderFilter(order.id, e.target.value)}
+																		/>
+																	</div>
+																</div>
+
+																<div className="overflow-x-auto rounded-lg border">
+																	<table className="w-full text-sm">
+																		<thead className="bg-muted/50">
+																			<tr>
+																				<th className="text-left font-medium py-3 px-4 border-b">Cantidad</th>
+																				<th className="text-left font-medium py-3 px-4 border-b">Unidad</th>
+																				<th className="text-left font-medium py-3 px-4 border-b">Material</th>
+																				<th className="text-right font-medium py-3 px-4 border-b">Precio unitario</th>
+																				<th className="text-right font-medium py-3 px-4 border-b">Total</th>
+																			</tr>
+																		</thead>
+																		<tbody>
+																			{itemsFiltered.map((it, iidx) => (
+																				<motion.tr
+																					key={it.id}
+																					initial={{ opacity: 0, y: 8 }}
+																					animate={{ opacity: 1, y: 0 }}
+																					transition={{ delay: (idx * 0.03) + (iidx * 0.02) }}
+																					className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+																				>
+																					<td className="py-3 px-4">{it.cantidad.toLocaleString('es-AR')}</td>
+																					<td className="py-3 px-4">{it.unidad}</td>
+																					<td className="py-3 px-4">{it.material}</td>
+																					<td className="py-3 px-4 text-right font-mono">$ {it.precioUnitario.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+																					<td className="py-3 px-4 text-right font-mono">$ {(it.precioUnitario * it.cantidad).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+																				</motion.tr>
+																			))}
+																		</tbody>
+																	</table>
+																</div>
+
+																<div className="flex justify-end items-center p-4 rounded-lg bg-muted/40 border">
+																	<span className="mr-3 text-sm text-muted-foreground">Total de la orden</span>
+																	<span className="text-lg font-bold font-mono">$ {totalOrden.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+																</div>
+															</div>
+															{/* Import result dialog */}
+															<Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+																<DialogContent className="max-w-3xl">
+																	<DialogHeader>
+																		<DialogTitle>Resultado de importación</DialogTitle>
+																	</DialogHeader>
+																	<div className="space-y-3">
+																		<pre className="bg-muted rounded-md p-3 text-xs overflow-auto max-h-[60vh]">
+																			{importResult ? JSON.stringify(importResult, null, 2) : "Sin datos"}
+																		</pre>
+																		<div className="flex justify-end">
+																			<Button onClick={() => setImportDialogOpen(false)}>Cerrar</Button>
+																		</div>
+																	</div>
+																</DialogContent>
+															</Dialog>
+														</motion.div>
+													</div>
+												);
+											})}
+										</div>
+									)}
+
+									<Dialog open={isAddOrderOpen} onOpenChange={setIsAddOrderOpen}>
+										<DialogContent>
+											<DialogHeader>
+												<DialogTitle>Nueva orden de materiales</DialogTitle>
+											</DialogHeader>
+											<form onSubmit={handleCreateOrder} className="space-y-4">
+												<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+													<div>
+														<label className="block text-sm font-medium mb-1">Nº de orden</label>
+														<Input value={newOrder.nroOrden} onChange={(e) => updateNewOrderMeta("nroOrden", e.target.value)} placeholder="OC-0003" />
+													</div>
+													<div>
+														<label className="block text-sm font-medium mb-1">Solicitante</label>
+														<Input value={newOrder.solicitante} onChange={(e) => updateNewOrderMeta("solicitante", e.target.value)} placeholder="Nombre del solicitante" />
+													</div>
+													<div>
+														<label className="block text-sm font-medium mb-1">Gestor</label>
+														<Input value={newOrder.gestor} onChange={(e) => updateNewOrderMeta("gestor", e.target.value)} placeholder="Nombre del gestor" />
+													</div>
+													<div>
+														<label className="block text-sm font-medium mb-1">Proveedor</label>
+														<Input value={newOrder.proveedor} onChange={(e) => updateNewOrderMeta("proveedor", e.target.value)} placeholder="Proveedor" />
+													</div>
+												</div>
+
+												<div className="space-y-2">
+													<div className="flex items-center justify-between">
+														<h3 className="text-sm font-semibold">Ítems</h3>
+														<Button type="button" variant="outline" className="h-8 px-2 text-xs" onClick={addNewOrderItem}>Agregar ítem</Button>
+													</div>
+													<div className="overflow-x-auto rounded-lg border">
+														<table className="w-full text-sm">
+															<thead className="bg-muted/50">
+																<tr>
+																	<th className="text-left font-medium py-2 px-3 border-b">Cantidad</th>
+																	<th className="text-left font-medium py-2 px-3 border-b">Unidad</th>
+																	<th className="text-left font-medium py-2 px-3 border-b">Material</th>
+																	<th className="text-right font-medium py-2 px-3 border-b">Precio unitario</th>
+																	<th className="py-2 px-3 border-b" />
+																</tr>
+															</thead>
+															<tbody>
+																{newOrder.items.map((it, i) => (
+																	<tr key={i} className="border-b last:border-0">
+																		<td className="py-2 px-3 min-w-[110px]"><Input type="number" step="0.01" value={it.cantidad} onChange={(e) => updateNewOrderItem(i, "cantidad", e.target.value)} placeholder="0" /></td>
+																		<td className="py-2 px-3 min-w-[110px]"><Input type="text" value={it.unidad} onChange={(e) => updateNewOrderItem(i, "unidad", e.target.value)} placeholder="u / m / m²" /></td>
+																		<td className="py-2 px-3 min-w-[220px]"><Input type="text" value={it.material} onChange={(e) => updateNewOrderItem(i, "material", e.target.value)} placeholder="Descripción" /></td>
+																		<td className="py-2 px-3 min-w-[160px]"><Input className="text-right" type="number" step="0.01" value={it.precioUnitario} onChange={(e) => updateNewOrderItem(i, "precioUnitario", e.target.value)} placeholder="0.00" /></td>
+																		<td className="py-2 px-3 text-right">
+																			<Button type="button" variant="ghost" onClick={() => removeNewOrderItem(i)}>Eliminar</Button>
+																		</td>
+																	</tr>
+																))}
+															</tbody>
+														</table>
+													</div>
+												</div>
+
+												<DialogFooter>
+													<Button type="button" variant="outline" onClick={() => { setIsAddOrderOpen(false); setNewOrder({ ...emptyNewOrderForm }); }}>Cancelar</Button>
+													<Button type="submit" className="min-w-[140px]">Guardar orden</Button>
+												</DialogFooter>
+											</form>
+										</DialogContent>
+									</Dialog>
+								</div>
+							</motion.section>
+						</TabsContent>
+
+						{/* Documentos Tab */}
+						<TabsContent value="documentos" className="space-y-6">
+							<motion.section
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ duration: 0.4 }}
+								className="rounded-lg border bg-card shadow-sm overflow-hidden"
+							>
+								<div className="bg-muted/50 px-6 py-4 border-b">
+									<div className="flex items-center justify-between gap-4 flex-wrap">
+										<div className="flex items-center gap-2">
+											<FileText className="h-5 w-5 text-primary" />
+											<h2 className="text-lg font-semibold">Documentos</h2>
+										</div>
+										<div className="flex items-center gap-2">
+											<Button variant="outline" className="gap-2" onClick={() => setIsCreateFolderOpen(true)}>
+												<FolderPlus className="h-4 w-4" />
+												Nueva carpeta
+											</Button>
+											<Button className="gap-2" onClick={triggerUpload}>
+												<Upload className="h-4 w-4" />
+												Subir archivos
+											</Button>
+											<input ref={uploadInputRef} type="file" className="hidden" multiple onChange={handleUploadFiles} />
+										</div>
+									</div>
+
+									<div className="px-6 pt-4">
+										{/* Breadcrumbs */}
+										<div className="flex items-center flex-wrap gap-1 text-sm">
+											<button className="text-muted-foreground hover:text-foreground transition" onClick={() => setDocPathSegments([])}>Obra</button>
+											{docPathSegments.map((seg, i) => (
+												<div key={`${seg}-${i}`} className="flex items-center gap-1">
+													<span className="text-muted-foreground">/</span>
+													<button className="text-muted-foreground hover:text-foreground transition" onClick={() => goToIndex(i + 1)}>{seg}</button>
+												</div>
+											))}
+										</div>
+
+										<div className="p-6 pt-4 space-y-4">
+											{docsError && (
+												<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive text-sm">{docsError}</div>
+											)}
+											{docsLoading ? (
+												<div className="flex items-center justify-center py-12">
+													<div className="space-y-2 text-center">
+														<div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+														<p className="text-sm text-muted-foreground">Cargando...</p>
+													</div>
+												</div>
+											) : (
+												<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+													{(docItems || []).sort((a, b) => {
+														const aIsFolder = !a.metadata;
+														const bIsFolder = !b.metadata;
+														if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1;
+														return a.name.localeCompare(b.name);
+													})
+														.map((item, idx) => {
+															const isFolder = !item.metadata;
+															const mime = item.metadata?.mimetype;
+															const isImage = typeof mime === 'string' && mime.startsWith('image/');
+															return (
+																<motion.button
+																	key={`${item.name}-${idx}`}
+																	initial={{ opacity: 0, y: 8 }}
+																	animate={{ opacity: 1, y: 0 }}
+																	transition={{ delay: idx * 0.02 }}
+																	onClick={() => {
+																		if (isFolder) {
+																			goToFolder(item.name);
+																		} else {
+																			void previewFile(item.name, mime);
+																		}
+																	}}
+																	className="group rounded-md border p-3 text-left hover:bg-muted/40 transition-colors"
+																>
+																	<div className="flex items-center justify-center h-16 mb-2 bg-muted/30 rounded-sm">
+																		{isFolder ? (
+																			<Folder className="h-7 w-7 text-muted-foreground" />
+																		) : isImage ? (
+																			<ImageIcon className="h-7 w-7 text-muted-foreground" />
+																		) : (
+																			<FileIcon className="h-7 w-7 text-muted-foreground" />
+																		)}
+																	</div>
+																	<div className="truncate text-sm font-medium">{item.name}</div>
+																	{!isFolder && (
+																		<div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+																			<span>{item.metadata?.size ? `${(item.metadata.size / 1024).toFixed(1)} KB` : ''}</span>
+																			<button type="button" className="opacity-70 hover:opacity-100" onClick={(ev) => { ev.stopPropagation(); void downloadFile(item.name); }}>
+																				<Download className="h-4 w-4" />
+																			</button>
+																		</div>
+																	)}
+																</motion.button>
+															);
+														})}
+												</div>
+											)}
+										</div>
+									</div>
+								</div>
+							</motion.section>
+
+							{/* Create folder dialog */}
+							<Dialog open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen}>
+								<DialogContent>
+									<DialogHeader>
+										<DialogTitle>Nueva carpeta</DialogTitle>
+									</DialogHeader>
+									<form onSubmit={handleCreateFolder} className="space-y-4">
+										<div>
+											<label className="block text-sm font-medium mb-1">Nombre de la carpeta</label>
+											<Input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Carpeta" />
+										</div>
+										<DialogFooter>
+											<Button type="button" variant="outline" onClick={() => setIsCreateFolderOpen(false)}>Cancelar</Button>
+											<Button type="submit" className="min-w-[120px]">Crear</Button>
+										</DialogFooter>
+									</form>
+								</DialogContent>
+							</Dialog>
+
+							{/* Preview dialog */}
+							<Dialog open={!!preview} onOpenChange={(open) => { if (!open) setPreview(null); }}>
+								<DialogContent className="max-w-3xl">
+									<DialogHeader>
+										<DialogTitle>{preview?.name}</DialogTitle>
+									</DialogHeader>
+									<div className="p-2">
+										{preview?.url ? (
+											<img src={preview.url} alt={preview.name} className="max-h-[70vh] w-auto rounded-md" />
+										) : null}
+									</div>
+								</DialogContent>
+							</Dialog>
+						</TabsContent>
+
 						{/* Pendientes Tab */}
 						<TabsContent value="pendientes" className="space-y-6">
 							<motion.section
@@ -1302,6 +2092,7 @@ export default function ObraDetailPage() {
 											<thead className="bg-muted/50">
 												<tr>
 													<th className="text-left font-medium py-3 px-4 border-b">Documento</th>
+													<th className="text-left font-medium py-3 px-4 border-b">Póliza</th>
 													<th className="text-left font-medium py-3 px-4 border-b">Vencimiento</th>
 													<th className="text-left font-medium py-3 px-4 border-b">Hecho</th>
 												</tr>
@@ -1321,6 +2112,14 @@ export default function ObraDetailPage() {
 																placeholder="Nombre del documento"
 																value={doc.name}
 																onChange={(e) => updatePendingDoc(idx, "name", e.target.value)}
+															/>
+														</td>
+														<td className="py-3 px-4 min-w-[200px]">
+															<Input
+																type="text"
+																placeholder="Póliza"
+																value={doc.poliza}
+																onChange={(e) => updatePendingDoc(idx, "poliza", e.target.value)}
 															/>
 														</td>
 														<td className="py-3 px-4 min-w-[200px]">

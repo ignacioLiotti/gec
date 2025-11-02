@@ -2,8 +2,8 @@
 import { createClient } from "@/utils/supabase/server";
 import { obrasFormSchema } from "@/app/excel/schema";
 import { NextResponse } from "next/server";
-import { start } from "workflow/api";
-import { sendObraCompletionWorkflow } from "@/workflows/obra-complete";
+import { emitEvent } from "@/lib/notifications/engine";
+import "@/lib/notifications/rules"; // register rules
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
@@ -443,74 +443,62 @@ export async function PUT(request: Request) {
 		console.warn("Obras PUT: user has no email, cannot send completion email", {
 			userId: user.id,
 		});
-	} else {
-		const completedMap = new Map(
-			completedRows.map((row) => [row.n, row])
-		);
+    } else {
+        const completedMap = new Map(
+            completedRows.map((row) => [row.n, row])
+        );
 
-		for (const obra of newlyCompleted) {
-			const latestRow = completedMap.get(obra.n);
-			const fallbackRow = existingMap.get(obra.n);
-			const workflowInput = {
-				to: user.email,
-				recipientName: user.user_metadata?.full_name ?? null,
-				obra: {
-					id: latestRow?.id ?? fallbackRow?.id,
-					name: latestRow?.designacion_y_ubicacion ?? obra.designacionYUbicacion,
-					percentage: latestRow ? Number(latestRow.porcentaje) || 0 : obra.porcentaje,
-				},
-				firstMessage:
-					latestRow?.on_finish_first_message ??
-					fallbackRow?.onFinishFirstMessage ??
-					null,
-				secondMessage:
-					latestRow?.on_finish_second_message ??
-					fallbackRow?.onFinishSecondMessage ??
-					null,
-				followUpSendAt:
-					latestRow?.on_finish_second_send_at ??
-					fallbackRow?.onFinishSecondSendAt ??
-					null,
-			};
+        for (const obra of newlyCompleted) {
+            const latestRow = completedMap.get(obra.n);
+            const fallbackRow = existingMap.get(obra.n);
+            const ctx = {
+                tenantId,
+                actorId: user.id,
+                obra: {
+                    id: latestRow?.id ?? fallbackRow?.id,
+                    name: latestRow?.designacion_y_ubicacion ?? obra.designacionYUbicacion,
+                    percentage: latestRow ? Number(latestRow.porcentaje) || 0 : obra.porcentaje,
+                },
+                followUpAt:
+                    latestRow?.on_finish_second_send_at ??
+                    fallbackRow?.onFinishSecondSendAt ??
+                    null,
+            } as const;
 
-			console.info("Obras PUT: starting completion workflow", {
-				n: obra.n,
-				obraId: workflowInput.obra.id ?? null,
-				to: workflowInput.to,
-				followUpSendAt: workflowInput.followUpSendAt,
-			});
+            console.info("Obras PUT: emitting event obra.completed", {
+                n: obra.n,
+                obraId: ctx.obra.id ?? null,
+                followUpAt: ctx.followUpAt,
+            });
 
-			try {
-				await start(sendObraCompletionWorkflow, [workflowInput]);
-				console.info("Obras PUT: completion workflow started", {
-					n: obra.n,
-					obraId: workflowInput.obra.id ?? null,
-				});
-			} catch (workflowError) {
-				console.error("Obras PUT: failed to start completion workflow", {
-					error: workflowError,
-					n: obra.n,
-					obraId: workflowInput.obra.id ?? null,
-				});
-			}
-		}
-	}
+            try {
+                await emitEvent("obra.completed", ctx);
+                console.info("Obras PUT: event emitted", { n: obra.n, obraId: ctx.obra.id ?? null });
+            } catch (workflowError) {
+                console.error("Obras PUT: failed to emit event", {
+                    error: workflowError,
+                    n: obra.n,
+                    obraId: ctx.obra.id ?? null,
+                });
+            }
+        }
+    }
 
 	return NextResponse.json({ ok: true });
 }
 
 export async function POST(_request: Request) {
-	console.log("Sending workflow");
-	const run = await start(sendObraCompletionWorkflow, [
-		{
-			to: "ignacioliotti@gmail.com",
-			recipientName: "Test User",
-			obra: { name: "Obra Test 1", percentage: 100 },
-			firstMessage: "¡Felicitaciones! Alcanzaste el 100% de avance.",
-			secondMessage: "Recordatorio personalizado de prueba.",
-			followUpSendAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
-		},
-	]);
-	console.log("Workflow started", run);
-	return NextResponse.json({ readable: run });
+    // Backward-compatible demo endpoint: emit obra.completed now
+    try {
+        const ctx = {
+            tenantId: null,
+            actorId: null,
+            obra: { id: undefined, name: "Obra Test 1", percentage: 100 },
+            followUpAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+        };
+        await emitEvent("obra.completed", ctx);
+        return NextResponse.json({ ok: true });
+    } catch (e) {
+        return NextResponse.json({ error: "failed" }, { status: 500 });
+    }
 }

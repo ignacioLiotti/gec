@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { sendDocumentReminderWorkflow } from "@/workflows/document-reminder";
+import { emitEvent } from "@/lib/notifications/engine";
+import "@/lib/notifications/rules";
 
 export async function POST(request: Request) {
 	try {
@@ -13,13 +14,13 @@ export async function POST(request: Request) {
 			);
 		}
 
-		await sendDocumentReminderWorkflow({
-			obraId: String(obraId),
-			obraName: obraName ? String(obraName) : null,
-			documentName: String(documentName),
-			dueDate: String(dueDate),
-			notifyUserId: notifyUserId ? String(notifyUserId) : null,
-		});
+        await emitEvent("document.reminder.requested", {
+            obraId: String(obraId),
+            obraName: obraName ? String(obraName) : null,
+            documentName: String(documentName),
+            dueDate: String(dueDate),
+            notifyUserId: notifyUserId ? String(notifyUserId) : null,
+        });
 
 		return NextResponse.json({ ok: true });
 	} catch (error) {
