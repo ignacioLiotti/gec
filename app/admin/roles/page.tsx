@@ -109,8 +109,8 @@ function RolesPanel({ roles, tenantId }: { roles: Role[]; tenantId: string }) {
         <h2 className="text-lg font-medium">Roles</h2>
         <CreateRoleForm onCreate={createRoleAction.bind(null, tenantId)} />
       </div>
-      <div className="overflow-hidden rounded-md border">
-        <table className="w-full text-sm table-fixed" data-table-id="roles-table">
+      <div className="overflow-x-auto rounded-md border">
+        <table className="text-sm table-fixed" data-table-id="roles-table">
           <ColGroup tableId="roles-table" columns={3} />
           <thead className="bg-foreground/5">
             <tr className="text-left">
@@ -145,8 +145,8 @@ function PermissionsPanel({ permissions }: { permissions: Permission[] }) {
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-medium">Permissions</h2>
-      <div className="overflow-hidden rounded-md border">
-        <table className="w-full text-sm table-fixed" data-table-id="permissions-table">
+      <div className="overflow-x-auto rounded-md border">
+        <table className="text-sm table-fixed" data-table-id="permissions-table">
           <ColGroup tableId="permissions-table" columns={2} />
           <thead className="bg-foreground/5">
             <tr className="text-left">

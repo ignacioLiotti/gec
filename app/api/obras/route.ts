@@ -7,8 +7,7 @@ import "@/lib/notifications/rules"; // register rules
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
-export const CONFIG_COLUMNS =
-	`${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
+export const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
 
 export type DbObraRow = {
 	id: string;
@@ -94,14 +93,38 @@ export async function GET(request: Request) {
 
 	const url = new URL(request.url);
 	const searchParams = url.searchParams;
-	const hasPagination =
-		searchParams.has("page") || searchParams.has("limit");
+	const hasPagination = searchParams.has("page") || searchParams.has("limit");
 
 	const statusParam = searchParams.get("status");
 	const status =
 		statusParam === "completed" || statusParam === "in-process"
 			? statusParam
 			: null;
+
+	// Sorting & search parameters
+	const allowedOrderColumns = new Set([
+		"n",
+		"designacion_y_ubicacion",
+		"sup_de_obra_m2",
+		"entidad_contratante",
+		"mes_basico_de_contrato",
+		"iniciacion",
+		"contrato_mas_ampliaciones",
+		"certificado_a_la_fecha",
+		"saldo_a_certificar",
+		"segun_contrato",
+		"prorrogas_acordadas",
+		"plazo_total",
+		"plazo_transc",
+		"porcentaje",
+	]);
+
+	const rawOrderBy = searchParams.get("orderBy") ?? "n";
+	const orderBy = allowedOrderColumns.has(rawOrderBy) ? rawOrderBy : "n";
+	const rawOrderDir = (searchParams.get("orderDir") ?? "asc").toLowerCase();
+	const orderAscending = rawOrderDir !== "desc";
+
+	const qRaw = (searchParams.get("q") ?? "").trim();
 
 	const rawPage = Number.parseInt(searchParams.get("page") ?? "", 10);
 	const rawLimit = Number.parseInt(searchParams.get("limit") ?? "", 10);
@@ -121,13 +144,86 @@ export async function GET(request: Request) {
 			.from("obras")
 			.select(columns, hasPagination ? { count: "exact" } : undefined)
 			.eq("tenant_id", tenantId)
-			.order("n", { ascending: true });
+			.order(orderBy, { ascending: orderAscending });
 
 		if (status === "completed") {
 			query.eq("porcentaje", 100);
 		} else if (status === "in-process") {
 			query.lt("porcentaje", 100);
 		}
+
+		if (qRaw) {
+			const like = `%${qRaw}%`;
+			const orFilters: string[] = [
+				`designacion_y_ubicacion.ilike.${like}`,
+				`entidad_contratante.ilike.${like}`,
+				`mes_basico_de_contrato.ilike.${like}`,
+				`iniciacion.ilike.${like}`,
+			];
+			const numericCandidate = Number(qRaw.replace(/[^\d+\-.]/g, ""));
+			if (Number.isFinite(numericCandidate)) {
+				const eqVal = String(numericCandidate);
+				orFilters.push(
+					`n.eq.${eqVal}`,
+					`sup_de_obra_m2.eq.${eqVal}`,
+					`contrato_mas_ampliaciones.eq.${eqVal}`,
+					`certificado_a_la_fecha.eq.${eqVal}`,
+					`saldo_a_certificar.eq.${eqVal}`,
+					`segun_contrato.eq.${eqVal}`,
+					`prorrogas_acordadas.eq.${eqVal}`,
+					`plazo_total.eq.${eqVal}`,
+					`plazo_transc.eq.${eqVal}`,
+					`porcentaje.eq.${eqVal}`
+				);
+			}
+			// Combine text and numeric filters into a single OR group
+			query.or(orFilters.join(","));
+		}
+
+		// Advanced filters
+		const numRange = (
+			nameMin: string,
+			nameMax: string,
+			column: keyof DbObraRow | string
+		) => {
+			const rawMin = searchParams.get(nameMin);
+			const rawMax = searchParams.get(nameMax);
+			const min = rawMin != null ? Number(rawMin) : null;
+			const max = rawMax != null ? Number(rawMax) : null;
+			if (min != null && Number.isFinite(min))
+				query.gte(String(column), min as any);
+			if (max != null && Number.isFinite(max))
+				query.lte(String(column), max as any);
+		};
+
+		numRange("supMin", "supMax", "sup_de_obra_m2");
+		numRange("cmaMin", "cmaMax", "contrato_mas_ampliaciones");
+		numRange("cafMin", "cafMax", "certificado_a_la_fecha");
+		numRange("sacMin", "sacMax", "saldo_a_certificar");
+		numRange("scMin", "scMax", "segun_contrato");
+		numRange("paMin", "paMax", "prorrogas_acordadas");
+		numRange("ptMin", "ptMax", "plazo_total");
+		numRange("ptrMin", "ptrMax", "plazo_transc");
+
+		const entidades = searchParams
+			.getAll("entidad")
+			.filter((v) => v.trim().length > 0);
+		if (entidades.length > 0) {
+			query.in("entidad_contratante", entidades);
+		}
+
+		const mesYear = searchParams.get("mesYear");
+		if (mesYear && mesYear.trim())
+			query.ilike("mes_basico_de_contrato", `%${mesYear.trim()}%`);
+		const iniYear = searchParams.get("iniYear");
+		if (iniYear && iniYear.trim())
+			query.ilike("iniciacion", `%${iniYear.trim()}%`);
+		const mesContains = searchParams.get("mesContains");
+		if (mesContains && mesContains.trim())
+			query.ilike("mes_basico_de_contrato", `%${mesContains.trim()}%`);
+		const iniContains = searchParams.get("iniContains");
+		if (iniContains && iniContains.trim())
+			query.ilike("iniciacion", `%${iniContains.trim()}%`);
 
 		if (hasPagination) {
 			query.range(from, to);
@@ -443,62 +539,116 @@ export async function PUT(request: Request) {
 		console.warn("Obras PUT: user has no email, cannot send completion email", {
 			userId: user.id,
 		});
-    } else {
-        const completedMap = new Map(
-            completedRows.map((row) => [row.n, row])
-        );
+	} else {
+		const completedMap = new Map(completedRows.map((row) => [row.n, row]));
 
-        for (const obra of newlyCompleted) {
-            const latestRow = completedMap.get(obra.n);
-            const fallbackRow = existingMap.get(obra.n);
-            const ctx = {
-                tenantId,
-                actorId: user.id,
-                obra: {
-                    id: latestRow?.id ?? fallbackRow?.id,
-                    name: latestRow?.designacion_y_ubicacion ?? obra.designacionYUbicacion,
-                    percentage: latestRow ? Number(latestRow.porcentaje) || 0 : obra.porcentaje,
-                },
-                followUpAt:
-                    latestRow?.on_finish_second_send_at ??
-                    fallbackRow?.onFinishSecondSendAt ??
-                    null,
-            } as const;
+		for (const obra of newlyCompleted) {
+			const latestRow = completedMap.get(obra.n);
+			const fallbackRow = existingMap.get(obra.n);
+			const ctx = {
+				tenantId,
+				actorId: user.id,
+				obra: {
+					id: latestRow?.id ?? fallbackRow?.id,
+					name:
+						latestRow?.designacion_y_ubicacion ?? obra.designacionYUbicacion,
+					percentage: latestRow
+						? Number(latestRow.porcentaje) || 0
+						: obra.porcentaje,
+				},
+				followUpAt:
+					latestRow?.on_finish_second_send_at ??
+					fallbackRow?.onFinishSecondSendAt ??
+					null,
+			} as const;
 
-            console.info("Obras PUT: emitting event obra.completed", {
-                n: obra.n,
-                obraId: ctx.obra.id ?? null,
-                followUpAt: ctx.followUpAt,
-            });
+			console.info("Obras PUT: emitting event obra.completed", {
+				n: obra.n,
+				obraId: ctx.obra.id ?? null,
+				followUpAt: ctx.followUpAt,
+			});
 
-            try {
-                await emitEvent("obra.completed", ctx);
-                console.info("Obras PUT: event emitted", { n: obra.n, obraId: ctx.obra.id ?? null });
-            } catch (workflowError) {
-                console.error("Obras PUT: failed to emit event", {
-                    error: workflowError,
-                    n: obra.n,
-                    obraId: ctx.obra.id ?? null,
-                });
-            }
-        }
-    }
+			try {
+				await emitEvent("obra.completed", ctx);
+				console.info("Obras PUT: event emitted", {
+					n: obra.n,
+					obraId: ctx.obra.id ?? null,
+				});
+			} catch (workflowError) {
+				console.error("Obras PUT: failed to emit event", {
+					error: workflowError,
+					n: obra.n,
+					obraId: ctx.obra.id ?? null,
+				});
+			}
+
+			// Schedule document reminders for pendientes configured after completion
+			try {
+				if (ctx.obra.id) {
+					const { data: pendRows, error: pendError } = await supabase
+						.from("obra_pendientes")
+						.select("name, offset_days")
+						.eq("obra_id", ctx.obra.id)
+						.eq("due_mode", "after_completion");
+					if (pendError) throw pendError;
+
+					for (const row of pendRows ?? []) {
+						const offsetDays = Number((row as any).offset_days ?? 0);
+						const dueDate = new Date(
+							Date.now() + Math.max(0, offsetDays) * 24 * 60 * 60 * 1000
+						);
+
+						// Upsert schedules for this pendiente
+						const stages: { stage: string; run_at: Date }[] = [];
+						const mk = (days: number, label: string) => {
+							const d = new Date(
+								dueDate.getTime() - days * 24 * 60 * 60 * 1000
+							);
+							if (label !== "due_today") d.setHours(9, 0, 0, 0);
+							return d;
+						};
+						stages.push({ stage: "due_7d", run_at: mk(7, "due_7d") });
+						stages.push({ stage: "due_3d", run_at: mk(3, "due_3d") });
+						stages.push({ stage: "due_1d", run_at: mk(1, "due_1d") });
+						stages.push({ stage: "due_today", run_at: new Date(dueDate) });
+
+						for (const s of stages) {
+							await supabase.from("pendiente_schedules").upsert(
+								{
+									pendiente_id: (row as any).id,
+									user_id: user.id,
+									stage: s.stage,
+									run_at: s.run_at.toISOString(),
+								},
+								{ onConflict: "pendiente_id,stage" }
+							);
+						}
+					}
+				}
+			} catch (scheduleErr) {
+				console.error(
+					"Obras PUT: error while scheduling pendientes after completion",
+					scheduleErr
+				);
+			}
+		}
+	}
 
 	return NextResponse.json({ ok: true });
 }
 
 export async function POST(_request: Request) {
-    // Backward-compatible demo endpoint: emit obra.completed now
-    try {
-        const ctx = {
-            tenantId: null,
-            actorId: null,
-            obra: { id: undefined, name: "Obra Test 1", percentage: 100 },
-            followUpAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
-        };
-        await emitEvent("obra.completed", ctx);
-        return NextResponse.json({ ok: true });
-    } catch (e) {
-        return NextResponse.json({ error: "failed" }, { status: 500 });
-    }
+	// Backward-compatible demo endpoint: emit obra.completed now
+	try {
+		const ctx = {
+			tenantId: null,
+			actorId: null,
+			obra: { id: undefined, name: "Obra Test 1", percentage: 100 },
+			followUpAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+		};
+		await emitEvent("obra.completed", ctx);
+		return NextResponse.json({ ok: true });
+	} catch (e) {
+		return NextResponse.json({ error: "failed" }, { status: 500 });
+	}
 }

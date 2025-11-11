@@ -6,11 +6,12 @@ import {
 	Users,
 	ShieldCheck,
 	Wrench,
-	Settings,
 	ChevronDown,
-	Building2,
 	FileText,
-	BarChart,
+	Bell,
+	FileCheck,
+	Database,
+	Play,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -48,22 +49,27 @@ type NavItem = {
 const navItems: NavItem[] = [
 	{
 		title: "Dashboard",
-		href: "/excel",
+		href: "/",
 		icon: Home,
 	},
 	{
-		title: "Instruments",
-		href: "/instruments",
-		icon: Wrench,
+		title: "Excel",
+		href: "/excel",
+		icon: Database,
 	},
 	{
-		title: "Reports",
-		href: "/reports",
-		icon: BarChart,
+		title: "Certificados",
+		href: "/certificados",
+		icon: FileCheck,
 	},
 	{
-		title: "Documents",
-		href: "/documents",
+		title: "Notifications",
+		href: "/notifications",
+		icon: Bell,
+	},
+	{
+		title: "Onboarding",
+		href: "/onboarding",
 		icon: FileText,
 	},
 ];
@@ -79,11 +85,6 @@ const adminItems: NavItem[] = [
 		href: "/admin/roles",
 		icon: ShieldCheck,
 	},
-	{
-		title: "Settings",
-		href: "/admin/settings",
-		icon: Settings,
-	},
 ];
 
 const devItems: NavItem[] = [
@@ -91,6 +92,11 @@ const devItems: NavItem[] = [
 		title: "Bootstrap",
 		href: "/dev/bootstrap",
 		icon: Wrench,
+	},
+	{
+		title: "Notifications Playground",
+		href: "/dev/notifications-playground",
+		icon: Play,
 	},
 	{
 		title: "Permissions Demo",
@@ -126,9 +132,9 @@ export function AppSidebar({
 							<Link href="/" className="container">
 								{/* if sidebar is closed make logo smaller */}
 								<div className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === 'collapsed' ? 'size-8' : 'size-10'}`} />
-								<div className="grid flex-1 text-left text-sm leading-tight">
-									<span className="truncate font-semibold">Multi-Tenant</span>
-									<span className="truncate text-xs">SaaS Platform</span>
+								<div className="grid flex-1 text-left text-sm leading-tight pt-[5px]">
+									<span className="truncate font-semibold font-mono text-lg leading-[16px]">Sintesis</span>
+									<span className="truncate text-xs">Plataforma de gestión</span>
 								</div>
 							</Link>
 						</SidebarMenuButton>

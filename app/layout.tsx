@@ -10,6 +10,8 @@ import AuthController from "@/components/auth/auth-controller";
 import ImpersonateBanner from "./admin/users/_components/impersonate-banner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import NotificationsListener from "@/components/notifications/notifications-listener";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,6 +53,8 @@ export default async function RootLayout({
       >
         <SupabaseAuthListener />
         <AuthController />
+        <Toaster position="bottom-right" richColors />
+        <NotificationsListener />
         <SidebarProvider>
           <AppSidebar user={user} />
           <SidebarInset>

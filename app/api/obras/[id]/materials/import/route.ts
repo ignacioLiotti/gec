@@ -20,59 +20,104 @@ const aiExtractionSchema = z.object({
   items: z.array(aiItemSchema).min(1),
 });
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const obraId = params.id;
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
+  const obraId = id;
   if (!obraId) {
     return NextResponse.json({ error: "Obra no encontrada" }, { status: 400 });
   }
 
   try {
+    const url = new URL(req.url);
+    const previewMode = url.searchParams.get('preview') === '1' || url.searchParams.get('preview') === 'true';
     const form = await req.formData();
+    const imageDataUrl = form.get("imageDataUrl");
     const file = form.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Archivo PDF requerido (campo 'file')" }, { status: 400 });
+    if (!(file instanceof File) && typeof imageDataUrl !== "string") {
+      return NextResponse.json({ error: "Se requiere un archivo o imageDataUrl" }, { status: 400 });
     }
-    if (!file.type?.includes("pdf")) {
-      return NextResponse.json({ error: "Solo se admite PDF" }, { status: 400 });
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Extract text from PDF
-    const pdfParse = (await import("pdf-parse")).default as unknown as (b: Buffer) => Promise<{ text: string }>;
-    const { text } = await pdfParse(buffer);
-    const cleanedText = (text || "").replace(/\u0000/g, "").trim();
-    if (!cleanedText) {
-      return NextResponse.json({ error: "No se pudo extraer texto del PDF" }, { status: 422 });
-    }
-
-    // Ask AI to structure items
-    const { object: extraction } = await generateObject({
-      model: openai("gpt-4o-mini"),
-      schema: aiExtractionSchema,
-      messages: [
-        {
-          role: "user",
-          content: `Sos un asistente que extrae una orden de compra de materiales en formato JSON.
-
-Documento (texto plano del PDF):\n\n${cleanedText.substring(0, 15000)}
+    let extraction;
+    if (typeof imageDataUrl === "string" && imageDataUrl.startsWith("data:")) {
+      // Client already rasterized to a data URL
+      const res = await generateObject({
+        model: openai("gpt-4o-mini"),
+        schema: aiExtractionSchema,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Extraé una orden de compra de materiales en formato JSON siguiendo el esquema.
 
 Instrucciones:
-- Devolvés items con estos campos: cantidad (número), unidad (texto), material (texto), precioUnitario (número si está, puede ser null)
-- Extraé además si aparecen: nroOrden, solicitante, gestor, proveedor (todos texto)
-- La cantidad puede ser decimal. La unidad puede ser u, m, m², kg, etc.
-- El material es la descripción del ítem.
-- El precioUnitario debe ser numérico sin símbolos. Si no aparece, usá null.
-- No inventes ítems; solo lo que figure legible.
-`
-        },
-      ],
-      temperature: 0.1,
-    });
+- Cada ítem: cantidad (número), unidad (texto), material (texto), precioUnitario (número o null)
+- Detectá y normalizá números con separador decimal coma.
+- Encabezados posibles: "Cantidad", "Unidad", "Detalle Descriptivo del pedido", "Precio Unit", "Total".
+- Extraé también si aparecen: nroOrden, solicitante, gestor, proveedor.
+- No inventes ítems; solo lo legible.`
+              },
+              { type: "image", image: imageDataUrl },
+            ],
+          },
+        ],
+        temperature: 0.1,
+      });
+      extraction = res.object;
+    } else if (file instanceof File) {
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      if (file.type?.startsWith("image/")) {
+        const mime = file.type || "image/png";
+        const base64 = buffer.toString("base64");
+        const dataUrl = `data:${mime};base64,${base64}`;
+
+        const res = await generateObject({
+          model: openai("gpt-4o-mini"),
+          schema: aiExtractionSchema,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `Extraé una orden de compra de materiales (JSON).` },
+                { type: "image", image: dataUrl },
+              ],
+            },
+          ],
+          temperature: 0.1,
+        });
+        extraction = res.object;
+      } else if (file.type?.includes("pdf")) {
+        // PDFs should be rasterized on the client and sent as imageDataUrl; bail if not
+        return NextResponse.json({ ok: false, error: "PDF escaneado detectado. Reintenta (el cliente rasterizará a imagen)." }, { status: 422 });
+      }
+    } else {
+      return NextResponse.json({ ok: false, error: "Tipo de archivo no soportado (PDF o imagen)" }, { status: 400 });
+    }
+
+    // If preview mode, just return extraction without persisting
+    if (previewMode) {
+      return NextResponse.json({ ok: true, items: extraction.items, meta: {
+        nroOrden: extraction.nroOrden ?? null,
+        solicitante: extraction.solicitante ?? null,
+        gestor: extraction.gestor ?? null,
+        proveedor: extraction.proveedor ?? null,
+      }});
+    }
 
     // Persist to DB
     const supabase = await createClient();
+
+    // Validate obra exists before inserting
+    const { data: obraExists, error: obraCheckError } = await supabase
+      .from("obras")
+      .select("id")
+      .eq("id", obraId)
+      .maybeSingle();
+    if (obraCheckError) throw obraCheckError;
+    if (!obraExists) {
+      return NextResponse.json({ ok: false, error: "Obra no encontrada" }, { status: 404 });
+    }
 
     const orderInsert = {
       obra_id: obraId,
@@ -80,6 +125,8 @@ Instrucciones:
       solicitante: extraction.solicitante ?? null,
       gestor: extraction.gestor ?? null,
       proveedor: extraction.proveedor ?? null,
+      doc_bucket: 'obra-documents',
+      doc_path: body?.docPath ?? null,
     } as const;
 
     const { data: order, error: orderError } = await supabase
@@ -107,8 +154,8 @@ Instrucciones:
     return NextResponse.json({
       ok: true,
       debug: {
-        textLength: cleanedText.length,
-        preview: cleanedText.slice(0, 500),
+        fileType: file.type,
+        size: file.size,
       },
       order: {
         id: order.id,

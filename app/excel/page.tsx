@@ -1,9 +1,8 @@
 'use client';
 
+import * as React from "react";
 import Link from "next/link";
 import {
-	forwardRef,
-	InputHTMLAttributes,
 	useCallback,
 	useEffect,
 	useRef,
@@ -14,7 +13,7 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { obrasFormSchema, type Obra, type ObrasForm } from "./schema";
 import { toast } from "sonner";
-import { FileSpreadsheet, Plus, Trash2, Upload } from "lucide-react";
+import { AlertCircle, FileSpreadsheet, Plus, Trash2, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Papa from "papaparse";
 import {
@@ -27,6 +26,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { SearchInput } from "./_components/SearchInput";
+import { ColumnsMenu } from "./_components/ColumnsMenu";
+import { ViewsMenu } from "./_components/ViewsMenu";
+import { InBodyStates } from "./_components/InBodyStates";
+import { CustomInput } from "./_components/CustomInput";
+import { ObrasTable } from "./_components/ObrasTable";
 
 const defaultObra: Obra = {
 	id: undefined,
@@ -71,8 +78,6 @@ const normalizeCsvString = (raw: string | null | undefined): string => {
 };
 
 export default function ExcelPage() {
-	const [showJsonInput, setShowJsonInput] = useState(false);
-	const [jsonInput, setJsonInput] = useState("");
 	const [isLoading, setIsLoading] = useState(true);
 	const [activeTab, setActiveTab] =
 		useState<"in-process" | "completed">("in-process");
@@ -80,6 +85,94 @@ export default function ExcelPage() {
 	const [isDraggingCsv, setIsDraggingCsv] = useState(false);
 	const [csvImportError, setCsvImportError] = useState<string | null>(null);
 	const csvInputRef = useRef<HTMLInputElement | null>(null);
+	const [rowsSnapshot, setRowsSnapshot] = useState<Obra[]>(initialData);
+
+	// Server-side sorting & global search
+	const COLUMN_TO_DB: Record<number, string> = {
+		0: "n",
+		1: "designacion_y_ubicacion",
+		2: "sup_de_obra_m2",
+		3: "entidad_contratante",
+		4: "mes_basico_de_contrato",
+		5: "iniciacion",
+		6: "contrato_mas_ampliaciones",
+		7: "certificado_a_la_fecha",
+		8: "saldo_a_certificar",
+		9: "segun_contrato",
+		10: "prorrogas_acordadas",
+		11: "plazo_total",
+		12: "plazo_transc",
+		13: "porcentaje",
+	};
+	const [orderBy, setOrderBy] = useState<string>("n");
+	const [orderDir, setOrderDir] = useState<"asc" | "desc">("asc");
+	const [query, setQuery] = useState("");
+	const [filtersVersion, setFiltersVersion] = useState(0);
+
+	const setSortByColumn = useCallback((colIndex: number) => {
+		const db = COLUMN_TO_DB[colIndex];
+		if (!db) return;
+		const nextDir = orderBy === db ? (orderDir === "asc" ? "desc" : "asc") : "asc";
+		setOrderBy(db);
+		setOrderDir(nextDir);
+	}, [orderBy, orderDir]);
+
+	// Advanced filters state
+	type FiltersState = {
+		supMin: string; supMax: string;
+		entidades: string[];
+		mesYear: string; mesContains: string;
+		iniYear: string; iniContains: string;
+		cmaMin: string; cmaMax: string;
+		cafMin: string; cafMax: string;
+		sacMin: string; sacMax: string;
+		scMin: string; scMax: string;
+		paMin: string; paMax: string;
+		ptMin: string; ptMax: string;
+		ptrMin: string; ptrMax: string;
+	};
+	const [filtersOpen, setFiltersOpen] = useState(false);
+	const [filters, setFilters] = useState<FiltersState>({
+		supMin: "", supMax: "",
+		entidades: [],
+		mesYear: "", mesContains: "",
+		iniYear: "", iniContains: "",
+		cmaMin: "", cmaMax: "",
+		cafMin: "", cafMax: "",
+		sacMin: "", sacMax: "",
+		scMin: "", scMax: "",
+		paMin: "", paMax: "",
+		ptMin: "", ptMax: "",
+		ptrMin: "", ptrMax: "",
+	});
+
+	const applyFiltersToParams = useCallback((params: URLSearchParams) => {
+		const addNum = (key: keyof FiltersState, name: string) => {
+			const v = filters[key] as unknown as string;
+			if (v && v.trim() !== "") params.set(name, v.trim());
+		};
+		addNum("supMin", "supMin"); addNum("supMax", "supMax");
+		filters.entidades.forEach((e) => { if (e.trim()) params.append("entidad", e); });
+		if (filters.mesYear.trim()) params.set("mesYear", filters.mesYear.trim());
+		if (filters.mesContains.trim()) params.set("mesContains", filters.mesContains.trim());
+		if (filters.iniYear.trim()) params.set("iniYear", filters.iniYear.trim());
+		if (filters.iniContains.trim()) params.set("iniContains", filters.iniContains.trim());
+		addNum("cmaMin", "cmaMin"); addNum("cmaMax", "cmaMax");
+		addNum("cafMin", "cafMin"); addNum("cafMax", "cafMax");
+		addNum("sacMin", "sacMin"); addNum("sacMax", "sacMax");
+		addNum("scMin", "scMin"); addNum("scMax", "scMax");
+		addNum("paMin", "paMin"); addNum("paMax", "paMax");
+		addNum("ptMin", "ptMin"); addNum("ptMax", "ptMax");
+		addNum("ptrMin", "ptrMin"); addNum("ptrMax", "ptrMax");
+	}, [filters]);
+
+	const allEntidades = (() => {
+		const set = new Set<string>();
+		for (const obra of rowsSnapshot) {
+			if (obra.entidadContratante?.trim()) set.add(obra.entidadContratante.trim());
+		}
+		return Array.from(set).sort((a, b) => a.localeCompare(b));
+	})();
 
 	// Column visibility state (indices 0..13)
 	const ALL_COLUMNS: { index: number; label: string }[] = [
@@ -102,6 +195,65 @@ export default function ExcelPage() {
 	const [hiddenCols, setHiddenCols] = useState<number[]>([]);
 	const isHidden = useCallback((i: number) => hiddenCols.includes(i), [hiddenCols]);
 
+	// Column resize mode: balanced (proportional) vs fixed (independent pixel widths)
+	const [resizeMode, setResizeMode] = useState<"balanced" | "fixed">(() => {
+		try {
+			return localStorage.getItem("excel:resizeMode") === "fixed" ? "fixed" : "balanced";
+		} catch { return "balanced"; }
+	});
+	useEffect(() => {
+		try { localStorage.setItem("excel:resizeMode", resizeMode); } catch { }
+	}, [resizeMode]);
+
+	// Persist column visibility
+	useEffect(() => {
+		try {
+			const raw = localStorage.getItem("excel:hiddenCols");
+			if (raw) {
+				const arr = JSON.parse(raw) as number[];
+				if (Array.isArray(arr)) setHiddenCols(arr);
+			}
+		} catch { /* ignore */ }
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+	useEffect(() => {
+		try {
+			localStorage.setItem("excel:hiddenCols", JSON.stringify(hiddenCols));
+		} catch { /* ignore */ }
+	}, [hiddenCols]);
+
+	// Pin columns (freeze) - array of column indices
+	const [pinnedColumns, setPinnedColumns] = useState<number[]>(() => {
+		try {
+			const raw = localStorage.getItem("excel:pinnedColumns");
+			if (raw) {
+				const parsed = JSON.parse(raw) as number[];
+				return Array.isArray(parsed) ? parsed : [];
+			}
+			return [];
+		} catch { return []; }
+	});
+
+	useEffect(() => {
+		try {
+			localStorage.setItem("excel:pinnedColumns", JSON.stringify(pinnedColumns));
+		} catch { /* ignore */ }
+	}, [pinnedColumns]);
+
+	const isPinned = useCallback((colIndex: number) => pinnedColumns.includes(colIndex), [pinnedColumns]);
+
+	const togglePinColumn = useCallback((colIndex: number) => {
+		setPinnedColumns((prev) => {
+			const set = new Set(prev);
+			if (set.has(colIndex)) {
+				set.delete(colIndex);
+			} else {
+				set.add(colIndex);
+			}
+			return Array.from(set).sort((a, b) => a - b);
+		});
+	}, []);
+
 	useEffect(() => {
 		// Hide corresponding <col> elements and redistribute widths across visible columns
 		const applyVisibilityToTable = (tableId: string) => {
@@ -120,17 +272,19 @@ export default function ExcelPage() {
 				}
 			});
 
-			if (visibleIndexes.length > 0) {
-				const percentage = 100 / visibleIndexes.length;
-				visibleIndexes.forEach((idx) => {
-					const col = cols[idx] as HTMLTableColElement;
-					col.style.width = `${percentage}%`;
-				});
+			// Only force percentage sizing in balanced mode
+			if (resizeMode === "balanced") {
+				if (visibleIndexes.length > 0) {
+					const percentage = 100 / visibleIndexes.length;
+					visibleIndexes.forEach((idx) => {
+						const col = cols[idx] as HTMLTableColElement;
+						col.style.width = `${percentage}%`;
+					});
+				}
 			}
 		};
-		applyVisibilityToTable("excel-inproc-table");
-		applyVisibilityToTable("excel-completed-table");
-	}, [hiddenCols]);
+		applyVisibilityToTable("excel-table");
+	}, [hiddenCols, resizeMode]);
 
 	// Pagination per tab
 	const [inProcPage, setInProcPage] = useState(1);
@@ -180,9 +334,16 @@ export default function ExcelPage() {
 				toast.success("Obras guardadas exitosamente");
 
 				try {
+					const params = new URLSearchParams();
+					params.set("orderBy", orderBy);
+					params.set("orderDir", orderDir);
+					if (query.trim()) params.set("q", query.trim());
+					applyFiltersToParams(params);
+					applyFiltersToParams(params);
+					const qs = params.toString();
 					const [rIn, rCo] = await Promise.all([
-						fetch("/api/obras?status=in-process"),
-						fetch("/api/obras?status=completed"),
+						fetch(`/api/obras?status=in-process${qs ? `&${qs}` : ""}`),
+						fetch(`/api/obras?status=completed${qs ? `&${qs}` : ""}`),
 					]);
 					if (rIn.ok && rCo.ok) {
 						const [dIn, dCo] = await Promise.all([rIn.json(), rCo.json()]);
@@ -190,8 +351,9 @@ export default function ExcelPage() {
 						const completed = Array.isArray(dCo?.detalleObras) ? dCo.detalleObras : [];
 						form.setFieldValue(
 							"detalleObras",
-							[...inProc, ...completed].sort((a: any, b: any) => (a?.n ?? 0) - (b?.n ?? 0)),
+							[...inProc, ...completed],
 						);
+						setRowsSnapshot([...inProc, ...completed]);
 					}
 				} catch (refreshError) {
 					console.error("Error refrescando obras", refreshError);
@@ -215,9 +377,16 @@ export default function ExcelPage() {
 
 		async function loadObras() {
 			try {
+				setTableError(null);
+				const params = new URLSearchParams();
+				params.set("orderBy", orderBy);
+				params.set("orderDir", orderDir);
+				if (query.trim()) params.set("q", query.trim());
+				applyFiltersToParams(params);
+				const qs = params.toString();
 				const [respInProc, respCompleted] = await Promise.all([
-					fetch("/api/obras?status=in-process"),
-					fetch("/api/obras?status=completed"),
+					fetch(`/api/obras?status=in-process${qs ? `&${qs}` : ""}`),
+					fetch(`/api/obras?status=completed${qs ? `&${qs}` : ""}`),
 				]);
 
 				if (!respInProc.ok || !respCompleted.ok) {
@@ -237,13 +406,16 @@ export default function ExcelPage() {
 					: [];
 
 				if (isMounted) {
-					const merged = [...inProc, ...completed].sort((a: any, b: any) =>
-						(a?.n ?? 0) - (b?.n ?? 0),
-					);
+					const merged = [...inProc, ...completed];
 					form.setFieldValue("detalleObras", merged);
+					setRowsSnapshot(merged);
+					setTableError(null);
 				}
 			} catch (error) {
 				console.error(error);
+				if (isMounted) {
+					setTableError(error instanceof Error ? error.message : "No se pudieron cargar las obras");
+				}
 				if (isMounted) {
 					toast.error(
 						error instanceof Error
@@ -263,23 +435,8 @@ export default function ExcelPage() {
 		return () => {
 			isMounted = false;
 		};
-	}, [form]);
+	}, [form, orderBy, orderDir, query, filtersVersion]);
 
-	const handleImportJson = () => {
-		try {
-			const parsed = JSON.parse(jsonInput);
-			if (Array.isArray(parsed)) {
-				form.setFieldValue("detalleObras", parsed);
-				toast.success("Datos importados correctamente");
-				setShowJsonInput(false);
-				setJsonInput("");
-			} else {
-				toast.error("El JSON debe ser un array");
-			}
-		} catch {
-			toast.error("JSON inválido");
-		}
-	};
 
 	const importCsvText = useCallback(
 		(text: string) => {
@@ -348,8 +505,6 @@ export default function ExcelPage() {
 			setCsvImportError(null);
 			setShowCsvImport(false);
 			setIsDraggingCsv(false);
-			setShowJsonInput(false);
-			setJsonInput("");
 
 			const completedCount = obras.filter((obra) => obra.porcentaje === 100)
 				.length;
@@ -446,28 +601,124 @@ export default function ExcelPage() {
 		[],
 	);
 
+	// Helpers: clipboard and row actions (context menu)
+	const copyToClipboard = useCallback(async (text: string) => {
+		try {
+			await navigator.clipboard.writeText(text);
+			toast.success("Copiado al portapapeles");
+		} catch {
+			toast.error("No se pudo copiar");
+		}
+	}, []);
+
+	const obraToCsv = useCallback((obra: Obra) => {
+		const values = [
+			obra.n ?? "",
+			obra.designacionYUbicacion ?? "",
+			obra.supDeObraM2 ?? "",
+			obra.entidadContratante ?? "",
+			obra.mesBasicoDeContrato ?? "",
+			obra.iniciacion ?? "",
+			obra.contratoMasAmpliaciones ?? "",
+			obra.certificadoALaFecha ?? "",
+			obra.saldoACertificar ?? "",
+			obra.segunContrato ?? "",
+			obra.prorrogasAcordadas ?? "",
+			obra.plazoTotal ?? "",
+			obra.plazoTransc ?? "",
+			obra.porcentaje ?? "",
+		];
+		return values.map((v) => String(v).replaceAll(";", ",")).join(";");
+	}, []);
+
+	// Field mapping by column index (0..13)
+	const FIELD_BY_INDEX: (keyof Obra)[] = [
+		"n",
+		"designacionYUbicacion",
+		"supDeObraM2",
+		"entidadContratante",
+		"mesBasicoDeContrato",
+		"iniciacion",
+		"contratoMasAmpliaciones",
+		"certificadoALaFecha",
+		"saldoACertificar",
+		"segunContrato",
+		"prorrogasAcordadas",
+		"plazoTotal",
+		"plazoTransc",
+		"porcentaje",
+	];
+
+	// Fuzzy highlight utility (very light)
+	const highlightText = useCallback((text: string, q: string) => {
+		if (!q.trim()) return text;
+		try {
+			const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+			const regex = new RegExp(`(${escaped})`, "ig");
+			return text.split(regex).map((part, i) =>
+				regex.test(part) ? `<mark>${part}</mark>` : part,
+			).join("");
+		} catch {
+			return text;
+		}
+	}, []);
+
+	// In-body table states and expansion
+	const [tableError, setTableError] = useState<string | null>(null);
+
+	// Saved views (visibility, pin, query, filters)
+	type SavedView = { name: string; hiddenCols: number[]; pinnedColumns: number[]; query: string; filters: FiltersState };
+	const loadViews = (): SavedView[] => {
+		try {
+			const raw = localStorage.getItem("excel:views");
+			const parsed = raw ? (JSON.parse(raw) as SavedView[]) : [];
+			return Array.isArray(parsed) ? parsed : [];
+		} catch { return []; }
+	};
+	const saveViews = (views: SavedView[]) => {
+		try { localStorage.setItem("excel:views", JSON.stringify(views)); } catch { /* ignore */ }
+	};
+	const [views, setViews] = useState<SavedView[]>(() => loadViews());
+	const saveCurrentAsView = useCallback(() => {
+		const name = window.prompt("Nombre de la vista:");
+		if (!name) return;
+		const nextViews = [...views.filter(v => v.name !== name), { name, hiddenCols, pinnedColumns, query, filters }];
+		setViews(nextViews);
+		saveViews(nextViews);
+		toast.success("Vista guardada");
+	}, [views, hiddenCols, pinnedColumns, query, filters]);
+	const applyView = useCallback((v: SavedView) => {
+		setHiddenCols(v.hiddenCols || []);
+		setPinnedColumns(v.pinnedColumns || []);
+		setQuery(v.query || "");
+		setFilters(v.filters || filters);
+		setFiltersVersion((x) => x + 1);
+	}, [filters]);
+	const deleteView = useCallback((name: string) => {
+		const next = views.filter(v => v.name !== name);
+		setViews(next);
+		saveViews(next);
+	}, [views]);
+
 	return (
-		<div className="w-full mx-auto p-6">
-			<div>
-				<p className="text-muted-foreground pb-2">
+		<div className="w-full mx-auto p-6 space-y-6">
+			<div className="space-y-2">
+				<p className="text-sm text-muted-foreground">
 					Gestión de obras
 				</p>
-				<h1 className="text-4xl font-bold mb-2">
+				<h1 className="text-4xl font-bold tracking-tight">
 					Detalle de las Obras en Ejecución
 				</h1>
 			</div>
-			{isLoading && (
-				<p className="text-sm text-muted-foreground">Cargando obras...</p>
-			)}
 
 
 			{showCsvImport && (
 				<div
 					className={cn(
-						"mb-6 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors",
+						"mb-6 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-all duration-300",
 						isDraggingCsv
-							? "border-primary bg-primary/5"
-							: "border-muted-foreground/30 bg-muted/40",
+							? "border-primary bg-primary/10 shadow-lg scale-[1.02]"
+							: "border-muted-foreground/30 bg-muted/40 hover:border-muted-foreground/50 hover:bg-muted/60",
 					)}
 					onDragEnter={handleCsvDragOver}
 					onDragOver={handleCsvDragOver}
@@ -490,44 +741,31 @@ export default function ExcelPage() {
 						className="hidden"
 						onChange={handleCsvInputChange}
 					/>
-					<p className="text-sm font-medium">
-						Arrastrá y soltá un archivo CSV o hacé clic para seleccionarlo.
-					</p>
-					<p className="mt-1 text-xs text-muted-foreground">
-						Usá el formato del archivo de ejemplo ubicado en{" "}
-						<code>app/excel/Libro1.csv</code>.
-					</p>
-					{csvImportError && (
-						<p className="mt-3 text-sm text-red-500">{csvImportError}</p>
-					)}
-				</div>
-			)}
-
-			{showJsonInput && (
-				<div className="mb-6 p-4 border rounded-lg bg-muted/50">
-					<label className="block text-sm font-medium mb-2">
-						Pegar JSON de base de datos:
-					</label>
-					<textarea
-						className="w-full p-2 border rounded-md font-mono text-sm min-h-[150px]"
-						value={jsonInput}
-						onChange={(e) => setJsonInput(e.target.value)}
-						placeholder='[{"n": 1, "designacionYUbicacion": "...", ...}]'
-					/>
-					<div className="flex gap-2 mt-2">
-						<Button size="sm" onClick={handleImportJson}>
-							Importar
-						</Button>
-						<Button
-							size="sm"
-							variant="outline"
-							onClick={() => {
-								setShowJsonInput(false);
-								setJsonInput("");
-							}}
-						>
-							Cancelar
-						</Button>
+					<div className="flex flex-col items-center gap-3">
+						<div className={cn(
+							"flex h-16 w-16 items-center justify-center rounded-full transition-colors",
+							isDraggingCsv ? "bg-primary/20" : "bg-muted"
+						)}>
+							<Upload className={cn(
+								"h-8 w-8 transition-colors",
+								isDraggingCsv ? "text-primary" : "text-muted-foreground"
+							)} />
+						</div>
+						<div className="space-y-2">
+							<p className="text-sm font-medium">
+								Arrastrá y soltá un archivo CSV o hacé clic para seleccionarlo
+							</p>
+							<p className="text-xs text-muted-foreground">
+								Usá el formato del archivo de ejemplo ubicado en{" "}
+								<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">app/excel/Libro1.csv</code>
+							</p>
+						</div>
+						{csvImportError && (
+							<div className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+								<AlertCircle className="h-4 w-4" />
+								<span>{csvImportError}</span>
+							</div>
+						)}
 					</div>
 				</div>
 			)}
@@ -541,13 +779,184 @@ export default function ExcelPage() {
 			>
 				<Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "in-process" | "completed")} className="w-full">
 
-					<div className="flex justify-between items-center mt-6">
-						<TabsList className="mb-3" >
-							<TabsTrigger value="in-process">En proceso</TabsTrigger>
-							<TabsTrigger value="completed">Completadas</TabsTrigger>
+					<div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+						<TabsList>
+							<TabsTrigger value="in-process" className="gap-2">
+								En proceso
+							</TabsTrigger>
+							<TabsTrigger value="completed" className="gap-2">
+								Completadas
+							</TabsTrigger>
 						</TabsList>
 
-						<div className="flex gap-2 items-center">
+						<div className="flex flex-wrap gap-2 items-center">
+							<SearchInput value={query} onChange={setQuery} />
+							<Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+								<SheetTrigger asChild>
+									<Button variant="outline" size="sm" className="gap-2">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+										Filtros
+									</Button>
+								</SheetTrigger>
+								<SheetContent side="right" className="sm:w-[30vw] sm:max-w-[90vw] my-auto max-h-[96vh] overflow-y-auto px-6 py-7">
+									<SheetHeader className="space-y-2 p-0">
+										<SheetTitle className="text-xl">Filtros avanzados</SheetTitle>
+										<p className="text-sm text-muted-foreground">Refiná los resultados aplicando múltiples criterios</p>
+									</SheetHeader>
+									<div className="mt-6 space-y-6 max-h-[90vh] overflow-y-auto">
+										<div className="space-y-3 rounded-lg border p-4">
+											<div className="text-sm font-semibold">Sup. de Obra (m²)</div>
+											<div className="flex items-center gap-2">
+												<Input type="number" placeholder="Mín" value={filters.supMin} onChange={(e) => setFilters((f) => ({ ...f, supMin: e.target.value }))} className="text-sm" />
+												<span className="text-muted-foreground">a</span>
+												<Input type="number" placeholder="Máx" value={filters.supMax} onChange={(e) => setFilters((f) => ({ ...f, supMax: e.target.value }))} className="text-sm" />
+											</div>
+										</div>
+
+										<div className="space-y-3 rounded-lg border p-4">
+											<div className="text-sm font-semibold">Entidad contratante</div>
+											<div className="flex flex-wrap gap-2 max-h-32 overflow-auto pr-1">
+												{allEntidades.length === 0 ? (
+													<p className="text-xs text-muted-foreground py-2">No hay entidades disponibles</p>
+												) : (
+													allEntidades.map((ent) => {
+														const active = filters.entidades.includes(ent);
+														return (
+															<button
+																key={ent}
+																type="button"
+																onClick={() => setFilters((f) => ({ ...f, entidades: active ? f.entidades.filter((e) => e !== ent) : [...f.entidades, ent] }))}
+																className={cn(
+																	"inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-all",
+																	active
+																		? 'bg-primary text-primary-foreground border-primary shadow-sm'
+																		: 'bg-background text-foreground hover:bg-muted border-border'
+																)}
+															>
+																{ent}
+															</button>
+														);
+													})
+												)}
+											</div>
+										</div>
+
+										<div className="space-y-3 rounded-lg border p-4">
+											<div className="text-sm font-semibold">Fechas</div>
+											<div className="space-y-4">
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Mes básico de contrato</div>
+													<div className="flex items-center gap-2">
+														<Input placeholder="Año (ej: 2024)" value={filters.mesYear} onChange={(e) => setFilters((f) => ({ ...f, mesYear: e.target.value }))} className="text-sm" />
+														<Input placeholder="Contiene..." value={filters.mesContains} onChange={(e) => setFilters((f) => ({ ...f, mesContains: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Iniciación</div>
+													<div className="flex items-center gap-2">
+														<Input placeholder="Año (ej: 2024)" value={filters.iniYear} onChange={(e) => setFilters((f) => ({ ...f, iniYear: e.target.value }))} className="text-sm" />
+														<Input placeholder="Contiene..." value={filters.iniContains} onChange={(e) => setFilters((f) => ({ ...f, iniContains: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+											</div>
+										</div>
+
+										<div className="space-y-3 rounded-lg border p-4">
+											<div className="text-sm font-semibold">Importes (en pesos)</div>
+											<div className="space-y-3">
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Contrato + ampliaciones</div>
+													<div className="flex items-center gap-2">
+														<Input type="number" placeholder="Mín" value={filters.cmaMin} onChange={(e) => setFilters((f) => ({ ...f, cmaMin: e.target.value }))} className="text-sm" />
+														<span className="text-muted-foreground">a</span>
+														<Input type="number" placeholder="Máx" value={filters.cmaMax} onChange={(e) => setFilters((f) => ({ ...f, cmaMax: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Certificado a la fecha</div>
+													<div className="flex items-center gap-2">
+														<Input type="number" placeholder="Mín" value={filters.cafMin} onChange={(e) => setFilters((f) => ({ ...f, cafMin: e.target.value }))} className="text-sm" />
+														<span className="text-muted-foreground">a</span>
+														<Input type="number" placeholder="Máx" value={filters.cafMax} onChange={(e) => setFilters((f) => ({ ...f, cafMax: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Saldo a certificar</div>
+													<div className="flex items-center gap-2">
+														<Input type="number" placeholder="Mín" value={filters.sacMin} onChange={(e) => setFilters((f) => ({ ...f, sacMin: e.target.value }))} className="text-sm" />
+														<span className="text-muted-foreground">a</span>
+														<Input type="number" placeholder="Máx" value={filters.sacMax} onChange={(e) => setFilters((f) => ({ ...f, sacMax: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+											</div>
+										</div>
+
+										<div className="space-y-3 rounded-lg border p-4">
+											<div className="text-sm font-semibold">Plazos (en meses)</div>
+											<div className="space-y-3">
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Según contrato</div>
+													<div className="flex items-center gap-2">
+														<Input type="number" placeholder="Mín" value={filters.scMin} onChange={(e) => setFilters((f) => ({ ...f, scMin: e.target.value }))} className="text-sm" />
+														<span className="text-muted-foreground">a</span>
+														<Input type="number" placeholder="Máx" value={filters.scMax} onChange={(e) => setFilters((f) => ({ ...f, scMax: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Prórrogas acordadas</div>
+													<div className="flex items-center gap-2">
+														<Input type="number" placeholder="Mín" value={filters.paMin} onChange={(e) => setFilters((f) => ({ ...f, paMin: e.target.value }))} className="text-sm" />
+														<span className="text-muted-foreground">a</span>
+														<Input type="number" placeholder="Máx" value={filters.paMax} onChange={(e) => setFilters((f) => ({ ...f, paMax: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Plazo total</div>
+													<div className="flex items-center gap-2">
+														<Input type="number" placeholder="Mín" value={filters.ptMin} onChange={(e) => setFilters((f) => ({ ...f, ptMin: e.target.value }))} className="text-sm" />
+														<span className="text-muted-foreground">a</span>
+														<Input type="number" placeholder="Máx" value={filters.ptMax} onChange={(e) => setFilters((f) => ({ ...f, ptMax: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+												<div className="space-y-2">
+													<div className="text-xs font-medium text-muted-foreground">Transcurrido</div>
+													<div className="flex items-center gap-2">
+														<Input type="number" placeholder="Mín" value={filters.ptrMin} onChange={(e) => setFilters((f) => ({ ...f, ptrMin: e.target.value }))} className="text-sm" />
+														<span className="text-muted-foreground">a</span>
+														<Input type="number" placeholder="Máx" value={filters.ptrMax} onChange={(e) => setFilters((f) => ({ ...f, ptrMax: e.target.value }))} className="text-sm" />
+													</div>
+												</div>
+											</div>
+										</div>
+
+									</div>
+									<SheetFooter className="mt-6 gap-2">
+										<Button type="button" variant="outline" className="flex-1 gap-2" onClick={() => {
+											setFilters({
+												supMin: "", supMax: "",
+												entidades: [],
+												mesYear: "", mesContains: "",
+												iniYear: "", iniContains: "",
+												cmaMin: "", cmaMax: "",
+												cafMin: "", cafMax: "",
+												sacMin: "", sacMax: "",
+												scMin: "", scMax: "",
+												paMin: "", paMax: "",
+												ptMin: "", ptMax: "",
+												ptrMin: "", ptrMax: "",
+											});
+											setFiltersVersion((v) => v + 1);
+										}}>
+											<X className="h-4 w-4" />
+											Limpiar
+										</Button>
+										<Button type="button" className="flex-1 gap-2" onClick={() => { setFiltersVersion((v) => v + 1); setFiltersOpen(false); }}>
+											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+											Aplicar
+										</Button>
+									</SheetFooter>
+								</SheetContent>
+							</Sheet>
 							<Button
 								variant="outline"
 								size="sm"
@@ -555,7 +964,6 @@ export default function ExcelPage() {
 									setShowCsvImport((prev) => {
 										const next = !prev;
 										if (next) {
-											setShowJsonInput(false);
 											setCsvImportError(null);
 										} else {
 											setIsDraggingCsv(false);
@@ -567,52 +975,22 @@ export default function ExcelPage() {
 								<FileSpreadsheet className="h-4 w-4 mr-2" />
 								Importar CSV
 							</Button>
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => {
-									setShowJsonInput((prev) => {
-										const next = !prev;
-										if (next) {
-											setShowCsvImport(false);
-											setIsDraggingCsv(false);
-											setCsvImportError(null);
-										}
-										return next;
-									});
-								}}
-							>
-								<Upload className="h-4 w-4 mr-2" />
-								Importar JSON
-							</Button>
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<Button variant="outline" size="sm">Columnas</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end" className="w-72">
-									<DropdownMenuItem onClick={() => setHiddenCols([])}>Mostrar todo</DropdownMenuItem>
-									<DropdownMenuItem onClick={() => setHiddenCols(ALL_COLUMNS.map(c => c.index))}>Ocultar todo</DropdownMenuItem>
-									<DropdownMenuSeparator />
-									{ALL_COLUMNS.map((col) => {
-										const checked = !hiddenCols.includes(col.index);
-										return (
-											<DropdownMenuCheckboxItem
-												key={col.index}
-												checked={checked}
-												onCheckedChange={(next: boolean | 'indeterminate') => {
-													setHiddenCols((prev) => {
-														const set = new Set(prev);
-														if (next === false) set.add(col.index); else set.delete(col.index);
-														return Array.from(set).sort((a, b) => a - b);
-													});
-												}}
-											>
-												{col.label}
-											</DropdownMenuCheckboxItem>
-										);
-									})}
-								</DropdownMenuContent>
-							</DropdownMenu>
+
+							<ColumnsMenu
+								allColumns={ALL_COLUMNS}
+								hiddenCols={hiddenCols}
+								setHiddenCols={setHiddenCols}
+								pinnedColumns={pinnedColumns}
+								togglePinColumn={togglePinColumn}
+								resizeMode={resizeMode}
+								setResizeMode={setResizeMode}
+							/>
+							<ViewsMenu
+								views={views}
+								saveCurrentAsView={saveCurrentAsView}
+								applyView={applyView}
+								deleteView={deleteView}
+							/>
 						</div>
 					</div>
 
@@ -620,185 +998,87 @@ export default function ExcelPage() {
 						<form.Field name="detalleObras" mode="array">
 							{(field) => {
 								const allRows = field.state.value.map((obra, index) => ({ obra, index }));
-								const filtered = allRows.filter(({ obra }) => obra.porcentaje !== 100);
+								const filtered = allRows.filter(({ obra }) =>
+									activeTab === "in-process" ? obra.porcentaje !== 100 : obra.porcentaje === 100,
+								);
 								const totalCount = filtered.length;
-								const totalPages = Math.max(1, Math.ceil(totalCount / inProcLimit));
-								const safePage = Math.min(inProcPage, totalPages);
-								const start = (safePage - 1) * inProcLimit;
-								const visible = filtered.slice(start, start + inProcLimit);
+								const currentLimit = activeTab === "in-process" ? inProcLimit : compLimit;
+								const currentPage = activeTab === "in-process" ? inProcPage : compPage;
+								const totalPages = Math.max(1, Math.ceil(totalCount / currentLimit));
+								const safePage = Math.min(currentPage, totalPages);
+								const start = (safePage - 1) * currentLimit;
+								const visible = filtered.slice(start, start + currentLimit);
 
 								return (
 									<>
-										<div className="border border-gray-300 rounded-lg overflow-x-auto mb-4 w-full max-h-[60vh] overflow-y-auto">
-											<table className="text-sm table-fixed " data-table-id="excel-inproc-table">
-												<ColGroup tableId="excel-inproc-table" columns={14} />
-												<thead className="bg-gray-100">
-													<tr className="bg-card">
-														<th rowSpan={2} className="relative px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(0) ? "none" : undefined }}>N°
-															<ColumnResizer tableId="excel-inproc-table" colIndex={0} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(1) ? "none" : undefined }}>DESIGNACIÓN Y UBICACIÓN
-															<ColumnResizer tableId="excel-inproc-table" colIndex={1} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(2) ? "none" : undefined }}>SUP. DE OBRA (M2)
-															<ColumnResizer tableId="excel-inproc-table" colIndex={2} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(3) ? "none" : undefined }}>ENTIDAD CONTRATANTE
-															<ColumnResizer tableId="excel-inproc-table" colIndex={3} />
-														</th>
-														{(() => {
-															const count = [4, 5].filter(i => !isHidden(i)).length;
-															return (
-																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">FECHAS</th>
-															);
-														})()}
-														{(() => {
-															const count = [6, 7, 8].filter(i => !isHidden(i)).length;
-															return (
-																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">IMPORTES (EN PESOS) A VALORES BÁSICOS</th>
-															);
-														})()}
-														{(() => {
-															const count = [9, 10, 11, 12].filter(i => !isHidden(i)).length;
-															return (
-																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">PLAZOS (EN MESES)</th>
-															);
-														})()}
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(13) ? "none" : undefined }}>%
-															<ColumnResizer tableId="excel-inproc-table" colIndex={13} />
-														</th>
-														{/* <th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-t border-gray-300 whitespace-normal break-words align-center">DETALLE
-															<ColumnResizer tableId="excel-inproc-table" colIndex={14} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase whitespace-normal break-words align-top">ACCIONES
-															<ColumnResizer tableId="excel-inproc-table" colIndex={15} />
-														</th> */}
-													</tr>
-													<tr className="bg-card ">
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(4) ? "none" : undefined }}>MES BÁSICO DE CONTRATO
-															<ColumnResizer tableId="excel-inproc-table" colIndex={4} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(5) ? "none" : undefined }}>INICIACIÓN
-															<ColumnResizer tableId="excel-inproc-table" colIndex={5} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(6) ? "none" : undefined }}>CONTRATO MÁS AMPLIACIONES
-															<ColumnResizer tableId="excel-inproc-table" colIndex={6} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(7) ? "none" : undefined }}>CERTIFICADO A LA FECHA
-															<ColumnResizer tableId="excel-inproc-table" colIndex={7} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(8) ? "none" : undefined }}>SALDO A CERTIFICAR
-															<ColumnResizer tableId="excel-inproc-table" colIndex={8} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(9) ? "none" : undefined }}>SEGÚN CONTRATO
-															<ColumnResizer tableId="excel-inproc-table" colIndex={9} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(10) ? "none" : undefined }}>PRORROGAS ACORDADAS
-															<ColumnResizer tableId="excel-inproc-table" colIndex={10} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(11) ? "none" : undefined }}>PLAZO TOTAL
-															<ColumnResizer tableId="excel-inproc-table" colIndex={11} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-r border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(12) ? "none" : undefined }}>PLAZO TOTAL TRANSCURRIDO
-															<ColumnResizer tableId="excel-inproc-table" colIndex={12} />
-														</th>
-													</tr>
-												</thead>
-												<tbody>
-													{visible.length === 0 ? (
-														<tr>
-															<td colSpan={16} className="px-4 py-6 text-center text-sm text-muted-foreground">No hay obras en proceso. Agregá una nueva fila para comenzar.</td>
-														</tr>
-													) : (
-														visible.map(({ index }, visualIndex) => (
-															<tr key={index} className={visualIndex % 2 === 0 ? "bg-background" : "bg-card/40"}>
-																<form.Field name={`detalleObras[${index}].n`}>
-																	{(subField) => (<td className="px-2 pl-4 py-2 border-t border-r border-gray-200 relative" style={{ display: isHidden(0) ? "none" : undefined }}>{subField.state.value}</td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].designacionYUbicacion`}>
-																	{(subField) => (
-																		<td className="border-t border-r border-gray-200 p-0 align-center px-2 py-2 " style={{ display: isHidden(1) ? "none" : undefined }}>
-																			<Link href={`/excel/${field.state.value[index]?.id}`} className="cursor-pointer">{subField.state.value}</Link>
-																		</td>
-																	)}
-																</form.Field>
+										<ObrasTable
+											formApi={form}
+											field={field}
+											tableId="excel-table"
+											visible={visible}
+											isLoading={isLoading}
+											tableError={tableError}
+											onRetry={() => { setIsLoading(true); setFiltersVersion(v => v + 1); }}
+											isHidden={isHidden}
+											pinnedColumns={pinnedColumns}
+											isPinned={isPinned}
+											togglePinColumn={togglePinColumn}
+											orderBy={orderBy}
+											orderDir={orderDir}
+											setOrderBy={setOrderBy}
+											setOrderDir={setOrderDir}
+											setSortByColumn={setSortByColumn}
+											resizeMode={resizeMode}
+											query={query}
+											copyToClipboard={copyToClipboard}
+											obraToCsv={obraToCsv}
+											FIELD_BY_INDEX={FIELD_BY_INDEX as unknown as string[]}
+											COLUMN_TO_DB={COLUMN_TO_DB}
+											highlightText={highlightText}
+											headerGroupBgClass="bg-sidebar"
+											emptyText="No hay obras en proceso. Agregá una nueva fila para comenzar."
+											onFilterByEntidad={(ent) => {
+												setFilters((f) => ({ ...f, entidades: [ent] }));
+												setFiltersVersion((v) => v + 1);
+												setActiveTab("in-process");
+											}}
+										/>
 
-																<form.Field name={`detalleObras[${index}].supDeObraM2`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(2) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].entidadContratante`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(3) ? "none" : undefined }}><CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].mesBasicoDeContrato`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(4) ? "none" : undefined }}><CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].iniciacion`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(5) ? "none" : undefined }}><CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].contratoMasAmpliaciones`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(6) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right font-mono" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].certificadoALaFecha`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(7) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right font-mono" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].saldoACertificar`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(8) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right font-mono" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].segunContrato`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(9) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].prorrogasAcordadas`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(10) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].plazoTotal`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(11) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm\tborder text-right" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].plazoTransc`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(12) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-
-																<form.Field name={`detalleObras[${index}].porcentaje`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(13) ? "none" : undefined }}><CustomInput type="number" step="0.01" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-
-																{/* <form.Field name={`detalleObras[${index}].id`}>
-																	{(subField) => (
-																		<td className="border-t border-r border-gray-200 text-center">{subField.state.value ? (<Button asChild variant="link" size="sm"><Link href={`/excel/${subField.state.value}`}>Ver detalle</Link></Button>) : (<span className="text-xs text-muted-foreground">Guardar para configurar</span>)}</td>
-																	)}
-																</form.Field>
-
-																<td className="px-2 py-2 border-t text-center"><Button type="button" variant="ghost" size="sm" onClick={() => field.removeValue(index)} disabled={field.state.value.length <= 1}><Trash2 className="h-4 w-4 text-destructive" /></Button></td> */}
-															</tr>
-														))
-													)}
-												</tbody>
-											</table>
-										</div >
-
-										<div className="flex items-center justify-between mb-4">
-											<div className="flex items-center gap-2 text-sm">
-												<span>Filas por página</span>
-												<select className="border rounded-md px-2 py-1 bg-background" value={inProcLimit} onChange={(e) => { setInProcLimit(Number(e.target.value)); setInProcPage(1); }}>
+										<div className="flex flex-wrap items-center justify-between gap-4 py-4 px-1">
+											<div className="flex items-center gap-2">
+												<span className="text-sm text-muted-foreground">Filas por página</span>
+												<select
+													className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring"
+													value={activeTab === "in-process" ? inProcLimit : compLimit}
+													onChange={(e) => {
+														const v = Number(e.target.value);
+														if (activeTab === "in-process") {
+															setInProcLimit(v);
+															setInProcPage(1);
+														} else {
+															setCompLimit(v);
+															setCompPage(1);
+														}
+													}}
+												>
 													<option value={10}>10</option>
 													<option value={25}>25</option>
 													<option value={50}>50</option>
 													<option value={100}>100</option>
 												</select>
 											</div>
-											<div className="flex items-center gap-2 text-sm">
-												<span>Página {safePage} de {totalPages}</span>
-												<Button type="button" variant="outline" size="sm" onClick={() => setInProcPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>Anterior</Button>
-												<Button type="button" variant="outline" size="sm" onClick={() => setInProcPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>Siguiente</Button>
+											<div className="flex items-center gap-3">
+												<span className="text-sm text-muted-foreground">
+													Página <span className="font-medium text-foreground">{safePage}</span> de <span className="font-medium text-foreground">{totalPages}</span>
+												</span>
+												<div className="flex gap-1">
+													<Button type="button" variant="outline" size="sm" onClick={() => (activeTab === "in-process" ? setInProcPage((p) => Math.max(1, p - 1)) : setCompPage((p) => Math.max(1, p - 1)))} disabled={safePage <= 1}>
+														<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+													</Button>
+													<Button type="button" variant="outline" size="sm" onClick={() => (activeTab === "in-process" ? setInProcPage((p) => Math.min(totalPages, p + 1)) : setCompPage((p) => Math.min(totalPages, p + 1)))} disabled={safePage >= totalPages}>
+														<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+													</Button>
+												</div>
 											</div>
 										</div>
 									</>
@@ -820,178 +1100,77 @@ export default function ExcelPage() {
 
 								return (
 									<>
-										<div className="border border-gray-300 rounded-lg overflow-x-auto mb-4 w-full max-h-[60vh] overflow-y-auto">
-											<table className="text-sm table-fixed" data-table-id="excel-completed-table">
-												<ColGroup tableId="excel-completed-table" columns={14} />
-												<thead className="bg-gray-100">
-													<tr className="bg-card">
-														<th rowSpan={2} className="relative px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(0) ? "none" : undefined }}>N°
-															<ColumnResizer tableId="excel-completed-table" colIndex={0} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(1) ? "none" : undefined }}>DESIGNACIÓN Y UBICACIÓN
-															<ColumnResizer tableId="excel-completed-table" colIndex={1} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(2) ? "none" : undefined }}>SUP. DE OBRA (M2)
-															<ColumnResizer tableId="excel-completed-table" colIndex={2} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(3) ? "none" : undefined }}>ENTIDAD CONTRATANTE
-															<ColumnResizer tableId="excel-completed-table" colIndex={3} />
-														</th>
-														{(() => {
-															const count = [4, 5].filter(i => !isHidden(i)).length;
-															return (
-																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">FECHAS</th>
-															);
-														})()}
-														{(() => {
-															const count = [6, 7, 8].filter(i => !isHidden(i)).length;
-															return (
-																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">IMPORTES (EN PESOS) A VALORES BÁSICOS</th>
-															);
-														})()}
-														{(() => {
-															const count = [9, 10, 11, 12].filter(i => !isHidden(i)).length;
-															return (
-																<th colSpan={count || 1} style={{ display: count === 0 ? "none" : undefined }} className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300">PLAZOS (EN MESES)</th>
-															);
-														})()}
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(13) ? "none" : undefined }}>%
-															<ColumnResizer tableId="excel-completed-table" colIndex={13} />
-														</th>
-														{/* <th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-t border-gray-300 whitespace-normal break-words align-center">DETALLE
-															<ColumnResizer tableId="excel-completed-table" colIndex={14} />
-														</th>
-														<th rowSpan={2} className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase whitespace-normal break-words align-top">ACCIONES
-															<ColumnResizer tableId="excel-completed-table" colIndex={15} />
-														</th> */}
-													</tr>
-													<tr className="bg-card ">
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(4) ? "none" : undefined }}>MES BÁSICO DE CONTRATO
-															<ColumnResizer tableId="excel-completed-table" colIndex={4} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(5) ? "none" : undefined }}>INICIACIÓN
-															<ColumnResizer tableId="excel-completed-table" colIndex={5} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(6) ? "none" : undefined }}>CONTRATO MÁS AMPLIACIONES
-															<ColumnResizer tableId="excel-completed-table" colIndex={6} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(7) ? "none" : undefined }}>CERTIFICADO A LA FECHA
-															<ColumnResizer tableId="excel-completed-table" colIndex={7} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(8) ? "none" : undefined }}>SALDO A CERTIFICAR
-															<ColumnResizer tableId="excel-completed-table" colIndex={8} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(9) ? "none" : undefined }}>SEGÚN CONTRATO
-															<ColumnResizer tableId="excel-completed-table" colIndex={9} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(10) ? "none" : undefined }}>PRORROGAS ACORDADAS
-															<ColumnResizer tableId="excel-completed-table" colIndex={10} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-x border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(11) ? "none" : undefined }}>PLAZO TOTAL
-															<ColumnResizer tableId="excel-completed-table" colIndex={11} />
-														</th>
-														<th className="relative px-4 py-2 text-xs font-medium text-gray-600 border-r border-t border-gray-300 whitespace-normal break-words align-center" style={{ display: isHidden(12) ? "none" : undefined }}>PLAZO TOTAL TRANSCURRIDO
-															<ColumnResizer tableId="excel-completed-table" colIndex={12} />
-														</th>
-													</tr>
-												</thead>
-												<tbody>
-													{visible.length === 0 ? (
-														<tr>
-															<td colSpan={16} className="px-4 py-6 text-center text-sm text-muted-foreground">No hay obras completadas todavía.</td>
-														</tr>
-													) : (
-														visible.map(({ index }, visualIndex) => (
-															<tr key={index} className={visualIndex % 2 === 0 ? "bg-background" : "bg-card/40"}>
-																<form.Field name={`detalleObras[${index}].n`}>
-																	{(subField) => (<td className="px-2 pl-4 py-2 border-t border-r border-gray-200 relative" style={{ display: isHidden(0) ? "none" : undefined }}>{subField.state.value}</td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].designacionYUbicacion`}>
-																	{(subField) => (
-																		<td className="border-t border-r border-gray-200 p-0 align-center px-2 py-2 " style={{ display: isHidden(1) ? "none" : undefined }}>
-																			<Link href={`/excel/${field.state.value[index]?.id}`} className="cursor-pointer">{subField.state.value}</Link>
-																		</td>
-																	)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].supDeObraM2`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(2) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].entidadContratante`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(3) ? "none" : undefined }}><CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].mesBasicoDeContrato`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(4) ? "none" : undefined }}><CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].iniciacion`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(5) ? "none" : undefined }}><CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].contratoMasAmpliaciones`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(6) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right font-mono" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].certificadoALaFecha`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(7) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right font-mono" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].saldoACertificar`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(8) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right font-mono" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].segunContrato`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(9) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].prorrogasAcordadas`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(10) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].plazoTotal`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(11) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm\tborder text-right" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].plazoTransc`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(12) ? "none" : undefined }}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-																<form.Field name={`detalleObras[${index}].porcentaje`}>
-																	{(subField) => (<td className="border-t border-r border-gray-200 p-0 relative table-cell" style={{ display: isHidden(13) ? "none" : undefined }}><CustomInput type="number" step="0.01" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
-																</form.Field>
-																{/* <form.Field name={`detalleObras[${index}].id`}>
-																	{(subField) => (
-																		<td className="border-t border-r border-gray-200 text-center">{subField.state.value ? (<Button asChild variant="link" size="sm"><Link href={`/excel/${subField.state.value}`}>Ver detalle</Link></Button>) : (<span className="text-xs text-muted-foreground">Guardar para configurar</span>)}</td>
-																	)}
-																</form.Field> */}
+										<ObrasTable
+											formApi={form}
+											field={field}
+											tableId="excel-completed-table"
+											visible={visible}
+											isLoading={isLoading}
+											tableError={tableError}
+											onRetry={() => { setIsLoading(true); setFiltersVersion(v => v + 1); }}
+											isHidden={isHidden}
+											pinnedColumns={pinnedColumns}
+											isPinned={isPinned}
+											togglePinColumn={togglePinColumn}
+											orderBy={orderBy}
+											orderDir={orderDir}
+											setOrderBy={setOrderBy}
+											setOrderDir={setOrderDir}
+											setSortByColumn={setSortByColumn}
+											resizeMode={resizeMode}
+											query={query}
+											copyToClipboard={copyToClipboard}
+											obraToCsv={obraToCsv}
+											FIELD_BY_INDEX={FIELD_BY_INDEX as unknown as string[]}
+											COLUMN_TO_DB={COLUMN_TO_DB}
+											highlightText={highlightText}
+											emptyText="No hay obras completadas todavía."
+											onFilterByEntidad={(ent) => {
+												setFilters((f) => ({ ...f, entidades: [ent] }));
+												setFiltersVersion((v) => v + 1);
+												setActiveTab("in-process");
+											}}
+										/>
 
-																{/* <td className="px-2 py-2 border-t text-center"><Button type="button" variant="ghost" size="sm" onClick={() => field.removeValue(index)} disabled={field.state.value.length <= 1}><Trash2 className="h-4 w-4 text-destructive" /></Button></td> */}
-															</tr>
-														))
-													)}
-												</tbody>
-											</table>
-										</div>
-
-										<div className="flex items-center justify-between mb-4">
-											<div className="flex items-center gap-2 text-sm">
-												<span>Filas por página</span>
-												<select className="border rounded-md px-2 py-1 bg-background" value={compLimit} onChange={(e) => { setCompLimit(Number(e.target.value)); setCompPage(1); }}>
+										<div className="flex flex-wrap items-center justify-between gap-4 py-4 px-1">
+											<div className="flex items-center gap-2">
+												<span className="text-sm text-muted-foreground">Filas por página</span>
+												<select className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring" value={compLimit} onChange={(e) => { setCompLimit(Number(e.target.value)); setCompPage(1); }}>
 													<option value={10}>10</option>
 													<option value={25}>25</option>
 													<option value={50}>50</option>
 													<option value={100}>100</option>
 												</select>
 											</div>
-											<div className="flex items-center gap-2 text-sm">
-												<span>Página {safePage} de {totalPages}</span>
-												<Button type="button" variant="outline" size="sm" onClick={() => setCompPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>Anterior</Button>
-												<Button type="button" variant="outline" size="sm" onClick={() => setCompPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>Siguiente</Button>
+											<div className="flex items-center gap-3">
+												<span className="text-sm text-muted-foreground">
+													Página <span className="font-medium text-foreground">{safePage}</span> de <span className="font-medium text-foreground">{totalPages}</span>
+												</span>
+												<div className="flex gap-1">
+													<Button type="button" variant="outline" size="sm" onClick={() => setCompPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
+														<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+													</Button>
+													<Button type="button" variant="outline" size="sm" onClick={() => setCompPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>
+														<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+													</Button>
+												</div>
 											</div>
 										</div>
 									</>
 								);
 							}}
 						</form.Field>
+
 					</TabsContent>
 				</Tabs>
 
-				<div className="flex justify-between items-center">
+				<div className="flex flex-wrap justify-between items-center gap-4 pt-4 border-t">
 					<form.Field name="detalleObras" mode="array">
 						{(field) => (
 							<Button
 								type="button"
 								variant="outline"
+								className="gap-2"
 								onClick={() => {
 									const nextN =
 										field.state.value.reduce(
@@ -1004,58 +1183,50 @@ export default function ExcelPage() {
 									});
 								}}
 							>
-								<Plus className="h-4 w-4 mr-2" />
+								<Plus className="h-4 w-4" />
 								Agregar Fila
 							</Button>
 						)}
 					</form.Field>
 
-					<div className="flex gap-2">
-						<form.Subscribe
-							selector={(state) => [state.canSubmit, state.isSubmitting]}
-						>
-							{([canSubmit, isSubmitting]) => (
-								<Button type="submit" disabled={!canSubmit || isLoading}>
-									{isSubmitting ? "Guardando..." : "Guardar"}
-								</Button>
-							)}
-						</form.Subscribe>
-					</div>
+					<form.Subscribe
+						selector={(state) => [state.canSubmit, state.isSubmitting]}
+					>
+						{([canSubmit, isSubmitting]) => (
+							<Button
+								type="submit"
+								disabled={!canSubmit || isLoading}
+								className="gap-2"
+								size="default"
+							>
+								{isSubmitting ? (
+									<>
+										<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+											<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+											<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+										</svg>
+										Guardando...
+									</>
+								) : (
+									<>
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+										Guardar Cambios
+									</>
+								)}
+							</Button>
+						)}
+					</form.Subscribe>
 				</div>
 			</form>
-		</div >
+		</div>
 	);
 }
 
-interface CustomInputProps extends InputHTMLAttributes<HTMLInputElement> {
-	variant?: "default" | "cammo" | "show-empty";
-}
-
-const CustomInput = forwardRef<HTMLInputElement, CustomInputProps>(
-	({ className, type, variant = "default", ...props }, ref) => {
-		const baseStyles =
-			"w-full font-mono text-base bg-transparent border-none outline-none px-0 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-primary";
-
-		const variantStyles: Record<NonNullable<CustomInputProps["variant"]>, string> =
-		{
-			default: "border-b border-[#e5e7eb] focus:border-black transition-colors",
-			cammo: "bg-transparent border-none outline-none shadow-none",
-			"show-empty": cn(
-				"border-b border-[#e5e7eb] focus:border-black transition-colors",
-				!props.value && "bg-dashedInput",
-			),
-		};
-
-		return (
-			<input
-				type={type}
-				ref={ref}
-				className={cn(baseStyles, variantStyles[variant], className)}
-				{...props}
-			/>
-		);
-	},
-);
-CustomInput.displayName = "CustomInput";
-
-export { CustomInput };
+/* extracted subcomponents moved into app/excel/_components:
+	 - SearchInput
+	 - ColumnsMenu
+	 - ViewsMenu
+	 - InBodyStates
+	 - CustomInput
+	 - ObrasTable
+*/

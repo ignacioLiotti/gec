@@ -1,5 +1,6 @@
 import { sleep } from "workflow";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { parseLocalDate } from "@/utils/date";
 
 type DocumentReminderParams = {
 	obraId: string;
@@ -10,6 +11,7 @@ type DocumentReminderParams = {
 	 */
 	dueDate: string;
 	notifyUserId?: string | null;
+	pendienteId?: string | null;
 	/**
 	 * Optional email fallback if you prefer email reminders instead of in-app notifications.
 	 */
@@ -37,19 +39,14 @@ export async function sendDocumentReminderWorkflow(
 }
 
 function computeReminderDate(dueDateInput: string): Date | null {
-	let due = new Date(dueDateInput);
-	if (Number.isNaN(due.getTime())) {
-		// Try parsing date-only format
-		if (/^\d{4}-\d{2}-\d{2}$/.test(dueDateInput)) {
-			due = new Date(`${dueDateInput}T00:00:00`);
-		} else {
-			return null;
-		}
-	}
-	// Day before due date at 09:00 local time
-	const dayBefore = new Date(due.getTime() - 24 * 60 * 60 * 1000);
-	dayBefore.setHours(9, 0, 0, 0);
-	return dayBefore;
+    const due = parseLocalDate(dueDateInput);
+    if (!due) {
+        return null;
+    }
+    // Day-of due date at 09:00 local time
+    const dayOf = new Date(due);
+    dayOf.setHours(9, 0, 0, 0);
+    return dayOf;
 }
 
 async function createNotification(params: DocumentReminderParams) {
@@ -65,5 +62,12 @@ async function createNotification(params: DocumentReminderParams) {
 		body,
 		type: "reminder",
 		action_url: actionUrl,
+		pendiente_id: params.pendienteId ?? null,
+		data: {
+			obraId: params.obraId,
+			obraName: params.obraName ?? null,
+			documentName: params.documentName,
+			dueDate: params.dueDate,
+		},
 	});
 }

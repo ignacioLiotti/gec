@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
 import { obraSchema, type Obra } from "../schema";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
 import {
@@ -28,7 +30,8 @@ import {
 	Upload,
 	Image as ImageIcon,
 	File as FileIcon,
-	Download
+	Download,
+	Trash2
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
@@ -122,11 +125,11 @@ export default function ObraDetailPage() {
 	const mountedRef = useRef(true);
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-	type PendingDoc = { id: string; name: string; poliza: string; dueDate: string; done: boolean };
+	type PendingDoc = { id: string; name: string; poliza: string; dueMode: "fixed" | "after_completion"; dueDate: string; offsetDays: number; done: boolean };
 	const [pendingDocs, setPendingDocs] = useState<PendingDoc[]>([
-		{ id: "doc-1", name: "", poliza: "", dueDate: "", done: false },
-		{ id: "doc-2", name: "", poliza: "", dueDate: "", done: false },
-		{ id: "doc-3", name: "", poliza: "", dueDate: "", done: false },
+		{ id: "doc-1", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
+		{ id: "doc-2", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
+		{ id: "doc-3", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
 	]);
 
 	// Materiales state
@@ -145,6 +148,7 @@ export default function ObraDetailPage() {
 		gestor: string;
 		proveedor: string;
 		items: MaterialItem[];
+		docUrl?: string; // signed URL to view uploaded document (optional)
 	};
 
 	const [materialOrders, setMaterialOrders] = useState<MaterialOrder[]>(() => [
@@ -175,12 +179,30 @@ export default function ObraDetailPage() {
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
+	const [orderDocPaths, setOrderDocPaths] = useState<Record<string, { segments: string[]; name: string; mime?: string }>>(() => ({}));
+	const [activeTab, setActiveTab] = useState<string>("general");
+	const [pendingOpenDoc, setPendingOpenDoc] = useState<{ segments: string[]; name: string; mime?: string } | null>(null);
+	const router = useRouter();
+	const searchParams = useSearchParams();
+	const pathname = usePathname();
+
+	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
+		const params = new URLSearchParams(searchParams?.toString?.() || "");
+		for (const [key, value] of Object.entries(patch)) {
+			if (value == null || value === "") params.delete(key); else params.set(key, value);
+		}
+		const qs = params.toString();
+		router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+	}, [router, pathname, searchParams]);
+
+	console.log('orderDocPaths', orderDocPaths);
 
 	// Import OC from PDF
 	const importInputRef = useRef<HTMLInputElement | null>(null);
 	const [isImportingMaterials, setIsImportingMaterials] = useState(false);
-	const [importDialogOpen, setImportDialogOpen] = useState(false);
-	const [importResult, setImportResult] = useState<any | null>(null);
+	const [isImportPreviewOpen, setIsImportPreviewOpen] = useState(false);
+	const [importPreviewOrder, setImportPreviewOrder] = useState<NewOrderForm | null>(null);
+	const lastUploadedDocRef = useRef<{ segments: string[]; name: string; mime?: string } | null>(null);
 
 	const triggerImportMaterials = useCallback(() => {
 		importInputRef.current?.click();
@@ -188,49 +210,94 @@ export default function ObraDetailPage() {
 
 	const handleImportMaterials = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
-		if (!file || !obraId) return;
+		if (!file) return;
+		if (!obraId || obraId === "undefined") {
+			toast.error("Obra no encontrada");
+			return;
+		}
 		try {
 			setIsImportingMaterials(true);
+			// Upload original file to Supabase Storage under <obraId>/materiales/
+			try {
+				const supabase = createSupabaseBrowserClient();
+				const basePath = String(obraId);
+				// Check if 'materiales' folder exists under obra root
+				const { data: rootList } = await supabase.storage
+					.from(DOCUMENTS_BUCKET)
+					.list(basePath, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+				const hasMateriales = Boolean((rootList || []).find((it: any) => it.name === 'materiales' && !it.metadata));
+				if (!hasMateriales) {
+					const keepKey = `${basePath}/materiales/.keep`;
+					await supabase.storage
+						.from(DOCUMENTS_BUCKET)
+						.upload(keepKey, new Blob([""], { type: 'text/plain' }), { upsert: true });
+				}
+				// Upload the file with a timestamped name to avoid collisions
+				const safeName = `${Date.now()}-${file.name}`;
+				const uploadKey = `${basePath}/materiales/${safeName}`;
+				const { error: upErr } = await supabase.storage
+					.from(DOCUMENTS_BUCKET)
+					.upload(uploadKey, file, { upsert: false });
+				if (!upErr) {
+					lastUploadedDocRef.current = { segments: ["materiales"], name: safeName, mime: file.type };
+				}
+				toast.success('Archivo guardado en Documentos/materiales');
+			} catch (uploadErr) {
+				console.error('Upload to materiales failed', uploadErr);
+				toast.error('No se pudo guardar el archivo en Documentos/materiales');
+			}
 			const fd = new FormData();
-			fd.append("file", file);
-			const res = await fetch(`/api/obras/${obraId}/materials/import`, { method: "POST", body: fd });
+			if (file.type.includes("pdf")) {
+				// Rasterize first page to PNG in-browser using pdfjs and send as imageDataUrl
+				try {
+					// @ts-ignore: dynamic import without types is fine for client rasterization
+					const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
+					const array = new Uint8Array(await file.arrayBuffer());
+					const loadingTask = pdfjs.getDocument({ data: array, disableWorker: true });
+					const pdf = await loadingTask.promise;
+					const page = await pdf.getPage(1);
+					const viewport = page.getViewport({ scale: 2 });
+					const canvasEl = document.createElement('canvas');
+					canvasEl.width = Math.ceil(viewport.width);
+					canvasEl.height = Math.ceil(viewport.height);
+					const ctx = canvasEl.getContext('2d');
+					if (!ctx) throw new Error('No canvas context');
+					await page.render({ canvasContext: ctx as any, viewport }).promise;
+					const dataUrl = canvasEl.toDataURL('image/png');
+					fd.append('imageDataUrl', dataUrl);
+				} catch (pdfErr) {
+					console.error('PDF rasterization failed', pdfErr);
+					// Fallback: send file anyway (server will reject with a helpful message)
+					fd.append('file', file);
+				}
+			} else {
+				fd.append('file', file);
+			}
+			const res = await fetch(`/api/obras/${obraId}/materials/import?preview=1`, { method: "POST", body: fd });
 			if (!res.ok) {
 				const out = await res.json().catch(() => ({} as any));
-				setImportResult(out || { ok: false, error: "No se pudo importar" });
-				setImportDialogOpen(true);
 				throw new Error(out?.error || "No se pudo importar");
 			}
 			const out = await res.json();
-			setImportResult(out);
-			setImportDialogOpen(true);
-			// Map response to local state shape
-			const orderId = String(out.order?.id || `ord-${Date.now()}`);
-			const items = (out.items || []).map((it: any, idx: number) => ({
-				id: `${orderId}-i-${idx}`,
-				cantidad: Number(it.cantidad || 0),
-				unidad: String(it.unidad || ""),
-				material: String(it.material || ""),
-				precioUnitario: Number(it.precioUnitario || 0),
+			// Build preview order form
+			const extractedItems = (out.items || []).map((it: any) => ({
+				cantidad: String(it.cantidad ?? ''),
+				unidad: String(it.unidad ?? ''),
+				material: String(it.material ?? ''),
+				precioUnitario: String(it.precioUnitario ?? ''),
 			}));
-			const newOrd = {
-				id: orderId,
-				nroOrden: out.order?.nroOrden || orderId,
-				solicitante: out.order?.solicitante || "",
-				gestor: out.order?.gestor || "",
-				proveedor: out.order?.proveedor || "",
-				items,
-			} as MaterialOrder;
-			setMaterialOrders((prev) => [newOrd, ...prev]);
-			setExpandedOrders((prev) => new Set(prev).add(orderId));
-			setOrderFilters((prev) => ({ ...prev, [orderId]: "" }));
-			toast.success("Orden importada");
+			const meta = out.meta || {};
+			setImportPreviewOrder({
+				nroOrden: meta.nroOrden ?? '',
+				solicitante: meta.solicitante ?? '',
+				gestor: meta.gestor ?? '',
+				proveedor: meta.proveedor ?? '',
+				items: extractedItems.length > 0 ? extractedItems : [{ cantidad: '', unidad: '', material: '', precioUnitario: '' }],
+			});
+			setIsImportPreviewOpen(true);
 		} catch (err) {
 			console.error(err);
 			const message = err instanceof Error ? err.message : "No se pudo importar";
-			if (!importDialogOpen) {
-				setImportResult({ ok: false, error: message });
-				setImportDialogOpen(true);
-			}
 			toast.error(message);
 		} finally {
 			setIsImportingMaterials(false);
@@ -402,6 +469,24 @@ export default function ObraDetailPage() {
 					})),
 				}));
 				setMaterialOrders(mapped);
+				// Build persistent doc mapping from API response
+				setOrderDocPaths(() => {
+					const acc: Record<string, { segments: string[]; name: string; mime?: string }> = {};
+					for (const o of orders) {
+						if (o.docPath && typeof o.docPath === 'string') {
+							const full = o.docPath as string;
+							const obraPrefix = `${String(obraId)}/`;
+							const rel = full.startsWith(obraPrefix) ? full.slice(obraPrefix.length) : full;
+							const parts = rel.split('/').filter(Boolean);
+							if (parts.length >= 1) {
+								const name = parts[parts.length - 1];
+								const segments = parts.slice(0, -1);
+								acc[String(o.id)] = { segments, name };
+							}
+						}
+					}
+					return acc;
+				});
 			}
 		} catch {
 			// no-op
@@ -411,6 +496,8 @@ export default function ObraDetailPage() {
 	useEffect(() => {
 		void refreshMaterialOrders();
 	}, [refreshMaterialOrders]);
+
+
 
 	// Documents (Supabase Storage) state and handlers
 	const DOCUMENTS_BUCKET = "obra-documents";
@@ -434,6 +521,7 @@ export default function ObraDetailPage() {
 	const [docsLoading, setDocsLoading] = useState(false);
 	const [docsError, setDocsError] = useState<string | null>(null);
 	const [docItems, setDocItems] = useState<StorageListItem[]>([]);
+	const [pendingAutoOpen, setPendingAutoOpen] = useState<{ segments: string[] } | null>(null);
 
 	const listDocuments = useCallback(async () => {
 		if (!obraId) return;
@@ -461,7 +549,10 @@ export default function ObraDetailPage() {
 	}, [obraId, listDocuments]);
 
 	const goToFolder = useCallback((folder: string) => {
-		setDocPathSegments((prev) => [...prev, folder]);
+		setDocPathSegments((prev) => {
+			const next = [...prev, folder];
+			return next;
+		});
 	}, []);
 
 	const goToIndex = useCallback((index: number) => {
@@ -524,10 +615,13 @@ export default function ObraDetailPage() {
 	}, [currentDocsPath, listDocuments]);
 
 	const [preview, setPreview] = useState<{ name: string; url: string } | null>(null);
-	const previewFile = useCallback(async (name: string, mimetype?: string) => {
+	const previewFile = useCallback(async (name: string, mimetype?: string, overrideSegments?: string[]) => {
 		try {
 			const supabase = createSupabaseBrowserClient();
-			const path = `${currentDocsPath}/${name}`;
+			const base = obraId ? String(obraId) : "";
+			const path = overrideSegments && overrideSegments.length > 0
+				? `${base}/${overrideSegments.join('/')}/${name}`
+				: `${currentDocsPath}/${name}`;
 			const { data, error } = await supabase.storage
 				.from(DOCUMENTS_BUCKET)
 				.createSignedUrl(path, 60);
@@ -537,7 +631,93 @@ export default function ObraDetailPage() {
 			console.error(err);
 			toast.error("No se pudo previsualizar");
 		}
-	}, [currentDocsPath]);
+	}, [obraId, currentDocsPath]);
+
+	// When user clicked "Ver documento" from materiales, open the stored doc
+	useEffect(() => {
+		if (activeTab !== 'documentos') return;
+		if (!pendingOpenDoc) return;
+		const want = pendingOpenDoc.segments.join('/');
+		const curr = docPathSegments.join('/');
+		if (want !== curr) {
+			setDocPathSegments(pendingOpenDoc.segments);
+			return;
+		}
+		void (async () => {
+			await previewFile(pendingOpenDoc.name);
+			setPendingOpenDoc(null);
+		})();
+	}, [activeTab, pendingOpenDoc, docPathSegments, previewFile]);
+
+	// Sync tab and documents view with URL
+	useEffect(() => {
+		const qTab = searchParams?.get?.("tab");
+		if (qTab && qTab !== activeTab) setActiveTab(qTab);
+		if (qTab === 'documentos') {
+			// Prefer full doc path if provided
+			const docParam = searchParams.get('doc') || '';
+			if (docParam.includes('/')) {
+				const parts = docParam.split('/').filter(Boolean);
+				const name = parts[parts.length - 1] || '';
+				const segs = parts.slice(0, -1);
+				if (segs.join('/') !== docPathSegments.join('/')) {
+					setDocPathSegments(segs);
+				}
+				if (name && (!preview || preview.name !== name)) {
+					void previewFile(name, undefined, segs);
+				}
+			} else {
+				// Back-compat: use docsPath + doc name
+				const path = searchParams.get('docsPath') || '';
+				const segs = path.split('/').filter(Boolean);
+				if (segs.join('/') !== docPathSegments.join('/')) {
+					setDocPathSegments(segs);
+				}
+				const file = docParam;
+				if (file && (!preview || preview.name !== file)) {
+					void previewFile(file);
+				}
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [searchParams, preview, docPathSegments]);
+
+	// After navigating to a folder via fallback, auto-open first file if available
+	useEffect(() => {
+		if (!pendingAutoOpen) return;
+		const want = pendingAutoOpen.segments.join('/');
+		if (docPathSegments.join('/') !== want) return;
+		const firstFile = (docItems || []).find((it) => !!it.metadata);
+		if (firstFile) {
+			void previewFile(firstFile.name, firstFile.metadata?.mimetype as any, pendingAutoOpen.segments);
+			setPendingAutoOpen(null);
+		}
+	}, [pendingAutoOpen, docPathSegments, docItems, previewFile]);
+
+	// Write tab/docsPath/doc to URL after state changes
+	useEffect(() => {
+		const params = new URLSearchParams(searchParams?.toString?.() || "");
+		let changed = false;
+		const currTab = params.get('tab') || '';
+		if (activeTab && activeTab !== currTab) { params.set('tab', activeTab); changed = true; }
+		const wantPath = activeTab === 'documentos' ? docPathSegments.join('/') : '';
+		const currPath = params.get('docsPath') || '';
+		if ((wantPath || currPath) && wantPath !== currPath) {
+			if (wantPath) params.set('docsPath', wantPath); else params.delete('docsPath');
+			changed = true;
+		}
+		const wantDoc = activeTab === 'documentos' && preview ? `${docPathSegments.join('/')}${docPathSegments.length ? '/' : ''}${preview.name}` : '';
+		const currDoc = params.get('doc') || '';
+		if ((wantDoc || currDoc) && wantDoc !== currDoc) {
+			if (wantDoc) params.set('doc', wantDoc); else params.delete('doc');
+			changed = true;
+		}
+		if (changed) {
+			const qs = params.toString();
+			router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false });
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [activeTab, docPathSegments, preview]);
 
 	const downloadFile = useCallback(async (name: string) => {
 		try {
@@ -673,7 +853,7 @@ export default function ObraDetailPage() {
 		});
 	}, []);
 
-	const updatePendingDoc = useCallback((index: number, field: keyof PendingDoc, value: string | boolean) => {
+	const updatePendingDoc = useCallback((index: number, field: keyof PendingDoc, value: string | boolean | number) => {
 		setPendingDocs((prev) => {
 			const next = [...prev];
 			next[index] = { ...next[index], [field]: value } as PendingDoc;
@@ -683,7 +863,7 @@ export default function ObraDetailPage() {
 
 	const scheduleReminderForDoc = useCallback(async (doc: PendingDoc) => {
 		if (!obraId || obraId === "undefined") return;
-		if (!doc.dueDate) return;
+		if (doc.dueMode !== "fixed" || !doc.dueDate) return;
 		try {
 			const res = await fetch("/api/doc-reminders", {
 				method: "POST",
@@ -694,15 +874,104 @@ export default function ObraDetailPage() {
 					documentName: doc.name || "Documento",
 					dueDate: doc.dueDate,
 					notifyUserId: currentUserId,
+					pendienteId: doc.id && /[0-9a-f-]{36}/i.test(doc.id) ? doc.id : null,
 				}),
 			});
 			if (!res.ok) throw new Error("Failed to schedule");
-			toast.success("Recordatorio programado para el día anterior al vencimiento");
+			toast.success("Recordatorio programado");
 		} catch (err) {
 			console.error(err);
 			toast.error("No se pudo programar el recordatorio");
 		}
 	}, [obraId, currentUserId]);
+
+	const loadPendientes = useCallback(async () => {
+		if (!obraId || obraId === "undefined") return;
+		try {
+			const res = await fetch(`/api/obras/${obraId}/pendientes`);
+			if (!res.ok) throw new Error("No se pudieron cargar los pendientes");
+			const data = await res.json();
+			const list = (data?.pendientes ?? []).map((p: any) => ({
+				id: p.id as string,
+				name: String(p.name ?? ""),
+				poliza: String(p.poliza ?? ""),
+				dueMode: (p.dueMode ?? "fixed") as "fixed" | "after_completion",
+				dueDate: String(p.dueDate ?? ""),
+				offsetDays: Number(p.offsetDays ?? 0),
+				done: Boolean(p.done ?? false),
+			})) as PendingDoc[];
+			if (list.length > 0) setPendingDocs(list);
+		} catch (err) {
+			console.error(err);
+		}
+	}, [obraId]);
+
+	useEffect(() => {
+		loadPendientes();
+	}, [loadPendientes]);
+
+	const savePendingDoc = useCallback(async (doc: PendingDoc, index: number) => {
+		if (!obraId || obraId === "undefined") return;
+		try {
+			const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.id);
+			const method = isUuid ? "PUT" : "POST";
+			const res = await fetch(`/api/obras/${obraId}/pendientes`, {
+				method,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					id: isUuid ? doc.id : undefined,
+					name: doc.name,
+					poliza: doc.poliza || null,
+					dueMode: doc.dueMode,
+					dueDate: doc.dueMode === "fixed" ? (doc.dueDate || null) : null,
+					offsetDays: doc.dueMode === "after_completion" ? Number(doc.offsetDays || 0) : null,
+					done: doc.done,
+				}),
+			});
+			if (!res.ok) throw new Error("No se pudo guardar");
+			const json = await res.json().catch(() => ({}));
+			let effectiveDoc = doc;
+			if (!isUuid && json?.pendiente?.id) {
+				const newId = String(json.pendiente.id);
+				effectiveDoc = { ...doc, id: newId };
+				setPendingDocs((prev) => {
+					const next = [...prev];
+					next[index] = effectiveDoc;
+					return next;
+				});
+			}
+			toast.success("Pendiente actualizado");
+			if (effectiveDoc.dueMode === "fixed" && effectiveDoc.dueDate) {
+				await scheduleReminderForDoc(effectiveDoc);
+			}
+		} catch (err) {
+			console.error(err);
+			toast.error("No se pudo guardar el pendiente");
+		}
+	}, [obraId, scheduleReminderForDoc]);
+
+	const deletePendingDoc = useCallback(async (doc: PendingDoc, index: number) => {
+		if (!obraId || obraId === "undefined") return;
+
+		// If it's a temporary (unsaved) doc, just remove it from the list
+		const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.id);
+		if (!isUuid) {
+			setPendingDocs((prev) => prev.filter((_, i) => i !== index));
+			return;
+		}
+
+		try {
+			const res = await fetch(`/api/obras/${obraId}/pendientes?id=${doc.id}`, {
+				method: "DELETE",
+			});
+			if (!res.ok) throw new Error("No se pudo eliminar");
+			setPendingDocs((prev) => prev.filter((_, i) => i !== index));
+			toast.success("Pendiente eliminado");
+		} catch (err) {
+			console.error(err);
+			toast.error("No se pudo eliminar el pendiente");
+		}
+	}, [obraId]);
 
 	const refreshCertificates = useCallback(async () => {
 		if (!obraId || obraId === "undefined") {
@@ -912,7 +1181,7 @@ export default function ObraDetailPage() {
 						<p className="font-medium">{loadError}</p>
 					</motion.div>
 				) : (
-					<Tabs defaultValue="general" className="space-y-6">
+					<Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); }} className="space-y-6">
 						<form.Subscribe selector={(state) => [state.values.porcentaje]}>
 							{([porcentaje]) => (
 								<TabsList className="grid w-full max-w-[1000px] grid-cols-6">
@@ -928,7 +1197,7 @@ export default function ObraDetailPage() {
 										<Receipt className="h-4 w-4" />
 										Certificados
 									</TabsTrigger>
-									<TabsTrigger value="pendientes" className="gap-2" disabled={(porcentaje as number) < 100}>
+									<TabsTrigger value="pendientes" className="gap-2">
 										<FileText className="h-4 w-4" />
 										Pendientes
 									</TabsTrigger>
@@ -1612,19 +1881,18 @@ export default function ObraDetailPage() {
 															required
 														/>
 													</div>
-													<div className="md:col-span-2">
-														<label className="block text-sm font-medium mb-2">
-															Estado
-														</label>
-														<Input
-															type="text"
-															value={newCertificate.estado}
-															onChange={(event) =>
-																handleNewCertificateChange("estado", event.target.value)
-															}
-															placeholder="CERTIFICADO"
-														/>
-													</div>
+													<div className="md:col-span-2"></div>
+													<label className="block text-sm font-medium mb-2">
+														Estado
+													</label>
+													<Input
+														type="text"
+														value={newCertificate.estado}
+														onChange={(event) =>
+															handleNewCertificateChange("estado", event.target.value)
+														}
+														placeholder="CERTIFICADO"
+													/>
 												</div>
 												{createCertificateError && (
 													<div className="p-3 rounded-md bg-destructive/10 border border-destructive/50">
@@ -1743,7 +2011,7 @@ export default function ObraDetailPage() {
 												<Upload className="h-4 w-4" />
 												{isImportingMaterials ? "Importando..." : "Importar OC"}
 											</Button>
-											<input ref={importInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleImportMaterials} />
+											<input ref={importInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleImportMaterials} />
 											<Button className="whitespace-nowrap gap-2" onClick={() => setIsAddOrderOpen(true)}>
 												<Plus className="h-4 w-4" />
 												Nueva orden
@@ -1790,7 +2058,34 @@ export default function ObraDetailPage() {
 																	<div className="text-sm text-muted-foreground">
 																		{order.items.length} ítems en la orden
 																	</div>
-																	<div className="w-full sm:w-auto">
+																	<div className="w-full sm:w-auto flex items-center gap-3">
+																		{(() => {
+																			const info = orderDocPaths[order.id];
+																			return (
+																				<button
+																					type="button"
+																					className="text-xs underline text-primary whitespace-nowrap"
+																					onClick={() => {
+																						setActiveTab('documentos');
+																						console.log('info', info);
+																						if (info) {
+																							setDocPathSegments(info.segments);
+																							setPendingOpenDoc({ segments: info.segments, name: info.name, mime: info.mime });
+																							void previewFile(info.name, undefined, info.segments);
+																						} else {
+																							// Fallback: try materiales folder and open first file if present
+																							const fallbackSegs = ['materiales'];
+																							setDocPathSegments(fallbackSegs);
+																							setPendingAutoOpen({ segments: fallbackSegs });
+																						}
+																					}}
+																				>
+																					{info ? 'Ver documento' : 'Ver documentos'}
+																				</button>
+																			);
+																		})()}
+
+
 																		<Input
 																			placeholder="Filtrar materiales de esta orden"
 																			value={orderFilters[order.id] ?? ""}
@@ -1835,20 +2130,105 @@ export default function ObraDetailPage() {
 																	<span className="text-lg font-bold font-mono">$ {totalOrden.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
 																</div>
 															</div>
-															{/* Import result dialog */}
-															<Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-																<DialogContent className="max-w-3xl">
+															{/* Import preview dialog */}
+															<Dialog open={isImportPreviewOpen} onOpenChange={setIsImportPreviewOpen}>
+																<DialogContent className="max-w-4xl">
 																	<DialogHeader>
-																		<DialogTitle>Resultado de importación</DialogTitle>
+																		<DialogTitle>Revisar orden importada</DialogTitle>
 																	</DialogHeader>
-																	<div className="space-y-3">
-																		<pre className="bg-muted rounded-md p-3 text-xs overflow-auto max-h-[60vh]">
-																			{importResult ? JSON.stringify(importResult, null, 2) : "Sin datos"}
-																		</pre>
-																		<div className="flex justify-end">
-																			<Button onClick={() => setImportDialogOpen(false)}>Cerrar</Button>
-																		</div>
-																	</div>
+																	{/* link to document removed in preview: requested only in table */}
+																	{importPreviewOrder && (
+																		<form onSubmit={async (ev) => {
+																			ev.preventDefault();
+																			if (!obraId) return;
+																			try {
+																				const normalizedItems = importPreviewOrder.items
+																					.filter((it) => (it.material?.trim() ?? '').length > 0 && Number(it.cantidad) > 0)
+																					.map((it) => ({
+																						cantidad: Number(it.cantidad) || 0,
+																						unidad: it.unidad.trim(),
+																						material: it.material.trim(),
+																						precioUnitario: Number(it.precioUnitario) || 0,
+																					}));
+																				const res = await fetch(`/api/obras/${obraId}/materials`, {
+																					method: 'POST',
+																					headers: { 'Content-Type': 'application/json' },
+																					body: JSON.stringify({
+																						nroOrden: importPreviewOrder.nroOrden.trim() || undefined,
+																						solicitante: importPreviewOrder.solicitante.trim() || undefined,
+																						gestor: importPreviewOrder.gestor.trim() || undefined,
+																						proveedor: importPreviewOrder.proveedor.trim() || undefined,
+																						items: normalizedItems,
+																						docBucket: 'obra-documents',
+																						docPath: (lastUploadedDocRef.current ? `${String(obraId)}/${lastUploadedDocRef.current.segments.join('/')}/${lastUploadedDocRef.current.name}` : undefined),
+																					}),
+																				});
+																				if (!res.ok) throw new Error((await res.json()).error || 'No se pudo guardar');
+																				const data = await res.json();
+																				await refreshMaterialOrders();
+																				if (lastUploadedDocRef.current && data?.order?.id) {
+																					setOrderDocPaths((prev) => ({ ...prev, [String(data.order.id)]: lastUploadedDocRef.current! }));
+																				}
+																				setIsImportPreviewOpen(false);
+																				setImportPreviewOrder(null);
+																				lastUploadedDocRef.current = null;
+																				toast.success('Orden guardada');
+																			} catch (saveErr) {
+																				console.error(saveErr);
+																				toast.error(saveErr instanceof Error ? saveErr.message : 'No se pudo guardar');
+																			}
+																		}} className="space-y-4">
+																			<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+																				<div>
+																					<label className="block text-sm font-medium mb-1">Nº de orden</label>
+																					<Input value={importPreviewOrder.nroOrden} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, nroOrden: e.target.value } : prev)} placeholder="OC-000X" />
+																				</div>
+																				<div>
+																					<label className="block text-sm font-medium mb-1">Solicitante</label>
+																					<Input value={importPreviewOrder.solicitante} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, solicitante: e.target.value } : prev)} placeholder="Nombre del solicitante" />
+																				</div>
+																				<div>
+																					<label className="block text-sm font-medium mb-1">Gestor</label>
+																					<Input value={importPreviewOrder.gestor} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, gestor: e.target.value } : prev)} placeholder="Nombre del gestor" />
+																				</div>
+																				<div>
+																					<label className="block text-sm font-medium mb-1">Proveedor</label>
+																					<Input value={importPreviewOrder.proveedor} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, proveedor: e.target.value } : prev)} placeholder="Proveedor" />
+																				</div>
+																			</div>
+
+																			<div className="overflow-x-auto rounded-lg border">
+																				<table className="w-full text-sm">
+																					<thead className="bg-muted/50">
+																						<tr>
+																							<th className="text-left font-medium py-2 px-3 border-b">Cantidad</th>
+																							<th className="text-left font-medium py-2 px-3 border-b">Unidad</th>
+																							<th className="text-left font-medium py-2 px-3 border-b">Material</th>
+																							<th className="text-right font-medium py-2 px-3 border-b">Precio unitario</th>
+																							<th className="py-2 px-3 border-b" />
+																						</tr>
+																					</thead>
+																					<tbody>
+																						{importPreviewOrder.items.map((it, i) => (
+																							<tr key={i} className="border-b last:border-0">
+																								<td className="py-2 px-3 min-w-[110px]"><Input type="number" step="0.01" value={it.cantidad} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], cantidad: e.target.value }; return { ...prev, items }; })} placeholder="0" /></td>
+																								<td className="py-2 px-3 min-w-[110px]"><Input type="text" value={it.unidad} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], unidad: e.target.value }; return { ...prev, items }; })} placeholder="u / m / m²" /></td>
+																								<td className="py-2 px-3 min-w-[220px]"><Input type="text" value={it.material} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], material: e.target.value }; return { ...prev, items }; })} placeholder="Descripción" /></td>
+																								<td className="py-2 px-3 min-w-[160px]"><Input className="text-right" type="number" step="0.01" value={it.precioUnitario} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], precioUnitario: e.target.value }; return { ...prev, items }; })} placeholder="0.00" /></td>
+																								<td className="py-2 px-3 text-right">
+																									<Button type="button" variant="ghost" onClick={() => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = prev.items.slice(); items.splice(i, 1); return { ...prev, items: items.length ? items : [{ cantidad: '', unidad: '', material: '', precioUnitario: '' }] }; })}>Eliminar</Button>
+																								</td>
+																							</tr>
+																						))}
+																					</tbody>
+																				</table>
+																			</div>
+																			<DialogFooter>
+																				<Button type="button" variant="outline" onClick={() => { setIsImportPreviewOpen(false); setImportPreviewOrder(null); lastUploadedDocRef.current = null; }}>Cancelar</Button>
+																				<Button type="submit" className="min-w-[140px]">Guardar</Button>
+																			</DialogFooter>
+																		</form>
+																	)}
 																</DialogContent>
 															</Dialog>
 														</motion.div>
@@ -2052,7 +2432,7 @@ export default function ObraDetailPage() {
 							</Dialog>
 
 							{/* Preview dialog */}
-							<Dialog open={!!preview} onOpenChange={(open) => { if (!open) setPreview(null); }}>
+							<Dialog open={!!preview} onOpenChange={(open) => { if (!open) { setPreview(null); setQueryParams({ doc: null }); } }}>
 								<DialogContent className="max-w-3xl">
 									<DialogHeader>
 										<DialogTitle>{preview?.name}</DialogTitle>
@@ -2083,6 +2463,21 @@ export default function ObraDetailPage() {
 											</div>
 											<p className="text-sm text-muted-foreground mt-1">Lista de tareas al completar la obra</p>
 										</div>
+										<div className="shrink-0">
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={() => {
+													setPendingDocs((prev) => ([
+														...prev,
+														{ id: `tmp-${Date.now()}`, name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
+													]));
+												}}
+											>
+												<Plus className="h-4 w-4 mr-2" />
+												Agregar
+											</Button>
+										</div>
 									</div>
 								</div>
 
@@ -2095,6 +2490,7 @@ export default function ObraDetailPage() {
 													<th className="text-left font-medium py-3 px-4 border-b">Póliza</th>
 													<th className="text-left font-medium py-3 px-4 border-b">Vencimiento</th>
 													<th className="text-left font-medium py-3 px-4 border-b">Hecho</th>
+													<th className="text-left font-medium py-3 px-4 border-b">Acciones</th>
 												</tr>
 											</thead>
 											<tbody>
@@ -2122,16 +2518,38 @@ export default function ObraDetailPage() {
 																onChange={(e) => updatePendingDoc(idx, "poliza", e.target.value)}
 															/>
 														</td>
-														<td className="py-3 px-4 min-w-[200px]">
-															<Input
-																type="date"
-																value={doc.dueDate}
-																onChange={async (e) => {
-																	const nextValue = e.target.value;
-																	updatePendingDoc(idx, "dueDate", nextValue);
-																	await scheduleReminderForDoc({ ...doc, dueDate: nextValue });
-																}}
-															/>
+														<td className="py-3 px-4 min-w-[280px]">
+															<div className="flex items-center gap-2">
+																<DropdownMenu>
+																	<DropdownMenuTrigger asChild>
+																		<Button variant="outline" size="sm">
+																			{doc.dueMode === "fixed" ? "Fecha fija" : "Días después de finalizar"}
+																		</Button>
+																	</DropdownMenuTrigger>
+																	<DropdownMenuContent align="start">
+																		<DropdownMenuItem onClick={() => updatePendingDoc(idx, "dueMode", "fixed")}>Fecha fija</DropdownMenuItem>
+																		<DropdownMenuItem onClick={() => updatePendingDoc(idx, "dueMode", "after_completion")}>Días después de finalizar</DropdownMenuItem>
+																	</DropdownMenuContent>
+																</DropdownMenu>
+																{doc.dueMode === "fixed" ? (
+																	<Input
+																		type="date"
+																		value={doc.dueDate}
+																		onChange={(e) => updatePendingDoc(idx, "dueDate", e.target.value)}
+																	/>
+																) : (
+																	<div className="flex items-center gap-2">
+																		<Input
+																			type="number"
+																			min={0}
+																			value={Number(doc.offsetDays || 0)}
+																			onChange={(e) => updatePendingDoc(idx, "offsetDays", Number(e.target.value))}
+																			className="w-24"
+																		/>
+																		<span className="text-sm text-muted-foreground">días después</span>
+																	</div>
+																)}
+															</div>
 														</td>
 														<td className="py-3 px-4">
 															<input
@@ -2140,6 +2558,19 @@ export default function ObraDetailPage() {
 																onChange={(e) => updatePendingDoc(idx, "done", e.target.checked)}
 																className="h-4 w-4"
 															/>
+														</td>
+														<td className="py-3 px-4">
+															<div className="flex items-center gap-2">
+																<Button size="sm" variant="secondary" onClick={() => savePendingDoc(doc, idx)}>Guardar</Button>
+																<Button
+																	size="sm"
+																	variant="ghost"
+																	onClick={() => deletePendingDoc(doc, idx)}
+																	className="text-destructive hover:text-destructive hover:bg-destructive/10"
+																>
+																	<Trash2 className="h-4 w-4" />
+																</Button>
+															</div>
 														</td>
 													</motion.tr>
 												))}
@@ -2155,6 +2586,6 @@ export default function ObraDetailPage() {
 					</Tabs>
 				)}
 			</div>
-		</div>
+		</div >
 	);
 }

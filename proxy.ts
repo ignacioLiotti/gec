@@ -22,8 +22,8 @@ export async function proxy(req: NextRequest) {
 		}
 	);
 
-	// Touch the session so refreshed tokens are captured into cookies
-	await supabase.auth.getUser();
+	// Refresh the session and capture refreshed tokens into cookies
+	await supabase.auth.getSession();
 
 	return res;
 }
