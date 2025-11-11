@@ -81,14 +81,24 @@ export default function UserMenu({ email }: UserMenuProps) {
         const userId = userRes.user?.id;
         if (!userId) return;
         const { data, error } = await supabase
-          .from("notifications")
-          .select("id,title,body,type,created_at,read_at,action_url")
+          .from("scheduled_events")
+          .select("id,title,description,notification_type,scheduled_at,read_at,action_url")
           .eq("user_id", userId)
-          .order("created_at", { ascending: false })
+          .eq("event_type", "NOTIFICATION") // Only show notification-type events
+          .order("scheduled_at", { ascending: false })
           .limit(50);
         if (error) throw error;
         if (!aborted) {
-          const items = data ?? [];
+          // Map new schema to old format for compatibility
+          const items = (data ?? []).map((item) => ({
+            id: item.id,
+            title: item.title,
+            body: item.description,
+            type: item.notification_type ?? "info",
+            created_at: item.scheduled_at,
+            read_at: item.read_at,
+            action_url: item.action_url,
+          }));
           setNotifications(items.length ? items : demoNotifications);
         }
       } catch (err) {

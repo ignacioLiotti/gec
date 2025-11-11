@@ -12,6 +12,18 @@ export default function NotificationsPlaygroundPage() {
   const [notifyUserId, setNotifyUserId] = useState("");
   const [documentName, setDocumentName] = useState("Póliza");
   const [dueDate, setDueDate] = useState("");
+
+  // Appointment fields
+  const [appointmentTitle, setAppointmentTitle] = useState("Consulta médica");
+  const [appointmentDate, setAppointmentDate] = useState("");
+  const [appointmentLocation, setAppointmentLocation] = useState("Consultorio");
+  const [appointmentNotes, setAppointmentNotes] = useState("");
+
+  // Meeting fields
+  const [meetingTitle, setMeetingTitle] = useState("Reunión de equipo");
+  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("Sala de conferencias");
+
   const [loading, setLoading] = useState<string | null>(null);
   const [result, setResult] = useState<string>("");
 
@@ -35,7 +47,10 @@ export default function NotificationsPlaygroundPage() {
 
   return (
     <div className="p-6 space-y-8">
-      <h1 className="text-2xl font-semibold">Notifications Playground</h1>
+      <h1 className="text-2xl font-semibold">Events & Notifications Playground</h1>
+      <p className="text-muted-foreground">
+        Test the generalized event system: notifications, appointments, and meetings
+      </p>
       <div className="rounded-md border p-4 space-y-4">
         <div className="text-lg font-medium">Obra completada</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -108,6 +123,100 @@ export default function NotificationsPlaygroundPage() {
             disabled={loading !== null}
           >
             Programar recordatorio
+          </Button>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="rounded-md border p-4 space-y-4 bg-blue-50/50">
+        <div className="text-lg font-medium">Nueva Cita (Appointment)</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm mb-1">Título</label>
+            <Input value={appointmentTitle} onChange={(e) => setAppointmentTitle(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Fecha y hora</label>
+            <Input
+              type="datetime-local"
+              value={appointmentDate}
+              onChange={(e) => setAppointmentDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Ubicación</label>
+            <Input value={appointmentLocation} onChange={(e) => setAppointmentLocation(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Notificar a user_id</label>
+            <Input value={notifyUserId} onChange={(e) => setNotifyUserId(e.target.value)} placeholder="user uuid" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-sm mb-1">Notas</label>
+            <Input value={appointmentNotes} onChange={(e) => setAppointmentNotes(e.target.value)} placeholder="Notas adicionales" />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={() =>
+              emit("appointment.created", {
+                userId: notifyUserId,
+                appointmentId: crypto.randomUUID(),
+                title: appointmentTitle,
+                appointmentAt: appointmentDate ? new Date(appointmentDate).toISOString() : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                location: appointmentLocation,
+                notes: appointmentNotes || null,
+              })
+            }
+            disabled={loading !== null}
+          >
+            Crear cita
+          </Button>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="rounded-md border p-4 space-y-4 bg-purple-50/50">
+        <div className="text-lg font-medium">Nueva Reunión (Meeting)</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm mb-1">Título</label>
+            <Input value={meetingTitle} onChange={(e) => setMeetingTitle(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Fecha y hora</label>
+            <Input
+              type="datetime-local"
+              value={meetingDate}
+              onChange={(e) => setMeetingDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Ubicación</label>
+            <Input value={meetingLocation} onChange={(e) => setMeetingLocation(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Organizador user_id</label>
+            <Input value={notifyUserId} onChange={(e) => setNotifyUserId(e.target.value)} placeholder="user uuid" />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={() =>
+              emit("meeting.scheduled", {
+                organizerId: notifyUserId,
+                meetingId: crypto.randomUUID(),
+                title: meetingTitle,
+                meetingAt: meetingDate ? new Date(meetingDate).toISOString() : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+                location: meetingLocation,
+                participantIds: notifyUserId ? [notifyUserId] : [],
+              })
+            }
+            disabled={loading !== null}
+          >
+            Programar reunión
           </Button>
         </div>
       </div>

@@ -29,14 +29,21 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
     if (eff.channel === "in-app") {
       "use step";
       const s = createSupabaseAdminClient();
-      await s.from("notifications").insert({
+      const now = new Date();
+
+      // Write to the new scheduled_events table
+      await s.from("scheduled_events").insert({
         user_id: eff.recipientId,
         tenant_id: eff.ctx?.tenantId ?? null,
+        event_type: "NOTIFICATION", // in-app notifications are type NOTIFICATION
         title: eff.title?.(eff.ctx) ?? "",
-        body: eff.body?.(eff.ctx) ?? null,
-        type: eff.type ?? "info",
+        description: eff.body?.(eff.ctx) ?? null,
+        notification_type: eff.type ?? "info",
         action_url: eff.actionUrl?.(eff.ctx) ?? null,
-        data: eff.data?.(eff.ctx) ?? {},
+        metadata: eff.data?.(eff.ctx) ?? {},
+        scheduled_at: now,
+        delivered_at: now, // delivered immediately
+        status: "delivered",
       });
     } else if (eff.channel === "email") {
       "use step";
