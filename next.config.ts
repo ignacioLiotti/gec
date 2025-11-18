@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
 		serverActions: {
 			bodySizeLimit: "2mb",
 		},
+		serverComponentsExternalPackages: [
+			"@supabase/node-fetch",
+			"node-fetch",
+			"undici",
+		],
 	},
 	webpack: (config, { isServer }) => {
 		if (isServer) {
