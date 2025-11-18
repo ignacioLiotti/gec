@@ -1,5 +1,4 @@
 import { Resend } from "resend";
-import { renderObraCompletionEmail } from "./obras";
 
 const resendKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL;
@@ -18,6 +17,9 @@ export type SendEmailInput = {
 /**
  * Low-level email send helper backed by Resend.
  * This is safe to call from any server context (API route, server action, workflow step).
+ *
+ * NOTE: This module intentionally does NOT depend on `@react-email/*` so it can
+ * be safely bundled for workflows / edge-like environments.
  */
 export async function sendEmail({
 	to,
@@ -35,37 +37,6 @@ export async function sendEmail({
 	await resendClient.emails.send({
 		from: fromEmail,
 		to,
-		subject,
-		html,
-	});
-}
-
-/**
- * Obra completion convenience helper that reuses the React email template.
- */
-export async function sendObraCompletionEmail(options: {
-	to: string;
-	recipientName?: string | null;
-	obras: { name: string; percentage: number }[];
-	subject?: string;
-	introMessage?: string;
-}): Promise<void> {
-	if (!options.obras.length) return;
-
-	const subject =
-		options.subject ??
-		(options.obras.length === 1
-			? `Obra completada: ${options.obras[0].name}`
-			: "Obras completadas recientemente");
-
-	const html = await renderObraCompletionEmail({
-		recipientName: options.recipientName,
-		obras: options.obras,
-		introMessage: options.introMessage,
-	});
-
-	await sendEmail({
-		to: options.to,
 		subject,
 		html,
 	});
