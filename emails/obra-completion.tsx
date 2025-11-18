@@ -1,12 +1,12 @@
-import {
-  Body,
-  Container,
-  Head,
-  Html,
-  Preview,
-  Section,
-  Text,
-} from "@react-email/components";
+// import {
+//   Body,
+//   Container,
+//   Head,
+//   Html,
+//   Preview,
+//   Section,
+//   Text,
+// } from "@react-email/components";
 
 import React from "react";
 
@@ -25,37 +25,37 @@ export default function ObraCompletionEmail({
   const message =
     introMessage ??
     "Te informamos que las siguientes obras alcanzaron el 100% de avance:";
-  return (
-    <Html>
-      <Head />
-      <Preview>Obra completada: {names}</Preview>
-      <Body style={bodyStyle}>
-        <Container style={containerStyle}>
-          <Section>
-            <Text style={headingStyle}>
-              {recipientName ? `Hola ${recipientName},` : "Hola,"}
-            </Text>
-            <Text style={textStyle}>
-              {message}
-            </Text>
-            <ul style={listStyle}>
-              {obras.map((obra) => (
-                <li key={obra.name} style={listItemStyle}>
-                  <strong>{obra.name}</strong> ({obra.percentage}%)
-                </li>
-              ))}
-            </ul>
-            <Text style={textStyle}>
-              ¡Felicitaciones por el progreso! Si necesitás revisar más
-              detalles, podés hacerlo desde el panel de obras.
-            </Text>
-            <Text style={textStyle}>Saludos,</Text>
-            <Text style={signatureStyle}>Equipo Multi-Tenant</Text>
-          </Section>
-        </Container>
-      </Body>
-    </Html>
-  );
+  // return (
+  //   <Html>
+  //     <Head />
+  //     <Preview>Obra completada: {names}</Preview>
+  //     <Body style={bodyStyle}>
+  //       <Container style={containerStyle}>
+  //         <Section>
+  //           <Text style={headingStyle}>
+  //             {recipientName ? `Hola ${recipientName},` : "Hola,"}
+  //           </Text>
+  //           <Text style={textStyle}>
+  //             {message}
+  //           </Text>
+  //           <ul style={listStyle}>
+  //             {obras.map((obra) => (
+  //               <li key={obra.name} style={listItemStyle}>
+  //                 <strong>{obra.name}</strong> ({obra.percentage}%)
+  //               </li>
+  //             ))}
+  //           </ul>
+  //           <Text style={textStyle}>
+  //             ¡Felicitaciones por el progreso! Si necesitás revisar más
+  //             detalles, podés hacerlo desde el panel de obras.
+  //           </Text>
+  //           <Text style={textStyle}>Saludos,</Text>
+  //           <Text style={signatureStyle}>Equipo Multi-Tenant</Text>
+  //         </Section>
+  //       </Container>
+  //     </Body>
+  //   </Html>
+  return message;
 }
 
 const bodyStyle: React.CSSProperties = {

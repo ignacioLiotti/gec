@@ -1,5 +1,5 @@
 import ObraCompletionEmail from "@/emails/obra-completion";
-import { render } from "@react-email/render";
+// import { render } from "@react-email/render";
 import { Resend } from "resend";
 
 type CompletedObra = {
@@ -13,13 +13,14 @@ export async function renderObraCompletionEmail(options: {
   obras: CompletedObra[];
   introMessage?: string;
 }): Promise<string> {
-  return await render(
-    <ObraCompletionEmail
-      recipientName={options.recipientName}
-      obras={options.obras}
-      introMessage={options.introMessage}
-    />
-  );
+  // return await render(
+  //   <ObraCompletionEmail
+  //     recipientName={options.recipientName}
+  //     obras={options.obras}
+  //     introMessage={options.introMessage}
+  //   />
+  // );
+  return "test";
 }
 
 // Send email function (can be used in workflow steps)
