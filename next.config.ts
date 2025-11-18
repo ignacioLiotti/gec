@@ -1,12 +1,10 @@
 // next.config.ts
-import { withWorkflow } from "workflow/next";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
 	reactStrictMode: true,
 	reactCompiler: true,
 	experimental: {
-		// Required for edge workflows and background tasks
 		serverActions: {
 			bodySizeLimit: "2mb",
 		},
@@ -18,10 +16,13 @@ const nextConfig: NextConfig = {
 			"@react-email/tailwind",
 			"@supabase/node-fetch",
 		],
+		// 👇 Fuerza desactivar Turbopack por completo
+		turbo: false,
 	},
+
+	// 👇 Le avisás a Next.js que querés Webpack y evitás el error
 	webpack: (config, { isServer }) => {
 		if (isServer) {
-			// Externalize Node.js built-ins for server-side code
 			config.externals = config.externals || [];
 			config.externals.push({
 				"node:stream": "commonjs node:stream",
@@ -30,7 +31,6 @@ const nextConfig: NextConfig = {
 				"node:crypto": "commonjs node:crypto",
 			});
 		} else {
-			// Exclude canvas from client-side bundle (required for react-pdf)
 			config.resolve = config.resolve || {};
 			config.resolve.alias = config.resolve.alias || {};
 			config.resolve.alias.canvas = false;
@@ -39,4 +39,4 @@ const nextConfig: NextConfig = {
 	},
 };
 
-export default withWorkflow(nextConfig);
+export default nextConfig;
