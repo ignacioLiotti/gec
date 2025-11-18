@@ -31,10 +31,21 @@ import {
 	Image as ImageIcon,
 	File as FileIcon,
 	Download,
-	Trash2
+	Trash2,
+	Pencil,
+	Eye
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
+import { FileManager } from "@/components/obras/file-manager";
+import { ExcelPageTabs } from "@/components/excel-page-tabs";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 
 type Certificate = {
 	id: string;
@@ -124,6 +135,7 @@ export default function ObraDetailPage() {
 	const [isCreatingCertificate, setIsCreatingCertificate] = useState(false);
 	const mountedRef = useRef(true);
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
 
 	type PendingDoc = { id: string; name: string; poliza: string; dueMode: "fixed" | "after_completion"; dueDate: string; offsetDays: number; done: boolean };
 	const [pendingDocs, setPendingDocs] = useState<PendingDoc[]>([
@@ -131,6 +143,45 @@ export default function ObraDetailPage() {
 		{ id: "doc-2", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
 		{ id: "doc-3", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
 	]);
+
+	type ObraRole = { id: string; key: string; name: string | null };
+	type ObraUser = { id: string; full_name: string | null };
+	type ObraUserRole = { user_id: string; role_id: string };
+
+	const [obraRoles, setObraRoles] = useState<ObraRole[]>([]);
+	const [obraUsers, setObraUsers] = useState<ObraUser[]>([]);
+	const [obraUserRoles, setObraUserRoles] = useState<ObraUserRole[]>([]);
+	const [selectedRecipientUserId, setSelectedRecipientUserId] = useState<string>("");
+	const [selectedRecipientRoleId, setSelectedRecipientRoleId] = useState<string>("");
+
+	// Flujo Actions state
+	type FlujoAction = {
+		id: string;
+		action_type: 'email' | 'calendar_event';
+		timing_mode: 'immediate' | 'offset' | 'scheduled';
+		offset_value: number | null;
+		offset_unit: 'minutes' | 'hours' | 'days' | 'weeks' | 'months' | null;
+		scheduled_date: string | null;
+		title: string;
+		message: string | null;
+		recipient_user_ids: string[];
+		notification_types: ('in_app' | 'email')[];
+		enabled: boolean;
+	};
+	const [flujoActions, setFlujoActions] = useState<FlujoAction[]>([]);
+	const [isLoadingFlujoActions, setIsLoadingFlujoActions] = useState(false);
+	const [isAddingFlujoAction, setIsAddingFlujoAction] = useState(false);
+	const [newFlujoAction, setNewFlujoAction] = useState<Partial<FlujoAction>>({
+		action_type: 'email',
+		timing_mode: 'immediate',
+		offset_value: 1,
+		offset_unit: 'days',
+		title: '',
+		message: '',
+		recipient_user_ids: [],
+		notification_types: ["in_app"],
+		enabled: true,
+	});
 
 	// Materiales state
 	type MaterialItem = {
@@ -149,6 +200,8 @@ export default function ObraDetailPage() {
 		proveedor: string;
 		items: MaterialItem[];
 		docUrl?: string; // signed URL to view uploaded document (optional)
+		docPath?: string; // storage path to document
+		docBucket?: string; // storage bucket name
 	};
 
 	const [materialOrders, setMaterialOrders] = useState<MaterialOrder[]>(() => [
@@ -180,11 +233,13 @@ export default function ObraDetailPage() {
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
 	const [orderDocPaths, setOrderDocPaths] = useState<Record<string, { segments: string[]; name: string; mime?: string }>>(() => ({}));
-	const [activeTab, setActiveTab] = useState<string>("general");
 	const [pendingOpenDoc, setPendingOpenDoc] = useState<{ segments: string[]; name: string; mime?: string } | null>(null);
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const pathname = usePathname();
+
+	// Derive activeTab from URL params
+	const activeTab = searchParams?.get?.("tab") || "general";
 
 	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
 		const params = new URLSearchParams(searchParams?.toString?.() || "");
@@ -460,6 +515,8 @@ export default function ObraDetailPage() {
 					solicitante: String(o.solicitante || ""),
 					gestor: String(o.gestor || ""),
 					proveedor: String(o.proveedor || ""),
+					docPath: o.docPath,
+					docBucket: o.docBucket,
 					items: (o.items || []).map((it: any, idx: number) => ({
 						id: `${o.id}-i-${idx}`,
 						cantidad: Number(it.cantidad || 0),
@@ -649,11 +706,9 @@ export default function ObraDetailPage() {
 		})();
 	}, [activeTab, pendingOpenDoc, docPathSegments, previewFile]);
 
-	// Sync tab and documents view with URL
+	// Sync documents view with URL
 	useEffect(() => {
-		const qTab = searchParams?.get?.("tab");
-		if (qTab && qTab !== activeTab) setActiveTab(qTab);
-		if (qTab === 'documentos') {
+		if (activeTab === 'documentos') {
 			// Prefer full doc path if provided
 			const docParam = searchParams.get('doc') || '';
 			if (docParam.includes('/')) {
@@ -973,6 +1028,150 @@ export default function ObraDetailPage() {
 		}
 	}, [obraId]);
 
+	// Flujo Actions functions
+	const loadFlujoActions = useCallback(async () => {
+		if (!obraId || obraId === "undefined") return;
+		setIsLoadingFlujoActions(true);
+		try {
+			const res = await fetch(`/api/flujo-actions?obraId=${obraId}`);
+			if (!res.ok) throw new Error("Failed to load flujo actions");
+			const data = await res.json();
+			setFlujoActions(data.actions || []);
+		} catch (err) {
+			console.error("Error loading flujo actions:", err);
+			toast.error("No se pudieron cargar las acciones de flujo");
+		} finally {
+			setIsLoadingFlujoActions(false);
+		}
+	}, [obraId]);
+
+	useEffect(() => {
+		loadFlujoActions();
+	}, [loadFlujoActions]);
+
+	// Load roles and users for this obra's tenant to power the flujo recipients selector
+	useEffect(() => {
+		if (!obraId || obraId === "undefined") return;
+		let cancelled = false;
+		(async () => {
+			try {
+				const res = await fetch(`/api/obra-recipients?obraId=${obraId}`);
+				if (!res.ok) return;
+				const data = await res.json();
+				if (cancelled) return;
+				setObraRoles(data.roles ?? []);
+				setObraUsers(data.users ?? []);
+				setObraUserRoles(data.userRoles ?? []);
+			} catch (error) {
+				console.error("Error loading obra recipients", error);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [obraId]);
+
+	const saveFlujoAction = useCallback(async () => {
+		if (!obraId || obraId === "undefined") return;
+		if (!newFlujoAction.title) {
+			toast.error("El título es requerido");
+			return;
+		}
+
+		try {
+			// Derive recipient user IDs from explicit selection and optional role
+			let recipientUserIds: string[] = [];
+			if (selectedRecipientUserId) {
+				recipientUserIds.push(selectedRecipientUserId);
+			}
+			if (selectedRecipientRoleId) {
+				const roleId = selectedRecipientRoleId;
+				const roleUserIds = obraUserRoles
+					.filter((ur) => ur.role_id === roleId)
+					.map((ur) => ur.user_id);
+				recipientUserIds.push(...roleUserIds);
+			}
+
+			recipientUserIds = Array.from(new Set(recipientUserIds));
+
+			const res = await fetch("/api/flujo-actions", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					obraId,
+					actionType: newFlujoAction.action_type,
+					timingMode: newFlujoAction.timing_mode,
+					offsetValue: newFlujoAction.offset_value,
+					offsetUnit: newFlujoAction.offset_unit,
+					scheduledDate: newFlujoAction.scheduled_date,
+					title: newFlujoAction.title,
+					message: newFlujoAction.message,
+					recipientUserIds,
+					notificationTypes: (newFlujoAction.notification_types ??
+						["in_app"]) as ("in_app" | "email")[],
+				}),
+			});
+
+			if (!res.ok) throw new Error("Failed to save flujo action");
+			const data = await res.json();
+			setFlujoActions((prev) => [...prev, data.action]);
+			setNewFlujoAction({
+				action_type: 'email',
+				timing_mode: 'immediate',
+				offset_value: 1,
+				offset_unit: 'days',
+				title: '',
+				message: '',
+				recipient_user_ids: [],
+				notification_types: ["in_app"],
+				enabled: true,
+			});
+			setSelectedRecipientUserId("");
+			setSelectedRecipientRoleId("");
+			setIsAddingFlujoAction(false);
+			toast.success("Acción de flujo creada");
+		} catch (err) {
+			console.error("Error saving flujo action:", err);
+			toast.error("No se pudo guardar la acción de flujo");
+		}
+	}, [obraId, newFlujoAction, obraUserRoles, selectedRecipientRoleId, selectedRecipientUserId]);
+
+	const deleteFlujoAction = useCallback(async (actionId: string) => {
+		if (!obraId || obraId === "undefined") return;
+
+		try {
+			const res = await fetch(`/api/flujo-actions?id=${actionId}`, {
+				method: "DELETE",
+			});
+			if (!res.ok) throw new Error("Failed to delete flujo action");
+			setFlujoActions((prev) => prev.filter((a) => a.id !== actionId));
+			toast.success("Acción de flujo eliminada");
+		} catch (err) {
+			console.error("Error deleting flujo action:", err);
+			toast.error("No se pudo eliminar la acción de flujo");
+		}
+	}, [obraId]);
+
+	const toggleFlujoAction = useCallback(async (actionId: string, enabled: boolean) => {
+		if (!obraId || obraId === "undefined") return;
+
+		try {
+			const res = await fetch("/api/flujo-actions", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ id: actionId, enabled }),
+			});
+			if (!res.ok) throw new Error("Failed to toggle flujo action");
+			setFlujoActions((prev) =>
+				prev.map((a) => (a.id === actionId ? { ...a, enabled } : a))
+			);
+			toast.success(enabled ? "Acción activada" : "Acción desactivada");
+		} catch (err) {
+			console.error("Error toggling flujo action:", err);
+			toast.error("No se pudo actualizar la acción");
+		}
+	}, [obraId]);
+
 	const refreshCertificates = useCallback(async () => {
 		if (!obraId || obraId === "undefined") {
 			return;
@@ -1132,26 +1331,27 @@ export default function ObraDetailPage() {
 	}, [refreshCertificates]);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-			<div className="container max-w-7xl mx-auto p-6 space-y-6">
+		<div className="min-h-screen bg-gradient-to-b from-background to-muted/20 "		>
+			<div className="container max-w-full mx-auto px-6">
 				{/* Header */}
-				<motion.div
+				<ExcelPageTabs />
+				{/* <motion.div
 					initial={{ opacity: 0, y: -20 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.3 }}
 					className="flex items-center justify-between"
 				>
-					<div className="space-y-1">
-						<Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
+					<div className="space-y-1"> */}
+				{/* <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
 							<Link href="/excel" className="gap-2">
 								<ArrowLeft className="h-4 w-4" />
 								Volver al listado
 							</Link>
-						</Button>
-						<h1 className="text-4xl font-bold tracking-tight">Detalle de Obra</h1>
-						<p className="text-muted-foreground">Gestiona la información y configuración de correos</p>
-					</div>
-				</motion.div>
+						</Button> */}
+				{/* <h1 className="text-4xl font-bold tracking-tight">Detalle de Obra</h1>
+						<p className="text-muted-foreground">Gestiona la información y configuración de correos</p> */}
+				{/* </div>
+				</motion.div> */}
 
 				{routeError ? (
 					<motion.div
@@ -1181,594 +1381,1075 @@ export default function ObraDetailPage() {
 						<p className="font-medium">{loadError}</p>
 					</motion.div>
 				) : (
-					<Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); }} className="space-y-6">
-						<form.Subscribe selector={(state) => [state.values.porcentaje]}>
-							{([porcentaje]) => (
-								<TabsList className="grid w-full max-w-[1000px] grid-cols-6">
-									<TabsTrigger value="general" className="gap-2">
-										<Building2 className="h-4 w-4" />
-										General
-									</TabsTrigger>
-									<TabsTrigger value="workflow" className="gap-2">
-										<Mail className="h-4 w-4" />
-										Workflow
-									</TabsTrigger>
-									<TabsTrigger value="certificates" className="gap-2">
-										<Receipt className="h-4 w-4" />
-										Certificados
-									</TabsTrigger>
-									<TabsTrigger value="pendientes" className="gap-2">
-										<FileText className="h-4 w-4" />
-										Pendientes
-									</TabsTrigger>
-									<TabsTrigger value="materiales" className="gap-2">
-										<FileText className="h-4 w-4" />
-										Materiales
-									</TabsTrigger>
-									<TabsTrigger value="documentos" className="gap-2">
-										<FileText className="h-4 w-4" />
-										Documentos
-									</TabsTrigger>
-								</TabsList>
-							)}
-						</form.Subscribe>
-
-						<TabsContent value="general" className="space-y-6">
-							<motion.form
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.4 }}
-								className="space-y-6"
-								onSubmit={(event) => {
-									event.preventDefault();
-									event.stopPropagation();
-									form.handleSubmit();
-								}}
+					<Tabs value={activeTab} className="space-y-6">
+						<TabsContent value="general" className="space-y-6 relative">
+							{/* Edit/Preview Toggle Button */}
+							<motion.div
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								className="flex justify-end absolute right-0 -mt-13"
 							>
-								{/* Key Metrics Cards */}
-								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-									<motion.div
-										initial={{ opacity: 0, scale: 0.95 }}
-										animate={{ opacity: 1, scale: 1 }}
-										transition={{ delay: 0.1 }}
-										className="rounded-lg border bg-card p-4 shadow-sm"
-									>
-										<form.Field name="porcentaje">
-											{(field) => (
-												<>
-													<div className="flex items-center gap-2 text-muted-foreground mb-2">
-														<Percent className="h-4 w-4" />
-														<span className="text-sm font-medium">Avance</span>
-													</div>
-													<div className="text-3xl font-bold">
-														{field.state.value}%
-													</div>
-													<div className="mt-3">
-														<Input
-															type="number"
-															step="0.01"
-															value={field.state.value}
-															onChange={(e) => field.handleChange(Number(e.target.value))}
-															onBlur={field.handleBlur}
-															className="text-right"
-														/>
-													</div>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
-												</>
-											)}
-										</form.Field>
-									</motion.div>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onClick={() => setIsGeneralTabEditMode(!isGeneralTabEditMode)}
+									className="gap-2"
+								>
+									{isGeneralTabEditMode ? (
+										<>
+											<Eye className="h-4 w-4" />
+											Modo Vista Previa
+										</>
+									) : (
+										<>
+											<Pencil className="h-4 w-4" />
+											Modo Edición
+										</>
+									)}
+								</Button>
+							</motion.div>
 
-									<motion.div
-										initial={{ opacity: 0, scale: 0.95 }}
-										animate={{ opacity: 1, scale: 1 }}
-										transition={{ delay: 0.15 }}
-										className="rounded-lg border bg-card p-4 shadow-sm"
-									>
-										<form.Field name="n">
-											{(field) => (
-												<>
-													<div className="flex items-center gap-2 text-muted-foreground mb-2">
-														<FileText className="h-4 w-4" />
-														<span className="text-sm font-medium">N° de Obra</span>
-													</div>
-													<div className="text-3xl font-bold">
-														#{field.state.value}
-													</div>
-													<div className="mt-3">
-														<Input
-															type="number"
-															value={field.state.value}
-															onChange={(e) => field.handleChange(Number(e.target.value))}
-															onBlur={field.handleBlur}
-															className="text-right"
-														/>
-													</div>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
-												</>
-											)}
-										</form.Field>
-									</motion.div>
-
-									<motion.div
-										initial={{ opacity: 0, scale: 0.95 }}
-										animate={{ opacity: 1, scale: 1 }}
-										transition={{ delay: 0.2 }}
-										className="rounded-lg border bg-card p-4 shadow-sm"
-									>
-										<form.Field name="supDeObraM2">
-											{(field) => (
-												<>
-													<div className="flex items-center gap-2 text-muted-foreground mb-2">
-														<TrendingUp className="h-4 w-4" />
-														<span className="text-sm font-medium">Superficie</span>
-													</div>
-													<div className="text-3xl font-bold">
-														{field.state.value.toLocaleString('es-AR')}
-													</div>
-													<div className="text-xs text-muted-foreground mb-2">m²</div>
-													<div className="mt-2">
-														<Input
-															type="number"
-															value={field.state.value}
-															onChange={(e) => field.handleChange(Number(e.target.value))}
-															onBlur={field.handleBlur}
-															className="text-right"
-														/>
-													</div>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
-												</>
-											)}
-										</form.Field>
-									</motion.div>
-								</div>
-
-								{/* Main Information Section */}
-								<motion.section
+							{isGeneralTabEditMode ? (
+								<motion.form
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
-									transition={{ delay: 0.25 }}
-									className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									transition={{ duration: 0.4 }}
+									className="space-y-6"
+									onSubmit={(event) => {
+										event.preventDefault();
+										event.stopPropagation();
+										form.handleSubmit();
+									}}
 								>
-									<div className="bg-muted/50 px-6 py-4 border-b">
-										<div className="flex items-center gap-2">
-											<Building2 className="h-5 w-5 text-primary" />
-											<h2 className="text-lg font-semibold">Información General</h2>
-										</div>
+									{/* Key Metrics Cards */}
+									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+										<motion.div
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											transition={{ delay: 0.1 }}
+											className="rounded-lg border bg-card p-4 shadow-sm"
+										>
+											<form.Field name="porcentaje">
+												{(field) => (
+													<>
+														<div className="flex items-center gap-2 text-muted-foreground mb-2">
+															<Percent className="h-4 w-4" />
+															<span className="text-sm font-medium">Avance</span>
+														</div>
+														<div className="text-3xl font-bold">
+															{field.state.value}%
+														</div>
+														<div className="mt-3">
+															<Input
+																type="number"
+																step="0.01"
+																value={field.state.value}
+																onChange={(e) => field.handleChange(Number(e.target.value))}
+																onBlur={field.handleBlur}
+																className="text-right"
+															/>
+														</div>
+														{getErrorMessage(field.state.meta.errors) && (
+															<p className="mt-1 text-xs text-red-500">
+																{getErrorMessage(field.state.meta.errors)}
+															</p>
+														)}
+													</>
+												)}
+											</form.Field>
+										</motion.div>
+
+										<motion.div
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											transition={{ delay: 0.15 }}
+											className="rounded-lg border bg-card p-4 shadow-sm"
+										>
+											<form.Field name="n">
+												{(field) => (
+													<>
+														<div className="flex items-center gap-2 text-muted-foreground mb-2">
+															<FileText className="h-4 w-4" />
+															<span className="text-sm font-medium">N° de Obra</span>
+														</div>
+														<div className="text-3xl font-bold">
+															#{field.state.value}
+														</div>
+														<div className="mt-3">
+															<Input
+																type="number"
+																value={field.state.value}
+																onChange={(e) => field.handleChange(Number(e.target.value))}
+																onBlur={field.handleBlur}
+																className="text-right"
+															/>
+														</div>
+														{getErrorMessage(field.state.meta.errors) && (
+															<p className="mt-1 text-xs text-red-500">
+																{getErrorMessage(field.state.meta.errors)}
+															</p>
+														)}
+													</>
+												)}
+											</form.Field>
+										</motion.div>
+
+										<motion.div
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											transition={{ delay: 0.2 }}
+											className="rounded-lg border bg-card p-4 shadow-sm"
+										>
+											<form.Field name="supDeObraM2">
+												{(field) => (
+													<>
+														<div className="flex items-center gap-2 text-muted-foreground mb-2">
+															<TrendingUp className="h-4 w-4" />
+															<span className="text-sm font-medium">Superficie</span>
+														</div>
+														<div className="text-3xl font-bold">
+															{field.state.value.toLocaleString('es-AR')}
+														</div>
+														<div className="text-xs text-muted-foreground mb-2">m²</div>
+														<div className="mt-2">
+															<Input
+																type="number"
+																value={field.state.value}
+																onChange={(e) => field.handleChange(Number(e.target.value))}
+																onBlur={field.handleBlur}
+																className="text-right"
+															/>
+														</div>
+														{getErrorMessage(field.state.meta.errors) && (
+															<p className="mt-1 text-xs text-red-500">
+																{getErrorMessage(field.state.meta.errors)}
+															</p>
+														)}
+													</>
+												)}
+											</form.Field>
+										</motion.div>
 									</div>
-									<div className="p-6 space-y-6">
-										<form.Field name="designacionYUbicacion">
-											{(field) => (
+
+									{/* Main Information Section */}
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: 0.25 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center gap-2">
+												<Building2 className="h-5 w-5 text-primary" />
+												<h2 className="text-lg font-semibold">Información General</h2>
+											</div>
+										</div>
+										<div className="p-6 space-y-6">
+											<form.Field name="designacionYUbicacion">
+												{(field) => (
+													<div>
+														<label className="flex items-center gap-2 text-sm font-medium mb-2">
+															<MapPin className="h-4 w-4 text-muted-foreground" />
+															Designación y ubicación
+														</label>
+														<textarea
+															value={field.state.value}
+															onChange={(e) => field.handleChange(e.target.value)}
+															onBlur={field.handleBlur}
+															className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px] resize-none"
+															placeholder="Describe la ubicación y características principales de la obra..."
+														/>
+														{getErrorMessage(field.state.meta.errors) && (
+															<p className="mt-1 text-xs text-red-500">
+																{getErrorMessage(field.state.meta.errors)}
+															</p>
+														)}
+													</div>
+												)}
+											</form.Field>
+
+											<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+												<form.Field name="entidadContratante">
+													{(field) => (
+														<div>
+															<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																<Building2 className="h-4 w-4 text-muted-foreground" />
+																Entidad contratante
+															</label>
+															<Input
+																type="text"
+																value={field.state.value}
+																onChange={(e) => field.handleChange(e.target.value)}
+																onBlur={field.handleBlur}
+																placeholder="Nombre de la entidad"
+															/>
+															{getErrorMessage(field.state.meta.errors) && (
+																<p className="mt-1 text-xs text-red-500">
+																	{getErrorMessage(field.state.meta.errors)}
+																</p>
+															)}
+														</div>
+													)}
+												</form.Field>
+
+												<form.Field name="mesBasicoDeContrato">
+													{(field) => (
+														<div>
+															<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																<Calendar className="h-4 w-4 text-muted-foreground" />
+																Mes básico de contrato
+															</label>
+															<Input
+																type="text"
+																value={field.state.value}
+																onChange={(e) => field.handleChange(e.target.value)}
+																onBlur={field.handleBlur}
+																placeholder="Ej: Enero 2024"
+															/>
+															{getErrorMessage(field.state.meta.errors) && (
+																<p className="mt-1 text-xs text-red-500">
+																	{getErrorMessage(field.state.meta.errors)}
+																</p>
+															)}
+														</div>
+													)}
+												</form.Field>
+
+												<form.Field name="iniciacion">
+													{(field) => (
+														<div>
+															<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																<Calendar className="h-4 w-4 text-muted-foreground" />
+																Fecha de iniciación
+															</label>
+															<Input
+																type="text"
+																value={field.state.value}
+																onChange={(e) => field.handleChange(e.target.value)}
+																onBlur={field.handleBlur}
+																placeholder="Ej: 01/01/2024"
+															/>
+															{getErrorMessage(field.state.meta.errors) && (
+																<p className="mt-1 text-xs text-red-500">
+																	{getErrorMessage(field.state.meta.errors)}
+																</p>
+															)}
+														</div>
+													)}
+												</form.Field>
+											</div>
+										</div>
+									</motion.section>
+
+									{/* Financial Section */}
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: 0.3 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center gap-2">
+												<DollarSign className="h-5 w-5 text-primary" />
+												<h2 className="text-lg font-semibold">Datos Financieros</h2>
+											</div>
+										</div>
+										<div className="p-6 space-y-4">
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+												<form.Field name="contratoMasAmpliaciones">
+													{(field) => (
+														<div>
+															<label className="block text-sm font-medium text-muted-foreground mb-2">
+																Contrato más ampliaciones
+															</label>
+															<div className="relative">
+																<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																	$
+																</span>
+																<Input
+																	type="number"
+																	value={field.state.value}
+																	onChange={(e) => field.handleChange(Number(e.target.value))}
+																	onBlur={field.handleBlur}
+																	className="text-right pl-8 font-mono"
+																	placeholder="0.00"
+																/>
+															</div>
+														</div>
+													)}
+												</form.Field>
+
+												<form.Field name="certificadoALaFecha">
+													{(field) => (
+														<div>
+															<label className="block text-sm font-medium text-muted-foreground mb-2">
+																Certificado a la fecha
+															</label>
+															<div className="relative">
+																<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																	$
+																</span>
+																<Input
+																	type="number"
+																	value={field.state.value}
+																	onChange={(e) => field.handleChange(Number(e.target.value))}
+																	onBlur={field.handleBlur}
+																	className="text-right pl-8 font-mono"
+																	placeholder="0.00"
+																/>
+															</div>
+														</div>
+													)}
+												</form.Field>
+
+												<form.Field name="saldoACertificar">
+													{(field) => (
+														<div>
+															<label className="block text-sm font-medium text-muted-foreground mb-2">
+																Saldo a certificar
+															</label>
+															<div className="relative">
+																<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																	$
+																</span>
+																<Input
+																	type="number"
+																	value={field.state.value}
+																	onChange={(e) => field.handleChange(Number(e.target.value))}
+																	onBlur={field.handleBlur}
+																	className="text-right pl-8 font-mono"
+																	placeholder="0.00"
+																/>
+															</div>
+														</div>
+													)}
+												</form.Field>
+											</div>
+
+											<Separator />
+
+											<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+												<form.Field name="segunContrato">
+													{(field) => (
+														<div>
+															<label className="block text-sm font-medium text-muted-foreground mb-2">
+																Según contrato
+															</label>
+															<div className="relative">
+																<Input
+																	type="number"
+																	value={field.state.value}
+																	onChange={(e) => field.handleChange(Number(e.target.value))}
+																	onBlur={field.handleBlur}
+																	className="text-right pr-14"
+																	placeholder="0"
+																/>
+																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																	meses
+																</span>
+															</div>
+														</div>
+													)}
+												</form.Field>
+
+												<form.Field name="prorrogasAcordadas">
+													{(field) => (
+														<div>
+															<label className="block text-sm font-medium text-muted-foreground mb-2">
+																Prórrogas acordadas
+															</label>
+															<div className="relative">
+																<Input
+																	type="number"
+																	value={field.state.value}
+																	onChange={(e) => field.handleChange(Number(e.target.value))}
+																	onBlur={field.handleBlur}
+																	className="text-right pr-14"
+																	placeholder="0"
+																/>
+																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																	meses
+																</span>
+															</div>
+														</div>
+													)}
+												</form.Field>
+
+												<form.Field name="plazoTotal">
+													{(field) => (
+														<div>
+															<label className="block text-sm font-medium text-muted-foreground mb-2">
+																Plazo total
+															</label>
+															<div className="relative">
+																<Input
+																	type="number"
+																	value={field.state.value}
+																	onChange={(e) => field.handleChange(Number(e.target.value))}
+																	onBlur={field.handleBlur}
+																	className="text-right pr-14"
+																	placeholder="0"
+																/>
+																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																	meses
+																</span>
+															</div>
+														</div>
+													)}
+												</form.Field>
+
+												<form.Field name="plazoTransc">
+													{(field) => (
+														<div>
+															<label className="block text-sm font-medium text-muted-foreground mb-2">
+																Transcurrido
+															</label>
+															<div className="relative">
+																<Input
+																	type="number"
+																	value={field.state.value}
+																	onChange={(e) => field.handleChange(Number(e.target.value))}
+																	onBlur={field.handleBlur}
+																	className="text-right pr-14"
+																	placeholder="0"
+																/>
+																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																	meses
+																</span>
+															</div>
+														</div>
+													)}
+												</form.Field>
+											</div>
+										</div>
+									</motion.section>
+
+									{/* Action Buttons */}
+									<motion.div
+										initial={{ opacity: 0 }}
+										animate={{ opacity: 1 }}
+										transition={{ delay: 0.35 }}
+										className="flex justify-end gap-3 pt-4"
+									>
+										<Button asChild variant="outline">
+											<Link href="/excel">Cancelar</Link>
+										</Button>
+										<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+											{([canSubmit, isSubmitting]) => (
+												<Button type="submit" disabled={!canSubmit} className="min-w-[140px]">
+													{isSubmitting ? "Guardando..." : "Guardar cambios"}
+												</Button>
+											)}
+										</form.Subscribe>
+									</motion.div>
+								</motion.form>
+							) : (
+								/* Preview Mode */
+								<div className="space-y-6">
+									{/* Key Metrics Cards */}
+									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+										<motion.div
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											transition={{ delay: 0.1 }}
+											className="rounded-lg border bg-card p-4 shadow-sm"
+										>
+											<div className="flex items-center gap-2 text-muted-foreground mb-2">
+												<Percent className="h-4 w-4" />
+												<span className="text-sm font-medium">Avance</span>
+											</div>
+											<div className="text-3xl font-bold">
+												{form.state.values.porcentaje}%
+											</div>
+										</motion.div>
+
+										<motion.div
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											transition={{ delay: 0.15 }}
+											className="rounded-lg border bg-card p-4 shadow-sm"
+										>
+											<div className="flex items-center gap-2 text-muted-foreground mb-2">
+												<FileText className="h-4 w-4" />
+												<span className="text-sm font-medium">N° de Obra</span>
+											</div>
+											<div className="text-3xl font-bold">
+												#{form.state.values.n}
+											</div>
+										</motion.div>
+
+										<motion.div
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											transition={{ delay: 0.2 }}
+											className="rounded-lg border bg-card p-4 shadow-sm"
+										>
+											<div className="flex items-center gap-2 text-muted-foreground mb-2">
+												<TrendingUp className="h-4 w-4" />
+												<span className="text-sm font-medium">Superficie</span>
+											</div>
+											<div className="text-3xl font-bold">
+												{form.state.values.supDeObraM2.toLocaleString('es-AR')}
+											</div>
+											<div className="text-xs text-muted-foreground">m²</div>
+										</motion.div>
+									</div>
+
+									{/* Main Information Section */}
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: 0.25 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center gap-2">
+												<Building2 className="h-5 w-5 text-primary" />
+												<h2 className="text-lg font-semibold">Información General</h2>
+											</div>
+										</div>
+										<div className="p-6 space-y-6">
+											<div>
+												<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+													<MapPin className="h-4 w-4" />
+													Designación y ubicación
+												</label>
+												<p className="text-sm min-h-[100px]">
+													{form.state.values.designacionYUbicacion || 'No especificado'}
+												</p>
+											</div>
+
+											<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<MapPin className="h-4 w-4 text-muted-foreground" />
-														Designación y ubicación
+													<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+														<Building2 className="h-4 w-4" />
+														Entidad contratante
 													</label>
-													<textarea
-														value={field.state.value}
-														onChange={(e) => field.handleChange(e.target.value)}
-														onBlur={field.handleBlur}
-														className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px] resize-none"
-														placeholder="Describe la ubicación y características principales de la obra..."
-													/>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
+													<p className="text-sm">
+														{form.state.values.entidadContratante || 'No especificado'}
+													</p>
 												</div>
-											)}
-										</form.Field>
 
-										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-											<form.Field name="entidadContratante">
-												{(field) => (
-													<div>
-														<label className="flex items-center gap-2 text-sm font-medium mb-2">
-															<Building2 className="h-4 w-4 text-muted-foreground" />
-															Entidad contratante
-														</label>
-														<Input
-															type="text"
-															value={field.state.value}
-															onChange={(e) => field.handleChange(e.target.value)}
-															onBlur={field.handleBlur}
-															placeholder="Nombre de la entidad"
-														/>
-														{getErrorMessage(field.state.meta.errors) && (
-															<p className="mt-1 text-xs text-red-500">
-																{getErrorMessage(field.state.meta.errors)}
-															</p>
-														)}
-													</div>
-												)}
-											</form.Field>
+												<div>
+													<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+														<Calendar className="h-4 w-4" />
+														Mes básico de contrato
+													</label>
+													<p className="text-sm">
+														{form.state.values.mesBasicoDeContrato || 'No especificado'}
+													</p>
+												</div>
 
-											<form.Field name="mesBasicoDeContrato">
-												{(field) => (
-													<div>
-														<label className="flex items-center gap-2 text-sm font-medium mb-2">
-															<Calendar className="h-4 w-4 text-muted-foreground" />
-															Mes básico de contrato
-														</label>
-														<Input
-															type="text"
-															value={field.state.value}
-															onChange={(e) => field.handleChange(e.target.value)}
-															onBlur={field.handleBlur}
-															placeholder="Ej: Enero 2024"
-														/>
-														{getErrorMessage(field.state.meta.errors) && (
-															<p className="mt-1 text-xs text-red-500">
-																{getErrorMessage(field.state.meta.errors)}
-															</p>
-														)}
-													</div>
-												)}
-											</form.Field>
-
-											<form.Field name="iniciacion">
-												{(field) => (
-													<div>
-														<label className="flex items-center gap-2 text-sm font-medium mb-2">
-															<Calendar className="h-4 w-4 text-muted-foreground" />
-															Fecha de iniciación
-														</label>
-														<Input
-															type="text"
-															value={field.state.value}
-															onChange={(e) => field.handleChange(e.target.value)}
-															onBlur={field.handleBlur}
-															placeholder="Ej: 01/01/2024"
-														/>
-														{getErrorMessage(field.state.meta.errors) && (
-															<p className="mt-1 text-xs text-red-500">
-																{getErrorMessage(field.state.meta.errors)}
-															</p>
-														)}
-													</div>
-												)}
-											</form.Field>
+												<div>
+													<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+														<Calendar className="h-4 w-4" />
+														Fecha de iniciación
+													</label>
+													<p className="text-sm">
+														{form.state.values.iniciacion || 'No especificado'}
+													</p>
+												</div>
+											</div>
 										</div>
-									</div>
-								</motion.section>
+									</motion.section>
 
-								{/* Financial Section */}
-								<motion.section
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ delay: 0.3 }}
-									className="rounded-lg border bg-card shadow-sm overflow-hidden"
-								>
-									<div className="bg-muted/50 px-6 py-4 border-b">
-										<div className="flex items-center gap-2">
-											<DollarSign className="h-5 w-5 text-primary" />
-											<h2 className="text-lg font-semibold">Datos Financieros</h2>
+									{/* Financial Section */}
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: 0.3 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center gap-2">
+												<DollarSign className="h-5 w-5 text-primary" />
+												<h2 className="text-lg font-semibold">Datos Financieros</h2>
+											</div>
 										</div>
-									</div>
-									<div className="p-6 space-y-4">
-										<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-											<form.Field name="contratoMasAmpliaciones">
-												{(field) => (
-													<div>
-														<label className="block text-sm font-medium text-muted-foreground mb-2">
-															Contrato más ampliaciones
-														</label>
-														<div className="relative">
-															<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																$
-															</span>
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right pl-8 font-mono"
-																placeholder="0.00"
-															/>
-														</div>
-													</div>
-												)}
-											</form.Field>
+										<div className="p-6 space-y-4">
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+												<div>
+													<label className="block text-sm font-medium text-muted-foreground mb-2">
+														Contrato más ampliaciones
+													</label>
+													<p className="text-sm font-mono">
+														$ {form.state.values.contratoMasAmpliaciones.toLocaleString('es-AR')}
+													</p>
+												</div>
 
-											<form.Field name="certificadoALaFecha">
-												{(field) => (
-													<div>
-														<label className="block text-sm font-medium text-muted-foreground mb-2">
-															Certificado a la fecha
-														</label>
-														<div className="relative">
-															<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																$
-															</span>
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right pl-8 font-mono"
-																placeholder="0.00"
-															/>
-														</div>
-													</div>
-												)}
-											</form.Field>
+												<div>
+													<label className="block text-sm font-medium text-muted-foreground mb-2">
+														Certificado a la fecha
+													</label>
+													<p className="text-sm font-mono">
+														$ {form.state.values.certificadoALaFecha.toLocaleString('es-AR')}
+													</p>
+												</div>
 
-											<form.Field name="saldoACertificar">
-												{(field) => (
-													<div>
-														<label className="block text-sm font-medium text-muted-foreground mb-2">
-															Saldo a certificar
-														</label>
-														<div className="relative">
-															<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																$
-															</span>
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right pl-8 font-mono"
-																placeholder="0.00"
-															/>
-														</div>
-													</div>
-												)}
-											</form.Field>
+												<div>
+													<label className="block text-sm font-medium text-muted-foreground mb-2">
+														Saldo a certificar
+													</label>
+													<p className="text-sm font-mono">
+														$ {form.state.values.saldoACertificar.toLocaleString('es-AR')}
+													</p>
+												</div>
+											</div>
+
+											<Separator />
+
+											<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+												<div>
+													<label className="block text-sm font-medium text-muted-foreground mb-2">
+														Según contrato
+													</label>
+													<p className="text-sm">
+														{form.state.values.segunContrato} meses
+													</p>
+												</div>
+
+												<div>
+													<label className="block text-sm font-medium text-muted-foreground mb-2">
+														Prórrogas acordadas
+													</label>
+													<p className="text-sm">
+														{form.state.values.prorrogasAcordadas} meses
+													</p>
+												</div>
+
+												<div>
+													<label className="block text-sm font-medium text-muted-foreground mb-2">
+														Plazo total
+													</label>
+													<p className="text-sm">
+														{form.state.values.plazoTotal} meses
+													</p>
+												</div>
+
+												<div>
+													<label className="block text-sm font-medium text-muted-foreground mb-2">
+														Transcurrido
+													</label>
+													<p className="text-sm">
+														{form.state.values.plazoTransc} meses
+													</p>
+												</div>
+											</div>
 										</div>
-
-										<Separator />
-
-										<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-											<form.Field name="segunContrato">
-												{(field) => (
-													<div>
-														<label className="block text-sm font-medium text-muted-foreground mb-2">
-															Según contrato
-														</label>
-														<div className="relative">
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right pr-14"
-																placeholder="0"
-															/>
-															<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																meses
-															</span>
-														</div>
-													</div>
-												)}
-											</form.Field>
-
-											<form.Field name="prorrogasAcordadas">
-												{(field) => (
-													<div>
-														<label className="block text-sm font-medium text-muted-foreground mb-2">
-															Prórrogas acordadas
-														</label>
-														<div className="relative">
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right pr-14"
-																placeholder="0"
-															/>
-															<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																meses
-															</span>
-														</div>
-													</div>
-												)}
-											</form.Field>
-
-											<form.Field name="plazoTotal">
-												{(field) => (
-													<div>
-														<label className="block text-sm font-medium text-muted-foreground mb-2">
-															Plazo total
-														</label>
-														<div className="relative">
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right pr-14"
-																placeholder="0"
-															/>
-															<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																meses
-															</span>
-														</div>
-													</div>
-												)}
-											</form.Field>
-
-											<form.Field name="plazoTransc">
-												{(field) => (
-													<div>
-														<label className="block text-sm font-medium text-muted-foreground mb-2">
-															Transcurrido
-														</label>
-														<div className="relative">
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right pr-14"
-																placeholder="0"
-															/>
-															<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																meses
-															</span>
-														</div>
-													</div>
-												)}
-											</form.Field>
-										</div>
-									</div>
-								</motion.section>
-
-								{/* Action Buttons */}
-								<motion.div
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-									transition={{ delay: 0.35 }}
-									className="flex justify-end gap-3 pt-4"
-								>
-									<Button asChild variant="outline">
-										<Link href="/excel">Cancelar</Link>
-									</Button>
-									<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-										{([canSubmit, isSubmitting]) => (
-											<Button type="submit" disabled={!canSubmit} className="min-w-[140px]">
-												{isSubmitting ? "Guardando..." : "Guardar cambios"}
-											</Button>
-										)}
-									</form.Subscribe>
-								</motion.div>
-							</motion.form>
+									</motion.section>
+								</div>
+							)}
 						</TabsContent>
 
-						{/* Workflow Tab */}
-						<TabsContent value="workflow" className="space-y-6">
-							<motion.form
+						{/* Flujo Tab */}
+						<TabsContent value="flujo" className="space-y-6">
+							<motion.section
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
 								transition={{ duration: 0.4 }}
-								className="space-y-6"
-								onSubmit={(event) => {
-									event.preventDefault();
-									event.stopPropagation();
-									form.handleSubmit();
-								}}
+								className="rounded-lg border bg-card shadow-sm overflow-hidden"
 							>
-								<motion.section
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ delay: 0.1 }}
-									className="rounded-lg border bg-card shadow-sm overflow-hidden"
-								>
-									<div className="bg-muted/50 px-6 py-4 border-b">
-										<div className="flex items-center gap-2">
-											<Mail className="h-5 w-5 text-primary" />
-											<h2 className="text-lg font-semibold">Workflow de Finalización</h2>
+								<div className="bg-muted/50 px-6 py-4 border-b">
+									<div className="flex items-center justify-between">
+										<div>
+											<div className="flex items-center gap-2">
+												<Mail className="h-5 w-5 text-primary" />
+												<h2 className="text-lg font-semibold">Flujo de Finalización</h2>
+											</div>
+											<p className="text-sm text-muted-foreground mt-1">
+												Configura acciones automáticas al alcanzar el 100% de la obra
+											</p>
 										</div>
-										<p className="text-sm text-muted-foreground mt-1">
-											Configura los mensajes automáticos que se envían al alcanzar el 100% de la obra
-										</p>
+										<Button
+											variant={isAddingFlujoAction ? "outline" : "default"}
+											onClick={() => setIsAddingFlujoAction(!isAddingFlujoAction)}
+											size="sm"
+										>
+											<Plus className="h-4 w-4 mr-2" />
+											{isAddingFlujoAction ? "Cancelar" : "Nueva Acción"}
+										</Button>
 									</div>
-									<div className="p-6 space-y-6">
-										<form.Field name="onFinishFirstMessage">
-											{(field) => (
-												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<Mail className="h-4 w-4 text-muted-foreground" />
-														Mensaje del primer correo
-													</label>
-													<textarea
-														value={field.state.value ?? ""}
-														onChange={(e) =>
-															field.handleChange(e.target.value ? e.target.value : null)
-														}
-														onBlur={field.handleBlur}
-														className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px] resize-none"
-														placeholder="Escribe el mensaje que se enviará inmediatamente al completarse la obra..."
-													/>
-													<p className="mt-1 text-xs text-muted-foreground">
-														Este correo se enviará automáticamente cuando la obra alcance el 100%
-													</p>
+								</div>
+
+								<div className="p-6 space-y-6">
+									{/* Add New Action Form */}
+									{isAddingFlujoAction && (
+										<motion.div
+											initial={{ opacity: 0, height: 0 }}
+											animate={{ opacity: 1, height: "auto" }}
+											exit={{ opacity: 0, height: 0 }}
+											className="rounded-lg border bg-muted/30 p-4 space-y-4"
+										>
+											<h3 className="text-sm font-semibold">Nueva Acción</h3>
+
+											{/* Action Type */}
+											<div>
+												<label className="text-sm font-medium mb-2 block">Tipo de acción</label>
+												<div className="flex gap-2">
+													<Button
+														type="button"
+														variant={newFlujoAction.action_type === 'email' ? 'default' : 'outline'}
+														size="sm"
+														onClick={() => setNewFlujoAction({ ...newFlujoAction, action_type: 'email' })}
+													>
+														<Mail className="h-4 w-4 mr-2" />
+														Email
+													</Button>
+													<Button
+														type="button"
+														variant={newFlujoAction.action_type === 'calendar_event' ? 'default' : 'outline'}
+														size="sm"
+														onClick={() => setNewFlujoAction({ ...newFlujoAction, action_type: 'calendar_event' })}
+													>
+														<Calendar className="h-4 w-4 mr-2" />
+														Evento de Calendario
+													</Button>
+												</div>
+											</div>
+
+											{/* Timing Mode */}
+											<div>
+												<label className="text-sm font-medium mb-2 block">¿Cuándo ejecutar?</label>
+												<div className="flex gap-2 flex-wrap">
+													<Button
+														type="button"
+														variant={newFlujoAction.timing_mode === 'immediate' ? 'default' : 'outline'}
+														size="sm"
+														onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'immediate' })}
+													>
+														Inmediato
+													</Button>
+													<Button
+														type="button"
+														variant={newFlujoAction.timing_mode === 'offset' ? 'default' : 'outline'}
+														size="sm"
+														onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'offset' })}
+													>
+														Después de X tiempo
+													</Button>
+													<Button
+														type="button"
+														variant={newFlujoAction.timing_mode === 'scheduled' ? 'default' : 'outline'}
+														size="sm"
+														onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'scheduled' })}
+													>
+														Fecha específica
+													</Button>
+												</div>
+											</div>
+
+											{/* Timing Details */}
+											{newFlujoAction.timing_mode === 'offset' && (
+												<div className="flex gap-2 items-end">
+													<div className="flex-1">
+														<label className="text-sm font-medium mb-2 block">Cantidad</label>
+														<Input
+															type="number"
+															min="1"
+															value={newFlujoAction.offset_value || 1}
+															onChange={(e) => setNewFlujoAction({ ...newFlujoAction, offset_value: parseInt(e.target.value) || 1 })}
+														/>
+													</div>
+													<div className="flex-1">
+														<label className="text-sm font-medium mb-2 block">Unidad</label>
+														<select
+															className="w-full rounded-md border px-3 py-2 text-sm"
+															value={newFlujoAction.offset_unit || 'days'}
+															onChange={(e) => setNewFlujoAction({ ...newFlujoAction, offset_unit: e.target.value as any })}
+														>
+															<option value="minutes">Minutos</option>
+															<option value="hours">Horas</option>
+															<option value="days">Días</option>
+															<option value="weeks">Semanas</option>
+															<option value="months">Meses</option>
+														</select>
+													</div>
 												</div>
 											)}
-										</form.Field>
 
-										<Separator />
-
-										<form.Field name="onFinishSecondMessage">
-											{(field) => (
+											{newFlujoAction.timing_mode === 'scheduled' && (
 												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<Mail className="h-4 w-4 text-muted-foreground" />
-														Mensaje del segundo correo (recordatorio)
-													</label>
-													<textarea
-														value={field.state.value ?? ""}
-														onChange={(e) =>
-															field.handleChange(e.target.value ? e.target.value : null)
-														}
-														onBlur={field.handleBlur}
-														className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px] resize-none"
-														placeholder="Escribe el mensaje de recordatorio..."
-													/>
-													<p className="mt-1 text-xs text-muted-foreground">
-														Mensaje para el correo de seguimiento
-													</p>
-												</div>
-											)}
-										</form.Field>
-
-										<form.Field name="onFinishSecondSendAt">
-											{(field) => (
-												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<Calendar className="h-4 w-4 text-muted-foreground" />
-														Fecha de envío del recordatorio
-													</label>
+													<label className="text-sm font-medium mb-2 block">Fecha y hora</label>
 													<Input
 														type="datetime-local"
-														value={field.state.value ?? ""}
-														onChange={(e) =>
-															field.handleChange(e.target.value ? e.target.value : null)
-														}
-														onBlur={field.handleBlur}
+														value={newFlujoAction.scheduled_date || ''}
+														onChange={(e) => setNewFlujoAction({ ...newFlujoAction, scheduled_date: e.target.value })}
 													/>
-													<p className="mt-1 text-xs text-muted-foreground">
-														Si no se define, el recordatorio se enviará según la configuración predeterminada del sistema
-													</p>
 												</div>
 											)}
-										</form.Field>
-									</div>
-								</motion.section>
 
-								{/* Action Buttons */}
-								<motion.div
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-									transition={{ delay: 0.15 }}
-									className="flex justify-end gap-3 pt-4"
-								>
-									<Button asChild variant="outline">
-										<Link href="/excel">Cancelar</Link>
-									</Button>
-									<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-										{([canSubmit, isSubmitting]) => (
-											<Button type="submit" disabled={!canSubmit} className="min-w-[140px]">
-												{isSubmitting ? "Guardando..." : "Guardar cambios"}
-											</Button>
+											{/* Title */}
+											<div>
+												<label className="text-sm font-medium mb-2 block">Título *</label>
+												<Input
+													type="text"
+													placeholder="Ej: Revisión de documentación final"
+													value={newFlujoAction.title || ''}
+													onChange={(e) => setNewFlujoAction({ ...newFlujoAction, title: e.target.value })}
+												/>
+											</div>
+
+											{/* Message */}
+											<div>
+												<label className="text-sm font-medium mb-2 block">Mensaje</label>
+												<textarea
+													className="w-full rounded-md border px-3 py-2 text-sm min-h-[100px]"
+													placeholder="Mensaje detallado de la acción..."
+													value={newFlujoAction.message || ''}
+													onChange={(e) => setNewFlujoAction({ ...newFlujoAction, message: e.target.value })}
+												/>
+											</div>
+
+											{/* Recipients */}
+											<div className="space-y-2">
+												<label className="text-sm font-medium mb-1 block">
+													Destinatarios
+												</label>
+												<p className="text-xs text-muted-foreground">
+													Si no seleccionás nada, se notificará solo al usuario actual. Podés elegir
+													un usuario específico, un rol, o ambos.
+												</p>
+												<div className="grid gap-3 md:grid-cols-2">
+													<div>
+														<label className="text-xs font-medium mb-1 block">
+															Usuario específico
+														</label>
+														<Select
+															value={selectedRecipientUserId || "none"}
+															onValueChange={(value) =>
+																setSelectedRecipientUserId(
+																	value === "none" ? "" : value
+																)
+															}
+														>
+															<SelectTrigger className="w-full text-xs">
+																<SelectValue placeholder="Seleccionar usuario" />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="none">
+																	<span className="text-xs text-muted-foreground">
+																		Ninguno (solo vos)
+																	</span>
+																</SelectItem>
+																{obraUsers.map((u) => (
+																	<SelectItem key={u.id} value={u.id}>
+																		<span className="text-xs">
+																			{u.full_name || u.id}
+																		</span>
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													</div>
+													<div>
+														<label className="text-xs font-medium mb-1 block">
+															Rol
+														</label>
+														<Select
+															value={selectedRecipientRoleId || "none"}
+															onValueChange={(value) =>
+																setSelectedRecipientRoleId(
+																	value === "none" ? "" : value
+																)
+															}
+														>
+															<SelectTrigger className="w-full text-xs">
+																<SelectValue placeholder="Seleccionar rol" />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="none">
+																	<span className="text-xs text-muted-foreground">
+																		Ninguno
+																	</span>
+																</SelectItem>
+																{obraRoles.map((r) => (
+																	<SelectItem key={r.id} value={r.id}>
+																		<span className="text-xs">
+																			{r.name || r.key}
+																		</span>
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													</div>
+												</div>
+											</div>
+
+											{/* Notification Types */}
+											<div>
+												<label className="text-sm font-medium mb-2 block">Tipo de notificación</label>
+												<div className="space-y-2">
+													<div className="flex items-center gap-2">
+														<input
+															type="checkbox"
+															id="notif-in-app"
+															className="h-4 w-4 rounded border-gray-300"
+															checked={newFlujoAction.notification_types?.includes('in_app') || false}
+															onChange={(e) => {
+																const current = (newFlujoAction.notification_types ||
+																	[]) as ("in_app" | "email")[];
+																const updated: ("in_app" | "email")[] = e.target.checked
+																	? [...current.filter((t) => t !== "in_app"), "in_app"]
+																	: current.filter((t) => t !== "in_app");
+																setNewFlujoAction({
+																	...newFlujoAction,
+																	notification_types:
+																		updated.length > 0 ? updated : ["in_app"],
+																});
+															}}
+														/>
+														<label htmlFor="notif-in-app" className="text-sm cursor-pointer">
+															Notificación en la aplicación
+														</label>
+													</div>
+													<div className="flex items-center gap-2">
+														<input
+															type="checkbox"
+															id="notif-email"
+															className="h-4 w-4 rounded border-gray-300"
+															checked={newFlujoAction.notification_types?.includes('email') || false}
+															onChange={(e) => {
+																const current = (newFlujoAction.notification_types ||
+																	[]) as ("in_app" | "email")[];
+																const updated: ("in_app" | "email")[] = e.target.checked
+																	? [...current.filter((t) => t !== "email"), "email"]
+																	: current.filter((t) => t !== "email");
+																setNewFlujoAction({
+																	...newFlujoAction,
+																	notification_types:
+																		updated.length > 0 ? updated : ["in_app"],
+																});
+															}}
+														/>
+														<label htmlFor="notif-email" className="text-sm cursor-pointer">
+															Notificación por correo electrónico
+														</label>
+													</div>
+												</div>
+												<p className="text-xs text-muted-foreground mt-1">
+													Selecciona cómo deseas recibir las notificaciones de esta acción
+												</p>
+											</div>
+
+											{/* Actions */}
+											<div className="flex justify-end gap-2">
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => {
+														setIsAddingFlujoAction(false);
+														setNewFlujoAction({
+															action_type: 'email',
+															timing_mode: 'immediate',
+															offset_value: 1,
+															offset_unit: 'days',
+															title: '',
+															message: '',
+															recipient_user_ids: [],
+															notification_types: ["in_app"],
+															enabled: true,
+														});
+													}}
+												>
+													Cancelar
+												</Button>
+												<Button
+													type="button"
+													size="sm"
+													onClick={saveFlujoAction}
+												>
+													Guardar Acción
+												</Button>
+											</div>
+										</motion.div>
+									)}
+
+									{/* List of Existing Actions */}
+									<div className="space-y-3">
+										{isLoadingFlujoActions ? (
+											<p className="text-sm text-muted-foreground text-center py-8">Cargando acciones...</p>
+										) : flujoActions.length === 0 ? (
+											<p className="text-sm text-muted-foreground text-center py-8">
+												No hay acciones configuradas. Crea una nueva acción para comenzar.
+											</p>
+										) : (
+											flujoActions.map((action, idx) => (
+												<motion.div
+													key={action.id}
+													initial={{ opacity: 0, y: 8 }}
+													animate={{ opacity: 1, y: 0 }}
+													transition={{ delay: idx * 0.05 }}
+													className={`rounded-lg border p-4 ${!action.enabled ? 'opacity-50' : ''}`}
+												>
+													<div className="flex items-start justify-between">
+														<div className="flex-1">
+															<div className="flex items-center gap-2 mb-2">
+																{action.action_type === 'email' ? (
+																	<Mail className="h-4 w-4 text-primary" />
+																) : (
+																	<Calendar className="h-4 w-4 text-primary" />
+																)}
+																<h4 className="font-semibold text-sm">{action.title}</h4>
+																<span className={`text-xs px-2 py-0.5 rounded-full ${action.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+																	{action.enabled ? 'Activa' : 'Inactiva'}
+																</span>
+															</div>
+															{action.message && (
+																<p className="text-sm text-muted-foreground mb-2">{action.message}</p>
+															)}
+															<div className="flex items-center gap-4 text-xs text-muted-foreground">
+																<span>
+																	{action.action_type === 'email' ? 'Email' : 'Evento de Calendario'}
+																</span>
+																<span>•</span>
+																<span>
+																	{action.timing_mode === 'immediate' && 'Inmediato'}
+																	{action.timing_mode === 'offset' && `${action.offset_value} ${action.offset_unit} después`}
+																	{action.timing_mode === 'scheduled' && `Fecha: ${new Date(action.scheduled_date!).toLocaleDateString()}`}
+																</span>
+																{action.notification_types && action.notification_types.length > 0 && (
+																	<>
+																		<span>•</span>
+																		<span className="flex items-center gap-1">
+																			{action.notification_types.includes('in_app') && (
+																				<span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">App</span>
+																			)}
+																			{action.notification_types.includes('email') && (
+																				<span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Email</span>
+																			)}
+																		</span>
+																	</>
+																)}
+															</div>
+														</div>
+														<div className="flex items-center gap-2">
+															<Button
+																type="button"
+																variant="ghost"
+																size="sm"
+																onClick={() => toggleFlujoAction(action.id, !action.enabled)}
+															>
+																{action.enabled ? 'Desactivar' : 'Activar'}
+															</Button>
+															<Button
+																type="button"
+																variant="ghost"
+																size="sm"
+																onClick={() => deleteFlujoAction(action.id)}
+																className="text-destructive hover:text-destructive hover:bg-destructive/10"
+															>
+																<Trash2 className="h-4 w-4" />
+															</Button>
+														</div>
+													</div>
+												</motion.div>
+											))
 										)}
-									</form.Subscribe>
-								</motion.div>
-							</motion.form>
+									</div>
+								</div>
+							</motion.section>
 						</TabsContent>
 
 						{/* Certificates Tab */}
@@ -1984,8 +2665,17 @@ export default function ObraDetailPage() {
 							</motion.section>
 						</TabsContent>
 
-						{/* Materiales Tab */}
-						<TabsContent value="materiales" className="space-y-6">
+						{/* Documentos Tab - Unified File Manager */}
+						<TabsContent value="documentos" className="space-y-6">
+							<FileManager
+								obraId={String(obraId)}
+								materialOrders={materialOrders}
+								onRefreshMaterials={refreshMaterialOrders}
+							/>
+						</TabsContent>
+
+						{/* OLD - Materiales Tab - Temporarily disabled */}
+						<TabsContent value="materiales-old" className="space-y-6 hidden">
 							<motion.section
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
@@ -2066,7 +2756,7 @@ export default function ObraDetailPage() {
 																					type="button"
 																					className="text-xs underline text-primary whitespace-nowrap"
 																					onClick={() => {
-																						setActiveTab('documentos');
+																						setQueryParams({ tab: 'documentos' });
 																						console.log('info', info);
 																						if (info) {
 																							setDocPathSegments(info.segments);
@@ -2307,8 +2997,8 @@ export default function ObraDetailPage() {
 							</motion.section>
 						</TabsContent>
 
-						{/* Documentos Tab */}
-						<TabsContent value="documentos" className="space-y-6">
+						{/* OLD - Documentos Tab - Removed and merged into FileManager above */}
+						<TabsContent value="documentos-old" className="space-y-6 hidden">
 							<motion.section
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
@@ -2446,143 +3136,6 @@ export default function ObraDetailPage() {
 							</Dialog>
 						</TabsContent>
 
-						{/* Pendientes Tab */}
-						<TabsContent value="pendientes" className="space-y-6">
-							<motion.section
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.4 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden"
-							>
-								<div className="bg-muted/50 px-6 py-4 border-b">
-									<div className="flex items-center justify-between">
-										<div>
-											<div className="flex items-center gap-2">
-												<FileText className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Documentos pendientes</h2>
-											</div>
-											<p className="text-sm text-muted-foreground mt-1">Lista de tareas al completar la obra</p>
-										</div>
-										<div className="shrink-0">
-											<Button
-												variant="outline"
-												size="sm"
-												onClick={() => {
-													setPendingDocs((prev) => ([
-														...prev,
-														{ id: `tmp-${Date.now()}`, name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
-													]));
-												}}
-											>
-												<Plus className="h-4 w-4 mr-2" />
-												Agregar
-											</Button>
-										</div>
-									</div>
-								</div>
-
-								<div className="p-6 space-y-4">
-									<div className="overflow-x-auto rounded-lg border">
-										<table className="w-full text-sm">
-											<thead className="bg-muted/50">
-												<tr>
-													<th className="text-left font-medium py-3 px-4 border-b">Documento</th>
-													<th className="text-left font-medium py-3 px-4 border-b">Póliza</th>
-													<th className="text-left font-medium py-3 px-4 border-b">Vencimiento</th>
-													<th className="text-left font-medium py-3 px-4 border-b">Hecho</th>
-													<th className="text-left font-medium py-3 px-4 border-b">Acciones</th>
-												</tr>
-											</thead>
-											<tbody>
-												{pendingDocs.map((doc, idx) => (
-													<motion.tr
-														key={doc.id}
-														initial={{ opacity: 0, y: 8 }}
-														animate={{ opacity: 1, y: 0 }}
-														transition={{ delay: idx * 0.05 }}
-														className="border-b last:border-0"
-													>
-														<td className="py-3 px-4 min-w-[240px]">
-															<Input
-																type="text"
-																placeholder="Nombre del documento"
-																value={doc.name}
-																onChange={(e) => updatePendingDoc(idx, "name", e.target.value)}
-															/>
-														</td>
-														<td className="py-3 px-4 min-w-[200px]">
-															<Input
-																type="text"
-																placeholder="Póliza"
-																value={doc.poliza}
-																onChange={(e) => updatePendingDoc(idx, "poliza", e.target.value)}
-															/>
-														</td>
-														<td className="py-3 px-4 min-w-[280px]">
-															<div className="flex items-center gap-2">
-																<DropdownMenu>
-																	<DropdownMenuTrigger asChild>
-																		<Button variant="outline" size="sm">
-																			{doc.dueMode === "fixed" ? "Fecha fija" : "Días después de finalizar"}
-																		</Button>
-																	</DropdownMenuTrigger>
-																	<DropdownMenuContent align="start">
-																		<DropdownMenuItem onClick={() => updatePendingDoc(idx, "dueMode", "fixed")}>Fecha fija</DropdownMenuItem>
-																		<DropdownMenuItem onClick={() => updatePendingDoc(idx, "dueMode", "after_completion")}>Días después de finalizar</DropdownMenuItem>
-																	</DropdownMenuContent>
-																</DropdownMenu>
-																{doc.dueMode === "fixed" ? (
-																	<Input
-																		type="date"
-																		value={doc.dueDate}
-																		onChange={(e) => updatePendingDoc(idx, "dueDate", e.target.value)}
-																	/>
-																) : (
-																	<div className="flex items-center gap-2">
-																		<Input
-																			type="number"
-																			min={0}
-																			value={Number(doc.offsetDays || 0)}
-																			onChange={(e) => updatePendingDoc(idx, "offsetDays", Number(e.target.value))}
-																			className="w-24"
-																		/>
-																		<span className="text-sm text-muted-foreground">días después</span>
-																	</div>
-																)}
-															</div>
-														</td>
-														<td className="py-3 px-4">
-															<input
-																type="checkbox"
-																checked={doc.done}
-																onChange={(e) => updatePendingDoc(idx, "done", e.target.checked)}
-																className="h-4 w-4"
-															/>
-														</td>
-														<td className="py-3 px-4">
-															<div className="flex items-center gap-2">
-																<Button size="sm" variant="secondary" onClick={() => savePendingDoc(doc, idx)}>Guardar</Button>
-																<Button
-																	size="sm"
-																	variant="ghost"
-																	onClick={() => deletePendingDoc(doc, idx)}
-																	className="text-destructive hover:text-destructive hover:bg-destructive/10"
-																>
-																	<Trash2 className="h-4 w-4" />
-																</Button>
-															</div>
-														</td>
-													</motion.tr>
-												))}
-											</tbody>
-										</table>
-									</div>
-									<p className="text-xs text-muted-foreground">
-										Al establecer una fecha, se agenda un recordatorio para el día anterior.
-									</p>
-								</div>
-							</motion.section>
-						</TabsContent>
 					</Tabs>
 				)}
 			</div>

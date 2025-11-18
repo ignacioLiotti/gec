@@ -80,6 +80,237 @@ export async function getAuthContext() {
 	return { supabase, user, tenantId };
 }
 
+/**
+ * Execute flujo actions when an obra completes
+ */
+export async function executeFlujoActions(
+	supabase: any,
+	obraId: string,
+	currentUserId: string,
+	tenantId: string | null
+) {
+	console.info("Executing flujo actions for obra", { obraId });
+
+	// Fetch all enabled flujo actions for this obra
+	const { data: actions, error: fetchError } = await supabase
+		.from("obra_flujo_actions")
+		.select("*")
+		.eq("obra_id", obraId)
+		.eq("enabled", true);
+
+	if (fetchError) {
+		console.error("Error fetching flujo actions:", fetchError);
+		return;
+	}
+
+	if (!actions || actions.length === 0) {
+		console.info("No flujo actions configured for this obra");
+		return;
+	}
+
+	console.info(`Found ${actions.length} flujo actions to execute`);
+
+	for (const action of actions) {
+		try {
+			// Calculate when to execute based on timing_mode
+			let executeAt: Date | null = null;
+
+			if (action.timing_mode === "immediate") {
+				executeAt = new Date();
+			} else if (action.timing_mode === "offset") {
+				// For completion workflows, "now" effectively is the completion time.
+				// Offsets are calculated relative to the moment the obra reached 100%.
+				const now = new Date();
+				const offsetValue = action.offset_value || 0;
+				const offsetUnit = action.offset_unit || "days";
+
+				switch (offsetUnit) {
+					case "minutes":
+						executeAt = new Date(now.getTime() + offsetValue * 60 * 1000);
+						break;
+					case "hours":
+						executeAt = new Date(now.getTime() + offsetValue * 60 * 60 * 1000);
+						break;
+					case "days":
+						executeAt = new Date(
+							now.getTime() + offsetValue * 24 * 60 * 60 * 1000
+						);
+						break;
+					case "weeks":
+						executeAt = new Date(
+							now.getTime() + offsetValue * 7 * 24 * 60 * 60 * 1000
+						);
+						break;
+					case "months":
+						executeAt = new Date(now);
+						executeAt.setMonth(executeAt.getMonth() + offsetValue);
+						break;
+					default:
+						executeAt = new Date(
+							now.getTime() + offsetValue * 24 * 60 * 60 * 1000
+						);
+				}
+			} else if (action.timing_mode === "scheduled") {
+				executeAt = action.scheduled_date
+					? new Date(action.scheduled_date)
+					: null;
+			}
+
+			if (!executeAt) {
+				console.warn("Could not determine execution time for action", {
+					actionId: action.id,
+				});
+				continue;
+			}
+
+			// Get recipient user IDs (default to current user if empty)
+			const recipients =
+				action.recipient_user_ids?.length > 0
+					? action.recipient_user_ids
+					: [currentUserId];
+
+			// Get notification types (default to in_app if not specified)
+			const notificationTypes =
+				action.notification_types?.length > 0
+					? action.notification_types
+					: ["in_app"];
+
+			// For email-type actions, we still create notifications; for calendar_event
+			// actions we now create rows in calendar_events instead, so they only
+			// appear once the obra has actually completed.
+			if (action.action_type === "calendar_event") {
+				if (!tenantId) {
+					console.warn(
+						"Skipping calendar_event flujo action because tenantId is null",
+						{ actionId: action.id, obraId }
+					);
+				} else {
+					for (const recipientId of recipients) {
+						const end = new Date(executeAt.getTime() + 60 * 60 * 1000);
+						const { error: calErr } = await supabase
+							.from("calendar_events")
+							.insert({
+								tenant_id: tenantId,
+								created_by: currentUserId,
+								obra_id: obraId,
+								flujo_action_id: action.id,
+								title: action.title,
+								description: action.message || "",
+								start_at: executeAt.toISOString(),
+								end_at: end.toISOString(),
+								all_day: false,
+								audience_type: "user",
+								target_user_id: recipientId,
+							});
+						if (calErr) {
+							console.error(
+								"Failed to insert calendar_event from flujo action",
+								{
+									actionId: action.id,
+									obraId,
+									recipientId,
+									error: calErr,
+								}
+							);
+						} else {
+							console.info("Inserted calendar_event from flujo action", {
+								actionId: action.id,
+								obraId,
+								recipientId,
+								start_at: executeAt.toISOString(),
+							});
+						}
+					}
+				}
+			} else {
+				// Create notifications for each recipient (email-type actions)
+				for (const recipientId of recipients) {
+					// Determine the base notification type
+					let baseType =
+						action.action_type === "email" ? "flujo_email" : "flujo_calendar";
+
+					// Send in-app notification if requested
+					if (notificationTypes.includes("in_app")) {
+						await supabase.from("notifications").insert({
+							user_id: recipientId,
+							tenant_id: tenantId,
+							title: action.title,
+							body: action.message || "",
+							type: baseType,
+							action_url: `/excel/${obraId}`,
+							data: {
+								obraId,
+								flujoActionId: action.id,
+								scheduledFor: executeAt.toISOString(),
+								eventDate: executeAt.toISOString(),
+							},
+						});
+					}
+
+					// Send email notification if requested
+					if (notificationTypes.includes("email")) {
+						// TODO: Integrate with email service (e.g., Resend)
+						// For now, create a notification with type "email" to indicate it should be sent via email
+						await supabase.from("notifications").insert({
+							user_id: recipientId,
+							tenant_id: tenantId,
+							title: action.title,
+							body: action.message || "",
+							type: `${baseType}_email`,
+							action_url: `/excel/${obraId}`,
+							data: {
+								obraId,
+								flujoActionId: action.id,
+								scheduledFor: executeAt.toISOString(),
+								eventDate: executeAt.toISOString(),
+								sendEmail: true,
+							},
+						});
+
+						console.info("Email notification queued for flujo action", {
+							actionId: action.id,
+							recipientId,
+						});
+					}
+				}
+			}
+
+			// Record execution
+			await supabase.from("obra_flujo_executions").insert({
+				flujo_action_id: action.id,
+				obra_id: obraId,
+				status: "completed",
+			});
+
+			console.info("Flujo action executed successfully", {
+				actionId: action.id,
+				type: action.action_type,
+				recipientCount: recipients.length,
+			});
+		} catch (actionError) {
+			console.error("Error executing flujo action", {
+				actionId: action.id,
+				error: actionError,
+			});
+
+			// Record failure
+			try {
+				await supabase.from("obra_flujo_executions").insert({
+					flujo_action_id: action.id,
+					obra_id: obraId,
+					status: "failed",
+					error_message:
+						actionError instanceof Error
+							? actionError.message
+							: String(actionError),
+				});
+			} catch (recordError) {
+				console.error("Failed to record flujo execution error", recordError);
+			}
+		}
+	}
+}
+
 export async function GET(request: Request) {
 	const { supabase, user, tenantId } = await getAuthContext();
 
@@ -457,6 +688,11 @@ export async function PUT(request: Request) {
 			(existingMap.get(obra.n)?.porcentaje ?? 0) < 100
 	);
 
+	const newlyIncomplete = payload.filter(
+		(obra) =>
+			obra.porcentaje < 100 && (existingMap.get(obra.n)?.porcentaje ?? 0) >= 100
+	);
+
 	console.info("Obras PUT: computed newlyCompleted", {
 		count: newlyCompleted.length,
 		items: newlyCompleted.map((obra) => ({
@@ -562,6 +798,13 @@ export async function PUT(request: Request) {
 					null,
 			} as const;
 
+			console.log("OBRA TERMINADA", {
+				n: obra.n,
+				obraId: ctx.obra.id ?? null,
+				name: ctx.obra.name,
+				percentage: ctx.obra.percentage,
+			});
+
 			console.info("Obras PUT: emitting event obra.completed", {
 				n: obra.n,
 				obraId: ctx.obra.id ?? null,
@@ -580,6 +823,19 @@ export async function PUT(request: Request) {
 					n: obra.n,
 					obraId: ctx.obra.id ?? null,
 				});
+			}
+
+			// Execute flujo actions for the completed obra
+			try {
+				if (ctx.obra.id) {
+					console.log("EXECUTING FLUJO ACTIONS", ctx.obra.id);
+					await executeFlujoActions(supabase, ctx.obra.id, user.id, tenantId);
+				}
+			} catch (flujoError) {
+				console.error(
+					"Obras PUT: error while executing flujo actions",
+					flujoError
+				);
 			}
 
 			// Schedule document reminders for pendientes configured after completion
@@ -631,6 +887,41 @@ export async function PUT(request: Request) {
 					scheduleErr
 				);
 			}
+		}
+	}
+
+	// Handle obras that were reverted from completed back to incomplete:
+	// remove any calendar events that were created for them by flujo actions.
+	if (newlyIncomplete.length > 0) {
+		try {
+			const revertedNs = newlyIncomplete.map((obra) => obra.n);
+			const revertedIds =
+				existingRows
+					?.filter((row) => revertedNs.includes(row.n))
+					.map((row) => row.id) ?? [];
+
+			if (revertedIds.length > 0) {
+				const { error: delErr } = await supabase
+					.from("calendar_events")
+					.delete()
+					.in("obra_id", revertedIds);
+				if (delErr) {
+					console.error(
+						"Obras PUT: failed to delete calendar_events for reverted obras",
+						{ obraIds: revertedIds, error: delErr }
+					);
+				} else {
+					console.info(
+						"Obras PUT: deleted calendar_events for reverted obras",
+						{ obraIds: revertedIds }
+					);
+				}
+			}
+		} catch (revertError) {
+			console.error(
+				"Obras PUT: unexpected error while cleaning up calendar_events for reverted obras",
+				revertError
+			);
 		}
 	}
 

@@ -72,3 +72,4 @@ CREATE INDEX IF NOT EXISTS certificates_vencimiento_idx ON public.certificates(v
 
 
 
+

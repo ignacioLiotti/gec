@@ -103,9 +103,15 @@ export async function GET(request: Request) {
       normalize(row.ente).includes(q) ||
       normalize(row.n_exp).includes(q) ||
       normalize(row.estado).includes(q) ||
+      normalize(row.mes).includes(q) ||
+      normalize(String(row.monto)).includes(q) ||
+      normalize(String(row.n_certificado)).includes(q) ||
       (row.nro_factura ? normalize(row.nro_factura).includes(q) : false) ||
       (row.concepto ? normalize(row.concepto).includes(q) : false) ||
-      (row.observaciones ? normalize(row.observaciones).includes(q) : false)
+      (row.observaciones ? normalize(row.observaciones).includes(q) : false) ||
+      (row.fecha_facturacion ? normalize(row.fecha_facturacion).includes(q) : false) ||
+      (row.vencimiento ? normalize(row.vencimiento).includes(q) : false) ||
+      (row.fecha_pago ? normalize(row.fecha_pago).includes(q) : false)
     );
   })();
 
@@ -141,6 +147,7 @@ export async function GET(request: Request) {
     },
   });
 }
+
 
 
 

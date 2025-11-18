@@ -1,17 +1,18 @@
 import { sleep } from "workflow";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
-import { Resend } from "resend";
+import { sendEmail } from "@/lib/email/api";
 
 type ExpandedEffect = {
 	channel: "in-app" | "email";
-	when: "now" | Date | ((ctx: any) => Date | "now");
+	// Resolved "when" value. `null` means "no delay" / treat as "now".
+	when: "now" | Date | null | ((ctx: any) => Date | "now" | null);
 	title?: (ctx: any) => string;
 	body?: (ctx: any) => string | null | undefined;
 	subject?: (ctx: any) => string | null | undefined;
 	html?: (ctx: any) => string | null | undefined;
 	actionUrl?: (ctx: any) => string | null | undefined;
 	data?: (ctx: any) => any;
-	type?: string;
+	type?: string | ((ctx: any) => string | null | undefined);
 	ctx: any;
 	recipientId?: string | null;
 	recipientEmail?: string | null;
@@ -29,32 +30,28 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 		if (eff.channel === "in-app") {
 			("use step");
 			const s = createSupabaseAdminClient();
+			const resolvedType =
+				typeof eff.type === "function" ? eff.type(eff.ctx) : eff.type;
 			await s.from("notifications").insert({
 				user_id: eff.recipientId,
 				tenant_id: eff.ctx?.tenantId ?? null,
 				title: eff.title?.(eff.ctx) ?? "",
 				body: eff.body?.(eff.ctx) ?? null,
-				type: eff.type ?? "info",
+				type: resolvedType ?? "info",
 				action_url: eff.actionUrl?.(eff.ctx) ?? null,
 				pendiente_id: (eff.ctx?.pendienteId as string | null) ?? null,
 				data: eff.data?.(eff.ctx) ?? {},
 			});
 		} else if (eff.channel === "email") {
 			("use step");
-			const resendKey = process.env.RESEND_API_KEY;
-			const fromEmail = process.env.RESEND_FROM_EMAIL;
-			if (!resendKey || !fromEmail || !eff.recipientEmail) {
-				continue;
-			}
+			if (!eff.recipientEmail) continue;
 			const subject = eff.subject?.(eff.ctx) ?? "Notificación";
 			const html =
 				eff.html?.(eff.ctx) ??
 				`<p>${eff.title?.(eff.ctx) ?? "Notificación"}</p><p>${
 					eff.body?.(eff.ctx) ?? ""
 				}</p>`;
-			const resend = new Resend(resendKey);
-			await resend.emails.send({
-				from: fromEmail,
+			await sendEmail({
 				to: eff.recipientEmail,
 				subject,
 				html,

@@ -394,7 +394,7 @@ export function ObrasTable(props: ObrasTableProps) {
             {(isLoading || tableError || visible.length === 0) ? (
               <InBodyStates
                 isLoading={isLoading}
-                tableError={tableError}
+                tableError={tableError ? new Error(tableError) : null}
                 colspan={16}
                 empty={visible.length === 0}
                 onRetry={onRetry}

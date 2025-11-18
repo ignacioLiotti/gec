@@ -1,0 +1,3 @@
+-- Placeholder migration to maintain sequence
+-- This migration was missing from the local repository
+-- No changes needed

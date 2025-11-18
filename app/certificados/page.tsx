@@ -1,17 +1,27 @@
 'use client';
 
 import Link from "next/link";
+import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 import { cn } from "@/lib/utils";
-import { FileSpreadsheet, Upload } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FileSpreadsheet, X, Columns3, Eye, EyeOff, Pin, FileText, ChevronDown, ChevronUp, Printer } from "lucide-react";
 import Papa from "papaparse";
 import { toast } from "sonner";
+import ReportTable from "./report";
+import { CheckedState } from "@radix-ui/react-checkbox";
 
 type CertRow = {
   id: string;
@@ -33,9 +43,118 @@ type CertRow = {
   fecha_pago: string | null;
 };
 
+// InBodyStates component (inline for simplicity)
+function InBodyStates({
+  isLoading,
+  tableError,
+  colspan,
+  empty,
+  onRetry,
+  emptyText,
+}: {
+  isLoading: boolean;
+  tableError: string | null;
+  colspan: number;
+  empty: boolean;
+  onRetry: () => void;
+  emptyText: string;
+}) {
+  if (isLoading) {
+    return (
+      <tr>
+        <td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
+          <div className="flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <p className="text-sm text-muted-foreground">Cargando datos...</p>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  if (tableError) {
+    return (
+      <tr>
+        <td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm text-destructive">Error: {tableError}</p>
+            <Button variant="outline" size="sm" onClick={onRetry}>Reintentar</Button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  if (empty) {
+    return (
+      <tr>
+        <td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
+          <p className="text-sm text-muted-foreground">{emptyText}</p>
+        </td>
+      </tr>
+    );
+  }
+
+  return null;
+}
+
+// Custom Input component (inline for simplicity)
+const CustomInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        ref={ref}
+        className={cn(
+          "w-full text-sm bg-transparent border-none outline-none px-0 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 focus:ring-1 focus:ring-primary",
+          className,
+        )}
+        {...props}
+      />
+    );
+  }
+);
+CustomInput.displayName = "CustomInput";
+
+const FIELD_BY_INDEX = [
+  "obraName", "ente", "facturado", "fecha_facturacion", "nro_factura",
+  "monto", "concepto", "cobrado", "n_exp", "observaciones", "vencimiento", "fecha_pago"
+];
+
+const COLUMN_TO_DB: Record<number, string> = {
+  0: "obra",
+  1: "ente",
+  2: "facturado",
+  3: "fecha_facturacion",
+  4: "nro_factura",
+  5: "monto",
+  6: "concepto",
+  7: "cobrado",
+  8: "n_exp",
+  9: "observaciones",
+  10: "vencimiento",
+  11: "fecha_pago",
+};
+
+type FiltersState = {
+  montoMin: string;
+  montoMax: string;
+  entes: string[];
+  facturado: "all" | "si" | "no";
+  cobrado: "all" | "si" | "no";
+  conceptoContains: string;
+  fechaFacturacionMin: string;
+  fechaFacturacionMax: string;
+  fechaPagoMin: string;
+  fechaPagoMax: string;
+  vencimientoMin: string;
+  vencimientoMax: string;
+};
+
 export default function CertificadosPage() {
   const [rows, setRows] = useState<CertRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [tableError, setTableError] = useState<string | null>(null);
   const [orderBy, setOrderBy] = useState<string>("obra");
   const [orderDir, setOrderDir] = useState<"asc" | "desc">("asc");
   const [query, setQuery] = useState("");
@@ -44,45 +163,162 @@ export default function CertificadosPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const [hiddenCols, setHiddenCols] = useState<number[]>([]);
-  const isHidden = useCallback((i: number) => hiddenCols.includes(i), [hiddenCols]);
+  // Filtros avanzados
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<FiltersState>({
+    montoMin: "",
+    montoMax: "",
+    entes: [],
+    facturado: "all",
+    cobrado: "all",
+    conceptoContains: "",
+    fechaFacturacionMin: "",
+    fechaFacturacionMax: "",
+    fechaPagoMin: "",
+    fechaPagoMax: "",
+    vencimientoMin: "",
+    vencimientoMax: "",
+  });
 
-  // Import widgets
+  const [hiddenCols, setHiddenCols] = useState<number[]>([]);
+  const [pinnedColumns, setPinnedColumns] = useState<number[]>([0]);
+  const [resizeMode, setResizeMode] = useState<"balanced" | "fixed">("balanced");
+
+  const isHidden = useCallback((i: number) => hiddenCols.includes(i), [hiddenCols]);
+  const isPinned = useCallback((colIndex: number) => pinnedColumns.includes(colIndex), [pinnedColumns]);
+
+  // Extract all unique entes for filter
+  const allEntes = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of rows) {
+      if (row.ente?.trim()) set.add(row.ente.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
+  const applyFiltersToParams = useCallback((params: URLSearchParams) => {
+    if (filters.montoMin.trim()) params.set("montoMin", filters.montoMin.trim());
+    if (filters.montoMax.trim()) params.set("montoMax", filters.montoMax.trim());
+    filters.entes.forEach((e) => { if (e.trim()) params.append("ente", e); });
+    if (filters.facturado !== "all") params.set("facturado", filters.facturado);
+    if (filters.cobrado !== "all") params.set("cobrado", filters.cobrado);
+    if (filters.conceptoContains.trim()) params.set("conceptoContains", filters.conceptoContains.trim());
+    if (filters.fechaFacturacionMin.trim()) params.set("fechaFacturacionMin", filters.fechaFacturacionMin.trim());
+    if (filters.fechaFacturacionMax.trim()) params.set("fechaFacturacionMax", filters.fechaFacturacionMax.trim());
+    if (filters.fechaPagoMin.trim()) params.set("fechaPagoMin", filters.fechaPagoMin.trim());
+    if (filters.fechaPagoMax.trim()) params.set("fechaPagoMax", filters.fechaPagoMax.trim());
+    if (filters.vencimientoMin.trim()) params.set("vencimientoMin", filters.vencimientoMin.trim());
+    if (filters.vencimientoMax.trim()) params.set("vencimientoMax", filters.vencimientoMax.trim());
+  }, [filters]);
+
+  const togglePinColumn = useCallback((colIndex: number) => {
+    setPinnedColumns((prev) => {
+      if (prev.includes(colIndex)) {
+        return prev.filter((c) => c !== colIndex);
+      } else {
+        return [...prev, colIndex].sort((a, b) => a - b);
+      }
+    });
+  }, []);
+
+  // CSV Import
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isDraggingCsv, setIsDraggingCsv] = useState(false);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
-  const setSortByColumn = useCallback((index: number) => {
-    const map: Record<number, string> = {
-      0: "obra",
-      1: "ente",
-      2: "facturado",
-      3: "fecha_facturacion",
-      4: "nro_factura",
-      5: "monto",
-      6: "concepto",
-      7: "cobrado",
-      8: "n_exp",
-      9: "observaciones",
-      10: "vencimiento",
-      11: "fecha_pago",
+  // Report generation
+  const [showReport, setShowReport] = useState(false);
+  const [reportCompanyName, setReportCompanyName] = useState("Nombre de la empresa");
+  const [reportDescription, setReportDescription] = useState("Reporte de certificados");
+  const [reportDate, setReportDate] = useState(new Date().toLocaleDateString('es-AR'));
+  const [reportViewMode, setReportViewMode] = useState<"full" | "by-obra" | "by-ente">("full");
+  const [reportHiddenCols, setReportHiddenCols] = useState<number[]>([]);
+  const [reportSortBy, setReportSortBy] = useState<number>(0);
+  const [reportSortDir, setReportSortDir] = useState<"asc" | "desc">("asc");
+  const [reportAggregations, setReportAggregations] = useState<Record<number, "none" | "sum" | "count" | "count-checked" | "average">>({});
+
+  const tableId = "certificados-table";
+
+  // Calculate sticky column offsets
+  const [columnOffsets, setColumnOffsets] = useState<Record<number, number>>({});
+
+  React.useEffect(() => {
+    const table = document.querySelector(`table[data-table-id="${tableId}"]`);
+    if (!table) return;
+
+    const calculateOffsets = () => {
+      const cols = table.querySelectorAll<HTMLTableColElement>("colgroup col");
+      const offsets: Record<number, number> = {};
+      let accumulator = 0;
+
+      pinnedColumns.forEach((colIndex) => {
+        if (!isHidden(colIndex)) {
+          offsets[colIndex] = accumulator;
+          const col = cols[colIndex];
+          if (col) {
+            const width = col.offsetWidth || parseInt(col.style.width) || 150;
+            accumulator += width;
+          }
+        }
+      });
+
+      setColumnOffsets(offsets);
     };
-    const col = map[index];
+
+    calculateOffsets();
+    const observer = new MutationObserver(calculateOffsets);
+    const colGroup = table.querySelector("colgroup");
+    if (colGroup) {
+      observer.observe(colGroup, { attributes: true, childList: true, subtree: true });
+    }
+
+    window.addEventListener("resize", calculateOffsets);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", calculateOffsets);
+    };
+  }, [tableId, pinnedColumns, isHidden]);
+
+  const getStickyProps = React.useCallback((colIndex: number, baseClass: string = "") => {
+    const pinned = isPinned(colIndex);
+    const offset = columnOffsets[colIndex];
+
+    return {
+      className: cn(
+        baseClass,
+        pinned && offset !== undefined ? "sticky z-20 outline outline-border" : ""
+      ),
+      style: {
+        left: pinned && offset !== undefined ? `${offset}px` : undefined,
+        display: isHidden(colIndex) ? "none" : undefined,
+      },
+    };
+  }, [isPinned, columnOffsets, isHidden]);
+
+  const setSortByColumn = useCallback((index: number) => {
+    const col = COLUMN_TO_DB[index];
     if (!col) return;
-    setOrderBy(col);
-    setOrderDir((prev) => (orderBy === col ? (prev === "asc" ? "desc" : "asc") : "asc"));
+    if (orderBy === col) {
+      setOrderDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setOrderBy(col);
+      setOrderDir("asc");
+    }
   }, [orderBy]);
 
   const refresh = useCallback(async () => {
     try {
       setIsLoading(true);
+      setTableError(null);
       const params = new URLSearchParams();
       params.set("orderBy", orderBy);
       params.set("orderDir", orderDir);
       params.set("page", String(page));
       params.set("limit", String(limit));
       if (query.trim()) params.set("q", query.trim());
+      applyFiltersToParams(params);
       const res = await fetch(`/api/certificados?${params.toString()}`);
       if (!res.ok) throw new Error("No se pudieron cargar los certificados");
       const data = await res.json();
@@ -93,11 +329,13 @@ export default function CertificadosPage() {
       setTotal(pag.total || 0);
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "No se pudieron cargar los certificados");
+      const msg = err instanceof Error ? err.message : "No se pudieron cargar los certificados";
+      setTableError(msg);
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
-  }, [orderBy, orderDir, page, limit, query]);
+  }, [orderBy, orderDir, page, limit, query, applyFiltersToParams]);
 
   useEffect(() => {
     void refresh();
@@ -128,6 +366,60 @@ export default function CertificadosPage() {
     }
   }, []);
 
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copiado al portapapeles");
+    } catch (err) {
+      console.error(err);
+      toast.error("No se pudo copiar");
+    }
+  }, []);
+
+  const rowToCsv = useCallback((row: CertRow) => {
+    const values = [
+      row.obraName,
+      row.ente,
+      row.facturado ? "Si" : "No",
+      row.fecha_facturacion || "",
+      row.nro_factura || "",
+      row.monto,
+      row.concepto || "",
+      row.cobrado ? "Si" : "No",
+      row.n_exp,
+      row.observaciones || "",
+      row.vencimiento || "",
+      row.fecha_pago || "",
+    ];
+    return values.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";");
+  }, []);
+
+  const highlightText = useCallback((text: string, q: string) => {
+    if (!q.trim()) return text;
+    const regex = new RegExp(`(${q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+    return text.replace(regex, '<mark class="bg-yellow-200">$1</mark>');
+  }, []);
+
+  const duplicateRow = useCallback((index: number) => {
+    const row = rows[index];
+    if (!row) return;
+    const copy = { ...row, id: `temp-${Date.now()}` };
+    const arr = rows.slice();
+    arr.splice(index + 1, 0, copy);
+    setRows(arr);
+    toast.success("Fila duplicada (temporal, no guardada)");
+  }, [rows]);
+
+  const deleteRow = useCallback((index: number) => {
+    if (rows.length <= 1) {
+      toast.error("No se puede eliminar la última fila");
+      return;
+    }
+    const arr = rows.filter((_, i) => i !== index);
+    setRows(arr);
+    toast.success("Fila eliminada (temporal, no guardada)");
+  }, [rows]);
+
   const ALL_COLUMNS: { index: number; label: string }[] = [
     { index: 0, label: "Obra" },
     { index: 1, label: "Ente" },
@@ -143,7 +435,7 @@ export default function CertificadosPage() {
     { index: 11, label: "Fecha pago" },
   ];
 
-  // CSV/JSON import
+  // CSV Import handlers
   const handleCsvFiles = useCallback(async (files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
@@ -160,7 +452,6 @@ export default function CertificadosPage() {
         .map((r) => (r || []).map((c) => (c ?? "").trim()))
         .filter((r) => r.some((c) => c.length > 0));
       if (rowsNorm.length === 0) throw new Error("CSV vacío");
-      // Expect header: obra;ente;facturado;fecha_facturacion;nro_factura;monto;concepto;cobrado;n_exp;observaciones;vencimiento;fecha_pago
       const dataRows = rowsNorm[0].join(";").toLowerCase().includes("obra") ? rowsNorm.slice(1) : rowsNorm;
       const imported: CertRow[] = dataRows.map((r, i) => {
         const get = (idx: number) => (r[idx] ?? "").trim();
@@ -224,13 +515,11 @@ export default function CertificadosPage() {
   }, []);
 
   return (
-    <div className="w-full mx-auto p-6">
-      <div>
+    <div className="w-full mx-auto p-6 pt-0">
+      {/* <div>
         <p className="text-muted-foreground pb-2">Gestión de certificados</p>
         <h1 className="text-4xl font-bold mb-2">Certificados por obra</h1>
-      </div>
-
-      {isLoading && <p className="text-sm text-muted-foreground">Cargando certificados...</p>}
+      </div> */}
 
       {showCsvImport && (
         <div
@@ -254,11 +543,182 @@ export default function CertificadosPage() {
         </div>
       )}
 
-      <div className="flex justify-between items-center mt-6">
+      <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Input placeholder="Buscar en todas las columnas..." value={query} onChange={(e) => setQuery(e.target.value)} className="w-[240px]" />
         </div>
         <div className="flex gap-2 items-center">
+          <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+                Filtros
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="sm:w-[30vw] sm:max-w-[90vw] my-auto max-h-[96vh] overflow-y-auto px-6 py-7">
+              <SheetHeader className="space-y-2 p-0">
+                <SheetTitle className="text-xl">Filtros avanzados</SheetTitle>
+                <p className="text-sm text-muted-foreground">Refiná los resultados aplicando múltiples criterios</p>
+              </SheetHeader>
+              <div className="mt-6 space-y-6 max-h-[90vh] overflow-y-auto">
+                {/* Monto */}
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div className="text-sm font-semibold">Monto</div>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" placeholder="Mínimo" value={filters.montoMin} onChange={(e) => setFilters((f) => ({ ...f, montoMin: e.target.value }))} className="text-sm" />
+                    <span className="text-muted-foreground">a</span>
+                    <Input type="number" placeholder="Máximo" value={filters.montoMax} onChange={(e) => setFilters((f) => ({ ...f, montoMax: e.target.value }))} className="text-sm" />
+                  </div>
+                </div>
+
+                {/* Entes */}
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div className="text-sm font-semibold">Ente</div>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-auto pr-1">
+                    {allEntes.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">No hay entes disponibles</p>
+                    ) : (
+                      allEntes.map((ent) => {
+                        const active = filters.entes.includes(ent);
+                        return (
+                          <button
+                            key={ent}
+                            type="button"
+                            onClick={() => setFilters((f) => ({ ...f, entes: active ? f.entes.filter((e) => e !== ent) : [...f.entes, ent] }))}
+                            className={cn(
+                              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-all",
+                              active
+                                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                : 'bg-background text-foreground hover:bg-muted border-border'
+                            )}
+                          >
+                            {ent}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Estados */}
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div className="text-sm font-semibold">Estados</div>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Facturado</div>
+                      <div className="flex gap-2">
+                        {[
+                          { value: "all" as const, label: "Todos" },
+                          { value: "si" as const, label: "Sí" },
+                          { value: "no" as const, label: "No" },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setFilters((f) => ({ ...f, facturado: option.value }))}
+                            className={cn(
+                              "flex-1 rounded-md border px-3 py-2 text-xs font-medium transition-all",
+                              filters.facturado === option.value
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background hover:bg-muted border-border'
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Cobrado</div>
+                      <div className="flex gap-2">
+                        {[
+                          { value: "all" as const, label: "Todos" },
+                          { value: "si" as const, label: "Sí" },
+                          { value: "no" as const, label: "No" },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setFilters((f) => ({ ...f, cobrado: option.value }))}
+                            className={cn(
+                              "flex-1 rounded-md border px-3 py-2 text-xs font-medium transition-all",
+                              filters.cobrado === option.value
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background hover:bg-muted border-border'
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fechas */}
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div className="text-sm font-semibold">Fechas</div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Fecha facturación</div>
+                      <div className="flex items-center gap-2">
+                        <Input type="date" value={filters.fechaFacturacionMin} onChange={(e) => setFilters((f) => ({ ...f, fechaFacturacionMin: e.target.value }))} className="text-sm" />
+                        <span className="text-muted-foreground">a</span>
+                        <Input type="date" value={filters.fechaFacturacionMax} onChange={(e) => setFilters((f) => ({ ...f, fechaFacturacionMax: e.target.value }))} className="text-sm" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Vencimiento</div>
+                      <div className="flex items-center gap-2">
+                        <Input type="date" value={filters.vencimientoMin} onChange={(e) => setFilters((f) => ({ ...f, vencimientoMin: e.target.value }))} className="text-sm" />
+                        <span className="text-muted-foreground">a</span>
+                        <Input type="date" value={filters.vencimientoMax} onChange={(e) => setFilters((f) => ({ ...f, vencimientoMax: e.target.value }))} className="text-sm" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Fecha pago</div>
+                      <div className="flex items-center gap-2">
+                        <Input type="date" value={filters.fechaPagoMin} onChange={(e) => setFilters((f) => ({ ...f, fechaPagoMin: e.target.value }))} className="text-sm" />
+                        <span className="text-muted-foreground">a</span>
+                        <Input type="date" value={filters.fechaPagoMax} onChange={(e) => setFilters((f) => ({ ...f, fechaPagoMax: e.target.value }))} className="text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Concepto */}
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div className="text-sm font-semibold">Concepto</div>
+                  <Input placeholder="Contiene texto..." value={filters.conceptoContains} onChange={(e) => setFilters((f) => ({ ...f, conceptoContains: e.target.value }))} className="text-sm" />
+                </div>
+              </div>
+              <SheetFooter className="mt-6 gap-2">
+                <Button type="button" variant="outline" className="flex-1 gap-2" onClick={() => {
+                  setFilters({
+                    montoMin: "",
+                    montoMax: "",
+                    entes: [],
+                    facturado: "all",
+                    cobrado: "all",
+                    conceptoContains: "",
+                    fechaFacturacionMin: "",
+                    fechaFacturacionMax: "",
+                    fechaPagoMin: "",
+                    fechaPagoMax: "",
+                    vencimientoMin: "",
+                    vencimientoMax: "",
+                  });
+                }}>
+                  <X className="h-4 w-4" />
+                  Limpiar
+                </Button>
+                <Button type="button" className="flex-1 gap-2" onClick={() => { setFiltersOpen(false); setPage(1); }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  Aplicar
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
           <Button variant="outline" size="sm" onClick={() => {
             setShowCsvImport((prev) => {
               const next = !prev;
@@ -271,139 +731,503 @@ export default function CertificadosPage() {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">Columnas</Button>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Columns3 className="h-4 w-4" />
+                Columnas
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuItem onClick={() => setHiddenCols([])}>Mostrar todo</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setHiddenCols(ALL_COLUMNS.map(c => c.index))}>Ocultar todo</DropdownMenuItem>
+              <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+                Configuración
+              </div>
+              <DropdownMenuCheckboxItem
+                checked={resizeMode === "fixed"}
+                onCheckedChange={(next) => setResizeMode(Boolean(next) ? "fixed" : "balanced")}
+              >
+                Ancho fijo (independiente)
+              </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
-              {ALL_COLUMNS.map((col) => {
-                const checked = !hiddenCols.includes(col.index);
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={col.index}
-                    checked={checked}
-                    onCheckedChange={(next: boolean | 'indeterminate') => {
-                      setHiddenCols((prev) => {
-                        const set = new Set(prev);
-                        if (next === false) set.add(col.index); else set.delete(col.index);
-                        return Array.from(set).sort((a, b) => a - b);
-                      });
-                    }}
-                  >
-                    {col.label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
+              <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+                Acciones rápidas
+              </div>
+              <DropdownMenuItem onClick={() => setHiddenCols([])} className="gap-2">
+                <Eye className="h-4 w-4" />
+                Mostrar todo
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setHiddenCols(ALL_COLUMNS.map(c => c.index))} className="gap-2">
+                <EyeOff className="h-4 w-4" />
+                Ocultar todo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+                Visibilidad y fijado de columnas
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {ALL_COLUMNS.map((col) => {
+                  const isVisible = !hiddenCols.includes(col.index);
+                  const isPinnedCol = pinnedColumns.includes(col.index);
+                  return (
+                    <div key={col.index} className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-sm">
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={(e) => {
+                          setHiddenCols((prev) => {
+                            const set = new Set(prev);
+                            if (!e.target.checked) set.add(col.index); else set.delete(col.index);
+                            return Array.from(set).sort((a, b) => a - b);
+                          });
+                        }}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <button
+                        onClick={() => togglePinColumn(col.index)}
+                        className={`p-1 rounded hover:bg-accent-foreground/10 ${isPinnedCol ? 'text-primary' : 'text-muted-foreground'}`}
+                        title={isPinnedCol ? "Desfijar columna" : "Fijar columna"}
+                      >
+                        <Pin className={`h-3 w-3 ${isPinnedCol ? 'fill-current' : ''}`} />
+                      </button>
+                      <span className="flex-1 text-sm">{col.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowReport(true)}>
+            <FileText className="h-4 w-4" />
+            Generar reporte
+          </Button>
         </div>
       </div>
 
-      <div className="border border-gray-300 rounded-lg overflow-x-auto mb-4 w-full max-h-[70vh] overflow-y-auto mt-4">
-        <table className="text-sm table-fixed" data-table-id="certificados-table">
-          <ColGroup tableId="certificados-table" columns={12} />
-          <thead className="bg-gray-100">
-            <tr className="bg-card">
-              <th className="relative px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 whitespace-normal" style={{ display: isHidden(0) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(0)}>OBRA{orderBy === "obra" ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
-                <ColumnResizer tableId="certificados-table" colIndex={0} />
-              </th>
-              <th className="relative px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(1) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(1)}>ENTE{orderBy === "ente" ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
-                <ColumnResizer tableId="certificados-table" colIndex={1} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(2) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(2)}>FACTURADO</button>
-                <ColumnResizer tableId="certificados-table" colIndex={2} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(3) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(3)}>FECHA FACTURACIÓN</button>
-                <ColumnResizer tableId="certificados-table" colIndex={3} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(4) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(4)}>N° FACTURA</button>
-                <ColumnResizer tableId="certificados-table" colIndex={4} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(5) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(5)}>MONTO{orderBy === "monto" ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
-                <ColumnResizer tableId="certificados-table" colIndex={5} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(6) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(6)}>CONCEPTO</button>
-                <ColumnResizer tableId="certificados-table" colIndex={6} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(7) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(7)}>COBRADO</button>
-                <ColumnResizer tableId="certificados-table" colIndex={7} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(8) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(8)}>N° EXPEDIENTE{orderBy === "n_exp" ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
-                <ColumnResizer tableId="certificados-table" colIndex={8} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(9) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(9)}>OBSERVACIONES</button>
-                <ColumnResizer tableId="certificados-table" colIndex={9} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-x border-gray-300 whitespace-normal" style={{ display: isHidden(10) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(10)}>VENCIMIENTO</button>
-                <ColumnResizer tableId="certificados-table" colIndex={10} />
-              </th>
-              <th className="relative px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase border-gray-300 whitespace-normal" style={{ display: isHidden(11) ? "none" : undefined }}>
-                <button type="button" className="hover:underline" onClick={() => setSortByColumn(11)}>FECHA PAGO</button>
-                <ColumnResizer tableId="certificados-table" colIndex={11} />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={12} className="px-4 py-6 text-center text-sm text-muted-foreground">No hay certificados</td>
+      <div className="border border-border rounded-xl overflow-hidden shadow-sm mb-6 w-full max-w-[calc(96vw-var(--sidebar-width))] mt-4">
+        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="text-sm table-fixed w-full" data-table-id={tableId}>
+            <ColGroup tableId={tableId} columns={12} mode={resizeMode} />
+            <thead className="bg-muted/50 sticky top-0 z-30">
+              <tr className="border-b">
+                <th {...getStickyProps(0, "relative px-4 py-3 text-left text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(0)}>OBRA{orderBy === COLUMN_TO_DB[0] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[0]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[0]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(0)}>
+                        {isPinned(0) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={0} />
+                </th>
+                <th {...getStickyProps(1, "relative px-4 py-3 text-left text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(1)}>ENTE{orderBy === COLUMN_TO_DB[1] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[1]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[1]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(1)}>
+                        {isPinned(1) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={1} />
+                </th>
+                <th {...getStickyProps(2, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(2)}>FACTURADO{orderBy === COLUMN_TO_DB[2] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[2]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[2]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(2)}>
+                        {isPinned(2) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={2} />
+                </th>
+                <th {...getStickyProps(3, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(3)}>FECHA FACTURACIÓN{orderBy === COLUMN_TO_DB[3] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[3]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[3]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(3)}>
+                        {isPinned(3) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={3} />
+                </th>
+                <th {...getStickyProps(4, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(4)}>N° FACTURA{orderBy === COLUMN_TO_DB[4] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[4]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[4]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(4)}>
+                        {isPinned(4) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={4} />
+                </th>
+                <th {...getStickyProps(5, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(5)}>MONTO{orderBy === COLUMN_TO_DB[5] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[5]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[5]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(5)}>
+                        {isPinned(5) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={5} />
+                </th>
+                <th {...getStickyProps(6, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(6)}>CONCEPTO{orderBy === COLUMN_TO_DB[6] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[6]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[6]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(6)}>
+                        {isPinned(6) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={6} />
+                </th>
+                <th {...getStickyProps(7, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(7)}>COBRADO{orderBy === COLUMN_TO_DB[7] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[7]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[7]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(7)}>
+                        {isPinned(7) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={7} />
+                </th>
+                <th {...getStickyProps(8, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(8)}>N° EXPEDIENTE{orderBy === COLUMN_TO_DB[8] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[8]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[8]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(8)}>
+                        {isPinned(8) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={8} />
+                </th>
+                <th {...getStickyProps(9, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(9)}>OBSERVACIONES{orderBy === COLUMN_TO_DB[9] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[9]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[9]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(9)}>
+                        {isPinned(9) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={9} />
+                </th>
+                <th {...getStickyProps(10, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(10)}>VENCIMIENTO{orderBy === COLUMN_TO_DB[10] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[10]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[10]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(10)}>
+                        {isPinned(10) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={10} />
+                </th>
+                <th {...getStickyProps(11, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <button type="button" className="hover:underline" onClick={() => setSortByColumn(11)}>FECHA PAGO{orderBy === COLUMN_TO_DB[11] ? (orderDir === "asc" ? " ▲" : " ▼") : ""}</button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-56">
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[11]); setOrderDir("asc"); }}>Orden ascendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy(COLUMN_TO_DB[11]); setOrderDir("desc"); }}>Orden descendente</ContextMenuItem>
+                      <ContextMenuItem onClick={() => { setOrderBy("obra"); setOrderDir("asc"); }}>Quitar orden</ContextMenuItem>
+                      <ContextMenuItem onClick={() => togglePinColumn(11)}>
+                        {isPinned(11) ? "Desfijar columna" : "Fijar columna"}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                  <ColumnResizer tableId={tableId} colIndex={11} />
+                </th>
               </tr>
-            ) : (
-              rows.map((row, idx) => (
-                <tr key={row.id} className={idx % 2 === 0 ? "bg-background" : "bg-card/40"}>
-                  <td className="px-2 pl-4 py-2 border-t border-r border-gray-200" style={{ display: isHidden(0) ? "none" : undefined }}>
-                    {row.obraId ? (
-                      <Link href={`/excel/${row.obraId}`} className="underline underline-offset-2">{row.obraName}</Link>
-                    ) : (
-                      row.obraName
-                    )}
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200" style={{ display: isHidden(1) ? "none" : undefined }}>{row.ente}</td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200 text-center" style={{ display: isHidden(2) ? "none" : undefined }}>
-                    <input type="checkbox" checked={!!row.facturado} onChange={(e) => updateRow(row.id, { facturado: e.target.checked })} className="h-4 w-4" />
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200" style={{ display: isHidden(3) ? "none" : undefined }}>
-                    <Input type="date" value={row.fecha_facturacion ?? ''} onChange={(e) => updateRow(row.id, { fecha_facturacion: e.target.value || null })} />
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200" style={{ display: isHidden(4) ? "none" : undefined }}>
-                    <Input type="text" value={row.nro_factura ?? ''} onChange={(e) => updateRow(row.id, { nro_factura: e.target.value || null })} />
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200 text-right font-mono" style={{ display: isHidden(5) ? "none" : undefined }}>
-                    $ {Number(row.monto).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200" style={{ display: isHidden(6) ? "none" : undefined }}>
-                    <Input type="text" value={row.concepto ?? ''} onChange={(e) => updateRow(row.id, { concepto: e.target.value || null })} />
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200 text-center" style={{ display: isHidden(7) ? "none" : undefined }}>
-                    <input type="checkbox" checked={!!row.cobrado} onChange={(e) => updateRow(row.id, { cobrado: e.target.checked })} className="h-4 w-4" />
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200" style={{ display: isHidden(8) ? "none" : undefined }}>{row.n_exp}</td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200" style={{ display: isHidden(9) ? "none" : undefined }}>
-                    <Input type="text" value={row.observaciones ?? ''} onChange={(e) => updateRow(row.id, { observaciones: e.target.value || null })} />
-                  </td>
-                  <td className="px-2 py-2 border-t border-r border-gray-200" style={{ display: isHidden(10) ? "none" : undefined }}>
-                    <Input type="date" value={row.vencimiento ?? ''} onChange={(e) => updateRow(row.id, { vencimiento: e.target.value || null })} />
-                  </td>
-                  <td className="px-2 py-2 border-t border-gray-200" style={{ display: isHidden(11) ? "none" : undefined }}>
-                    <Input type="date" value={row.fecha_pago ?? ''} onChange={(e) => updateRow(row.id, { fecha_pago: e.target.value || null })} />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(isLoading || tableError || rows.length === 0) ? (
+                <InBodyStates
+                  isLoading={isLoading}
+                  tableError={tableError}
+                  colspan={12}
+                  empty={rows.length === 0}
+                  onRetry={refresh}
+                  emptyText="No hay certificados disponibles"
+                />
+              ) : (
+                rows.map((row, visualIndex) => (
+                  <React.Fragment key={row.id}>
+                    <ContextMenu>
+                      <ContextMenuTrigger asChild>
+                        <tr className={cn(
+                          "transition-colors duration-150 hover:bg-muted/50",
+                          visualIndex % 2 === 0 ? "bg-background" : "bg-card/40"
+                        )}>
+                          <td {...getStickyProps(0, "px-2 pl-4 py-2 outline outline-border border-border relative bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <div className="min-h-[28px]">
+                                  {row.obraId ? (
+                                    <Link href={`/excel/${row.obraId}`} className="cursor-pointer text-muted-foreground font-semibold" dangerouslySetInnerHTML={{ __html: highlightText(row.obraName, query) }} />
+                                  ) : (
+                                    <span dangerouslySetInnerHTML={{ __html: highlightText(row.obraName, query) }} />
+                                  )}
+                                </div>
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.obraName)}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.obraName);
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(1, "outline outline-border border-border p-0 align-center px-2 py-2 bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <div className="min-h-[28px] text-muted-foreground font-semibold" dangerouslySetInnerHTML={{ __html: highlightText(row.ente, query) }} />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.ente)}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.ente);
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(2, "outline outline-border border-border p-0 relative table-cell bg-background text-center")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <Checkbox checked={!!row.facturado} onCheckedChange={(checked: CheckedState) => updateRow(row.id, { facturado: checked === "indeterminate" ? false : checked })} className="h-8 w-8 bg-background border border-ring rounded-sm" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.facturado ? "Si" : "No")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { facturado: false })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.facturado ? "Si" : "No");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(3, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <CustomInput type="date" value={row.fecha_facturacion ?? ''} onChange={(e) => updateRow(row.id, { fecha_facturacion: e.target.value || null })} className="w-full text-sm border absolute inset-0 focus:ring-0 focus:outline-none px-8" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.fecha_facturacion ?? "")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { fecha_facturacion: null })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.fecha_facturacion ?? "");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(4, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <CustomInput type="text" value={row.nro_factura ?? ''} onChange={(e) => updateRow(row.id, { nro_factura: e.target.value || null })} className="w-full text-sm border  h-full absolute inset-0 focus:ring-0 focus:outline-none" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.nro_factura ?? "")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { nro_factura: null })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.nro_factura ?? "");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(5, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <div className="absolute inset-0 px-2 py-2 flex items-center justify-end text-right font-mono text-muted-foreground font-semibold" dangerouslySetInnerHTML={{ __html: highlightText(`$ ${Number(row.monto).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, query) }} />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(String(row.monto))}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => String(r.monto));
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(6, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <CustomInput type="text" value={row.concepto ?? ''} onChange={(e) => updateRow(row.id, { concepto: e.target.value || null })} className="w-full text-sm border absolute inset-0 focus:ring-0 focus:outline-none" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.concepto ?? "")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { concepto: null })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.concepto ?? "");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(7, "outline outline-border border-border p-0 relative table-cell bg-background text-center")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <Checkbox checked={!!row.cobrado} onCheckedChange={(checked: CheckedState) => updateRow(row.id, { cobrado: checked === "indeterminate" ? false : checked })} className="h-8 w-8 bg-background border border-ring rounded-sm" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.cobrado ? "Si" : "No")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { cobrado: false })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.cobrado ? "Si" : "No");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(8, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <div className="min-h-[28px] px-2 py-2 text-muted-foreground font-semibold" dangerouslySetInnerHTML={{ __html: highlightText(row.n_exp, query) }} />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.n_exp)}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.n_exp);
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(9, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <CustomInput type="text" value={row.observaciones ?? ''} onChange={(e) => updateRow(row.id, { observaciones: e.target.value || null })} className="w-full text-sm border absolute inset-0 focus:ring-0 focus:outline-none" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.observaciones ?? "")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { observaciones: null })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.observaciones ?? "");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(10, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <CustomInput type="date" value={row.vencimiento ?? ''} onChange={(e) => updateRow(row.id, { vencimiento: e.target.value || null })} className="w-full text-sm border absolute inset-0 focus:ring-0 focus:outline-none px-8" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.vencimiento ?? "")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { vencimiento: null })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.vencimiento ?? "");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                          <td {...getStickyProps(11, "outline outline-border border-border p-0 relative table-cell bg-background")}>
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <CustomInput type="date" value={row.fecha_pago ?? ''} onChange={(e) => updateRow(row.id, { fecha_pago: e.target.value || null })} className="w-full text-sm border absolute inset-0 focus:ring-0 focus:outline-none px-8" />
+                              </ContextMenuTrigger>
+                              <ContextMenuContent className="w-52">
+                                <ContextMenuItem onClick={() => void copyToClipboard(row.fecha_pago ?? "")}>Copiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => updateRow(row.id, { fecha_pago: null })}>Limpiar valor</ContextMenuItem>
+                                <ContextMenuItem onClick={() => {
+                                  const colValues = rows.map((r) => r.fecha_pago ?? "");
+                                  void copyToClipboard(colValues.join("\n"));
+                                }}>Copiar columna</ContextMenuItem>
+                                <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </td>
+                        </tr>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="w-56">
+                        <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
+                        <ContextMenuItem onClick={() => duplicateRow(visualIndex)}>Duplicar fila</ContextMenuItem>
+                        <ContextMenuItem onClick={() => deleteRow(visualIndex)}>Eliminar fila</ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  </React.Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="flex items-center justify-between mb-4">
@@ -423,16 +1247,492 @@ export default function CertificadosPage() {
           <Button type="button" variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Siguiente</Button>
         </div>
       </div>
+
+      {/* Report Modal */}
+      {showReport && (
+        <style>{`
+          @media print {
+            @page {
+              size: A4 ;
+              margin: 0mm;
+            }
+
+            body {
+              background: white !important;
+            }
+
+            input {
+              border: 1px solid #ccc !important;
+            }
+
+            /* Hide configuration sidebar and controls, show only main report */
+            .cert-report-sidebar {
+              display: none !important;
+            }
+
+            .cert-report-print-button {
+              display: none !important;
+            }
+
+            /* Use dedicated print-only version of the report */
+            .cert-report-screen {
+              display: none !important;
+            }
+
+            .cert-report-print {
+              display: block !important;
+              overflow: visible !important;
+              max-height: none !important;
+              width: 100% !important;
+              max-width: 100% !important;
+            }
+
+            /* Improve table pagination / headers across pages */
+            .cert-report-root table {
+              page-break-inside: auto;
+              border-collapse: collapse;
+              width: 100%;
+            }
+
+            .cert-report-root thead {
+              display: table-header-group;
+            }
+
+            .cert-report-root tfoot {
+              display: table-footer-group;
+            }
+
+            .cert-report-root tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
+            }
+
+            .cert-report-root h3 {
+              page-break-after: avoid;
+            }
+
+            /* Force each logical section (table) to start on a new page,
+               but allow the table itself to span multiple pages */
+            .cert-report-print-section {
+              page-break-before: always;
+            }
+
+            .cert-report-print-section:first-child {
+              page-break-before: auto;
+            }
+            .cert-report-dialog-content {
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+            }
+
+          }
+        `}</style>
+      )}
+      <Dialog open={showReport} onOpenChange={setShowReport}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-hidden flex flex-col p-0 cert-report-dialog-content">
+          <div className="flex h-full">
+            {/* Sidebar with controls */}
+            <div className="w-64 border-r bg-muted/30 p-4 space-y-4 overflow-y-auto cert-report-sidebar">
+              <DialogHeader>
+                <DialogTitle className="text-lg">Configuración</DialogTitle>
+              </DialogHeader>
+
+              {/* View mode buttons */}
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-muted-foreground">Vista</div>
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setReportViewMode("full")}
+                    className={cn(
+                      "text-left px-3 py-2 rounded-md text-sm transition-colors",
+                      reportViewMode === "full"
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-accent"
+                    )}
+                  >
+                    Completa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportViewMode("by-obra")}
+                    className={cn(
+                      "text-left px-3 py-2 rounded-md text-sm transition-colors",
+                      reportViewMode === "by-obra"
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-accent"
+                    )}
+                  >
+                    Por obra
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportViewMode("by-ente")}
+                    className={cn(
+                      "text-left px-3 py-2 rounded-md text-sm transition-colors",
+                      reportViewMode === "by-ente"
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-accent"
+                    )}
+                  >
+                    Por ente
+                  </button>
+                </div>
+              </div>
+
+              {/* Column visibility */}
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-muted-foreground">Columnas visibles</div>
+                <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                  {ALL_COLUMNS.map((col) => {
+                    const isVisible = !reportHiddenCols.includes(col.index);
+                    return (
+                      <label key={col.index} className="flex items-center gap-2 text-sm py-1 hover:bg-accent rounded px-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isVisible}
+                          onChange={(e) => {
+                            setReportHiddenCols((prev) => {
+                              const set = new Set(prev);
+                              if (!e.target.checked) set.add(col.index); else set.delete(col.index);
+                              return Array.from(set).sort((a, b) => a - b);
+                            });
+                          }}
+                          className="h-4 w-4 rounded"
+                        />
+                        <span>{col.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Aggregations */}
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-muted-foreground">Totales por columna</div>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto text-xs">
+                  {ALL_COLUMNS.map((col) => {
+                    if (reportHiddenCols.includes(col.index)) return null;
+                    const currentAgg = reportAggregations[col.index] || "none";
+                    return (
+                      <div key={col.index} className="space-y-1">
+                        <div className="font-medium">{col.label}</div>
+                        <select
+                          value={currentAgg}
+                          onChange={(e) => {
+                            setReportAggregations((prev) => ({
+                              ...prev,
+                              [col.index]: e.target.value as any,
+                            }));
+                          }}
+                          className="w-full text-xs border rounded px-2 py-1 bg-background"
+                        >
+                          <option value="none">Sin total</option>
+                          <option value="sum">Suma</option>
+                          <option value="count">Contar</option>
+                          <option value="count-checked">Contar marcados</option>
+                          <option value="average">Promedio</option>
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Report content */}
+            <div className="flex-1 overflow-y-auto p-8 bg-white relative">
+              {/* Editable on-screen version */}
+              <div className="cert-report-content cert-report-root cert-report-screen h-full overflow-y-auto">
+                <CertificadosReportContent
+                  reportCompanyName={reportCompanyName}
+                  setReportCompanyName={setReportCompanyName}
+                  reportDescription={reportDescription}
+                  setReportDescription={setReportDescription}
+                  reportDate={reportDate}
+                  setReportDate={setReportDate}
+                  reportViewMode={reportViewMode}
+                  rows={rows}
+                  reportHiddenCols={reportHiddenCols}
+                  reportSortBy={reportSortBy}
+                  reportSortDir={reportSortDir}
+                  setReportSortDir={setReportSortDir}
+                  setReportSortBy={setReportSortBy}
+                  reportAggregations={reportAggregations}
+                  allColumns={ALL_COLUMNS}
+                />
+              </div>
+
+              {/* Print-only, final version (no inputs, better page breaks) */}
+              <div className="cert-report-print cert-report-root hidden">
+                <CertificadosReportPrintContent
+                  reportCompanyName={reportCompanyName}
+                  reportDescription={reportDescription}
+                  reportDate={reportDate}
+                  reportViewMode={reportViewMode}
+                  rows={rows}
+                  reportHiddenCols={reportHiddenCols}
+                  reportSortBy={reportSortBy}
+                  reportSortDir={reportSortDir}
+                  reportAggregations={reportAggregations}
+                  allColumns={ALL_COLUMNS}
+                />
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
+// Certificados Report Print-only Content (non-editable, optimized for print)
+function CertificadosReportPrintContent({
+  reportCompanyName,
+  reportDescription,
+  reportDate,
+  reportViewMode,
+  rows,
+  reportHiddenCols,
+  reportSortBy,
+  reportSortDir,
+  reportAggregations,
+  allColumns,
+}: {
+  reportCompanyName: string;
+  reportDescription: string;
+  reportDate: string;
+  reportViewMode: "full" | "by-obra" | "by-ente";
+  rows: CertRow[];
+  reportHiddenCols: number[];
+  reportSortBy: number;
+  reportSortDir: "asc" | "desc";
+  reportAggregations: Record<number, "none" | "sum" | "count" | "count-checked" | "average">;
+  allColumns: { index: number; label: string }[];
+}) {
+  // We reuse ReportTable so sorting is identical to the on-screen version,
+  // but we don't need interactive sorting in the print output.
+  const noopSort = () => { };
+
+  return (
+    <div className="max-w-full mx-auto space-y-6 bg-red-500 border-none shadow-none">
+      {/* Static report header for print */}
+      <div className="space-y-1 border-b pb-4 bg-green-500">
+        <h1 className="text-2xl font-bold">{reportCompanyName}</h1>
+        <p className="text-lg text-muted-foreground">{reportDescription}</p>
+        <p className="text-sm text-muted-foreground">{reportDate}</p>
+      </div>
+
+      {/* Report tables for print, with explicit sections for better page breaks */}
+      {reportViewMode === "full" && (
+        <div className="cert-report-print-section bg-blue-500">
+          <ReportTable
+            title="Todos los certificados"
+            data={rows}
+            hiddenCols={reportHiddenCols}
+            sortBy={reportSortBy}
+            sortDir={reportSortDir}
+            onSort={noopSort}
+            aggregations={reportAggregations}
+            allColumns={allColumns}
+            isPrint={true}
+          />
+        </div>
+      )}
+
+      {reportViewMode === "by-obra" && (() => {
+        const grouped = rows.reduce((acc, row) => {
+          if (!acc[row.obraName]) acc[row.obraName] = [];
+          acc[row.obraName].push(row);
+          return acc;
+        }, {} as Record<string, CertRow[]>);
+
+        return Object.entries(grouped).map(([obraName, data]) => (
+          <div key={obraName} className="cert-report-print-section">
+            <ReportTable
+              title={obraName}
+              data={data}
+              hiddenCols={reportHiddenCols}
+              sortBy={reportSortBy}
+              sortDir={reportSortDir}
+              onSort={noopSort}
+              aggregations={reportAggregations}
+              allColumns={allColumns}
+              isPrint={true}
+            />
+          </div>
+        ));
+      })()}
+
+      {reportViewMode === "by-ente" && (() => {
+        const grouped = rows.reduce((acc, row) => {
+          if (!acc[row.ente]) acc[row.ente] = [];
+          acc[row.ente].push(row);
+          return acc;
+        }, {} as Record<string, CertRow[]>);
+
+        return Object.entries(grouped).map(([ente, data]) => (
+          <div key={ente} className="cert-report-print-section">
+            <ReportTable
+              title={ente}
+              data={data}
+              hiddenCols={reportHiddenCols}
+              sortBy={reportSortBy}
+              sortDir={reportSortDir}
+              onSort={noopSort}
+              aggregations={reportAggregations}
+              allColumns={allColumns}
+              isPrint={true}
+            />
+          </div>
+        ));
+      })()}
+    </div>
+  );
+}
+
+// Certificados Report Content Component
+function CertificadosReportContent({
+  reportCompanyName,
+  setReportCompanyName,
+  reportDescription,
+  setReportDescription,
+  reportDate,
+  setReportDate,
+  reportViewMode,
+  rows,
+  reportHiddenCols,
+  reportSortBy,
+  reportSortDir,
+  setReportSortDir,
+  setReportSortBy,
+  reportAggregations,
+  allColumns,
+}: {
+  reportCompanyName: string;
+  setReportCompanyName: (value: string) => void;
+  reportDescription: string;
+  setReportDescription: (value: string) => void;
+  reportDate: string;
+  setReportDate: (value: string) => void;
+  reportViewMode: "full" | "by-obra" | "by-ente";
+  rows: CertRow[];
+  reportHiddenCols: number[];
+  reportSortBy: number;
+  reportSortDir: "asc" | "desc";
+  setReportSortDir: React.Dispatch<React.SetStateAction<"asc" | "desc">>;
+  setReportSortBy: React.Dispatch<React.SetStateAction<number>>;
+  reportAggregations: Record<number, "none" | "sum" | "count" | "count-checked" | "average">;
+  allColumns: { index: number; label: string }[];
+}) {
+  const handleSort = useCallback((colIndex: number) => {
+    if (reportSortBy === colIndex) {
+      setReportSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setReportSortBy(colIndex);
+      setReportSortDir("asc");
+    }
+  }, [reportSortBy, setReportSortBy, setReportSortDir]);
+
+  return (
+    <div className="max-w-full mx-auto space-y-6">
+      {/* Report header */}
+      <div className="space-y-3 border-b pb-4">
+        <input
+          type="text"
+          value={reportCompanyName}
+          onChange={(e) => setReportCompanyName(e.target.value)}
+          className="text-2xl font-bold w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
+          placeholder="Nombre de la empresa"
+        />
+        <input
+          type="text"
+          value={reportDescription}
+          onChange={(e) => setReportDescription(e.target.value)}
+          className="text-lg text-muted-foreground w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
+          placeholder="Descripción del reporte"
+        />
+        <input
+          type="text"
+          value={reportDate}
+          onChange={(e) => setReportDate(e.target.value)}
+          className="text-sm text-muted-foreground w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
+          placeholder="Fecha"
+        />
+      </div>
+
+      <div className="flex flex-col gap-4 max-h-[calc(80vh-200px)] overflow-y-auto">
 
 
+        {/* Report tables */}
+        {reportViewMode === "full" && (
+          <ReportTable
+            title="Todos los certificados"
+            data={rows}
+            hiddenCols={reportHiddenCols}
+            sortBy={reportSortBy}
+            sortDir={reportSortDir}
+            onSort={handleSort}
+            aggregations={reportAggregations}
+            allColumns={allColumns}
+            isPrint={false}
+          />
+        )}
 
+        {reportViewMode === "by-obra" && (() => {
+          const grouped = rows.reduce((acc, row) => {
+            if (!acc[row.obraName]) acc[row.obraName] = [];
+            acc[row.obraName].push(row);
+            return acc;
+          }, {} as Record<string, CertRow[]>);
 
+          return Object.entries(grouped).map(([obraName, data]) => (
+            <ReportTable
+              key={obraName}
+              title={obraName}
+              data={data}
+              hiddenCols={reportHiddenCols}
+              sortBy={reportSortBy}
+              sortDir={reportSortDir}
+              onSort={handleSort}
+              aggregations={reportAggregations}
+              allColumns={allColumns}
+              isPrint={false}
+            />
+          ));
+        })()}
 
+        {reportViewMode === "by-ente" && (() => {
+          const grouped = rows.reduce((acc, row) => {
+            if (!acc[row.ente]) acc[row.ente] = [];
+            acc[row.ente].push(row);
+            return acc;
+          }, {} as Record<string, CertRow[]>);
 
+          return Object.entries(grouped).map(([ente, data]) => (
+            <ReportTable
+              key={ente}
+              title={ente}
+              data={data}
+              hiddenCols={reportHiddenCols}
+              sortBy={reportSortBy}
+              sortDir={reportSortDir}
+              onSort={handleSort}
+              aggregations={reportAggregations}
+              allColumns={allColumns}
+              isPrint={false}
+            />
+          ));
+        })()}
+      </div>
 
-
+      {/* Print button */}
+      <Button className="w-full gap-2 cert-report-print-button" onClick={() => window.print()}>
+        <Printer className="h-4 w-4" />
+        Imprimir
+      </Button>
+    </div>
+  );
+}
 

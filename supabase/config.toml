@@ -9,5 +9,16 @@ enabled = true
 [db]
 major_version = 15
 
+[auth]
+enabled = true
+# Enable email/password authentication
+enable_signup = true
+
+[auth.external.google]
+enabled = true
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_CLIENT_SECRET)"
+redirect_uri = "http://127.0.0.1:54321/auth/v1/callback"
+
 
 

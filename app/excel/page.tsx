@@ -701,15 +701,15 @@ export default function ExcelPage() {
 	}, [views]);
 
 	return (
-		<div className="w-full mx-auto p-6 space-y-6">
-			<div className="space-y-2">
+		<div className="w-full mx-auto p-6 space-y-6 pt-0">
+			{/* <div className="space-y-2">
 				<p className="text-sm text-muted-foreground">
 					Gestión de obras
 				</p>
 				<h1 className="text-4xl font-bold tracking-tight">
 					Detalle de las Obras en Ejecución
 				</h1>
-			</div>
+			</div> */}
 
 
 			{showCsvImport && (

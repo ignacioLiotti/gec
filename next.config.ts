@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
 				"node:util": "commonjs node:util",
 				"node:crypto": "commonjs node:crypto",
 			});
+		} else {
+			// Exclude canvas from client-side bundle (required for react-pdf)
+			config.resolve = config.resolve || {};
+			config.resolve.alias = config.resolve.alias || {};
+			config.resolve.alias.canvas = false;
 		}
 		return config;
 	},

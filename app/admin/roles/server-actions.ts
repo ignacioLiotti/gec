@@ -150,8 +150,15 @@ export async function createPermission({
 	description: string | null;
 }) {
 	const supabase = await createClient();
-	await supabase.from("permissions").insert({ key, description });
+	const { error } = await supabase.from("permissions").insert({ key, description });
+
+	if (error) {
+		console.error("Error creating permission:", error);
+		return { error: error.message };
+	}
+
 	revalidatePath("/admin/roles");
+	return { success: true };
 }
 
 export async function deletePermission({
@@ -160,8 +167,15 @@ export async function deletePermission({
 	permissionId: string;
 }) {
 	const supabase = await createClient();
-	await supabase.from("permissions").delete().eq("id", permissionId);
+	const { error } = await supabase.from("permissions").delete().eq("id", permissionId);
+
+	if (error) {
+		console.error("Error deleting permission:", error);
+		return { error: error.message };
+	}
+
 	revalidatePath("/admin/roles");
+	return { success: true };
 }
 
 // Role update

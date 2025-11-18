@@ -12,6 +12,7 @@ import {
 	FileCheck,
 	Database,
 	Play,
+	User,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -33,6 +34,7 @@ import {
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { getRouteAccessConfig, type Role } from "@/lib/route-access";
 
 type NavItem = {
 	title: string;
@@ -44,6 +46,28 @@ type NavItem = {
 		href: string;
 	}[];
 };
+
+/**
+ * ============================================================================
+ * SIDEBAR NAVIGATION CONFIGURATION
+ * ============================================================================
+ * 
+ * THIS IS WHERE YOU CONFIGURE THE SIDEBAR NAVIGATION ITEMS
+ * 
+ * File: components/app-sidebar.tsx
+ * 
+ * To add a new navigation item:
+ * 1. Add a new entry to navItems, adminItems, or devItems array below
+ * 2. The item will automatically be filtered based on user roles
+ * 3. Make sure the route is also configured in lib/route-access.ts if it needs protection
+ * 
+ * Navigation Sections:
+ * - navItems: Main navigation (shown to all users, filtered by role access)
+ * - adminItems: Admin section (only shown to admins/superadmins)
+ * - devItems: Development section (shown to all, typically for dev/testing)
+ * 
+ * ============================================================================
+ */
 
 // Navigation structure for your multi-tenant app
 const navItems: NavItem[] = [
@@ -63,25 +87,26 @@ const navItems: NavItem[] = [
 		icon: FileCheck,
 	},
 	{
-		title: "Notifications",
+		title: "Notificaciones",
 		href: "/notifications",
 		icon: Bell,
 	},
 	{
-		title: "Onboarding",
-		href: "/onboarding",
-		icon: FileText,
+		title: "Perfil",
+		href: "/profile",
+		icon: User,
 	},
+
 ];
 
 const adminItems: NavItem[] = [
 	{
-		title: "Users",
+		title: "Usuarios",
 		href: "/admin/users",
 		icon: Users,
 	},
 	{
-		title: "Roles & Permissions",
+		title: "Roles y Permisos",
 		href: "/admin/roles",
 		icon: ShieldCheck,
 	},
@@ -94,34 +119,93 @@ const devItems: NavItem[] = [
 		icon: Wrench,
 	},
 	{
-		title: "Notifications Playground",
+		title: "Prueba de Notificaciones",
 		href: "/dev/notifications-playground",
 		icon: Play,
 	},
 	{
-		title: "Permissions Demo",
+		title: "Demo de Permisos",
 		href: "/permissions-demo",
 		icon: ShieldCheck,
 	},
 	{
-		title: "Test Pages",
+		title: "Páginas de Prueba",
 		href: "#",
 		icon: FileText,
 		items: [
-			{ title: "Test 1", href: "/test" },
-			{ title: "Test 2", href: "/test2" },
+			{ title: "Prueba 1", href: "/test" },
+			{ title: "Prueba 2", href: "/test2" },
 		],
 	},
 ];
 
 export function AppSidebar({
 	user,
+	userRoles,
 	...props
 }: React.ComponentProps<typeof Sidebar> & {
 	user?: { email?: string } | null;
+	userRoles?: {
+		roles: Role[];
+		isAdmin: boolean;
+		isSuperAdmin: boolean;
+		tenantId: string | null;
+	} | null;
 }) {
 	const pathname = usePathname();
 	const { state } = useSidebar();
+
+	// Helper function to check if user can access a route
+	const canAccessRoute = React.useCallback(
+		(href: string): boolean => {
+			// Admin and superadmin can access everything
+			if (userRoles?.isAdmin || userRoles?.isSuperAdmin) {
+				return true;
+			}
+
+			// Check route access config
+			const config = getRouteAccessConfig(href);
+			if (!config) {
+				// Route not protected, allow access
+				return true;
+			}
+
+			// If no roles required, allow access
+			if (config.allowedRoles.length === 0) {
+				return true;
+			}
+
+			// Check if user has any of the required roles
+			return config.allowedRoles.some((role) =>
+				userRoles?.roles.includes(role)
+			);
+		},
+		[userRoles]
+	);
+
+	// Filter navigation items based on user roles
+	const filteredNavItems = React.useMemo(
+		() => navItems.filter((item) => canAccessRoute(item.href)),
+		[canAccessRoute]
+	);
+
+	// Filter admin items (only show to admins)
+	const filteredAdminItems = React.useMemo(
+		() =>
+			userRoles?.isAdmin || userRoles?.isSuperAdmin
+				? adminItems
+				: [],
+		[userRoles]
+	);
+
+	// Filter dev items (only show to admins)
+	const filteredDevItems = React.useMemo(
+		() =>
+			userRoles?.isAdmin || userRoles?.isSuperAdmin
+				? devItems
+				: [],
+		[userRoles]
+	);
 
 	return (
 		<Sidebar collapsible="icon" {...props}>
@@ -144,100 +228,110 @@ export function AppSidebar({
 
 			<SidebarContent>
 				{/* Main Navigation */}
-				<SidebarGroup>
-					<SidebarGroupLabel>Main</SidebarGroupLabel>
-					<SidebarGroupContent>
-						<SidebarMenu>
-							{navItems.map((item) => {
-								const isActive = pathname === item.href;
-								return (
-									<SidebarMenuItem key={item.title}>
-										<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-											<Link href={item.href}>
-												<item.icon className="size-4" />
-												<span>{item.title}</span>
-											</Link>
-										</SidebarMenuButton>
-									</SidebarMenuItem>
-								);
-							})}
-						</SidebarMenu>
-					</SidebarGroupContent>
-				</SidebarGroup>
-
-				<Separator />
-
-				{/* Admin Navigation */}
-				<SidebarGroup>
-					<SidebarGroupLabel>Administration</SidebarGroupLabel>
-					<SidebarGroupContent>
-						<SidebarMenu>
-							{adminItems.map((item) => {
-								const isActive = pathname === item.href || pathname.startsWith(item.href);
-								return (
-									<SidebarMenuItem key={item.title}>
-										<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-											<Link href={item.href}>
-												<item.icon className="size-4" />
-												<span>{item.title}</span>
-											</Link>
-										</SidebarMenuButton>
-									</SidebarMenuItem>
-								);
-							})}
-						</SidebarMenu>
-					</SidebarGroupContent>
-				</SidebarGroup>
-
-				<Separator />
-
-				{/* Development Navigation */}
-				<SidebarGroup>
-					<SidebarGroupLabel>Development</SidebarGroupLabel>
-					<SidebarGroupContent>
-						<SidebarMenu>
-							{devItems.map((item) => {
-								const isActive = pathname === item.href;
-								const hasSubItems = item.items && item.items.length > 0;
-
-								if (hasSubItems) {
+				{filteredNavItems.length > 0 && (
+					<SidebarGroup>
+						<SidebarGroupLabel>Principal</SidebarGroupLabel>
+						<SidebarGroupContent>
+							<SidebarMenu>
+								{filteredNavItems.map((item) => {
+									const isActive = pathname === item.href;
 									return (
 										<SidebarMenuItem key={item.title}>
-											<SidebarMenuButton tooltip={item.title}>
-												<item.icon className="size-4" />
-												<span>{item.title}</span>
-												<ChevronDown className="ml-auto size-4 transition-transform group-data-[state=open]:rotate-180" />
+											<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+												<Link href={item.href}>
+													<item.icon className="size-4" />
+													<span>{item.title}</span>
+												</Link>
 											</SidebarMenuButton>
-											<SidebarMenuSub>
-												{item.items?.map((subItem) => {
-													const isSubActive = pathname === subItem.href;
-													return (
-														<SidebarMenuSubItem key={subItem.title}>
-															<SidebarMenuSubButton asChild isActive={isSubActive}>
-																<Link href={subItem.href}>{subItem.title}</Link>
-															</SidebarMenuSubButton>
-														</SidebarMenuSubItem>
-													);
-												})}
-											</SidebarMenuSub>
 										</SidebarMenuItem>
 									);
-								}
+								})}
+							</SidebarMenu>
+						</SidebarGroupContent>
+					</SidebarGroup>
+				)}
 
-								return (
-									<SidebarMenuItem key={item.title}>
-										<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-											<Link href={item.href}>
-												<item.icon className="size-4" />
-												<span>{item.title}</span>
-											</Link>
-										</SidebarMenuButton>
-									</SidebarMenuItem>
-								);
-							})}
-						</SidebarMenu>
-					</SidebarGroupContent>
-				</SidebarGroup>
+				{filteredAdminItems.length > 0 && (
+					<>
+						<Separator />
+
+						{/* Admin Navigation */}
+						<SidebarGroup>
+							<SidebarGroupLabel>Administración</SidebarGroupLabel>
+							<SidebarGroupContent>
+								<SidebarMenu>
+									{filteredAdminItems.map((item) => {
+										const isActive = pathname === item.href || pathname.startsWith(item.href);
+										return (
+											<SidebarMenuItem key={item.title}>
+												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+													<Link href={item.href}>
+														<item.icon className="size-4" />
+														<span>{item.title}</span>
+													</Link>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					</>
+				)}
+
+				{filteredDevItems.length > 0 && (
+					<>
+						<Separator />
+
+						{/* Development Navigation */}
+						<SidebarGroup>
+							<SidebarGroupLabel>Desarrollo</SidebarGroupLabel>
+							<SidebarGroupContent>
+								<SidebarMenu>
+									{filteredDevItems.map((item) => {
+										const isActive = pathname === item.href;
+										const hasSubItems = item.items && item.items.length > 0;
+
+										if (hasSubItems) {
+											return (
+												<SidebarMenuItem key={item.title}>
+													<SidebarMenuButton tooltip={item.title}>
+														<item.icon className="size-4" />
+														<span>{item.title}</span>
+														<ChevronDown className="ml-auto size-4 transition-transform group-data-[state=open]:rotate-180" />
+													</SidebarMenuButton>
+													<SidebarMenuSub>
+														{item.items?.map((subItem) => {
+															const isSubActive = pathname === subItem.href;
+															return (
+																<SidebarMenuSubItem key={subItem.title}>
+																	<SidebarMenuSubButton asChild isActive={isSubActive}>
+																		<Link href={subItem.href}>{subItem.title}</Link>
+																	</SidebarMenuSubButton>
+																</SidebarMenuSubItem>
+															);
+														})}
+													</SidebarMenuSub>
+												</SidebarMenuItem>
+											);
+										}
+
+										return (
+											<SidebarMenuItem key={item.title}>
+												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+													<Link href={item.href}>
+														<item.icon className="size-4" />
+														<span>{item.title}</span>
+													</Link>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					</>
+				)}
 			</SidebarContent>
 
 			<SidebarFooter>

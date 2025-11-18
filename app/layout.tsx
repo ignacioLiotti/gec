@@ -5,13 +5,16 @@ import SupabaseAuthListener from "@/components/auth/auth-listener";
 import AuthModal from "@/components/auth/auth-modal";
 import UserMenu from "@/components/auth/user-menu";
 import { createClient } from "@/utils/supabase/server";
-import { Suspense } from "react";
 import AuthController from "@/components/auth/auth-controller";
 import ImpersonateBanner from "./admin/users/_components/impersonate-banner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import NotificationsListener from "@/components/notifications/notifications-listener";
 import { Toaster } from "sonner";
+import { ExcelObraName } from "@/components/excel-obra-name";
+import { MainWrapper } from "@/components/main-wrapper";
+import { PendingInvitationsBanner } from "@/components/invitations/pending-invitations-banner";
+import { getUserRoles } from "@/lib/route-guard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,9 +46,16 @@ export default async function RootLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Get user roles for sidebar filtering
+  const userRoles = user ? await getUserRoles() : null;
+
   return (
     <html lang="en">
       <head>
+        <script
+          crossOrigin="anonymous"
+          src="//unpkg.com/react-scan/dist/auto.global.js"
+        ></script>
         {/* rest of your scripts go under */}
       </head>
       <body
@@ -56,17 +66,21 @@ export default async function RootLayout({
         <Toaster position="bottom-right" richColors />
         <NotificationsListener />
         <SidebarProvider>
-          <AppSidebar user={user} />
+          <AppSidebar user={user} userRoles={userRoles} />
           <SidebarInset>
-            <header className="flex h-16 max-w-full shrink-0 items-center justify-between gap-2 border-b px-4">
-              <SidebarTrigger className="-ml-1" />
-              <div className="flex items-center justify-between">
+            <header className="flex h-16 max-w-full shrink-0 items-center gap-4 border-b px-4">
+              <div className="flex items-center gap-2">
+                <SidebarTrigger className="-ml-1" />
+                <ExcelObraName />
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
                 <ImpersonateBanner />
-                <Suspense>
-                  <UserMenu email={user?.email} />
-                </Suspense>
+                <UserMenu email={user?.email} userRoles={userRoles} />
               </div>
             </header>
+            <div className="px-4 pt-4">
+              <PendingInvitationsBanner />
+            </div>
             <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
           </SidebarInset>
         </SidebarProvider>

@@ -8,6 +8,9 @@ import PermissionsManager from "./_components/permissions-manager";
 import RoleRow from "./_components/role-row";
 import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 
+const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+
 type Role = {
   id: string;
   tenant_id: string | null;
@@ -26,41 +29,60 @@ export default async function RolesAdminPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  console.log("[admin/roles] current user", user?.id);
 
   if (!user) {
     return (
       <div className="p-6">
-        <p className="text-sm">Please sign in to access admin.</p>
+        <p className="text-sm">Por favor iniciá sesión para acceder al panel de administración.</p>
       </div>
     );
   }
 
   // For demo we will scope to the first tenant the user belongs to
-  const { data: memberships } = await supabase
+  const { data: memberships, error: membershipsError } = await supabase
     .from("memberships")
     .select("tenant_id, role")
     .order("created_at", { ascending: true });
+  console.log("[admin/roles] memberships", memberships, membershipsError);
+  let resolvedMemberships = memberships;
 
-  const tenantId = memberships?.[0]?.tenant_id ?? null;
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("is_superadmin")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  console.log("[admin/roles] profile lookup", profile, profileError);
+  const isSuperAdmin = (profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
 
-  if (!tenantId) {
-    return (
-      <div className="p-6">
-        <p className="text-sm">No tenant membership found.</p>
-      </div>
-    );
+  if ((!resolvedMemberships || resolvedMemberships.length === 0) && isSuperAdmin) {
+    console.log("[admin/roles] no memberships found; using default tenant for superadmin");
+    resolvedMemberships = [{ tenant_id: DEFAULT_TENANT_ID, role: null }];
   }
 
-  // Ensure user has the admin permission (admin:roles) within this tenant
-  const { data: canAdmin } = await supabase.rpc("has_permission", {
-    tenant: tenantId,
-    perm_key: "admin:roles",
-  });
+  const tenantId = resolvedMemberships?.[0]?.tenant_id ?? DEFAULT_TENANT_ID;
+  console.log("[admin/roles] resolved tenantId", tenantId);
 
-  if (!canAdmin) {
+  // Ensure user has the admin permission (admin:roles) within this tenant
+  let canAdmin: boolean | null = null;
+  let permError: any = null;
+  if (!isSuperAdmin) {
+    const permResult = await supabase.rpc("has_permission", {
+      tenant: tenantId,
+      perm_key: "admin:roles",
+    });
+    canAdmin = permResult.data;
+    permError = permResult.error;
+  } else {
+    canAdmin = true;
+  }
+  console.log("[admin/roles] has_permission admin:roles =", canAdmin, permError);
+  const effectiveAdmin = (typeof canAdmin === "boolean" ? canAdmin : null) ?? isSuperAdmin;
+
+  if (!effectiveAdmin) {
     return (
       <div className="p-6">
-        <p className="text-sm">You do not have permission to manage roles.</p>
+        <p className="text-sm">No tenés permisos para gestionar roles.</p>
       </div>
     );
   }
@@ -70,15 +92,19 @@ export default async function RolesAdminPage() {
     supabase.from("permissions").select("id, key, description").order("key"),
     supabase.from("memberships").select("user_id").eq("tenant_id", tenantId)
   ]);
+  console.log("[admin/roles] fetched roles", roles);
+  console.log("[admin/roles] fetched permissions", permissions);
+  console.log("[admin/roles] fetched members", members);
 
   const { data: profiles } = await supabase
     .from("profiles")
     .select("user_id, full_name")
     .in("user_id", (members ?? []).map((m) => m.user_id));
+  console.log("[admin/roles] fetched profiles", profiles);
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Roles & Permissions</h1>
+      <h1 className="text-2xl font-semibold">Roles y Permisos</h1>
       <RolesPanel roles={(roles ?? []) as Role[]} tenantId={tenantId} />
       <PermissionsManager permissions={(permissions ?? []) as Permission[]} />
       <AssignmentsPanel users={profiles ?? []} tenantId={tenantId} />
@@ -114,13 +140,13 @@ function RolesPanel({ roles, tenantId }: { roles: Role[]; tenantId: string }) {
           <ColGroup tableId="roles-table" columns={3} />
           <thead className="bg-foreground/5">
             <tr className="text-left">
-              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Key
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Clave
                 <ColumnResizer tableId="roles-table" colIndex={0} />
               </th>
-              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Name
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Nombre
                 <ColumnResizer tableId="roles-table" colIndex={1} />
               </th>
-              <th className="relative px-3 py-2 w-32 whitespace-normal break-words align-top">Actions
+              <th className="relative px-3 py-2 w-32 whitespace-normal break-words align-top">Acciones
                 <ColumnResizer tableId="roles-table" colIndex={2} />
               </th>
             </tr>
@@ -131,7 +157,7 @@ function RolesPanel({ roles, tenantId }: { roles: Role[]; tenantId: string }) {
             ))}
             {roles.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-foreground/60 whitespace-normal break-words align-top" colSpan={3}>No roles yet.</td>
+                <td className="px-3 py-6 text-foreground/60 whitespace-normal break-words align-top" colSpan={3}>Todavía no hay roles.</td>
               </tr>
             )}
           </tbody>
@@ -144,16 +170,16 @@ function RolesPanel({ roles, tenantId }: { roles: Role[]; tenantId: string }) {
 function PermissionsPanel({ permissions }: { permissions: Permission[] }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-medium">Permissions</h2>
+      <h2 className="text-lg font-medium">Permisos</h2>
       <div className="overflow-x-auto rounded-md border">
         <table className="text-sm table-fixed" data-table-id="permissions-table">
           <ColGroup tableId="permissions-table" columns={2} />
           <thead className="bg-foreground/5">
             <tr className="text-left">
-              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Key
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Clave
                 <ColumnResizer tableId="permissions-table" colIndex={0} />
               </th>
-              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Description
+              <th className="relative px-3 py-2 whitespace-normal break-words align-top">Descripción
                 <ColumnResizer tableId="permissions-table" colIndex={1} />
               </th>
             </tr>
@@ -167,7 +193,7 @@ function PermissionsPanel({ permissions }: { permissions: Permission[] }) {
             ))}
             {permissions.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-foreground/60 whitespace-normal break-words align-top" colSpan={2}>No permissions.</td>
+                <td className="px-3 py-6 text-foreground/60 whitespace-normal break-words align-top" colSpan={2}>No hay permisos.</td>
               </tr>
             )}
           </tbody>
@@ -180,7 +206,7 @@ function PermissionsPanel({ permissions }: { permissions: Permission[] }) {
 function AssignmentsPanel({ users, tenantId }: { users: { user_id: string; full_name: string | null }[]; tenantId: string }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-medium">Assignments</h2>
+      <h2 className="text-lg font-medium">Asignaciones</h2>
       <UserAssignments users={users} tenantId={tenantId} />
     </section>
   );
@@ -189,7 +215,7 @@ function AssignmentsPanel({ users, tenantId }: { users: { user_id: string; full_
 function RolePermissionsSection({ roles, permissions }: { roles: Role[]; permissions: Permission[] }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-medium">Role Permissions</h2>
+      <h2 className="text-lg font-medium">Permisos de Roles</h2>
       <div className="space-y-4">
         {roles.map((r) => (
           <div key={r.id} className="rounded-md border p-3">
@@ -198,7 +224,7 @@ function RolePermissionsSection({ roles, permissions }: { roles: Role[]; permiss
           </div>
         ))}
         {roles.length === 0 && (
-          <div className="rounded-md border p-3 text-sm text-foreground/60">No roles yet.</div>
+          <div className="rounded-md border p-3 text-sm text-foreground/60">Todavía no hay roles.</div>
         )}
       </div>
     </section>

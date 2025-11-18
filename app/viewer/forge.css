@@ -1,0 +1,19 @@
+/* Override Autodesk inline sizing */
+.adsk-viewing-viewer,
+.canvas-wrap,
+.adsk-viewing-viewer canvas {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: 1128px !important;
+	max-height: 600px !important;
+	overflow: hidden !important;
+}
+
+/* Optional – center it visually */
+.forge-container {
+	width: 1128px;
+	height: 600px;
+	margin: 0 auto;
+	overflow: hidden;
+	position: relative;
+}

@@ -59,3 +59,4 @@ create policy "obra_pendientes delete in tenant" on public.obra_pendientes
 
 
 
+

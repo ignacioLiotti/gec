@@ -13,7 +13,7 @@ export default function ImpersonateBanner() {
   }
   if (!active) return null;
   return (
-    <div className="rounded-md border bg-yellow-50 px-4 py-2 text-sm">Impersonating. <button onClick={stop} className="underline">Return to my account</button></div>
+    <div className="rounded-md border bg-yellow-50 px-4 py-2 text-sm">Suplantando. <button onClick={stop} className="underline">Volver a mi cuenta</button></div>
   );
 }
 

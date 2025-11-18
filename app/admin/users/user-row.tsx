@@ -73,7 +73,7 @@ export default function UserRow({
             location.reload();
           }}
         >
-          <button className="mt-2 rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Impersonate</button>
+          <button className="mt-2 rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Suplantar</button>
         </form>
       </td>
       <td className="px-3 py-2">
@@ -83,11 +83,11 @@ export default function UserRow({
             onChange={(e) => setSelectedOrgRole(e.currentTarget.value)}
             className="rounded-md border bg-background px-2 py-1 text-xs"
           >
-            <option value="owner">owner</option>
+            <option value="owner">propietario</option>
             <option value="admin">admin</option>
-            <option value="member">member</option>
+            <option value="member">miembro</option>
           </select>
-          <button className="rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Update</button>
+          <button className="rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Actualizar</button>
         </form>
       </td>
       <td className="px-3 py-2 space-y-2">
@@ -97,7 +97,7 @@ export default function UserRow({
             onChange={(e) => setNewRoleId(e.currentTarget.value)}
             className="rounded-md border bg-background px-2 py-1 text-xs"
           >
-            <option value="">Add role...</option>
+            <option value="">Agregar rol...</option>
             {allRoles
               .filter((r) => !assignedRoleIds.has(r.id))
               .map((r) => (
@@ -111,7 +111,7 @@ export default function UserRow({
               setNewRoleId("");
             }}
           >
-            <button className="rounded-md bg-black px-2 py-1 text-xs text-white hover:bg-black/90">Add</button>
+            <button className="rounded-md bg-black px-2 py-1 text-xs text-white hover:bg-black/90">Agregar</button>
           </form>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -136,7 +136,7 @@ export default function UserRow({
             onChange={(e) => setNewPermissionId(e.currentTarget.value)}
             className="rounded-md border bg-background px-2 py-1 text-xs"
           >
-            <option value="">Add permission...</option>
+            <option value="">Agregar permiso...</option>
             {allPermissions
               .filter((p) => {
                 const fromAdmin = sources?.isAdmin ?? false;
@@ -155,7 +155,7 @@ export default function UserRow({
               setNewPermissionId("");
             }}
           >
-            <button className="rounded-md bg-black px-2 py-1 text-xs text-white hover:bg-black/90">Add</button>
+            <button className="rounded-md bg-black px-2 py-1 text-xs text-white hover:bg-black/90">Agregar</button>
           </form>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -165,12 +165,12 @@ export default function UserRow({
             const fromOverride = overrideSet.has(p.id);
             const hasPerm = fromAdmin || fromOverride || fromRole;
             const hint = fromAdmin
-              ? "via org admin"
+              ? "vía admin de org."
               : fromOverride
-                ? "direct"
+                ? "directo"
                 : fromRole
-                  ? "via role"
-                  : "not granted";
+                  ? "vía rol"
+                  : "no otorgado";
             return (
               <label key={p.id} className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs" title={hint}>
                 <input

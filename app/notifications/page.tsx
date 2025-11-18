@@ -4,6 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseLocalDate, formatLocalDate } from "@/utils/date";
 import { NotificationsTable } from "./_components/notifications-table";
 import { revalidatePath } from "next/cache";
+import { addHours } from "date-fns";
+import { PendientesCalendar, type CalendarEventPayload } from "./_components/pendientes-calendar";
 
 type NotificationRow = {
   id: string;
@@ -27,7 +29,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
   }
 
   const sp = (await searchParams) ?? {};
-  const tab = typeof sp.tab === "string" ? sp.tab : "all";
+  const tab = typeof sp.tab === "string" ? sp.tab : "calendar";
 
   // Plain select; we enrich with separate fetch using pendiente_id to avoid FK-name coupling
   const selectCols = "id,title,body,type,action_url,created_at,read_at,data,pendiente_id";
@@ -82,9 +84,131 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     }
   }
 
-  // Expose to child component via global shim (RSC-only simplification)
-  ; (globalThis as any).__pendientesById = pendientesById;
-  ; (globalThis as any).__pendienteDueBySchedule = dueBySchedule;
+  const pendienteCalendarItems = parsePendienteRows((reminders ?? []) as NotificationRow[], pendientesById, dueBySchedule);
+  const pendienteCalendarEvents = buildCalendarEvents(pendienteCalendarItems);
+  console.log("[notifications/calendar] pendienteCalendarEvents", pendienteCalendarEvents.map((ev) => ({
+    source: "pendiente",
+    id: ev.id,
+    title: ev.title,
+    start: ev.start,
+    end: ev.end,
+  })));
+
+  // Fetch flujo actions for calendar view
+  const { data: tenantData } = await supabase
+    .from("memberships")
+    .select("tenant_id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+
+  const tenantId = tenantData?.tenant_id;
+  let flujoCalendarEvents: CalendarEventPayload[] = [];
+  let availableRoles: { key: string; name: string | null }[] = [];
+  let calendarEventRows: any[] = [];
+
+  let calendarEvents: CalendarEventPayload[] = [...pendienteCalendarEvents];
+
+  if (tenantId) {
+    const [obrasRes, rolesRes, userRoleIdsRes, calendarRes] = await Promise.all([
+      supabase
+        .from("obras")
+        .select("id")
+        .eq("tenant_id", tenantId),
+      supabase
+        .from("roles")
+        .select("id,key,name")
+        .eq("tenant_id", tenantId)
+        .order("name"),
+      supabase
+        .from("user_roles")
+        .select("role_id")
+        .eq("user_id", userId),
+      supabase
+        .from("calendar_events")
+        .select("*")
+        .eq("tenant_id", tenantId),
+    ]);
+
+    const obras = obrasRes.data ?? [];
+    const rolesData = rolesRes.data ?? [];
+    const userRoleIds = (userRoleIdsRes.data ?? []) as { role_id: string }[];
+    calendarEventRows = calendarRes.data ?? [];
+
+    availableRoles = rolesData.map((r: any) => ({
+      key: String(r.key),
+      name: r.name ?? null,
+    }));
+
+    // Map current user's roles in this tenant to role keys
+    const roleIds = userRoleIds.map((ur) => ur.role_id);
+    const userRoleKeys = rolesData
+      .filter((r: any) => roleIds.includes(r.id))
+      .map((r: any) => String(r.key));
+
+    // We no longer surface calendar events directly from obra_flujo_actions.
+    // Instead, when an obra completes, executeFlujoActions creates rows in
+    // calendar_events for calendar_event actions at the correct relative time.
+
+    // Filter calendar events based on audience and current user's roles
+    const calendarEventsFromTable: CalendarEventPayload[] = (calendarEventRows ?? [])
+      .filter((row) => {
+        const audienceType = row.audience_type as string | null;
+        const targetUserId = row.target_user_id as string | null;
+        const targetRoleKey = row.target_role_key as string | null;
+
+        let show = false;
+
+        if (!audienceType || audienceType === "me") {
+          show = row.created_by === userId;
+        } else if (audienceType === "user") {
+          show = targetUserId === userId;
+        } else if (audienceType === "role") {
+          show = Boolean(targetRoleKey && userRoleKeys.includes(targetRoleKey));
+        } else if (audienceType === "tenant") {
+          show = true;
+        }
+
+        console.log("[notifications/calendar] calendar_events visibility", {
+          source: "calendar_events",
+          id: row.id,
+          title: row.title,
+          audienceType,
+          targetUserId,
+          targetRoleKey,
+          currentUserId: userId,
+          userRoleKeys,
+          show,
+        });
+
+        return show;
+      })
+      .map((row) => ({
+        id: row.id as string,
+        title: String(row.title ?? ""),
+        description: row.description ?? undefined,
+        start: String(row.start_at),
+        end: String(row.end_at),
+        allDay: Boolean(row.all_day),
+        color: (row.color ?? "emerald") as CalendarEventPayload["color"],
+        location: row.location ?? undefined,
+        completed: Boolean(row.completed),
+        pendingStatus: "upcoming" as const,
+      }));
+
+    // Combine pendientes, flujo, and calendar_events rows
+    calendarEvents = [
+      ...pendienteCalendarEvents,
+      ...calendarEventsFromTable,
+    ];
+  }
+
+  console.log("[notifications/calendar] final calendarEvents", calendarEvents.map((ev) => ({
+    id: ev.id,
+    title: ev.title,
+    start: ev.start,
+    end: ev.end,
+  })));
 
   async function markAllRead() {
     "use server";
@@ -96,6 +220,47 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", me.user.id)
       .is("read_at", null);
+  }
+
+  async function updateFlujoCalendarEvent(eventId: string, title: string, description: string | undefined, start: string, end: string, allDay: boolean) {
+    "use server";
+    // Extract flujo action ID from event ID (format: "flujo-{action_id}")
+    const actionId = eventId.replace(/^flujo-/, "");
+
+    const s = await createClient();
+    const { data: me } = await s.auth.getUser();
+    if (!me.user) return;
+
+    const startDate = new Date(start);
+
+    await s
+      .from("obra_flujo_actions")
+      .update({
+        title,
+        message: description || null,
+        scheduled_date: startDate.toISOString(),
+        timing_mode: "scheduled",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", actionId);
+
+    revalidatePath("/notifications");
+  }
+
+  async function deleteFlujoCalendarEvent(eventId: string) {
+    "use server";
+    const actionId = eventId.replace(/^flujo-/, "");
+
+    const s = await createClient();
+    const { data: me } = await s.auth.getUser();
+    if (!me.user) return;
+
+    await s
+      .from("obra_flujo_actions")
+      .delete()
+      .eq("id", actionId);
+
+    revalidatePath("/notifications");
   }
 
   async function markRead(formData: FormData) {
@@ -185,6 +350,8 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     revalidatePath("/notifications");
   }
 
+  console.log("[notifications] availableRoles", availableRoles);
+
   return (
     <div className="p-6 space-y-6 min-h-svh flex flex-col">
       <div className="flex items-center justify-between gap-2">
@@ -195,14 +362,15 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       </div>
 
       <Tabs defaultValue={tab} className="w-full flex-1 flex min-h-0 flex-col">
-        <TabsList>
-          <TabsTrigger value="all">Todas</TabsTrigger>
-          <TabsTrigger value="unread">No leídas</TabsTrigger>
-          <TabsTrigger value="pendientes">Pendientes</TabsTrigger>
-          <TabsTrigger value="test">Test</TabsTrigger>
-        </TabsList>
+        {/* <TabsList> */}
+        {/* <TabsTrigger value="calendar">Calendario</TabsTrigger> */}
+        {/* <TabsTrigger value="all">Todas</TabsTrigger> */}
+        {/* <TabsTrigger value="unread">No leídas</TabsTrigger> */}
+        {/* <TabsTrigger value="pendientes">Pendientes</TabsTrigger> */}
+        {/* <TabsTrigger value="test">Test</TabsTrigger> */}
+        {/* </TabsList> */}
 
-        <TabsContent value="all" className="space-y-4 flex-1 min-h-0">
+        {/* <TabsContent value="all" className="space-y-4 flex-1 min-h-0">
           <NotificationsTable rows={(all ?? []) as NotificationRow[]} markRead={markRead} deleteNotification={deleteNotification} />
         </TabsContent>
 
@@ -211,12 +379,28 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
         </TabsContent>
 
         <TabsContent value="pendientes" className="space-y-4">
-          <PendientesTable rows={(reminders ?? []) as NotificationRow[]} markRead={markRead} deleteNotification={deleteNotification} deletePendiente={deletePendiente} />
-        </TabsContent>
+          <PendientesTable
+            rows={(reminders ?? []) as NotificationRow[]}
+            markRead={markRead}
+            deleteNotification={deleteNotification}
+            deletePendiente={deletePendiente}
+            pendientesById={pendientesById}
+            dueBySchedule={dueBySchedule}
+          />
+        </TabsContent> */}
 
+        <TabsContent value="calendar" className="flex-1 min-h-0">
+          <PendientesCalendar
+            events={calendarEvents}
+            onFlujoEventUpdate={updateFlujoCalendarEvent}
+            onFlujoEventDelete={deleteFlujoCalendarEvent}
+            availableRoles={availableRoles}
+          />
+        </TabsContent>
+        {/* 
         <TabsContent value="test" className="space-y-4 flex-1 min-h-0">
           <NotificationsTable rows={(all ?? []) as NotificationRow[]} markRead={markRead} deleteNotification={deleteNotification} />
-        </TabsContent>
+        </TabsContent> */}
       </Tabs>
     </div>
   );
@@ -236,39 +420,67 @@ type PendienteItem = {
   action_url: string | null;
 };
 
-function PendientesTable({ rows, markRead, deleteNotification, deletePendiente }: { rows: NotificationRow[]; markRead: (fd: FormData) => Promise<void>; deleteNotification: (fd: FormData) => Promise<void>; deletePendiente: (fd: FormData) => Promise<void> }) {
-  const pendientesById: Record<string, { name: string; obra_id: string | null; due_date: string | null }> = (globalThis as any).__pendientesById || {};
-  const dueBySchedule: Record<string, string> = (globalThis as any).__pendienteDueBySchedule || {};
+function PendientesTable({
+  rows,
+  markRead,
+  deleteNotification,
+  deletePendiente,
+  pendientesById,
+  dueBySchedule,
+}: {
+  rows: NotificationRow[];
+  markRead: (fd: FormData) => Promise<void>;
+  deleteNotification: (fd: FormData) => Promise<void>;
+  deletePendiente: (fd: FormData) => Promise<void>;
+  pendientesById: Record<string, { name: string; obra_id: string | null; due_date: string | null }>;
+  dueBySchedule: Record<string, string>;
+}) {
+  const parsed = parsePendienteRows(rows, pendientesById, dueBySchedule);
 
-  const parsed: PendienteItem[] = rows.map((r) => {
-    const pendienteId = (r as any).pendiente_id;
-    const joined = (r as any).pending as { id: string; name: string; obra_id: string | null; due_date: string | null } | undefined;
-    const dueDate = pendienteId
-      ? (joined?.due_date ?? dueBySchedule[pendienteId] ?? pendientesById[pendienteId]?.due_date ?? r.data?.dueDate ?? null)
-      : (r.data?.dueDate ?? null);
-    // Parse as local date to avoid UTC interpretation issues
-    const dueDateObj = parseLocalDate(dueDate);
-
-    return {
-      id: r.id,
-      pendienteId: pendienteId ?? null,
-      title: r.title,
-      documentName: r.data?.documentName ?? null,
-      obraId: pendienteId ? (pendientesById[pendienteId]?.obra_id ?? r.data?.obraId ?? null) : (r.data?.obraId ?? null),
-      obraName: r.data?.obraName ?? null,
-      dueDate,
-      dueDateObj,
-      created_at: r.created_at,
-      read_at: r.read_at,
-      action_url: r.action_url,
-    };
-  });
-
-  // Group by date category: past, today, next
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart);
   todayEnd.setDate(todayEnd.getDate() + 1);
+
+  const calendarEvents: CalendarEventPayload[] = parsed.map((item) => {
+    const baseStart = item.dueDateObj
+      ? new Date(item.dueDateObj)
+      : new Date(item.created_at)
+    const startDate = new Date(baseStart)
+    const endDate = addHours(startDate, 1)
+    const hasExplicitTime =
+      item.dueDateObj &&
+      (item.dueDateObj.getHours() !== 0 || item.dueDateObj.getMinutes() !== 0)
+    const descriptionParts = []
+    if (item.documentName) {
+      descriptionParts.push(`Documento: ${item.documentName}`)
+    }
+    if (item.obraName) {
+      descriptionParts.push(`Obra: ${item.obraName}`)
+    }
+
+    let color: CalendarEventPayload["color"] = "emerald"
+    if (!item.dueDateObj) {
+      color = "violet"
+    } else if (item.dueDateObj < todayStart) {
+      color = "rose"
+    } else if (item.dueDateObj >= todayStart && item.dueDateObj < todayEnd) {
+      color = "amber"
+    }
+
+    return {
+      id: item.pendienteId ?? item.id,
+      title: item.title,
+      description: descriptionParts.join(" • ") || undefined,
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
+      allDay: !hasExplicitTime,
+      color,
+      location: item.obraName ?? undefined,
+    }
+  })
+
+  // Group by date category: past, today, next
 
   const grouped = {
     past: [] as PendienteItem[],
@@ -781,6 +993,127 @@ function PendientesTable({ rows, markRead, deleteNotification, deletePendiente }
       {renderSection("Sin fecha", noDateGroups, "Sin pendientes sin fecha")}
     </div>
   );
+}
+
+function parsePendienteRows(
+  rows: NotificationRow[],
+  pendientesById: Record<string, { name: string; obra_id: string | null; due_date: string | null }>,
+  dueBySchedule: Record<string, string>
+): PendienteItem[] {
+  return rows.map((r) => {
+    const pendienteId = (r as any).pendiente_id;
+    const joined = (r as any).pending as { id: string; name: string; obra_id: string | null; due_date: string | null } | undefined;
+    const dueDate = pendienteId
+      ? (joined?.due_date ?? dueBySchedule[pendienteId] ?? pendientesById[pendienteId]?.due_date ?? r.data?.dueDate ?? null)
+      : (r.data?.dueDate ?? null);
+    const dueDateObj = parseLocalDate(dueDate);
+
+    return {
+      id: r.id,
+      pendienteId: pendienteId ?? null,
+      title: r.title,
+      documentName: r.data?.documentName ?? null,
+      obraId: pendienteId ? (pendientesById[pendienteId]?.obra_id ?? r.data?.obraId ?? null) : (r.data?.obraId ?? null),
+      obraName: r.data?.obraName ?? null,
+      dueDate,
+      dueDateObj,
+      created_at: r.created_at,
+      read_at: r.read_at,
+      action_url: r.action_url,
+    };
+  });
+}
+
+function buildCalendarEvents(items: PendienteItem[]): CalendarEventPayload[] {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+
+  return items.map((item) => {
+    const baseStart = item.dueDateObj ? new Date(item.dueDateObj) : new Date(item.created_at);
+    const startDate = new Date(baseStart);
+    const endDate = addHours(startDate, 1);
+    const hasExplicitTime = item.dueDateObj && (item.dueDateObj.getHours() !== 0 || item.dueDateObj.getMinutes() !== 0);
+    const descriptionParts = [];
+    if (item.documentName) descriptionParts.push(`Documento: ${item.documentName}`);
+    if (item.obraName) descriptionParts.push(`Obra: ${item.obraName}`);
+
+    let color: CalendarEventPayload["color"] = "emerald";
+    let pendingStatus: CalendarEventPayload["pendingStatus"] = "upcoming";
+    if (!item.dueDateObj) {
+      color = "violet";
+      pendingStatus = "nodate";
+    } else if (item.dueDateObj < todayStart) {
+      color = "rose";
+      pendingStatus = "overdue";
+    } else if (item.dueDateObj >= todayStart && item.dueDateObj < todayEnd) {
+      color = "amber";
+      pendingStatus = "today";
+    }
+
+    return {
+      id: item.pendienteId ?? item.id,
+      title: item.title,
+      description: descriptionParts.join(" • ") || undefined,
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
+      allDay: !hasExplicitTime,
+      color,
+      location: item.obraName ?? undefined,
+      pendingStatus,
+      completed: false,
+    };
+  });
+}
+
+function buildFlujoCalendarEvents(flujoActions: any[]): CalendarEventPayload[] {
+  return flujoActions.map((action) => {
+    // Calculate the event date based on timing mode
+    let eventDate = new Date();
+
+    if (action.timing_mode === "scheduled" && action.scheduled_date) {
+      eventDate = new Date(action.scheduled_date);
+    } else if (action.timing_mode === "offset") {
+      const offsetValue = action.offset_value || 0;
+      const offsetUnit = action.offset_unit || "days";
+
+      switch (offsetUnit) {
+        case "minutes":
+          eventDate = new Date(Date.now() + offsetValue * 60 * 1000);
+          break;
+        case "hours":
+          eventDate = new Date(Date.now() + offsetValue * 60 * 60 * 1000);
+          break;
+        case "days":
+          eventDate = new Date(Date.now() + offsetValue * 24 * 60 * 60 * 1000);
+          break;
+        case "weeks":
+          eventDate = new Date(Date.now() + offsetValue * 7 * 24 * 60 * 60 * 1000);
+          break;
+        case "months":
+          eventDate = new Date();
+          eventDate.setMonth(eventDate.getMonth() + offsetValue);
+          break;
+      }
+    }
+
+    const startDate = new Date(eventDate);
+    const endDate = addHours(startDate, 1);
+
+    return {
+      id: `flujo-${action.id}`,
+      title: action.title,
+      description: action.message || "Acción de flujo automática",
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
+      allDay: action.timing_mode === "offset",
+      color: "sky" as const,
+      location: undefined,
+      pendingStatus: "upcoming" as const,
+      completed: false,
+    };
+  });
 }
 
 

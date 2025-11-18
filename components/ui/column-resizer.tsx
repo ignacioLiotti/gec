@@ -325,10 +325,12 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
         if (resizeMode === "fixed") {
           // Keep total table width as sum of frozen widths with the updated column width
           const newTotal = baseTotalWidth - Math.round(startWidth) + next;
-          try {
-            table.style.width = `${newTotal}px`;
-          } catch {
-            // ignore
+          if (table) {
+            try {
+              table.style.width = `${newTotal}px`;
+            } catch {
+              // ignore
+            }
           }
         }
         // Update minimum width reference in ColGroup component
@@ -339,24 +341,26 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
       function onUp() {
         // Update the saved width as the new minimum
         saveWidths(tableId, widths);
-        // Debug: log final widths when completing resize
-        const finalCols = Array.from(table.querySelectorAll<HTMLTableColElement>("colgroup col"));
-        const finalWidths = finalCols.map((c, i) => ({
-          index: i,
-          width: Math.round(c.getBoundingClientRect().width),
-        }));
-        // eslint-disable-next-line no-console
-        console.log("[ColumnResizer] end", {
-          tableId,
-          colIndex,
-          resizeMode,
-          widths: finalWidths,
-          newWidth: widths[colIndex],
-        });
-        // Trigger a custom event to notify ColGroup about the width change
         if (table) {
-          const event = new CustomEvent('columnResized', {
-            detail: { tableId, colIndex, newWidth: widths[colIndex] }
+          // Debug: log final widths when completing resize
+          const finalCols = Array.from(
+            table.querySelectorAll<HTMLTableColElement>("colgroup col")
+          );
+          const finalWidths = finalCols.map((c, i) => ({
+            index: i,
+            width: Math.round(c.getBoundingClientRect().width),
+          }));
+          // eslint-disable-next-line no-console
+          console.log("[ColumnResizer] end", {
+            tableId,
+            colIndex,
+            resizeMode,
+            widths: finalWidths,
+            newWidth: widths[colIndex],
+          });
+          // Trigger a custom event to notify ColGroup about the width change
+          const event = new CustomEvent("columnResized", {
+            detail: { tableId, colIndex, newWidth: widths[colIndex] },
           });
           table.dispatchEvent(event);
         }
