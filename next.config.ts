@@ -5,22 +5,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
 	reactStrictMode: true,
 	reactCompiler: true,
-
 	experimental: {
+		// Required for edge workflows and background tasks
 		serverActions: {
 			bodySizeLimit: "2mb",
 		},
-		// This is the key fix for Supabase + Vercel in 2025
-		serverComponentsExternalPackages: [
-			"@supabase/node-fetch",
-			// Also add these if you ever use them directly
-			// "node-fetch", "undici", etc.
-		],
 	},
-
 	webpack: (config, { isServer }) => {
 		if (isServer) {
-			// Keep your existing externals (good for SSR/Edge)
+			// Externalize Node.js built-ins for server-side code
 			config.externals = config.externals || [];
 			config.externals.push({
 				"node:stream": "commonjs node:stream",
@@ -29,24 +22,11 @@ const nextConfig: NextConfig = {
 				"node:crypto": "commonjs node:crypto",
 			});
 		} else {
-			// Client-side: stub out canvas (for react-pdf)
+			// Exclude canvas from client-side bundle (required for react-pdf)
 			config.resolve = config.resolve || {};
 			config.resolve.alias = config.resolve.alias || {};
 			config.resolve.alias.canvas = false;
-
-			// Optional: aggressively stub Node.js builtins on client
-			config.resolve.fallback = {
-				...config.resolve.fallback,
-				stream: false,
-				http: false,
-				https: false,
-				url: false,
-				zlib: false,
-				crypto: false,
-				buffer: false,
-			};
 		}
-
 		return config;
 	},
 };
