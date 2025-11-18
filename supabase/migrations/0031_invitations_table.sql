@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS public.invitations (
   invited_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   invited_role TEXT NOT NULL DEFAULT 'member' CHECK (invited_role IN ('member', 'admin')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'cancelled')),
-  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'),
+  -- Use md5 of a random UUID for a hex token (avoids gen_random_bytes, which may not be available)
+  token TEXT NOT NULL UNIQUE DEFAULT md5(gen_random_uuid()::text),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '72 hours'),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   accepted_at TIMESTAMPTZ,

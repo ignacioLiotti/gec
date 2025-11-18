@@ -1,9 +1,6 @@
--- Ensure UUID generation extension exists
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Create obra_flujo_actions table for configurable completion workflows
 CREATE TABLE IF NOT EXISTS obra_flujo_actions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   obra_id UUID NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
 
@@ -88,7 +85,7 @@ CREATE POLICY "Users can delete flujo actions in their tenant"
 
 -- Create a table to track executed flujo actions
 CREATE TABLE IF NOT EXISTS obra_flujo_executions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   flujo_action_id UUID NOT NULL REFERENCES obra_flujo_actions(id) ON DELETE CASCADE,
   obra_id UUID NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
   executed_at TIMESTAMPTZ DEFAULT NOW(),

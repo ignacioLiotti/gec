@@ -10,10 +10,19 @@ UPDATE public.profiles
 SET is_superadmin = true
 WHERE user_id = '77b936fb-3e92-4180-b601-15c31125811e';
 
--- If the user doesn't have a profile yet, insert one
-INSERT INTO public.profiles (user_id, is_superadmin)
-VALUES ('77b936fb-3e92-4180-b601-15c31125811e', true)
-ON CONFLICT (user_id) DO UPDATE SET is_superadmin = true;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM auth.users u
+    WHERE u.id = '77b936fb-3e92-4180-b601-15c31125811e'
+  ) THEN
+    INSERT INTO public.profiles (user_id, is_superadmin)
+    VALUES ('77b936fb-3e92-4180-b601-15c31125811e', true)
+    ON CONFLICT (user_id) DO UPDATE SET is_superadmin = true;
+  END IF;
+END;
+$$;
 
 -- Create or replace the is_admin_of function to include superadmin bypass
 CREATE OR REPLACE FUNCTION public.is_admin_of(tenant UUID)
@@ -114,16 +123,26 @@ CREATE POLICY "superadmin_can_update_memberships" ON public.memberships
     )
   );
 
--- Ensure the superadmin user is an owner in all existing tenants
-INSERT INTO public.memberships (tenant_id, user_id, role)
-SELECT t.id, '77b936fb-3e92-4180-b601-15c31125811e', 'owner'
-FROM public.tenants t
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.memberships m
-  WHERE m.tenant_id = t.id
-    AND m.user_id = '77b936fb-3e92-4180-b601-15c31125811e'
-)
-ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner';
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM auth.users u
+    WHERE u.id = '77b936fb-3e92-4180-b601-15c31125811e'
+  ) THEN
+    -- Ensure the superadmin user is an owner in all existing tenants
+    INSERT INTO public.memberships (tenant_id, user_id, role)
+    SELECT t.id, '77b936fb-3e92-4180-b601-15c31125811e', 'owner'
+    FROM public.tenants t
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.memberships m
+      WHERE m.tenant_id = t.id
+        AND m.user_id = '77b936fb-3e92-4180-b601-15c31125811e'
+    )
+    ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner';
+  END IF;
+END;
+$$;
 
 -- Create a trigger to automatically add superadmin as owner to new tenants
 CREATE OR REPLACE FUNCTION add_superadmin_to_new_tenant()
@@ -132,10 +151,16 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  -- Add superadmin user as owner to the new tenant
-  INSERT INTO public.memberships (tenant_id, user_id, role)
-  VALUES (NEW.id, '77b936fb-3e92-4180-b601-15c31125811e', 'owner')
-  ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner';
+  -- Add superadmin user as owner to the new tenant, if the superadmin user exists
+  IF EXISTS (
+    SELECT 1
+    FROM auth.users u
+    WHERE u.id = '77b936fb-3e92-4180-b601-15c31125811e'
+  ) THEN
+    INSERT INTO public.memberships (tenant_id, user_id, role)
+    VALUES (NEW.id, '77b936fb-3e92-4180-b601-15c31125811e', 'owner')
+    ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner';
+  END IF;
 
   RETURN NEW;
 END;
