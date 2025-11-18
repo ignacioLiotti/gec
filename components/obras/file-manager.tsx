@@ -380,13 +380,10 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
 
   // Handle folder click
   const handleFolderClick = (folder: FileSystemItem) => {
-    // Only select OCR-enabled folders, ignore regular folders
-    if (folder.ocrEnabled) {
-      setSelectedFolder(folder);
-      setSelectedDocument(null);
-      setPreviewUrl(null);
-      setMinimizedPanel(null); // Reset panel minimization when switching folders
-    }
+    setSelectedFolder(folder);
+    setSelectedDocument(null);
+    setPreviewUrl(null);
+    setMinimizedPanel(null); // Reset panel minimization when switching folders
   };
 
   // Handle document click
@@ -482,6 +479,9 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
         ? obraId
         : `${obraId}/${selectedFolder?.name}`;
 
+      const isOcrFolder = Boolean(selectedFolder?.ocrEnabled);
+      let importedAnyMaterials = false;
+
       for (const file of Array.from(files)) {
         const filePath = `${folderPath}/${file.name}`;
 
@@ -539,9 +539,112 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
             toast.error('File uploaded to storage, but 3D processing failed');
           }
         }
+
+        // If this is the OCR-enabled "materiales" folder, run OCR import for PDFs/images
+        if (isOcrFolder) {
+          try {
+            const fd = new FormData();
+
+            if (file.type.includes('pdf')) {
+              try {
+                // @ts-ignore: dynamic import without types is fine for client rasterization
+                const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
+                const array = new Uint8Array(await file.arrayBuffer());
+                const loadingTask = pdfjs.getDocument({ data: array, disableWorker: true });
+                const pdf = await loadingTask.promise;
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 2 });
+                const canvasEl = document.createElement('canvas');
+                canvasEl.width = Math.ceil(viewport.width);
+                canvasEl.height = Math.ceil(viewport.height);
+                const ctx = canvasEl.getContext('2d');
+                if (!ctx) throw new Error('No canvas context');
+                await page.render({ canvasContext: ctx as any, viewport }).promise;
+                const dataUrl = canvasEl.toDataURL('image/png');
+                fd.append('imageDataUrl', dataUrl);
+              } catch (pdfErr) {
+                console.error('PDF rasterization failed (FileManager upload)', pdfErr);
+                // Fallback: send raw file, server may still handle or return a helpful error
+                fd.append('file', file);
+              }
+            } else if (file.type.startsWith('image/')) {
+              fd.append('file', file);
+            } else {
+              // Non-image / non-PDF files are just stored, no OCR attempted
+              continue;
+            }
+
+            const importRes = await fetch(`/api/obras/${obraId}/materials/import?preview=1`, {
+              method: 'POST',
+              body: fd,
+            });
+
+            if (!importRes.ok) {
+              const out = await importRes.json().catch(() => ({} as any));
+              console.error('Materials import failed for uploaded file', out);
+              toast.error('El archivo se subió pero no se pudo extraer la orden de materiales');
+              continue;
+            }
+
+            const out = await importRes.json();
+            const extractedItems = (out.items || []) as Array<any>;
+            const meta = out.meta || {};
+
+            // Normalize items as in the excel materiales flow
+            const normalizedItems = extractedItems
+              .filter((it) => (String(it.material ?? '').trim().length > 0) && Number(it.cantidad) > 0)
+              .map((it) => ({
+                cantidad: Number(it.cantidad) || 0,
+                unidad: String(it.unidad || '').trim(),
+                material: String(it.material || '').trim(),
+                precioUnitario: Number(it.precioUnitario) || 0,
+              }));
+
+            if (normalizedItems.length === 0) {
+              console.log('No valid material items extracted from file', file.name);
+              continue;
+            }
+
+            const saveRes = await fetch(`/api/obras/${obraId}/materials`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                nroOrden: String(meta.nroOrden ?? '').trim() || undefined,
+                solicitante: String(meta.solicitante ?? '').trim() || undefined,
+                gestor: String(meta.gestor ?? '').trim() || undefined,
+                proveedor: String(meta.proveedor ?? '').trim() || undefined,
+                items: normalizedItems,
+                docBucket: 'obra-documents',
+                docPath: filePath,
+              }),
+            });
+
+            if (!saveRes.ok) {
+              const errOut = await saveRes.json().catch(() => ({} as any));
+              console.error('Failed to persist materials from uploaded file', errOut);
+              toast.error('El archivo se subió pero no se pudo guardar la orden de materiales');
+              continue;
+            }
+
+            importedAnyMaterials = true;
+          } catch (ocrError) {
+            console.error('Error extracting materials from uploaded file', ocrError);
+            toast.error('El archivo se subió pero no se pudo extraer la orden de materiales');
+          }
+        }
       }
 
       toast.success(`${files.length} file(s) uploaded successfully`);
+
+      // If we created / updated material orders, refresh them so the extracted data panel updates
+      if (importedAnyMaterials && onRefreshMaterials) {
+        try {
+          await onRefreshMaterials();
+        } catch (refreshErr) {
+          console.error('Error refreshing material orders after OCR import', refreshErr);
+        }
+      }
+
       buildFileTree();
     } catch (error) {
       console.error('Error uploading files:', error);
@@ -633,13 +736,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
 
     const handleItemClick = () => {
       if (isFolder) {
-        // For OCR-enabled folders, select them to show data
-        // For regular folders, just toggle expansion
-        if (item.ocrEnabled) {
-          handleFolderClick(item);
-        } else {
-          toggleFolder(item.id);
-        }
+        handleFolderClick(item);
       } else {
         // It's a file - preview it and set its parent folder as selected
         handleDocumentClick(item, parentFolder);
@@ -987,8 +1084,8 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
           {/* Extracted Data Panel */}
           <div
             className={`rounded-lg border bg-card shadow-sm overflow-hidden transition-all duration-300 ease-in-out ${dataMinimized
-                ? 'flex items-center justify-center h-12 w-full lg:w-12 lg:h-auto flex-shrink-0'
-                : 'flex-1 min-h-[260px]'
+              ? 'flex items-center justify-center h-12 w-full lg:w-12 lg:h-auto flex-shrink-0'
+              : 'flex-1 min-h-[260px]'
               }`}
           >
             {dataMinimized ? (
@@ -1026,8 +1123,8 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
           {/* Document Preview Panel */}
           <div
             className={`rounded-lg border bg-card shadow-sm overflow-hidden transition-all duration-300 ease-in-out ${previewMinimized
-                ? 'flex items-center justify-center h-12 w-full lg:w-12 lg:h-auto flex-shrink-0'
-                : 'flex-1 min-h-[260px]'
+              ? 'flex items-center justify-center h-12 w-full lg:w-12 lg:h-auto flex-shrink-0'
+              : 'flex-1 min-h-[260px]'
               }`}
           >
             {previewMinimized ? (
@@ -1232,13 +1329,13 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:justify-end">
           {!selectedFolder?.ocrEnabled && (
             <div className="flex items-center gap-1 border rounded-md">
-              {/* <Button
+              <Button
                 variant={viewMode === 'grid' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('grid')}
               >
                 <Grid3x3 className="w-4 h-4" />
-              </Button> */}
+              </Button>
               <Button
                 variant={viewMode === 'list' ? 'default' : 'ghost'}
                 size="sm"
@@ -1284,13 +1381,13 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
 
       {/* Main Layout */}
       <div className={`flex-1 min-h-0 transition-all duration-300 ease-in-out ${!selectedDocument && (!selectedFolder || selectedFolder.id === 'root')
-          ? ''
-          : 'grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4'
+        ? ''
+        : 'grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4'
         }`}>
         {/* Tree View - Always rendered, animates width */}
         <div className={`rounded-lg border bg-card shadow-sm overflow-auto transition-all duration-300 ease-in-out ${!selectedDocument && (!selectedFolder || selectedFolder.id === 'root')
-            ? 'h-full w-full'
-            : 'max-h-[320px] lg:max-h-none'
+          ? 'h-full w-full'
+          : 'max-h-[320px] lg:max-h-none'
           }`}>
           <div className="p-4">
             <h2 className="text-sm font-semibold mb-2 text-muted-foreground uppercase">

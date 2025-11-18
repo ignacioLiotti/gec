@@ -204,30 +204,8 @@ export default function ObraDetailPage() {
 		docBucket?: string; // storage bucket name
 	};
 
-	const [materialOrders, setMaterialOrders] = useState<MaterialOrder[]>(() => [
-		{
-			id: "ord-1",
-			nroOrden: "OC-0001",
-			solicitante: "Juan Pérez",
-			gestor: "María López",
-			proveedor: "Materiales S.A.",
-			items: [
-				{ id: "i-1", cantidad: 10, unidad: "m²", material: "Cerámica blanco 60x60", precioUnitario: 4500 },
-				{ id: "i-2", cantidad: 25, unidad: "u", material: "Bolsa de cemento 50kg", precioUnitario: 9800 },
-			],
-		},
-		{
-			id: "ord-2",
-			nroOrden: "OC-0002",
-			solicitante: "Ana Gómez",
-			gestor: "Carlos Ruiz",
-			proveedor: "Ferretería Norte",
-			items: [
-				{ id: "i-3", cantidad: 100, unidad: "m", material: "Hierro del 8", precioUnitario: 1200 },
-				{ id: "i-4", cantidad: 50, unidad: "u", material: "Ladrillo hueco 18x18", precioUnitario: 750 },
-			],
-		},
-	]);
+	// Start with no material orders; they are loaded from `/api/obras/:obraId/materials`
+	const [materialOrders, setMaterialOrders] = useState<MaterialOrder[]>([]);
 
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
@@ -505,46 +483,51 @@ export default function ObraDetailPage() {
 		if (!obraId) return;
 		try {
 			const res = await fetch(`/api/obras/${obraId}/materials`);
-			if (!res.ok) return;
+			if (!res.ok) {
+				// If the endpoint fails, keep current state (don't re-introduce any fake data)
+				return;
+			}
 			const data = await res.json();
 			const orders = (data?.orders || []) as Array<any>;
-			if (orders.length > 0) {
-				const mapped: MaterialOrder[] = orders.map((o: any) => ({
-					id: String(o.id),
-					nroOrden: String(o.nroOrden || o.id),
-					solicitante: String(o.solicitante || ""),
-					gestor: String(o.gestor || ""),
-					proveedor: String(o.proveedor || ""),
-					docPath: o.docPath,
-					docBucket: o.docBucket,
-					items: (o.items || []).map((it: any, idx: number) => ({
-						id: `${o.id}-i-${idx}`,
-						cantidad: Number(it.cantidad || 0),
-						unidad: String(it.unidad || ""),
-						material: String(it.material || ""),
-						precioUnitario: Number(it.precioUnitario || 0),
-					})),
-				}));
-				setMaterialOrders(mapped);
-				// Build persistent doc mapping from API response
-				setOrderDocPaths(() => {
-					const acc: Record<string, { segments: string[]; name: string; mime?: string }> = {};
-					for (const o of orders) {
-						if (o.docPath && typeof o.docPath === 'string') {
-							const full = o.docPath as string;
-							const obraPrefix = `${String(obraId)}/`;
-							const rel = full.startsWith(obraPrefix) ? full.slice(obraPrefix.length) : full;
-							const parts = rel.split('/').filter(Boolean);
-							if (parts.length >= 1) {
-								const name = parts[parts.length - 1];
-								const segments = parts.slice(0, -1);
-								acc[String(o.id)] = { segments, name };
-							}
+
+			const mapped: MaterialOrder[] = orders.map((o: any) => ({
+				id: String(o.id),
+				nroOrden: String(o.nroOrden || o.id),
+				solicitante: String(o.solicitante || ""),
+				gestor: String(o.gestor || ""),
+				proveedor: String(o.proveedor || ""),
+				docPath: o.docPath,
+				docBucket: o.docBucket,
+				items: (o.items || []).map((it: any, idx: number) => ({
+					id: `${o.id}-i-${idx}`,
+					cantidad: Number(it.cantidad || 0),
+					unidad: String(it.unidad || ""),
+					material: String(it.material || ""),
+					precioUnitario: Number(it.precioUnitario || 0),
+				})),
+			}));
+
+			// Always replace materialOrders with whatever the backend returns
+			setMaterialOrders(mapped);
+
+			// Build persistent doc mapping from API response (or clear it if there are no orders)
+			setOrderDocPaths(() => {
+				const acc: Record<string, { segments: string[]; name: string; mime?: string }> = {};
+				for (const o of orders) {
+					if (o.docPath && typeof o.docPath === 'string') {
+						const full = o.docPath as string;
+						const obraPrefix = `${String(obraId)}/`;
+						const rel = full.startsWith(obraPrefix) ? full.slice(obraPrefix.length) : full;
+						const parts = rel.split('/').filter(Boolean);
+						if (parts.length >= 1) {
+							const name = parts[parts.length - 1];
+							const segments = parts.slice(0, -1);
+							acc[String(o.id)] = { segments, name };
 						}
 					}
-					return acc;
-				});
-			}
+				}
+				return acc;
+			});
 		} catch {
 			// no-op
 		}

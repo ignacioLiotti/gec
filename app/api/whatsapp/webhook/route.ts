@@ -60,24 +60,50 @@ export async function POST(req: NextRequest) {
 
 	try {
 		if (message.type === "image" && message.image?.id) {
-			const { obraNumber, folderName } = parseInstruction(textBody);
+			const { obraName, obraNumber, folderName } = parseInstruction(textBody);
 
-			if (!obraNumber || !folderName) {
+			if (!folderName || (!obraName && !obraNumber)) {
 				await replyText(
 					from,
-					"No entendí la instrucción. Usá algo como: 'obra 12 carpeta planos'."
+					"No entendí la instrucción. Usá algo como: 'obra CONSTRUCCION DE 20 VIVIENDAS carpeta Whatsapp'."
 				);
 				return NextResponse.json({ status: "bad_instruction" });
 			}
 
-			const obraId = await findObraIdByNumber(obraNumber);
-			if (!obraId) {
-				await replyText(
-					from,
-					`No encontré la obra ${obraNumber}. Verificá el número.`
-				);
+			let obra: {
+				id: string;
+				name: string;
+			} | null = null;
+
+			if (obraName) {
+				obra = await findObraByName(obraName);
+			}
+
+			if (!obra && obraNumber) {
+				obra = await findObraByNumber(obraNumber);
+			}
+
+			if (!obra) {
+				if (obraName) {
+					await replyText(
+						from,
+						`No encontré una obra cuyo nombre contenga: "${obraName}".`
+					);
+				} else if (obraNumber) {
+					await replyText(
+						from,
+						`No encontré la obra con número ${obraNumber}. Verificá el dato.`
+					);
+				} else {
+					await replyText(
+						from,
+						"No encontré la obra indicada. Probá con: 'obra NOMBRE COMPLETO carpeta X'."
+					);
+				}
 				return NextResponse.json({ status: "obra_not_found" });
 			}
+
+			const obraId = obra.id;
 
 			const { arrayBuffer, mimeType } = await downloadWhatsappMedia(
 				message.image.id
@@ -95,9 +121,24 @@ export async function POST(req: NextRequest) {
 				mimeType
 			);
 
+			const origin = req.nextUrl.origin;
+			const obraUrl = `${origin}/excel/${obraId}`;
+			const { signedUrl } = await getSignedUrlForObraFile(
+				obraId,
+				folderName,
+				fileName
+			);
+
 			await replyText(
 				from,
-				`Listo ✅ Subí tu foto a la obra ${obraNumber} en la carpeta '${folderName}'.`
+				[
+					`Listo ✅ Subí tu foto a la obra "${obra.name}" en la carpeta '${folderName}'.`,
+					"",
+					`Ver la obra: ${obraUrl}`,
+					signedUrl ? `Ver el archivo: ${signedUrl}` : "",
+				]
+					.filter(Boolean)
+					.join("\n")
 			);
 
 			return NextResponse.json({ status: "ok" });
@@ -124,13 +165,15 @@ export async function POST(req: NextRequest) {
 }
 
 function parseInstruction(text: string): {
+	obraName?: string;
 	obraNumber?: number;
 	folderName?: string;
 } {
-	const lower = text.toLowerCase();
+	const trimmed = text.trim();
+	const lower = trimmed.toLowerCase();
 
-	const obraMatch = lower.match(/obra\s+(\d+)/);
-	const obraNumber = obraMatch ? Number(obraMatch[1]) : undefined;
+	let obraName: string | undefined;
+	let obraNumber: number | undefined;
 
 	let folderName: string | undefined;
 	const carpetaIndex = lower.indexOf("carpeta");
@@ -147,15 +190,48 @@ function parseInstruction(text: string): {
 			}
 		}
 	}
+	// Try to extract obra name between "obra" and "carpeta"
+	const obraIndex = lower.indexOf("obra");
+	if (obraIndex !== -1) {
+		const afterObraIndex = obraIndex + "obra".length;
+		const endIndex =
+			carpetaIndex !== -1 && carpetaIndex > afterObraIndex
+				? carpetaIndex
+				: trimmed.length;
+		const rawName = trimmed.slice(afterObraIndex, endIndex).trim();
+		if (rawName) {
+			obraName = rawName;
 
-	return { obraNumber, folderName };
+			// If the user still writes "obra 12" we keep supporting it
+			const numberMatch = rawName.match(/(\d+)/);
+			if (numberMatch) {
+				const n = Number(numberMatch[1]);
+				if (!Number.isNaN(n)) {
+					obraNumber = n;
+				}
+			}
+		}
+	}
+
+	// Fallback: if we didn't detect "obra" but we did detect "carpeta",
+	// treat the text before "carpeta" as obra name.
+	if (!obraName && carpetaIndex > 0) {
+		const before = trimmed.slice(0, carpetaIndex).trim();
+		if (before) {
+			obraName = before;
+		}
+	}
+
+	return { obraName, obraNumber, folderName };
 }
 
-async function findObraIdByNumber(obraNumber: number): Promise<string | null> {
+async function findObraByNumber(
+	obraNumber: number
+): Promise<{ id: string; name: string } | null> {
 	const supabase = createSupabaseAdminClient();
 	const { data, error } = await supabase
 		.from("obras")
-		.select("id")
+		.select("id, designacion_y_ubicacion")
 		.eq("n", obraNumber)
 		.limit(1)
 		.maybeSingle();
@@ -166,7 +242,49 @@ async function findObraIdByNumber(obraNumber: number): Promise<string | null> {
 		return null;
 	}
 
-	return (data as { id: string }).id;
+	const row = data as { id: string; designacion_y_ubicacion: string };
+	return { id: row.id, name: row.designacion_y_ubicacion };
+}
+
+async function findObraByName(
+	obraName: string
+): Promise<{ id: string; name: string } | null> {
+	const supabase = createSupabaseAdminClient();
+	const search = obraName.trim();
+	if (!search) return null;
+
+	const { data, error } = await supabase
+		.from("obras")
+		.select("id, designacion_y_ubicacion, n")
+		.ilike("designacion_y_ubicacion", `%${search}%`)
+		.order("n", { ascending: true })
+		.limit(5);
+
+	if (error || !data || data.length === 0) {
+		// eslint-disable-next-line no-console
+		console.error("[WhatsApp Webhook] Error fetching obra by name", error, {
+			search,
+		});
+		return null;
+	}
+
+	if (data.length > 1) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			"[WhatsApp Webhook] Multiple obras matched name, using first",
+			{
+				search,
+				matches: data.map((row) => ({
+					id: row.id,
+					name: row.designacion_y_ubicacion,
+					n: row.n,
+				})),
+			}
+		);
+	}
+
+	const row = data[0] as { id: string; designacion_y_ubicacion: string };
+	return { id: row.id, name: row.designacion_y_ubicacion };
 }
 
 async function downloadWhatsappMedia(mediaId: string): Promise<{
@@ -229,7 +347,7 @@ async function uploadToObraFolder(
 	fileName: string,
 	arrayBuffer: ArrayBuffer,
 	mimeType: string
-) {
+): Promise<{ filePath: string }> {
 	const supabase = createSupabaseAdminClient();
 	const bucket = "obra-documents";
 	const filePath = `${obraId}/${folderName}/${fileName}`;
@@ -247,6 +365,42 @@ async function uploadToObraFolder(
 			error
 		);
 		throw error;
+	}
+
+	return { filePath };
+}
+
+async function getSignedUrlForObraFile(
+	obraId: string,
+	folderName: string,
+	fileName: string
+): Promise<{ signedUrl?: string }> {
+	const supabase = createSupabaseAdminClient();
+	const bucket = "obra-documents";
+	const filePath = `${obraId}/${folderName}/${fileName}`;
+
+	try {
+		const { data, error } = await supabase.storage
+			.from(bucket)
+			.createSignedUrl(filePath, 60 * 60 * 24);
+
+		if (error) {
+			// eslint-disable-next-line no-console
+			console.error(
+				"[WhatsApp Webhook] Error creating signed URL for obra-documents",
+				error
+			);
+			return {};
+		}
+
+		return { signedUrl: data?.signedUrl };
+	} catch (err) {
+		// eslint-disable-next-line no-console
+		console.error(
+			"[WhatsApp Webhook] Unexpected error creating signed URL",
+			err
+		);
+		return {};
 	}
 }
 
