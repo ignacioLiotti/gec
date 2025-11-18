@@ -11,9 +11,12 @@ const nextConfig: NextConfig = {
 			bodySizeLimit: "2mb",
 		},
 		serverComponentsExternalPackages: [
-			"@supabase/node-fetch",
 			"node-fetch",
 			"undici",
+			"@react-email/components",
+			"@react-email/render",
+			"@react-email/tailwind",
+			"@supabase/node-fetch",
 		],
 	},
 	webpack: (config, { isServer }) => {
