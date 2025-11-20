@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from "react";
-import Link from "next/link";
 import {
 	useCallback,
 	useEffect,
@@ -13,27 +12,18 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { obrasFormSchema, type Obra, type ObrasForm } from "./schema";
 import { toast } from "sonner";
-import { AlertCircle, FileSpreadsheet, Plus, Trash2, Upload, X } from "lucide-react";
+import { AlertCircle, FileSpreadsheet, Plus, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Papa from "papaparse";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { balanceTableColumns } from "@/components/ui/column-resizer";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { SearchInput } from "./_components/SearchInput";
 import { ColumnsMenu } from "./_components/ColumnsMenu";
-import { ViewsMenu } from "./_components/ViewsMenu";
-import { InBodyStates } from "./_components/InBodyStates";
-import { CustomInput } from "./_components/CustomInput";
 import { ObrasTable } from "./_components/ObrasTable";
+import { CustomInput } from "./_components/CustomInput";
 
 const defaultObra: Obra = {
 	id: undefined,
@@ -86,6 +76,8 @@ export default function ExcelPage() {
 	const [csvImportError, setCsvImportError] = useState<string | null>(null);
 	const csvInputRef = useRef<HTMLInputElement | null>(null);
 	const [rowsSnapshot, setRowsSnapshot] = useState<Obra[]>(initialData);
+	const [isRefreshing, setIsRefreshing] = useState(false);
+	const hasLoadedRef = useRef(false);
 
 	// Server-side sorting & global search
 	const COLUMN_TO_DB: Record<number, string> = {
@@ -195,16 +187,6 @@ export default function ExcelPage() {
 	const [hiddenCols, setHiddenCols] = useState<number[]>([]);
 	const isHidden = useCallback((i: number) => hiddenCols.includes(i), [hiddenCols]);
 
-	// Column resize mode: balanced (proportional) vs fixed (independent pixel widths)
-	const [resizeMode, setResizeMode] = useState<"balanced" | "fixed">(() => {
-		try {
-			return localStorage.getItem("excel:resizeMode") === "fixed" ? "fixed" : "balanced";
-		} catch { return "fixed"; }
-	});
-	useEffect(() => {
-		try { localStorage.setItem("excel:resizeMode", resizeMode); } catch { }
-	}, [resizeMode]);
-
 	// Persist column visibility
 	useEffect(() => {
 		try {
@@ -254,13 +236,18 @@ export default function ExcelPage() {
 		});
 	}, []);
 
+	const handleBalanceColumns = useCallback(() => {
+		balanceTableColumns("excel-table", { hiddenCols });
+		balanceTableColumns("excel-completed-table", { hiddenCols });
+		toast.success("Columnas balanceadas");
+	}, [hiddenCols]);
+
 	useEffect(() => {
-		// Hide corresponding <col> elements and redistribute widths across visible columns
+		const tableIds = ["excel-table", "excel-completed-table"];
 		const applyVisibilityToTable = (tableId: string) => {
 			const table = document.querySelector(`table[data-table-id="${tableId}"]`);
 			if (!table) return;
 			const cols = table.querySelectorAll<HTMLTableColElement>("colgroup col");
-			const visibleIndexes: number[] = [];
 			cols.forEach((col, idx) => {
 				const hide = hiddenCols.includes(idx);
 				if (hide) {
@@ -268,23 +255,19 @@ export default function ExcelPage() {
 					col.style.width = "0px";
 				} else {
 					col.style.display = "";
-					visibleIndexes.push(idx);
 				}
 			});
-
-			// Only force percentage sizing in balanced mode
-			if (resizeMode === "balanced") {
-				if (visibleIndexes.length > 0) {
-					const percentage = 100 / visibleIndexes.length;
-					visibleIndexes.forEach((idx) => {
-						const col = cols[idx] as HTMLTableColElement;
-						col.style.width = `${percentage}%`;
-					});
-				}
-			}
 		};
-		applyVisibilityToTable("excel-table");
-	}, [hiddenCols, resizeMode]);
+		tableIds.forEach(applyVisibilityToTable);
+
+		if (hiddenCols.length < ALL_COLUMNS.length) {
+			requestAnimationFrame(() => {
+				tableIds.forEach((tableId) => {
+					balanceTableColumns(tableId, { hiddenCols });
+				});
+			});
+		}
+	}, [hiddenCols, ALL_COLUMNS.length]);
 
 	// Pagination per tab
 	const [inProcPage, setInProcPage] = useState(1);
@@ -334,6 +317,7 @@ export default function ExcelPage() {
 				toast.success("Obras guardadas exitosamente");
 
 				try {
+					setIsRefreshing(true);
 					const params = new URLSearchParams();
 					params.set("orderBy", orderBy);
 					params.set("orderDir", orderDir);
@@ -361,6 +345,9 @@ export default function ExcelPage() {
 						"Las obras se guardaron, pero no se pudieron refrescar los datos.",
 					);
 				}
+				finally {
+					setIsRefreshing(false);
+				}
 			} catch (error) {
 				console.error(error);
 				toast.error(
@@ -378,6 +365,11 @@ export default function ExcelPage() {
 		async function loadObras() {
 			try {
 				setTableError(null);
+				if (hasLoadedRef.current) {
+					setIsRefreshing(true);
+				} else {
+					setIsLoading(true);
+				}
 				const params = new URLSearchParams();
 				params.set("orderBy", orderBy);
 				params.set("orderDir", orderDir);
@@ -410,6 +402,7 @@ export default function ExcelPage() {
 					form.setFieldValue("detalleObras", merged);
 					setRowsSnapshot(merged);
 					setTableError(null);
+					hasLoadedRef.current = true;
 				}
 			} catch (error) {
 				console.error(error);
@@ -426,6 +419,7 @@ export default function ExcelPage() {
 			} finally {
 				if (isMounted) {
 					setIsLoading(false);
+					setIsRefreshing(false);
 				}
 			}
 		}
@@ -817,8 +811,7 @@ export default function ExcelPage() {
 								setHiddenCols={setHiddenCols}
 								pinnedColumns={pinnedColumns}
 								togglePinColumn={togglePinColumn}
-								resizeMode={resizeMode}
-								setResizeMode={setResizeMode}
+								onBalanceColumns={handleBalanceColumns}
 							/>
 							<SearchInput value={query} onChange={setQuery} />
 							<Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -1019,6 +1012,7 @@ export default function ExcelPage() {
 											tableId="excel-table"
 											visible={visible}
 											isLoading={isLoading}
+											isRefreshing={isRefreshing}
 											tableError={tableError}
 											onRetry={() => { setIsLoading(true); setFiltersVersion(v => v + 1); }}
 											isHidden={isHidden}
@@ -1030,7 +1024,7 @@ export default function ExcelPage() {
 											setOrderBy={setOrderBy}
 											setOrderDir={setOrderDir}
 											setSortByColumn={setSortByColumn}
-											resizeMode={resizeMode}
+											resizeMode="fixed"
 											query={query}
 											copyToClipboard={copyToClipboard}
 											obraToCsv={obraToCsv}
@@ -1108,6 +1102,7 @@ export default function ExcelPage() {
 											tableId="excel-completed-table"
 											visible={visible}
 											isLoading={isLoading}
+											isRefreshing={isRefreshing}
 											tableError={tableError}
 											onRetry={() => { setIsLoading(true); setFiltersVersion(v => v + 1); }}
 											isHidden={isHidden}
@@ -1119,7 +1114,7 @@ export default function ExcelPage() {
 											setOrderBy={setOrderBy}
 											setOrderDir={setOrderDir}
 											setSortByColumn={setSortByColumn}
-											resizeMode={resizeMode}
+											resizeMode="fixed"
 											query={query}
 											copyToClipboard={copyToClipboard}
 											obraToCsv={obraToCsv}

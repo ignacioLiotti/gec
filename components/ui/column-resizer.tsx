@@ -186,7 +186,108 @@ export function ColGroup({ tableId, columns, mode = "balanced" }: { tableId: str
   );
 }
 
-export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: string; colIndex: number; minWidth?: number }) {
+export function balanceTableColumns(
+  tableId: string,
+  options?: { hiddenCols?: number[]; minVisibleWidth?: number }
+) {
+  if (typeof window === "undefined") return;
+  const table = document.querySelector<HTMLTableElement>(`table[data-table-id="${tableId}"]`);
+  if (!table) return;
+  const container = table.parentElement as HTMLElement | null;
+  if (!container) return;
+
+  const cols = table.querySelectorAll<HTMLTableColElement>("colgroup col");
+  if (!cols.length) return;
+
+  const hidden = new Set(options?.hiddenCols ?? []);
+  const visibleCols = Array.from(cols)
+    .map((col, idx) => ({ col, idx }))
+    .filter(({ idx }) => !hidden.has(idx));
+
+  if (!visibleCols.length) return;
+
+  const containerWidth = container.getBoundingClientRect().width || table.getBoundingClientRect().width;
+  if (!containerWidth || containerWidth <= 0) return;
+
+  const minWidth = Math.max(8, options?.minVisibleWidth ?? 80);
+  const stored = loadWidths(tableId);
+  const fallbackWidth = containerWidth / visibleCols.length || minWidth;
+
+  const measured = visibleCols.map(({ col, idx }) => {
+    const rectWidth = col.getBoundingClientRect().width;
+    if (rectWidth && rectWidth > 0) return rectWidth;
+    const saved = stored[idx];
+    if (saved && saved > 0) return saved;
+    return fallbackWidth;
+  });
+
+  let totalMeasured = measured.reduce((sum, width) => sum + width, 0);
+  if (!Number.isFinite(totalMeasured) || totalMeasured <= 0) {
+    totalMeasured = fallbackWidth * visibleCols.length;
+  }
+
+  const minTotal = minWidth * visibleCols.length;
+  let targetWidths: number[];
+
+  if (containerWidth >= minTotal) {
+    const remaining = containerWidth - minTotal;
+    const increments = measured.map((width) => {
+      if (totalMeasured <= 0) return remaining / visibleCols.length;
+      return (width / totalMeasured) * remaining;
+    });
+    targetWidths = increments.map((increment) => minWidth + increment);
+  } else {
+    const scale = containerWidth / totalMeasured;
+    targetWidths = measured.map((width) => Math.max(8, width * scale));
+    const scaledTotal = targetWidths.reduce((sum, width) => sum + width, 0);
+    if (scaledTotal !== containerWidth && targetWidths.length > 0) {
+      targetWidths[targetWidths.length - 1] += containerWidth - scaledTotal;
+    }
+  }
+
+  let widths = targetWidths.map((width) => Math.max(8, Math.round(width)));
+  let appliedTotal = widths.reduce((sum, width) => sum + width, 0);
+  const delta = Math.round(containerWidth) - appliedTotal;
+  if (widths.length > 0 && delta !== 0) {
+    widths[widths.length - 1] = Math.max(8, widths[widths.length - 1] + delta);
+    appliedTotal = widths.reduce((sum, width) => sum + width, 0);
+  }
+
+  visibleCols.forEach(({ col, idx }, i) => {
+    const width = widths[i];
+    col.style.width = `${width}px`;
+    stored[idx] = width;
+  });
+
+  hidden.forEach((idx) => {
+    const col = cols[idx];
+    if (col) {
+      col.style.width = "0px";
+      stored[idx] = 0;
+    }
+  });
+
+  saveWidths(tableId, stored);
+
+  const finalWidth =
+    containerWidth >= minTotal ? Math.max(containerWidth, appliedTotal) : Math.max(appliedTotal, containerWidth);
+  table.style.width = `${finalWidth}px`;
+  table.style.minWidth = "0px";
+}
+
+interface ColumnResizerProps {
+  tableId: string;
+  colIndex: number;
+  minWidth?: number;
+  mode?: "balanced" | "fixed";
+}
+
+export function ColumnResizer({
+  tableId,
+  colIndex,
+  minWidth = 80,
+  mode = "fixed",
+}: ColumnResizerProps) {
   const autoSizeColumn = useCallback((target: HTMLElement) => {
     const table = (target.closest("table") ?? undefined) as HTMLTableElement | undefined;
     if (!table) return;
@@ -277,14 +378,6 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
 
       const widths = loadWidths(tableId);
 
-      // Debug: log current mode and all column widths at the start of a resize
-      let resizeMode: "balanced" | "fixed" = "balanced";
-      try {
-        const raw = localStorage.getItem("excel:resizeMode");
-        if (raw === "fixed") resizeMode = "fixed";
-      } catch {
-        // ignore
-      }
       const allCols = Array.from(table.querySelectorAll<HTMLTableColElement>("colgroup col"));
       const currentWidths = allCols.map((c, i) => ({
         index: i,
@@ -292,7 +385,7 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
       }));
       // In fixed mode, freeze all columns to their current px width and set table width explicitly
       let baseTotalWidth = currentWidths.reduce((sum, w) => sum + (w.width || 0), 0);
-      if (resizeMode === "fixed") {
+      if (mode === "fixed") {
         allCols.forEach((c, i) => {
           const w = currentWidths[i]?.width ?? 0;
           if (w > 0) {
@@ -312,7 +405,7 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
       console.log("[ColumnResizer] start", {
         tableId,
         colIndex,
-        resizeMode,
+        resizeMode: mode,
         widths: currentWidths,
         startWidth: Math.round(startWidth),
       });
@@ -322,7 +415,7 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
         const next = Math.max(minWidth, Math.round(startWidth + delta));
         col.style.width = `${next}px`;
         widths[colIndex] = next;
-        if (resizeMode === "fixed") {
+        if (mode === "fixed") {
           // Keep total table width as sum of frozen widths with the updated column width
           const newTotal = baseTotalWidth - Math.round(startWidth) + next;
           if (table) {
@@ -354,7 +447,7 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
           console.log("[ColumnResizer] end", {
             tableId,
             colIndex,
-            resizeMode,
+            resizeMode: mode,
             widths: finalWidths,
             newWidth: widths[colIndex],
           });
@@ -374,7 +467,7 @@ export function ColumnResizer({ tableId, colIndex, minWidth = 80 }: { tableId: s
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [tableId, colIndex, minWidth]
+    [tableId, colIndex, minWidth, mode]
   );
 
   return (

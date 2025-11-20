@@ -13,6 +13,7 @@ import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 import { InBodyStates } from "./InBodyStates";
 import { CustomInput } from "./CustomInput";
 import { Input } from "@/components/ui/input";
+import { AnimatePresence, motion } from "framer-motion";
 
 type AnyFormApi = {
   Field: any;
@@ -25,6 +26,7 @@ export interface ObrasTableProps {
   tableId: string;
   visible: Array<{ index: number }>;
   isLoading: boolean;
+  isRefreshing: boolean;
   tableError: string | null;
   onRetry: () => void;
   isHidden: (i: number) => boolean;
@@ -76,6 +78,7 @@ export function ObrasTable(props: ObrasTableProps) {
     headerGroupBgClass = "bg-sidebar",
     emptyText,
     onFilterByEntidad,
+    isRefreshing,
   } = props;
 
   // Calculate sticky column offsets dynamically
@@ -139,11 +142,27 @@ export function ObrasTable(props: ObrasTableProps) {
   }, [isPinned, columnOffsets, isHidden]);
 
   const lastIndex = field.state.value.length - 1;
+  const showOverlay = isRefreshing || (isLoading && visible.length > 0);
 
   return (
-    <div className="border border-border rounded-none overflow-hidden w-full max-w-[calc(100vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] 
-        bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_10px,var(--border)_10px,var(--border)_11px,transparent_12px)] bg-repeat">
-      <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+    <div className="relative border border-border rounded-none overflow-x-scroll w-full max-w-[calc(98vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] 
+        bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
+      <AnimatePresence>
+        {showOverlay && (
+          <motion.div
+            key="obras-table-loader"
+            className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <p className="text-sm font-medium text-primary">Actualizando tabla...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div className="max-h-[70vh]">
         <table className="text-sm table-fixed w-full" data-table-id={tableId}>
           <ColGroup tableId={tableId} columns={14} mode={resizeMode} />
           <thead className="bg-muted/50 sticky top-0 z-30">
@@ -395,10 +414,10 @@ export function ObrasTable(props: ObrasTableProps) {
             </tr>
           </thead>
           <tbody>
-            {(isLoading || tableError || visible.length === 0) ? (
+            {(tableError || visible.length === 0) ? (
               <InBodyStates
                 isLoading={isLoading}
-                tableError={tableError ? new Error(tableError) : null}
+                tableError={tableError}
                 colspan={16}
                 empty={visible.length === 0}
                 onRetry={onRetry}

@@ -13,11 +13,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ColGroup, ColumnResizer, balanceTableColumns } from "@/components/ui/column-resizer";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileSpreadsheet, X, Columns3, Eye, EyeOff, Pin, FileText } from "lucide-react";
+import { FileSpreadsheet, X, Columns3, Eye, EyeOff, Pin, FileText, MoveHorizontal } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import Papa from "papaparse";
 import { toast } from "sonner";
 import { CheckedState } from "@radix-ui/react-checkbox";
@@ -58,7 +59,7 @@ function InBodyStates({
   onRetry: () => void;
   emptyText: string;
 }) {
-  if (isLoading) {
+  if (isLoading && empty) {
     return (
       <tr>
         <td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
@@ -105,7 +106,7 @@ const CustomInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes
         type={type}
         ref={ref}
         className={cn(
-          "w-full text-sm bg-transparent border-none outline-none px-0 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 focus:ring-1 focus:ring-primary",
+          "w-full text-sm bg-transparent border-none outline-none px-0 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 focus:ring-primary",
           className,
         )}
         {...props}
@@ -155,6 +156,7 @@ export default function CertificadosPage() {
   const [rows, setRows] = useState<CertRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tableError, setTableError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderBy, setOrderBy] = useState<string>("obra");
   const [orderDir, setOrderDir] = useState<"asc" | "desc">("asc");
   const [query, setQuery] = useState("");
@@ -162,6 +164,7 @@ export default function CertificadosPage() {
   const [limit, setLimit] = useState(25);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const tableId = "certificados-table";
 
   // Filtros avanzados
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -182,7 +185,7 @@ export default function CertificadosPage() {
 
   const [hiddenCols, setHiddenCols] = useState<number[]>([]);
   const [pinnedColumns, setPinnedColumns] = useState<number[]>([0]);
-  const [resizeMode, setResizeMode] = useState<"balanced" | "fixed">("balanced");
+  const hasLoadedRef = useRef(false);
 
   const isHidden = useCallback((i: number) => hiddenCols.includes(i), [hiddenCols]);
   const isPinned = useCallback((colIndex: number) => pinnedColumns.includes(colIndex), [pinnedColumns]);
@@ -221,6 +224,11 @@ export default function CertificadosPage() {
     });
   }, []);
 
+  const handleBalanceColumns = useCallback(() => {
+    balanceTableColumns(tableId, { hiddenCols });
+    toast.success("Columnas balanceadas");
+  }, [hiddenCols, tableId]);
+
   // CSV Import
   const [showCsvImport, setShowCsvImport] = useState(false);
   const [isDraggingCsv, setIsDraggingCsv] = useState(false);
@@ -228,7 +236,7 @@ export default function CertificadosPage() {
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
 
-  const tableId = "certificados-table";
+  const showTableOverlay = isRefreshing || (isLoading && rows.length > 0);
 
   // Calculate sticky column offsets
   const [columnOffsets, setColumnOffsets] = useState<Record<number, number>>({});
@@ -300,7 +308,11 @@ export default function CertificadosPage() {
 
   const refresh = useCallback(async () => {
     try {
-      setIsLoading(true);
+      if (hasLoadedRef.current) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
       setTableError(null);
       const params = new URLSearchParams();
       params.set("orderBy", orderBy);
@@ -317,6 +329,7 @@ export default function CertificadosPage() {
       setPage(pag.page || 1);
       setTotalPages(pag.totalPages || 1);
       setTotal(pag.total || 0);
+      hasLoadedRef.current = true;
     } catch (err) {
       console.error(err);
       const msg = err instanceof Error ? err.message : "No se pudieron cargar los certificados";
@@ -324,6 +337,7 @@ export default function CertificadosPage() {
       toast.error(msg);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [orderBy, orderDir, page, limit, query, applyFiltersToParams]);
 
@@ -736,12 +750,10 @@ export default function CertificadosPage() {
               <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
                 Configuración
               </div>
-              <DropdownMenuCheckboxItem
-                checked={resizeMode === "fixed"}
-                onCheckedChange={(next) => setResizeMode(Boolean(next) ? "fixed" : "balanced")}
-              >
-                Ancho fijo (independiente)
-              </DropdownMenuCheckboxItem>
+              <DropdownMenuItem onClick={handleBalanceColumns} className="gap-2">
+                <MoveHorizontal className="h-4 w-4" />
+                Balancear columnas
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
                 Acciones rápidas
@@ -758,7 +770,7 @@ export default function CertificadosPage() {
               <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
                 Visibilidad y fijado de columnas
               </div>
-              <div className="max-h-[300px] overflow-y-auto">
+              <div className="">
                 {ALL_COLUMNS.map((col) => {
                   const isVisible = !hiddenCols.includes(col.index);
                   const isPinnedCol = pinnedColumns.includes(col.index);
@@ -797,11 +809,26 @@ export default function CertificadosPage() {
         </div>
       </div>
 
-      <div className="border border-border rounded-none overflow-hidden mb-6 w-full  max-w-[calc(100vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] 
+      <div className="relative border border-border rounded-none overflow-x-scroll w-full max-w-[calc(98vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] 
         bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_10px,var(--border)_10px,var(--border)_11px,transparent_12px)] bg-repeat">
-        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <AnimatePresence>
+          {showTableOverlay && (
+            <motion.div
+              key="certificados-table-loader"
+              className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              <p className="text-sm font-medium text-primary">Sincronizando tabla...</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className=" max-h-[70vh] ">
           <table className="text-sm table-fixed w-full " data-table-id={tableId}>
-            <ColGroup tableId={tableId} columns={12} mode={resizeMode} />
+            <ColGroup tableId={tableId} columns={12} mode="fixed" />
             <thead className="bg-muted/50 sticky top-0 z-30">
               <tr className="border-b">
                 <th {...getStickyProps(0, "relative px-4 py-3 text-left text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
@@ -818,7 +845,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={0} />
+                  <ColumnResizer tableId={tableId} colIndex={0} mode="fixed" />
                 </th>
                 <th {...getStickyProps(1, "relative px-4 py-3 text-left text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -834,7 +861,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={1} />
+                  <ColumnResizer tableId={tableId} colIndex={1} mode="fixed" />
                 </th>
                 <th {...getStickyProps(2, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -850,7 +877,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={2} />
+                  <ColumnResizer tableId={tableId} colIndex={2} mode="fixed" />
                 </th>
                 <th {...getStickyProps(3, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -866,7 +893,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={3} />
+                  <ColumnResizer tableId={tableId} colIndex={3} mode="fixed" />
                 </th>
                 <th {...getStickyProps(4, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -882,7 +909,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={4} />
+                  <ColumnResizer tableId={tableId} colIndex={4} mode="fixed" />
                 </th>
                 <th {...getStickyProps(5, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -898,7 +925,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={5} />
+                  <ColumnResizer tableId={tableId} colIndex={5} mode="fixed" />
                 </th>
                 <th {...getStickyProps(6, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -914,7 +941,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={6} />
+                  <ColumnResizer tableId={tableId} colIndex={6} mode="fixed" />
                 </th>
                 <th {...getStickyProps(7, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -930,7 +957,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={7} />
+                  <ColumnResizer tableId={tableId} colIndex={7} mode="fixed" />
                 </th>
                 <th {...getStickyProps(8, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -946,7 +973,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={8} />
+                  <ColumnResizer tableId={tableId} colIndex={8} mode="fixed" />
                 </th>
                 <th {...getStickyProps(9, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -962,7 +989,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={9} />
+                  <ColumnResizer tableId={tableId} colIndex={9} mode="fixed" />
                 </th>
                 <th {...getStickyProps(10, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -978,7 +1005,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={10} />
+                  <ColumnResizer tableId={tableId} colIndex={10} mode="fixed" />
                 </th>
                 <th {...getStickyProps(11, "relative px-4 py-3 text-center text-xs font-semibold uppercase outline outline-border whitespace-normal break-words align-center bg-sidebar")}>
                   <ContextMenu>
@@ -994,7 +1021,7 @@ export default function CertificadosPage() {
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
-                  <ColumnResizer tableId={tableId} colIndex={11} />
+                  <ColumnResizer tableId={tableId} colIndex={11} mode="fixed" />
                 </th>
               </tr>
             </thead>

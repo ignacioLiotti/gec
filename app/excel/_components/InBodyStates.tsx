@@ -3,7 +3,7 @@ import { RefreshCw } from "lucide-react";
 
 interface InBodyStatesProps {
 	isLoading: boolean;
-	tableError: Error | null;
+	tableError: string | null;
 	colspan: number;
 	empty: boolean;
 	onRetry: () => void;
@@ -18,7 +18,7 @@ export function InBodyStates({
 	onRetry,
 	emptyText,
 }: InBodyStatesProps) {
-	if (isLoading) {
+	if (isLoading && empty) {
 		return (
 			<tr>
 				<td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
@@ -37,7 +37,7 @@ export function InBodyStates({
 				<td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
 					<div className="flex flex-col items-center gap-3">
 						<p className="text-sm text-destructive">
-							Error al cargar los datos: {tableError.message}
+							Error al cargar los datos: {tableError}
 						</p>
 						<Button
 							variant="outline"

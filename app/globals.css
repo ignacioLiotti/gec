@@ -83,14 +83,6 @@
 	--sidebar-accent-foreground: hsl(240 5.9% 10%);
 	--sidebar-border: hsl(220 13% 91%);
 	--sidebar-ring: hsl(217.2 91.2% 59.8%);
-
-	--color-background-lines: linear-gradient(
-		60deg,
-		transparent 0%,
-		transparent 10px,
-		rgba(0, 0, 0, 0.05) 10px,
-		rgba(0, 0, 0, 0.05) 20px
-	);
 }
 
 .dark {

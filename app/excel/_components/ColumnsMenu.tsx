@@ -4,13 +4,12 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Columns3, Eye, EyeOff, Pin } from "lucide-react";
+import { Columns3, Eye, EyeOff, MoveHorizontal, Pin } from "lucide-react";
 
 export function ColumnsMenu({
   allColumns,
@@ -18,16 +17,14 @@ export function ColumnsMenu({
   setHiddenCols,
   pinnedColumns,
   togglePinColumn,
-  resizeMode,
-  setResizeMode,
+  onBalanceColumns,
 }: {
   allColumns: { index: number; label: string }[];
   hiddenCols: number[];
   setHiddenCols: React.Dispatch<React.SetStateAction<number[]>>;
   pinnedColumns: number[];
   togglePinColumn: (colIndex: number) => void;
-  resizeMode: "balanced" | "fixed";
-  setResizeMode: (v: "balanced" | "fixed") => void;
+  onBalanceColumns: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -41,12 +38,10 @@ export function ColumnsMenu({
         <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
           Configuración
         </div>
-        <DropdownMenuCheckboxItem
-          checked={resizeMode === "fixed"}
-          onCheckedChange={(next) => setResizeMode(Boolean(next) ? "fixed" : "balanced")}
-        >
-          Ancho fijo (independiente)
-        </DropdownMenuCheckboxItem>
+        <DropdownMenuItem onClick={onBalanceColumns} className="gap-2">
+          <MoveHorizontal className="h-4 w-4" />
+          Balancear columnas
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
           Acciones rápidas
@@ -63,7 +58,7 @@ export function ColumnsMenu({
         <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
           Visibilidad y fijado de columnas
         </div>
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="">
           {allColumns.map((col) => {
             const isVisible = !hiddenCols.includes(col.index);
             const isPinned = pinnedColumns.includes(col.index);

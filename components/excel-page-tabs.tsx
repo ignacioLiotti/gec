@@ -19,7 +19,7 @@ export function ExcelPageTabs() {
   if (!isExcelDetailPage) return null;
 
   return (
-    <TabsList>
+    <TabsList >
       {tabs.map((tab) => {
         const Icon = tab.icon;
         return (

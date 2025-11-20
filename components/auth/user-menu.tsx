@@ -127,7 +127,7 @@ export default function UserMenu({ email, userRoles }: UserMenuProps) {
         <span className="max-w-[160px] truncate">{email ?? "Iniciar sesión"}</span>
       </button>
       {open && isAuthed && (
-        <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-md border bg-card shadow-lg">
+        <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-md border bg-card shadow-lg z-[1000]">
           <div className="px-3 py-2">
             <div className="text-sm text-foreground/70">{email}</div>
             {userRoles && (

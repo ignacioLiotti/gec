@@ -104,6 +104,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<FileSystemItem | null>(null);
   const previewRequestIdRef = useRef(0);
+  const isUploadingMateriales = uploadingFiles && selectedFolder?.name === 'materiales';
 
   // Build file tree from storage
   const buildFileTree = useCallback(async () => {
@@ -1313,7 +1314,51 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
   };
 
   return (
-    <div className="min-h-[calc(100vh-9rem)] flex flex-col gap-4">
+    <div className="relative min-h-[calc(100vh-9rem)] flex flex-col gap-4">
+      <AnimatePresence>
+        {isUploadingMateriales && (
+          <motion.div
+            key="materiales-upload"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="relative w-full max-w-sm rounded-2xl border bg-card/95 p-6 shadow-2xl flex flex-col items-center gap-4 text-center"
+            >
+              <div className="relative flex items-center justify-center">
+                <div className="relative w-24 h-28 rounded-2xl border border-primary/30 bg-muted/50 shadow-inner overflow-hidden">
+                  <FileText className="w-12 h-12 text-primary/80 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10" />
+
+                  <motion.div
+                    className="absolute left-2 right-2 h-px bg-linear-to-r from-transparent via-primary/80 to-transparent"
+                    animate={{ y: [10, 80] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-lg font-semibold">Escaneando documento</p>
+                <p className="text-sm text-muted-foreground">
+                  Subiendo archivos a la carpeta materiales y extrayendo órdenes.
+                </p>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                <motion.span
+                  className="block h-full bg-linear-to-r from-primary/40 via-primary to-primary/40"
+                  animate={{ x: ['-100%', '100%'] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="w-full md:flex-1 relative">
@@ -1352,7 +1397,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
             onClick={() => setIsCreateFolderOpen(true)}
           >
             <FolderPlus className="w-4 h-4 mr-2" />
-            New Folder
+            Crear carpeta
           </Button>
 
           <Button
@@ -1366,7 +1411,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
             ) : (
               <Upload className="w-4 h-4 mr-2" />
             )}
-            Upload
+            Subir archivos
           </Button>
 
           <input
