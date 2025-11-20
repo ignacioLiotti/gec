@@ -1,103 +1,105 @@
-import Image from "next/image";
+'use client';
+
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { ArrowRight, BarChart3, FolderKanban, ShieldCheck, Sparkles } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
+const features = [
+  {
+    title: "Documentos centralizados",
+    description: "Gestioná planos, contratos y certificados en un único espacio seguro.",
+    icon: FolderKanban,
+  },
+  {
+    title: "Seguimiento inteligente",
+    description: "Visualizá métricas clave de cada obra para anticiparte a los desvíos.",
+    icon: BarChart3,
+  },
+  {
+    title: "Control y permisos",
+    description: "Definí accesos según roles para mantener la información protegida.",
+    icon: ShieldCheck,
+  },
+];
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-gradient-to-b from-background via-background/95 to-muted">
+      <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-16">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="space-y-6 text-center md:text-left"
+        >
+          <Badge variant="secondary" className="inline-flex items-center gap-1">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Bienvenido
+          </Badge>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          <div className="space-y-4">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              Todo lo que necesitás para coordinar tus obras en un solo lugar.
+            </h1>
+            <p className="text-muted-foreground text-lg max-w-2xl">
+              Simplificamos la carga de documentos, el seguimiento de certificados y la comunicación entre equipos.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button asChild size="lg" className="gap-2">
+              <Link href="/excel">
+                Entrar al panel
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="lg">
+              <Link href="/onboarding">Configurar una nueva obra</Link>
+            </Button>
+          </div>
+        </motion.div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          {features.map(({ title, description, icon: Icon }) => (
+            <motion.div
+              key={title}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <Card className="h-full border-muted/80 bg-card/70 backdrop-blur">
+                <CardContent className="space-y-3 p-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold">{title}</p>
+                    <p className="text-sm text-muted-foreground">{description}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="rounded-2xl border bg-card/70 p-8 text-center md:text-left"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <p className="text-lg font-medium text-foreground">
+            ¿Primera vez en la plataforma?
+          </p>
+          <p className="text-muted-foreground">
+            Explorá tus documentos en la pestaña Documentos o consultá los certificados activos desde el panel principal.
+          </p>
+        </motion.div>
+      </div>
     </div>
   );
 }
