@@ -135,6 +135,7 @@ function SidebarProvider({
             {
               "--sidebar-width": SIDEBAR_WIDTH,
               "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
+              "--sidebar-current-width": state === "collapsed" ? SIDEBAR_WIDTH_ICON : SIDEBAR_WIDTH,
               ...style,
             } as React.CSSProperties
           }

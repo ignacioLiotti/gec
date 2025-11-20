@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
 import {
+	AlertCircle,
 	ArrowLeft,
 	Building2,
 	Calendar,
@@ -33,9 +34,11 @@ import {
 	Download,
 	Trash2,
 	Pencil,
-	Eye
+	Eye,
+	StickyNote,
+	X,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { FileManager } from "@/components/obras/file-manager";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
@@ -46,6 +49,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type Certificate = {
 	id: string;
@@ -114,6 +119,56 @@ const toIsoDateTime = (value: string | null) => {
 	return date.toISOString();
 };
 
+const CircularProgress = ({ value }: { value: number }) => {
+	const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+	const radius = 80;
+	const strokeWidth = 30;
+	const circumference = 2 * Math.PI * radius;
+	const offset = circumference - (clamped / 100) * circumference;
+
+	return (
+		<div className="relative mx-auto flex items-center justify-center h-full w-full">
+			<svg
+				width={(radius + strokeWidth) * 2}
+				height={(radius + strokeWidth) * 2}
+				viewBox={`0 0 ${(radius + strokeWidth) * 2} ${(radius + strokeWidth) * 2}`}
+				className="drop-shadow-sm"
+			>
+				<circle
+					className="text-muted/40 h-full w-full"
+					stroke="currentColor"
+					fill="transparent"
+					strokeWidth={strokeWidth}
+					r={radius}
+					cx={radius + strokeWidth}
+					cy={radius + strokeWidth}
+				/>
+				<motion.circle
+					className="text-orange-primary h-full w-full"
+					stroke="currentColor"
+					fill="transparent"
+					strokeWidth={strokeWidth}
+					strokeLinecap="round"
+					r={radius}
+					cx={radius + strokeWidth}
+					cy={radius + strokeWidth}
+					strokeDasharray={circumference}
+					strokeDashoffset={offset}
+					initial={{ strokeDashoffset: circumference }}
+					animate={{ strokeDashoffset: offset }}
+					transition={{ type: "spring", stiffness: 140, damping: 20 }}
+				/>
+			</svg>
+			<div className="absolute flex flex-col items-center justify-center h-full w-full">
+				<div className="text-4xl font-bold leading-none">
+					{Number.isNaN(clamped) ? 0 : Math.round(clamped)}%
+				</div>
+				<div className="mt-1 text-xs text-muted-foreground">Completado</div>
+			</div>
+		</div>
+	);
+};
+
 export default function ObraDetailPage() {
 	const params = useParams();
 	const obraId = useMemo(() => {
@@ -136,6 +191,18 @@ export default function ObraDetailPage() {
 	const mountedRef = useRef(true);
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
+	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
+
+	type MemoriaNote = {
+		id: string;
+		text: string;
+		createdAt: string;
+		userId: string;
+		userName: string | null;
+	};
+	const [isMemoriaOpen, setIsMemoriaOpen] = useState(false);
+	const [memoriaDraft, setMemoriaDraft] = useState("");
+	const [memoriaNotes, setMemoriaNotes] = useState<MemoriaNote[]>([]);
 
 	type PendingDoc = { id: string; name: string; poliza: string; dueMode: "fixed" | "after_completion"; dueDate: string; offsetDays: number; done: boolean };
 	const [pendingDocs, setPendingDocs] = useState<PendingDoc[]>([
@@ -808,6 +875,8 @@ export default function ObraDetailPage() {
 					if (refresh.ok) {
 						const refreshed = await refresh.json();
 						applyObraToForm(refreshed.obra as Obra);
+						// After successful save, the current values become the new initial values
+						setInitialFormValues(refreshed.obra as Obra);
 					}
 				} catch (refreshError) {
 					console.error("Error refrescando la obra", refreshError);
@@ -822,6 +891,20 @@ export default function ObraDetailPage() {
 			}
 		},
 	});
+
+	// Helper to check if a field has unsaved changes
+	const isFieldDirty = useCallback((fieldName: keyof Obra) => {
+		const currentValue = form.state.values[fieldName];
+		const initialValue = initialFormValues[fieldName];
+		return currentValue !== initialValue;
+	}, [form.state.values, initialFormValues]);
+
+	// Helper to check if ANY field has unsaved changes
+	const hasUnsavedChanges = useCallback(() => {
+		return (Object.keys(form.state.values) as (keyof Obra)[]).some((key) => {
+			return isFieldDirty(key);
+		});
+	}, [form.state.values, isFieldDirty]);
 
 	useEffect(() => {
 		mountedRef.current = true;
@@ -841,6 +924,40 @@ export default function ObraDetailPage() {
 			}
 		})();
 	}, []);
+
+	// Load persisted memoria notes for this obra
+	useEffect(() => {
+		if (!obraId) return;
+		let cancelled = false;
+
+		void (async () => {
+			try {
+				const res = await fetch(`/api/obras/${obraId}/memoria`);
+				if (!res.ok) return;
+				const out = await res.json();
+				if (cancelled) return;
+				const items = Array.isArray(out?.notes) ? out.notes : [];
+				setMemoriaNotes(
+					items.map((n: any) => ({
+						id: String(n.id),
+						text: String(n.text ?? ""),
+						createdAt: String(n.createdAt ?? n.created_at ?? ""),
+						userId: String(n.userId ?? n.user_id ?? ""),
+						userName:
+							typeof n.userName === "string"
+								? n.userName
+								: n.user_name ?? null,
+					})),
+				);
+			} catch {
+				// ignore load errors silently for now
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [obraId]);
 
 	const getErrorMessage = useCallback((errors: unknown): string => {
 		if (!errors) return "";
@@ -869,6 +986,9 @@ export default function ObraDetailPage() {
 			(Object.keys(normalized) as (keyof Obra)[]).forEach((key) => {
 				form.setFieldValue(key, normalized[key]);
 			});
+
+			// Store initial values for dirty tracking
+			setInitialFormValues(normalized);
 		},
 		[form]
 	);
@@ -1314,28 +1434,8 @@ export default function ObraDetailPage() {
 	}, [refreshCertificates]);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-b from-background to-muted/20 "		>
-			<div className="container max-w-full mx-auto px-6">
-				{/* Header */}
-				<ExcelPageTabs />
-				{/* <motion.div
-					initial={{ opacity: 0, y: -20 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.3 }}
-					className="flex items-center justify-between"
-				>
-					<div className="space-y-1"> */}
-				{/* <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
-							<Link href="/excel" className="gap-2">
-								<ArrowLeft className="h-4 w-4" />
-								Volver al listado
-							</Link>
-						</Button> */}
-				{/* <h1 className="text-4xl font-bold tracking-tight">Detalle de Obra</h1>
-						<p className="text-muted-foreground">Gestiona la información y configuración de correos</p> */}
-				{/* </div>
-				</motion.div> */}
-
+		<div className="min-h-screen bg-gradient-to-b from-background to-muted/20 ">
+			<div className="container max-w-full mx-auto px-4 pt-2">
 				{routeError ? (
 					<motion.div
 						initial={{ opacity: 0, scale: 0.95 }}
@@ -1364,1762 +1464,2033 @@ export default function ObraDetailPage() {
 						<p className="font-medium">{loadError}</p>
 					</motion.div>
 				) : (
-					<Tabs value={activeTab} className="space-y-6">
-						<TabsContent value="general" className="space-y-6 relative">
-							{/* Edit/Preview Toggle Button */}
-							<motion.div
-								initial={{ opacity: 0 }}
-								animate={{ opacity: 1 }}
-								className="flex justify-end absolute right-0 -mt-13"
+					<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
+						<div className="flex-1 min-w-0">
+							<Tabs
+								value={activeTab}
+								onValueChange={(value) => setQueryParams({ tab: value })}
+								className="space-y-4"
 							>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									onClick={() => setIsGeneralTabEditMode(!isGeneralTabEditMode)}
-									className="gap-2"
-								>
+								<div className="flex items-center justify-between mb-2 gap-2">
+									<ExcelPageTabs />
+									<div className="flex items-center gap-2">
+
+										<motion.div
+											initial={{ opacity: 0 }}
+											animate={{ opacity: 1 }}
+											className="flex justify-end "
+										>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												onClick={() => setIsGeneralTabEditMode(!isGeneralTabEditMode)}
+												className="gap-2"
+											>
+												{isGeneralTabEditMode ? (
+													<>
+														<Pencil className="h-4 w-4" />
+														Modo Edición
+													</>
+												) : (
+													<>
+														<Eye className="h-4 w-4" />
+														Modo Vista Previa
+													</>
+												)}
+											</Button>
+										</motion.div>
+										<Button
+											type="button"
+											variant={isMemoriaOpen ? "default" : "outline"}
+											size="sm"
+											onClick={() => setIsMemoriaOpen((open) => !open)}
+											className="gap-2"
+										>
+											<StickyNote className="h-4 w-4" />
+											<span>Memoria</span>
+										</Button>
+									</div>
+								</div>
+
+								<TabsContent value="general" className="space-y-6 pt-0">
+									{/* Edit/Preview Toggle Button */}
+
+
 									{isGeneralTabEditMode ? (
 										<>
-											<Eye className="h-4 w-4" />
-											Modo Vista Previa
+											<motion.form
+												initial={{ opacity: 0, y: 20 }}
+												animate={{ opacity: 1, y: 0 }}
+												transition={{ duration: 0.4 }}
+												className="space-y-6"
+												onSubmit={(event) => {
+													event.preventDefault();
+													event.stopPropagation();
+													form.handleSubmit();
+												}}
+											>
+												{/* Key Metrics Cards */}
+												<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+													<motion.div
+														initial={{ opacity: 0, scale: 0.95 }}
+														animate={{ opacity: 1, scale: 1 }}
+														transition={{ delay: 0.1 }}
+														className="rounded-lg border bg-card p-4 shadow-sm flex flex-col col-span-1 row-span-1"
+													>
+														<form.Field name="porcentaje">
+															{(field) => (
+																<>
+																	<div className="flex items-center justify-between gap-2 text-muted-foreground mb-4">
+																		<div className="flex items-center gap-2">
+																			<Percent className="h-4 w-4" />
+																			<span className="text-sm font-medium">Avance</span>
+																		</div>
+																		<span className="text-xs uppercase tracking-wide text-orange-primary">
+																			Progreso
+																		</span>
+																	</div>
+																	<CircularProgress value={Number(field.state.value) ?? 0} />
+																	<div className="mt-4">
+																		<Input
+																			type="number"
+																			step="0.01"
+																			value={field.state.value}
+																			onChange={(e) => field.handleChange(Number(e.target.value))}
+																			onBlur={field.handleBlur}
+																			className="text-right"
+																		/>
+																	</div>
+																	{getErrorMessage(field.state.meta.errors) && (
+																		<p className="mt-1 text-xs text-red-500">
+																			{getErrorMessage(field.state.meta.errors)}
+																		</p>
+																	)}
+																</>
+															)}
+														</form.Field>
+													</motion.div>
+
+													<motion.section
+														initial={{ opacity: 0, y: 20 }}
+														animate={{ opacity: 1, y: 0 }}
+														transition={{ delay: 0.25 }}
+														className="rounded-lg border bg-card shadow-sm overflow-hidden col-span-2 row-span-1"
+													>
+														<div className="bg-muted/50 px-6 py-4 border-b">
+															<div className="flex items-center gap-2">
+																<Building2 className="h-5 w-5 text-primary" />
+																<h2 className="text-lg font-semibold">Información General</h2>
+															</div>
+														</div>
+														<div className="p-6 space-y-6">
+															<form.Field name="designacionYUbicacion">
+																{(field) => (
+																	<div>
+																		<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																			<MapPin className="h-4 w-4 text-muted-foreground" />
+																			Designación y ubicación
+																		</label>
+																		<Input
+																			type="text"
+																			value={field.state.value}
+																			onChange={(e) => field.handleChange(e.target.value)}
+																			onBlur={field.handleBlur}
+																			className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+																			placeholder="Describe la ubicación y características principales de la obra..."
+																		/>
+																		{getErrorMessage(field.state.meta.errors) && (
+																			<p className="mt-1 text-xs text-red-500">
+																				{getErrorMessage(field.state.meta.errors)}
+																			</p>
+																		)}
+																	</div>
+																)}
+															</form.Field>
+
+															<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+																<form.Field name="entidadContratante">
+																	{(field) => (
+																		<div>
+																			<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																				<Building2 className="h-4 w-4 text-muted-foreground" />
+																				Entidad contratante
+																			</label>
+																			<Input
+																				type="text"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(e.target.value)}
+																				onBlur={field.handleBlur}
+																				placeholder="Nombre de la entidad"
+																			/>
+																			{getErrorMessage(field.state.meta.errors) && (
+																				<p className="mt-1 text-xs text-red-500">
+																					{getErrorMessage(field.state.meta.errors)}
+																				</p>
+																			)}
+																		</div>
+																	)}
+																</form.Field>
+
+																<form.Field name="mesBasicoDeContrato">
+																	{(field) => (
+																		<div>
+																			<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																				<Calendar className="h-4 w-4 text-muted-foreground" />
+																				Mes básico de contrato
+																			</label>
+																			<Input
+																				type="text"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(e.target.value)}
+																				onBlur={field.handleBlur}
+																				placeholder="Ej: Enero 2024"
+																			/>
+																			{getErrorMessage(field.state.meta.errors) && (
+																				<p className="mt-1 text-xs text-red-500">
+																					{getErrorMessage(field.state.meta.errors)}
+																				</p>
+																			)}
+																		</div>
+																	)}
+																</form.Field>
+
+																<form.Field name="iniciacion">
+																	{(field) => (
+																		<div>
+																			<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																				<Calendar className="h-4 w-4 text-muted-foreground" />
+																				Fecha de iniciación
+																			</label>
+																			<Input
+																				type="text"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(e.target.value)}
+																				onBlur={field.handleBlur}
+																				placeholder="Ej: 01/01/2024"
+																			/>
+																			{getErrorMessage(field.state.meta.errors) && (
+																				<p className="mt-1 text-xs text-red-500">
+																					{getErrorMessage(field.state.meta.errors)}
+																				</p>
+																			)}
+																		</div>
+																	)}
+																</form.Field>
+
+																<form.Field name="n">
+																	{(field) => (
+																		<div>
+																			<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																				<FileText className="h-4 w-4 text-muted-foreground" />
+																				N° de Obra
+																			</label>
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				placeholder="Número de obra"
+																			/>
+																			{getErrorMessage(field.state.meta.errors) && (
+																				<p className="mt-1 text-xs text-red-500">
+																					{getErrorMessage(field.state.meta.errors)}
+																				</p>
+																			)}
+																		</div>
+																	)}
+																</form.Field>
+
+																<form.Field name="supDeObraM2">
+																	{(field) => (
+																		<div>
+																			<label className="flex items-center gap-2 text-sm font-medium mb-2">
+																				<TrendingUp className="h-4 w-4 text-muted-foreground" />
+																				Superficie (m²)
+																			</label>
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				placeholder="Superficie en m²"
+																			/>
+																			{getErrorMessage(field.state.meta.errors) && (
+																				<p className="mt-1 text-xs text-red-500">
+																					{getErrorMessage(field.state.meta.errors)}
+																				</p>
+																			)}
+																		</div>
+																	)}
+																</form.Field>
+															</div>
+														</div>
+													</motion.section>
+												</div>
+												{/* Financial Section */}
+												<motion.section
+													initial={{ opacity: 0, y: 20 }}
+													animate={{ opacity: 1, y: 0 }}
+													transition={{ delay: 0.3 }}
+													className="rounded-lg border bg-card shadow-sm overflow-hidden"
+												>
+													<div className="bg-muted/50 px-6 py-4 border-b">
+														<div className="flex items-center gap-2">
+															<DollarSign className="h-5 w-5 text-primary" />
+															<h2 className="text-lg font-semibold">Datos Financieros</h2>
+														</div>
+													</div>
+													<div className="p-6 space-y-4">
+														<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+															<form.Field name="contratoMasAmpliaciones">
+																{(field) => (
+																	<div>
+																		<label className="block text-sm font-medium text-muted-foreground mb-2">
+																			Contrato más ampliaciones
+																		</label>
+																		<div className="relative">
+																			<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																				$
+																			</span>
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				className="text-right pl-8 font-mono"
+																				placeholder="0.00"
+																			/>
+																		</div>
+																	</div>
+																)}
+															</form.Field>
+
+															<form.Field name="certificadoALaFecha">
+																{(field) => (
+																	<div>
+																		<label className="block text-sm font-medium text-muted-foreground mb-2">
+																			Certificado a la fecha
+																		</label>
+																		<div className="relative">
+																			<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																				$
+																			</span>
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				className="text-right pl-8 font-mono"
+																				placeholder="0.00"
+																			/>
+																		</div>
+																	</div>
+																)}
+															</form.Field>
+
+															<form.Field name="saldoACertificar">
+																{(field) => (
+																	<div>
+																		<label className="block text-sm font-medium text-muted-foreground mb-2">
+																			Saldo a certificar
+																		</label>
+																		<div className="relative">
+																			<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																				$
+																			</span>
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				className="text-right pl-8 font-mono"
+																				placeholder="0.00"
+																			/>
+																		</div>
+																	</div>
+																)}
+															</form.Field>
+														</div>
+
+														<Separator />
+
+														<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+															<form.Field name="segunContrato">
+																{(field) => (
+																	<div>
+																		<label className="block text-sm font-medium text-muted-foreground mb-2">
+																			Según contrato
+																		</label>
+																		<div className="relative">
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				className="text-right pr-14"
+																				placeholder="0"
+																			/>
+																			<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																				meses
+																			</span>
+																		</div>
+																	</div>
+																)}
+															</form.Field>
+
+															<form.Field name="prorrogasAcordadas">
+																{(field) => (
+																	<div>
+																		<label className="block text-sm font-medium text-muted-foreground mb-2">
+																			Prórrogas acordadas
+																		</label>
+																		<div className="relative">
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				className="text-right pr-14"
+																				placeholder="0"
+																			/>
+																			<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																				meses
+																			</span>
+																		</div>
+																	</div>
+																)}
+															</form.Field>
+
+															<form.Field name="plazoTotal">
+																{(field) => (
+																	<div>
+																		<label className="block text-sm font-medium text-muted-foreground mb-2">
+																			Plazo total
+																		</label>
+																		<div className="relative">
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				className="text-right pr-14"
+																				placeholder="0"
+																			/>
+																			<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																				meses
+																			</span>
+																		</div>
+																	</div>
+																)}
+															</form.Field>
+
+															<form.Field name="plazoTransc">
+																{(field) => (
+																	<div>
+																		<label className="block text-sm font-medium text-muted-foreground mb-2">
+																			Transcurrido
+																		</label>
+																		<div className="relative">
+																			<Input
+																				type="number"
+																				value={field.state.value}
+																				onChange={(e) => field.handleChange(Number(e.target.value))}
+																				onBlur={field.handleBlur}
+																				className="text-right pr-14"
+																				placeholder="0"
+																			/>
+																			<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																				meses
+																			</span>
+																		</div>
+																	</div>
+																)}
+															</form.Field>
+														</div>
+													</div>
+												</motion.section>
+
+											</motion.form>
+											{/* Action Buttons */}
+											<motion.div
+												initial={{ opacity: 0 }}
+												animate={{ opacity: 1 }}
+												transition={{ delay: 0.35 }}
+												className="flex justify-end gap-3 p-4 sticky bottom-0 left-0 w-full"
+											>
+												<Button asChild variant="outline">
+													<Link href="/excel">Cancelar</Link>
+												</Button>
+												<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+													{([canSubmit, isSubmitting]) => (
+														<Button type="submit" disabled={!canSubmit} className="min-w-[140px]">
+															{isSubmitting ? "Guardando..." : "Guardar cambios"}
+														</Button>
+													)}
+												</form.Subscribe>
+											</motion.div>
 										</>
 									) : (
-										<>
-											<Pencil className="h-4 w-4" />
-											Modo Edición
-										</>
-									)}
-								</Button>
-							</motion.div>
-
-							{isGeneralTabEditMode ? (
-								<motion.form
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ duration: 0.4 }}
-									className="space-y-6"
-									onSubmit={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-										form.handleSubmit();
-									}}
-								>
-									{/* Key Metrics Cards */}
-									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-										<motion.div
-											initial={{ opacity: 0, scale: 0.95 }}
-											animate={{ opacity: 1, scale: 1 }}
-											transition={{ delay: 0.1 }}
-											className="rounded-lg border bg-card p-4 shadow-sm"
-										>
-											<form.Field name="porcentaje">
-												{(field) => (
-													<>
-														<div className="flex items-center gap-2 text-muted-foreground mb-2">
+										/* Preview Mode */
+										<div className="space-y-6">
+											{/* Key Metrics Cards */}
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:auto-rows-fr">
+												<motion.div
+													initial={{ opacity: 0, scale: 0.95 }}
+													animate={{ opacity: 1, scale: 1 }}
+													transition={{ delay: 0.1 }}
+													className={cn(
+														"rounded-lg border bg-card p-4 shadow-sm flex flex-col col-span-1 row-span-1 transition-colors",
+														isFieldDirty('porcentaje') && "bg-orange-primary/5 border-orange-primary/40 border-2"
+													)}
+												>
+													<div className="flex items-center justify-between gap-2 text-muted-foreground mb-4">
+														<div className="flex items-center gap-2">
 															<Percent className="h-4 w-4" />
 															<span className="text-sm font-medium">Avance</span>
 														</div>
-														<div className="text-3xl font-bold">
-															{field.state.value}%
-														</div>
-														<div className="mt-3">
-															<Input
-																type="number"
-																step="0.01"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right"
-															/>
-														</div>
-														{getErrorMessage(field.state.meta.errors) && (
-															<p className="mt-1 text-xs text-red-500">
-																{getErrorMessage(field.state.meta.errors)}
-															</p>
-														)}
-													</>
-												)}
-											</form.Field>
-										</motion.div>
-
-										<motion.div
-											initial={{ opacity: 0, scale: 0.95 }}
-											animate={{ opacity: 1, scale: 1 }}
-											transition={{ delay: 0.15 }}
-											className="rounded-lg border bg-card p-4 shadow-sm"
-										>
-											<form.Field name="n">
-												{(field) => (
-													<>
-														<div className="flex items-center gap-2 text-muted-foreground mb-2">
-															<FileText className="h-4 w-4" />
-															<span className="text-sm font-medium">N° de Obra</span>
-														</div>
-														<div className="text-3xl font-bold">
-															#{field.state.value}
-														</div>
-														<div className="mt-3">
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right"
-															/>
-														</div>
-														{getErrorMessage(field.state.meta.errors) && (
-															<p className="mt-1 text-xs text-red-500">
-																{getErrorMessage(field.state.meta.errors)}
-															</p>
-														)}
-													</>
-												)}
-											</form.Field>
-										</motion.div>
-
-										<motion.div
-											initial={{ opacity: 0, scale: 0.95 }}
-											animate={{ opacity: 1, scale: 1 }}
-											transition={{ delay: 0.2 }}
-											className="rounded-lg border bg-card p-4 shadow-sm"
-										>
-											<form.Field name="supDeObraM2">
-												{(field) => (
-													<>
-														<div className="flex items-center gap-2 text-muted-foreground mb-2">
-															<TrendingUp className="h-4 w-4" />
-															<span className="text-sm font-medium">Superficie</span>
-														</div>
-														<div className="text-3xl font-bold">
-															{field.state.value.toLocaleString('es-AR')}
-														</div>
-														<div className="text-xs text-muted-foreground mb-2">m²</div>
-														<div className="mt-2">
-															<Input
-																type="number"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(Number(e.target.value))}
-																onBlur={field.handleBlur}
-																className="text-right"
-															/>
-														</div>
-														{getErrorMessage(field.state.meta.errors) && (
-															<p className="mt-1 text-xs text-red-500">
-																{getErrorMessage(field.state.meta.errors)}
-															</p>
-														)}
-													</>
-												)}
-											</form.Field>
-										</motion.div>
-									</div>
-
-									{/* Main Information Section */}
-									<motion.section
-										initial={{ opacity: 0, y: 20 }}
-										animate={{ opacity: 1, y: 0 }}
-										transition={{ delay: 0.25 }}
-										className="rounded-lg border bg-card shadow-sm overflow-hidden"
-									>
-										<div className="bg-muted/50 px-6 py-4 border-b">
-											<div className="flex items-center gap-2">
-												<Building2 className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Información General</h2>
-											</div>
-										</div>
-										<div className="p-6 space-y-6">
-											<form.Field name="designacionYUbicacion">
-												{(field) => (
-													<div>
-														<label className="flex items-center gap-2 text-sm font-medium mb-2">
-															<MapPin className="h-4 w-4 text-muted-foreground" />
-															Designación y ubicación
-														</label>
-														<textarea
-															value={field.state.value}
-															onChange={(e) => field.handleChange(e.target.value)}
-															onBlur={field.handleBlur}
-															className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px] resize-none"
-															placeholder="Describe la ubicación y características principales de la obra..."
-														/>
-														{getErrorMessage(field.state.meta.errors) && (
-															<p className="mt-1 text-xs text-red-500">
-																{getErrorMessage(field.state.meta.errors)}
-															</p>
+														{isFieldDirty('porcentaje') ? (
+															<span className="text-xs text-orange-primary font-semibold">
+																• Sin guardar
+															</span>
+														) : (
+															<span className="text-xs uppercase tracking-wide text-orange-primary">
+																Progreso
+															</span>
 														)}
 													</div>
-												)}
-											</form.Field>
+													<CircularProgress value={form.state.values.porcentaje ?? 0} />
+												</motion.div>
+												{/* Main Information Section */}
 
-											<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-												<form.Field name="entidadContratante">
-													{(field) => (
-														<div>
-															<label className="flex items-center gap-2 text-sm font-medium mb-2">
-																<Building2 className="h-4 w-4 text-muted-foreground" />
-																Entidad contratante
-															</label>
-															<Input
-																type="text"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(e.target.value)}
-																onBlur={field.handleBlur}
-																placeholder="Nombre de la entidad"
-															/>
-															{getErrorMessage(field.state.meta.errors) && (
-																<p className="mt-1 text-xs text-red-500">
-																	{getErrorMessage(field.state.meta.errors)}
-																</p>
-															)}
-														</div>
-													)}
-												</form.Field>
-
-												<form.Field name="mesBasicoDeContrato">
-													{(field) => (
-														<div>
-															<label className="flex items-center gap-2 text-sm font-medium mb-2">
-																<Calendar className="h-4 w-4 text-muted-foreground" />
-																Mes básico de contrato
-															</label>
-															<Input
-																type="text"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(e.target.value)}
-																onBlur={field.handleBlur}
-																placeholder="Ej: Enero 2024"
-															/>
-															{getErrorMessage(field.state.meta.errors) && (
-																<p className="mt-1 text-xs text-red-500">
-																	{getErrorMessage(field.state.meta.errors)}
-																</p>
-															)}
-														</div>
-													)}
-												</form.Field>
-
-												<form.Field name="iniciacion">
-													{(field) => (
-														<div>
-															<label className="flex items-center gap-2 text-sm font-medium mb-2">
-																<Calendar className="h-4 w-4 text-muted-foreground" />
-																Fecha de iniciación
-															</label>
-															<Input
-																type="text"
-																value={field.state.value}
-																onChange={(e) => field.handleChange(e.target.value)}
-																onBlur={field.handleBlur}
-																placeholder="Ej: 01/01/2024"
-															/>
-															{getErrorMessage(field.state.meta.errors) && (
-																<p className="mt-1 text-xs text-red-500">
-																	{getErrorMessage(field.state.meta.errors)}
-																</p>
-															)}
-														</div>
-													)}
-												</form.Field>
-											</div>
-										</div>
-									</motion.section>
-
-									{/* Financial Section */}
-									<motion.section
-										initial={{ opacity: 0, y: 20 }}
-										animate={{ opacity: 1, y: 0 }}
-										transition={{ delay: 0.3 }}
-										className="rounded-lg border bg-card shadow-sm overflow-hidden"
-									>
-										<div className="bg-muted/50 px-6 py-4 border-b">
-											<div className="flex items-center gap-2">
-												<DollarSign className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Datos Financieros</h2>
-											</div>
-										</div>
-										<div className="p-6 space-y-4">
-											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-												<form.Field name="contratoMasAmpliaciones">
-													{(field) => (
-														<div>
-															<label className="block text-sm font-medium text-muted-foreground mb-2">
-																Contrato más ampliaciones
-															</label>
-															<div className="relative">
-																<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																	$
-																</span>
-																<Input
-																	type="number"
-																	value={field.state.value}
-																	onChange={(e) => field.handleChange(Number(e.target.value))}
-																	onBlur={field.handleBlur}
-																	className="text-right pl-8 font-mono"
-																	placeholder="0.00"
-																/>
-															</div>
-														</div>
-													)}
-												</form.Field>
-
-												<form.Field name="certificadoALaFecha">
-													{(field) => (
-														<div>
-															<label className="block text-sm font-medium text-muted-foreground mb-2">
-																Certificado a la fecha
-															</label>
-															<div className="relative">
-																<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																	$
-																</span>
-																<Input
-																	type="number"
-																	value={field.state.value}
-																	onChange={(e) => field.handleChange(Number(e.target.value))}
-																	onBlur={field.handleBlur}
-																	className="text-right pl-8 font-mono"
-																	placeholder="0.00"
-																/>
-															</div>
-														</div>
-													)}
-												</form.Field>
-
-												<form.Field name="saldoACertificar">
-													{(field) => (
-														<div>
-															<label className="block text-sm font-medium text-muted-foreground mb-2">
-																Saldo a certificar
-															</label>
-															<div className="relative">
-																<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																	$
-																</span>
-																<Input
-																	type="number"
-																	value={field.state.value}
-																	onChange={(e) => field.handleChange(Number(e.target.value))}
-																	onBlur={field.handleBlur}
-																	className="text-right pl-8 font-mono"
-																	placeholder="0.00"
-																/>
-															</div>
-														</div>
-													)}
-												</form.Field>
-											</div>
-
-											<Separator />
-
-											<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-												<form.Field name="segunContrato">
-													{(field) => (
-														<div>
-															<label className="block text-sm font-medium text-muted-foreground mb-2">
-																Según contrato
-															</label>
-															<div className="relative">
-																<Input
-																	type="number"
-																	value={field.state.value}
-																	onChange={(e) => field.handleChange(Number(e.target.value))}
-																	onBlur={field.handleBlur}
-																	className="text-right pr-14"
-																	placeholder="0"
-																/>
-																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																	meses
-																</span>
-															</div>
-														</div>
-													)}
-												</form.Field>
-
-												<form.Field name="prorrogasAcordadas">
-													{(field) => (
-														<div>
-															<label className="block text-sm font-medium text-muted-foreground mb-2">
-																Prórrogas acordadas
-															</label>
-															<div className="relative">
-																<Input
-																	type="number"
-																	value={field.state.value}
-																	onChange={(e) => field.handleChange(Number(e.target.value))}
-																	onBlur={field.handleBlur}
-																	className="text-right pr-14"
-																	placeholder="0"
-																/>
-																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																	meses
-																</span>
-															</div>
-														</div>
-													)}
-												</form.Field>
-
-												<form.Field name="plazoTotal">
-													{(field) => (
-														<div>
-															<label className="block text-sm font-medium text-muted-foreground mb-2">
-																Plazo total
-															</label>
-															<div className="relative">
-																<Input
-																	type="number"
-																	value={field.state.value}
-																	onChange={(e) => field.handleChange(Number(e.target.value))}
-																	onBlur={field.handleBlur}
-																	className="text-right pr-14"
-																	placeholder="0"
-																/>
-																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																	meses
-																</span>
-															</div>
-														</div>
-													)}
-												</form.Field>
-
-												<form.Field name="plazoTransc">
-													{(field) => (
-														<div>
-															<label className="block text-sm font-medium text-muted-foreground mb-2">
-																Transcurrido
-															</label>
-															<div className="relative">
-																<Input
-																	type="number"
-																	value={field.state.value}
-																	onChange={(e) => field.handleChange(Number(e.target.value))}
-																	onBlur={field.handleBlur}
-																	className="text-right pr-14"
-																	placeholder="0"
-																/>
-																<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																	meses
-																</span>
-															</div>
-														</div>
-													)}
-												</form.Field>
-											</div>
-										</div>
-									</motion.section>
-
-									{/* Action Buttons */}
-									<motion.div
-										initial={{ opacity: 0 }}
-										animate={{ opacity: 1 }}
-										transition={{ delay: 0.35 }}
-										className="flex justify-end gap-3 pt-4"
-									>
-										<Button asChild variant="outline">
-											<Link href="/excel">Cancelar</Link>
-										</Button>
-										<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-											{([canSubmit, isSubmitting]) => (
-												<Button type="submit" disabled={!canSubmit} className="min-w-[140px]">
-													{isSubmitting ? "Guardando..." : "Guardar cambios"}
-												</Button>
-											)}
-										</form.Subscribe>
-									</motion.div>
-								</motion.form>
-							) : (
-								/* Preview Mode */
-								<div className="space-y-6">
-									{/* Key Metrics Cards */}
-									<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-										<motion.div
-											initial={{ opacity: 0, scale: 0.95 }}
-											animate={{ opacity: 1, scale: 1 }}
-											transition={{ delay: 0.1 }}
-											className="rounded-lg border bg-card p-4 shadow-sm"
-										>
-											<div className="flex items-center gap-2 text-muted-foreground mb-2">
-												<Percent className="h-4 w-4" />
-												<span className="text-sm font-medium">Avance</span>
-											</div>
-											<div className="text-3xl font-bold">
-												{form.state.values.porcentaje}%
-											</div>
-										</motion.div>
-
-										<motion.div
-											initial={{ opacity: 0, scale: 0.95 }}
-											animate={{ opacity: 1, scale: 1 }}
-											transition={{ delay: 0.15 }}
-											className="rounded-lg border bg-card p-4 shadow-sm"
-										>
-											<div className="flex items-center gap-2 text-muted-foreground mb-2">
-												<FileText className="h-4 w-4" />
-												<span className="text-sm font-medium">N° de Obra</span>
-											</div>
-											<div className="text-3xl font-bold">
-												#{form.state.values.n}
-											</div>
-										</motion.div>
-
-										<motion.div
-											initial={{ opacity: 0, scale: 0.95 }}
-											animate={{ opacity: 1, scale: 1 }}
-											transition={{ delay: 0.2 }}
-											className="rounded-lg border bg-card p-4 shadow-sm"
-										>
-											<div className="flex items-center gap-2 text-muted-foreground mb-2">
-												<TrendingUp className="h-4 w-4" />
-												<span className="text-sm font-medium">Superficie</span>
-											</div>
-											<div className="text-3xl font-bold">
-												{form.state.values.supDeObraM2.toLocaleString('es-AR')}
-											</div>
-											<div className="text-xs text-muted-foreground">m²</div>
-										</motion.div>
-									</div>
-
-									{/* Main Information Section */}
-									<motion.section
-										initial={{ opacity: 0, y: 20 }}
-										animate={{ opacity: 1, y: 0 }}
-										transition={{ delay: 0.25 }}
-										className="rounded-lg border bg-card shadow-sm overflow-hidden"
-									>
-										<div className="bg-muted/50 px-6 py-4 border-b">
-											<div className="flex items-center gap-2">
-												<Building2 className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Información General</h2>
-											</div>
-										</div>
-										<div className="p-6 space-y-6">
-											<div>
-												<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-													<MapPin className="h-4 w-4" />
-													Designación y ubicación
-												</label>
-												<p className="text-sm min-h-[100px]">
-													{form.state.values.designacionYUbicacion || 'No especificado'}
-												</p>
-											</div>
-
-											<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-														<Building2 className="h-4 w-4" />
-														Entidad contratante
-													</label>
-													<p className="text-sm">
-														{form.state.values.entidadContratante || 'No especificado'}
-													</p>
-												</div>
-
-												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-														<Calendar className="h-4 w-4" />
-														Mes básico de contrato
-													</label>
-													<p className="text-sm">
-														{form.state.values.mesBasicoDeContrato || 'No especificado'}
-													</p>
-												</div>
-
-												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-														<Calendar className="h-4 w-4" />
-														Fecha de iniciación
-													</label>
-													<p className="text-sm">
-														{form.state.values.iniciacion || 'No especificado'}
-													</p>
-												</div>
-											</div>
-										</div>
-									</motion.section>
-
-									{/* Financial Section */}
-									<motion.section
-										initial={{ opacity: 0, y: 20 }}
-										animate={{ opacity: 1, y: 0 }}
-										transition={{ delay: 0.3 }}
-										className="rounded-lg border bg-card shadow-sm overflow-hidden"
-									>
-										<div className="bg-muted/50 px-6 py-4 border-b">
-											<div className="flex items-center gap-2">
-												<DollarSign className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Datos Financieros</h2>
-											</div>
-										</div>
-										<div className="p-6 space-y-4">
-											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-												<div>
-													<label className="block text-sm font-medium text-muted-foreground mb-2">
-														Contrato más ampliaciones
-													</label>
-													<p className="text-sm font-mono">
-														$ {form.state.values.contratoMasAmpliaciones.toLocaleString('es-AR')}
-													</p>
-												</div>
-
-												<div>
-													<label className="block text-sm font-medium text-muted-foreground mb-2">
-														Certificado a la fecha
-													</label>
-													<p className="text-sm font-mono">
-														$ {form.state.values.certificadoALaFecha.toLocaleString('es-AR')}
-													</p>
-												</div>
-
-												<div>
-													<label className="block text-sm font-medium text-muted-foreground mb-2">
-														Saldo a certificar
-													</label>
-													<p className="text-sm font-mono">
-														$ {form.state.values.saldoACertificar.toLocaleString('es-AR')}
-													</p>
-												</div>
-											</div>
-
-											<Separator />
-
-											<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-												<div>
-													<label className="block text-sm font-medium text-muted-foreground mb-2">
-														Según contrato
-													</label>
-													<p className="text-sm">
-														{form.state.values.segunContrato} meses
-													</p>
-												</div>
-
-												<div>
-													<label className="block text-sm font-medium text-muted-foreground mb-2">
-														Prórrogas acordadas
-													</label>
-													<p className="text-sm">
-														{form.state.values.prorrogasAcordadas} meses
-													</p>
-												</div>
-
-												<div>
-													<label className="block text-sm font-medium text-muted-foreground mb-2">
-														Plazo total
-													</label>
-													<p className="text-sm">
-														{form.state.values.plazoTotal} meses
-													</p>
-												</div>
-
-												<div>
-													<label className="block text-sm font-medium text-muted-foreground mb-2">
-														Transcurrido
-													</label>
-													<p className="text-sm">
-														{form.state.values.plazoTransc} meses
-													</p>
-												</div>
-											</div>
-										</div>
-									</motion.section>
-								</div>
-							)}
-						</TabsContent>
-
-						{/* Flujo Tab */}
-						<TabsContent value="flujo" className="space-y-6">
-							<motion.section
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.4 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden"
-							>
-								<div className="bg-muted/50 px-6 py-4 border-b">
-									<div className="flex items-center justify-between">
-										<div>
-											<div className="flex items-center gap-2">
-												<Mail className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Flujo de Finalización</h2>
-											</div>
-											<p className="text-sm text-muted-foreground mt-1">
-												Configura acciones automáticas al alcanzar el 100% de la obra
-											</p>
-										</div>
-										<Button
-											variant={isAddingFlujoAction ? "outline" : "default"}
-											onClick={() => setIsAddingFlujoAction(!isAddingFlujoAction)}
-											size="sm"
-										>
-											<Plus className="h-4 w-4 mr-2" />
-											{isAddingFlujoAction ? "Cancelar" : "Nueva Acción"}
-										</Button>
-									</div>
-								</div>
-
-								<div className="p-6 space-y-6">
-									{/* Add New Action Form */}
-									{isAddingFlujoAction && (
-										<motion.div
-											initial={{ opacity: 0, height: 0 }}
-											animate={{ opacity: 1, height: "auto" }}
-											exit={{ opacity: 0, height: 0 }}
-											className="rounded-lg border bg-muted/30 p-4 space-y-4"
-										>
-											<h3 className="text-sm font-semibold">Nueva Acción</h3>
-
-											{/* Action Type */}
-											<div>
-												<label className="text-sm font-medium mb-2 block">Tipo de acción</label>
-												<div className="flex gap-2">
-													<Button
-														type="button"
-														variant={newFlujoAction.action_type === 'email' ? 'default' : 'outline'}
-														size="sm"
-														onClick={() => setNewFlujoAction({ ...newFlujoAction, action_type: 'email' })}
-													>
-														<Mail className="h-4 w-4 mr-2" />
-														Email
-													</Button>
-													<Button
-														type="button"
-														variant={newFlujoAction.action_type === 'calendar_event' ? 'default' : 'outline'}
-														size="sm"
-														onClick={() => setNewFlujoAction({ ...newFlujoAction, action_type: 'calendar_event' })}
-													>
-														<Calendar className="h-4 w-4 mr-2" />
-														Evento de Calendario
-													</Button>
-												</div>
-											</div>
-
-											{/* Timing Mode */}
-											<div>
-												<label className="text-sm font-medium mb-2 block">¿Cuándo ejecutar?</label>
-												<div className="flex gap-2 flex-wrap">
-													<Button
-														type="button"
-														variant={newFlujoAction.timing_mode === 'immediate' ? 'default' : 'outline'}
-														size="sm"
-														onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'immediate' })}
-													>
-														Inmediato
-													</Button>
-													<Button
-														type="button"
-														variant={newFlujoAction.timing_mode === 'offset' ? 'default' : 'outline'}
-														size="sm"
-														onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'offset' })}
-													>
-														Después de X tiempo
-													</Button>
-													<Button
-														type="button"
-														variant={newFlujoAction.timing_mode === 'scheduled' ? 'default' : 'outline'}
-														size="sm"
-														onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'scheduled' })}
-													>
-														Fecha específica
-													</Button>
-												</div>
-											</div>
-
-											{/* Timing Details */}
-											{newFlujoAction.timing_mode === 'offset' && (
-												<div className="flex gap-2 items-end">
-													<div className="flex-1">
-														<label className="text-sm font-medium mb-2 block">Cantidad</label>
-														<Input
-															type="number"
-															min="1"
-															value={newFlujoAction.offset_value || 1}
-															onChange={(e) => setNewFlujoAction({ ...newFlujoAction, offset_value: parseInt(e.target.value) || 1 })}
-														/>
-													</div>
-													<div className="flex-1">
-														<label className="text-sm font-medium mb-2 block">Unidad</label>
-														<select
-															className="w-full rounded-md border px-3 py-2 text-sm"
-															value={newFlujoAction.offset_unit || 'days'}
-															onChange={(e) => setNewFlujoAction({ ...newFlujoAction, offset_unit: e.target.value as any })}
-														>
-															<option value="minutes">Minutos</option>
-															<option value="hours">Horas</option>
-															<option value="days">Días</option>
-															<option value="weeks">Semanas</option>
-															<option value="months">Meses</option>
-														</select>
-													</div>
-												</div>
-											)}
-
-											{newFlujoAction.timing_mode === 'scheduled' && (
-												<div>
-													<label className="text-sm font-medium mb-2 block">Fecha y hora</label>
-													<Input
-														type="datetime-local"
-														value={newFlujoAction.scheduled_date || ''}
-														onChange={(e) => setNewFlujoAction({ ...newFlujoAction, scheduled_date: e.target.value })}
-													/>
-												</div>
-											)}
-
-											{/* Title */}
-											<div>
-												<label className="text-sm font-medium mb-2 block">Título *</label>
-												<Input
-													type="text"
-													placeholder="Ej: Revisión de documentación final"
-													value={newFlujoAction.title || ''}
-													onChange={(e) => setNewFlujoAction({ ...newFlujoAction, title: e.target.value })}
-												/>
-											</div>
-
-											{/* Message */}
-											<div>
-												<label className="text-sm font-medium mb-2 block">Mensaje</label>
-												<textarea
-													className="w-full rounded-md border px-3 py-2 text-sm min-h-[100px]"
-													placeholder="Mensaje detallado de la acción..."
-													value={newFlujoAction.message || ''}
-													onChange={(e) => setNewFlujoAction({ ...newFlujoAction, message: e.target.value })}
-												/>
-											</div>
-
-											{/* Recipients */}
-											<div className="space-y-2">
-												<label className="text-sm font-medium mb-1 block">
-													Destinatarios
-												</label>
-												<p className="text-xs text-muted-foreground">
-													Si no seleccionás nada, se notificará solo al usuario actual. Podés elegir
-													un usuario específico, un rol, o ambos.
-												</p>
-												<div className="grid gap-3 md:grid-cols-2">
-													<div>
-														<label className="text-xs font-medium mb-1 block">
-															Usuario específico
-														</label>
-														<Select
-															value={selectedRecipientUserId || "none"}
-															onValueChange={(value) =>
-																setSelectedRecipientUserId(
-																	value === "none" ? "" : value
-																)
-															}
-														>
-															<SelectTrigger className="w-full text-xs">
-																<SelectValue placeholder="Seleccionar usuario" />
-															</SelectTrigger>
-															<SelectContent>
-																<SelectItem value="none">
-																	<span className="text-xs text-muted-foreground">
-																		Ninguno (solo vos)
-																	</span>
-																</SelectItem>
-																{obraUsers.map((u) => (
-																	<SelectItem key={u.id} value={u.id}>
-																		<span className="text-xs">
-																			{u.full_name || u.id}
-																		</span>
-																	</SelectItem>
-																))}
-															</SelectContent>
-														</Select>
-													</div>
-													<div>
-														<label className="text-xs font-medium mb-1 block">
-															Rol
-														</label>
-														<Select
-															value={selectedRecipientRoleId || "none"}
-															onValueChange={(value) =>
-																setSelectedRecipientRoleId(
-																	value === "none" ? "" : value
-																)
-															}
-														>
-															<SelectTrigger className="w-full text-xs">
-																<SelectValue placeholder="Seleccionar rol" />
-															</SelectTrigger>
-															<SelectContent>
-																<SelectItem value="none">
-																	<span className="text-xs text-muted-foreground">
-																		Ninguno
-																	</span>
-																</SelectItem>
-																{obraRoles.map((r) => (
-																	<SelectItem key={r.id} value={r.id}>
-																		<span className="text-xs">
-																			{r.name || r.key}
-																		</span>
-																	</SelectItem>
-																))}
-															</SelectContent>
-														</Select>
-													</div>
-												</div>
-											</div>
-
-											{/* Notification Types */}
-											<div>
-												<label className="text-sm font-medium mb-2 block">Tipo de notificación</label>
-												<div className="space-y-2">
-													<div className="flex items-center gap-2">
-														<input
-															type="checkbox"
-															id="notif-in-app"
-															className="h-4 w-4 rounded border-gray-300"
-															checked={newFlujoAction.notification_types?.includes('in_app') || false}
-															onChange={(e) => {
-																const current = (newFlujoAction.notification_types ||
-																	[]) as ("in_app" | "email")[];
-																const updated: ("in_app" | "email")[] = e.target.checked
-																	? [...current.filter((t) => t !== "in_app"), "in_app"]
-																	: current.filter((t) => t !== "in_app");
-																setNewFlujoAction({
-																	...newFlujoAction,
-																	notification_types:
-																		updated.length > 0 ? updated : ["in_app"],
-																});
-															}}
-														/>
-														<label htmlFor="notif-in-app" className="text-sm cursor-pointer">
-															Notificación en la aplicación
-														</label>
-													</div>
-													<div className="flex items-center gap-2">
-														<input
-															type="checkbox"
-															id="notif-email"
-															className="h-4 w-4 rounded border-gray-300"
-															checked={newFlujoAction.notification_types?.includes('email') || false}
-															onChange={(e) => {
-																const current = (newFlujoAction.notification_types ||
-																	[]) as ("in_app" | "email")[];
-																const updated: ("in_app" | "email")[] = e.target.checked
-																	? [...current.filter((t) => t !== "email"), "email"]
-																	: current.filter((t) => t !== "email");
-																setNewFlujoAction({
-																	...newFlujoAction,
-																	notification_types:
-																		updated.length > 0 ? updated : ["in_app"],
-																});
-															}}
-														/>
-														<label htmlFor="notif-email" className="text-sm cursor-pointer">
-															Notificación por correo electrónico
-														</label>
-													</div>
-												</div>
-												<p className="text-xs text-muted-foreground mt-1">
-													Selecciona cómo deseas recibir las notificaciones de esta acción
-												</p>
-											</div>
-
-											{/* Actions */}
-											<div className="flex justify-end gap-2">
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													onClick={() => {
-														setIsAddingFlujoAction(false);
-														setNewFlujoAction({
-															action_type: 'email',
-															timing_mode: 'immediate',
-															offset_value: 1,
-															offset_unit: 'days',
-															title: '',
-															message: '',
-															recipient_user_ids: [],
-															notification_types: ["in_app"],
-															enabled: true,
-														});
-													}}
-												>
-													Cancelar
-												</Button>
-												<Button
-													type="button"
-													size="sm"
-													onClick={saveFlujoAction}
-												>
-													Guardar Acción
-												</Button>
-											</div>
-										</motion.div>
-									)}
-
-									{/* List of Existing Actions */}
-									<div className="space-y-3">
-										{isLoadingFlujoActions ? (
-											<p className="text-sm text-muted-foreground text-center py-8">Cargando acciones...</p>
-										) : flujoActions.length === 0 ? (
-											<p className="text-sm text-muted-foreground text-center py-8">
-												No hay acciones configuradas. Crea una nueva acción para comenzar.
-											</p>
-										) : (
-											flujoActions.map((action, idx) => (
-												<motion.div
-													key={action.id}
-													initial={{ opacity: 0, y: 8 }}
+												<motion.section
+													initial={{ opacity: 0, y: 20 }}
 													animate={{ opacity: 1, y: 0 }}
-													transition={{ delay: idx * 0.05 }}
-													className={`rounded-lg border p-4 ${!action.enabled ? 'opacity-50' : ''}`}
+													transition={{ delay: 0.25 }}
+													className="rounded-lg border bg-card shadow-sm overflow-hidden col-span-2 row-span-1"
 												>
-													<div className="flex items-start justify-between">
-														<div className="flex-1">
-															<div className="flex items-center gap-2 mb-2">
-																{action.action_type === 'email' ? (
-																	<Mail className="h-4 w-4 text-primary" />
-																) : (
-																	<Calendar className="h-4 w-4 text-primary" />
-																)}
-																<h4 className="font-semibold text-sm">{action.title}</h4>
-																<span className={`text-xs px-2 py-0.5 rounded-full ${action.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-																	{action.enabled ? 'Activa' : 'Inactiva'}
-																</span>
-															</div>
-															{action.message && (
-																<p className="text-sm text-muted-foreground mb-2">{action.message}</p>
-															)}
-															<div className="flex items-center gap-4 text-xs text-muted-foreground">
-																<span>
-																	{action.action_type === 'email' ? 'Email' : 'Evento de Calendario'}
-																</span>
-																<span>•</span>
-																<span>
-																	{action.timing_mode === 'immediate' && 'Inmediato'}
-																	{action.timing_mode === 'offset' && `${action.offset_value} ${action.offset_unit} después`}
-																	{action.timing_mode === 'scheduled' && `Fecha: ${new Date(action.scheduled_date!).toLocaleDateString()}`}
-																</span>
-																{action.notification_types && action.notification_types.length > 0 && (
-																	<>
-																		<span>•</span>
-																		<span className="flex items-center gap-1">
-																			{action.notification_types.includes('in_app') && (
-																				<span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">App</span>
-																			)}
-																			{action.notification_types.includes('email') && (
-																				<span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Email</span>
-																			)}
-																		</span>
-																	</>
-																)}
-															</div>
-														</div>
+													<div className="bg-muted/50 px-6 py-4 border-b">
 														<div className="flex items-center gap-2">
-															<Button
-																type="button"
-																variant="ghost"
-																size="sm"
-																onClick={() => toggleFlujoAction(action.id, !action.enabled)}
-															>
-																{action.enabled ? 'Desactivar' : 'Activar'}
-															</Button>
-															<Button
-																type="button"
-																variant="ghost"
-																size="sm"
-																onClick={() => deleteFlujoAction(action.id)}
-																className="text-destructive hover:text-destructive hover:bg-destructive/10"
-															>
-																<Trash2 className="h-4 w-4" />
-															</Button>
+															<Building2 className="h-5 w-5 text-primary" />
+															<h2 className="text-lg font-semibold">Información General</h2>
 														</div>
+													</div>
+													<div className="p-6 space-y-6">
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('designacionYUbicacion') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+																<MapPin className="h-4 w-4" />
+																Designación y ubicación
+																{isFieldDirty('designacionYUbicacion') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm ">
+																{form.state.values.designacionYUbicacion || 'No especificado'}
+															</p>
+														</div>
+
+														<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+															<div className={cn(
+																"p-3 rounded-md transition-colors",
+																isFieldDirty('entidadContratante') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+															)}>
+																<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+																	<Building2 className="h-4 w-4" />
+																	Entidad contratante
+																	{isFieldDirty('entidadContratante') && (
+																		<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																	)}
+																</label>
+																<p className="text-sm">
+																	{form.state.values.entidadContratante || 'No especificado'}
+																</p>
+															</div>
+
+															<div className={cn(
+																"p-3 rounded-md transition-colors",
+																isFieldDirty('mesBasicoDeContrato') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+															)}>
+																<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+																	<Calendar className="h-4 w-4" />
+																	Mes básico de contrato
+																	{isFieldDirty('mesBasicoDeContrato') && (
+																		<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																	)}
+																</label>
+																<p className="text-sm">
+																	{form.state.values.mesBasicoDeContrato || 'No especificado'}
+																</p>
+															</div>
+
+															<div className={cn(
+																"p-3 rounded-md transition-colors",
+																isFieldDirty('iniciacion') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+															)}>
+																<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+																	<Calendar className="h-4 w-4" />
+																	Fecha de iniciación
+																	{isFieldDirty('iniciacion') && (
+																		<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																	)}
+																</label>
+																<p className="text-sm">
+																	{form.state.values.iniciacion || 'No especificado'}
+																</p>
+															</div>
+
+															<div className={cn(
+																"p-3 rounded-md transition-colors",
+																isFieldDirty('n') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+															)}>
+																<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+																	<FileText className="h-4 w-4" />
+																	N° de Obra
+																	{isFieldDirty('n') && (
+																		<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																	)}
+																</label>
+																<p className="text-sm">
+																	#{form.state.values.n}
+																</p>
+															</div>
+
+															<div className={cn(
+																"p-3 rounded-md transition-colors",
+																isFieldDirty('supDeObraM2') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+															)}>
+																<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
+																	<TrendingUp className="h-4 w-4" />
+																	Superficie
+																	{isFieldDirty('supDeObraM2') && (
+																		<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																	)}
+																</label>
+																<p className="text-sm">
+																	{form.state.values.supDeObraM2.toLocaleString('es-AR')} m²
+																</p>
+															</div>
+
+														</div>
+													</div>
+												</motion.section>
+
+
+											</div>
+
+											{/* Financial Section */}
+											<motion.section
+												initial={{ opacity: 0, y: 20 }}
+												animate={{ opacity: 1, y: 0 }}
+												transition={{ delay: 0.3 }}
+												className="rounded-lg border bg-card shadow-sm overflow-hidden"
+											>
+												<div className="bg-muted/50 px-6 py-4 border-b">
+													<div className="flex items-center gap-2">
+														<DollarSign className="h-5 w-5 text-primary" />
+														<h2 className="text-lg font-semibold">Datos Financieros</h2>
+													</div>
+												</div>
+												<div className="p-6 space-y-4">
+													<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('contratoMasAmpliaciones') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+																Contrato más ampliaciones
+																{isFieldDirty('contratoMasAmpliaciones') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm font-mono">
+																$ {form.state.values.contratoMasAmpliaciones.toLocaleString('es-AR')}
+															</p>
+														</div>
+
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('certificadoALaFecha') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+																Certificado a la fecha
+																{isFieldDirty('certificadoALaFecha') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm font-mono">
+																$ {form.state.values.certificadoALaFecha.toLocaleString('es-AR')}
+															</p>
+														</div>
+
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('saldoACertificar') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+																Saldo a certificar
+																{isFieldDirty('saldoACertificar') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm font-mono">
+																$ {form.state.values.saldoACertificar.toLocaleString('es-AR')}
+															</p>
+														</div>
+													</div>
+
+													<Separator />
+
+													<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('segunContrato') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+																Según contrato
+																{isFieldDirty('segunContrato') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm">
+																{form.state.values.segunContrato} meses
+															</p>
+														</div>
+
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('prorrogasAcordadas') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+																Prórrogas acordadas
+																{isFieldDirty('prorrogasAcordadas') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm">
+																{form.state.values.prorrogasAcordadas} meses
+															</p>
+														</div>
+
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('plazoTotal') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+																Plazo total
+																{isFieldDirty('plazoTotal') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm">
+																{form.state.values.plazoTotal} meses
+															</p>
+														</div>
+
+														<div className={cn(
+															"p-3 rounded-md transition-colors",
+															isFieldDirty('plazoTransc') && "bg-orange-primary/5 border-2 border-orange-primary/40"
+														)}>
+															<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+																Transcurrido
+																{isFieldDirty('plazoTransc') && (
+																	<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+																)}
+															</label>
+															<p className="text-sm">
+																{form.state.values.plazoTransc} meses
+															</p>
+														</div>
+													</div>
+												</div>
+											</motion.section>
+
+											{/* Save Button for Unsaved Changes in Preview Mode */}
+											{hasUnsavedChanges() && (
+												<motion.div
+													initial={{ opacity: 0, y: 20 }}
+													animate={{ opacity: 1, y: 0 }}
+													transition={{ delay: 0.4 }}
+													className="flex justify-center flex-col items-end gap-3 p-4 sticky bottom-0 left-0"
+												>
+													<div className="flex items-center gap-2 text-orange-primary">
+														<AlertCircle className="h-5 w-5" />
+														<p className="text-sm font-semibold">Tenés cambios sin guardar</p>
+													</div>
+													<div className="flex gap-3 justify-end">
+														<Button
+															variant="outline"
+															onClick={() => {
+																// Reset form to initial values
+																applyObraToForm(initialFormValues);
+															}}
+														>
+															Descartar cambios
+														</Button>
+														<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+															{([canSubmit, isSubmitting]) => (
+																<Button
+																	onClick={(e) => {
+																		e.preventDefault();
+																		form.handleSubmit();
+																	}}
+																	disabled={!canSubmit || isSubmitting}
+																	className="gap-2"
+																>
+																	{isSubmitting ? (
+																		<>
+																			<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+																				<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+																				<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+																			</svg>
+																			Guardando...
+																		</>
+																	) : (
+																		<>
+																			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+																			Guardar cambios
+																		</>
+																	)}
+																</Button>
+															)}
+														</form.Subscribe>
 													</div>
 												</motion.div>
-											))
-										)}
-									</div>
-								</div>
-							</motion.section>
-						</TabsContent>
-
-						{/* Certificates Tab */}
-						<TabsContent value="certificates" className="space-y-6">
-							<motion.section
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.4 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden"
-							>
-								<div className="bg-muted/50 px-6 py-4 border-b">
-									<div className="flex items-center justify-between">
-										<div>
-											<div className="flex items-center gap-2">
-												<Receipt className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Certificados de Obra</h2>
-											</div>
-											<p className="text-sm text-muted-foreground mt-1">
-												{certificates.length} {certificates.length === 1 ? 'certificado registrado' : 'certificados registrados'}
-											</p>
-										</div>
-										<Button
-											variant={isAddingCertificate ? "outline" : "default"}
-											onClick={handleToggleAddCertificate}
-											disabled={isCreatingCertificate}
-											className="gap-2"
-										>
-											{isAddingCertificate ? (
-												"Cancelar"
-											) : (
-												<>
-													<Plus className="h-4 w-4" />
-													Agregar certificado
-												</>
 											)}
-										</Button>
-									</div>
-								</div>
+										</div>
+									)}
+								</TabsContent>
 
-								<div className="p-6 space-y-6">
-									{isAddingCertificate && (
-										<motion.div
-											initial={{ opacity: 0, height: 0 }}
-											animate={{ opacity: 1, height: "auto" }}
-											exit={{ opacity: 0, height: 0 }}
-											className="overflow-hidden"
-										>
-											<form onSubmit={handleCreateCertificate} className="space-y-4 p-4 rounded-lg bg-muted/50 border">
-												<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-													<div>
-														<label className="block text-sm font-medium mb-2">
-															N° de expediente
-														</label>
-														<Input
-															type="text"
-															value={newCertificate.n_exp}
-															onChange={(event) =>
-																handleNewCertificateChange("n_exp", event.target.value)
-															}
-															placeholder="Ej: EXP-2024-001"
-															required
-														/>
+								{/* Flujo Tab */}
+								<TabsContent value="flujo" className="space-y-6">
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ duration: 0.4 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center justify-between">
+												<div>
+													<div className="flex items-center gap-2">
+														<Mail className="h-5 w-5 text-primary" />
+														<h2 className="text-lg font-semibold">Flujo de Finalización</h2>
 													</div>
+													<p className="text-sm text-muted-foreground mt-1">
+														Configura acciones automáticas al alcanzar el 100% de la obra
+													</p>
+												</div>
+												<Button
+													variant={isAddingFlujoAction ? "outline" : "default"}
+													onClick={() => setIsAddingFlujoAction(!isAddingFlujoAction)}
+													size="sm"
+												>
+													<Plus className="h-4 w-4 mr-2" />
+													{isAddingFlujoAction ? "Cancelar" : "Nueva Acción"}
+												</Button>
+											</div>
+										</div>
+
+										<div className="p-6 space-y-6">
+											{/* Add New Action Form */}
+											{isAddingFlujoAction && (
+												<motion.div
+													initial={{ opacity: 0, height: 0 }}
+													animate={{ opacity: 1, height: "auto" }}
+													exit={{ opacity: 0, height: 0 }}
+													className="rounded-lg border bg-muted/30 p-4 space-y-4"
+												>
+													<h3 className="text-sm font-semibold">Nueva Acción</h3>
+
+													{/* Action Type */}
 													<div>
-														<label className="block text-sm font-medium mb-2">
-															N° de certificado
-														</label>
-														<Input
-															type="number"
-															value={newCertificate.n_certificado}
-															onChange={(event) =>
-																handleNewCertificateChange("n_certificado", event.target.value)
-															}
-															placeholder="1"
-															required
-														/>
-													</div>
-													<div>
-														<label className="block text-sm font-medium mb-2">
-															Monto
-														</label>
-														<div className="relative">
-															<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-																$
-															</span>
-															<Input
-																type="number"
-																step="0.01"
-																value={newCertificate.monto}
-																onChange={(event) =>
-																	handleNewCertificateChange("monto", event.target.value)
-																}
-																className="pl-8 text-right font-mono"
-																placeholder="0.00"
-																required
-															/>
+														<label className="text-sm font-medium mb-2 block">Tipo de acción</label>
+														<div className="flex gap-2">
+															<Button
+																type="button"
+																variant={newFlujoAction.action_type === 'email' ? 'default' : 'outline'}
+																size="sm"
+																onClick={() => setNewFlujoAction({ ...newFlujoAction, action_type: 'email' })}
+															>
+																<Mail className="h-4 w-4 mr-2" />
+																Email
+															</Button>
+															<Button
+																type="button"
+																variant={newFlujoAction.action_type === 'calendar_event' ? 'default' : 'outline'}
+																size="sm"
+																onClick={() => setNewFlujoAction({ ...newFlujoAction, action_type: 'calendar_event' })}
+															>
+																<Calendar className="h-4 w-4 mr-2" />
+																Evento de Calendario
+															</Button>
 														</div>
 													</div>
+
+													{/* Timing Mode */}
 													<div>
-														<label className="block text-sm font-medium mb-2">
-															Mes
-														</label>
+														<label className="text-sm font-medium mb-2 block">¿Cuándo ejecutar?</label>
+														<div className="flex gap-2 flex-wrap">
+															<Button
+																type="button"
+																variant={newFlujoAction.timing_mode === 'immediate' ? 'default' : 'outline'}
+																size="sm"
+																onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'immediate' })}
+															>
+																Inmediato
+															</Button>
+															<Button
+																type="button"
+																variant={newFlujoAction.timing_mode === 'offset' ? 'default' : 'outline'}
+																size="sm"
+																onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'offset' })}
+															>
+																Después de X tiempo
+															</Button>
+															<Button
+																type="button"
+																variant={newFlujoAction.timing_mode === 'scheduled' ? 'default' : 'outline'}
+																size="sm"
+																onClick={() => setNewFlujoAction({ ...newFlujoAction, timing_mode: 'scheduled' })}
+															>
+																Fecha específica
+															</Button>
+														</div>
+													</div>
+
+													{/* Timing Details */}
+													{newFlujoAction.timing_mode === 'offset' && (
+														<div className="flex gap-2 items-end">
+															<div className="flex-1">
+																<label className="text-sm font-medium mb-2 block">Cantidad</label>
+																<Input
+																	type="number"
+																	min="1"
+																	value={newFlujoAction.offset_value || 1}
+																	onChange={(e) => setNewFlujoAction({ ...newFlujoAction, offset_value: parseInt(e.target.value) || 1 })}
+																/>
+															</div>
+															<div className="flex-1">
+																<label className="text-sm font-medium mb-2 block">Unidad</label>
+																<select
+																	className="w-full rounded-md border px-3 py-2 text-sm"
+																	value={newFlujoAction.offset_unit || 'days'}
+																	onChange={(e) => setNewFlujoAction({ ...newFlujoAction, offset_unit: e.target.value as any })}
+																>
+																	<option value="minutes">Minutos</option>
+																	<option value="hours">Horas</option>
+																	<option value="days">Días</option>
+																	<option value="weeks">Semanas</option>
+																	<option value="months">Meses</option>
+																</select>
+															</div>
+														</div>
+													)}
+
+													{newFlujoAction.timing_mode === 'scheduled' && (
+														<div>
+															<label className="text-sm font-medium mb-2 block">Fecha y hora</label>
+															<Input
+																type="datetime-local"
+																value={newFlujoAction.scheduled_date || ''}
+																onChange={(e) => setNewFlujoAction({ ...newFlujoAction, scheduled_date: e.target.value })}
+															/>
+														</div>
+													)}
+
+													{/* Title */}
+													<div>
+														<label className="text-sm font-medium mb-2 block">Título *</label>
 														<Input
 															type="text"
-															value={newCertificate.mes}
-															onChange={(event) =>
-																handleNewCertificateChange("mes", event.target.value)
-															}
-															placeholder="Ej: Enero 2024"
-															required
+															placeholder="Ej: Revisión de documentación final"
+															value={newFlujoAction.title || ''}
+															onChange={(e) => setNewFlujoAction({ ...newFlujoAction, title: e.target.value })}
 														/>
 													</div>
-													<div className="md:col-span-2"></div>
-													<label className="block text-sm font-medium mb-2">
-														Estado
-													</label>
-													<Input
-														type="text"
-														value={newCertificate.estado}
-														onChange={(event) =>
-															handleNewCertificateChange("estado", event.target.value)
-														}
-														placeholder="CERTIFICADO"
-													/>
-												</div>
-												{createCertificateError && (
-													<div className="p-3 rounded-md bg-destructive/10 border border-destructive/50">
-														<p className="text-sm text-destructive">{createCertificateError}</p>
+
+													{/* Message */}
+													<div>
+														<label className="text-sm font-medium mb-2 block">Mensaje</label>
+														<textarea
+															className="w-full rounded-md border px-3 py-2 text-sm min-h-[100px]"
+															placeholder="Mensaje detallado de la acción..."
+															value={newFlujoAction.message || ''}
+															onChange={(e) => setNewFlujoAction({ ...newFlujoAction, message: e.target.value })}
+														/>
 													</div>
-												)}
-												<div className="flex justify-end gap-3 pt-2">
-													<Button
-														type="button"
-														variant="outline"
-														onClick={handleToggleAddCertificate}
-														disabled={isCreatingCertificate}
-													>
-														Cancelar
-													</Button>
-													<Button type="submit" disabled={isCreatingCertificate} className="min-w-[140px]">
-														{isCreatingCertificate ? "Guardando..." : "Guardar certificado"}
-													</Button>
-												</div>
-											</form>
-										</motion.div>
-									)}
 
-									{certificatesLoading ? (
-										<div className="flex items-center justify-center py-12">
-											<div className="space-y-2 text-center">
-												<div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
-												<p className="text-sm text-muted-foreground">Cargando certificados...</p>
-											</div>
-										</div>
-									) : certificates.length === 0 && !isAddingCertificate ? (
-										<div className="text-center py-12">
-											<Receipt className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
-											<p className="text-sm text-muted-foreground mb-1">No hay certificados registrados</p>
-											<p className="text-xs text-muted-foreground">Agregá el primer certificado para esta obra</p>
-										</div>
-									) : certificates.length > 0 ? (
-										<div className="space-y-4">
-											<div className="overflow-x-auto rounded-lg border">
-												<table className="w-full text-sm">
-													<thead className="bg-muted/50">
-														<tr>
-															<th className="text-left font-medium py-3 px-4 border-b">N° EXP.</th>
-															<th className="text-left font-medium py-3 px-4 border-b">N° Certificado</th>
-															<th className="text-right font-medium py-3 px-4 border-b">Monto</th>
-															<th className="text-left font-medium py-3 px-4 border-b">Mes</th>
-															<th className="text-left font-medium py-3 px-4 border-b">Estado</th>
-														</tr>
-													</thead>
-													<tbody>
-														{certificates.map((cert, index) => (
-															<motion.tr
-																key={cert.id}
-																initial={{ opacity: 0, y: 10 }}
-																animate={{ opacity: 1, y: 0 }}
-																transition={{ delay: index * 0.05 }}
-																className="border-b last:border-0 hover:bg-muted/30 transition-colors"
-															>
-																<td className="py-3 px-4 font-medium">{cert.n_exp}</td>
-																<td className="py-3 px-4">{cert.n_certificado}</td>
-																<td className="py-3 px-4 text-right font-mono">
-																	$ {Number(cert.monto).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-																</td>
-																<td className="py-3 px-4">{cert.mes}</td>
-																<td className="py-3 px-4">
-																	<span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-																		{cert.estado}
-																	</span>
-																</td>
-															</motion.tr>
-														))}
-													</tbody>
-												</table>
-											</div>
+													{/* Recipients */}
+													<div className="space-y-2">
+														<label className="text-sm font-medium mb-1 block">
+															Destinatarios
+														</label>
+														<p className="text-xs text-muted-foreground">
+															Si no seleccionás nada, se notificará solo al usuario actual. Podés elegir
+															un usuario específico, un rol, o ambos.
+														</p>
+														<div className="grid gap-3 md:grid-cols-2">
+															<div>
+																<label className="text-xs font-medium mb-1 block">
+																	Usuario específico
+																</label>
+																<Select
+																	value={selectedRecipientUserId || "none"}
+																	onValueChange={(value) =>
+																		setSelectedRecipientUserId(
+																			value === "none" ? "" : value
+																		)
+																	}
+																>
+																	<SelectTrigger className="w-full text-xs">
+																		<SelectValue placeholder="Seleccionar usuario" />
+																	</SelectTrigger>
+																	<SelectContent>
+																		<SelectItem value="none">
+																			<span className="text-xs text-muted-foreground">
+																				Ninguno (solo vos)
+																			</span>
+																		</SelectItem>
+																		{obraUsers.map((u) => (
+																			<SelectItem key={u.id} value={u.id}>
+																				<span className="text-xs">
+																					{u.full_name || u.id}
+																				</span>
+																			</SelectItem>
+																		))}
+																	</SelectContent>
+																</Select>
+															</div>
+															<div>
+																<label className="text-xs font-medium mb-1 block">
+																	Rol
+																</label>
+																<Select
+																	value={selectedRecipientRoleId || "none"}
+																	onValueChange={(value) =>
+																		setSelectedRecipientRoleId(
+																			value === "none" ? "" : value
+																		)
+																	}
+																>
+																	<SelectTrigger className="w-full text-xs">
+																		<SelectValue placeholder="Seleccionar rol" />
+																	</SelectTrigger>
+																	<SelectContent>
+																		<SelectItem value="none">
+																			<span className="text-xs text-muted-foreground">
+																				Ninguno
+																			</span>
+																		</SelectItem>
+																		{obraRoles.map((r) => (
+																			<SelectItem key={r.id} value={r.id}>
+																				<span className="text-xs">
+																					{r.name || r.key}
+																				</span>
+																			</SelectItem>
+																		))}
+																	</SelectContent>
+																</Select>
+															</div>
+														</div>
+													</div>
 
-											{/* Total Summary */}
-											<div className="flex justify-between items-center p-4 rounded-lg bg-muted/50 border">
-												<div className="flex items-center gap-2">
-													<DollarSign className="h-5 w-5 text-muted-foreground" />
-													<span className="font-semibold">Total Certificado</span>
-												</div>
-												<span className="text-xl font-bold font-mono">
-													$ {Number(certificatesTotal).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-												</span>
-											</div>
-										</div>
-									) : null}
-								</div>
-							</motion.section>
-						</TabsContent>
+													{/* Notification Types */}
+													<div>
+														<label className="text-sm font-medium mb-2 block">Tipo de notificación</label>
+														<div className="space-y-2">
+															<div className="flex items-center gap-2">
+																<input
+																	type="checkbox"
+																	id="notif-in-app"
+																	className="h-4 w-4 rounded border-gray-300"
+																	checked={newFlujoAction.notification_types?.includes('in_app') || false}
+																	onChange={(e) => {
+																		const current = (newFlujoAction.notification_types ||
+																			[]) as ("in_app" | "email")[];
+																		const updated: ("in_app" | "email")[] = e.target.checked
+																			? [...current.filter((t) => t !== "in_app"), "in_app"]
+																			: current.filter((t) => t !== "in_app");
+																		setNewFlujoAction({
+																			...newFlujoAction,
+																			notification_types:
+																				updated.length > 0 ? updated : ["in_app"],
+																		});
+																	}}
+																/>
+																<label htmlFor="notif-in-app" className="text-sm cursor-pointer">
+																	Notificación en la aplicación
+																</label>
+															</div>
+															<div className="flex items-center gap-2">
+																<input
+																	type="checkbox"
+																	id="notif-email"
+																	className="h-4 w-4 rounded border-gray-300"
+																	checked={newFlujoAction.notification_types?.includes('email') || false}
+																	onChange={(e) => {
+																		const current = (newFlujoAction.notification_types ||
+																			[]) as ("in_app" | "email")[];
+																		const updated: ("in_app" | "email")[] = e.target.checked
+																			? [...current.filter((t) => t !== "email"), "email"]
+																			: current.filter((t) => t !== "email");
+																		setNewFlujoAction({
+																			...newFlujoAction,
+																			notification_types:
+																				updated.length > 0 ? updated : ["in_app"],
+																		});
+																	}}
+																/>
+																<label htmlFor="notif-email" className="text-sm cursor-pointer">
+																	Notificación por correo electrónico
+																</label>
+															</div>
+														</div>
+														<p className="text-xs text-muted-foreground mt-1">
+															Selecciona cómo deseas recibir las notificaciones de esta acción
+														</p>
+													</div>
 
-						{/* Documentos Tab - Unified File Manager */}
-						<TabsContent value="documentos" className="space-y-6">
-							<FileManager
-								obraId={String(obraId)}
-								materialOrders={materialOrders}
-								onRefreshMaterials={refreshMaterialOrders}
-							/>
-						</TabsContent>
-
-						{/* OLD - Materiales Tab - Temporarily disabled */}
-						<TabsContent value="materiales-old" className="space-y-6 hidden">
-							<motion.section
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.4 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden"
-							>
-								<div className="bg-muted/50 px-6 py-4 border-b">
-									<div className="flex items-center justify-between gap-4 flex-wrap">
-										<div>
-											<div className="flex items-center gap-2">
-												<FileText className="h-5 w-5 text-primary" />
-												<h2 className="text-lg font-semibold">Materiales</h2>
-											</div>
-											<p className="text-sm text-muted-foreground mt-1">Órdenes de materiales enviadas a la obra</p>
-										</div>
-										<div className="w-full sm:w-auto flex items-center gap-2">
-											<Input
-												placeholder="Filtrar por material, proveedor, solicitante o gestor"
-												value={globalMaterialsFilter}
-												onChange={(e) => setGlobalMaterialsFilter(e.target.value)}
-											/>
-											<Button variant="outline" className="whitespace-nowrap gap-2" onClick={triggerImportMaterials} disabled={isImportingMaterials}>
-												<Upload className="h-4 w-4" />
-												{isImportingMaterials ? "Importando..." : "Importar OC"}
-											</Button>
-											<input ref={importInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleImportMaterials} />
-											<Button className="whitespace-nowrap gap-2" onClick={() => setIsAddOrderOpen(true)}>
-												<Plus className="h-4 w-4" />
-												Nueva orden
-											</Button>
-										</div>
-									</div>
-								</div>
-
-								<div className="p-6 space-y-4">
-									{filteredOrders.length === 0 ? (
-										<div className="text-center py-10 text-muted-foreground text-sm">
-											No se encontraron órdenes con el filtro aplicado
-										</div>
-									) : (
-										<div className="space-y-3">
-											{filteredOrders.map((order, idx) => {
-												const itemsFiltered = getOrderItemsFiltered(order);
-												const totalOrden = getOrderTotal(itemsFiltered);
-												const isOpen = expandedOrders.has(order.id);
-												return (
-													<div key={order.id} className="border rounded-lg overflow-hidden">
-														<button
-															onClick={() => toggleOrderExpanded(order.id)}
-															className="w-full text-left bg-muted/40 px-4 py-3 flex items-center justify-between hover:bg-muted/60 transition-colors"
+													{/* Actions */}
+													<div className="flex justify-end gap-2">
+														<Button
+															type="button"
+															variant="outline"
+															size="sm"
+															onClick={() => {
+																setIsAddingFlujoAction(false);
+																setNewFlujoAction({
+																	action_type: 'email',
+																	timing_mode: 'immediate',
+																	offset_value: 1,
+																	offset_unit: 'days',
+																	title: '',
+																	message: '',
+																	recipient_user_ids: [],
+																	notification_types: ["in_app"],
+																	enabled: true,
+																});
+															}}
 														>
-															<div className="flex flex-col sm:flex-row sm:items-center gap-3">
-																<div className="font-semibold">N° de orden: {order.nroOrden}</div>
-																<div className="text-sm text-muted-foreground">Solicitante: {order.solicitante}</div>
-																<div className="text-sm text-muted-foreground">Gestor: {order.gestor}</div>
-																<div className="text-sm text-muted-foreground">Proveedor: {order.proveedor}</div>
-															</div>
-															<div className="text-sm font-semibold font-mono">
-																$ {totalOrden.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-															</div>
-														</button>
+															Cancelar
+														</Button>
+														<Button
+															type="button"
+															size="sm"
+															onClick={saveFlujoAction}
+														>
+															Guardar Acción
+														</Button>
+													</div>
+												</motion.div>
+											)}
+
+											{/* List of Existing Actions */}
+											<div className="space-y-3">
+												{isLoadingFlujoActions ? (
+													<p className="text-sm text-muted-foreground text-center py-8">Cargando acciones...</p>
+												) : flujoActions.length === 0 ? (
+													<p className="text-sm text-orange-primary/80 text-center py-8">
+														No hay acciones configuradas. Crea una nueva acción para comenzar.
+													</p>
+												) : (
+													flujoActions.map((action, idx) => (
 														<motion.div
-															initial={false}
-															animate={{ height: isOpen ? 'auto' : 0, opacity: isOpen ? 1 : 0 }}
-															transition={{ duration: 0.25 }}
-															className="overflow-hidden"
+															key={action.id}
+															initial={{ opacity: 0, y: 8 }}
+															animate={{ opacity: 1, y: 0 }}
+															transition={{ delay: idx * 0.05 }}
+															className={`rounded-lg border p-4 ${!action.enabled ? 'opacity-50' : ''}`}
 														>
-															<div className="p-4 space-y-4">
-																<div className="flex items-center justify-between gap-3 flex-wrap">
-																	<div className="text-sm text-muted-foreground">
-																		{order.items.length} ítems en la orden
+															<div className="flex items-start justify-between">
+																<div className="flex-1">
+																	<div className="flex items-center gap-2 mb-2">
+																		{action.action_type === 'email' ? (
+																			<Mail className="h-4 w-4 text-primary" />
+																		) : (
+																			<Calendar className="h-4 w-4 text-primary" />
+																		)}
+																		<h4 className="font-semibold text-sm">{action.title}</h4>
+																		<span className={`text-xs px-2 py-0.5 rounded-full ${action.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+																			{action.enabled ? 'Activa' : 'Inactiva'}
+																		</span>
 																	</div>
-																	<div className="w-full sm:w-auto flex items-center gap-3">
-																		{(() => {
-																			const info = orderDocPaths[order.id];
-																			return (
-																				<button
-																					type="button"
-																					className="text-xs underline text-primary whitespace-nowrap"
-																					onClick={() => {
-																						setQueryParams({ tab: 'documentos' });
-																						console.log('info', info);
-																						if (info) {
-																							setDocPathSegments(info.segments);
-																							setPendingOpenDoc({ segments: info.segments, name: info.name, mime: info.mime });
-																							void previewFile(info.name, undefined, info.segments);
-																						} else {
-																							// Fallback: try materiales folder and open first file if present
-																							const fallbackSegs = ['materiales'];
-																							setDocPathSegments(fallbackSegs);
-																							setPendingAutoOpen({ segments: fallbackSegs });
-																						}
-																					}}
-																				>
-																					{info ? 'Ver documento' : 'Ver documentos'}
-																				</button>
-																			);
-																		})()}
-
-
-																		<Input
-																			placeholder="Filtrar materiales de esta orden"
-																			value={orderFilters[order.id] ?? ""}
-																			onChange={(e) => setOrderFilter(order.id, e.target.value)}
-																		/>
+																	{action.message && (
+																		<p className="text-sm text-muted-foreground mb-2">{action.message}</p>
+																	)}
+																	<div className="flex items-center gap-4 text-xs text-muted-foreground">
+																		<span>
+																			{action.action_type === 'email' ? 'Email' : 'Evento de Calendario'}
+																		</span>
+																		<span>•</span>
+																		<span>
+																			{action.timing_mode === 'immediate' && 'Inmediato'}
+																			{action.timing_mode === 'offset' && `${action.offset_value} ${action.offset_unit} después`}
+																			{action.timing_mode === 'scheduled' && `Fecha: ${new Date(action.scheduled_date!).toLocaleDateString()}`}
+																		</span>
+																		{action.notification_types && action.notification_types.length > 0 && (
+																			<>
+																				<span>•</span>
+																				<span className="flex items-center gap-1">
+																					{action.notification_types.includes('in_app') && (
+																						<span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">App</span>
+																					)}
+																					{action.notification_types.includes('email') && (
+																						<span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Email</span>
+																					)}
+																				</span>
+																			</>
+																		)}
 																	</div>
 																</div>
-
-																<div className="overflow-x-auto rounded-lg border">
-																	<table className="w-full text-sm">
-																		<thead className="bg-muted/50">
-																			<tr>
-																				<th className="text-left font-medium py-3 px-4 border-b">Cantidad</th>
-																				<th className="text-left font-medium py-3 px-4 border-b">Unidad</th>
-																				<th className="text-left font-medium py-3 px-4 border-b">Material</th>
-																				<th className="text-right font-medium py-3 px-4 border-b">Precio unitario</th>
-																				<th className="text-right font-medium py-3 px-4 border-b">Total</th>
-																			</tr>
-																		</thead>
-																		<tbody>
-																			{itemsFiltered.map((it, iidx) => (
-																				<motion.tr
-																					key={it.id}
-																					initial={{ opacity: 0, y: 8 }}
-																					animate={{ opacity: 1, y: 0 }}
-																					transition={{ delay: (idx * 0.03) + (iidx * 0.02) }}
-																					className="border-b last:border-0 hover:bg-muted/30 transition-colors"
-																				>
-																					<td className="py-3 px-4">{it.cantidad.toLocaleString('es-AR')}</td>
-																					<td className="py-3 px-4">{it.unidad}</td>
-																					<td className="py-3 px-4">{it.material}</td>
-																					<td className="py-3 px-4 text-right font-mono">$ {it.precioUnitario.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-																					<td className="py-3 px-4 text-right font-mono">$ {(it.precioUnitario * it.cantidad).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-																				</motion.tr>
-																			))}
-																		</tbody>
-																	</table>
-																</div>
-
-																<div className="flex justify-end items-center p-4 rounded-lg bg-muted/40 border">
-																	<span className="mr-3 text-sm text-muted-foreground">Total de la orden</span>
-																	<span className="text-lg font-bold font-mono">$ {totalOrden.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+																<div className="flex items-center gap-2">
+																	<Button
+																		type="button"
+																		variant="ghost"
+																		size="sm"
+																		onClick={() => toggleFlujoAction(action.id, !action.enabled)}
+																	>
+																		{action.enabled ? 'Desactivar' : 'Activar'}
+																	</Button>
+																	<Button
+																		type="button"
+																		variant="ghost"
+																		size="sm"
+																		onClick={() => deleteFlujoAction(action.id)}
+																		className="text-destructive hover:text-destructive hover:bg-destructive/10"
+																	>
+																		<Trash2 className="h-4 w-4" />
+																	</Button>
 																</div>
 															</div>
-															{/* Import preview dialog */}
-															<Dialog open={isImportPreviewOpen} onOpenChange={setIsImportPreviewOpen}>
-																<DialogContent className="max-w-4xl">
-																	<DialogHeader>
-																		<DialogTitle>Revisar orden importada</DialogTitle>
-																	</DialogHeader>
-																	{/* link to document removed in preview: requested only in table */}
-																	{importPreviewOrder && (
-																		<form onSubmit={async (ev) => {
-																			ev.preventDefault();
-																			if (!obraId) return;
-																			try {
-																				const normalizedItems = importPreviewOrder.items
-																					.filter((it) => (it.material?.trim() ?? '').length > 0 && Number(it.cantidad) > 0)
-																					.map((it) => ({
-																						cantidad: Number(it.cantidad) || 0,
-																						unidad: it.unidad.trim(),
-																						material: it.material.trim(),
-																						precioUnitario: Number(it.precioUnitario) || 0,
-																					}));
-																				const res = await fetch(`/api/obras/${obraId}/materials`, {
-																					method: 'POST',
-																					headers: { 'Content-Type': 'application/json' },
-																					body: JSON.stringify({
-																						nroOrden: importPreviewOrder.nroOrden.trim() || undefined,
-																						solicitante: importPreviewOrder.solicitante.trim() || undefined,
-																						gestor: importPreviewOrder.gestor.trim() || undefined,
-																						proveedor: importPreviewOrder.proveedor.trim() || undefined,
-																						items: normalizedItems,
-																						docBucket: 'obra-documents',
-																						docPath: (lastUploadedDocRef.current ? `${String(obraId)}/${lastUploadedDocRef.current.segments.join('/')}/${lastUploadedDocRef.current.name}` : undefined),
-																					}),
-																				});
-																				if (!res.ok) throw new Error((await res.json()).error || 'No se pudo guardar');
-																				const data = await res.json();
-																				await refreshMaterialOrders();
-																				if (lastUploadedDocRef.current && data?.order?.id) {
-																					setOrderDocPaths((prev) => ({ ...prev, [String(data.order.id)]: lastUploadedDocRef.current! }));
-																				}
-																				setIsImportPreviewOpen(false);
-																				setImportPreviewOrder(null);
-																				lastUploadedDocRef.current = null;
-																				toast.success('Orden guardada');
-																			} catch (saveErr) {
-																				console.error(saveErr);
-																				toast.error(saveErr instanceof Error ? saveErr.message : 'No se pudo guardar');
-																			}
-																		}} className="space-y-4">
-																			<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-																				<div>
-																					<label className="block text-sm font-medium mb-1">Nº de orden</label>
-																					<Input value={importPreviewOrder.nroOrden} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, nroOrden: e.target.value } : prev)} placeholder="OC-000X" />
-																				</div>
-																				<div>
-																					<label className="block text-sm font-medium mb-1">Solicitante</label>
-																					<Input value={importPreviewOrder.solicitante} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, solicitante: e.target.value } : prev)} placeholder="Nombre del solicitante" />
-																				</div>
-																				<div>
-																					<label className="block text-sm font-medium mb-1">Gestor</label>
-																					<Input value={importPreviewOrder.gestor} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, gestor: e.target.value } : prev)} placeholder="Nombre del gestor" />
-																				</div>
-																				<div>
-																					<label className="block text-sm font-medium mb-1">Proveedor</label>
-																					<Input value={importPreviewOrder.proveedor} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, proveedor: e.target.value } : prev)} placeholder="Proveedor" />
-																				</div>
-																			</div>
-
-																			<div className="overflow-x-auto rounded-lg border">
-																				<table className="w-full text-sm">
-																					<thead className="bg-muted/50">
-																						<tr>
-																							<th className="text-left font-medium py-2 px-3 border-b">Cantidad</th>
-																							<th className="text-left font-medium py-2 px-3 border-b">Unidad</th>
-																							<th className="text-left font-medium py-2 px-3 border-b">Material</th>
-																							<th className="text-right font-medium py-2 px-3 border-b">Precio unitario</th>
-																							<th className="py-2 px-3 border-b" />
-																						</tr>
-																					</thead>
-																					<tbody>
-																						{importPreviewOrder.items.map((it, i) => (
-																							<tr key={i} className="border-b last:border-0">
-																								<td className="py-2 px-3 min-w-[110px]"><Input type="number" step="0.01" value={it.cantidad} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], cantidad: e.target.value }; return { ...prev, items }; })} placeholder="0" /></td>
-																								<td className="py-2 px-3 min-w-[110px]"><Input type="text" value={it.unidad} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], unidad: e.target.value }; return { ...prev, items }; })} placeholder="u / m / m²" /></td>
-																								<td className="py-2 px-3 min-w-[220px]"><Input type="text" value={it.material} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], material: e.target.value }; return { ...prev, items }; })} placeholder="Descripción" /></td>
-																								<td className="py-2 px-3 min-w-[160px]"><Input className="text-right" type="number" step="0.01" value={it.precioUnitario} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], precioUnitario: e.target.value }; return { ...prev, items }; })} placeholder="0.00" /></td>
-																								<td className="py-2 px-3 text-right">
-																									<Button type="button" variant="ghost" onClick={() => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = prev.items.slice(); items.splice(i, 1); return { ...prev, items: items.length ? items : [{ cantidad: '', unidad: '', material: '', precioUnitario: '' }] }; })}>Eliminar</Button>
-																								</td>
-																							</tr>
-																						))}
-																					</tbody>
-																				</table>
-																			</div>
-																			<DialogFooter>
-																				<Button type="button" variant="outline" onClick={() => { setIsImportPreviewOpen(false); setImportPreviewOrder(null); lastUploadedDocRef.current = null; }}>Cancelar</Button>
-																				<Button type="submit" className="min-w-[140px]">Guardar</Button>
-																			</DialogFooter>
-																		</form>
-																	)}
-																</DialogContent>
-															</Dialog>
 														</motion.div>
-													</div>
-												);
-											})}
+													))
+												)}
+											</div>
 										</div>
-									)}
+									</motion.section>
+								</TabsContent>
 
-									<Dialog open={isAddOrderOpen} onOpenChange={setIsAddOrderOpen}>
-										<DialogContent>
-											<DialogHeader>
-												<DialogTitle>Nueva orden de materiales</DialogTitle>
-											</DialogHeader>
-											<form onSubmit={handleCreateOrder} className="space-y-4">
-												<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-													<div>
-														<label className="block text-sm font-medium mb-1">Nº de orden</label>
-														<Input value={newOrder.nroOrden} onChange={(e) => updateNewOrderMeta("nroOrden", e.target.value)} placeholder="OC-0003" />
+								{/* Certificates Tab */}
+								<TabsContent value="certificates" className="space-y-6">
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ duration: 0.4 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center justify-between">
+												<div>
+													<div className="flex items-center gap-2">
+														<Receipt className="h-5 w-5 text-primary" />
+														<h2 className="text-lg font-semibold">Certificados de Obra</h2>
 													</div>
-													<div>
-														<label className="block text-sm font-medium mb-1">Solicitante</label>
-														<Input value={newOrder.solicitante} onChange={(e) => updateNewOrderMeta("solicitante", e.target.value)} placeholder="Nombre del solicitante" />
-													</div>
-													<div>
-														<label className="block text-sm font-medium mb-1">Gestor</label>
-														<Input value={newOrder.gestor} onChange={(e) => updateNewOrderMeta("gestor", e.target.value)} placeholder="Nombre del gestor" />
-													</div>
-													<div>
-														<label className="block text-sm font-medium mb-1">Proveedor</label>
-														<Input value={newOrder.proveedor} onChange={(e) => updateNewOrderMeta("proveedor", e.target.value)} placeholder="Proveedor" />
+													<p className="text-sm text-muted-foreground mt-1">
+														{certificates.length} {certificates.length === 1 ? 'certificado registrado' : 'certificados registrados'}
+													</p>
+												</div>
+												<Button
+													variant={isAddingCertificate ? "outline" : "default"}
+													onClick={handleToggleAddCertificate}
+													disabled={isCreatingCertificate}
+													className="gap-2"
+												>
+													{isAddingCertificate ? (
+														"Cancelar"
+													) : (
+														<>
+															<Plus className="h-4 w-4" />
+															Agregar certificado
+														</>
+													)}
+												</Button>
+											</div>
+										</div>
+
+										<div className="p-6 space-y-6">
+											{isAddingCertificate && (
+												<motion.div
+													initial={{ opacity: 0, height: 0 }}
+													animate={{ opacity: 1, height: "auto" }}
+													exit={{ opacity: 0, height: 0 }}
+													className="overflow-hidden"
+												>
+													<form onSubmit={handleCreateCertificate} className="space-y-4 p-4 rounded-lg bg-muted/50 border">
+														<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+															<div>
+																<label className="block text-sm font-medium mb-2">
+																	N° de expediente
+																</label>
+																<Input
+																	type="text"
+																	value={newCertificate.n_exp}
+																	onChange={(event) =>
+																		handleNewCertificateChange("n_exp", event.target.value)
+																	}
+																	placeholder="Ej: EXP-2024-001"
+																	required
+																/>
+															</div>
+															<div>
+																<label className="block text-sm font-medium mb-2">
+																	N° de certificado
+																</label>
+																<Input
+																	type="number"
+																	value={newCertificate.n_certificado}
+																	onChange={(event) =>
+																		handleNewCertificateChange("n_certificado", event.target.value)
+																	}
+																	placeholder="1"
+																	required
+																/>
+															</div>
+															<div>
+																<label className="block text-sm font-medium mb-2">
+																	Monto
+																</label>
+																<div className="relative">
+																	<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+																		$
+																	</span>
+																	<Input
+																		type="number"
+																		step="0.01"
+																		value={newCertificate.monto}
+																		onChange={(event) =>
+																			handleNewCertificateChange("monto", event.target.value)
+																		}
+																		className="pl-8 text-right font-mono"
+																		placeholder="0.00"
+																		required
+																	/>
+																</div>
+															</div>
+															<div>
+																<label className="block text-sm font-medium mb-2">
+																	Mes
+																</label>
+																<Input
+																	type="text"
+																	value={newCertificate.mes}
+																	onChange={(event) =>
+																		handleNewCertificateChange("mes", event.target.value)
+																	}
+																	placeholder="Ej: Enero 2024"
+																	required
+																/>
+															</div>
+															<div className="md:col-span-2"></div>
+															<label className="block text-sm font-medium mb-2">
+																Estado
+															</label>
+															<Input
+																type="text"
+																value={newCertificate.estado}
+																onChange={(event) =>
+																	handleNewCertificateChange("estado", event.target.value)
+																}
+																placeholder="CERTIFICADO"
+															/>
+														</div>
+														{createCertificateError && (
+															<div className="p-3 rounded-md bg-destructive/10 border border-destructive/50">
+																<p className="text-sm text-destructive">{createCertificateError}</p>
+															</div>
+														)}
+														<div className="flex justify-end gap-3 pt-2">
+															<Button
+																type="button"
+																variant="outline"
+																onClick={handleToggleAddCertificate}
+																disabled={isCreatingCertificate}
+															>
+																Cancelar
+															</Button>
+															<Button type="submit" disabled={isCreatingCertificate} className="min-w-[140px]">
+																{isCreatingCertificate ? "Guardando..." : "Guardar certificado"}
+															</Button>
+														</div>
+													</form>
+												</motion.div>
+											)}
+
+											{certificatesLoading ? (
+												<div className="flex items-center justify-center py-12">
+													<div className="space-y-2 text-center">
+														<div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+														<p className="text-sm text-muted-foreground">Cargando certificados...</p>
 													</div>
 												</div>
-
-												<div className="space-y-2">
-													<div className="flex items-center justify-between">
-														<h3 className="text-sm font-semibold">Ítems</h3>
-														<Button type="button" variant="outline" className="h-8 px-2 text-xs" onClick={addNewOrderItem}>Agregar ítem</Button>
-													</div>
+											) : certificates.length === 0 && !isAddingCertificate ? (
+												<div className="text-center py-12">
+													<Receipt className="h-12 w-12 text-orange-primary/40 mx-auto mb-3" />
+													<p className="text-sm text-orange-primary/80 mb-1">No hay certificados registrados</p>
+													<p className="text-xs text-muted-foreground">Agregá el primer certificado para esta obra</p>
+												</div>
+											) : certificates.length > 0 ? (
+												<div className="space-y-4">
 													<div className="overflow-x-auto rounded-lg border">
 														<table className="w-full text-sm">
 															<thead className="bg-muted/50">
 																<tr>
-																	<th className="text-left font-medium py-2 px-3 border-b">Cantidad</th>
-																	<th className="text-left font-medium py-2 px-3 border-b">Unidad</th>
-																	<th className="text-left font-medium py-2 px-3 border-b">Material</th>
-																	<th className="text-right font-medium py-2 px-3 border-b">Precio unitario</th>
-																	<th className="py-2 px-3 border-b" />
+																	<th className="text-left font-medium py-3 px-4 border-b">N° EXP.</th>
+																	<th className="text-left font-medium py-3 px-4 border-b">N° Certificado</th>
+																	<th className="text-right font-medium py-3 px-4 border-b">Monto</th>
+																	<th className="text-left font-medium py-3 px-4 border-b">Mes</th>
+																	<th className="text-left font-medium py-3 px-4 border-b">Estado</th>
 																</tr>
 															</thead>
 															<tbody>
-																{newOrder.items.map((it, i) => (
-																	<tr key={i} className="border-b last:border-0">
-																		<td className="py-2 px-3 min-w-[110px]"><Input type="number" step="0.01" value={it.cantidad} onChange={(e) => updateNewOrderItem(i, "cantidad", e.target.value)} placeholder="0" /></td>
-																		<td className="py-2 px-3 min-w-[110px]"><Input type="text" value={it.unidad} onChange={(e) => updateNewOrderItem(i, "unidad", e.target.value)} placeholder="u / m / m²" /></td>
-																		<td className="py-2 px-3 min-w-[220px]"><Input type="text" value={it.material} onChange={(e) => updateNewOrderItem(i, "material", e.target.value)} placeholder="Descripción" /></td>
-																		<td className="py-2 px-3 min-w-[160px]"><Input className="text-right" type="number" step="0.01" value={it.precioUnitario} onChange={(e) => updateNewOrderItem(i, "precioUnitario", e.target.value)} placeholder="0.00" /></td>
-																		<td className="py-2 px-3 text-right">
-																			<Button type="button" variant="ghost" onClick={() => removeNewOrderItem(i)}>Eliminar</Button>
+																{certificates.map((cert, index) => (
+																	<motion.tr
+																		key={cert.id}
+																		initial={{ opacity: 0, y: 10 }}
+																		animate={{ opacity: 1, y: 0 }}
+																		transition={{ delay: index * 0.05 }}
+																		className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+																	>
+																		<td className="py-3 px-4 font-medium">{cert.n_exp}</td>
+																		<td className="py-3 px-4">{cert.n_certificado}</td>
+																		<td className="py-3 px-4 text-right font-mono">
+																			$ {Number(cert.monto).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 																		</td>
-																	</tr>
+																		<td className="py-3 px-4">{cert.mes}</td>
+																		<td className="py-3 px-4">
+																			<span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+																				{cert.estado}
+																			</span>
+																		</td>
+																	</motion.tr>
 																))}
 															</tbody>
 														</table>
 													</div>
+
+													{/* Total Summary */}
+													<div className="flex justify-between items-center p-4 rounded-lg bg-muted/50 border">
+														<div className="flex items-center gap-2">
+															<DollarSign className="h-5 w-5 text-muted-foreground" />
+															<span className="font-semibold">Total Certificado</span>
+														</div>
+														<span className="text-xl font-bold font-mono">
+															$ {Number(certificatesTotal).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+														</span>
+													</div>
+												</div>
+											) : null}
+										</div>
+									</motion.section>
+								</TabsContent>
+
+								{/* Documentos Tab - Unified File Manager */}
+								<TabsContent value="documentos" className="space-y-6">
+									<FileManager
+										obraId={String(obraId)}
+										materialOrders={materialOrders}
+										onRefreshMaterials={refreshMaterialOrders}
+									/>
+								</TabsContent>
+
+								{/* OLD - Materiales Tab - Temporarily disabled */}
+								<TabsContent value="materiales-old" className="space-y-6 hidden">
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ duration: 0.4 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center justify-between gap-4 flex-wrap">
+												<div>
+													<div className="flex items-center gap-2">
+														<FileText className="h-5 w-5 text-primary" />
+														<h2 className="text-lg font-semibold">Materiales</h2>
+													</div>
+													<p className="text-sm text-muted-foreground mt-1">Órdenes de materiales enviadas a la obra</p>
+												</div>
+												<div className="w-full sm:w-auto flex items-center gap-2">
+													<Input
+														placeholder="Filtrar por material, proveedor, solicitante o gestor"
+														value={globalMaterialsFilter}
+														onChange={(e) => setGlobalMaterialsFilter(e.target.value)}
+													/>
+													<Button variant="outline" className="whitespace-nowrap gap-2" onClick={triggerImportMaterials} disabled={isImportingMaterials}>
+														<Upload className="h-4 w-4" />
+														{isImportingMaterials ? "Importando..." : "Importar OC"}
+													</Button>
+													<input ref={importInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleImportMaterials} />
+													<Button className="whitespace-nowrap gap-2" onClick={() => setIsAddOrderOpen(true)}>
+														<Plus className="h-4 w-4" />
+														Nueva orden
+													</Button>
+												</div>
+											</div>
+										</div>
+
+										<div className="p-6 space-y-4">
+											{filteredOrders.length === 0 ? (
+												<div className="text-center py-10 text-muted-foreground text-sm">
+													No se encontraron órdenes con el filtro aplicado
+												</div>
+											) : (
+												<div className="space-y-3">
+													{filteredOrders.map((order, idx) => {
+														const itemsFiltered = getOrderItemsFiltered(order);
+														const totalOrden = getOrderTotal(itemsFiltered);
+														const isOpen = expandedOrders.has(order.id);
+														return (
+															<div key={order.id} className="border rounded-lg overflow-hidden">
+																<button
+																	onClick={() => toggleOrderExpanded(order.id)}
+																	className="w-full text-left bg-muted/40 px-4 py-3 flex items-center justify-between hover:bg-muted/60 transition-colors"
+																>
+																	<div className="flex flex-col sm:flex-row sm:items-center gap-3">
+																		<div className="font-semibold">N° de orden: {order.nroOrden}</div>
+																		<div className="text-sm text-muted-foreground">Solicitante: {order.solicitante}</div>
+																		<div className="text-sm text-muted-foreground">Gestor: {order.gestor}</div>
+																		<div className="text-sm text-muted-foreground">Proveedor: {order.proveedor}</div>
+																	</div>
+																	<div className="text-sm font-semibold font-mono">
+																		$ {totalOrden.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+																	</div>
+																</button>
+																<motion.div
+																	initial={false}
+																	animate={{ height: isOpen ? 'auto' : 0, opacity: isOpen ? 1 : 0 }}
+																	transition={{ duration: 0.25 }}
+																	className="overflow-hidden"
+																>
+																	<div className="p-4 space-y-4">
+																		<div className="flex items-center justify-between gap-3 flex-wrap">
+																			<div className="text-sm text-muted-foreground">
+																				{order.items.length} ítems en la orden
+																			</div>
+																			<div className="w-full sm:w-auto flex items-center gap-3">
+																				{(() => {
+																					const info = orderDocPaths[order.id];
+																					return (
+																						<button
+																							type="button"
+																							className="text-xs underline text-primary whitespace-nowrap"
+																							onClick={() => {
+																								setQueryParams({ tab: 'documentos' });
+																								console.log('info', info);
+																								if (info) {
+																									setDocPathSegments(info.segments);
+																									setPendingOpenDoc({ segments: info.segments, name: info.name, mime: info.mime });
+																									void previewFile(info.name, undefined, info.segments);
+																								} else {
+																									// Fallback: try materiales folder and open first file if present
+																									const fallbackSegs = ['materiales'];
+																									setDocPathSegments(fallbackSegs);
+																									setPendingAutoOpen({ segments: fallbackSegs });
+																								}
+																							}}
+																						>
+																							{info ? 'Ver documento' : 'Ver documentos'}
+																						</button>
+																					);
+																				})()}
+
+
+																				<Input
+																					placeholder="Filtrar materiales de esta orden"
+																					value={orderFilters[order.id] ?? ""}
+																					onChange={(e) => setOrderFilter(order.id, e.target.value)}
+																				/>
+																			</div>
+																		</div>
+
+																		<div className="overflow-x-auto rounded-lg border">
+																			<table className="w-full text-sm">
+																				<thead className="bg-muted/50">
+																					<tr>
+																						<th className="text-left font-medium py-3 px-4 border-b">Cantidad</th>
+																						<th className="text-left font-medium py-3 px-4 border-b">Unidad</th>
+																						<th className="text-left font-medium py-3 px-4 border-b">Material</th>
+																						<th className="text-right font-medium py-3 px-4 border-b">Precio unitario</th>
+																						<th className="text-right font-medium py-3 px-4 border-b">Total</th>
+																					</tr>
+																				</thead>
+																				<tbody>
+																					{itemsFiltered.map((it, iidx) => (
+																						<motion.tr
+																							key={it.id}
+																							initial={{ opacity: 0, y: 8 }}
+																							animate={{ opacity: 1, y: 0 }}
+																							transition={{ delay: (idx * 0.03) + (iidx * 0.02) }}
+																							className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+																						>
+																							<td className="py-3 px-4">{it.cantidad.toLocaleString('es-AR')}</td>
+																							<td className="py-3 px-4">{it.unidad}</td>
+																							<td className="py-3 px-4">{it.material}</td>
+																							<td className="py-3 px-4 text-right font-mono">$ {it.precioUnitario.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+																							<td className="py-3 px-4 text-right font-mono">$ {(it.precioUnitario * it.cantidad).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+																						</motion.tr>
+																					))}
+																				</tbody>
+																			</table>
+																		</div>
+
+																		<div className="flex justify-end items-center p-4 rounded-lg bg-muted/40 border">
+																			<span className="mr-3 text-sm text-muted-foreground">Total de la orden</span>
+																			<span className="text-lg font-bold font-mono">$ {totalOrden.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+																		</div>
+																	</div>
+																	{/* Import preview dialog */}
+																	<Dialog open={isImportPreviewOpen} onOpenChange={setIsImportPreviewOpen}>
+																		<DialogContent className="max-w-4xl">
+																			<DialogHeader>
+																				<DialogTitle>Revisar orden importada</DialogTitle>
+																			</DialogHeader>
+																			{/* link to document removed in preview: requested only in table */}
+																			{importPreviewOrder && (
+																				<form onSubmit={async (ev) => {
+																					ev.preventDefault();
+																					if (!obraId) return;
+																					try {
+																						const normalizedItems = importPreviewOrder.items
+																							.filter((it) => (it.material?.trim() ?? '').length > 0 && Number(it.cantidad) > 0)
+																							.map((it) => ({
+																								cantidad: Number(it.cantidad) || 0,
+																								unidad: it.unidad.trim(),
+																								material: it.material.trim(),
+																								precioUnitario: Number(it.precioUnitario) || 0,
+																							}));
+																						const res = await fetch(`/api/obras/${obraId}/materials`, {
+																							method: 'POST',
+																							headers: { 'Content-Type': 'application/json' },
+																							body: JSON.stringify({
+																								nroOrden: importPreviewOrder.nroOrden.trim() || undefined,
+																								solicitante: importPreviewOrder.solicitante.trim() || undefined,
+																								gestor: importPreviewOrder.gestor.trim() || undefined,
+																								proveedor: importPreviewOrder.proveedor.trim() || undefined,
+																								items: normalizedItems,
+																								docBucket: 'obra-documents',
+																								docPath: (lastUploadedDocRef.current ? `${String(obraId)}/${lastUploadedDocRef.current.segments.join('/')}/${lastUploadedDocRef.current.name}` : undefined),
+																							}),
+																						});
+																						if (!res.ok) throw new Error((await res.json()).error || 'No se pudo guardar');
+																						const data = await res.json();
+																						await refreshMaterialOrders();
+																						if (lastUploadedDocRef.current && data?.order?.id) {
+																							setOrderDocPaths((prev) => ({ ...prev, [String(data.order.id)]: lastUploadedDocRef.current! }));
+																						}
+																						setIsImportPreviewOpen(false);
+																						setImportPreviewOrder(null);
+																						lastUploadedDocRef.current = null;
+																						toast.success('Orden guardada');
+																					} catch (saveErr) {
+																						console.error(saveErr);
+																						toast.error(saveErr instanceof Error ? saveErr.message : 'No se pudo guardar');
+																					}
+																				}} className="space-y-4">
+																					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+																						<div>
+																							<label className="block text-sm font-medium mb-1">Nº de orden</label>
+																							<Input value={importPreviewOrder.nroOrden} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, nroOrden: e.target.value } : prev)} placeholder="OC-000X" />
+																						</div>
+																						<div>
+																							<label className="block text-sm font-medium mb-1">Solicitante</label>
+																							<Input value={importPreviewOrder.solicitante} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, solicitante: e.target.value } : prev)} placeholder="Nombre del solicitante" />
+																						</div>
+																						<div>
+																							<label className="block text-sm font-medium mb-1">Gestor</label>
+																							<Input value={importPreviewOrder.gestor} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, gestor: e.target.value } : prev)} placeholder="Nombre del gestor" />
+																						</div>
+																						<div>
+																							<label className="block text-sm font-medium mb-1">Proveedor</label>
+																							<Input value={importPreviewOrder.proveedor} onChange={(e) => setImportPreviewOrder((prev) => prev ? { ...prev, proveedor: e.target.value } : prev)} placeholder="Proveedor" />
+																						</div>
+																					</div>
+
+																					<div className="overflow-x-auto rounded-lg border">
+																						<table className="w-full text-sm">
+																							<thead className="bg-muted/50">
+																								<tr>
+																									<th className="text-left font-medium py-2 px-3 border-b">Cantidad</th>
+																									<th className="text-left font-medium py-2 px-3 border-b">Unidad</th>
+																									<th className="text-left font-medium py-2 px-3 border-b">Material</th>
+																									<th className="text-right font-medium py-2 px-3 border-b">Precio unitario</th>
+																									<th className="py-2 px-3 border-b" />
+																								</tr>
+																							</thead>
+																							<tbody>
+																								{importPreviewOrder.items.map((it, i) => (
+																									<tr key={i} className="border-b last:border-0">
+																										<td className="py-2 px-3 min-w-[110px]"><Input type="number" step="0.01" value={it.cantidad} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], cantidad: e.target.value }; return { ...prev, items }; })} placeholder="0" /></td>
+																										<td className="py-2 px-3 min-w-[110px]"><Input type="text" value={it.unidad} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], unidad: e.target.value }; return { ...prev, items }; })} placeholder="u / m / m²" /></td>
+																										<td className="py-2 px-3 min-w-[220px]"><Input type="text" value={it.material} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], material: e.target.value }; return { ...prev, items }; })} placeholder="Descripción" /></td>
+																										<td className="py-2 px-3 min-w-[160px]"><Input className="text-right" type="number" step="0.01" value={it.precioUnitario} onChange={(e) => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = [...prev.items]; items[i] = { ...items[i], precioUnitario: e.target.value }; return { ...prev, items }; })} placeholder="0.00" /></td>
+																										<td className="py-2 px-3 text-right">
+																											<Button type="button" variant="ghost" onClick={() => setImportPreviewOrder((prev) => { if (!prev) return prev; const items = prev.items.slice(); items.splice(i, 1); return { ...prev, items: items.length ? items : [{ cantidad: '', unidad: '', material: '', precioUnitario: '' }] }; })}>Eliminar</Button>
+																										</td>
+																									</tr>
+																								))}
+																							</tbody>
+																						</table>
+																					</div>
+																					<DialogFooter>
+																						<Button type="button" variant="outline" onClick={() => { setIsImportPreviewOpen(false); setImportPreviewOrder(null); lastUploadedDocRef.current = null; }}>Cancelar</Button>
+																						<Button type="submit" className="min-w-[140px]">Guardar</Button>
+																					</DialogFooter>
+																				</form>
+																			)}
+																		</DialogContent>
+																	</Dialog>
+																</motion.div>
+															</div>
+														);
+													})}
+												</div>
+											)}
+
+											<Dialog open={isAddOrderOpen} onOpenChange={setIsAddOrderOpen}>
+												<DialogContent>
+													<DialogHeader>
+														<DialogTitle>Nueva orden de materiales</DialogTitle>
+													</DialogHeader>
+													<form onSubmit={handleCreateOrder} className="space-y-4">
+														<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+															<div>
+																<label className="block text-sm font-medium mb-1">Nº de orden</label>
+																<Input value={newOrder.nroOrden} onChange={(e) => updateNewOrderMeta("nroOrden", e.target.value)} placeholder="OC-0003" />
+															</div>
+															<div>
+																<label className="block text-sm font-medium mb-1">Solicitante</label>
+																<Input value={newOrder.solicitante} onChange={(e) => updateNewOrderMeta("solicitante", e.target.value)} placeholder="Nombre del solicitante" />
+															</div>
+															<div>
+																<label className="block text-sm font-medium mb-1">Gestor</label>
+																<Input value={newOrder.gestor} onChange={(e) => updateNewOrderMeta("gestor", e.target.value)} placeholder="Nombre del gestor" />
+															</div>
+															<div>
+																<label className="block text-sm font-medium mb-1">Proveedor</label>
+																<Input value={newOrder.proveedor} onChange={(e) => updateNewOrderMeta("proveedor", e.target.value)} placeholder="Proveedor" />
+															</div>
+														</div>
+
+														<div className="space-y-2">
+															<div className="flex items-center justify-between">
+																<h3 className="text-sm font-semibold">Ítems</h3>
+																<Button type="button" variant="outline" className="h-8 px-2 text-xs" onClick={addNewOrderItem}>Agregar ítem</Button>
+															</div>
+															<div className="overflow-x-auto rounded-lg border">
+																<table className="w-full text-sm">
+																	<thead className="bg-muted/50">
+																		<tr>
+																			<th className="text-left font-medium py-2 px-3 border-b">Cantidad</th>
+																			<th className="text-left font-medium py-2 px-3 border-b">Unidad</th>
+																			<th className="text-left font-medium py-2 px-3 border-b">Material</th>
+																			<th className="text-right font-medium py-2 px-3 border-b">Precio unitario</th>
+																			<th className="py-2 px-3 border-b" />
+																		</tr>
+																	</thead>
+																	<tbody>
+																		{newOrder.items.map((it, i) => (
+																			<tr key={i} className="border-b last:border-0">
+																				<td className="py-2 px-3 min-w-[110px]"><Input type="number" step="0.01" value={it.cantidad} onChange={(e) => updateNewOrderItem(i, "cantidad", e.target.value)} placeholder="0" /></td>
+																				<td className="py-2 px-3 min-w-[110px]"><Input type="text" value={it.unidad} onChange={(e) => updateNewOrderItem(i, "unidad", e.target.value)} placeholder="u / m / m²" /></td>
+																				<td className="py-2 px-3 min-w-[220px]"><Input type="text" value={it.material} onChange={(e) => updateNewOrderItem(i, "material", e.target.value)} placeholder="Descripción" /></td>
+																				<td className="py-2 px-3 min-w-[160px]"><Input className="text-right" type="number" step="0.01" value={it.precioUnitario} onChange={(e) => updateNewOrderItem(i, "precioUnitario", e.target.value)} placeholder="0.00" /></td>
+																				<td className="py-2 px-3 text-right">
+																					<Button type="button" variant="ghost" onClick={() => removeNewOrderItem(i)}>Eliminar</Button>
+																				</td>
+																			</tr>
+																		))}
+																	</tbody>
+																</table>
+															</div>
+														</div>
+
+														<DialogFooter>
+															<Button type="button" variant="outline" onClick={() => { setIsAddOrderOpen(false); setNewOrder({ ...emptyNewOrderForm }); }}>Cancelar</Button>
+															<Button type="submit" className="min-w-[140px]">Guardar orden</Button>
+														</DialogFooter>
+													</form>
+												</DialogContent>
+											</Dialog>
+										</div>
+									</motion.section>
+								</TabsContent>
+
+								{/* OLD - Documentos Tab - Removed and merged into FileManager above */}
+								<TabsContent value="documentos-old" className="space-y-6 hidden">
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ duration: 0.4 }}
+										className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									>
+										<div className="bg-muted/50 px-6 py-4 border-b">
+											<div className="flex items-center justify-between gap-4 flex-wrap">
+												<div className="flex items-center gap-2">
+													<FileText className="h-5 w-5 text-primary" />
+													<h2 className="text-lg font-semibold">Documentos</h2>
+												</div>
+												<div className="flex items-center gap-2">
+													<Button variant="outline" className="gap-2" onClick={() => setIsCreateFolderOpen(true)}>
+														<FolderPlus className="h-4 w-4" />
+														Nueva carpeta
+													</Button>
+													<Button className="gap-2" onClick={triggerUpload}>
+														<Upload className="h-4 w-4" />
+														Subir archivos
+													</Button>
+													<input ref={uploadInputRef} type="file" className="hidden" multiple onChange={handleUploadFiles} />
+												</div>
+											</div>
+
+											<div className="px-6 pt-4">
+												{/* Breadcrumbs */}
+												<div className="flex items-center flex-wrap gap-1 text-sm">
+													<button className="text-muted-foreground hover:text-foreground transition" onClick={() => setDocPathSegments([])}>Obra</button>
+													{docPathSegments.map((seg, i) => (
+														<div key={`${seg}-${i}`} className="flex items-center gap-1">
+															<span className="text-muted-foreground">/</span>
+															<button className="text-muted-foreground hover:text-foreground transition" onClick={() => goToIndex(i + 1)}>{seg}</button>
+														</div>
+													))}
 												</div>
 
+												<div className="p-6 pt-4 space-y-4">
+													{docsError && (
+														<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive text-sm">{docsError}</div>
+													)}
+													{docsLoading ? (
+														<div className="flex items-center justify-center py-12">
+															<div className="space-y-2 text-center">
+																<div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+																<p className="text-sm text-muted-foreground">Cargando...</p>
+															</div>
+														</div>
+													) : (
+														<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+															{(docItems || []).sort((a, b) => {
+																const aIsFolder = !a.metadata;
+																const bIsFolder = !b.metadata;
+																if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1;
+																return a.name.localeCompare(b.name);
+															})
+																.map((item, idx) => {
+																	const isFolder = !item.metadata;
+																	const mime = item.metadata?.mimetype;
+																	const isImage = typeof mime === 'string' && mime.startsWith('image/');
+																	return (
+																		<motion.button
+																			key={`${item.name}-${idx}`}
+																			initial={{ opacity: 0, y: 8 }}
+																			animate={{ opacity: 1, y: 0 }}
+																			transition={{ delay: idx * 0.02 }}
+																			onClick={() => {
+																				if (isFolder) {
+																					goToFolder(item.name);
+																				} else {
+																					void previewFile(item.name, mime);
+																				}
+																			}}
+																			className="group rounded-md border p-3 text-left hover:bg-muted/40 transition-colors"
+																		>
+																			<div className="flex items-center justify-center h-16 mb-2 bg-muted/30 rounded-sm">
+																				{isFolder ? (
+																					<Folder className="h-7 w-7 text-muted-foreground" />
+																				) : isImage ? (
+																					<ImageIcon className="h-7 w-7 text-muted-foreground" />
+																				) : (
+																					<FileIcon className="h-7 w-7 text-muted-foreground" />
+																				)}
+																			</div>
+																			<div className="truncate text-sm font-medium">{item.name}</div>
+																			{!isFolder && (
+																				<div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+																					<span>{item.metadata?.size ? `${(item.metadata.size / 1024).toFixed(1)} KB` : ''}</span>
+																					<button type="button" className="opacity-70 hover:opacity-100" onClick={(ev) => { ev.stopPropagation(); void downloadFile(item.name); }}>
+																						<Download className="h-4 w-4" />
+																					</button>
+																				</div>
+																			)}
+																		</motion.button>
+																	);
+																})}
+														</div>
+													)}
+												</div>
+											</div>
+										</div>
+									</motion.section>
+
+									{/* Create folder dialog */}
+									<Dialog open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen}>
+										<DialogContent>
+											<DialogHeader>
+												<DialogTitle>Nueva carpeta</DialogTitle>
+											</DialogHeader>
+											<form onSubmit={handleCreateFolder} className="space-y-4">
+												<div>
+													<label className="block text-sm font-medium mb-1">Nombre de la carpeta</label>
+													<Input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Carpeta" />
+												</div>
 												<DialogFooter>
-													<Button type="button" variant="outline" onClick={() => { setIsAddOrderOpen(false); setNewOrder({ ...emptyNewOrderForm }); }}>Cancelar</Button>
-													<Button type="submit" className="min-w-[140px]">Guardar orden</Button>
+													<Button type="button" variant="outline" onClick={() => setIsCreateFolderOpen(false)}>Cancelar</Button>
+													<Button type="submit" className="min-w-[120px]">Crear</Button>
 												</DialogFooter>
 											</form>
 										</DialogContent>
 									</Dialog>
-								</div>
-							</motion.section>
-						</TabsContent>
 
-						{/* OLD - Documentos Tab - Removed and merged into FileManager above */}
-						<TabsContent value="documentos-old" className="space-y-6 hidden">
-							<motion.section
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.4 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden"
-							>
-								<div className="bg-muted/50 px-6 py-4 border-b">
-									<div className="flex items-center justify-between gap-4 flex-wrap">
+									{/* Preview dialog */}
+									<Dialog open={!!preview} onOpenChange={(open) => { if (!open) { setPreview(null); setQueryParams({ doc: null }); } }}>
+										<DialogContent className="max-w-3xl">
+											<DialogHeader>
+												<DialogTitle>{preview?.name}</DialogTitle>
+											</DialogHeader>
+											<div className="p-2">
+												{preview?.url ? (
+													<img src={preview.url} alt={preview.name} className="max-h-[70vh] w-auto rounded-md" />
+												) : null}
+											</div>
+										</DialogContent>
+									</Dialog>
+								</TabsContent>
+							</Tabs>
+						</div>
+						<AnimatePresence>
+							{isMemoriaOpen && (
+								<motion.aside
+									initial={{ x: 320, opacity: 0 }}
+									animate={{ x: 0, opacity: 1 }}
+									exit={{ x: 320, opacity: 0 }}
+									transition={{ duration: 0.25, ease: "easeOut" }}
+									className="w-full lg:w-80 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4"
+								>
+									<div className="flex items-center justify-between gap-2">
 										<div className="flex items-center gap-2">
-											<FileText className="h-5 w-5 text-primary" />
-											<h2 className="text-lg font-semibold">Documentos</h2>
+											<StickyNote className="h-4 w-4 text-primary" />
+											<h2 className="text-sm font-semibold">Memoria descriptiva de la obra</h2>
 										</div>
-										<div className="flex items-center gap-2">
-											<Button variant="outline" className="gap-2" onClick={() => setIsCreateFolderOpen(true)}>
-												<FolderPlus className="h-4 w-4" />
-												Nueva carpeta
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											onClick={() => setIsMemoriaOpen(false)}
+										>
+											<X className="h-4 w-4" />
+										</Button>
+									</div>
+
+									<div className="space-y-2">
+										<label className="text-xs font-medium text-muted-foreground">
+											Nueva nota
+										</label>
+										<Textarea
+											value={memoriaDraft}
+											onChange={(e) => setMemoriaDraft(e.target.value)}
+											placeholder="Escribe aquí notas, decisiones o contexto importante sobre esta obra..."
+											className="min-h-[80px] text-sm"
+										/>
+										<div className="flex justify-end">
+											<Button
+												type="button"
+												size="sm"
+												disabled={!memoriaDraft.trim()}
+												onClick={async () => {
+													const text = memoriaDraft.trim();
+													if (!text || !obraId || obraId === "undefined") return;
+													try {
+														const res = await fetch(`/api/obras/${obraId}/memoria`, {
+															method: "POST",
+															headers: { "Content-Type": "application/json" },
+															body: JSON.stringify({ text }),
+														});
+														if (!res.ok) {
+															const out = await res.json().catch(() => ({} as any));
+															throw new Error(out?.error || "No se pudo guardar la nota");
+														}
+														const out = await res.json();
+														const note = out?.note;
+														if (note) {
+															setMemoriaNotes((prev) => [
+																{
+																	id: String(note.id),
+																	text: String(note.text ?? ""),
+																	createdAt: String(note.createdAt ?? note.created_at ?? ""),
+																	userId: String(note.userId ?? note.user_id ?? ""),
+																	userName:
+																		typeof note.userName === "string"
+																			? note.userName
+																			: note.user_name ?? null,
+																},
+																...prev,
+															]);
+														}
+														setMemoriaDraft("");
+													} catch (err) {
+														console.error(err);
+														const message =
+															err instanceof Error ? err.message : "No se pudo guardar la nota";
+														toast.error(message);
+													}
+												}}
+											>
+												Guardar nota
 											</Button>
-											<Button className="gap-2" onClick={triggerUpload}>
-												<Upload className="h-4 w-4" />
-												Subir archivos
-											</Button>
-											<input ref={uploadInputRef} type="file" className="hidden" multiple onChange={handleUploadFiles} />
 										</div>
 									</div>
 
-									<div className="px-6 pt-4">
-										{/* Breadcrumbs */}
-										<div className="flex items-center flex-wrap gap-1 text-sm">
-											<button className="text-muted-foreground hover:text-foreground transition" onClick={() => setDocPathSegments([])}>Obra</button>
-											{docPathSegments.map((seg, i) => (
-												<div key={`${seg}-${i}`} className="flex items-center gap-1">
-													<span className="text-muted-foreground">/</span>
-													<button className="text-muted-foreground hover:text-foreground transition" onClick={() => goToIndex(i + 1)}>{seg}</button>
-												</div>
-											))}
-										</div>
+									<Separator />
 
-										<div className="p-6 pt-4 space-y-4">
-											{docsError && (
-												<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-destructive text-sm">{docsError}</div>
-											)}
-											{docsLoading ? (
-												<div className="flex items-center justify-center py-12">
-													<div className="space-y-2 text-center">
-														<div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
-														<p className="text-sm text-muted-foreground">Cargando...</p>
+									<div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+										{memoriaNotes.length === 0 ? (
+											<p className="text-xs text-muted-foreground">
+												Todavía no hay notas para esta obra. Usa este espacio para registrar decisiones,
+												aclaraciones o contexto importante.
+											</p>
+										) : (
+											memoriaNotes.map((note) => (
+												<div
+													key={note.id}
+													className="rounded-md border bg-background/60 px-3 py-2 text-xs space-y-1"
+												>
+													<div className="flex items-center justify-between gap-2">
+														<div className="flex items-center gap-2">
+															<div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
+																{(note.userName || "?")
+																	.split(" ")
+																	.filter(Boolean)
+																	.slice(0, 2)
+																	.map((part) => part[0])
+																	.join("")}
+															</div>
+															<div className="flex flex-col">
+																<span className="font-medium text-foreground">
+																	{note.userName || "Usuario"}
+																</span>
+																{currentUserId === note.userId && (
+																	<span className="text-[10px] text-muted-foreground">
+																		Tú
+																	</span>
+																)}
+															</div>
+														</div>
+														<p className="text-[10px] text-muted-foreground">
+															{new Date(note.createdAt).toLocaleString()}
+														</p>
 													</div>
+													<p className="whitespace-pre-wrap text-foreground">
+														{note.text}
+													</p>
 												</div>
-											) : (
-												<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-													{(docItems || []).sort((a, b) => {
-														const aIsFolder = !a.metadata;
-														const bIsFolder = !b.metadata;
-														if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1;
-														return a.name.localeCompare(b.name);
-													})
-														.map((item, idx) => {
-															const isFolder = !item.metadata;
-															const mime = item.metadata?.mimetype;
-															const isImage = typeof mime === 'string' && mime.startsWith('image/');
-															return (
-																<motion.button
-																	key={`${item.name}-${idx}`}
-																	initial={{ opacity: 0, y: 8 }}
-																	animate={{ opacity: 1, y: 0 }}
-																	transition={{ delay: idx * 0.02 }}
-																	onClick={() => {
-																		if (isFolder) {
-																			goToFolder(item.name);
-																		} else {
-																			void previewFile(item.name, mime);
-																		}
-																	}}
-																	className="group rounded-md border p-3 text-left hover:bg-muted/40 transition-colors"
-																>
-																	<div className="flex items-center justify-center h-16 mb-2 bg-muted/30 rounded-sm">
-																		{isFolder ? (
-																			<Folder className="h-7 w-7 text-muted-foreground" />
-																		) : isImage ? (
-																			<ImageIcon className="h-7 w-7 text-muted-foreground" />
-																		) : (
-																			<FileIcon className="h-7 w-7 text-muted-foreground" />
-																		)}
-																	</div>
-																	<div className="truncate text-sm font-medium">{item.name}</div>
-																	{!isFolder && (
-																		<div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-																			<span>{item.metadata?.size ? `${(item.metadata.size / 1024).toFixed(1)} KB` : ''}</span>
-																			<button type="button" className="opacity-70 hover:opacity-100" onClick={(ev) => { ev.stopPropagation(); void downloadFile(item.name); }}>
-																				<Download className="h-4 w-4" />
-																			</button>
-																		</div>
-																	)}
-																</motion.button>
-															);
-														})}
-												</div>
-											)}
-										</div>
+											))
+										)}
 									</div>
-								</div>
-							</motion.section>
-
-							{/* Create folder dialog */}
-							<Dialog open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen}>
-								<DialogContent>
-									<DialogHeader>
-										<DialogTitle>Nueva carpeta</DialogTitle>
-									</DialogHeader>
-									<form onSubmit={handleCreateFolder} className="space-y-4">
-										<div>
-											<label className="block text-sm font-medium mb-1">Nombre de la carpeta</label>
-											<Input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Carpeta" />
-										</div>
-										<DialogFooter>
-											<Button type="button" variant="outline" onClick={() => setIsCreateFolderOpen(false)}>Cancelar</Button>
-											<Button type="submit" className="min-w-[120px]">Crear</Button>
-										</DialogFooter>
-									</form>
-								</DialogContent>
-							</Dialog>
-
-							{/* Preview dialog */}
-							<Dialog open={!!preview} onOpenChange={(open) => { if (!open) { setPreview(null); setQueryParams({ doc: null }); } }}>
-								<DialogContent className="max-w-3xl">
-									<DialogHeader>
-										<DialogTitle>{preview?.name}</DialogTitle>
-									</DialogHeader>
-									<div className="p-2">
-										{preview?.url ? (
-											<img src={preview.url} alt={preview.name} className="max-h-[70vh] w-auto rounded-md" />
-										) : null}
-									</div>
-								</DialogContent>
-							</Dialog>
-						</TabsContent>
-
-					</Tabs>
+								</motion.aside>
+							)}
+						</AnimatePresence>
+					</div>
 				)}
 			</div>
 		</div >

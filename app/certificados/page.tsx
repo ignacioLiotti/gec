@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,10 @@ import {
 import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileSpreadsheet, X, Columns3, Eye, EyeOff, Pin, FileText, ChevronDown, ChevronUp, Printer } from "lucide-react";
+import { FileSpreadsheet, X, Columns3, Eye, EyeOff, Pin, FileText } from "lucide-react";
 import Papa from "papaparse";
 import { toast } from "sonner";
-import ReportTable from "./report";
 import { CheckedState } from "@radix-ui/react-checkbox";
 
 type CertRow = {
@@ -89,7 +88,7 @@ function InBodyStates({
     return (
       <tr>
         <td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
-          <p className="text-sm text-muted-foreground">{emptyText}</p>
+          <p className="text-sm text-orange-primary/80">{emptyText}</p>
         </td>
       </tr>
     );
@@ -152,6 +151,7 @@ type FiltersState = {
 };
 
 export default function CertificadosPage() {
+  const router = useRouter();
   const [rows, setRows] = useState<CertRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tableError, setTableError] = useState<string | null>(null);
@@ -227,16 +227,6 @@ export default function CertificadosPage() {
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Report generation
-  const [showReport, setShowReport] = useState(false);
-  const [reportCompanyName, setReportCompanyName] = useState("Nombre de la empresa");
-  const [reportDescription, setReportDescription] = useState("Reporte de certificados");
-  const [reportDate, setReportDate] = useState(new Date().toLocaleDateString('es-AR'));
-  const [reportViewMode, setReportViewMode] = useState<"full" | "by-obra" | "by-ente">("full");
-  const [reportHiddenCols, setReportHiddenCols] = useState<number[]>([]);
-  const [reportSortBy, setReportSortBy] = useState<number>(0);
-  const [reportSortDir, setReportSortDir] = useState<"asc" | "desc">("asc");
-  const [reportAggregations, setReportAggregations] = useState<Record<number, "none" | "sum" | "count" | "count-checked" | "average">>({});
 
   const tableId = "certificados-table";
 
@@ -514,8 +504,14 @@ export default function CertificadosPage() {
     setIsDraggingCsv(false);
   }, []);
 
+  const goToReport = useCallback(() => {
+    const params = new URLSearchParams();
+    applyFiltersToParams(params);
+    router.push(`/certificados/reporte?${params.toString()}`);
+  }, [applyFiltersToParams, router]);
+
   return (
-    <div className="w-full mx-auto p-6 pt-0">
+    <div className="w-full mx-auto p-4 pt-0">
       {/* <div>
         <p className="text-muted-foreground pb-2">Gestión de certificados</p>
         <h1 className="text-4xl font-bold mb-2">Certificados por obra</h1>
@@ -543,7 +539,7 @@ export default function CertificadosPage() {
         </div>
       )}
 
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center py-2">
         <div className="flex items-center gap-2">
           <Input placeholder="Buscar en todas las columnas..." value={query} onChange={(e) => setQuery(e.target.value)} className="w-[240px]" />
         </div>
@@ -794,16 +790,17 @@ export default function CertificadosPage() {
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowReport(true)}>
+          <Button variant="outline" size="sm" className="gap-2" onClick={goToReport}>
             <FileText className="h-4 w-4" />
             Generar reporte
           </Button>
         </div>
       </div>
 
-      <div className="border border-border rounded-xl overflow-hidden shadow-sm mb-6 w-full max-w-[calc(96vw-var(--sidebar-width))] mt-4">
+      <div className="border border-border rounded-none overflow-hidden mb-6 w-full  max-w-[calc(100vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] 
+        bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_10px,var(--border)_10px,var(--border)_11px,transparent_12px)] bg-repeat">
         <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
-          <table className="text-sm table-fixed w-full" data-table-id={tableId}>
+          <table className="text-sm table-fixed w-full " data-table-id={tableId}>
             <ColGroup tableId={tableId} columns={12} mode={resizeMode} />
             <thead className="bg-muted/50 sticky top-0 z-30">
               <tr className="border-b">
@@ -1248,490 +1245,6 @@ export default function CertificadosPage() {
         </div>
       </div>
 
-      {/* Report Modal */}
-      {showReport && (
-        <style>{`
-          @media print {
-            @page {
-              size: A4 ;
-              margin: 0mm;
-            }
-
-            body {
-              background: white !important;
-            }
-
-            input {
-              border: 1px solid #ccc !important;
-            }
-
-            /* Hide configuration sidebar and controls, show only main report */
-            .cert-report-sidebar {
-              display: none !important;
-            }
-
-            .cert-report-print-button {
-              display: none !important;
-            }
-
-            /* Use dedicated print-only version of the report */
-            .cert-report-screen {
-              display: none !important;
-            }
-
-            .cert-report-print {
-              display: block !important;
-              overflow: visible !important;
-              max-height: none !important;
-              width: 100% !important;
-              max-width: 100% !important;
-            }
-
-            /* Improve table pagination / headers across pages */
-            .cert-report-root table {
-              page-break-inside: auto;
-              border-collapse: collapse;
-              width: 100%;
-            }
-
-            .cert-report-root thead {
-              display: table-header-group;
-            }
-
-            .cert-report-root tfoot {
-              display: table-footer-group;
-            }
-
-            .cert-report-root tr {
-              page-break-inside: avoid;
-              page-break-after: auto;
-            }
-
-            .cert-report-root h3 {
-              page-break-after: avoid;
-            }
-
-            /* Force each logical section (table) to start on a new page,
-               but allow the table itself to span multiple pages */
-            .cert-report-print-section {
-              page-break-before: always;
-            }
-
-            .cert-report-print-section:first-child {
-              page-break-before: auto;
-            }
-            .cert-report-dialog-content {
-              border: none !important;
-              box-shadow: none !important;
-              padding: 0 !important;
-            }
-
-          }
-        `}</style>
-      )}
-      <Dialog open={showReport} onOpenChange={setShowReport}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-hidden flex flex-col p-0 cert-report-dialog-content">
-          <div className="flex h-full">
-            {/* Sidebar with controls */}
-            <div className="w-64 border-r bg-muted/30 p-4 space-y-4 overflow-y-auto cert-report-sidebar">
-              <DialogHeader>
-                <DialogTitle className="text-lg">Configuración</DialogTitle>
-              </DialogHeader>
-
-              {/* View mode buttons */}
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-muted-foreground">Vista</div>
-                <div className="flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setReportViewMode("full")}
-                    className={cn(
-                      "text-left px-3 py-2 rounded-md text-sm transition-colors",
-                      reportViewMode === "full"
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent"
-                    )}
-                  >
-                    Completa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReportViewMode("by-obra")}
-                    className={cn(
-                      "text-left px-3 py-2 rounded-md text-sm transition-colors",
-                      reportViewMode === "by-obra"
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent"
-                    )}
-                  >
-                    Por obra
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReportViewMode("by-ente")}
-                    className={cn(
-                      "text-left px-3 py-2 rounded-md text-sm transition-colors",
-                      reportViewMode === "by-ente"
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent"
-                    )}
-                  >
-                    Por ente
-                  </button>
-                </div>
-              </div>
-
-              {/* Column visibility */}
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-muted-foreground">Columnas visibles</div>
-                <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                  {ALL_COLUMNS.map((col) => {
-                    const isVisible = !reportHiddenCols.includes(col.index);
-                    return (
-                      <label key={col.index} className="flex items-center gap-2 text-sm py-1 hover:bg-accent rounded px-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isVisible}
-                          onChange={(e) => {
-                            setReportHiddenCols((prev) => {
-                              const set = new Set(prev);
-                              if (!e.target.checked) set.add(col.index); else set.delete(col.index);
-                              return Array.from(set).sort((a, b) => a - b);
-                            });
-                          }}
-                          className="h-4 w-4 rounded"
-                        />
-                        <span>{col.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Aggregations */}
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-muted-foreground">Totales por columna</div>
-                <div className="space-y-2 max-h-[200px] overflow-y-auto text-xs">
-                  {ALL_COLUMNS.map((col) => {
-                    if (reportHiddenCols.includes(col.index)) return null;
-                    const currentAgg = reportAggregations[col.index] || "none";
-                    return (
-                      <div key={col.index} className="space-y-1">
-                        <div className="font-medium">{col.label}</div>
-                        <select
-                          value={currentAgg}
-                          onChange={(e) => {
-                            setReportAggregations((prev) => ({
-                              ...prev,
-                              [col.index]: e.target.value as any,
-                            }));
-                          }}
-                          className="w-full text-xs border rounded px-2 py-1 bg-background"
-                        >
-                          <option value="none">Sin total</option>
-                          <option value="sum">Suma</option>
-                          <option value="count">Contar</option>
-                          <option value="count-checked">Contar marcados</option>
-                          <option value="average">Promedio</option>
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Report content */}
-            <div className="flex-1 overflow-y-auto p-8 bg-white relative">
-              {/* Editable on-screen version */}
-              <div className="cert-report-content cert-report-root cert-report-screen h-full overflow-y-auto">
-                <CertificadosReportContent
-                  reportCompanyName={reportCompanyName}
-                  setReportCompanyName={setReportCompanyName}
-                  reportDescription={reportDescription}
-                  setReportDescription={setReportDescription}
-                  reportDate={reportDate}
-                  setReportDate={setReportDate}
-                  reportViewMode={reportViewMode}
-                  rows={rows}
-                  reportHiddenCols={reportHiddenCols}
-                  reportSortBy={reportSortBy}
-                  reportSortDir={reportSortDir}
-                  setReportSortDir={setReportSortDir}
-                  setReportSortBy={setReportSortBy}
-                  reportAggregations={reportAggregations}
-                  allColumns={ALL_COLUMNS}
-                />
-              </div>
-
-              {/* Print-only, final version (no inputs, better page breaks) */}
-              <div className="cert-report-print cert-report-root hidden">
-                <CertificadosReportPrintContent
-                  reportCompanyName={reportCompanyName}
-                  reportDescription={reportDescription}
-                  reportDate={reportDate}
-                  reportViewMode={reportViewMode}
-                  rows={rows}
-                  reportHiddenCols={reportHiddenCols}
-                  reportSortBy={reportSortBy}
-                  reportSortDir={reportSortDir}
-                  reportAggregations={reportAggregations}
-                  allColumns={ALL_COLUMNS}
-                />
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-// Certificados Report Print-only Content (non-editable, optimized for print)
-function CertificadosReportPrintContent({
-  reportCompanyName,
-  reportDescription,
-  reportDate,
-  reportViewMode,
-  rows,
-  reportHiddenCols,
-  reportSortBy,
-  reportSortDir,
-  reportAggregations,
-  allColumns,
-}: {
-  reportCompanyName: string;
-  reportDescription: string;
-  reportDate: string;
-  reportViewMode: "full" | "by-obra" | "by-ente";
-  rows: CertRow[];
-  reportHiddenCols: number[];
-  reportSortBy: number;
-  reportSortDir: "asc" | "desc";
-  reportAggregations: Record<number, "none" | "sum" | "count" | "count-checked" | "average">;
-  allColumns: { index: number; label: string }[];
-}) {
-  // We reuse ReportTable so sorting is identical to the on-screen version,
-  // but we don't need interactive sorting in the print output.
-  const noopSort = () => { };
-
-  return (
-    <div className="max-w-full mx-auto space-y-6 bg-red-500 border-none shadow-none">
-      {/* Static report header for print */}
-      <div className="space-y-1 border-b pb-4 bg-green-500">
-        <h1 className="text-2xl font-bold">{reportCompanyName}</h1>
-        <p className="text-lg text-muted-foreground">{reportDescription}</p>
-        <p className="text-sm text-muted-foreground">{reportDate}</p>
-      </div>
-
-      {/* Report tables for print, with explicit sections for better page breaks */}
-      {reportViewMode === "full" && (
-        <div className="cert-report-print-section bg-blue-500">
-          <ReportTable
-            title="Todos los certificados"
-            data={rows}
-            hiddenCols={reportHiddenCols}
-            sortBy={reportSortBy}
-            sortDir={reportSortDir}
-            onSort={noopSort}
-            aggregations={reportAggregations}
-            allColumns={allColumns}
-            isPrint={true}
-          />
-        </div>
-      )}
-
-      {reportViewMode === "by-obra" && (() => {
-        const grouped = rows.reduce((acc, row) => {
-          if (!acc[row.obraName]) acc[row.obraName] = [];
-          acc[row.obraName].push(row);
-          return acc;
-        }, {} as Record<string, CertRow[]>);
-
-        return Object.entries(grouped).map(([obraName, data]) => (
-          <div key={obraName} className="cert-report-print-section">
-            <ReportTable
-              title={obraName}
-              data={data}
-              hiddenCols={reportHiddenCols}
-              sortBy={reportSortBy}
-              sortDir={reportSortDir}
-              onSort={noopSort}
-              aggregations={reportAggregations}
-              allColumns={allColumns}
-              isPrint={true}
-            />
-          </div>
-        ));
-      })()}
-
-      {reportViewMode === "by-ente" && (() => {
-        const grouped = rows.reduce((acc, row) => {
-          if (!acc[row.ente]) acc[row.ente] = [];
-          acc[row.ente].push(row);
-          return acc;
-        }, {} as Record<string, CertRow[]>);
-
-        return Object.entries(grouped).map(([ente, data]) => (
-          <div key={ente} className="cert-report-print-section">
-            <ReportTable
-              title={ente}
-              data={data}
-              hiddenCols={reportHiddenCols}
-              sortBy={reportSortBy}
-              sortDir={reportSortDir}
-              onSort={noopSort}
-              aggregations={reportAggregations}
-              allColumns={allColumns}
-              isPrint={true}
-            />
-          </div>
-        ));
-      })()}
-    </div>
-  );
-}
-
-// Certificados Report Content Component
-function CertificadosReportContent({
-  reportCompanyName,
-  setReportCompanyName,
-  reportDescription,
-  setReportDescription,
-  reportDate,
-  setReportDate,
-  reportViewMode,
-  rows,
-  reportHiddenCols,
-  reportSortBy,
-  reportSortDir,
-  setReportSortDir,
-  setReportSortBy,
-  reportAggregations,
-  allColumns,
-}: {
-  reportCompanyName: string;
-  setReportCompanyName: (value: string) => void;
-  reportDescription: string;
-  setReportDescription: (value: string) => void;
-  reportDate: string;
-  setReportDate: (value: string) => void;
-  reportViewMode: "full" | "by-obra" | "by-ente";
-  rows: CertRow[];
-  reportHiddenCols: number[];
-  reportSortBy: number;
-  reportSortDir: "asc" | "desc";
-  setReportSortDir: React.Dispatch<React.SetStateAction<"asc" | "desc">>;
-  setReportSortBy: React.Dispatch<React.SetStateAction<number>>;
-  reportAggregations: Record<number, "none" | "sum" | "count" | "count-checked" | "average">;
-  allColumns: { index: number; label: string }[];
-}) {
-  const handleSort = useCallback((colIndex: number) => {
-    if (reportSortBy === colIndex) {
-      setReportSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setReportSortBy(colIndex);
-      setReportSortDir("asc");
-    }
-  }, [reportSortBy, setReportSortBy, setReportSortDir]);
-
-  return (
-    <div className="max-w-full mx-auto space-y-6">
-      {/* Report header */}
-      <div className="space-y-3 border-b pb-4">
-        <input
-          type="text"
-          value={reportCompanyName}
-          onChange={(e) => setReportCompanyName(e.target.value)}
-          className="text-2xl font-bold w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
-          placeholder="Nombre de la empresa"
-        />
-        <input
-          type="text"
-          value={reportDescription}
-          onChange={(e) => setReportDescription(e.target.value)}
-          className="text-lg text-muted-foreground w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
-          placeholder="Descripción del reporte"
-        />
-        <input
-          type="text"
-          value={reportDate}
-          onChange={(e) => setReportDate(e.target.value)}
-          className="text-sm text-muted-foreground w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
-          placeholder="Fecha"
-        />
-      </div>
-
-      <div className="flex flex-col gap-4 max-h-[calc(80vh-200px)] overflow-y-auto">
-
-
-        {/* Report tables */}
-        {reportViewMode === "full" && (
-          <ReportTable
-            title="Todos los certificados"
-            data={rows}
-            hiddenCols={reportHiddenCols}
-            sortBy={reportSortBy}
-            sortDir={reportSortDir}
-            onSort={handleSort}
-            aggregations={reportAggregations}
-            allColumns={allColumns}
-            isPrint={false}
-          />
-        )}
-
-        {reportViewMode === "by-obra" && (() => {
-          const grouped = rows.reduce((acc, row) => {
-            if (!acc[row.obraName]) acc[row.obraName] = [];
-            acc[row.obraName].push(row);
-            return acc;
-          }, {} as Record<string, CertRow[]>);
-
-          return Object.entries(grouped).map(([obraName, data]) => (
-            <ReportTable
-              key={obraName}
-              title={obraName}
-              data={data}
-              hiddenCols={reportHiddenCols}
-              sortBy={reportSortBy}
-              sortDir={reportSortDir}
-              onSort={handleSort}
-              aggregations={reportAggregations}
-              allColumns={allColumns}
-              isPrint={false}
-            />
-          ));
-        })()}
-
-        {reportViewMode === "by-ente" && (() => {
-          const grouped = rows.reduce((acc, row) => {
-            if (!acc[row.ente]) acc[row.ente] = [];
-            acc[row.ente].push(row);
-            return acc;
-          }, {} as Record<string, CertRow[]>);
-
-          return Object.entries(grouped).map(([ente, data]) => (
-            <ReportTable
-              key={ente}
-              title={ente}
-              data={data}
-              hiddenCols={reportHiddenCols}
-              sortBy={reportSortBy}
-              sortDir={reportSortDir}
-              onSort={handleSort}
-              aggregations={reportAggregations}
-              allColumns={allColumns}
-              isPrint={false}
-            />
-          ));
-        })()}
-      </div>
-
-      {/* Print button */}
-      <Button className="w-full gap-2 cert-report-print-button" onClick={() => window.print()}>
-        <Printer className="h-4 w-4" />
-        Imprimir
-      </Button>
     </div>
   );
 }

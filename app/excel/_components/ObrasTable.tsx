@@ -12,6 +12,7 @@ import {
 import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 import { InBodyStates } from "./InBodyStates";
 import { CustomInput } from "./CustomInput";
+import { Input } from "@/components/ui/input";
 
 type AnyFormApi = {
   Field: any;
@@ -137,8 +138,11 @@ export function ObrasTable(props: ObrasTableProps) {
     };
   }, [isPinned, columnOffsets, isHidden]);
 
+  const lastIndex = field.state.value.length - 1;
+
   return (
-    <div className="border border-border rounded-xl overflow-hidden shadow-sm mb-6 w-full max-w-[calc(96vw-var(--sidebar-width))]">
+    <div className="border border-border rounded-none overflow-hidden w-full max-w-[calc(100vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] 
+        bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_10px,var(--border)_10px,var(--border)_11px,transparent_12px)] bg-repeat">
       <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
         <table className="text-sm table-fixed w-full" data-table-id={tableId}>
           <ColGroup tableId={tableId} columns={14} mode={resizeMode} />
@@ -407,14 +411,15 @@ export function ObrasTable(props: ObrasTableProps) {
                     <ContextMenuTrigger asChild>
                       <tr className={cn(
                         "transition-colors duration-150 hover:bg-muted/50",
-                        visualIndex % 2 === 0 ? "bg-background" : "bg-card/40"
+                        visualIndex % 2 === 0 ? "bg-background" : "bg-card/40",
+                        index === lastIndex ? "border-b" : ""
                       )}>
                         <formApi.Field name={`detalleObras[${index}].n`}>
                           {(subField: any) => (
                             <td {...getStickyProps(0, "px-2 pl-4 py-2  outline outline-border border-border relative bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="min-h-[28px]">{subField.state.value}</div>
+                                  <div className="min-h-[18px]">{subField.state.value}</div>
                                 </ContextMenuTrigger>
                                 <ContextMenuContent className="w-52">
                                   <ContextMenuItem onClick={() => void copyToClipboard(String(subField.state.value ?? ""))}>Copiar valor</ContextMenuItem>
@@ -437,9 +442,16 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(1, " outline outline-border border-border p-0 align-center px-2 py-2 bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="min-h-[28px]">
-                                    <Link href={`/excel/${field.state.value[index]?.id}`} className="cursor-pointer" dangerouslySetInnerHTML={{ __html: highlightText(String(subField.state.value ?? ""), query) }} />
-                                  </div>
+                                  {/* if there is no value for the name then asume its the first time it was created then make it editable */}
+                                  {subField.state.value ? (
+                                    <div className="min-h-[18px]">
+                                      <Link href={`/excel/${field.state.value[index]?.id}`} className="cursor-pointer" dangerouslySetInnerHTML={{ __html: highlightText(String(subField.state.value ?? ""), query) }} />
+                                    </div>
+                                  ) : (
+                                    <div className="min-h-[18px]">
+                                      <Input type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="w-full text-sm border" />
+                                    </div>
+                                  )}
                                 </ContextMenuTrigger>
                                 <ContextMenuContent className="w-52">
                                   <ContextMenuItem onClick={() => void copyToClipboard(String(subField.state.value ?? ""))}>Copiar valor</ContextMenuItem>

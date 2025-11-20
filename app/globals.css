@@ -43,7 +43,11 @@
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
 
+	--text-sm: 0.8125rem;
+
 	--color-orange-primary: #ff5800;
+
+	/* background with lines at 60deg every 10px */
 }
 
 :root {
@@ -79,6 +83,14 @@
 	--sidebar-accent-foreground: hsl(240 5.9% 10%);
 	--sidebar-border: hsl(220 13% 91%);
 	--sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+	--color-background-lines: linear-gradient(
+		60deg,
+		transparent 0%,
+		transparent 10px,
+		rgba(0, 0, 0, 0.05) 10px,
+		rgba(0, 0, 0, 0.05) 20px
+	);
 }
 
 .dark {

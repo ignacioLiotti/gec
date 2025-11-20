@@ -15,6 +15,7 @@ import { ExcelObraName } from "@/components/excel-obra-name";
 import { MainWrapper } from "@/components/main-wrapper";
 import { PendingInvitationsBanner } from "@/components/invitations/pending-invitations-banner";
 import { getUserRoles } from "@/lib/route-guard";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -68,20 +69,20 @@ export default async function RootLayout({
         <SidebarProvider>
           <AppSidebar user={user} userRoles={userRoles} />
           <SidebarInset>
-            <header className="flex h-16 max-w-full shrink-0 items-center gap-4 border-b px-4">
-              <div className="flex items-center gap-2">
+            <header className="flex h-12 max-w-full shrink-0 items-center gap-4 border-b px-4">
+              <div className="flex items-center gap-3 min-w-0">
                 <SidebarTrigger className="-ml-1" />
-                <ExcelObraName />
+                <PageBreadcrumb />
               </div>
               <div className="flex items-center gap-2 ml-auto">
                 <ImpersonateBanner />
                 <UserMenu email={user?.email} userRoles={userRoles} />
               </div>
             </header>
-            <div className="px-4 pt-4">
+            {/* <div className="px-4 pt-4">
               <PendingInvitationsBanner />
-            </div>
-            <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
+            </div> */}
+            <main className="flex flex-1 flex-col gap-4">{children}</main>
           </SidebarInset>
         </SidebarProvider>
       </body>

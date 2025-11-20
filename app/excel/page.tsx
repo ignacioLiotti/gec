@@ -199,7 +199,7 @@ export default function ExcelPage() {
 	const [resizeMode, setResizeMode] = useState<"balanced" | "fixed">(() => {
 		try {
 			return localStorage.getItem("excel:resizeMode") === "fixed" ? "fixed" : "balanced";
-		} catch { return "balanced"; }
+		} catch { return "fixed"; }
 	});
 	useEffect(() => {
 		try { localStorage.setItem("excel:resizeMode", resizeMode); } catch { }
@@ -701,7 +701,7 @@ export default function ExcelPage() {
 	}, [views]);
 
 	return (
-		<div className="w-full mx-auto p-6 space-y-6 pt-0">
+		<div className="w-full mx-auto space-y-6 pt-0">
 			{/* <div className="space-y-2">
 				<p className="text-sm text-muted-foreground">
 					Gestión de obras
@@ -777,9 +777,10 @@ export default function ExcelPage() {
 					form.handleSubmit();
 				}}
 			>
-				<Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "in-process" | "completed")} className="w-full">
+				<Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "in-process" | "completed")} className="w-full px-4">
 
-					<div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+					<div className="flex flex-wrap justify-between items-center gap-4 py-2 ">
+
 						<TabsList>
 							<TabsTrigger value="in-process" className="gap-2">
 								En proceso
@@ -790,6 +791,35 @@ export default function ExcelPage() {
 						</TabsList>
 
 						<div className="flex flex-wrap gap-2 items-center">
+
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									setShowCsvImport((prev) => {
+										const next = !prev;
+										if (next) {
+											setCsvImportError(null);
+										} else {
+											setIsDraggingCsv(false);
+										}
+										return next;
+									});
+								}}
+							>
+								<FileSpreadsheet className="h-4 w-4 mr-2" />
+								Importar CSV
+							</Button>
+
+							<ColumnsMenu
+								allColumns={ALL_COLUMNS}
+								hiddenCols={hiddenCols}
+								setHiddenCols={setHiddenCols}
+								pinnedColumns={pinnedColumns}
+								togglePinColumn={togglePinColumn}
+								resizeMode={resizeMode}
+								setResizeMode={setResizeMode}
+							/>
 							<SearchInput value={query} onChange={setQuery} />
 							<Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
 								<SheetTrigger asChild>
@@ -957,40 +987,12 @@ export default function ExcelPage() {
 									</SheetFooter>
 								</SheetContent>
 							</Sheet>
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => {
-									setShowCsvImport((prev) => {
-										const next = !prev;
-										if (next) {
-											setCsvImportError(null);
-										} else {
-											setIsDraggingCsv(false);
-										}
-										return next;
-									});
-								}}
-							>
-								<FileSpreadsheet className="h-4 w-4 mr-2" />
-								Importar CSV
-							</Button>
-
-							<ColumnsMenu
-								allColumns={ALL_COLUMNS}
-								hiddenCols={hiddenCols}
-								setHiddenCols={setHiddenCols}
-								pinnedColumns={pinnedColumns}
-								togglePinColumn={togglePinColumn}
-								resizeMode={resizeMode}
-								setResizeMode={setResizeMode}
-							/>
-							<ViewsMenu
+							{/* <ViewsMenu
 								views={views}
 								saveCurrentAsView={saveCurrentAsView}
 								applyView={applyView}
 								deleteView={deleteView}
-							/>
+							/> */}
 						</div>
 					</div>
 
@@ -1164,7 +1166,7 @@ export default function ExcelPage() {
 					</TabsContent>
 				</Tabs>
 
-				<div className="flex flex-wrap justify-between items-center gap-4 pt-4 border-t">
+				<div className="flex flex-wrap justify-between items-center gap-4 pt-4 border-t px-4">
 					<form.Field name="detalleObras" mode="array">
 						{(field) => (
 							<Button

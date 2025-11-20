@@ -121,7 +121,7 @@ export default function UserMenu({ email, userRoles }: UserMenuProps) {
           // Fire global event consumed by AuthController
           window.dispatchEvent(new Event("open-auth"));
         }}
-        className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-foreground/10"
+        className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm hover:bg-foreground/10"
       >
         <div className="size-6 rounded-full bg-orange-primary" />
         <span className="max-w-[160px] truncate">{email ?? "Iniciar sesión"}</span>
@@ -161,12 +161,12 @@ export default function UserMenu({ email, userRoles }: UserMenuProps) {
                   ))}
                 {/* Only show "No roles" if user is not admin/superadmin AND has no custom roles */}
                 {!userRoles.isAdmin &&
-                 !userRoles.isSuperAdmin &&
-                 userRoles.roles.filter(r => r !== "admin").length === 0 && (
-                  <span className="inline-flex items-center rounded-full bg-gray-500/20 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300">
-                    Sin roles
-                  </span>
-                )}
+                  !userRoles.isSuperAdmin &&
+                  userRoles.roles.filter(r => r !== "admin").length === 0 && (
+                    <span className="inline-flex items-center rounded-full bg-gray-500/20 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Sin roles
+                    </span>
+                  )}
               </div>
             )}
           </div>

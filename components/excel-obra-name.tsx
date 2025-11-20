@@ -87,20 +87,22 @@ export function ExcelObraName() {
   if (!displayName && !isLoading) return null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50">
-      <Building2 className="h-4 w-4 text-muted-foreground" />
+    <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50">
+      {obraName && (
+        <Building2 className="h-4 w-4 text-muted-foreground" />
+      )}
       {isLoading ? (
         <Skeleton className="h-4 w-48" />
       ) : (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-lg font-medium truncate max-w-xs cursor-default">
+              <span className="text-md font-medium truncate max-w-xs cursor-default">
                 {displayName || "Cargando..."}
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              <p className="max-w-md text-xl">{displayName || "Cargando..."}</p>
+              <p className="max-w-md text-md">{displayName || "Cargando..."}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
