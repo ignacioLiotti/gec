@@ -112,32 +112,32 @@ const adminItems: NavItem[] = [
 	},
 ];
 
-const devItems: NavItem[] = [
-	{
-		title: "Bootstrap",
-		href: "/dev/bootstrap",
-		icon: Wrench,
-	},
-	{
-		title: "Prueba de Notificaciones",
-		href: "/dev/notifications-playground",
-		icon: Play,
-	},
-	{
-		title: "Demo de Permisos",
-		href: "/permissions-demo",
-		icon: ShieldCheck,
-	},
-	{
-		title: "Páginas de Prueba",
-		href: "#",
-		icon: FileText,
-		items: [
-			{ title: "Prueba 1", href: "/test" },
-			{ title: "Prueba 2", href: "/test2" },
-		],
-	},
-];
+// const devItems: NavItem[] = [
+// 	{
+// 		title: "Bootstrap",
+// 		href: "/dev/bootstrap",
+// 		icon: Wrench,
+// 	},
+// 	{
+// 		title: "Prueba de Notificaciones",
+// 		href: "/dev/notifications-playground",
+// 		icon: Play,
+// 	},
+// 	{
+// 		title: "Demo de Permisos",
+// 		href: "/permissions-demo",
+// 		icon: ShieldCheck,
+// 	},
+// 	{
+// 		title: "Páginas de Prueba",
+// 		href: "#",
+// 		icon: FileText,
+// 		items: [
+// 			{ title: "Prueba 1", href: "/test" },
+// 			{ title: "Prueba 2", href: "/test2" },
+// 		],
+// 	},
+// ];
 
 export function AppSidebar({
 	user,
@@ -199,13 +199,13 @@ export function AppSidebar({
 	);
 
 	// Filter dev items (only show to admins)
-	const filteredDevItems = React.useMemo(
-		() =>
-			userRoles?.isAdmin || userRoles?.isSuperAdmin
-				? devItems
-				: [],
-		[userRoles]
-	);
+	// const filteredDevItems = React.useMemo(
+	// 	() =>
+	// 		userRoles?.isAdmin || userRoles?.isSuperAdmin
+	// 			? devItems
+	// 			: [],
+	// 	[userRoles]
+	// );
 
 	return (
 		<Sidebar collapsible="icon" {...props}>
@@ -279,11 +279,11 @@ export function AppSidebar({
 					</>
 				)}
 
-				{filteredDevItems.length > 0 && (
+				{/* {filteredDevItems.length > 0 && (
 					<>
 						<Separator />
 
-						{/* Development Navigation */}
+						
 						<SidebarGroup>
 							<SidebarGroupLabel>Desarrollo</SidebarGroupLabel>
 							<SidebarGroupContent>
@@ -331,7 +331,7 @@ export function AppSidebar({
 							</SidebarGroupContent>
 						</SidebarGroup>
 					</>
-				)}
+				)} */}
 			</SidebarContent>
 
 			<SidebarFooter>
@@ -355,6 +355,6 @@ export function AppSidebar({
 					</SidebarMenu>
 				)}
 			</SidebarFooter>
-		</Sidebar>
+		</Sidebar >
 	);
 }

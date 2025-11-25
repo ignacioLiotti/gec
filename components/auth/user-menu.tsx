@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type UserMenuProps = {
   email?: string | null;
@@ -22,7 +23,7 @@ type UserMenuProps = {
 };
 
 export default function UserMenu({ email, userRoles }: UserMenuProps) {
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notifications, setNotifications] = useState<
     Array<{
@@ -72,9 +73,21 @@ export default function UserMenu({ email, userRoles }: UserMenuProps) {
   );
 
   async function handleLogout() {
+    setMenuOpen(false);
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
   }
+
+  const handlePopoverChange = (nextOpen: boolean) => {
+    if (!isAuthed) return;
+    setMenuOpen(nextOpen);
+  };
+
+  const handleTriggerClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (isAuthed) return;
+    event.preventDefault();
+    window.dispatchEvent(new Event("open-auth"));
+  };
 
   useEffect(() => {
     if (!dialogOpen || !isAuthed) return;
@@ -114,86 +127,86 @@ export default function UserMenu({ email, userRoles }: UserMenuProps) {
   );
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => {
-          if (isAuthed) return setOpen((v) => !v);
-          // Fire global event consumed by AuthController
-          window.dispatchEvent(new Event("open-auth"));
-        }}
-        className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm hover:bg-foreground/10"
-      >
-        <div className="size-6 rounded-full bg-orange-primary" />
-        <span className="max-w-[160px] truncate">{email ?? "Iniciar sesión"}</span>
-      </button>
-      {open && isAuthed && (
-        <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-md border bg-card shadow-lg z-[1000]">
-          <div className="px-3 py-2">
-            <div className="text-sm text-foreground/70">{email}</div>
-            {userRoles && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {userRoles.isSuperAdmin && (
-                  <span className="inline-flex items-center rounded-full bg-purple-500/20 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300">
-                    SuperAdministrador
-                  </span>
-                )}
-                {userRoles.isAdmin && !userRoles.isSuperAdmin && (
-                  <span className="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
-                    Administrador
-                  </span>
-                )}
-                {/* Show custom roles (excluding admin if already shown as Admin badge) */}
-                {userRoles.roles
-                  .filter((role) => {
-                    // Don't show "admin" role if we're already showing Admin badge
-                    if (role === "admin" && userRoles.isAdmin && !userRoles.isSuperAdmin) {
-                      return false;
-                    }
-                    return true;
-                  })
-                  .map((role) => (
-                    <span
-                      key={role}
-                      className="inline-flex items-center rounded-full bg-orange-500/20 px-2 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-300"
-                    >
-                      {role}
-                    </span>
-                  ))}
-                {/* Only show "No roles" if user is not admin/superadmin AND has no custom roles */}
-                {!userRoles.isAdmin &&
-                  !userRoles.isSuperAdmin &&
-                  userRoles.roles.filter(r => r !== "admin").length === 0 && (
-                    <span className="inline-flex items-center rounded-full bg-gray-500/20 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300">
-                      Sin roles
+    <>
+      <Popover open={isAuthed ? menuOpen : false} onOpenChange={handlePopoverChange}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            onClick={handleTriggerClick}
+            className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm hover:bg-foreground/10"
+          >
+            <div className="size-6 rounded-full bg-orange-primary" />
+            <span className="max-w-[160px] truncate">{email ?? "Iniciar sesión"}</span>
+          </button>
+        </PopoverTrigger>
+        {isAuthed && (
+          <PopoverContent align="end" sideOffset={8} className="w-64 overflow-hidden p-0">
+            <div className="px-3 py-2">
+              <div className="text-sm text-foreground/70">{email}</div>
+              {userRoles && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {userRoles.isSuperAdmin && (
+                    <span className="inline-flex items-center rounded-full bg-purple-500/20 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300">
+                      SuperAdministrador
                     </span>
                   )}
-              </div>
-            )}
-          </div>
-          <Separator />
-          <button
-            onClick={() => {
-              setDialogOpen(true);
-              setOpen(false);
-            }}
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-foreground/10"
-          >
-            <span>Notificaciones</span>
-            {unreadCount > 0 && (
-              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-orange-primary px-1.5 text-xs text-white">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="block w-full px-3 py-2 text-left text-sm hover:bg-foreground/10"
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      )}
-
+                  {userRoles.isAdmin && !userRoles.isSuperAdmin && (
+                    <span className="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+                      Administrador
+                    </span>
+                  )}
+                  {/* Show custom roles (excluding admin if already shown as Admin badge) */}
+                  {userRoles.roles
+                    .filter((role) => {
+                      // Don't show "admin" role if we're already showing Admin badge
+                      if (role === "admin" && userRoles.isAdmin && !userRoles.isSuperAdmin) {
+                        return false;
+                      }
+                      return true;
+                    })
+                    .map((role) => (
+                      <span
+                        key={role}
+                        className="inline-flex items-center rounded-full bg-orange-500/20 px-2 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-300"
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  {/* Only show "No roles" if user is not admin/superadmin AND has no custom roles */}
+                  {!userRoles.isAdmin &&
+                    !userRoles.isSuperAdmin &&
+                    userRoles.roles.filter((r) => r !== "admin").length === 0 && (
+                      <span className="inline-flex items-center rounded-full bg-gray-500/20 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+                        Sin roles
+                      </span>
+                    )}
+                </div>
+              )}
+            </div>
+            <Separator />
+            <button
+              onClick={() => {
+                setDialogOpen(true);
+                setMenuOpen(false);
+              }}
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-foreground/10"
+            >
+              <span>Notificaciones</span>
+              {unreadCount > 0 && (
+                <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-orange-primary px-1.5 text-xs text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-foreground/10"
+            >
+              Cerrar sesión
+            </button>
+          </PopoverContent>
+        )}
+      </Popover>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -249,8 +262,6 @@ export default function UserMenu({ email, userRoles }: UserMenuProps) {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
-
-

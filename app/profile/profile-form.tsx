@@ -169,7 +169,7 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
         </Card>
       </motion.div>
 
-      <motion.div
+      {/* <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, delay: 0.1 }}
@@ -217,7 +217,7 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
             </div>
           </form>
         </Card>
-      </motion.div>
+      </motion.div> */}
     </div>
   );
 }

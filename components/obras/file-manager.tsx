@@ -56,6 +56,17 @@ export type FileSystemItem = {
   apsUrn?: string; // Autodesk Platform Services URN for 3D models
 };
 
+export type FileManagerSelectionChange = {
+  folder: FileSystemItem | null;
+  folderPath: string[];
+  document: FileSystemItem | null;
+  documentPath: string[];
+};
+
+type SelectionChangeOptions = {
+  emitSelection?: boolean;
+};
+
 export type MaterialOrder = {
   id: string;
   nroOrden: string;
@@ -81,9 +92,19 @@ type FileManagerProps = {
   obraId: string;
   materialOrders?: MaterialOrder[];
   onRefreshMaterials?: () => void;
+  selectedFolderPath?: string | null;
+  selectedFilePath?: string | null;
+  onSelectionChange?: (selection: FileManagerSelectionChange) => void;
 };
 
-export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }: FileManagerProps) {
+export function FileManager({
+  obraId,
+  materialOrders = [],
+  onRefreshMaterials,
+  selectedFolderPath = null,
+  selectedFilePath = null,
+  onSelectionChange,
+}: FileManagerProps) {
   const supabase = createSupabaseBrowserClient();
 
   // State
@@ -103,8 +124,73 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FileSystemItem } | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<FileSystemItem | null>(null);
+  const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
+  const [currentUploadFolder, setCurrentUploadFolder] = useState<FileSystemItem | null>(null);
   const previewRequestIdRef = useRef(0);
-  const isUploadingMateriales = uploadingFiles && selectedFolder?.name === 'materiales';
+  const isUploadingMateriales = uploadingFiles && currentUploadFolder?.name === 'materiales';
+  const parentMapRef = useRef<Map<string, FileSystemItem | null>>(new Map());
+  const pendingFolderPathRef = useRef<string | null>(null);
+  const pendingFilePathRef = useRef<string | null>(null);
+
+  const sanitizePath = useCallback((path: string | null | undefined) => {
+    if (!path) return [] as string[];
+    return path
+      .split('/')
+      .map(segment => segment.trim())
+      .filter(Boolean);
+  }, []);
+
+  const folderPathSegments = useMemo(() => sanitizePath(selectedFolderPath), [selectedFolderPath, sanitizePath]);
+  const filePathSegments = useMemo(() => sanitizePath(selectedFilePath), [selectedFilePath, sanitizePath]);
+  const folderPathKey = useMemo(() => folderPathSegments.join('/'), [folderPathSegments]);
+  const filePathKey = useMemo(() => filePathSegments.join('/'), [filePathSegments]);
+
+  const rebuildParentMap = useCallback((tree: FileSystemItem | null) => {
+    const nextMap = new Map<string, FileSystemItem | null>();
+    const walk = (node: FileSystemItem | null, parent: FileSystemItem | null) => {
+      if (!node) return;
+      nextMap.set(node.id, parent);
+      node.children?.forEach(child => walk(child, node));
+    };
+    walk(tree, null);
+    parentMapRef.current = nextMap;
+  }, []);
+
+  const ensureAncestorsExpanded = useCallback((item?: FileSystemItem | null) => {
+    if (!item) return;
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      let current: FileSystemItem | null | undefined = item;
+      while (current) {
+        if (current.type === 'folder') {
+          next.add(current.id);
+        }
+        current = parentMapRef.current.get(current.id) ?? null;
+      }
+      return next;
+    });
+  }, []);
+
+  const getPathSegments = useCallback((item: FileSystemItem | null | undefined) => {
+    if (!item) return [] as string[];
+    const segments: string[] = [];
+    let current: FileSystemItem | null | undefined = item;
+    while (current && current.id !== 'root') {
+      segments.push(current.name);
+      current = parentMapRef.current.get(current.id) ?? null;
+    }
+    return segments.reverse();
+  }, []);
+
+  const containsFiles = (dataTransfer?: DataTransfer | null) => {
+    if (!dataTransfer) return false;
+    if (dataTransfer.files && dataTransfer.files.length > 0) return true;
+    if (dataTransfer.types && Array.from(dataTransfer.types).includes('Files')) return true;
+    if (dataTransfer.items) {
+      return Array.from(dataTransfer.items).some(item => item.kind === 'file');
+    }
+    return false;
+  };
 
   // Build file tree from storage
   const buildFileTree = useCallback(async () => {
@@ -330,6 +416,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
         docPath: o.docPath
       })));
 
+      rebuildParentMap(root);
       setFileTree(root);
       if (!selectedFolder) {
         setSelectedFolder(root);
@@ -351,11 +438,32 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
     } finally {
       setLoading(false);
     }
-  }, [obraId, materialOrders, supabase]);
+  }, [obraId, materialOrders, rebuildParentMap, supabase]);
 
   useEffect(() => {
     buildFileTree();
   }, [buildFileTree]);
+
+  const findFolderBySegments = useCallback((segments: string[]) => {
+    if (!fileTree) return null;
+    if (segments.length === 0) return fileTree;
+    let current: FileSystemItem | null = fileTree;
+    for (const segment of segments) {
+      const next: FileSystemItem | undefined = current?.children?.find(child => child.type === 'folder' && child.name === segment);
+      if (!next) return null;
+      current = next;
+    }
+    return current;
+  }, [fileTree]);
+
+  const findDocumentBySegments = useCallback((segments: string[]) => {
+    if (!fileTree || segments.length === 0) return null;
+    const fileName = segments[segments.length - 1];
+    const folderSegments = segments.slice(0, -1);
+    const parentFolder = folderSegments.length > 0 ? findFolderBySegments(folderSegments) : fileTree;
+    if (!parentFolder) return null;
+    return parentFolder.children?.find(child => child.type === 'file' && child.name === fileName) || null;
+  }, [fileTree, findFolderBySegments]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -380,15 +488,27 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
   };
 
   // Handle folder click
-  const handleFolderClick = (folder: FileSystemItem) => {
+  const handleFolderClick = useCallback((folder: FileSystemItem, options: SelectionChangeOptions = {}) => {
     setSelectedFolder(folder);
     setSelectedDocument(null);
     setPreviewUrl(null);
     setMinimizedPanel(null); // Reset panel minimization when switching folders
-  };
+    ensureAncestorsExpanded(folder);
+    if (options.emitSelection === false) {
+      return;
+    }
+    const folderPath = getPathSegments(folder);
+    pendingFolderPathRef.current = folderPath.join('/');
+    onSelectionChange?.({
+      folder,
+      folderPath,
+      document: null,
+      documentPath: [],
+    });
+  }, [ensureAncestorsExpanded, getPathSegments, onSelectionChange]);
 
   // Handle document click
-  const handleDocumentClick = async (document: FileSystemItem, parentFolder?: FileSystemItem) => {
+  const handleDocumentClick = useCallback(async (document: FileSystemItem, parentFolder?: FileSystemItem, options: SelectionChangeOptions = {}) => {
     console.log('handleDocumentClick called with:', document, 'parent:', parentFolder);
     console.log('Document has apsUrn:', document.apsUrn);
     console.log('Is 3D model file:', is3DModelFile(document.name));
@@ -396,9 +516,23 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
     setSelectedDocument(document);
     const requestId = ++previewRequestIdRef.current;
 
-    // If a parent folder is provided, also update the selected folder
-    if (parentFolder) {
-      setSelectedFolder(parentFolder);
+    const resolvedParent = parentFolder ?? parentMapRef.current.get(document.id) ?? null;
+    if (resolvedParent && resolvedParent.type === 'folder') {
+      setSelectedFolder(resolvedParent);
+      ensureAncestorsExpanded(resolvedParent);
+    }
+
+    if (options.emitSelection !== false) {
+      const folderPath = resolvedParent ? getPathSegments(resolvedParent) : [];
+      const documentPath = [...folderPath, document.name];
+      pendingFolderPathRef.current = folderPath.join('/');
+      pendingFilePathRef.current = documentPath.join('/');
+      onSelectionChange?.({
+        folder: resolvedParent,
+        folderPath,
+        document,
+        documentPath,
+      });
     }
 
     // If this is a 3D model with URN, we don't need the storage preview URL
@@ -431,7 +565,70 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
     } else {
       console.warn('No storagePath for document:', document);
     }
-  };
+  }, [ensureAncestorsExpanded, getPathSegments, onSelectionChange, supabase]);
+
+  const selectedFolderId = selectedFolder?.id;
+  const selectedDocumentId = selectedDocument?.id;
+
+  useEffect(() => {
+    if (!fileTree) return;
+    if (folderPathSegments.length === 0) {
+      if (pendingFolderPathRef.current) {
+        return;
+      }
+      if (!selectedFolderId || selectedFolderId !== fileTree.id) {
+        handleFolderClick(fileTree, { emitSelection: false });
+      }
+      return;
+    }
+    const folderFromPath = findFolderBySegments(folderPathSegments);
+    if (folderFromPath && folderFromPath.id !== selectedFolderId) {
+      handleFolderClick(folderFromPath, { emitSelection: false });
+    }
+    if (pendingFolderPathRef.current === folderPathKey) {
+      pendingFolderPathRef.current = null;
+    }
+  }, [
+    fileTree,
+    folderPathKey,
+    folderPathSegments,
+    selectedFolderId,
+    handleFolderClick,
+    findFolderBySegments,
+  ]);
+
+  useEffect(() => {
+    if (!fileTree) return;
+    if (filePathSegments.length === 0) {
+      if (pendingFilePathRef.current) {
+        return;
+      }
+      if (selectedDocumentId) {
+        setSelectedDocument(null);
+        setPreviewUrl(null);
+      }
+      return;
+    }
+    const documentFromPath = findDocumentBySegments(filePathSegments);
+    if (documentFromPath && documentFromPath.id !== selectedDocumentId) {
+      const parentSegments = filePathSegments.slice(0, -1);
+      const parentFolder = parentSegments.length > 0
+        ? findFolderBySegments(parentSegments)
+        : fileTree;
+      handleDocumentClick(documentFromPath, parentFolder ?? undefined, { emitSelection: false });
+    }
+    if (pendingFilePathRef.current === filePathKey) {
+      pendingFilePathRef.current = null;
+    }
+  }, [
+    filePathKey,
+    filePathSegments,
+    fileTree,
+    findDocumentBySegments,
+    findFolderBySegments,
+    handleDocumentClick,
+    selectedDocumentId,
+  ]);
 
   // Handle file download
   const handleDownload = async (document: FileSystemItem) => {
@@ -469,21 +666,36 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
     }
   };
 
-  // Upload files
-  const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const uploadFilesToFolder = useCallback(async (inputFiles: FileList | File[], targetFolder?: FileSystemItem | null) => {
+    const filesArray = Array.isArray(inputFiles) ? inputFiles : Array.from(inputFiles);
+    if (!filesArray.length) return;
+
+    const resolvedFolder =
+      targetFolder ??
+      (selectedFolder?.type === 'folder' ? selectedFolder : null) ??
+      fileTree ??
+      null;
+
+    const folderForUpload = resolvedFolder?.type === 'folder' ? resolvedFolder : fileTree;
+
+    const resolveFolderPath = (folder?: FileSystemItem | null) => {
+      if (!folder || folder.id === 'root') {
+        return obraId;
+      }
+      const segments = getPathSegments(folder);
+      const relativePath = segments.join('/');
+      return relativePath ? `${obraId}/${relativePath}` : obraId;
+    };
+
+    const folderPath = resolveFolderPath(folderForUpload ?? null);
+    const isOcrFolder = Boolean(folderForUpload?.ocrEnabled);
+    let importedAnyMaterials = false;
 
     setUploadingFiles(true);
+    setCurrentUploadFolder(folderForUpload ?? fileTree ?? null);
+
     try {
-      const folderPath = selectedFolder?.id === 'root'
-        ? obraId
-        : `${obraId}/${selectedFolder?.name}`;
-
-      const isOcrFolder = Boolean(selectedFolder?.ocrEnabled);
-      let importedAnyMaterials = false;
-
-      for (const file of Array.from(files)) {
+      for (const file of filesArray) {
         const filePath = `${folderPath}/${file.name}`;
 
         // Upload to Supabase storage
@@ -635,7 +847,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
         }
       }
 
-      toast.success(`${files.length} file(s) uploaded successfully`);
+      toast.success(`${filesArray.length} file(s) uploaded successfully`);
 
       // If we created / updated material orders, refresh them so the extracted data panel updates
       if (importedAnyMaterials && onRefreshMaterials) {
@@ -652,8 +864,54 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
       toast.error('Error uploading files');
     } finally {
       setUploadingFiles(false);
+      setCurrentUploadFolder(null);
     }
+  }, [buildFileTree, fileTree, getPathSegments, obraId, onRefreshMaterials, selectedFolder, supabase]);
+
+  // Upload files from input control
+  const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await uploadFilesToFolder(files);
+    e.target.value = '';
   };
+
+  const handleFolderDragEnter = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (!containsFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggedFolderId(folder.id);
+  }, []);
+
+  const handleFolderDragOver = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (!containsFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+    setDraggedFolderId(prev => (prev === folder.id ? prev : folder.id));
+  }, []);
+
+  const handleFolderDragLeave = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (!containsFiles(event.dataTransfer)) return;
+    const currentTarget = event.currentTarget as HTMLElement;
+    const related = event.relatedTarget as Node | null;
+    if (related && currentTarget.contains(related)) {
+      return;
+    }
+    setDraggedFolderId(prev => (prev === folder.id ? null : prev));
+  }, []);
+
+  const handleFolderDrop = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (!containsFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const files = Array.from(event.dataTransfer.files || []);
+    setDraggedFolderId(null);
+    event.dataTransfer.clearData();
+    if (files.length) {
+      void uploadFilesToFolder(files, folder);
+    }
+  }, [uploadFilesToFolder]);
 
   // Delete file or folder
   const handleDelete = async (item: FileSystemItem) => {
@@ -733,6 +991,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
     const isFolder = item.type === 'folder';
     const isFolderSelected = selectedFolder?.id === item.id;
     const isDocumentSelected = selectedDocument?.id === item.id;
+    const isDragTarget = draggedFolderId === item.id;
     const hasChildren = item.children && item.children.length > 0;
 
     const handleItemClick = () => {
@@ -748,6 +1007,10 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
       <div key={item.id}>
         <button
           onClick={handleItemClick}
+          onDragEnter={isFolder ? (event) => handleFolderDragEnter(event, item) : undefined}
+          onDragOver={isFolder ? (event) => handleFolderDragOver(event, item) : undefined}
+          onDragLeave={isFolder ? (event) => handleFolderDragLeave(event, item) : undefined}
+          onDrop={isFolder ? (event) => handleFolderDrop(event, item) : undefined}
           onContextMenu={(e) => {
             e.preventDefault();
             // Don't allow deleting root folder
@@ -764,6 +1027,7 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
             hover:bg-accent transition-colors
             ${isFolderSelected && isFolder ? 'bg-blue-100 dark:bg-blue-950' : ''}
             ${isDocumentSelected && !isFolder ? 'border-2 border-orange-primary rounded-md' : ''}
+            ${isDragTarget ? 'ring-2 ring-primary/70 ring-offset-1 ring-offset-background' : ''}
           `}
           style={{ paddingLeft: `${level * 12 + 8}px` }}
         >
@@ -1233,42 +1497,49 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
     if (viewMode === 'grid') {
       return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {sortedItems.map(item => (
-            <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
-              <div
-                className="flex flex-col items-start gap-2 p-3 w-[105px] h-[75px] rounded-lg hover:bg-muted transition-colors bg-gradient-to-b from-[#4F4F4F] to-[#3D3D3D] relative"
-                onClick={() => {
-                  if (item.type === 'folder') {
-                    handleFolderClick(item);
-                  } else {
-                    handleDocumentClick(item, selectedFolder);
-                  }
-                }}
-              >
-                {item.type === 'folder' ? (<FolderFront className="w-[110px] h-[80px] absolute -bottom-1 -left-1 transform origin-[50%_100%] group-hover:[transform:perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />) : null}
-                <div className="pt-15 flex flex-col items-center justify-center w-full">
-                  {item.type === 'folder' ? (
-                    item.ocrEnabled ? (
-                      <BarChart3 className="w-10 h-10 text-white absolute mx-auto top-5 transform origin-[50%_100%] group-hover:[transform:perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+          {sortedItems.map(item => {
+            const isDragTarget = draggedFolderId === item.id;
+            return (
+              <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
+                <div
+                  className={`flex flex-col items-start gap-2 p-3 w-[105px] h-[75px] rounded-lg hover:bg-muted transition-colors bg-gradient-to-b from-[#4F4F4F] to-[#3D3D3D] relative ${item.type === 'folder' && isDragTarget ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+                  onClick={() => {
+                    if (item.type === 'folder') {
+                      handleFolderClick(item);
+                    } else {
+                      handleDocumentClick(item, selectedFolder);
+                    }
+                  }}
+                  onDragEnter={item.type === 'folder' ? (event) => handleFolderDragEnter(event, item) : undefined}
+                  onDragOver={item.type === 'folder' ? (event) => handleFolderDragOver(event, item) : undefined}
+                  onDragLeave={item.type === 'folder' ? (event) => handleFolderDragLeave(event, item) : undefined}
+                  onDrop={item.type === 'folder' ? (event) => handleFolderDrop(event, item) : undefined}
+                >
+                  {item.type === 'folder' ? (<FolderFront className="w-[110px] h-[80px] absolute -bottom-1 -left-1 transform origin-[50%_100%] group-hover:[transform:perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />) : null}
+                  <div className="pt-15 flex flex-col items-center justify-center w-full">
+                    {item.type === 'folder' ? (
+                      item.ocrEnabled ? (
+                        <BarChart3 className="w-10 h-10 text-white absolute mx-auto top-5 transform origin-[50%_100%] group-hover:[transform:perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                      ) : (
+                        <Folder className="w-10 h-10 text-white absolute mx-auto top-5 transform origin-[50%_100%] group-hover:[transform:perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                      )
                     ) : (
-                      <Folder className="w-10 h-10 text-white absolute mx-auto top-5 transform origin-[50%_100%] group-hover:[transform:perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
-                    )
-                  ) : (
-                    getFileIcon(item.mimetype)
-                  )}
-                  <span className="text-sm text-center truncate w-full" title={item.name}>
-                    {item.name}
-                  </span>
-                  {item.type === 'file' && item.size && (
-                    <span className="text-xs text-muted-foreground">
-                      {(item.size / 1024).toFixed(1)} KB
+                      getFileIcon(item.mimetype)
+                    )}
+                    <span className="text-sm text-center truncate w-full" title={item.name}>
+                      {item.name}
                     </span>
-                  )}
-                </div>
+                    {item.type === 'file' && item.size && (
+                      <span className="text-xs text-muted-foreground">
+                        {(item.size / 1024).toFixed(1)} KB
+                      </span>
+                    )}
+                  </div>
 
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       );
     }
@@ -1276,39 +1547,46 @@ export function FileManager({ obraId, materialOrders = [], onRefreshMaterials }:
     // List view
     return (
       <div className="space-y-1">
-        {sortedItems.map(item => (
-          <div
-            key={item.id}
-            className="rounded-lg border bg-card shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => {
-              if (item.type === 'folder') {
-                handleFolderClick(item);
-              } else {
-                handleDocumentClick(item, selectedFolder);
-              }
-            }}
-          >
-            <div className="p-3 flex items-center gap-3">
-              {item.type === 'folder' ? (
-                item.ocrEnabled ? (
-                  <BarChart3 className="w-5 h-5 text-purple-500 flex-shrink-0" />
+        {sortedItems.map(item => {
+          const isDragTarget = draggedFolderId === item.id;
+          return (
+            <div
+              key={item.id}
+              className={`rounded-lg border bg-card shadow-sm cursor-pointer hover:shadow-md transition-shadow ${item.type === 'folder' && isDragTarget ? 'ring-2 ring-primary/70 ring-offset-2 ring-offset-background' : ''}`}
+              onClick={() => {
+                if (item.type === 'folder') {
+                  handleFolderClick(item);
+                } else {
+                  handleDocumentClick(item, selectedFolder);
+                }
+              }}
+              onDragEnter={item.type === 'folder' ? (event) => handleFolderDragEnter(event, item) : undefined}
+              onDragOver={item.type === 'folder' ? (event) => handleFolderDragOver(event, item) : undefined}
+              onDragLeave={item.type === 'folder' ? (event) => handleFolderDragLeave(event, item) : undefined}
+              onDrop={item.type === 'folder' ? (event) => handleFolderDrop(event, item) : undefined}
+            >
+              <div className="p-3 flex items-center gap-3">
+                {item.type === 'folder' ? (
+                  item.ocrEnabled ? (
+                    <BarChart3 className="w-5 h-5 text-purple-500 flex-shrink-0" />
+                  ) : (
+                    <Folder className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                  )
                 ) : (
-                  <Folder className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                )
-              ) : (
-                <div className="flex-shrink-0">
-                  {getFileIcon(item.mimetype)}
-                </div>
-              )}
-              <span className="flex-1 truncate">{item.name}</span>
-              {item.type === 'file' && item.size && (
-                <span className="text-sm text-muted-foreground">
-                  {(item.size / 1024).toFixed(1)} KB
-                </span>
-              )}
+                  <div className="flex-shrink-0">
+                    {getFileIcon(item.mimetype)}
+                  </div>
+                )}
+                <span className="flex-1 truncate">{item.name}</span>
+                {item.type === 'file' && item.size && (
+                  <span className="text-sm text-muted-foreground">
+                    {(item.size / 1024).toFixed(1)} KB
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };

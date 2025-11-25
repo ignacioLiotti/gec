@@ -1,0 +1,56 @@
+export type Certificate = {
+	id: string;
+	obra_id: string;
+	n_exp: string;
+	n_certificado: number;
+	monto: number;
+	mes: string;
+	estado: string;
+};
+
+export type NewCertificateFormState = {
+	n_exp: string;
+	n_certificado: string;
+	monto: string;
+	mes: string;
+	estado: string;
+};
+
+export type ObraRole = { id: string; key: string; name: string | null };
+export type ObraUser = { id: string; full_name: string | null };
+export type ObraUserRole = { user_id: string; role_id: string };
+
+export type FlujoAction = {
+	id: string;
+	action_type: 'email' | 'calendar_event';
+	timing_mode: 'immediate' | 'offset' | 'scheduled';
+	offset_value: number | null;
+	offset_unit: 'minutes' | 'hours' | 'days' | 'weeks' | 'months' | null;
+	scheduled_date: string | null;
+	title: string;
+	message: string | null;
+	recipient_user_ids: string[];
+	notification_types: ('in_app' | 'email')[];
+	enabled: boolean;
+};
+
+export type MaterialItem = {
+	id: string;
+	cantidad: number;
+	unidad: string;
+	material: string;
+	precioUnitario: number;
+};
+
+export type MaterialOrder = {
+	id: string;
+	nroOrden: string;
+	solicitante: string;
+	gestor: string;
+	proveedor: string;
+	items: MaterialItem[];
+	docUrl?: string;
+	docPath?: string;
+	docBucket?: string;
+};
+
