@@ -22,10 +22,10 @@ const redisClient =
 		: null;
 
 const ipLimit = Number.parseInt(process.env.RATE_LIMIT_IP ?? "120", 10);
-const ipWindow = process.env.RATE_LIMIT_IP_WINDOW ?? "1 m";
+const ipWindow = (process.env.RATE_LIMIT_IP_WINDOW ?? "1m") as any;
 
 const tenantLimit = Number.parseInt(process.env.RATE_LIMIT_TENANT ?? "2000", 10);
-const tenantWindow = process.env.RATE_LIMIT_TENANT_WINDOW ?? "5 m";
+const tenantWindow = (process.env.RATE_LIMIT_TENANT_WINDOW ?? "5m") as any;
 
 const ipLimiter =
 	redisClient && ipLimit > 0

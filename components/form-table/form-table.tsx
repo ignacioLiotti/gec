@@ -70,6 +70,8 @@ export type FormTableRow = {
 	[key: string]: unknown;
 };
 
+type ColumnField<Row extends FormTableRow> = Extract<keyof Omit<Row, "id">, string>;
+
 type FormValues<Row extends FormTableRow> = {
 	rowOrder: string[];
 	rowsById: Record<string, Row>;
@@ -79,7 +81,7 @@ type FormFieldComponent<Row extends FormTableRow> = (props: {
 	name: string;
 	children: (field: any) => ReactNode;
 	validators?: FieldValidators;
-}) => JSX.Element;
+}) => ReactNode;
 
 type RenderCellArgs<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
@@ -171,7 +173,7 @@ type FieldValidators = {
 export type ColumnDef<Row extends FormTableRow> = {
 	id: string;
 	label: string;
-	field: keyof Omit<Row, "id">;
+	field: ColumnField<Row>;
 	required?: boolean;
 	enableHide?: boolean;
 	enablePin?: boolean;
@@ -343,7 +345,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 	);
 }
 
-function defaultSortByField<Row extends FormTableRow>(field: keyof Omit<Row, "id">) {
+function defaultSortByField<Row extends FormTableRow>(field: ColumnField<Row>) {
 	return (a: Row, b: Row) => {
 		const valueA = a[field];
 		const valueB = b[field];
@@ -434,12 +436,12 @@ function renderReadOnlyValue<Row extends FormTableRow>(
 	const config = column.cellConfig || {};
 
 	switch (cellType) {
-		case 'number':
-			return (
-				<span className="font-mono tabular-nums">
-					{typeof value === 'number' ? value.toLocaleString() : value ?? '-'}
-				</span>
-			);
+			case 'number':
+				return (
+					<span className="font-mono tabular-nums">
+						{typeof value === 'number' ? value.toLocaleString() : String(value ?? '-')}
+					</span>
+				);
 		case 'currency': {
 			const amount =
 				typeof value === 'number'
@@ -592,10 +594,12 @@ function renderReadOnlyValue<Row extends FormTableRow>(
 	}
 }
 
+type EditableCellValue = string | number | readonly string[] | null | undefined;
+
 type EditableContentArgs<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
 	row: Row;
-	value: unknown;
+	value: EditableCellValue;
 	setValue: (value: unknown) => void;
 	handleBlur: () => void;
 	highlightQuery: string;
@@ -856,15 +860,15 @@ function renderCellByType<Row extends FormTableRow>({
 				const fieldValue = field.state.value;
 				const setValue = (value: unknown) => field.handleChange(value);
 				const errorMessage = field.state.meta?.errors?.[0];
-				const content = editable
-					? renderEditableContent({
-						column,
-						row,
-						value: fieldValue,
-						setValue,
-						handleBlur: field.handleBlur,
-						highlightQuery,
-					})
+					const content = editable
+						? renderEditableContent({
+							column,
+							row,
+							value: fieldValue as EditableCellValue,
+							setValue,
+							handleBlur: field.handleBlur,
+							highlightQuery,
+						})
 					: renderReadOnlyValue(fieldValue, row, column, highlightQuery);
 
 				const body = (
@@ -944,19 +948,33 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const TABLE_ID = config.tableId;
 
 	// TanStack Form setup
-	const form = useForm<FormValues<Row>>({
+	const form = useForm<
+		FormValues<Row>,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined
+	>({
 		defaultValues: {
 			rowOrder: [],
 			rowsById: {},
 		},
 	});
+	const setFormFieldValue = form.setFieldValue as (path: string, updater: any) => void;
 
-	const rowOrderSelector = useCallback(
-		(state: AnyFormState<FormValues<Row>>) => state.values?.rowOrder ?? [],
+	const rowOrderSelector = useCallback<(state: AnyFormState) => string[]>(
+		(state) => (state.values?.rowOrder as string[]) ?? [],
 		[]
 	);
-	const rowsByIdSelector = useCallback(
-		(state: AnyFormState<FormValues<Row>>) => state.values?.rowsById ?? {},
+	const rowsByIdSelector = useCallback<(state: AnyFormState) => Record<string, Row>>(
+		(state) => (state.values?.rowsById as Record<string, Row>) ?? {},
 		[]
 	);
 
@@ -1013,19 +1031,19 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [colWidths, setColWidths] = useState<Record<number, number>>({});
 	const colRefs = useRef<(HTMLTableColElement | null)[]>([]);
 
-	const setFormRows = useCallback(
-		(nextRows: Row[]) => {
-			const nextOrder = nextRows.map((row) => row.id);
-			const nextMap = nextRows.reduce<Record<string, Row>>((acc, row) => {
-				acc[row.id] = { ...row };
-				return acc;
-			}, {});
-			form.setFieldValue("rowOrder", () => nextOrder);
-			form.setFieldValue("rowsById", () => nextMap);
-			initialValuesRef.current = snapshotValues(nextOrder, nextMap);
-		},
-		[form]
-	);
+		const setFormRows = useCallback(
+			(nextRows: Row[]) => {
+				const nextOrder = nextRows.map((row) => row.id);
+				const nextMap = nextRows.reduce<Record<string, Row>>((acc, row) => {
+					acc[row.id] = { ...row };
+					return acc;
+				}, {});
+				setFormFieldValue("rowOrder", nextOrder);
+				setFormFieldValue("rowsById", nextMap);
+				initialValuesRef.current = snapshotValues(nextOrder, nextMap);
+			},
+			[form]
+		);
 
 	const rows = useMemo(() => {
 		return rowOrder.map((id) => rowsById[id]).filter((row): row is Row => Boolean(row));
@@ -1037,20 +1055,21 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}
 	}, [rowOrder, rowsById]);
 
-	useEffect(() => {
-		if (!config.fetchRows) return;
-		setIsServerPaging(true);
-		let isMounted = true;
-		const run = async () => {
-			setIsFetchingServerRows(true);
-			setServerError(null);
-			try {
-				const result = await config.fetchRows({
-					page,
-					limit: pageSize,
-					filters: filtersRef.current,
-					search: searchRef.current,
-				});
+		useEffect(() => {
+			const fetchRows = config.fetchRows;
+			if (!fetchRows) return;
+			setIsServerPaging(true);
+			let isMounted = true;
+			const run = async () => {
+				setIsFetchingServerRows(true);
+				setServerError(null);
+				try {
+					const result = await fetchRows({
+						page,
+						limit: pageSize,
+						filters: filtersRef.current,
+						search: searchRef.current,
+					});
 				if (!isMounted) return;
 				setFormRows(result.rows);
 				const pagination = result.pagination;
@@ -1078,7 +1097,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		return () => {
 			isMounted = false;
 		};
-	}, [config, page, pageSize, setFormRows]);
+		}, [config, page, pageSize, setFormRows]);
 
 	useEffect(() => {
 		if (config.fetchRows) return;
@@ -1094,13 +1113,13 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	);
 
 	const getInitialCellValue = useCallback(
-		(rowId: string, column: ColumnDef) =>
+		(rowId: string, column: ColumnDef<Row>) =>
 			initialValuesRef.current.rowsById[rowId]?.[column.field],
 		[]
 	);
 
 	const isCellDirty = useCallback(
-		(rowId: string, column: ColumnDef) => {
+		(rowId: string, column: ColumnDef<Row>) => {
 			const initialRow = getInitialRow(rowId);
 			const currentRow = rowsById[rowId];
 			if (!currentRow) return false;
@@ -1118,7 +1137,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			//make it return true if any cell is dirty and then an array of the dirty cells 
 			const initialRow = getInitialRow(rowId);
 			const currentRow = rowsById[rowId];
-			const dirtyCells: ColumnDef[] = [];
+			const dirtyCells: ColumnDef<Row>[] = [];
 			if (!currentRow) return { dirty: false, cells: [] };
 			if (!initialRow) return { dirty: true, cells: [] };
 			for (const column of columns) {
@@ -1167,15 +1186,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			map[column.id] = index;
 		});
 		return map;
-	}, []);
+	}, [columns]);
 
 	const columnsById = useMemo(() => {
-		const map: Record<string, ColumnDef> = {};
+		const map: Record<string, ColumnDef<Row>> = {};
 		columns.forEach((column) => {
 			map[column.id] = column;
 		});
 		return map;
-	}, []);
+	}, [columns]);
 
 	const groupedColumnLookup = useMemo(() => {
 		const map = new Map<string, HeaderGroup>();
@@ -1185,16 +1204,16 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			});
 		});
 		return map;
-	}, []);
+	}, [headerGroups]);
 
 	const hideableColumns = useMemo(
 		() => new Set(columns.filter((col) => col.enableHide !== false).map((col) => col.id)),
-		[]
+		[columns]
 	);
 
 	const pinnableColumns = useMemo(
 		() => new Set(columns.filter((col) => col.enablePin !== false).map((col) => col.id)),
-		[]
+		[columns]
 	);
 
 	const normalizedSearch = searchValue.trim().toLowerCase();
@@ -1220,8 +1239,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	);
 
 	const advancedFilteredRows = useMemo(() => {
-		if (!config.applyFilters) return searchFilteredRows;
-		return searchFilteredRows.filter((row) => config.applyFilters?.(row, filters));
+		const applyFilters = config.applyFilters;
+		if (!applyFilters) return searchFilteredRows;
+		return searchFilteredRows.filter((row) => applyFilters(row, filters));
 	}, [searchFilteredRows, config, filters]);
 
 	const tabCounts = useMemo(() => {
@@ -1240,7 +1260,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return advancedFilteredRows;
 		}
 		return advancedFilteredRows.filter(currentTab.predicate);
-	}, [advancedFilteredRows, activeTab]);
+	}, [advancedFilteredRows, activeTab, tabFilters]);
 
 	const sortedRows = useMemo(() => {
 		if (!sortState.columnId) return tabFilteredRows;
@@ -1346,23 +1366,28 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		};
 	}, [recalcPinnedOffsets]);
 
-	useEffect(() => {
-		const table = tableRef.current;
-		if (!table) return;
-		const handler = (event: Event) => {
-			const detail = (event as CustomEvent)?.detail as { tableId?: string; colIndex?: number; newWidth?: number };
-			if (!detail || detail.tableId !== TABLE_ID) return;
-			if (typeof detail.colIndex !== "number" || typeof detail.newWidth !== "number") return;
-			setColWidths((prev) => {
-				if (prev[detail.colIndex] === detail.newWidth) return prev;
-				return { ...prev, [detail.colIndex]: detail.newWidth };
-			});
-		};
-		table.addEventListener("columnResized", handler as EventListener);
-		return () => {
-			table.removeEventListener("columnResized", handler as EventListener);
-		};
-	}, [TABLE_ID]);
+		useEffect(() => {
+			const table = tableRef.current;
+			if (!table) return;
+			const handler = (event: Event) => {
+				const detail = (event as CustomEvent)?.detail as {
+					tableId?: string;
+					colIndex?: number;
+					newWidth?: number;
+				};
+				if (!detail || detail.tableId !== TABLE_ID) return;
+				const { colIndex, newWidth } = detail;
+				if (typeof colIndex !== "number" || typeof newWidth !== "number") return;
+				setColWidths((prev) => {
+					if (prev[colIndex] === newWidth) return prev;
+					return { ...prev, [colIndex]: newWidth };
+				});
+			};
+			table.addEventListener("columnResized", handler as EventListener);
+			return () => {
+				table.removeEventListener("columnResized", handler as EventListener);
+			};
+		}, [TABLE_ID]);
 
 	const getStickyProps = useCallback(
 		(columnId: string, baseClassName?: string) => {
@@ -1479,30 +1504,24 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const FieldComponent = form.Field as FormFieldComponent<Row>;
 
-	const handleClearCell = useCallback(
-		(rowId: string, column: ColumnDef) => {
-			if (column.editable === false) return;
-			const clearedValue = getClearedValue(column);
-			form.setFieldValue(
-				`rowsById.${rowId}.${column.field}` as const,
-				() => clearedValue
-			);
-		},
-		[form]
-	);
+		const handleClearCell = useCallback(
+			(rowId: string, column: ColumnDef<Row>) => {
+				if (column.editable === false) return;
+				const clearedValue = getClearedValue(column);
+				setFormFieldValue(`rowsById.${rowId}.${column.field}` as const, () => clearedValue as Row[ColumnField<Row>]);
+			},
+			[form]
+		);
 
-	const handleRestoreCell = useCallback(
-		(rowId: string, column: ColumnDef) => {
-			const initialRow = initialValuesRef.current.rowsById[rowId];
-			if (!initialRow) return;
-			const initialValue = initialRow[column.field];
-			form.setFieldValue(
-				`rowsById.${rowId}.${column.field}` as const,
-				() => initialValue
-			);
-		},
-		[form]
-	);
+		const handleRestoreCell = useCallback(
+			(rowId: string, column: ColumnDef<Row>) => {
+				const initialRow = initialValuesRef.current.rowsById[rowId];
+				if (!initialRow) return;
+				const initialValue = initialRow[column.field];
+				setFormFieldValue(`rowsById.${rowId}.${column.field}` as const, () => initialValue as Row[ColumnField<Row>]);
+			},
+			[form]
+		);
 
 	const handleCopyCell = useCallback(async (value: unknown) => {
 		const success = await copyToClipboard(value == null ? "" : String(value));
@@ -1511,12 +1530,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		);
 	}, []);
 
-	const handleCopyColumn = useCallback(async (column: ColumnDef) => {
-		const snapshot = processedRowsRef.current;
-		const values = snapshot.map((row) => row[column.field] ?? "").join("\n");
-		const success = await copyToClipboard(values);
-		toast[success ? "success" : "error"](
-			success ? "Columna copiada" : "No se pudo copiar la columna"
+		const handleCopyColumn = useCallback(async (column: ColumnDef<Row>) => {
+			const snapshot = processedRowsRef.current;
+			const values = snapshot.map((row) => row[column.field] ?? "").join("\n");
+			const success = await copyToClipboard(values);
+			toast[success ? "success" : "error"](
+				success ? "Columna copiada" : "No se pudo copiar la columna"
 		);
 	}, []);
 
@@ -1528,14 +1547,14 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [columns]);
 
 	// TanStack Table column definitions (static)
-	const tableColumns = useMemo<TanStackColumnDef<Row>[]>(() => {
-		return columns.map((col) => ({
-			id: col.id,
-			accessorKey: col.field,
-			header: col.label,
-			cell: (info) => info.getValue() ?? "",
-		}));
-	}, []);
+		const tableColumns = useMemo<TanStackColumnDef<Row>[]>(() => {
+			return columns.map((col) => ({
+				id: col.id,
+				accessorKey: col.field,
+				header: col.label,
+				cell: (info) => info.getValue() ?? "",
+			}));
+		}, [columns]);
 
 	// TanStack Table column visibility state
 	const columnVisibility = useMemo<VisibilityState>(() => {
@@ -1564,21 +1583,24 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		columnResizeMode: 'onChange',
 	});
 
-	const handleAddRow = useCallback(() => {
-		const newRow = config.createRow ? config.createRow() : createRowFromColumns(columns);
-		form.setFieldValue("rowOrder", (prev = []) => [...prev, newRow.id]);
-		form.setFieldValue("rowsById", (prev = {}) => ({ ...prev, [newRow.id]: newRow }));
-		toast.success("Fila vacía agregada");
-	}, [columns, config, form]);
+		const handleAddRow = useCallback(() => {
+			const newRow = config.createRow ? config.createRow() : createRowFromColumns(columns);
+			setFormFieldValue("rowOrder", (prev: string[] = []) => [...prev, newRow.id]);
+			setFormFieldValue("rowsById", (prev: Record<string, Row> = {}) => ({
+				...prev,
+				[newRow.id]: newRow,
+			}));
+			toast.success("Fila vacía agregada");
+		}, [columns, config, form]);
 
-	const handleDelete = useCallback((id: string) => {
-		form.setFieldValue("rowOrder", (prev = []) => prev.filter((rowId) => rowId !== id));
-		form.setFieldValue("rowsById", (prev = {}) => {
-			if (!(id in prev)) return prev;
-			const next = { ...prev };
-			delete next[id];
-			return next;
-		});
+		const handleDelete = useCallback((id: string) => {
+			setFormFieldValue("rowOrder", (prev: string[] = []) => prev.filter((rowId) => rowId !== id));
+			setFormFieldValue("rowsById", (prev: Record<string, Row> = {}) => {
+				if (!(id in prev)) return prev;
+				const next = { ...prev };
+				delete next[id];
+				return next;
+			});
 		toast.success("Fila eliminada");
 	}, [form]);
 

@@ -8,12 +8,9 @@ import {
 	validateJsonBody,
 } from "@/lib/http/validation";
 
-const RotateSecretSchema = z
-	.object({
-		graceDays: z.coerce.number().int().positive().max(30).optional(),
-	})
-	.optional()
-	.default({});
+const RotateSecretSchema = z.object({
+	graceDays: z.coerce.number().int().positive().max(30).optional(),
+});
 
 async function requireAdminTenant(request: Request) {
 	const supabase = await createClient();
@@ -107,7 +104,18 @@ export async function POST(request: Request) {
 			);
 		}
 
-		const { graceDays } = await validateJsonBody(request, RotateSecretSchema);
+		let graceDays: number | undefined;
+		try {
+			const body = await validateJsonBody(request, RotateSecretSchema);
+			graceDays = body.graceDays;
+		} catch (error) {
+			// If there's no body or it's invalid JSON, just use undefined
+			if (error instanceof ApiValidationError && error.issues.includes("invalid_json")) {
+				graceDays = undefined;
+			} else {
+				throw error;
+			}
+		}
 		const graceValue =
 			graceDays && Number.isFinite(graceDays) ? `${graceDays} days` : undefined;
 

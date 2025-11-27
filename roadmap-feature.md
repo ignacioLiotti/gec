@@ -189,3 +189,40 @@ Advanced scheduling & resource allocation
 Map-based obra management
 
 Predictive analytics & anomaly detection
+
+› here are some todos left before releasing this app, create a step by step into implementing them
+
+Add audit logging for cross-tenant risks 6. API & Application Security
+
+Add rate limiting (per IP & per tenant)
+
+Add Zod validation on ALL API routes
+
+Add request signing for sensitive endpoints (HMAC/JWT)
+
+Secrets rotation strategy (Resend, OpenAI, Supabase)
+
+SQL injection audit
+
+XSS & CSRF audit 7. Monitoring, Logging & Observability
+
+Integrate error tracking (Sentry)
+
+8. Infrastructure Resilience
+
+Verify Supabase backup restorability
+
+Load testing (baseline concurrency test)
+
+PHASE 5 — Data Integrity (Week 4) 9. Data Protection
+
+Add soft deletes across all critical tables
+
+Implement orphan record cleanup jobs
+(certificates, obras, related artifacts)
+
+PHASE 6 — Product Completeness (Week 4–5) 10. Testing Coverage
+
+Unit tests on critical business logic
+
+Integration tests for all API routes

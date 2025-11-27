@@ -32,7 +32,16 @@ const FlujoActionsPayloadSchema = z
 				code: z.ZodIssueCode.custom,
 				message: "offsetValue y offsetUnit son obligatorios para offset",
 				path: ["offsetValue"],
-		});
+			});
+		}
+		if (val.timingMode === "scheduled" && !val.scheduledDate) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "scheduledDate es obligatorio para scheduled",
+				path: ["scheduledDate"],
+			});
+		}
+	});
 
 const FlujoActionsUpdateSchema = z.object({
 	id: z.string().uuid(),
@@ -53,15 +62,6 @@ const FlujoActionsUpdateSchema = z.object({
 const FlujoActionsDeleteSchema = z.object({
 	id: z.string().uuid(),
 });
-		}
-		if (val.timingMode === "scheduled" && !val.scheduledDate) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: "scheduledDate es obligatorio para scheduled",
-				path: ["scheduledDate"],
-			});
-		}
-	});
 
 export async function GET(request: Request) {
 	try {

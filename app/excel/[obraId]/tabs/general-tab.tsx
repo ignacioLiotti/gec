@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 type GeneralTabProps = {
-	form: FormApi<Obra, any, undefined>;
+	form: any; // FormApi type requires 11-12 type arguments, using any for simplicity
 	isGeneralTabEditMode: boolean;
 	hasUnsavedChanges: () => boolean;
 	isFieldDirty: (field: keyof Obra) => boolean;
@@ -104,7 +104,7 @@ export function ObraGeneralTab({
 								className="rounded-lg border bg-card p-4 shadow-sm flex flex-col col-span-1 row-span-1"
 							>
 								<form.Field name="porcentaje">
-									{(field) => (
+									{(field: any) => (
 										<>
 											<div className="flex items-center justify-between gap-2 text-muted-foreground mb-4">
 												<div className="flex items-center gap-2">
@@ -150,7 +150,7 @@ export function ObraGeneralTab({
 								</div>
 								<div className="p-6 space-y-6">
 									<form.Field name="designacionYUbicacion">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="flex items-center gap-2 text-sm font-medium mb-2">
 													<MapPin className="h-4 w-4 text-muted-foreground" />
@@ -175,7 +175,7 @@ export function ObraGeneralTab({
 
 									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 										<form.Field name="entidadContratante">
-											{(field) => (
+											{(field: any) => (
 												<div>
 													<label className="flex items-center gap-2 text-sm font-medium mb-2">
 														<Building2 className="h-4 w-4 text-muted-foreground" />
@@ -198,7 +198,7 @@ export function ObraGeneralTab({
 										</form.Field>
 
 										<form.Field name="mesBasicoDeContrato">
-											{(field) => (
+											{(field: any) => (
 												<div>
 													<label className="flex items-center gap-2 text-sm font-medium mb-2">
 														<Calendar className="h-4 w-4 text-muted-foreground" />
@@ -221,7 +221,7 @@ export function ObraGeneralTab({
 										</form.Field>
 
 										<form.Field name="iniciacion">
-											{(field) => (
+											{(field: any) => (
 												<div>
 													<label className="flex items-center gap-2 text-sm font-medium mb-2">
 														<Calendar className="h-4 w-4 text-muted-foreground" />
@@ -244,7 +244,7 @@ export function ObraGeneralTab({
 										</form.Field>
 
 										<form.Field name="n">
-											{(field) => (
+											{(field: any) => (
 												<div>
 													<label className="flex items-center gap-2 text-sm font-medium mb-2">
 														<FileText className="h-4 w-4 text-muted-foreground" />
@@ -267,7 +267,7 @@ export function ObraGeneralTab({
 										</form.Field>
 
 										<form.Field name="supDeObraM2">
-											{(field) => (
+											{(field: any) => (
 												<div>
 													<label className="flex items-center gap-2 text-sm font-medium mb-2">
 														<TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -308,7 +308,7 @@ export function ObraGeneralTab({
 							<div className="p-6 space-y-4">
 								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 									<form.Field name="contratoMasAmpliaciones">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="block text-sm font-medium text-muted-foreground mb-2">
 													Contrato más ampliaciones
@@ -331,7 +331,7 @@ export function ObraGeneralTab({
 									</form.Field>
 
 									<form.Field name="certificadoALaFecha">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="block text-sm font-medium text-muted-foreground mb-2">
 													Certificado a la fecha
@@ -354,7 +354,7 @@ export function ObraGeneralTab({
 									</form.Field>
 
 									<form.Field name="saldoACertificar">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="block text-sm font-medium text-muted-foreground mb-2">
 													Saldo a certificar
@@ -381,7 +381,7 @@ export function ObraGeneralTab({
 
 								<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 									<form.Field name="segunContrato">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="block text-sm font-medium text-muted-foreground mb-2">
 													Según contrato
@@ -404,7 +404,7 @@ export function ObraGeneralTab({
 									</form.Field>
 
 									<form.Field name="prorrogasAcordadas">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="block text-sm font-medium text-muted-foreground mb-2">
 													Prórrogas acordadas
@@ -427,7 +427,7 @@ export function ObraGeneralTab({
 									</form.Field>
 
 									<form.Field name="plazoTotal">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="block text-sm font-medium text-muted-foreground mb-2">
 													Plazo total
@@ -450,7 +450,7 @@ export function ObraGeneralTab({
 									</form.Field>
 
 									<form.Field name="plazoTransc">
-										{(field) => (
+										{(field: any) => (
 											<div>
 												<label className="block text-sm font-medium text-muted-foreground mb-2">
 													Transcurrido
@@ -484,8 +484,8 @@ export function ObraGeneralTab({
 						<Button asChild variant="outline">
 							<Link href="/excel">Cancelar</Link>
 						</Button>
-						<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-							{([canSubmit, isSubmitting]) => (
+						<form.Subscribe selector={(state: any) => [state.canSubmit, state.isSubmitting]}>
+							{([canSubmit, isSubmitting]: [any, any]) => (
 								<Button type="submit" disabled={!canSubmit} className="min-w-[140px]">
 									{isSubmitting ? "Guardando..." : "Guardar cambios"}
 								</Button>
@@ -809,8 +809,8 @@ export function ObraGeneralTab({
 								>
 									Descartar cambios
 								</Button>
-								<form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-									{([canSubmit, isSubmitting]) => (
+								<form.Subscribe selector={(state: any) => [state.canSubmit, state.isSubmitting]}>
+									{([canSubmit, isSubmitting]: [any, any]) => (
 										<Button
 											onClick={(e) => {
 												e.preventDefault();

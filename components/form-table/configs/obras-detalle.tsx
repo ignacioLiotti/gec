@@ -37,6 +37,8 @@ export type DetailAdvancedFilters = {
 	ptrMax: string;
 };
 
+type RangeFilterKey = Exclude<keyof DetailAdvancedFilters, "entidades">;
+
 export type ObrasDetalleRow = FormTableRow & {
 	n?: number | null;
 	designacionYUbicacion?: string | null;
@@ -301,7 +303,7 @@ const renderFilters = ({
 	filters: DetailAdvancedFilters;
 	onChange: (updater: (prev: DetailAdvancedFilters) => DetailAdvancedFilters) => void;
 }): ReactNode => {
-	const handleRangeChange = (key: keyof DetailAdvancedFilters, value: string) => {
+	const handleRangeChange = (key: RangeFilterKey, value: string) => {
 		onChange((prev) => ({ ...prev, [key]: value }));
 	};
 
@@ -375,7 +377,7 @@ const renderFilters = ({
 					/>
 				</div>
 			</div>
-			{[
+			{( [
 				["cmaMin", "cmaMax", "Contrato + Ampliaciones"],
 				["cafMin", "cafMax", "Certificado a la fecha"],
 				["sacMin", "sacMax", "Saldo a certificar"],
@@ -383,25 +385,21 @@ const renderFilters = ({
 				["paMin", "paMax", "Prórrogas acordadas"],
 				["ptMin", "ptMax", "Plazo total"],
 				["ptrMin", "ptrMax", "Plazo total transc."],
-			].map(([minKey, maxKey, label]) => (
+			] as Array<[RangeFilterKey, RangeFilterKey, string]>).map(([minKey, maxKey, label]) => (
 				<div key={minKey} className="grid grid-cols-2 gap-3">
 					<div>
 						<Label>{label} (mín)</Label>
 						<Input
-							value={(filters as Record<string, string>)[minKey]}
-							onChange={(event) =>
-								handleRangeChange(minKey as keyof DetailAdvancedFilters, event.target.value)
-							}
+							value={filters[minKey]}
+							onChange={(event) => handleRangeChange(minKey, event.target.value)}
 							placeholder="0"
 						/>
 					</div>
 					<div>
 						<Label>{label} (máx)</Label>
 						<Input
-							value={(filters as Record<string, string>)[maxKey]}
-							onChange={(event) =>
-								handleRangeChange(maxKey as keyof DetailAdvancedFilters, event.target.value)
-							}
+							value={filters[maxKey]}
+							onChange={(event) => handleRangeChange(maxKey, event.target.value)}
 							placeholder="0"
 						/>
 					</div>

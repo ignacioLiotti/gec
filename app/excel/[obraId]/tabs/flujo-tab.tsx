@@ -288,13 +288,13 @@ export function ObraFlujoTab({
 											checked={newFlujoAction.notification_types?.includes("in_app") || false}
 											onChange={(e) =>
 												setNewFlujoAction((prev) => {
-													const current = prev.notification_types || [];
-													const updated = e.target.checked
-														? Array.from(new Set([...current.filter((t) => t !== "in_app"), "in_app"]))
+													const current: ('in_app' | 'email')[] = prev.notification_types || [];
+													const updated: ('in_app' | 'email')[] = e.target.checked
+														? Array.from(new Set([...current.filter((t) => t !== "in_app"), "in_app" as const]))
 														: current.filter((t) => t !== "in_app");
 													return {
 														...prev,
-														notification_types: updated.length > 0 ? updated : ["in_app"],
+														notification_types: updated.length > 0 ? updated : (["in_app"] as const),
 													};
 												})
 											}
@@ -311,13 +311,13 @@ export function ObraFlujoTab({
 											checked={newFlujoAction.notification_types?.includes("email") || false}
 											onChange={(e) =>
 												setNewFlujoAction((prev) => {
-													const current = prev.notification_types || [];
-													const updated = e.target.checked
-														? Array.from(new Set([...current.filter((t) => t !== "email"), "email"]))
+													const current: ('in_app' | 'email')[] = prev.notification_types || [];
+													const updated: ('in_app' | 'email')[] = e.target.checked
+														? Array.from(new Set([...current.filter((t) => t !== "email"), "email" as const]))
 														: current.filter((t) => t !== "email");
 													return {
 														...prev,
-														notification_types: updated.length > 0 ? updated : ["in_app"],
+														notification_types: updated.length > 0 ? updated : (["in_app"] as const),
 													};
 												})
 											}

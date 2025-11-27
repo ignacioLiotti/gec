@@ -208,7 +208,7 @@ export async function PUT(req: Request, context: RouteContext) {
 		// Ensure the pendiente belongs to this obra
 		const { data: existing, error: fetchError } = await supabase
 			.from("obra_pendientes")
-			.select("id")
+			.select("id, tenant_id")
 			.eq("id", pendienteId)
 			.eq("obra_id", obraId)
 			.is("deleted_at", null)
@@ -271,7 +271,7 @@ export async function PUT(req: Request, context: RouteContext) {
 						{
 							pendiente_id: pendienteId,
 							user_id: userId,
-							tenant_id: (obraRow as any).tenant_id,
+							tenant_id: (existing as any).tenant_id,
 							stage: s.stage,
 							run_at: s.run_at.toISOString(),
 						},

@@ -4,13 +4,13 @@ import { z } from "zod";
 export class ApiValidationError extends Error {
 	status: number;
 	issues: string[];
-	fieldErrors?: Record<string, string[]>;
+	fieldErrors?: Record<string, string[] | undefined>;
 
 	constructor(
 		message: string,
 		issues: string[] = [],
 		status = 400,
-		fieldErrors?: Record<string, string[]>
+		fieldErrors?: Record<string, string[] | undefined>
 	) {
 		super(message);
 		this.name = "ApiValidationError";
