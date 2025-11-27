@@ -1,5 +1,7 @@
 -- Tenant-scoped API secrets for request signing
 
+create extension if not exists pgcrypto;
+
 create table if not exists public.tenant_api_secrets (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.tenants(id) on delete cascade,
@@ -72,7 +74,7 @@ grant execute on function public.get_active_tenant_secret(uuid, int) to service_
 drop function if exists public.rotate_tenant_api_secret(uuid, text, interval);
 create or replace function public.rotate_tenant_api_secret(
   p_tenant_id uuid,
-  p_new_secret text default encode(gen_random_bytes(32), 'hex'),
+  p_new_secret text default encode(extensions.gen_random_bytes(32), 'hex'),
   p_grace_period interval default interval '7 days'
 )
 returns public.tenant_api_secrets

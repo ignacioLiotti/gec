@@ -29,6 +29,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import * as Sentry from '@sentry/nextjs';
 import ForgeViewer from '@/app/viewer/forgeviewer';
 import { EnhancedDocumentViewer } from '@/components/viewer/enhanced-document-viewer';
 import FolderFront from '../ui/FolderFront';
@@ -434,6 +435,13 @@ export function FileManager({
       console.log('Auto-expanded folders:', foldersToExpand);
     } catch (error) {
       console.error('Error building file tree:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'file-manager' },
+        extra: {
+          obraId,
+          materialOrdersCount: materialOrders.length,
+        },
+      });
       toast.error('Error loading documents');
     } finally {
       setLoading(false);
