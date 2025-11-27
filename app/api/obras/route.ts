@@ -4,10 +4,48 @@ import { obrasFormSchema } from "@/app/excel/schema";
 import { NextResponse } from "next/server";
 import { emitEvent } from "@/lib/notifications/engine";
 import "@/lib/notifications/rules"; // register rules
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { sendEmail } from "@/lib/email/api";
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
 export const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
+
+const appBaseUrl =
+	process.env.NEXT_PUBLIC_APP_URL ??
+	(process.env.NEXT_PUBLIC_VERCEL_URL
+		? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+		: process.env.VERCEL_URL
+			? `https://${process.env.VERCEL_URL}`
+			: "http://localhost:3000");
+
+let cachedAdminClient: ReturnType<typeof createSupabaseAdminClient> | null =
+	null;
+function getAdminClient() {
+	if (cachedAdminClient) return cachedAdminClient;
+	try {
+		cachedAdminClient = createSupabaseAdminClient();
+	} catch (error) {
+		console.error("[flujo-actions] admin client unavailable", error);
+		cachedAdminClient = null;
+	}
+	return cachedAdminClient;
+}
+
+async function fetchUserEmail(userId: string) {
+	const adminClient = getAdminClient();
+	if (!adminClient) return null;
+	try {
+		const { data } = await adminClient.auth.admin.getUserById(userId);
+		return data.user?.email ?? null;
+	} catch (error) {
+		console.error("[flujo-actions] failed to fetch user email", {
+			userId,
+			error,
+		});
+		return null;
+	}
+}
 
 export type DbObraRow = {
 	id: string;
@@ -201,6 +239,8 @@ export async function executeFlujoActions(
 								all_day: false,
 								audience_type: "user",
 								target_user_id: recipientId,
+								deleted_at: null,
+								deleted_by: null,
 							});
 						if (calErr) {
 							console.error(
@@ -249,8 +289,6 @@ export async function executeFlujoActions(
 
 					// Send email notification if requested
 					if (notificationTypes.includes("email")) {
-						// TODO: Integrate with email service (e.g., Resend)
-						// For now, create a notification with type "email" to indicate it should be sent via email
 						await supabase.from("notifications").insert({
 							user_id: recipientId,
 							tenant_id: tenantId,
@@ -267,10 +305,33 @@ export async function executeFlujoActions(
 							},
 						});
 
-						console.info("Email notification queued for flujo action", {
-							actionId: action.id,
-							recipientId,
-						});
+						const recipientEmail = await fetchUserEmail(recipientId);
+						if (recipientEmail) {
+							try {
+								await sendEmail({
+									to: recipientEmail,
+									subject: action.title,
+									html: `
+										<p>${action.message ?? ""}</p>
+										<p><a href="${appBaseUrl}/excel/${obraId}">Ver obra</a></p>
+									`,
+								});
+								console.info("Email notification sent for flujo action", {
+									actionId: action.id,
+									recipientId,
+								});
+							} catch (emailError) {
+								console.error(
+									"Failed to send flujo action email notification",
+									emailError
+								);
+							}
+						} else {
+							console.warn(
+								"No email found for flujo action recipient",
+								recipientId
+							);
+						}
 					}
 				}
 			}
@@ -375,6 +436,7 @@ export async function GET(request: Request) {
 			.from("obras")
 			.select(columns, hasPagination ? { count: "exact" } : undefined)
 			.eq("tenant_id", tenantId)
+			.is("deleted_at", null)
 			.order(orderBy, { ascending: orderAscending });
 
 		if (status === "completed") {
@@ -498,7 +560,8 @@ export async function GET(request: Request) {
 		const totalQuery = supabase
 			.from("obras")
 			.select("*", { count: "exact", head: true })
-			.eq("tenant_id", tenantId);
+			.eq("tenant_id", tenantId)
+			.is("deleted_at", null);
 
 		if (status === "completed") {
 			totalQuery.eq("porcentaje", 100);
@@ -580,7 +643,8 @@ export async function PUT(request: Request) {
 		.select(
 			"id, n, porcentaje, designacion_y_ubicacion, on_finish_first_message, on_finish_second_message, on_finish_second_send_at"
 		)
-		.eq("tenant_id", tenantId);
+		.eq("tenant_id", tenantId)
+		.is("deleted_at", null);
 
 	if (fetchExistingError && fetchExistingError.code === "42703") {
 		supportsConfigColumns = false;
@@ -590,7 +654,8 @@ export async function PUT(request: Request) {
 		const fallback = await supabase
 			.from("obras")
 			.select("id, n, porcentaje, designacion_y_ubicacion")
-			.eq("tenant_id", tenantId);
+			.eq("tenant_id", tenantId)
+			.is("deleted_at", null);
 		existingRows = fallback.data as any;
 		fetchExistingError = fallback.error;
 	}
@@ -637,6 +702,8 @@ export async function PUT(request: Request) {
 			plazo_total: obra.plazoTotal,
 			plazo_transc: obra.plazoTransc,
 			porcentaje: obra.porcentaje,
+			deleted_at: null,
+			deleted_by: null,
 		};
 
 		if (supportsConfigColumns) {
@@ -719,6 +786,7 @@ export async function PUT(request: Request) {
 				"id, n, designacion_y_ubicacion, porcentaje, on_finish_first_message, on_finish_second_message, on_finish_second_send_at"
 			)
 			.eq("tenant_id", tenantId)
+			.is("deleted_at", null)
 			.in(
 				"n",
 				newlyCompleted.map((obra) => obra.n)
@@ -738,6 +806,7 @@ export async function PUT(request: Request) {
 					.from("obras")
 					.select("id, n, designacion_y_ubicacion, porcentaje")
 					.eq("tenant_id", tenantId)
+					.is("deleted_at", null)
 					.in(
 						"n",
 						newlyCompleted.map((obra) => obra.n)
@@ -873,6 +942,7 @@ export async function PUT(request: Request) {
 								{
 									pendiente_id: (row as any).id,
 									user_id: user.id,
+									tenant_id: tenantId,
 									stage: s.stage,
 									run_at: s.run_at.toISOString(),
 								},

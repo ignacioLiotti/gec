@@ -87,6 +87,7 @@ export async function POST(req: Request, context: RouteContext) {
 			.from("obras")
 			.select("id")
 			.eq("id", obraId)
+			.is("deleted_at", null)
 			.single();
 
 		if (obraError) throw obraError;

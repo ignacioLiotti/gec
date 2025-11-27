@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { ApiValidationError, validateFormData } from "@/lib/http/validation";
+
+const UploadSchema = z.object({
+	file: z.instanceof(File, { message: "No file provided" }),
+});
 
 export async function POST(request: NextRequest) {
 	try {
 		const formData = await request.formData();
-		const file = formData.get("file") as File;
-
-		if (!file) {
-			return NextResponse.json({ error: "No file provided" }, { status: 400 });
-		}
+		const { file } = validateFormData(formData, UploadSchema);
 
 		const clientId = process.env.APS_CLIENT_ID;
 		const clientSecret = process.env.APS_CLIENT_SECRET;
@@ -215,6 +217,12 @@ export async function POST(request: NextRequest) {
 			translation: translateData,
 		});
 	} catch (error: any) {
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		console.error("Upload error:", error);
 		return NextResponse.json(
 			{ error: error.message || "Upload failed" },

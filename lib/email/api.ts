@@ -1,6 +1,8 @@
 import { Resend } from "resend";
+import { getVersionedSecret } from "@/lib/security/secrets";
 
-const resendKey = process.env.RESEND_API_KEY;
+const { value: resendKey, version: resendVersion } =
+	getVersionedSecret("RESEND_API_KEY");
 const fromEmail = process.env.RESEND_FROM_EMAIL;
 
 let resendClient: Resend | null = null;
@@ -30,6 +32,7 @@ export async function sendEmail({
 		console.warn("Email API: missing config, skipping send", {
 			hasKey: Boolean(resendKey),
 			hasFrom: Boolean(fromEmail),
+			version: resendVersion ?? "legacy",
 		});
 		return;
 	}

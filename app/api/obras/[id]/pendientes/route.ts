@@ -16,6 +16,7 @@ export async function GET(_req: Request, context: RouteContext) {
 			.from("obra_pendientes")
 			.select("id, name, poliza, due_mode, due_date, offset_days, done")
 			.eq("obra_id", obraId)
+			.is("deleted_at", null)
 			.order("created_at", { ascending: true });
 		if (error) throw error;
 
@@ -60,6 +61,7 @@ export async function POST(req: Request, context: RouteContext) {
 			.from("obras")
 			.select("tenant_id")
 			.eq("id", obraId)
+			.is("deleted_at", null)
 			.single();
 		if (obraError) throw obraError;
 		if (!obraRow)
@@ -86,6 +88,7 @@ export async function POST(req: Request, context: RouteContext) {
 			.from("obra_pendientes")
 			.select("id")
 			.eq("obra_id", obraId)
+			.is("deleted_at", null)
 			.eq("name", insertPayload.name)
 			.limit(1)
 			.maybeSingle();
@@ -126,7 +129,7 @@ export async function POST(req: Request, context: RouteContext) {
                     for (const s of stages) {
                         await supabase
                             .from("pendiente_schedules")
-                            .upsert({ pendiente_id: existingByName.id, user_id: userId, stage: s.stage, run_at: s.run_at.toISOString() }, { onConflict: "pendiente_id,stage" });
+                            .upsert({ pendiente_id: existingByName.id, user_id: userId, tenant_id: (obraRow as any).tenant_id, stage: s.stage, run_at: s.run_at.toISOString() }, { onConflict: "pendiente_id,stage" });
                     }
                 }
             }
@@ -164,7 +167,7 @@ export async function POST(req: Request, context: RouteContext) {
                 for (const s of stages) {
                     await supabase
                         .from("pendiente_schedules")
-                        .upsert({ pendiente_id: newId, user_id: userId, stage: s.stage, run_at: s.run_at.toISOString() }, { onConflict: "pendiente_id,stage" });
+                        .upsert({ pendiente_id: newId, user_id: userId, tenant_id: (obraRow as any).tenant_id, stage: s.stage, run_at: s.run_at.toISOString() }, { onConflict: "pendiente_id,stage" });
                 }
             }
         }
@@ -208,6 +211,7 @@ export async function PUT(req: Request, context: RouteContext) {
 			.select("id")
 			.eq("id", pendienteId)
 			.eq("obra_id", obraId)
+			.is("deleted_at", null)
 			.single();
 		if (fetchError) throw fetchError;
 		if (!existing)
@@ -232,7 +236,8 @@ export async function PUT(req: Request, context: RouteContext) {
 			.from("obra_pendientes")
 			.update(updatePayload)
 			.eq("id", pendienteId)
-			.eq("obra_id", obraId);
+			.eq("obra_id", obraId)
+			.is("deleted_at", null);
 		if (error) throw error;
 
 		// Upsert schedules for fixed due date; skip for after_completion (handled on obra completion)
@@ -266,6 +271,7 @@ export async function PUT(req: Request, context: RouteContext) {
 						{
 							pendiente_id: pendienteId,
 							user_id: userId,
+							tenant_id: (obraRow as any).tenant_id,
 							stage: s.stage,
 							run_at: s.run_at.toISOString(),
 						},
@@ -306,6 +312,7 @@ export async function DELETE(req: Request, context: RouteContext) {
 			.select("id")
 			.eq("id", pendienteId)
 			.eq("obra_id", obraId)
+			.is("deleted_at", null)
 			.single();
 		if (fetchError) throw fetchError;
 		if (!existing)

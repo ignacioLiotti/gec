@@ -20,6 +20,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { balanceTableColumns } from "@/components/ui/column-resizer";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { SearchInput } from "./_components/SearchInput";
 import { ColumnsMenu } from "./_components/ColumnsMenu";
 import { ObrasTable } from "./_components/ObrasTable";
@@ -76,6 +84,8 @@ export default function ExcelPage() {
 	const [csvImportError, setCsvImportError] = useState<string | null>(null);
 	const csvInputRef = useRef<HTMLInputElement | null>(null);
 	const [rowsSnapshot, setRowsSnapshot] = useState<Obra[]>(initialData);
+	const [pendingDeleteObra, setPendingDeleteObra] = useState<{ obra: Obra; index: number } | null>(null);
+	const [isDeletingObra, setIsDeletingObra] = useState(false);
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const hasLoadedRef = useRef(false);
 
@@ -358,6 +368,40 @@ export default function ExcelPage() {
 			}
 		},
 	});
+
+	const confirmDeleteObra = useCallback(async () => {
+		if (!pendingDeleteObra?.obra?.id) {
+			setPendingDeleteObra(null);
+			return;
+		}
+		try {
+			setIsDeletingObra(true);
+			const res = await fetch(`/api/obras/${pendingDeleteObra.obra.id}`, {
+				method: "DELETE",
+			});
+			const payload = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				throw new Error(payload?.error ?? "No se pudo eliminar la obra");
+			}
+			const current = (form.state.values.detalleObras ?? []) as Obra[];
+			const filtered = current.filter(
+				(obra) => obra.id !== pendingDeleteObra.obra.id
+			);
+			form.setFieldValue("detalleObras", filtered);
+			setRowsSnapshot(filtered);
+			toast.success("Obra eliminada");
+		} catch (error) {
+			console.error(error);
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "No se pudo eliminar la obra"
+			);
+		} finally {
+			setIsDeletingObra(false);
+			setPendingDeleteObra(null);
+		}
+	}, [pendingDeleteObra, form, setRowsSnapshot]);
 
 	useEffect(() => {
 		let isMounted = true;
@@ -1003,6 +1047,17 @@ export default function ExcelPage() {
 								const safePage = Math.min(currentPage, totalPages);
 								const start = (safePage - 1) * currentLimit;
 								const visible = filtered.slice(start, start + currentLimit);
+								const handleDeleteObra = ({ obra, index }: { obra: Obra; index: number }) => {
+									if (!obra?.id) {
+										const arr = field.state.value
+											.filter((_: Obra, i: number) => i !== index) as Obra[];
+										form.setFieldValue("detalleObras", arr);
+										setRowsSnapshot(arr);
+										toast.success("Fila eliminada (no guardada)");
+										return;
+									}
+									setPendingDeleteObra({ obra, index });
+								};
 
 								return (
 									<>
@@ -1038,6 +1093,7 @@ export default function ExcelPage() {
 												setFiltersVersion((v) => v + 1);
 												setActiveTab("in-process");
 											}}
+											onRequestDelete={handleDeleteObra}
 										/>
 
 										<div className="flex flex-wrap items-center justify-between gap-4 py-4 px-1">
@@ -1093,6 +1149,17 @@ export default function ExcelPage() {
 								const safePage = Math.min(compPage, totalPages);
 								const start = (safePage - 1) * compLimit;
 								const visible = filtered.slice(start, start + compLimit);
+								const handleDeleteObra = ({ obra, index }: { obra: Obra; index: number }) => {
+									if (!obra?.id) {
+										const arr = field.state.value
+											.filter((_: Obra, i: number) => i !== index) as Obra[];
+										form.setFieldValue("detalleObras", arr);
+										setRowsSnapshot(arr);
+										toast.success("Fila eliminada (no guardada)");
+										return;
+									}
+									setPendingDeleteObra({ obra, index });
+								};
 
 								return (
 									<>
@@ -1127,6 +1194,7 @@ export default function ExcelPage() {
 												setFiltersVersion((v) => v + 1);
 												setActiveTab("in-process");
 											}}
+											onRequestDelete={handleDeleteObra}
 										/>
 
 										<div className="flex flex-wrap items-center justify-between gap-4 py-4 px-1">
@@ -1215,6 +1283,53 @@ export default function ExcelPage() {
 					</form.Subscribe>
 				</div>
 			</form>
+			<Dialog
+				open={Boolean(pendingDeleteObra)}
+				onOpenChange={(open) => {
+					if (!open && !isDeletingObra) {
+						setPendingDeleteObra(null);
+					}
+				}}
+			>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Eliminar obra</DialogTitle>
+						<DialogDescription>
+							Esta acción moverá la obra y sus datos asociados a la papelera de la organización.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-2 px-1 py-2">
+						<p className="text-sm text-foreground/80">
+							¿Confirmás que querés eliminar{" "}
+							<span className="font-semibold">
+								{pendingDeleteObra?.obra?.designacionYUbicacion || "esta obra"}
+							</span>
+							?
+						</p>
+						<p className="text-xs text-muted-foreground">
+							Los certificados, pendientes y documentos seguirán disponibles en la base de datos pero dejarán de mostrarse en la app.
+						</p>
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => setPendingDeleteObra(null)}
+							disabled={isDeletingObra}
+						>
+							Cancelar
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							onClick={() => void confirmDeleteObra()}
+							disabled={isDeletingObra}
+						>
+							{isDeletingObra ? "Eliminando..." : "Eliminar obra"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

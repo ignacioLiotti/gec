@@ -8,9 +8,10 @@ async function runDispatch() {
   // 1) Load due, unprocessed schedules
   const { data: schedules, error: schedErr } = await admin
     .from("pendiente_schedules")
-    .select("id,pendiente_id,user_id,stage,run_at")
+    .select("id,pendiente_id,user_id,tenant_id,stage,run_at")
     .lte("run_at", nowIso)
     .is("processed_at", null)
+    .is("deleted_at", null)
     .order("run_at", { ascending: true })
     .limit(1000);
   if (schedErr) throw schedErr;
@@ -22,7 +23,8 @@ async function runDispatch() {
   const { data: pendientes, error: pendErr } = await admin
     .from("obra_pendientes")
     .select("id,name,obra_id,due_date")
-    .in("id", pendienteIds);
+    .in("id", pendienteIds)
+    .is("deleted_at", null);
   if (pendErr) throw pendErr;
   const pendById = new Map<string, any>((pendientes ?? []).map((p: any) => [p.id, p]));
 
@@ -34,7 +36,7 @@ async function runDispatch() {
     const body = p?.due_date ? `Vence el ${p.due_date}.` : null;
     return {
       user_id: s.user_id,
-      tenant_id: null,
+      tenant_id: s.tenant_id,
       title,
       body,
       type: "reminder" as const,
@@ -58,7 +60,8 @@ async function runDispatch() {
   const { error: updErr } = await admin
     .from("pendiente_schedules")
     .update({ processed_at: new Date().toISOString() })
-    .in("id", ids);
+    .in("id", ids)
+    .is("deleted_at", null);
   if (updErr) throw updErr;
 
   return { processed: items.length };

@@ -154,6 +154,7 @@ type FiltersState = {
 export default function CertificadosPage() {
   const router = useRouter();
   const [rows, setRows] = useState<CertRow[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [tableError, setTableError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -414,15 +415,41 @@ export default function CertificadosPage() {
     toast.success("Fila duplicada (temporal, no guardada)");
   }, [rows]);
 
-  const deleteRow = useCallback((index: number) => {
-    if (rows.length <= 1) {
-      toast.error("No se puede eliminar la última fila");
+  const deleteRow = useCallback(async (index: number) => {
+    const row = rows[index];
+    if (!row) return;
+
+    const isEphemeral = row.id.startsWith("temp-") || row.id.startsWith("import-");
+    if (isEphemeral) {
+      setRows((prev) => prev.filter((_, i) => i !== index));
+      toast.success("Fila eliminada (no guardada)");
       return;
     }
-    const arr = rows.filter((_, i) => i !== index);
-    setRows(arr);
-    toast.success("Fila eliminada (temporal, no guardada)");
-  }, [rows]);
+
+    try {
+      setDeletingId(row.id);
+      const res = await fetch(`/api/certificados/${row.id}`, {
+        method: "DELETE",
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "No se pudo eliminar el certificado");
+      }
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
+      setTotal((prev) => Math.max(prev - 1, 0));
+      toast.success("Certificado eliminado");
+      await refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar el certificado"
+      );
+    } finally {
+      setDeletingId((current) => (current === row.id ? null : current));
+    }
+  }, [rows, refresh]);
 
   const ALL_COLUMNS: { index: number; label: string }[] = [
     { index: 0, label: "Obra" },
@@ -1243,7 +1270,12 @@ export default function CertificadosPage() {
                       <ContextMenuContent className="w-56">
                         <ContextMenuItem onClick={() => void copyToClipboard(rowToCsv(row))}>Copiar fila (CSV)</ContextMenuItem>
                         <ContextMenuItem onClick={() => duplicateRow(visualIndex)}>Duplicar fila</ContextMenuItem>
-                        <ContextMenuItem onClick={() => deleteRow(visualIndex)}>Eliminar fila</ContextMenuItem>
+                        <ContextMenuItem
+                          disabled={deletingId === row.id}
+                          onClick={() => void deleteRow(visualIndex)}
+                        >
+                          {deletingId === row.id ? "Eliminando..." : "Eliminar certificado"}
+                        </ContextMenuItem>
                       </ContextMenuContent>
                     </ContextMenu>
                   </React.Fragment>
@@ -1275,4 +1307,3 @@ export default function CertificadosPage() {
     </div>
   );
 }
-

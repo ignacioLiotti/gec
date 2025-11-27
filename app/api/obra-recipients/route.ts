@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { z } from "zod";
+import {
+	ApiValidationError,
+	validateSearchParams,
+} from "@/lib/http/validation";
+
+const ObraRecipientsQuerySchema = z.object({
+	obraId: z.string().uuid("obraId inválido"),
+});
 
 export async function GET(request: Request) {
 	try {
-		const { searchParams } = new URL(request.url);
-		const obraId = searchParams.get("obraId");
-
-		if (!obraId) {
-			return NextResponse.json(
-				{ error: "obraId is required" },
-				{ status: 400 }
-			);
-		}
+		const { obraId } = validateSearchParams(
+			new URL(request.url).searchParams,
+			ObraRecipientsQuerySchema
+		);
 
 		const supabase = await createClient();
 		const {
@@ -27,6 +31,7 @@ export async function GET(request: Request) {
 			.from("obras")
 			.select("tenant_id")
 			.eq("id", obraId)
+			.is("deleted_at", null)
 			.maybeSingle();
 
 		if (obraError || !obra) {
@@ -86,6 +91,12 @@ export async function GET(request: Request) {
 		});
 	} catch (error: any) {
 		console.error("Error in GET /api/obra-recipients:", error);
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		return NextResponse.json(
 			{ error: error?.message ?? "Internal server error" },
 			{ status: 500 }

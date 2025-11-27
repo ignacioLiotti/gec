@@ -1,27 +1,22 @@
 import { NextResponse } from "next/server"
 import { createClient as createServerRlsClient } from "@/utils/supabase/server"
 import { createReminder } from "@/lib/events/reminders"
+import { z } from "zod"
+import { ApiValidationError, validateJsonBody } from "@/lib/http/validation"
+
+const ReminderSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().nullish(),
+  date: z.string().min(1),
+  audienceType: z.enum(["me", "role"]).default("me"),
+  audienceRole: z.string().nullish(),
+})
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => null)
-    const title = typeof body?.title === "string" ? body.title : ""
-    const description =
-      typeof body?.description === "string" ? body.description : null
-    const dateStr = typeof body?.date === "string" ? body.date : null
-    const audienceType =
-      body?.audienceType === "role" ? "role" : ("me" as "me" | "role")
-    const audienceRoleKey =
-      typeof body?.audienceRole === "string" ? body.audienceRole : null
-
-    if (!title || !dateStr) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      )
-    }
-
-    const targetDate = new Date(dateStr)
+    const { title, description, date, audienceType, audienceRole } =
+      await validateJsonBody(request, ReminderSchema)
+    const targetDate = new Date(date)
     if (Number.isNaN(targetDate.getTime())) {
       return NextResponse.json(
         { error: "Invalid date" },
@@ -45,11 +40,11 @@ export async function POST(request: Request) {
     const tenantId = (membership as any)?.tenant_id ?? null
 
     const target =
-      audienceType === "role" && tenantId && audienceRoleKey
+      audienceType === "role" && tenantId && audienceRole
         ? {
             type: "role" as const,
             tenantId: tenantId as string,
-            roleKey: audienceRoleKey as string,
+            roleKey: audienceRole as string,
           }
         : {
             type: "user" as const,
@@ -70,6 +65,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true })
   } catch (error: any) {
+    if (error instanceof ApiValidationError) {
+      return NextResponse.json(
+        { error: error.message, issues: error.issues },
+        { status: error.status }
+      )
+    }
     return NextResponse.json(
       { error: error?.message ?? "Failed to create reminder event" },
       { status: 500 }

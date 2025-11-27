@@ -233,6 +233,7 @@ async function findObraByNumber(
 		.from("obras")
 		.select("id, designacion_y_ubicacion")
 		.eq("n", obraNumber)
+		.is("deleted_at", null)
 		.limit(1)
 		.maybeSingle();
 
@@ -257,6 +258,7 @@ async function findObraByName(
 		.from("obras")
 		.select("id, designacion_y_ubicacion, n")
 		.ilike("designacion_y_ubicacion", `%${search}%`)
+		.is("deleted_at", null)
 		.order("n", { ascending: true })
 		.limit(5);
 

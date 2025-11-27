@@ -13,6 +13,7 @@ import {
 	Database,
 	Play,
 	User,
+	KeyRound,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -109,6 +110,16 @@ const adminItems: NavItem[] = [
 		title: "Roles y Permisos",
 		href: "/admin/roles",
 		icon: ShieldCheck,
+	},
+	{
+		title: "Secretos API",
+		href: "/admin/tenant-secrets",
+		icon: KeyRound,
+	},
+	{
+		title: "Auditoría",
+		href: "/admin/audit-log",
+		icon: FileText,
 	},
 ];
 

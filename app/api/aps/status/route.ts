@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { ApiValidationError, validateSearchParams } from "@/lib/http/validation";
+
+const StatusQuerySchema = z.object({
+	urn: z.string().min(1, "URN is required"),
+});
 
 export async function GET(request: NextRequest) {
-	const searchParams = request.nextUrl.searchParams;
-	const urn = searchParams.get("urn");
-
-	if (!urn) {
-		return NextResponse.json({ error: "URN is required" }, { status: 400 });
-	}
-
 	try {
+		const { urn } = validateSearchParams(
+			request.nextUrl.searchParams,
+			StatusQuerySchema
+		);
+
 		const clientId = process.env.APS_CLIENT_ID!;
 		const clientSecret = process.env.APS_CLIENT_SECRET!;
 
@@ -46,6 +50,12 @@ export async function GET(request: NextRequest) {
 		const statusData = await statusResponse.json();
 		return NextResponse.json(statusData);
 	} catch (error: any) {
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		console.error("Status check error:", error);
 		return NextResponse.json(
 			{ error: error.message || "Status check failed" },

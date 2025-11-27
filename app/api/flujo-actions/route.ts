@@ -1,17 +1,74 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { z } from "zod";
+import {
+	ApiValidationError,
+	validateJsonBody,
+	validateSearchParams,
+} from "@/lib/http/validation";
+
+const FlujoActionsQuerySchema = z.object({
+	obraId: z.string().uuid("obraId inválido"),
+});
+
+const FlujoActionsPayloadSchema = z
+	.object({
+		obraId: z.string().uuid(),
+		actionType: z.enum(["email", "calendar_event"]),
+		timingMode: z.enum(["immediate", "offset", "scheduled"]),
+		offsetValue: z.coerce.number().int().positive().optional(),
+		offsetUnit: z
+			.enum(["minutes", "hours", "days", "weeks", "months"])
+			.optional(),
+		scheduledDate: z.string().min(1).optional(),
+		title: z.string().min(1),
+		message: z.string().nullish(),
+		recipientUserIds: z.array(z.string().uuid()).optional(),
+		notificationTypes: z.array(z.enum(["in_app", "email"])).optional(),
+	})
+	.superRefine((val, ctx) => {
+		if (val.timingMode === "offset" && (!val.offsetValue || !val.offsetUnit)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "offsetValue y offsetUnit son obligatorios para offset",
+				path: ["offsetValue"],
+		});
+
+const FlujoActionsUpdateSchema = z.object({
+	id: z.string().uuid(),
+	actionType: z.enum(["email", "calendar_event"]).optional(),
+	timingMode: z.enum(["immediate", "offset", "scheduled"]).optional(),
+	offsetValue: z.coerce.number().int().positive().optional(),
+	offsetUnit: z
+		.enum(["minutes", "hours", "days", "weeks", "months"])
+		.optional(),
+	scheduledDate: z.string().min(1).optional(),
+	title: z.string().min(1).optional(),
+	message: z.string().nullish().optional(),
+	recipientUserIds: z.array(z.string().uuid()).optional(),
+	notificationTypes: z.array(z.enum(["in_app", "email"])).optional(),
+	enabled: z.boolean().optional(),
+});
+
+const FlujoActionsDeleteSchema = z.object({
+	id: z.string().uuid(),
+});
+		}
+		if (val.timingMode === "scheduled" && !val.scheduledDate) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "scheduledDate es obligatorio para scheduled",
+				path: ["scheduledDate"],
+			});
+		}
+	});
 
 export async function GET(request: Request) {
 	try {
-		const { searchParams } = new URL(request.url);
-		const obraId = searchParams.get("obraId");
-
-		if (!obraId) {
-			return NextResponse.json(
-				{ error: "obraId is required" },
-				{ status: 400 }
-			);
-		}
+		const { obraId } = validateSearchParams(
+			new URL(request.url).searchParams,
+			FlujoActionsQuerySchema
+		);
 
 		const supabase = await createClient();
 
@@ -32,6 +89,12 @@ export async function GET(request: Request) {
 		return NextResponse.json({ actions });
 	} catch (error: any) {
 		console.error("Error in GET /api/flujo-actions:", error);
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		return NextResponse.json(
 			{ error: error?.message ?? "Internal server error" },
 			{ status: 500 }
@@ -41,7 +104,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
 	try {
-		const body = await request.json();
 		const {
 			obraId,
 			actionType,
@@ -53,43 +115,7 @@ export async function POST(request: Request) {
 			message,
 			recipientUserIds,
 			notificationTypes,
-		} = body;
-
-		// Validation
-		if (!obraId || !actionType || !timingMode || !title) {
-			return NextResponse.json(
-				{ error: "Missing required fields: obraId, actionType, timingMode, title" },
-				{ status: 400 }
-			);
-		}
-
-		if (!["email", "calendar_event"].includes(actionType)) {
-			return NextResponse.json(
-				{ error: "actionType must be 'email' or 'calendar_event'" },
-				{ status: 400 }
-			);
-		}
-
-		if (!["immediate", "offset", "scheduled"].includes(timingMode)) {
-			return NextResponse.json(
-				{ error: "timingMode must be 'immediate', 'offset', or 'scheduled'" },
-				{ status: 400 }
-			);
-		}
-
-		if (timingMode === "offset" && (!offsetValue || !offsetUnit)) {
-			return NextResponse.json(
-				{ error: "offsetValue and offsetUnit required for offset timing" },
-				{ status: 400 }
-			);
-		}
-
-		if (timingMode === "scheduled" && !scheduledDate) {
-			return NextResponse.json(
-				{ error: "scheduledDate required for scheduled timing" },
-				{ status: 400 }
-			);
-		}
+		} = await validateJsonBody(request, FlujoActionsPayloadSchema);
 
 		const supabase = await createClient();
 
@@ -107,6 +133,7 @@ export async function POST(request: Request) {
 			.from("obras")
 			.select("tenant_id")
 			.eq("id", obraId)
+			.is("deleted_at", null)
 			.single();
 
 		if (obraError || !obra) {
@@ -157,6 +184,12 @@ export async function POST(request: Request) {
 		return NextResponse.json({ action });
 	} catch (error: any) {
 		console.error("Error in POST /api/flujo-actions:", error);
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		return NextResponse.json(
 			{ error: error?.message ?? "Internal server error" },
 			{ status: 500 }
@@ -166,7 +199,6 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
 	try {
-		const body = await request.json();
 		const {
 			id,
 			actionType,
@@ -179,14 +211,7 @@ export async function PUT(request: Request) {
 			recipientUserIds,
 			notificationTypes,
 			enabled,
-		} = body;
-
-		if (!id) {
-			return NextResponse.json(
-				{ error: "id is required" },
-				{ status: 400 }
-			);
-		}
+		} = await validateJsonBody(request, FlujoActionsUpdateSchema);
 
 		const supabase = await createClient();
 
@@ -242,6 +267,12 @@ export async function PUT(request: Request) {
 		return NextResponse.json({ action });
 	} catch (error: any) {
 		console.error("Error in PUT /api/flujo-actions:", error);
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		return NextResponse.json(
 			{ error: error?.message ?? "Internal server error" },
 			{ status: 500 }
@@ -251,15 +282,10 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
 	try {
-		const { searchParams } = new URL(request.url);
-		const id = searchParams.get("id");
-
-		if (!id) {
-			return NextResponse.json(
-				{ error: "id is required" },
-				{ status: 400 }
-			);
-		}
+		const { id } = validateSearchParams(
+			new URL(request.url).searchParams,
+			FlujoActionsDeleteSchema
+		);
 
 		const supabase = await createClient();
 
@@ -279,6 +305,12 @@ export async function DELETE(request: Request) {
 		return NextResponse.json({ success: true });
 	} catch (error: any) {
 		console.error("Error in DELETE /api/flujo-actions:", error);
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		return NextResponse.json(
 			{ error: error?.message ?? "Internal server error" },
 			{ status: 500 }

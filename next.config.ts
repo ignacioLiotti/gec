@@ -1,6 +1,7 @@
 // next.config.ts
-// import { withWorkflow } from "workflow/next";
+import { withWorkflow } from "workflow/next";
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
 	reactStrictMode: true,
@@ -39,5 +40,16 @@ const nextConfig: NextConfig = {
 	// },
 };
 
-export default nextConfig;
-// export default withWorkflow(nextConfig);
+const sentryOptions = {
+	silent: true,
+	org: process.env.SENTRY_ORG,
+	project: process.env.SENTRY_PROJECT,
+	widenClientFileUpload: true,
+};
+
+const configWithSentry =
+	process.env.SENTRY_DSN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
+		? withSentryConfig(nextConfig, sentryOptions)
+		: nextConfig;
+
+export default withWorkflow(configWithSentry);

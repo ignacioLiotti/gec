@@ -48,6 +48,7 @@ export interface ObrasTableProps {
   headerGroupBgClass?: string;
   emptyText: string;
   onFilterByEntidad?: (ent: string) => void;
+  onRequestDelete?: (payload: { obra: any; index: number }) => void;
 }
 
 export function ObrasTable(props: ObrasTableProps) {
@@ -79,6 +80,7 @@ export function ObrasTable(props: ObrasTableProps) {
     emptyText,
     onFilterByEntidad,
     isRefreshing,
+    onRequestDelete,
   } = props;
 
   // Calculate sticky column offsets dynamically
@@ -710,14 +712,23 @@ export function ObrasTable(props: ObrasTableProps) {
                         arr.splice(index + 1, 0, copy);
                         formApi.setFieldValue("detalleObras", arr);
                       }}>Duplicar fila</ContextMenuItem>
-                      <ContextMenuItem onClick={() => {
-                        if (field.state.value.length <= 1) {
-                          // toast available in parent; keep UX minimal here
-                          return;
-                        }
-                        const arr = field.state.value.filter((_: any, i: number) => i !== index);
-                        formApi.setFieldValue("detalleObras", arr);
-                      }}>Eliminar fila</ContextMenuItem>
+                      <ContextMenuItem
+                        onClick={() => {
+                          const obra = field.state.value[index];
+                          if (!obra) return;
+                          if (onRequestDelete) {
+                            onRequestDelete({ obra, index });
+                            return;
+                          }
+                          if (field.state.value.length <= 1) {
+                            return;
+                          }
+                          const arr = field.state.value.filter((_: any, i: number) => i !== index);
+                          formApi.setFieldValue("detalleObras", arr);
+                        }}
+                      >
+                        Eliminar obra
+                      </ContextMenuItem>
                       <ContextMenuItem onClick={() => {
                         const obra = field.state.value[index];
                         const ent = obra?.entidadContratante?.trim?.();
@@ -735,5 +746,3 @@ export function ObrasTable(props: ObrasTableProps) {
     </div>
   );
 }
-
-

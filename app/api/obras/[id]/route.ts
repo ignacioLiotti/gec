@@ -38,6 +38,7 @@ export async function GET(_request: Request, context: RouteContext) {
 		.select(CONFIG_COLUMNS)
 		.eq("id", obraId)
 		.eq("tenant_id", tenantId)
+		.is("deleted_at", null)
 		.maybeSingle<DbObraRow>();
 
 	if (error && error.code === "42703") {
@@ -49,6 +50,7 @@ export async function GET(_request: Request, context: RouteContext) {
 			.select(BASE_COLUMNS)
 			.eq("id", obraId)
 			.eq("tenant_id", tenantId)
+			.is("deleted_at", null)
 			.maybeSingle<DbObraRow>();
 		data = fallback.data;
 		error = fallback.error;
@@ -94,6 +96,7 @@ export async function PUT(
 		.select("porcentaje, designacion_y_ubicacion")
 		.eq("id", obraId)
 		.eq("tenant_id", tenantId)
+		.is("deleted_at", null)
 		.maybeSingle();
 
 	if (existingError) {
@@ -199,6 +202,7 @@ export async function PUT(
 				.select(CONFIG_COLUMNS)
 				.eq("id", obraId)
 				.eq("tenant_id", tenantId)
+				.is("deleted_at", null)
 				.maybeSingle<DbObraRow>();
 
 			if (completedError && completedError.code === "42703") {
@@ -210,6 +214,7 @@ export async function PUT(
 					.select(BASE_COLUMNS)
 					.eq("id", obraId)
 					.eq("tenant_id", tenantId)
+					.is("deleted_at", null)
 					.maybeSingle<DbObraRow>();
 				completedRow = fallback.data;
 				completedError = fallback.error;
@@ -298,4 +303,60 @@ export async function PUT(
 	}
 
 	return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(
+	_request: Request,
+	{ params }: { params: Promise<{ id: string }> }
+) {
+	const { id: obraId } = await params;
+	const { supabase, user, tenantId } = await getAuthContext();
+
+	if (!user) {
+		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	}
+
+	if (!tenantId) {
+		return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	}
+
+	if (!obraId || obraId === "undefined") {
+		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
+	}
+
+	const { data: obra, error: fetchError } = await supabase
+		.from("obras")
+		.select("id")
+		.eq("id", obraId)
+		.eq("tenant_id", tenantId)
+		.is("deleted_at", null)
+		.maybeSingle();
+
+	if (fetchError) {
+		console.error("Obra DELETE: failed to fetch obra", fetchError);
+		return NextResponse.json(
+			{ error: "No se pudo verificar la obra" },
+			{ status: 500 }
+		);
+	}
+
+	if (!obra) {
+		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
+	}
+
+	const { error: deleteError } = await supabase
+		.from("obras")
+		.delete()
+		.eq("id", obraId)
+		.eq("tenant_id", tenantId);
+
+	if (deleteError) {
+		console.error("Obra DELETE: failed to delete obra", deleteError);
+		return NextResponse.json(
+			{ error: "No se pudo eliminar la obra" },
+			{ status: 500 }
+		);
+	}
+
+	return NextResponse.json({ success: true });
 }

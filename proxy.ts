@@ -1,12 +1,106 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getRouteAccessConfig, type Role } from "./lib/route-access";
+import { getClientIp, rateLimitByIp } from "@/lib/security/rate-limit";
 
 const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+const rateLimitEnabled =
+	(process.env.RATE_LIMIT_IP ?? "120") !== "0" &&
+	!!process.env.UPSTASH_REDIS_REST_URL &&
+	!!process.env.UPSTASH_REDIS_REST_TOKEN;
+
+const securityHeaders: Record<string, string> = {
+	"strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+	"x-frame-options": "DENY",
+	"x-content-type-options": "nosniff",
+	"referrer-policy": "strict-origin-when-cross-origin",
+	"content-security-policy":
+		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'",
+};
+
+function attachSecurityHeaders(res: NextResponse) {
+	for (const [key, value] of Object.entries(securityHeaders)) {
+		res.headers.set(key, value);
+	}
+	return res;
+}
+
+function enforceCsrf(req: NextRequest) {
+	if (!req.nextUrl.pathname.startsWith("/api")) {
+		return null;
+	}
+	const method = req.method?.toUpperCase();
+	if (!method || ["GET", "HEAD", "OPTIONS"].includes(method)) {
+		return null;
+	}
+	const fetchSite = req.headers.get("sec-fetch-site");
+	if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
+		return attachSecurityHeaders(
+			new NextResponse(
+				JSON.stringify({ error: "Cross-site request blocked" }),
+				{
+					status: 403,
+					headers: { "content-type": "application/json" },
+				}
+			)
+		);
+	}
+	return null;
+}
 
 export async function proxy(req: NextRequest) {
+	const csrfFailure = enforceCsrf(req);
+	if (csrfFailure) {
+		return csrfFailure;
+	}
+
+	let rateLimitResult = null;
+	if (rateLimitEnabled && req.nextUrl.pathname.startsWith("/api")) {
+		const ip = getClientIp(req);
+		if (ip) {
+			const identifier = `${ip}:${req.nextUrl.pathname}`;
+			const result = await rateLimitByIp(identifier);
+			if (result.pending) {
+				await result.pending;
+			}
+			if (!result.success) {
+				const retryAfter = Math.max(
+					1,
+					Math.ceil((result.reset - Date.now()) / 1000)
+				);
+				return attachSecurityHeaders(
+					new NextResponse(
+						JSON.stringify({
+							error:
+								"Demasiadas solicitudes desde esta IP. Intentalo de nuevo en breve.",
+						}),
+						{
+							status: 429,
+							headers: {
+								"content-type": "application/json",
+								"retry-after": retryAfter.toString(),
+								"x-ratelimit-limit": result.limit.toString(),
+								"x-ratelimit-remaining": "0",
+								"x-ratelimit-reset": result.reset.toString(),
+							},
+						}
+					)
+				);
+			}
+			rateLimitResult = result;
+		}
+	}
+
 	const res = NextResponse.next({ request: { headers: req.headers } });
+	if (rateLimitResult) {
+		res.headers.set("x-ratelimit-limit", rateLimitResult.limit.toString());
+		res.headers.set(
+			"x-ratelimit-remaining",
+			Math.max(rateLimitResult.remaining, 0).toString()
+		);
+		res.headers.set("x-ratelimit-reset", rateLimitResult.reset.toString());
+	}
 
 	const supabase = createServerClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,31 +120,24 @@ export async function proxy(req: NextRequest) {
 		}
 	);
 
-	// Refresh the session and capture refreshed tokens into cookies
 	await supabase.auth.getSession();
 
 	const pathname = req.nextUrl.pathname;
-
-	// Check if route is protected
 	const config = getRouteAccessConfig(pathname);
 
-	// If route is not protected, allow access
 	if (!config) {
-		return res;
+		return attachSecurityHeaders(res);
 	}
 
-	// For protected routes, check authentication and authorization
 	try {
 		const {
 			data: { user },
 		} = await supabase.auth.getUser();
 
-		// If no user, allow through (page will handle auth)
 		if (!user) {
-			return res;
+			return attachSecurityHeaders(res);
 		}
 
-		// Check if superadmin
 		const { data: profile } = await supabase
 			.from("profiles")
 			.select("is_superadmin")
@@ -60,7 +147,6 @@ export async function proxy(req: NextRequest) {
 		const isSuperAdmin =
 			(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
 
-		// Get tenant membership for current user
 		const { data: memberships, error: membershipsError } = await supabase
 			.from("memberships")
 			.select("tenant_id, role")
@@ -84,40 +170,32 @@ export async function proxy(req: NextRequest) {
 
 		const tenantId = resolvedMemberships?.[0]?.tenant_id ?? DEFAULT_TENANT_ID;
 		const membershipRole = resolvedMemberships?.[0]?.role;
-
-		// Check if admin via membership
 		const isAdmin =
 			membershipRole === "owner" || membershipRole === "admin" || isSuperAdmin;
 
-		// Superadmin and admin always have access
 		if (isSuperAdmin || isAdmin) {
-			return res;
+			return attachSecurityHeaders(res);
 		}
 
-		// Get user roles from the roles table (using same logic as route-guard.ts)
 		const roles: Role[] = [];
 
 		if (tenantId) {
 			try {
-				// Step 1: Get role_ids from user_roles table
 				const { data: userRoleIds, error: userRoleIdsError } = await supabase
 					.from("user_roles")
 					.select("role_id")
 					.eq("user_id", user.id);
 
-				// Check for stack depth error (circular RLS dependency)
 				if (userRoleIdsError?.code === "54001") {
 					console.warn(
 						"Stack depth limit exceeded in middleware - skipping user_roles query"
 					);
-					// Skip this query and continue with just admin/superadmin roles
 				} else if (userRoleIdsError) {
 					console.error(
 						"Error fetching user role IDs in middleware:",
 						userRoleIdsError
 					);
 				} else if (userRoleIds && userRoleIds.length > 0) {
-					// Step 2: Get role details for those role_ids, filtered by tenant
 					const roleIds = userRoleIds.map((ur: any) => ur.role_id);
 					const { data: roleDetails, error: roleDetailsError } = await supabase
 						.from("roles")
@@ -131,9 +209,8 @@ export async function proxy(req: NextRequest) {
 							roleDetailsError
 						);
 					} else if (roleDetails) {
-						// Map role keys to standardized role names for route access
 						const roleKeyMapping: Record<string, Role> = {
-							"1": "contable", // Map '1' to 'contable'
+							"1": "contable",
 							admin: "admin",
 							contable: "contable",
 						};
@@ -141,10 +218,7 @@ export async function proxy(req: NextRequest) {
 						for (const role of roleDetails) {
 							const roleKey = role.key;
 							if (roleKey) {
-								// Map the role key to a standardized role name for route access
 								const mappedRole = roleKeyMapping[roleKey] || roleKey;
-
-								// Add the mapped role for route access checking
 								if (!roles.includes(mappedRole as Role)) {
 									roles.push(mappedRole as Role);
 								}
@@ -157,24 +231,21 @@ export async function proxy(req: NextRequest) {
 			}
 		}
 
-		// Check if user has any of the required roles
 		const hasAccess =
 			config.allowedRoles.length === 0 ||
 			config.allowedRoles.some((role) => roles.includes(role));
 
 		if (!hasAccess) {
-			// Redirect to home page if user doesn't have access
 			const url = req.nextUrl.clone();
 			url.pathname = "/";
-			return NextResponse.redirect(url);
+			return attachSecurityHeaders(NextResponse.redirect(url));
 		}
 	} catch (error) {
-		// If there's an error, log it but allow access to prevent breaking the app
 		console.error("Middleware route access check error:", error);
-		return res;
+		return attachSecurityHeaders(res);
 	}
 
-	return res;
+	return attachSecurityHeaders(res);
 }
 
 export const config = {

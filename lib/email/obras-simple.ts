@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { getVersionedSecret } from "@/lib/security/secrets";
 
 type CompletedObra = {
   name: string;
@@ -45,7 +46,7 @@ export async function sendObraCompletionEmail(options: {
   subject?: string;
   introMessage?: string;
 }) {
-  const resendKey = process.env.RESEND_API_KEY;
+  const { value: resendKey } = getVersionedSecret("RESEND_API_KEY");
   const fromEmail = process.env.RESEND_FROM_EMAIL;
 
   if (!resendKey || !fromEmail || !options.obras.length) {

@@ -48,7 +48,8 @@ export async function GET(request: Request) {
   const { data: obrasRows, error: obrasErr } = await supabase
     .from("obras")
     .select("id, designacion_y_ubicacion, entidad_contratante")
-    .eq("tenant_id", tenantId);
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null);
 
   if (obrasErr) {
     return NextResponse.json({ error: "No se pudieron obtener las obras" }, { status: 500 });
@@ -64,6 +65,8 @@ export async function GET(request: Request) {
   const { data: certRows, error: certErr } = await supabase
     .from("certificates")
     .select("*")
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null)
     .in("obra_id", obraIds);
 
   if (certErr) {

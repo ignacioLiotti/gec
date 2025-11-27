@@ -7,7 +7,8 @@
       "Bash(npm run dev)",
       "Bash(curl -X POST http://localhost:3000/api/test -H \"Content-Type: application/json\")",
       "Bash(nul)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(xargs ls:*)"
     ],
     "deny": [],
     "ask": []

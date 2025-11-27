@@ -3,14 +3,38 @@ import { emitEvent, expandEffectsForEvent } from "@/lib/notifications/engine";
 import "@/lib/notifications/rules";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { createClient as createServerRlsClient } from "@/utils/supabase/server";
+import {
+	RequestSignatureError,
+	verifySignedJsonRequest,
+} from "@/lib/security/request-signing";
+import { z } from "zod";
+import {
+	ApiValidationError,
+	validateWithSchema,
+} from "@/lib/http/validation";
+
+const NotificationEventSchema = z.object({
+	type: z.string().min(1),
+	ctx: z.record(z.any()).optional(),
+});
 
 export async function POST(request: Request) {
 	try {
-		const body = await request.json();
-		const eventType = String(body?.type ?? "");
-		const ctx = (body?.ctx ?? {}) as Record<string, unknown>;
-		if (!eventType)
-			return NextResponse.json({ error: "type required" }, { status: 400 });
+		const signingDisabled = process.env.REQUEST_SIGNING_DISABLED === "1";
+		const parsed = signingDisabled
+			? { body: await request.json(), tenantId: null }
+			: await verifySignedJsonRequest(request);
+
+		const payload = validateWithSchema(
+			NotificationEventSchema,
+			parsed.body ?? {},
+			"body"
+		);
+		const eventType = payload.type;
+		const ctx = (payload.ctx ?? {}) as Record<string, unknown>;
+		if (!ctx.tenantId && parsed.tenantId) {
+			ctx.tenantId = parsed.tenantId;
+		}
 
 		const workflowsEnabled =
 			process.env.NODE_ENV === "production" &&
@@ -53,11 +77,12 @@ export async function POST(request: Request) {
 			const rls = await createServerRlsClient();
 			const { data: userRes } = await rls.auth.getUser();
 			const authedUserId = userRes.user?.id ?? null;
-			if (!authedUserId)
+			if (!authedUserId) {
 				return NextResponse.json(
 					{ error: "Not authenticated" },
 					{ status: 401 }
 				);
+			}
 			for (const eff of effects) {
 				if (eff.channel !== "in-app") continue;
 				if (eff.recipientId !== authedUserId) continue;
@@ -80,9 +105,20 @@ export async function POST(request: Request) {
 			}
 			return NextResponse.json({ ok: true, delivered: true, inserted });
 		}
-	} catch (e: any) {
+	} catch (error: any) {
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		} else if (error instanceof RequestSignatureError) {
+			return NextResponse.json(
+				{ error: error.message, code: error.code },
+				{ status: error.status }
+			);
+		}
 		return NextResponse.json(
-			{ error: e?.message ?? "failed" },
+			{ error: error?.message ?? "failed" },
 			{ status: 500 }
 		);
 	}

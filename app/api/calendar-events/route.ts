@@ -80,6 +80,8 @@ export async function POST(request: Request) {
         audience_type: audienceType,
         target_user_id: audienceType === "user" ? targetUserId : null,
         target_role_key: audienceType === "role" ? audienceRoleKey : null,
+        deleted_at: null,
+        deleted_by: null,
       })
       .select()
       .single()

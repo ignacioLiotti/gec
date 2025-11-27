@@ -65,6 +65,8 @@ export async function PATCH(request: Request) {
 				plazo_total: obra.plazoTotal,
 				plazo_transc: obra.plazoTransc,
 				porcentaje: obra.porcentaje,
+				deleted_at: null,
+				deleted_by: null,
 			};
 
 			if (obra.id) {

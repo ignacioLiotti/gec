@@ -17,10 +17,14 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { supabase, user } = await getAuthContext();
+  const { supabase, user, tenantId } = await getAuthContext();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!tenantId) {
+    return NextResponse.json({ error: "No se encontró una organización para el usuario" }, { status: 400 });
   }
 
   let body: Record<string, unknown>;
@@ -45,6 +49,7 @@ export async function PATCH(
     .from("certificates")
     .update(updatePayload)
     .eq("id", id)
+    .eq("tenant_id", tenantId)
     .select("*")
     .single();
 
@@ -53,6 +58,69 @@ export async function PATCH(
   }
 
   return NextResponse.json({ certificate: data });
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const { supabase, user, tenantId } = await getAuthContext();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!tenantId) {
+    return NextResponse.json(
+      { error: "No se encontró una organización para el usuario" },
+      { status: 400 }
+    );
+  }
+
+  if (!id) {
+    return NextResponse.json(
+      { error: "Certificado no encontrado" },
+      { status: 404 }
+    );
+  }
+
+  const { data: certificate, error: fetchError } = await supabase
+    .from("certificates")
+    .select("id")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (fetchError) {
+    return NextResponse.json(
+      { error: "No se pudo verificar el certificado" },
+      { status: 500 }
+    );
+  }
+
+  if (!certificate) {
+    return NextResponse.json(
+      { error: "Certificado no encontrado" },
+      { status: 404 }
+    );
+  }
+
+  const { error } = await supabase
+    .from("certificates")
+    .delete()
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    return NextResponse.json(
+      { error: "No se pudo eliminar el certificado" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ success: true });
 }
 
 

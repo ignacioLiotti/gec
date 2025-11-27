@@ -3,18 +3,28 @@ import { emitEvent, expandEffectsForEvent } from "@/lib/notifications/engine";
 import "@/lib/notifications/rules";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { createClient as createServerRlsClient } from "@/utils/supabase/server";
+import { z } from "zod";
+import { ApiValidationError, validateJsonBody } from "@/lib/http/validation";
+
+const DocReminderSchema = z.object({
+	obraId: z.string().min(1),
+	obraName: z.string().nullish(),
+	documentName: z.string().min(1),
+	dueDate: z.string().min(1),
+	notifyUserId: z.string().min(1).optional(),
+	pendienteId: z.string().min(1).optional(),
+});
 
 export async function POST(request: Request) {
 	try {
-		const body = await request.json();
-		const { obraId, obraName, documentName, dueDate, notifyUserId, pendienteId } =
-            body ?? {};
-		if (!obraId || !documentName || !dueDate) {
-			return NextResponse.json(
-				{ error: "Missing required fields" },
-				{ status: 400 }
-			);
-		}
+		const {
+			obraId,
+			obraName,
+			documentName,
+			dueDate,
+			notifyUserId,
+			pendienteId,
+		} = await validateJsonBody(request, DocReminderSchema);
 
 		const workflowsEnabled =
 			process.env.NODE_ENV === "production" &&
@@ -62,8 +72,14 @@ export async function POST(request: Request) {
 		}
 
         // Dev: we already inserted a "created" row; skip immediate delivery. Acknowledge.
-        return NextResponse.json({ ok: true });
+		return NextResponse.json({ ok: true });
 	} catch (error: any) {
+		if (error instanceof ApiValidationError) {
+			return NextResponse.json(
+				{ error: error.message, issues: error.issues },
+				{ status: error.status }
+			);
+		}
 		return NextResponse.json(
 			{ error: error?.message ?? "Failed to schedule reminder" },
 			{ status: 500 }

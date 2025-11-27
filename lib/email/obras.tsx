@@ -1,6 +1,7 @@
 import ObraCompletionEmail from "@/emails/obra-completion";
 // import { render } from "@react-email/render";
 import { Resend } from "resend";
+import { getVersionedSecret } from "@/lib/security/secrets";
 
 type CompletedObra = {
   name: string;
@@ -32,7 +33,8 @@ export async function sendObraCompletionEmail(options: {
   introMessage?: string;
   html?: string; // Pre-rendered HTML to avoid React in workflow steps
 }) {
-  const resendKey = process.env.RESEND_API_KEY;
+  const { value: resendKey, version: resendVersion } =
+    getVersionedSecret("RESEND_API_KEY");
   const fromEmail = process.env.RESEND_FROM_EMAIL;
 
   console.log("Email: sending obra completion email", {
@@ -50,6 +52,7 @@ export async function sendObraCompletionEmail(options: {
       {
         hasKey: Boolean(resendKey),
         hasFrom: Boolean(fromEmail),
+        version: resendVersion ?? "legacy",
       }
     );
     return;

@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { sendInvitationEmail } from "@/lib/email/invitations";
 
 const INVITATIONS_TABLE_MISSING_CODE = "PGRST205";
 const isInvitationsTableMissing = (error?: PostgrestError | null) =>
@@ -66,7 +67,7 @@ export async function sendInvitation({
 
 	const { data: profile } = await supabase
 		.from("profiles")
-		.select("is_superadmin")
+		.select("is_superadmin, full_name")
 		.eq("user_id", user.id)
 		.maybeSingle();
 	const isSuperAdmin =
@@ -118,9 +119,30 @@ export async function sendInvitation({
 		return { error: "Failed to create invitation" };
 	}
 
-	// TODO: Send email with invitation link
-	// const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/${invitation.token}`;
-	// await sendInvitationEmail({ email: normalizedEmail, inviteLink, tenantName, inviterName });
+	const baseUrl =
+		process.env.NEXT_PUBLIC_APP_URL ??
+		(process.env.NEXT_PUBLIC_VERCEL_URL
+			? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+			: process.env.VERCEL_URL
+				? `https://${process.env.VERCEL_URL}`
+				: "http://localhost:3000");
+	const inviteLink = `${baseUrl}/invitations/${invitation.token}`;
+	const { data: tenant } = await supabase
+		.from("tenants")
+		.select("name")
+		.eq("id", tenantId)
+		.maybeSingle();
+
+	try {
+		await sendInvitationEmail({
+			to: normalizedEmail,
+			inviteLink,
+			tenantName: tenant?.name ?? "tu organización",
+			inviterName: profile?.full_name ?? user.email ?? null,
+		});
+	} catch (emailError) {
+		console.error("Failed to send invitation email", emailError);
+	}
 
 	revalidatePath("/admin/users");
 
