@@ -1,6 +1,6 @@
 import { sleep } from "workflow";
-import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { parseLocalDate } from "@/utils/date";
+import { insertNotificationEdge } from "@/lib/workflow/notifications";
 
 type DocumentReminderParams = {
 	obraId: string;
@@ -52,11 +52,10 @@ function computeReminderDate(dueDateInput: string): Date | null {
 async function createNotification(params: DocumentReminderParams) {
 	"use step";
 	if (!params.notifyUserId) return;
-	const supabase = createSupabaseAdminClient();
 	const title = `Recordatorio: ${params.documentName} pendiente`;
 	const body = `Mañana vence el documento "${params.documentName}" de la obra "${params.obraName ?? ""}".`;
 	const actionUrl = `/excel/${params.obraId}`;
-	await supabase.from("notifications").insert({
+	await insertNotificationEdge({
 		user_id: params.notifyUserId,
 		title,
 		body,

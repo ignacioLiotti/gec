@@ -1,6 +1,6 @@
 import { sleep } from "workflow";
-import { createSupabaseAdminClient } from "@/utils/supabase/admin";
-import { sendEmail } from "@/lib/email/api";
+import { insertNotificationEdge } from "@/lib/workflow/notifications";
+import { sendSimpleEmailEdge } from "@/lib/workflow/email";
 
 type ExpandedEffect = {
 	channel: "in-app" | "email";
@@ -29,10 +29,9 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 
 		if (eff.channel === "in-app") {
 			("use step");
-			const s = createSupabaseAdminClient();
 			const resolvedType =
 				typeof eff.type === "function" ? eff.type(eff.ctx) : eff.type;
-			await s.from("notifications").insert({
+			await insertNotificationEdge({
 				user_id: eff.recipientId,
 				tenant_id: eff.ctx?.tenantId ?? null,
 				title: eff.title?.(eff.ctx) ?? "",
@@ -51,7 +50,7 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 				`<p>${eff.title?.(eff.ctx) ?? "Notificación"}</p><p>${
 					eff.body?.(eff.ctx) ?? ""
 				}</p>`;
-			await sendEmail({
+			await sendSimpleEmailEdge({
 				to: eff.recipientEmail,
 				subject,
 				html,

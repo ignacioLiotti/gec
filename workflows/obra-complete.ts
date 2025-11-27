@@ -1,16 +1,13 @@
 import { sleep } from "workflow";
-import { sendObraCompletionEmail } from "@/lib/email/obras-simple";
+import { sendObraCompletionEmailEdge } from "@/lib/workflow/email";
+import type { CompletedObra } from "@/lib/email/obras-simple";
 
-type CompletedObra = {
-	id?: string;
-	name: string;
-	percentage: number;
-};
+type CompletedObraWithId = CompletedObra & { id?: string };
 
 type WorkflowParams = {
 	to: string;
 	recipientName?: string | null;
-	obra: CompletedObra;
+	obra: CompletedObraWithId;
 	subject?: string;
 	firstMessage?: string | null;
 	secondMessage?: string | null;
@@ -29,7 +26,7 @@ export async function sendObraCompletionWorkflow(params: WorkflowParams) {
 
 async function sendInitialEmail(params: WorkflowParams) {
 	"use step";
-	await sendObraCompletionEmail({
+	await sendObraCompletionEmailEdge({
 		to: params.to,
 		recipientName: params.recipientName,
 		obras: [params.obra],
@@ -60,7 +57,7 @@ async function waitForFollowUp(targetIso?: string | null) {
 
 async function sendFollowUpEmail(params: WorkflowParams) {
 	"use step";
-	await sendObraCompletionEmail({
+	await sendObraCompletionEmailEdge({
 		to: params.to,
 		recipientName: params.recipientName,
 		obras: [params.obra],
