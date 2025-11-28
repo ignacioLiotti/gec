@@ -16,7 +16,7 @@ const securityHeaders: Record<string, string> = {
 	"x-content-type-options": "nosniff",
 	"referrer-policy": "strict-origin-when-cross-origin",
 	"content-security-policy":
-		"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'",
+		"default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; form-action 'self'; base-uri 'self'",
 };
 
 function attachSecurityHeaders(res: NextResponse) {
