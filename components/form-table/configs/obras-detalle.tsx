@@ -7,8 +7,8 @@ import {
 	TabFilterOption,
 	HeaderGroup,
 	FormTableRow,
-	requiredValidator,
-} from "@/components/form-table/form-table";
+} from "@/components/form-table/types";
+import { requiredValidator } from "@/components/form-table/form-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";

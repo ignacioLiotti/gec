@@ -140,7 +140,7 @@ export function FormTableProvider<Row extends FormTableRow, Filters>({
 	value: FormTableContextValue<Row, Filters>;
 	children: ReactNode;
 }) {
-	return <FormTableContext.Provider value={value}>{children}</FormTableContext.Provider>;
+	return <FormTableContext.Provider value={value as unknown as FormTableContextValue<FormTableRow, unknown>}>{children}</FormTableContext.Provider>;
 }
 
 export function useFormTable<Row extends FormTableRow, Filters>() {
@@ -148,6 +148,6 @@ export function useFormTable<Row extends FormTableRow, Filters>() {
 	if (!ctx) {
 		throw new Error("useFormTable must be used within a FormTableProvider");
 	}
-	return ctx as FormTableContextValue<Row, Filters>;
+	return ctx as unknown as FormTableContextValue<Row, Filters>;
 }
 

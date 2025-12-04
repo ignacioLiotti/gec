@@ -355,7 +355,7 @@ export default function ObraDefaultsPage() {
         label: col.label,
         dataType: normalizedType,
         required: false,
-        ocrScope: col.ocrScope === "parent" ? "parent" : "item",
+        ocrScope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
         fieldKey: col.fieldKey || `col_${index + 1}`,
       };
     });

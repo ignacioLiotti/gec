@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { MouseEvent } from 'react';
-import { FormTable, type FormTableConfig, type FormTableRow, type ColumnDef } from '@/components/form-table/form-table';
+import { FormTable } from '@/components/form-table/form-table';
 import { createSupabaseBrowserClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,6 +78,10 @@ import {
   getCachedOcrLinks,
   setCachedOcrLinks,
 } from './cache';
+import { CellType, FormTableConfig, FormTableRow, ColumnDef, ColumnField } from '@/components/form-table/types';
+
+// Re-export types for external consumers
+export type { FileManagerSelectionChange };
 
 const DATA_TYPE_LABELS: Record<TablaColumnDataType, string> = {
   text: 'Texto',
@@ -98,7 +102,7 @@ type OcrDocumentTableFilters = {
   docPath: string | null;
 };
 
-type OcrOrderItemRow = FormTableRow & {
+type OcrOrderItemRow = OcrDocumentTableRow & {
   orderId: string;
   nroOrden: string;
   proveedor: string;
@@ -1975,7 +1979,7 @@ export function FileManager({
   };
 
   const mapDataTypeToCellType = useCallback(
-    (dataType: TablaColumnDataType): ColumnDef<OcrDocumentTableRow>["cellType"] => {
+    (dataType: TablaColumnDataType): CellType => {
       switch (dataType) {
         case 'number':
           return 'number';
@@ -2120,7 +2124,7 @@ export function FileManager({
     const tablaColumnDefs: ColumnDef<OcrDocumentTableRow>[] = tablaColumns.map((column) => ({
       id: column.id,
       label: column.label,
-      field: column.fieldKey as keyof OcrDocumentTableRow,
+      field: column.fieldKey as ColumnField<OcrDocumentTableRow>,
       editable: canEditTabla,
       cellType: mapDataTypeToCellType(column.dataType),
       required: column.required,
@@ -2128,14 +2132,14 @@ export function FileManager({
     const docSourceColumn: ColumnDef<OcrDocumentTableRow> = {
       id: 'doc-source',
       label: 'Documento origen',
-      field: '__docFileName' as keyof OcrDocumentTableRow,
+      field: '__docFileName' as ColumnField<OcrDocumentTableRow>,
       editable: false,
       cellType: 'text',
       enableHide: false,
       cellConfig: {
-        renderReadOnly: ({ row }) => (
+        renderReadOnly: ({ row }: { value: unknown; row: OcrDocumentTableRow; highlightQuery: string }) => (
           <OcrDocumentSourceCell
-            row={row as OcrDocumentTableRow}
+            row={row}
             obraId={obraId}
             documentsByStoragePath={documentsByStoragePath}
             supabase={supabase}
@@ -2146,12 +2150,12 @@ export function FileManager({
         {
           id: 'filter-doc',
           label: 'Filtrar por este documento',
-          onSelect: (row) => {
+          onSelect: (row: OcrDocumentTableRow) => {
             const docPath = typeof (row as Record<string, unknown>).__docPath === 'string'
-              ? (row as Record<string, unknown>).__docPath
+              ? (row as Record<string, unknown>).__docPath as string
               : null;
             const docName = typeof (row as Record<string, unknown>).__docFileName === 'string'
-              ? (row as Record<string, unknown>).__docFileName
+              ? (row as Record<string, unknown>).__docFileName as string
               : null;
             handleFilterRowsByDocument(docPath, docName);
           },
@@ -2159,9 +2163,9 @@ export function FileManager({
         {
           id: 'preview-doc',
           label: 'Ver documento',
-          onSelect: (row) => {
+          onSelect: (row: OcrDocumentTableRow) => {
             const docPath = typeof (row as Record<string, unknown>).__docPath === 'string'
-              ? (row as Record<string, unknown>).__docPath
+              ? (row as Record<string, unknown>).__docPath as string
               : null;
             void handleOpenDocumentSheetByPath(docPath);
           },
@@ -2171,6 +2175,7 @@ export function FileManager({
     const columns: ColumnDef<OcrDocumentTableRow>[] = [docSourceColumn, ...tablaColumnDefs];
     return {
       tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${documentViewMode}-${ocrDocumentFilterPath ?? 'all'}`,
+      title: 'Documentos OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns,
       createFilters: () => ({ docPath: ocrDocumentFilterPath }),
@@ -2854,20 +2859,20 @@ function OcrDocumentSourceCell({
   documentsByStoragePath,
   supabase,
 }: OcrDocumentSourceCellProps) {
-  const docPath =
+  const docPath: string | null =
     typeof (row as Record<string, unknown>).__docPath === 'string'
-      ? (row as Record<string, unknown>).__docPath
+      ? (row as Record<string, unknown>).__docPath as string
       : null;
-  const docName =
+  const docName: string =
     typeof (row as Record<string, unknown>).__docFileName === 'string'
-      ? (row as Record<string, unknown>).__docFileName
+      ? (row as Record<string, unknown>).__docFileName as string
       : docPath?.split('/').pop() ?? 'Documento sin nombre';
-  const relativePath =
+  const relativePath: string =
     docPath && obraId && docPath.startsWith(`${obraId}/`)
       ? docPath.slice(obraId.length + 1)
       : docPath ?? 'Sin ruta';
   const docItem = docPath ? documentsByStoragePath.get(docPath) ?? null : null;
-  const storagePath = docItem?.storagePath ?? docPath ?? null;
+  const storagePath: string | null = docItem?.storagePath ?? docPath ?? null;
   const isImage = Boolean(docItem?.mimetype?.startsWith('image/'));
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(() => {

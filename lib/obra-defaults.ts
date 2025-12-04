@@ -2,6 +2,9 @@ import { normalizeFolderName } from "./tablas";
 
 type SupabaseClient = {
 	from: (table: string) => any;
+	storage: {
+		from: (bucket: string) => any;
+	};
 };
 
 type DefaultFolder = {

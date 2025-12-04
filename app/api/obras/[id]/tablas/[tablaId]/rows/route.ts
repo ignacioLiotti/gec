@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { coerceValueForType, ensureTablaDataType } from "@/lib/tablas";
 
-async function fetchColumnMetas(supabase: Awaited<ReturnType<typeof createClient>>, tablaId: string) {
+async function fetchColumnMetas(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	tablaId: string
+) {
 	const { data, error } = await supabase
 		.from("obra_tabla_columns")
-		.select("id, tabla_id, field_key, label, data_type, position, required, config")
+		.select(
+			"id, tabla_id, field_key, label, data_type, position, required, config"
+		)
 		.eq("tabla_id", tablaId)
 		.order("position", { ascending: true });
 	if (error) throw error;
@@ -22,13 +27,19 @@ type RowsContext = { params: Promise<{ id: string; tablaId: string }> };
 export async function GET(request: Request, context: RowsContext) {
 	const { id, tablaId } = await context.params;
 	if (!id || !tablaId) {
-		return NextResponse.json({ error: "Parámetros incompletos" }, { status: 400 });
+		return NextResponse.json(
+			{ error: "Parámetros incompletos" },
+			{ status: 400 }
+		);
 	}
 
 	try {
 		const url = new URL(request.url);
 		const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
-		const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
+		const limit = Math.min(
+			200,
+			Math.max(1, Number(url.searchParams.get("limit")) || 50)
+		);
 		const from = (page - 1) * limit;
 		const to = from + limit - 1;
 		const docPath = url.searchParams.get("docPath");
@@ -69,7 +80,8 @@ export async function GET(request: Request, context: RowsContext) {
 		});
 	} catch (error) {
 		console.error("[tabla-rows:list]", error);
-		const message = error instanceof Error ? error.message : "Error desconocido";
+		const message =
+			error instanceof Error ? error.message : "Error desconocido";
 		return NextResponse.json({ error: message }, { status: 500 });
 	}
 }
@@ -77,14 +89,22 @@ export async function GET(request: Request, context: RowsContext) {
 export async function POST(request: Request, context: RowsContext) {
 	const { id, tablaId } = await context.params;
 	if (!id || !tablaId) {
-		return NextResponse.json({ error: "Parámetros incompletos" }, { status: 400 });
+		return NextResponse.json(
+			{ error: "Parámetros incompletos" },
+			{ status: 400 }
+		);
 	}
 
 	try {
 		const body = await request.json().catch(() => ({}));
-		const dirtyRows: any[] = Array.isArray(body?.dirtyRows) ? body.dirtyRows : [];
+		const dirtyRows: any[] = Array.isArray(body?.dirtyRows)
+			? body.dirtyRows
+			: [];
 		const deletedRowIds: string[] = Array.isArray(body?.deletedRowIds)
-			? body.deletedRowIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+			? body.deletedRowIds.filter(
+					(value: any): value is string =>
+						typeof value === "string" && value.length > 0
+				)
 			: [];
 
 		const supabase = await createClient();
@@ -102,7 +122,10 @@ export async function POST(request: Request, context: RowsContext) {
 				.map((row) => {
 					const data: Record<string, unknown> = {};
 					for (const column of columns) {
-						data[column.fieldKey] = coerceValueForType(column.dataType, (row as any)[column.fieldKey]);
+						data[column.fieldKey] = coerceValueForType(
+							column.dataType,
+							(row as any)[column.fieldKey]
+						);
 					}
 					return {
 						id: row.id as string,
@@ -131,7 +154,8 @@ export async function POST(request: Request, context: RowsContext) {
 		return NextResponse.json({ ok: true });
 	} catch (error) {
 		console.error("[tabla-rows:save]", error);
-		const message = error instanceof Error ? error.message : "Error desconocido";
+		const message =
+			error instanceof Error ? error.message : "Error desconocido";
 		return NextResponse.json({ error: message }, { status: 500 });
 	}
 }
