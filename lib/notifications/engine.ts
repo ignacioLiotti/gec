@@ -59,7 +59,15 @@ export async function emitEvent(
 	const serializableEffects = expandedEffects
 		.map((eff) => {
 			const shouldSend = resolveMaybeFn(eff.shouldSend ?? true, eff.ctx);
-			const when = resolveMaybeFn(eff.when ?? null, eff.ctx);
+			let when = resolveMaybeFn(eff.when ?? null, eff.ctx);
+			if (when && when !== "now") {
+				const whenDate = new Date(when);
+				if (!Number.isFinite(whenDate.getTime()) || whenDate <= new Date()) {
+					when = "now";
+				} else {
+					when = whenDate;
+				}
+			}
 			const resolvedTitle = resolveMaybeFn(eff.title ?? null, eff.ctx);
 			const resolvedBody = resolveMaybeFn(eff.body ?? null, eff.ctx);
 			const resolvedSubject = resolveMaybeFn(eff.subject ?? null, eff.ctx);

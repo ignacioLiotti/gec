@@ -39,7 +39,16 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 
 			const at = eff.when;
 			if (at && at !== "now") {
-				await sleep(new Date(at));
+				const target = new Date(at);
+				if (!Number.isFinite(target.getTime()) || target <= new Date()) {
+					console.warn("[workflow] skipping sleep for past/invalid date", {
+						executionId,
+						recipientId: eff.recipientId ?? null,
+						target,
+					});
+				} else {
+					await sleep(target);
+				}
 			}
 
 			console.info("[workflow] delivering effect", {
