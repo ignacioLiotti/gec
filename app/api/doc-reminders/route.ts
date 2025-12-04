@@ -26,9 +26,9 @@ export async function POST(request: Request) {
 			pendienteId,
 		} = await validateJsonBody(request, DocReminderSchema);
 
-		const workflowsEnabled =
-			process.env.NODE_ENV === "production" &&
-			process.env.WORKFLOWS_DISABLED !== "1";
+		const workflowsDisabled = process.env.WORKFLOWS_DISABLED === "1";
+		const workflowsForced = process.env.WORKFLOWS_ENABLED === "1";
+		const workflowsActive = workflowsForced || !workflowsDisabled;
 
 		// Insert an immediate "created" notification so the UI can toast and list it
         try {
@@ -59,20 +59,20 @@ export async function POST(request: Request) {
 				await rls.from("notifications").insert(basePayload);
 			}
 		} catch {}
-        if (workflowsEnabled) {
-            await emitEvent("document.reminder.requested", {
+		if (workflowsActive) {
+			await emitEvent("document.reminder.requested", {
 				obraId: String(obraId),
 				obraName: obraName ? String(obraName) : null,
 				documentName: String(documentName),
 				dueDate: String(dueDate),
 				notifyUserId: notifyUserId ? String(notifyUserId) : null,
-                pendienteId: pendienteId ? String(pendienteId) : null,
+				pendienteId: pendienteId ? String(pendienteId) : null,
 			});
-            return NextResponse.json({ ok: true });
+			return NextResponse.json({ ok: true, workflow: "queued" });
 		}
 
-        // Dev: we already inserted a "created" row; skip immediate delivery. Acknowledge.
-		return NextResponse.json({ ok: true });
+		// Workflows explicitly disabled; rely on immediate insert above.
+		return NextResponse.json({ ok: true, workflow: "disabled" });
 	} catch (error: any) {
 		if (error instanceof ApiValidationError) {
 			return NextResponse.json(

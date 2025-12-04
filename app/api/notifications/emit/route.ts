@@ -36,12 +36,13 @@ export async function POST(request: Request) {
 			ctx.tenantId = parsed.tenantId;
 		}
 
-		const workflowsEnabled =
-			process.env.NODE_ENV === "production" &&
-			process.env.WORKFLOWS_DISABLED !== "1";
-		if (workflowsEnabled) {
+		const workflowsDisabled = process.env.WORKFLOWS_DISABLED === "1";
+		const workflowsForced = process.env.WORKFLOWS_ENABLED === "1";
+		const workflowsActive = workflowsForced || !workflowsDisabled;
+
+		if (workflowsActive) {
 			await emitEvent(eventType, ctx);
-			return NextResponse.json({ ok: true });
+			return NextResponse.json({ ok: true, workflow: "queued" });
 		}
 
 		const effects = await expandEffectsForEvent(eventType, ctx as any);
