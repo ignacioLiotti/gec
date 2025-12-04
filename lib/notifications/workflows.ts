@@ -56,7 +56,10 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 				channel: eff.channel,
 				recipientId: eff.recipientId ?? null,
 				eventType: eff.ctx?.eventType ?? eff.ctx?.type ?? "unknown",
-				when: at === "now" || !at ? "now" : at,
+				when: at === "now" || !at ? "now" : new Date(at as Date).toISOString(),
+				title: eff.title ?? null,
+				body: eff.body ?? null,
+				subject: eff.subject ?? null,
 			});
 
 			if (eff.channel === "in-app") {
