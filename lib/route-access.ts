@@ -80,6 +80,10 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
+		path: "/admin/workflows",
+		allowedRoles: ["admin"],
+	},
+	{
 		path: "/dev",
 		allowedRoles: ["admin"],
 	},

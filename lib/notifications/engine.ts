@@ -5,6 +5,7 @@ import { getUserEmailById, getUserIdsByRoleKey } from "./recipients";
 export type EventContext = {
 	tenantId?: string | null;
 	actorId?: string | null;
+	executionId?: string | null;
 	[k: string]: any;
 };
 
@@ -97,6 +98,7 @@ export async function expandEffectsForEvent(
 				ctx,
 				recipientId: r.userId,
 				recipientEmail: r.email,
+				executionId: ctx.executionId ?? null,
 			});
 		}
 	}

@@ -127,6 +127,11 @@ const adminItems: NavItem[] = [
 		href: "/admin/audit-log",
 		icon: FileText,
 	},
+	{
+		title: "Workflows",
+		href: "/admin/workflows",
+		icon: Play,
+	},
 ];
 
 // const devItems: NavItem[] = [

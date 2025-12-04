@@ -176,6 +176,14 @@ export async function executeFlujoActions(
 					? action.notification_types
 					: ["in_app"];
 
+			const scheduledAtIso = executeAt.toISOString();
+			const executionBase = {
+				flujo_action_id: action.id,
+				obra_id: obraId,
+				scheduled_for: scheduledAtIso,
+				notification_types: notificationTypes,
+			};
+
 			// For email-type actions, we still create notifications; for calendar_event
 			// actions we now create rows in calendar_events instead, so they only
 			// appear once the obra has actually completed.
@@ -215,6 +223,14 @@ export async function executeFlujoActions(
 									error: calErr,
 								}
 							);
+							await supabase.from("obra_flujo_executions").insert({
+								...executionBase,
+								recipient_user_id: recipientId,
+								status: "failed",
+								executed_at: new Date().toISOString(),
+								error_message:
+									calErr instanceof Error ? calErr.message : String(calErr),
+							});
 						} else {
 							console.info("Inserted calendar_event from flujo action", {
 								actionId: action.id,
@@ -222,31 +238,73 @@ export async function executeFlujoActions(
 								recipientId,
 								start_at: executeAt.toISOString(),
 							});
+							await supabase.from("obra_flujo_executions").insert({
+								...executionBase,
+								recipient_user_id: recipientId,
+								status: "completed",
+								executed_at: new Date().toISOString(),
+							});
 						}
 					}
 				}
 			} else {
 				for (const recipientId of recipients) {
-					await emitEvent("flujo.action.triggered", {
-						tenantId,
-						actorId: currentUserId,
-						recipientId,
-						obraId,
-						actionId: action.id,
-						title: action.title,
-						message: action.message,
-						executeAt: executeAt.toISOString(),
-						notificationTypes,
-					});
+					const { data: executionRow, error: executionError } = await supabase
+						.from("obra_flujo_executions")
+						.insert({
+							...executionBase,
+							recipient_user_id: recipientId,
+							status: "pending",
+						})
+						.select("id")
+						.single();
+
+					if (executionError) {
+						console.error("Failed to record flujo execution", {
+							actionId: action.id,
+							recipientId,
+							error: executionError,
+						});
+						continue;
+					}
+
+					const executionId = executionRow?.id ?? null;
+
+					try {
+						await emitEvent("flujo.action.triggered", {
+							tenantId,
+							actorId: currentUserId,
+							recipientId,
+							obraId,
+							actionId: action.id,
+							title: action.title,
+							message: action.message,
+							executeAt: scheduledAtIso,
+							notificationTypes,
+							executionId,
+						});
+					} catch (eventError) {
+						console.error("Failed to schedule flujo workflow", {
+							actionId: action.id,
+							recipientId,
+							error: eventError,
+						});
+						if (executionId) {
+							await supabase
+								.from("obra_flujo_executions")
+								.update({
+									status: "failed",
+									executed_at: new Date().toISOString(),
+									error_message:
+										eventError instanceof Error
+											? eventError.message
+											: String(eventError),
+								})
+								.eq("id", executionId);
+						}
+					}
 				}
 			}
-
-			// Record execution
-			await supabase.from("obra_flujo_executions").insert({
-				flujo_action_id: action.id,
-				obra_id: obraId,
-				status: "completed",
-			});
 
 			console.info("Flujo action executed successfully", {
 				actionId: action.id,
@@ -259,20 +317,6 @@ export async function executeFlujoActions(
 				error: actionError,
 			});
 
-			// Record failure
-			try {
-				await supabase.from("obra_flujo_executions").insert({
-					flujo_action_id: action.id,
-					obra_id: obraId,
-					status: "failed",
-					error_message:
-						actionError instanceof Error
-							? actionError.message
-							: String(actionError),
-				});
-			} catch (recordError) {
-				console.error("Failed to record flujo execution error", recordError);
-			}
 		}
 	}
 }
