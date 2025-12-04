@@ -56,20 +56,49 @@ export async function emitEvent(
 		});
 		return;
 	}
+	const serializableEffects = expandedEffects
+		.map((eff) => {
+			const shouldSend = resolveMaybeFn(eff.shouldSend ?? true, eff.ctx);
+			const when = resolveMaybeFn(eff.when ?? null, eff.ctx);
+			const resolvedTitle = resolveMaybeFn(eff.title ?? null, eff.ctx);
+			const resolvedBody = resolveMaybeFn(eff.body ?? null, eff.ctx);
+			const resolvedSubject = resolveMaybeFn(eff.subject ?? null, eff.ctx);
+			const resolvedHtml = resolveMaybeFn(eff.html ?? null, eff.ctx);
+			const resolvedActionUrl = resolveMaybeFn(eff.actionUrl ?? null, eff.ctx);
+			const resolvedData = resolveMaybeFn(eff.data ?? {}, eff.ctx) ?? {};
+			const resolvedType = resolveMaybeFn(eff.type ?? null, eff.ctx);
+			return {
+				channel: eff.channel,
+				when,
+				title: resolvedTitle,
+				body: resolvedBody,
+				subject: resolvedSubject,
+				html: resolvedHtml,
+				actionUrl: resolvedActionUrl,
+				data: resolvedData,
+				type: resolvedType,
+				shouldSend,
+				ctx: { ...eff.ctx, eventType },
+				recipientId: eff.recipientId ?? null,
+				recipientEmail: eff.recipientEmail ?? null,
+				executionId: eff.executionId ?? null,
+			};
+		})
+		.filter((eff) => eff.shouldSend);
 	const recipients = Array.from(
 		new Set(
-			expandedEffects
+			serializableEffects
 				.map((eff) => eff.recipientId)
 				.filter((id): id is string => Boolean(id))
 		)
 	);
 	console.info("[notifications] emitEvent scheduling workflow", {
 		eventType,
-		effectCount: expandedEffects.length,
+		effectCount: serializableEffects.length,
 		recipients,
 		executionId: ctx.executionId ?? null,
 	});
-	await start(deliverEffectsWorkflow, [expandedEffects]);
+	await start(deliverEffectsWorkflow, [serializableEffects]);
 }
 
 export function getRegistryForDebug() {
@@ -126,4 +155,10 @@ export async function expandEffectsForEvent(
 		}
 	}
 	return expandedEffects;
+}
+function resolveMaybeFn<T>(
+	value: T | ((ctx: EventContext) => T) | undefined,
+	ctx: EventContext
+): T {
+	return typeof value === "function" ? (value as (ctx: EventContext) => T)(ctx) : (value as T);
 }

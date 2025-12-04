@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { emitEvent } from "@/lib/notifications/engine";
 import "@/lib/notifications/rules"; // register rules
 import { applyObraDefaults } from "@/lib/obra-defaults";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
@@ -91,6 +92,7 @@ export async function executeFlujoActions(
 	tenantId: string | null
 ) {
 	console.info("Executing flujo actions for obra", { obraId });
+	const adminSupabase = createSupabaseAdminClient();
 
 	// Fetch all enabled flujo actions for this obra
 	const { data: actions, error: fetchError } = await supabase
@@ -196,7 +198,7 @@ export async function executeFlujoActions(
 				} else {
 					for (const recipientId of recipients) {
 						const end = new Date(executeAt.getTime() + 60 * 60 * 1000);
-						const { error: calErr } = await supabase
+						const { error: calErr } = await adminSupabase
 							.from("calendar_events")
 							.insert({
 								tenant_id: tenantId,
@@ -238,7 +240,7 @@ export async function executeFlujoActions(
 								recipientId,
 								start_at: executeAt.toISOString(),
 							});
-							await supabase.from("obra_flujo_executions").insert({
+							await adminSupabase.from("obra_flujo_executions").insert({
 								...executionBase,
 								recipient_user_id: recipientId,
 								status: "completed",
@@ -249,7 +251,7 @@ export async function executeFlujoActions(
 				}
 			} else {
 				for (const recipientId of recipients) {
-					const { data: executionRow, error: executionError } = await supabase
+					const { data: executionRow, error: executionError } = await adminSupabase
 						.from("obra_flujo_executions")
 						.insert({
 							...executionBase,
@@ -297,7 +299,7 @@ export async function executeFlujoActions(
 							error: eventError,
 						});
 						if (executionId) {
-							await supabase
+							await adminSupabase
 								.from("obra_flujo_executions")
 								.update({
 									status: "failed",

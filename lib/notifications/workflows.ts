@@ -5,19 +5,18 @@ import { markFlujoExecutionStatusEdge } from "@/lib/workflow/flujo-executions";
 
 type ExpandedEffect = {
 	channel: "in-app" | "email";
-	// Resolved "when" value. `null` means "no delay" / treat as "now".
-	when: "now" | Date | null | ((ctx: any) => Date | "now" | null);
-	title?: (ctx: any) => string;
-	body?: (ctx: any) => string | null | undefined;
-	subject?: (ctx: any) => string | null | undefined;
-	html?: (ctx: any) => string | null | undefined;
-	actionUrl?: (ctx: any) => string | null | undefined;
-	data?: (ctx: any) => any;
-	type?: string | ((ctx: any) => string | null | undefined);
+	when: "now" | Date | null;
+	title?: string | null;
+	body?: string | null;
+	subject?: string | null;
+	html?: string | null;
+	actionUrl?: string | null;
+	data?: any;
+	type?: string | null;
 	ctx: any;
 	recipientId?: string | null;
 	recipientEmail?: string | null;
-	shouldSend?: (ctx: any) => boolean;
+	shouldSend?: boolean;
 	executionId?: string | null;
 };
 
@@ -36,11 +35,9 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 
 	try {
 		for (const eff of effects) {
-			const shouldSend =
-				typeof eff.shouldSend === "function" ? eff.shouldSend(eff.ctx) : true;
-			if (!shouldSend) continue;
+			if (eff.shouldSend === false) continue;
 
-			const at = typeof eff.when === "function" ? eff.when(eff.ctx) : eff.when;
+			const at = eff.when;
 			if (at && at !== "now") {
 				await sleep(new Date(at));
 			}
@@ -55,17 +52,15 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 
 			if (eff.channel === "in-app") {
 				("use step");
-				const resolvedType =
-					typeof eff.type === "function" ? eff.type(eff.ctx) : eff.type;
 				await insertNotificationEdge({
 					user_id: eff.recipientId,
 					tenant_id: eff.ctx?.tenantId ?? null,
-					title: eff.title?.(eff.ctx) ?? "",
-					body: eff.body?.(eff.ctx) ?? null,
-					type: resolvedType ?? "info",
-					action_url: eff.actionUrl?.(eff.ctx) ?? null,
+					title: eff.title ?? "",
+					body: eff.body ?? null,
+					type: eff.type ?? "info",
+					action_url: eff.actionUrl ?? null,
 					pendiente_id: (eff.ctx?.pendienteId as string | null) ?? null,
-					data: eff.data?.(eff.ctx) ?? {},
+					data: eff.data ?? {},
 				});
 				console.info("[workflow] in-app notification inserted", {
 					executionId,
@@ -74,12 +69,10 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 			} else if (eff.channel === "email") {
 				("use step");
 				if (!eff.recipientEmail) continue;
-				const subject = eff.subject?.(eff.ctx) ?? "Notificación";
+				const subject = eff.subject ?? eff.title ?? "Notificación";
 				const html =
-					eff.html?.(eff.ctx) ??
-					`<p>${eff.title?.(eff.ctx) ?? "Notificación"}</p><p>${
-						eff.body?.(eff.ctx) ?? ""
-					}</p>`;
+					eff.html ??
+					`<p>${eff.title ?? "Notificación"}</p><p>${eff.body ?? ""}</p>`;
 				await sendSimpleEmailEdge({
 					to: eff.recipientEmail,
 					subject,
