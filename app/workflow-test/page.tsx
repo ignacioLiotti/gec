@@ -3,9 +3,9 @@ import { createClient } from "@/utils/supabase/server";
 import { WorkflowTestPanel } from "./workflow-test-panel";
 
 export default async function WorkflowTestPage() {
-	if (process.env.NODE_ENV === "production") {
-		notFound();
-	}
+	// if (process.env.NODE_ENV === "production") {
+	// 	notFound();
+	// }
 
 	const supabase = await createClient();
 	const {
