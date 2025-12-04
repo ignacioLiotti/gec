@@ -14,6 +14,7 @@ import {
 	Play,
 	User,
 	KeyRound,
+	Settings2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -110,6 +111,11 @@ const adminItems: NavItem[] = [
 		title: "Roles y Permisos",
 		href: "/admin/roles",
 		icon: ShieldCheck,
+	},
+	{
+		title: "Configuración de Obras",
+		href: "/admin/obra-defaults",
+		icon: Settings2,
 	},
 	{
 		title: "Secretos API",

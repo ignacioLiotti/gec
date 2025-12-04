@@ -1,6 +1,22 @@
 import { defineRule } from "./engine";
 import { parseLocalDate } from "@/utils/date";
 
+const appBaseUrl =
+	process.env.NEXT_PUBLIC_APP_BASE_URL ??
+	process.env.NEXT_PUBLIC_APP_URL ??
+	(process.env.NEXT_PUBLIC_VERCEL_URL
+		? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+		: process.env.VERCEL_URL
+			? `https://${process.env.VERCEL_URL}`
+			: "http://localhost:3000");
+
+function getNotificationTypes(ctx: any): string[] {
+	const raw = ctx.notificationTypes;
+	if (Array.isArray(raw)) return raw as string[];
+	if (!raw) return [];
+	return [raw];
+}
+
 // obra.completed -> notify actor now (in-app) and optional email follow-up
 defineRule("obra.completed", {
 	recipients: async (ctx) => {
@@ -61,6 +77,58 @@ defineRule("document.reminder.requested", {
                 documentName: ctx.documentName ?? null,
         dueDate: ctx.dueDate ?? null,
             }),
+		},
+	],
+});
+
+defineRule("flujo.action.triggered", {
+	recipients: async (ctx) => {
+		const recipientId = ctx.recipientId as string | undefined;
+		return recipientId ? [recipientId] : [];
+	},
+	effects: [
+		{
+			channel: "in-app",
+			shouldSend: (ctx) => {
+				const types = getNotificationTypes(ctx);
+				return types.length === 0 || types.includes("in_app");
+			},
+			when: (ctx) => {
+				if (!ctx.executeAt) return "now";
+				const at = new Date(ctx.executeAt);
+				return Number.isNaN(at.getTime()) ? "now" : at;
+			},
+			title: (ctx) => ctx.title || "Flujo action",
+			body: (ctx) => ctx.message || "",
+			actionUrl: (ctx) => (ctx.obraId ? `/excel/${ctx.obraId}` : null),
+			type: "flujo_email",
+			data: (ctx) => ({
+				obraId: ctx.obraId ?? null,
+				flujoActionId: ctx.actionId ?? null,
+				scheduledFor: ctx.executeAt ?? null,
+			}),
+		},
+		{
+			channel: "email",
+			shouldSend: (ctx) => {
+				const types = getNotificationTypes(ctx);
+				return types.includes("email");
+			},
+			when: (ctx) => {
+				if (!ctx.executeAt) return "now";
+				const at = new Date(ctx.executeAt);
+				return Number.isNaN(at.getTime()) ? "now" : at;
+			},
+			subject: (ctx) => ctx.title || "Notificación",
+			html: (ctx) => {
+				const message = ctx.message || "";
+				const obraPath = ctx.obraId ? `/excel/${ctx.obraId}` : "";
+				const obraUrl = obraPath ? `${appBaseUrl}${obraPath}` : appBaseUrl;
+				const linkMarkup = obraPath
+					? `<p><a href="${obraUrl}">Ver obra</a></p>`
+					: "";
+				return `<p>${message}</p>${linkMarkup}`;
+			},
 		},
 	],
 });

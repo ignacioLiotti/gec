@@ -56,6 +56,16 @@ export type ObrasDetalleRow = FormTableRow & {
 	porcentaje?: number | null;
 };
 
+const currencyFormatter = new Intl.NumberFormat("es-AR", {
+	style: "currency",
+	currency: "ARS",
+});
+
+function formatCurrency(value?: number | null) {
+	if (value == null) return "—";
+	return currencyFormatter.format(value);
+}
+
 const columns: ColumnDef<ObrasDetalleRow>[] = [
 	{
 		id: "n",
@@ -569,4 +579,72 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	applyFilters,
 	countActiveFilters,
 	fetchRows: fetchObrasDetalle,
+	accordionRow: {
+		triggerLabel: "detalle extendido",
+		renderContent: (row) => {
+			const avance = Math.max(0, Math.min(100, row.porcentaje ?? 0));
+			return (
+				<div className="space-y-4">
+					<div className="grid gap-4 text-sm md:grid-cols-3">
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Entidad contratante</p>
+							<p className="font-medium text-foreground">{row.entidadContratante || "Sin datos"}</p>
+						</div>
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Mes básico de contrato</p>
+							<p className="font-medium text-foreground">{row.mesBasicoDeContrato || "—"}</p>
+						</div>
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Iniciación</p>
+							<p className="font-medium text-foreground">{row.iniciacion || "—"}</p>
+						</div>
+					</div>
+					<div className="grid gap-4 text-sm md:grid-cols-4">
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Contrato + Ampliaciones</p>
+							<p className="font-semibold">{formatCurrency(row.contratoMasAmpliaciones)}</p>
+						</div>
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Certificado a la fecha</p>
+							<p className="font-semibold">{formatCurrency(row.certificadoALaFecha)}</p>
+						</div>
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Saldo a certificar</p>
+							<p className="font-semibold">{formatCurrency(row.saldoACertificar)}</p>
+						</div>
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Según contrato</p>
+							<p className="font-semibold">{formatCurrency(row.segunContrato)}</p>
+						</div>
+					</div>
+					<div className="grid gap-4 text-sm md:grid-cols-3">
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Prórrogas acordadas</p>
+							<p className="font-medium">{row.prorrogasAcordadas ?? "—"}</p>
+						</div>
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Plazo total</p>
+							<p className="font-medium">{row.plazoTotal ?? "—"}</p>
+						</div>
+						<div>
+							<p className="text-xs uppercase text-muted-foreground">Plazo transcurrido</p>
+							<p className="font-medium">{row.plazoTransc ?? "—"}</p>
+						</div>
+					</div>
+					<div className="space-y-2">
+						<p className="text-xs uppercase text-muted-foreground">Avance físico</p>
+						<div className="flex items-center gap-3">
+							<div className="h-2 flex-1 rounded-full bg-muted">
+								<div
+									className="h-2 rounded-full bg-orange-primary transition-all"
+									style={{ width: `${avance}%` }}
+								/>
+							</div>
+							<span className="text-sm font-semibold text-foreground">{avance}%</span>
+						</div>
+					</div>
+				</div>
+			);
+		},
+	},
 };

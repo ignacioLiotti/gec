@@ -16,12 +16,17 @@ type ExpandedEffect = {
 	ctx: any;
 	recipientId?: string | null;
 	recipientEmail?: string | null;
+	shouldSend?: (ctx: any) => boolean;
 };
 
 export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 	"use workflow";
 
 	for (const eff of effects) {
+		const shouldSend =
+			typeof eff.shouldSend === "function" ? eff.shouldSend(eff.ctx) : true;
+		if (!shouldSend) continue;
+
 		const at = typeof eff.when === "function" ? eff.when(eff.ctx) : eff.when;
 		if (at && at !== "now") {
 			await sleep(new Date(at));

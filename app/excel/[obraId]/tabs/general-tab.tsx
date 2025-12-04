@@ -1,6 +1,5 @@
 'use client';
 
-import Link from "next/link";
 import type { FormApi } from "@tanstack/react-form";
 import { motion } from "framer-motion";
 import { AlertCircle, Building2, Calendar, DollarSign, FileText, MapPin, Percent, TrendingUp } from "lucide-react";
@@ -481,12 +480,22 @@ export function ObraGeneralTab({
 						transition={{ delay: 0.35 }}
 						className="flex justify-end gap-3 p-4 sticky bottom-0 left-0 w-full"
 					>
-						<Button asChild variant="outline">
-							<Link href="/excel">Cancelar</Link>
+						<Button
+							variant="outline"
+							onClick={() => {
+								applyObraToForm(initialFormValues);
+							}}
+						>
+							Cancelar
 						</Button>
 						<form.Subscribe selector={(state: any) => [state.canSubmit, state.isSubmitting]}>
 							{([canSubmit, isSubmitting]: [any, any]) => (
-								<Button type="submit" disabled={!canSubmit} className="min-w-[140px]">
+								<Button type="submit" disabled={!canSubmit} className="min-w-[140px]"
+									onClick={(e) => {
+										e.preventDefault();
+										form.handleSubmit();
+									}}
+								>
 									{isSubmitting ? "Guardando..." : "Guardar cambios"}
 								</Button>
 							)}

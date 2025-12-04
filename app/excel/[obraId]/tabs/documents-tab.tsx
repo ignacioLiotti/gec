@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { FileManager, type FileManagerSelectionChange } from "@/components/obras/file-manager";
+import { FileManager, type FileManagerSelectionChange } from "./file-manager/file-manager";
 import { TabsContent } from "@/components/ui/tabs";
 
 import type { MaterialOrder } from "./types";
@@ -68,4 +68,3 @@ export function ObraDocumentsTab({ obraId, materialOrders, refreshMaterialOrders
 		</TabsContent>
 	);
 }
-

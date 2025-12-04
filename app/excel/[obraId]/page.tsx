@@ -29,6 +29,7 @@ import { ObraDocumentsTab } from "./tabs/documents-tab";
 import { ObraCertificatesTab } from "./tabs/certificates-tab";
 import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
+
 import type {
 	Certificate,
 	NewCertificateFormState,
@@ -1060,269 +1061,267 @@ export default function ObraDetailPage() {
 	}, [refreshCertificates]);
 
 	return (
-		<div className="min-h-screen bg-linear-to-b from-background to-muted/20 ">
-			<div className="container max-w-full mx-auto px-4 pt-2">
-				{routeError ? (
-					<motion.div
-						initial={{ opacity: 0, scale: 0.95 }}
-						animate={{ opacity: 1, scale: 1 }}
-						className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
-					>
-						<p className="font-medium">{routeError}</p>
-					</motion.div>
-				) : isLoading ? (
-					<motion.div
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						className="flex items-center justify-center py-12"
-					>
-						<div className="space-y-2 text-center">
-							<div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
-							<p className="text-sm text-muted-foreground">Cargando obra...</p>
-						</div>
-					</motion.div>
-				) : loadError ? (
-					<motion.div
-						initial={{ opacity: 0, scale: 0.95 }}
-						animate={{ opacity: 1, scale: 1 }}
-						className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
-					>
-						<p className="font-medium">{loadError}</p>
-					</motion.div>
-				) : (
-					<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
-						<div className="flex-1 min-w-0">
-							<Tabs
-								value={activeTab}
-								onValueChange={(value) => setQueryParams({ tab: value })}
-								className="space-y-4"
-							>
-								<div className="flex items-center justify-between mb-2 gap-2">
-									<ExcelPageTabs />
-									<div className="flex items-center gap-2">
+		<div className="container max-w-full mx-auto px-4 pt-2">
+			{routeError ? (
+				<motion.div
+					initial={{ opacity: 0, scale: 0.95 }}
+					animate={{ opacity: 1, scale: 1 }}
+					className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
+				>
+					<p className="font-medium">{routeError}</p>
+				</motion.div>
+			) : isLoading ? (
+				<motion.div
+					initial={{ opacity: 0 }}
+					animate={{ opacity: 1 }}
+					className="flex items-center justify-center py-12"
+				>
+					<div className="space-y-2 text-center">
+						<div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+						<p className="text-sm text-muted-foreground">Cargando obra...</p>
+					</div>
+				</motion.div>
+			) : loadError ? (
+				<motion.div
+					initial={{ opacity: 0, scale: 0.95 }}
+					animate={{ opacity: 1, scale: 1 }}
+					className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
+				>
+					<p className="font-medium">{loadError}</p>
+				</motion.div>
+			) : (
+				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
+					<div className="flex-1 min-w-0">
+						<Tabs
+							value={activeTab}
+							onValueChange={(value) => setQueryParams({ tab: value })}
+							className="space-y-4"
+						>
+							<div className="flex items-center justify-between mb-2 gap-2">
+								<ExcelPageTabs />
+								<div className="flex items-center gap-2">
 
-										<motion.div
-											initial={{ opacity: 0 }}
-											animate={{ opacity: 1 }}
-											className="flex justify-end "
-										>
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												onClick={() => setIsGeneralTabEditMode(!isGeneralTabEditMode)}
-												className="gap-2"
-											>
-												{isGeneralTabEditMode ? (
-													<>
-														<Pencil className="h-4 w-4" />
-														Modo Edición
-													</>
-												) : (
-													<>
-														<Eye className="h-4 w-4" />
-														Modo Vista Previa
-													</>
-												)}
-											</Button>
-										</motion.div>
+									<motion.div
+										initial={{ opacity: 0 }}
+										animate={{ opacity: 1 }}
+										className="flex justify-end "
+									>
 										<Button
 											type="button"
-											variant={isMemoriaOpen ? "default" : "outline"}
+											variant="outline"
 											size="sm"
-											onClick={() => setIsMemoriaOpen((open) => !open)}
+											onClick={() => setIsGeneralTabEditMode(!isGeneralTabEditMode)}
 											className="gap-2"
 										>
-											<StickyNote className="h-4 w-4" />
-											<span>Memoria</span>
+											{isGeneralTabEditMode ? (
+												<>
+													<Pencil className="h-4 w-4" />
+													Modo Edición
+												</>
+											) : (
+												<>
+													<Eye className="h-4 w-4" />
+													Modo Vista Previa
+												</>
+											)}
+										</Button>
+									</motion.div>
+									<Button
+										type="button"
+										variant={isMemoriaOpen ? "default" : "outline"}
+										size="sm"
+										onClick={() => setIsMemoriaOpen((open) => !open)}
+										className="gap-2"
+									>
+										<StickyNote className="h-4 w-4" />
+										<span>Memoria</span>
+									</Button>
+								</div>
+							</div>
+
+							<ObraGeneralTab
+								form={form}
+								isGeneralTabEditMode={isGeneralTabEditMode}
+								hasUnsavedChanges={hasUnsavedChanges}
+								isFieldDirty={isFieldDirty}
+								applyObraToForm={applyObraToForm}
+								initialFormValues={initialFormValues}
+								getErrorMessage={getErrorMessage}
+							/>
+
+							<ObraFlujoTab
+								isAddingFlujoAction={isAddingFlujoAction}
+								setIsAddingFlujoAction={setIsAddingFlujoAction}
+								newFlujoAction={newFlujoAction}
+								setNewFlujoAction={setNewFlujoAction}
+								selectedRecipientUserId={selectedRecipientUserId}
+								setSelectedRecipientUserId={setSelectedRecipientUserId}
+								selectedRecipientRoleId={selectedRecipientRoleId}
+								setSelectedRecipientRoleId={setSelectedRecipientRoleId}
+								obraUsers={obraUsers}
+								obraRoles={obraRoles}
+								saveFlujoAction={saveFlujoAction}
+								toggleFlujoAction={toggleFlujoAction}
+								deleteFlujoAction={deleteFlujoAction}
+								flujoActions={flujoActions}
+								isLoadingFlujoActions={isLoadingFlujoActions}
+							/>
+
+							<ObraCertificatesTab
+								certificates={certificates}
+								certificatesTotal={certificatesTotal}
+								certificatesLoading={certificatesLoading}
+								isAddingCertificate={isAddingCertificate}
+								isCreatingCertificate={isCreatingCertificate}
+								createCertificateError={createCertificateError}
+								newCertificate={newCertificate}
+								handleToggleAddCertificate={handleToggleAddCertificate}
+								handleCreateCertificate={handleCreateCertificate}
+								handleNewCertificateChange={handleNewCertificateChange}
+							/>
+
+							<ObraDocumentsTab
+								obraId={obraId}
+								materialOrders={materialOrders}
+								refreshMaterialOrders={refreshMaterialOrders}
+							/>
+
+						</Tabs>
+					</div>
+					<AnimatePresence>
+						{isMemoriaOpen && (
+							<motion.aside
+								initial={{ x: 320, opacity: 0 }}
+								animate={{ x: 0, opacity: 1 }}
+								exit={{ x: 320, opacity: 0 }}
+								transition={{ duration: 0.25, ease: "easeOut" }}
+								className="w-full lg:w-80 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4"
+							>
+								<div className="flex items-center justify-between gap-2">
+									<div className="flex items-center gap-2">
+										<StickyNote className="h-4 w-4 text-primary" />
+										<h2 className="text-sm font-semibold">Memoria descriptiva de la obra</h2>
+									</div>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon"
+										onClick={() => setIsMemoriaOpen(false)}
+									>
+										<X className="h-4 w-4" />
+									</Button>
+								</div>
+
+								<div className="space-y-2">
+									<label className="text-xs font-medium text-muted-foreground">
+										Nueva nota
+									</label>
+									<Textarea
+										value={memoriaDraft}
+										onChange={(e) => setMemoriaDraft(e.target.value)}
+										placeholder="Escribe aquí notas, decisiones o contexto importante sobre esta obra..."
+										className="min-h-[80px] text-sm"
+									/>
+									<div className="flex justify-end">
+										<Button
+											type="button"
+											size="sm"
+											disabled={!memoriaDraft.trim()}
+											onClick={async () => {
+												const text = memoriaDraft.trim();
+												if (!text || !obraId || obraId === "undefined") return;
+												try {
+													const res = await fetch(`/api/obras/${obraId}/memoria`, {
+														method: "POST",
+														headers: { "Content-Type": "application/json" },
+														body: JSON.stringify({ text }),
+													});
+													if (!res.ok) {
+														const out = await res.json().catch(() => ({} as any));
+														throw new Error(out?.error || "No se pudo guardar la nota");
+													}
+													const out = await res.json();
+													const note = out?.note;
+													if (note) {
+														setMemoriaNotes((prev) => [
+															{
+																id: String(note.id),
+																text: String(note.text ?? ""),
+																createdAt: String(note.createdAt ?? note.created_at ?? ""),
+																userId: String(note.userId ?? note.user_id ?? ""),
+																userName:
+																	typeof note.userName === "string"
+																		? note.userName
+																		: note.user_name ?? null,
+															},
+															...prev,
+														]);
+													}
+													setMemoriaDraft("");
+												} catch (err) {
+													console.error(err);
+													const message =
+														err instanceof Error ? err.message : "No se pudo guardar la nota";
+													toast.error(message);
+												}
+											}}
+										>
+											Guardar nota
 										</Button>
 									</div>
 								</div>
 
-								<ObraGeneralTab
-									form={form}
-									isGeneralTabEditMode={isGeneralTabEditMode}
-									hasUnsavedChanges={hasUnsavedChanges}
-									isFieldDirty={isFieldDirty}
-									applyObraToForm={applyObraToForm}
-									initialFormValues={initialFormValues}
-									getErrorMessage={getErrorMessage}
-								/>
+								<Separator />
 
-								<ObraFlujoTab
-									isAddingFlujoAction={isAddingFlujoAction}
-									setIsAddingFlujoAction={setIsAddingFlujoAction}
-									newFlujoAction={newFlujoAction}
-									setNewFlujoAction={setNewFlujoAction}
-									selectedRecipientUserId={selectedRecipientUserId}
-									setSelectedRecipientUserId={setSelectedRecipientUserId}
-									selectedRecipientRoleId={selectedRecipientRoleId}
-									setSelectedRecipientRoleId={setSelectedRecipientRoleId}
-									obraUsers={obraUsers}
-									obraRoles={obraRoles}
-									saveFlujoAction={saveFlujoAction}
-									toggleFlujoAction={toggleFlujoAction}
-									deleteFlujoAction={deleteFlujoAction}
-									flujoActions={flujoActions}
-									isLoadingFlujoActions={isLoadingFlujoActions}
-								/>
-
-								<ObraCertificatesTab
-									certificates={certificates}
-									certificatesTotal={certificatesTotal}
-									certificatesLoading={certificatesLoading}
-									isAddingCertificate={isAddingCertificate}
-									isCreatingCertificate={isCreatingCertificate}
-									createCertificateError={createCertificateError}
-									newCertificate={newCertificate}
-									handleToggleAddCertificate={handleToggleAddCertificate}
-									handleCreateCertificate={handleCreateCertificate}
-									handleNewCertificateChange={handleNewCertificateChange}
-								/>
-
-								<ObraDocumentsTab
-									obraId={obraId}
-									materialOrders={materialOrders}
-									refreshMaterialOrders={refreshMaterialOrders}
-								/>
-
-							</Tabs>
-						</div>
-						<AnimatePresence>
-							{isMemoriaOpen && (
-								<motion.aside
-									initial={{ x: 320, opacity: 0 }}
-									animate={{ x: 0, opacity: 1 }}
-									exit={{ x: 320, opacity: 0 }}
-									transition={{ duration: 0.25, ease: "easeOut" }}
-									className="w-full lg:w-80 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4"
-								>
-									<div className="flex items-center justify-between gap-2">
-										<div className="flex items-center gap-2">
-											<StickyNote className="h-4 w-4 text-primary" />
-											<h2 className="text-sm font-semibold">Memoria descriptiva de la obra</h2>
-										</div>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon"
-											onClick={() => setIsMemoriaOpen(false)}
-										>
-											<X className="h-4 w-4" />
-										</Button>
-									</div>
-
-									<div className="space-y-2">
-										<label className="text-xs font-medium text-muted-foreground">
-											Nueva nota
-										</label>
-										<Textarea
-											value={memoriaDraft}
-											onChange={(e) => setMemoriaDraft(e.target.value)}
-											placeholder="Escribe aquí notas, decisiones o contexto importante sobre esta obra..."
-											className="min-h-[80px] text-sm"
-										/>
-										<div className="flex justify-end">
-											<Button
-												type="button"
-												size="sm"
-												disabled={!memoriaDraft.trim()}
-												onClick={async () => {
-													const text = memoriaDraft.trim();
-													if (!text || !obraId || obraId === "undefined") return;
-													try {
-														const res = await fetch(`/api/obras/${obraId}/memoria`, {
-															method: "POST",
-															headers: { "Content-Type": "application/json" },
-															body: JSON.stringify({ text }),
-														});
-														if (!res.ok) {
-															const out = await res.json().catch(() => ({} as any));
-															throw new Error(out?.error || "No se pudo guardar la nota");
-														}
-														const out = await res.json();
-														const note = out?.note;
-														if (note) {
-															setMemoriaNotes((prev) => [
-																{
-																	id: String(note.id),
-																	text: String(note.text ?? ""),
-																	createdAt: String(note.createdAt ?? note.created_at ?? ""),
-																	userId: String(note.userId ?? note.user_id ?? ""),
-																	userName:
-																		typeof note.userName === "string"
-																			? note.userName
-																			: note.user_name ?? null,
-																},
-																...prev,
-															]);
-														}
-														setMemoriaDraft("");
-													} catch (err) {
-														console.error(err);
-														const message =
-															err instanceof Error ? err.message : "No se pudo guardar la nota";
-														toast.error(message);
-													}
-												}}
+								<div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+									{memoriaNotes.length === 0 ? (
+										<p className="text-xs text-muted-foreground">
+											Todavía no hay notas para esta obra. Usa este espacio para registrar decisiones,
+											aclaraciones o contexto importante.
+										</p>
+									) : (
+										memoriaNotes.map((note) => (
+											<div
+												key={note.id}
+												className="rounded-md border bg-background/60 px-3 py-2 text-xs space-y-1"
 											>
-												Guardar nota
-											</Button>
-										</div>
-									</div>
-
-									<Separator />
-
-									<div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-										{memoriaNotes.length === 0 ? (
-											<p className="text-xs text-muted-foreground">
-												Todavía no hay notas para esta obra. Usa este espacio para registrar decisiones,
-												aclaraciones o contexto importante.
-											</p>
-										) : (
-											memoriaNotes.map((note) => (
-												<div
-													key={note.id}
-													className="rounded-md border bg-background/60 px-3 py-2 text-xs space-y-1"
-												>
-													<div className="flex items-center justify-between gap-2">
-														<div className="flex items-center gap-2">
-															<div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
-																{(note.userName || "?")
-																	.split(" ")
-																	.filter(Boolean)
-																	.slice(0, 2)
-																	.map((part) => part[0])
-																	.join("")}
-															</div>
-															<div className="flex flex-col">
-																<span className="font-medium text-foreground">
-																	{note.userName || "Usuario"}
-																</span>
-																{currentUserId === note.userId && (
-																	<span className="text-[10px] text-muted-foreground">
-																		Tú
-																	</span>
-																)}
-															</div>
+												<div className="flex items-center justify-between gap-2">
+													<div className="flex items-center gap-2">
+														<div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
+															{(note.userName || "?")
+																.split(" ")
+																.filter(Boolean)
+																.slice(0, 2)
+																.map((part) => part[0])
+																.join("")}
 														</div>
-														<p className="text-[10px] text-muted-foreground">
-															{new Date(note.createdAt).toLocaleString()}
-														</p>
+														<div className="flex flex-col">
+															<span className="font-medium text-foreground">
+																{note.userName || "Usuario"}
+															</span>
+															{currentUserId === note.userId && (
+																<span className="text-[10px] text-muted-foreground">
+																	Tú
+																</span>
+															)}
+														</div>
 													</div>
-													<p className="whitespace-pre-wrap text-foreground">
-														{note.text}
+													<p className="text-[10px] text-muted-foreground">
+														{new Date(note.createdAt).toLocaleString()}
 													</p>
 												</div>
-											))
-										)}
-									</div>
-								</motion.aside>
-							)}
-						</AnimatePresence>
-					</div>
-				)}
-			</div>
-		</div >
+												<p className="whitespace-pre-wrap text-foreground">
+													{note.text}
+												</p>
+											</div>
+										))
+									)}
+								</div>
+							</motion.aside>
+						)}
+					</AnimatePresence>
+				</div>
+			)}
+		</div>
 	);
 }

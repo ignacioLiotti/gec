@@ -22,36 +22,54 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
     setLoading(true);
     setError(null);
     const supabase = createSupabaseBrowserClient();
+    console.log("[AUTH-MODAL] handleSubmit started, mode:", mode);
     try {
       if (mode === "sign_in") {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        console.log("[AUTH-MODAL] Calling signInWithPassword...");
+        const { error: signInError, data: signInData } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
+        console.log("[AUTH-MODAL] signInWithPassword result:", { error: signInError, user: signInData?.user?.email, session: !!signInData?.session });
         if (signInError) throw signInError;
 
         // Wait for session to be fully established
-        await supabase.auth.getSession();
+        console.log("[AUTH-MODAL] Calling getSession...");
+        const { data: sessionData } = await supabase.auth.getSession();
+        console.log("[AUTH-MODAL] getSession result:", { hasSession: !!sessionData?.session, user: sessionData?.session?.user?.email });
+
+        // Check cookies before delay
+        console.log("[AUTH-MODAL] Cookies before delay:", document.cookie);
 
         // Give the session time to persist to cookies
+        console.log("[AUTH-MODAL] Waiting 300ms for cookies to persist...");
         await new Promise(resolve => setTimeout(resolve, 300));
 
+        // Check cookies after delay
+        console.log("[AUTH-MODAL] Cookies after delay:", document.cookie);
+
         // Refresh server state to pick up new session
+        console.log("[AUTH-MODAL] Calling router.refresh()...");
         router.refresh();
+        console.log("[AUTH-MODAL] router.refresh() called");
 
         // Close modal after session is synced
         onOpenChange(false);
         setEmail("");
         setPassword("");
+        console.log("[AUTH-MODAL] Modal closed, login flow complete");
       } else {
-        const { error: signUpError } = await supabase.auth.signUp({
+        console.log("[AUTH-MODAL] Calling signUp...");
+        const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
           email,
           password,
         });
+        console.log("[AUTH-MODAL] signUp result:", { error: signUpError, user: signUpData?.user?.email });
         if (signUpError) throw signUpError;
 
         // Wait for session
-        await supabase.auth.getSession();
+        const { data: sessionData } = await supabase.auth.getSession();
+        console.log("[AUTH-MODAL] getSession after signUp:", { hasSession: !!sessionData?.session });
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // After sign-up route to onboarding to pick a tenant
@@ -61,6 +79,7 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
         setPassword("");
       }
     } catch (err: any) {
+      console.error("[AUTH-MODAL] Error:", err);
       setError(err?.message ?? "Algo salió mal");
     } finally {
       setLoading(false);
@@ -71,15 +90,20 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
     setLoading(true);
     setError(null);
     const supabase = createSupabaseBrowserClient();
+    console.log("[AUTH-MODAL] handleGoogleSignIn started");
     try {
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      console.log("[AUTH-MODAL] Calling signInWithOAuth, redirectTo:", redirectTo);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo,
         },
       });
       if (error) throw error;
+      console.log("[AUTH-MODAL] signInWithOAuth initiated, redirecting to Google...");
     } catch (err: any) {
+      console.error("[AUTH-MODAL] Google sign in error:", err);
       setError(err?.message ?? "Algo salió mal");
       setLoading(false);
     }

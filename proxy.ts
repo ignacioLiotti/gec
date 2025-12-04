@@ -10,13 +10,36 @@ const rateLimitEnabled =
 	!!process.env.UPSTASH_REDIS_REST_URL &&
 	!!process.env.UPSTASH_REDIS_REST_TOKEN;
 
+// Allowed sources for CSP
+const trustedSources = ["'self'", "https://*.supabase.co"];
+
+// WebSocket sources
+const wsSources = ["wss://*.supabase.co"];
+
+if (process.env.NODE_ENV !== "production") {
+	// Allow local development servers
+	trustedSources.push("http://127.0.0.1:*", "http://localhost:*");
+	wsSources.push("ws://127.0.0.1:*", "ws://localhost:*");
+}
+
 const securityHeaders: Record<string, string> = {
 	"strict-transport-security": "max-age=63072000; includeSubDomains; preload",
 	"x-frame-options": "DENY",
 	"x-content-type-options": "nosniff",
 	"referrer-policy": "strict-origin-when-cross-origin",
-	"content-security-policy":
-		"default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; form-action 'self'; base-uri 'self'",
+	"content-security-policy": [
+		`default-src ${trustedSources.join(" ")}`,
+		`script-src ${trustedSources.join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com`,
+		`style-src ${trustedSources.join(" ")} 'unsafe-inline'`,
+		`img-src ${trustedSources.join(" ")} data: blob:`,
+		`font-src ${trustedSources.join(" ")}`,
+		`connect-src ${trustedSources.join(" ")} ${wsSources.join(" ")}`,
+		`media-src ${trustedSources.join(" ")} data: blob:`,
+		`worker-src ${trustedSources.join(" ")} blob:`,
+		"frame-ancestors 'none'",
+		"form-action 'self'",
+		"base-uri 'self'",
+	].join("; "),
 };
 
 function attachSecurityHeaders(res: NextResponse) {

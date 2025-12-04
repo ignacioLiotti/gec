@@ -42,20 +42,23 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  console.log("[LAYOUT] RootLayout rendering...");
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  console.log("[LAYOUT] getUser result:", { hasUser: !!user, email: user?.email });
 
   // Get user roles for sidebar filtering
   const userRoles = user ? await getUserRoles() : null;
+  console.log("[LAYOUT] userRoles:", userRoles);
 
   return (
     <html lang="en">
       <head>
         <script
           crossOrigin="anonymous"
-          src="//unpkg.com/react-scan/dist/auto.global.js"
+          src="https://unpkg.com/react-scan/dist/auto.global.js"
         ></script>
         {/* rest of your scripts go under */}
       </head>

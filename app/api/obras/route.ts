@@ -4,48 +4,11 @@ import { obrasFormSchema } from "@/app/excel/schema";
 import { NextResponse } from "next/server";
 import { emitEvent } from "@/lib/notifications/engine";
 import "@/lib/notifications/rules"; // register rules
-import { createSupabaseAdminClient } from "@/utils/supabase/admin";
-import { sendEmail } from "@/lib/email/api";
+import { applyObraDefaults } from "@/lib/obra-defaults";
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
 export const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
-
-const appBaseUrl =
-	process.env.NEXT_PUBLIC_APP_URL ??
-	(process.env.NEXT_PUBLIC_VERCEL_URL
-		? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-		: process.env.VERCEL_URL
-			? `https://${process.env.VERCEL_URL}`
-			: "http://localhost:3000");
-
-let cachedAdminClient: ReturnType<typeof createSupabaseAdminClient> | null =
-	null;
-function getAdminClient() {
-	if (cachedAdminClient) return cachedAdminClient;
-	try {
-		cachedAdminClient = createSupabaseAdminClient();
-	} catch (error) {
-		console.error("[flujo-actions] admin client unavailable", error);
-		cachedAdminClient = null;
-	}
-	return cachedAdminClient;
-}
-
-async function fetchUserEmail(userId: string) {
-	const adminClient = getAdminClient();
-	if (!adminClient) return null;
-	try {
-		const { data } = await adminClient.auth.admin.getUserById(userId);
-		return data.user?.email ?? null;
-	} catch (error) {
-		console.error("[flujo-actions] failed to fetch user email", {
-			userId,
-			error,
-		});
-		return null;
-	}
-}
 
 export type DbObraRow = {
 	id: string;
@@ -263,76 +226,18 @@ export async function executeFlujoActions(
 					}
 				}
 			} else {
-				// Create notifications for each recipient (email-type actions)
 				for (const recipientId of recipients) {
-					// Determine the base notification type
-					let baseType =
-						action.action_type === "email" ? "flujo_email" : "flujo_calendar";
-
-					// Send in-app notification if requested
-					if (notificationTypes.includes("in_app")) {
-						await supabase.from("notifications").insert({
-							user_id: recipientId,
-							tenant_id: tenantId,
-							title: action.title,
-							body: action.message || "",
-							type: baseType,
-							action_url: `/excel/${obraId}`,
-							data: {
-								obraId,
-								flujoActionId: action.id,
-								scheduledFor: executeAt.toISOString(),
-								eventDate: executeAt.toISOString(),
-							},
-						});
-					}
-
-					// Send email notification if requested
-					if (notificationTypes.includes("email")) {
-						await supabase.from("notifications").insert({
-							user_id: recipientId,
-							tenant_id: tenantId,
-							title: action.title,
-							body: action.message || "",
-							type: `${baseType}_email`,
-							action_url: `/excel/${obraId}`,
-							data: {
-								obraId,
-								flujoActionId: action.id,
-								scheduledFor: executeAt.toISOString(),
-								eventDate: executeAt.toISOString(),
-								sendEmail: true,
-							},
-						});
-
-						const recipientEmail = await fetchUserEmail(recipientId);
-						if (recipientEmail) {
-							try {
-								await sendEmail({
-									to: recipientEmail,
-									subject: action.title,
-									html: `
-										<p>${action.message ?? ""}</p>
-										<p><a href="${appBaseUrl}/excel/${obraId}">Ver obra</a></p>
-									`,
-								});
-								console.info("Email notification sent for flujo action", {
-									actionId: action.id,
-									recipientId,
-								});
-							} catch (emailError) {
-								console.error(
-									"Failed to send flujo action email notification",
-									emailError
-								);
-							}
-						} else {
-							console.warn(
-								"No email found for flujo action recipient",
-								recipientId
-							);
-						}
-					}
+					await emitEvent("flujo.action.triggered", {
+						tenantId,
+						actorId: currentUserId,
+						recipientId,
+						obraId,
+						actionId: action.id,
+						title: action.title,
+						message: action.message,
+						executeAt: executeAt.toISOString(),
+						notificationTypes,
+					});
 				}
 			}
 
@@ -746,6 +651,55 @@ export async function PUT(request: Request) {
 				{ error: "No se pudieron eliminar algunas obras" },
 				{ status: 500 }
 			);
+		}
+	}
+
+	// Detect newly created obras and apply defaults
+	const existingNs = new Set(existingMap.keys());
+	const newlyCreatedNs = payload
+		.filter((obra) => !existingNs.has(obra.n))
+		.map((obra) => obra.n);
+
+	if (newlyCreatedNs.length > 0) {
+		console.info("Obras PUT: detected newly created obras", {
+			count: newlyCreatedNs.length,
+			ns: newlyCreatedNs,
+		});
+
+		// Fetch the IDs of newly created obras
+		const { data: newObraRows, error: fetchNewError } = await supabase
+			.from("obras")
+			.select("id, n")
+			.eq("tenant_id", tenantId)
+			.in("n", newlyCreatedNs);
+
+		if (fetchNewError) {
+			console.error("Obras PUT: error fetching new obra IDs", fetchNewError);
+		} else if (newObraRows && newObraRows.length > 0) {
+			// Apply defaults to each new obra
+			for (const obraRow of newObraRows) {
+				try {
+					const result = await applyObraDefaults(supabase, obraRow.id, tenantId);
+					if (result.success) {
+						console.info("Obras PUT: applied defaults to obra", {
+							obraId: obraRow.id,
+							n: obraRow.n,
+							foldersApplied: result.foldersApplied,
+							tablasApplied: result.tablasApplied,
+						});
+					} else {
+						console.warn("Obras PUT: failed to apply defaults", {
+							obraId: obraRow.id,
+							error: result.error,
+						});
+					}
+				} catch (defaultsError) {
+					console.error("Obras PUT: error applying defaults", {
+						obraId: obraRow.id,
+						error: defaultsError,
+					});
+				}
+			}
 		}
 	}
 

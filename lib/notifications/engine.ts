@@ -24,6 +24,8 @@ export type EffectDef = {
 	data?: (ctx: EventContext) => any;
 	// In-app notification type. Can be a static string or derived from context.
 	type?: string | ((ctx: EventContext) => string | null | undefined);
+	// Optional guard to skip delivery altogether.
+	shouldSend?: (ctx: EventContext) => boolean;
 };
 
 export type Rule = {
