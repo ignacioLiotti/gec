@@ -8,12 +8,12 @@ import {
 
 type Variant = "immediate" | "delay";
 
-function isFeatureEnabled() {
-	return process.env.NODE_ENV !== "production";
-}
+const workflowTestsDisabled =
+	process.env.WORKFLOW_TEST_DISABLED === "1" ||
+	process.env.WORKFLOW_TEST_ENABLED === "0";
 
 export async function POST(request: NextRequest) {
-	if (!isFeatureEnabled()) {
+	if (workflowTestsDisabled) {
 		return NextResponse.json({ error: "Not found" }, { status: 404 });
 	}
 
