@@ -1,3 +1,4 @@
+import { fetch as workflowFetch } from "workflow";
 import { getVersionedSecret } from "@/lib/security/secrets";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -18,6 +19,7 @@ function buildWorkflowError(message: string): Error {
 }
 
 export async function insertNotificationEdge(row: NotificationInsert): Promise<void> {
+	"use step";
 	if (!supabaseUrl) {
 		throw buildWorkflowError("missing NEXT_PUBLIC_SUPABASE_URL");
 	}
@@ -27,7 +29,7 @@ export async function insertNotificationEdge(row: NotificationInsert): Promise<v
 		throw buildWorkflowError("missing SUPABASE_SERVICE_ROLE_KEY configuration");
 	}
 
-	const response = await fetch(
+	const response = await workflowFetch(
 		`${supabaseUrl}/rest/v1/rpc/workflow_insert_notification`,
 		{
 			method: "POST",

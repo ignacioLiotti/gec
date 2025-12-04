@@ -1,3 +1,4 @@
+import { fetch as workflowFetch } from "workflow";
 import { getVersionedSecret } from "@/lib/security/secrets";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,6 +14,7 @@ type ExecutionStatusUpdate = {
 export async function markFlujoExecutionStatusEdge(
 	update: ExecutionStatusUpdate
 ): Promise<void> {
+	"use step";
 	if (!supabaseUrl) {
 		console.error(
 			"[workflow/flujo-executions] missing NEXT_PUBLIC_SUPABASE_URL"
@@ -40,7 +42,7 @@ export async function markFlujoExecutionStatusEdge(
 		payload.executed_at = new Date().toISOString();
 	}
 
-	const response = await fetch(
+	const response = await workflowFetch(
 		`${supabaseUrl}/rest/v1/obra_flujo_executions?id=eq.${update.id}`,
 		{
 			method: "PATCH",

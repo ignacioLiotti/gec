@@ -1,3 +1,4 @@
+import { fetch as workflowFetch } from "workflow";
 import { getVersionedSecret } from "@/lib/security/secrets";
 import {
 	renderObraCompletionHtml,
@@ -14,6 +15,7 @@ type EmailPayload = {
 const RESEND_API_BASE = "https://api.resend.com/emails";
 
 async function sendResendEmailEdge(payload: EmailPayload) {
+	"use step";
 	const { value: resendKey } = getVersionedSecret("RESEND_API_KEY");
 	const fromEmail = process.env.RESEND_FROM_EMAIL;
 	if (!resendKey || !fromEmail) {
@@ -21,7 +23,7 @@ async function sendResendEmailEdge(payload: EmailPayload) {
 		return;
 	}
 
-	const response = await fetch(RESEND_API_BASE, {
+	const response = await workflowFetch(RESEND_API_BASE, {
 		method: "POST",
 		headers: {
 			Authorization: `Bearer ${resendKey}`,
