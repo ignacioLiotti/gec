@@ -1,12 +1,13 @@
 'use client';
 
-import type { Dispatch, SetStateAction } from "react";
+import { useMemo, type Dispatch, type SetStateAction } from "react";
 import { motion } from "framer-motion";
 import { Calendar, Mail, Plus, Trash2 } from "lucide-react";
 
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
 	Select,
 	SelectContent,
@@ -15,7 +16,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 
-import type { FlujoAction, ObraRole, ObraUser } from "./types";
+import type { FlujoAction, ObraRole, ObraUser, ObraUserRole } from "./types";
 
 type FlujoTabProps = {
 	isAddingFlujoAction: boolean;
@@ -28,6 +29,7 @@ type FlujoTabProps = {
 	setSelectedRecipientRoleId: Dispatch<SetStateAction<string>>;
 	obraUsers: ObraUser[];
 	obraRoles: ObraRole[];
+	obraUserRoles: ObraUserRole[];
 	saveFlujoAction: () => void | Promise<void>;
 	toggleFlujoAction: (id: string, enabled: boolean) => void | Promise<void>;
 	deleteFlujoAction: (id: string) => void | Promise<void>;
@@ -46,12 +48,38 @@ export function ObraFlujoTab({
 	setSelectedRecipientRoleId,
 	obraUsers,
 	obraRoles,
+	obraUserRoles,
 	saveFlujoAction,
 	toggleFlujoAction,
 	deleteFlujoAction,
 	flujoActions,
 	isLoadingFlujoActions,
 }: FlujoTabProps) {
+	const includeCalendarEvent = newFlujoAction.action_type === "calendar_event";
+
+	const getUserDisplayById = (userId: string) => {
+		const user = obraUsers.find((u) => u.id === userId);
+		if (!user) return null;
+		return user.full_name || user.email || user.id;
+	};
+
+	const roleUserMap = useMemo(() => {
+		const map = new Map<string, string[]>();
+		for (const role of obraRoles) {
+			map.set(role.id, []);
+		}
+		for (const relation of obraUserRoles) {
+			const display = getUserDisplayById(relation.user_id);
+			if (!display) continue;
+			const existing = map.get(relation.role_id) ?? [];
+			map.set(relation.role_id, [...existing, display]);
+		}
+		return map;
+	}, [obraRoles, obraUserRoles, obraUsers]);
+
+	const getUserLabel = (user: ObraUser) =>
+		user.full_name || user.email || user.id;
+
 	return (
 		<TabsContent value="flujo" className="space-y-6">
 			<motion.section
@@ -92,27 +120,24 @@ export function ObraFlujoTab({
 						>
 							<h3 className="text-sm font-semibold">Nueva Acción</h3>
 
-							<div>
-								<label className="text-sm font-medium mb-2 block">Tipo de acción</label>
-								<div className="flex gap-2">
-									<Button
-										type="button"
-										variant={newFlujoAction.action_type === "email" ? "default" : "outline"}
-										size="sm"
-										onClick={() => setNewFlujoAction((prev) => ({ ...prev, action_type: "email" }))}
-									>
-										<Mail className="h-4 w-4 mr-2" />
-										Email
-									</Button>
-									<Button
-										type="button"
-										variant={newFlujoAction.action_type === "calendar_event" ? "default" : "outline"}
-										size="sm"
-										onClick={() => setNewFlujoAction((prev) => ({ ...prev, action_type: "calendar_event" }))}
-									>
-										<Calendar className="h-4 w-4 mr-2" />
-										Evento de Calendario
-									</Button>
+							<div className="space-y-2 rounded-md border px-4 py-3">
+								<div className="flex items-center justify-between gap-6">
+									<div>
+										<label className="text-sm font-medium block">Evento de calendario</label>
+										<p className="text-xs text-muted-foreground">
+											Activá esta opción para crear un evento en el calendario. Podés combinarlo con
+											las notificaciones por email/app para avisar al mismo tiempo.
+										</p>
+									</div>
+									<Switch
+										checked={includeCalendarEvent}
+										onCheckedChange={(checked) =>
+											setNewFlujoAction((prev) => ({
+												...prev,
+												action_type: checked ? "calendar_event" : "email",
+											}))
+										}
+									/>
 								</div>
 							</div>
 
@@ -245,7 +270,16 @@ export function ObraFlujoTab({
 												</SelectItem>
 												{obraUsers.map((user) => (
 													<SelectItem key={user.id} value={user.id}>
-														<span className="text-xs">{user.full_name || user.id}</span>
+														<div className="flex flex-col text-xs">
+															<span className="font-medium">
+																{getUserLabel(user)}
+															</span>
+															{user.full_name && user.email ? (
+																<span className="text-[10px] text-muted-foreground">
+																	{user.email}
+																</span>
+															) : null}
+														</div>
 													</SelectItem>
 												))}
 											</SelectContent>
@@ -266,11 +300,23 @@ export function ObraFlujoTab({
 												<SelectItem value="none">
 													<span className="text-xs text-muted-foreground">Ninguno</span>
 												</SelectItem>
-												{obraRoles.map((role) => (
-													<SelectItem key={role.id} value={role.id}>
-														<span className="text-xs">{role.name || role.key}</span>
-													</SelectItem>
-												))}
+												{obraRoles.map((role) => {
+													const members = roleUserMap.get(role.id) ?? [];
+													return (
+														<SelectItem key={role.id} value={role.id}>
+															<div className="flex flex-col text-xs">
+																<span className="font-medium">
+																	{role.name || role.key}
+																</span>
+																<span className="text-[10px] text-muted-foreground">
+																	{members.length
+																		? members.join(", ")
+																		: "Sin usuarios asignados"}
+																</span>
+															</div>
+														</SelectItem>
+													);
+												})}
 											</SelectContent>
 										</Select>
 									</div>
@@ -380,10 +426,10 @@ export function ObraFlujoTab({
 									<div className="flex items-start justify-between">
 										<div className="flex-1">
 											<div className="flex items-center gap-2 mb-2">
-												{action.action_type === "email" ? (
-													<Mail className="h-4 w-4 text-primary" />
-												) : (
+												{action.action_type === "calendar_event" ? (
 													<Calendar className="h-4 w-4 text-primary" />
+												) : (
+													<Mail className="h-4 w-4 text-primary" />
 												)}
 												<h4 className="font-semibold text-sm">{action.title}</h4>
 												<span
@@ -398,7 +444,11 @@ export function ObraFlujoTab({
 												<p className="text-sm text-muted-foreground mb-2">{action.message}</p>
 											)}
 											<div className="flex items-center gap-4 text-xs text-muted-foreground">
-												<span>{action.action_type === "email" ? "Email" : "Evento de Calendario"}</span>
+												<span>
+													{action.action_type === "calendar_event"
+														? "Evento de calendario"
+														: "Notificación"}
+												</span>
 												<span>•</span>
 												<span>
 													{action.timing_mode === "immediate" && "Inmediato"}

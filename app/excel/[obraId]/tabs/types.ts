@@ -17,7 +17,11 @@ export type NewCertificateFormState = {
 };
 
 export type ObraRole = { id: string; key: string; name: string | null };
-export type ObraUser = { id: string; full_name: string | null };
+export type ObraUser = {
+	id: string;
+	full_name: string | null;
+	email: string | null;
+};
 export type ObraUserRole = { user_id: string; role_id: string };
 
 export type FlujoAction = {

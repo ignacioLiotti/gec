@@ -1160,6 +1160,7 @@ export default function ObraDetailPage() {
 								setSelectedRecipientRoleId={setSelectedRecipientRoleId}
 								obraUsers={obraUsers}
 								obraRoles={obraRoles}
+								obraUserRoles={obraUserRoles}
 								saveFlujoAction={saveFlujoAction}
 								toggleFlujoAction={toggleFlujoAction}
 								deleteFlujoAction={deleteFlujoAction}

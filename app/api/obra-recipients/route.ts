@@ -54,6 +54,8 @@ export async function GET(request: Request) {
 		const roleIds = (roles ?? []).map((r: any) => r.id as string);
 		const memberIds = (memberships ?? []).map((m: any) => m.user_id as string);
 
+		const uniqueMemberIds = Array.from(new Set(memberIds));
+
 		const [{ data: userRoles }, { data: profiles }] = await Promise.all([
 			roleIds.length
 				? admin
@@ -61,19 +63,48 @@ export async function GET(request: Request) {
 						.select("user_id,role_id")
 						.in("role_id", roleIds)
 				: Promise.resolve({ data: [] as any[] }),
-			memberIds.length
-				? supabase
+			uniqueMemberIds.length
+				? admin
 						.from("profiles")
 						.select("user_id,full_name")
-						.in("user_id", memberIds)
+						.in("user_id", uniqueMemberIds)
 				: Promise.resolve({ data: [] as any[] }),
 		]);
 
-		const users =
-			profiles?.map((p: any) => ({
-				id: p.user_id as string,
-				full_name: (p.full_name as string | null) ?? null,
-			})) ?? [];
+		const profileNameMap = new Map(
+			(profiles ?? []).map((p: any) => [
+				p.user_id as string,
+				(p.full_name as string | null) ?? null,
+			])
+		);
+
+		const emailMap = new Map<string, string | null>();
+		if (uniqueMemberIds.length) {
+			const lookups = await Promise.all(
+				uniqueMemberIds.map(async (userId) => {
+					try {
+						const { data } = await admin.auth.admin.getUserById(userId);
+						return { userId, email: data?.user?.email ?? null };
+					} catch (error) {
+						console.error("[obra-recipients] failed to fetch user email", {
+							userId,
+							error,
+						});
+						return { userId, email: null };
+					}
+				})
+			);
+
+			for (const result of lookups) {
+				emailMap.set(result.userId, result.email);
+			}
+		}
+
+		const users = uniqueMemberIds.map((id) => ({
+			id,
+			full_name: profileNameMap.get(id) ?? null,
+			email: emailMap.get(id) ?? null,
+		}));
 
 		return NextResponse.json({
 			roles:

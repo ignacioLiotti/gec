@@ -186,10 +186,10 @@ export async function executeFlujoActions(
 				notification_types: notificationTypes,
 			};
 
-			// For email-type actions, we still create notifications; for calendar_event
-			// actions we now create rows in calendar_events instead, so they only
-			// appear once the obra has actually completed.
-			if (action.action_type === "calendar_event") {
+			const shouldCreateCalendarEvent = action.action_type === "calendar_event";
+			const shouldSendNotifications = notificationTypes.length > 0;
+
+			if (shouldCreateCalendarEvent) {
 				if (!tenantId) {
 					console.warn(
 						"Skipping calendar_event flujo action because tenantId is null",
@@ -249,7 +249,9 @@ export async function executeFlujoActions(
 						}
 					}
 				}
-			} else {
+			}
+
+			if (shouldSendNotifications) {
 				for (const recipientId of recipients) {
 					const { data: executionRow, error: executionError } = await adminSupabase
 						.from("obra_flujo_executions")
