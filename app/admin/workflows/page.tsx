@@ -139,7 +139,7 @@ export default async function WorkflowMonitorPage({
 	const rows = executionRows ?? [];
 	const stats = rows.reduce(
 		(acc, row) => {
-			acc[row.status] = (acc[row.status] ?? 0) + 1;
+			acc[row.status as "pending" | "completed" | "failed"] = (acc[row.status as "pending" | "completed" | "failed"] ?? 0) + 1;
 			return acc;
 		},
 		{ pending: 0, completed: 0, failed: 0 } as Record<
@@ -191,14 +191,14 @@ export default async function WorkflowMonitorPage({
 							<tr key={row.id} className="border-t">
 								<td className="px-3 py-2 align-top">
 									<div className="font-medium">
-										{row.flujo_action?.title ?? "Acción"}
+										{row.flujo_action?.[0]?.title ?? "Acción"}
 									</div>
 									<div className="text-xs text-muted-foreground">
-										{row.flujo_action?.action_type ?? "-"}
+										{row.flujo_action?.[0]?.action_type ?? "-"}
 									</div>
 								</td>
 								<td className="px-3 py-2 align-top">
-									{row.obra?.designacion_y_ubicacion ?? row.obra?.id ?? "-"}
+									{row.obra?.[0]?.designacion_y_ubicacion ?? row.obra?.[0]?.id ?? "-"}
 								</td>
 								<td className="px-3 py-2 align-top">
 									{renderRecipient(row.recipient_user_id, profileMap)}
