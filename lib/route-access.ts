@@ -88,6 +88,10 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
+		path: "/workflow-test",
+		allowedRoles: ["admin"],
+	},
+	{
 		path: "/profile",
 		// Perfil accesible para cualquier usuario autenticado
 		allowedRoles: [],
