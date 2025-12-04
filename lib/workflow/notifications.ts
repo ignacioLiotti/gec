@@ -1,4 +1,4 @@
-import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { workflowSupabase } from "@/app/workflow/supabase-client";
 
 type NotificationInsert = {
 	user_id?: string | null;
@@ -12,8 +12,7 @@ type NotificationInsert = {
 };
 
 export async function insertNotificationEdge(row: NotificationInsert): Promise<void> {
-	const client = createSupabaseAdminClient();
-	const { error } = await client.rpc("workflow_insert_notification", {
+	const { error } = await workflowSupabase.rpc("workflow_insert_notification", {
 		payload: row,
 	});
 	if (error) {
