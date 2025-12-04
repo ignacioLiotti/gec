@@ -271,6 +271,13 @@ export async function executeFlujoActions(
 					const executionId = executionRow?.id ?? null;
 
 					try {
+						console.info("Scheduling flujo notification workflow", {
+							actionId: action.id,
+							recipientId,
+							executionId,
+							notificationTypes,
+							executeAt: scheduledAtIso,
+						});
 						await emitEvent("flujo.action.triggered", {
 							tenantId,
 							actorId: currentUserId,

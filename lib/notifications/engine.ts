@@ -45,7 +45,30 @@ export async function emitEvent(
 	ctx: EventContext
 ): Promise<void> {
 	const expandedEffects = await expandEffectsForEvent(eventType, ctx);
-	if (!expandedEffects.length) return;
+	if (!expandedEffects.length) {
+		console.info("[notifications] emitEvent skipped (no effects)", {
+			eventType,
+			context: {
+				tenantId: ctx.tenantId ?? null,
+				actorId: ctx.actorId ?? null,
+				executionId: ctx.executionId ?? null,
+			},
+		});
+		return;
+	}
+	const recipients = Array.from(
+		new Set(
+			expandedEffects
+				.map((eff) => eff.recipientId)
+				.filter((id): id is string => Boolean(id))
+		)
+	);
+	console.info("[notifications] emitEvent scheduling workflow", {
+		eventType,
+		effectCount: expandedEffects.length,
+		recipients,
+		executionId: ctx.executionId ?? null,
+	});
 	await start(deliverEffectsWorkflow, [expandedEffects]);
 }
 

@@ -29,6 +29,11 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 		(effects[0]?.ctx?.executionId as string | null | undefined) ??
 		null;
 
+	console.info("[workflow] deliverEffectsWorkflow started", {
+		effectCount: effects.length,
+		executionId,
+	});
+
 	try {
 		for (const eff of effects) {
 			const shouldSend =
@@ -39,6 +44,14 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 			if (at && at !== "now") {
 				await sleep(new Date(at));
 			}
+
+			console.info("[workflow] delivering effect", {
+				executionId,
+				channel: eff.channel,
+				recipientId: eff.recipientId ?? null,
+				eventType: eff.ctx?.eventType ?? eff.ctx?.type ?? "unknown",
+				when: at === "now" || !at ? "now" : at,
+			});
 
 			if (eff.channel === "in-app") {
 				("use step");
@@ -54,6 +67,10 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 					pendiente_id: (eff.ctx?.pendienteId as string | null) ?? null,
 					data: eff.data?.(eff.ctx) ?? {},
 				});
+				console.info("[workflow] in-app notification inserted", {
+					executionId,
+					recipientId: eff.recipientId ?? null,
+				});
 			} else if (eff.channel === "email") {
 				("use step");
 				if (!eff.recipientEmail) continue;
@@ -68,6 +85,11 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 					subject,
 					html,
 				});
+				console.info("[workflow] email queued", {
+					executionId,
+					to: eff.recipientEmail,
+					subject,
+				});
 			}
 		}
 
@@ -78,6 +100,10 @@ export async function deliverEffectsWorkflow(effects: ExpandedEffect[]) {
 			});
 		}
 	} catch (error: any) {
+		console.error("[workflow] delivery failed", {
+			executionId,
+			error,
+		});
 		if (executionId) {
 			await markFlujoExecutionStatusEdge({
 				id: executionId,
