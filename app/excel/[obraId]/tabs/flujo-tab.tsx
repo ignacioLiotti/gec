@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type Dispatch, type SetStateAction } from "react";
+import { useMemo, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { motion } from "framer-motion";
 import { Calendar, Mail, Plus, Trash2 } from "lucide-react";
 
@@ -8,6 +8,7 @@ import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
 	Select,
 	SelectContent,
@@ -17,6 +18,27 @@ import {
 } from "@/components/ui/select";
 
 import type { FlujoAction, ObraRole, ObraUser, ObraUserRole } from "./types";
+
+const OFFSET_UNIT_LABELS: Record<NonNullable<FlujoAction["offset_unit"]>, string> = {
+	minutes: "Minutos",
+	hours: "Horas",
+	days: "Días",
+	weeks: "Semanas",
+	months: "Meses",
+};
+
+const DetailField = ({ label, children }: { label: string; children: ReactNode }) => (
+	<div className="space-y-1 rounded-md border border-dashed border-border/60 bg-background/50 p-3">
+		<p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+		<div className="text-sm text-foreground">{children}</div>
+	</div>
+);
+
+const formatScheduledDate = (value: string) => {
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return value;
+	return date.toLocaleString();
+};
 
 type FlujoTabProps = {
 	isAddingFlujoAction: boolean;
@@ -415,86 +437,139 @@ export function ObraFlujoTab({
 								No hay acciones configuradas. Crea una nueva acción para comenzar.
 							</p>
 						) : (
-							flujoActions.map((action, idx) => (
-								<motion.div
-									key={action.id}
-									initial={{ opacity: 0, y: 8 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ delay: idx * 0.05 }}
-									className={`rounded-lg border p-4 ${!action.enabled ? "opacity-50" : ""}`}
-								>
-									<div className="flex items-start justify-between">
-										<div className="flex-1">
-											<div className="flex items-center gap-2 mb-2">
-												{action.action_type === "calendar_event" ? (
-													<Calendar className="h-4 w-4 text-primary" />
-												) : (
-													<Mail className="h-4 w-4 text-primary" />
-												)}
-												<h4 className="font-semibold text-sm">{action.title}</h4>
-												<span
-													className={`text-xs px-2 py-0.5 rounded-full ${
-														action.enabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
-													}`}
-												>
-													{action.enabled ? "Activa" : "Inactiva"}
-												</span>
-											</div>
-											{action.message && (
-												<p className="text-sm text-muted-foreground mb-2">{action.message}</p>
-											)}
-											<div className="flex items-center gap-4 text-xs text-muted-foreground">
-												<span>
-													{action.action_type === "calendar_event"
-														? "Evento de calendario"
-														: "Notificación"}
-												</span>
-												<span>•</span>
-												<span>
-													{action.timing_mode === "immediate" && "Inmediato"}
-													{action.timing_mode === "offset" &&
-														`${action.offset_value} ${action.offset_unit} después`}
-													{action.timing_mode === "scheduled" &&
-														action.scheduled_date &&
-														`Fecha: ${new Date(action.scheduled_date).toLocaleDateString()}`}
-												</span>
-												{action.notification_types && action.notification_types.length > 0 && (
-													<>
-														<span>•</span>
-														<span className="flex items-center gap-1">
-															{action.notification_types.includes("in_app") && (
-																<span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">App</span>
-															)}
-															{action.notification_types.includes("email") && (
-																<span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Email</span>
-															)}
+							flujoActions.map((action, idx) => {
+								const recipients = (action.recipient_user_ids ?? []).map((userId) => ({
+									userId,
+									label: getUserDisplayById(userId) || `Usuario ${userId.slice(0, 6)}…`,
+								}));
+								const notificationTypes = action.notification_types ?? [];
+								const timingSummary =
+									action.timing_mode === "immediate"
+										? "Inmediato"
+										: action.timing_mode === "offset" && action.offset_value && action.offset_unit
+											? `Después de ${action.offset_value} ${OFFSET_UNIT_LABELS[action.offset_unit] ?? action.offset_unit}`
+											: action.timing_mode === "scheduled" && action.scheduled_date
+												? `Fecha específica: ${formatScheduledDate(action.scheduled_date)}`
+												: "Sin configuración";
+
+								return (
+									<motion.div
+										key={action.id}
+										initial={{ opacity: 0, y: 8 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: idx * 0.05 }}
+										className={`rounded-lg border p-4 ${!action.enabled ? "opacity-50" : ""}`}
+									>
+										<div className="flex flex-col gap-4">
+											<div className="flex items-start justify-between gap-3">
+												<div className="flex-1">
+													<div className="flex flex-wrap items-center gap-2 mb-2">
+														{action.action_type === "calendar_event" ? (
+															<Calendar className="h-4 w-4 text-primary" />
+														) : (
+															<Mail className="h-4 w-4 text-primary" />
+														)}
+														<h4 className="font-semibold text-sm">{action.title}</h4>
+														<span
+															className={`text-xs px-2 py-0.5 rounded-full ${
+																action.enabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+															}`}
+														>
+															{action.enabled ? "Activa" : "Inactiva"}
 														</span>
+													</div>
+												</div>
+												<div className="flex items-center gap-2">
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														onClick={() => toggleFlujoAction(action.id, !action.enabled)}
+													>
+														{action.enabled ? "Desactivar" : "Activar"}
+													</Button>
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														onClick={() => deleteFlujoAction(action.id)}
+														className="text-destructive hover:text-destructive hover:bg-destructive/10"
+													>
+														<Trash2 className="h-4 w-4" />
+													</Button>
+												</div>
+											</div>
+
+											<div className="grid gap-3 md:grid-cols-2">
+												<DetailField label="Evento de calendario">
+													{action.action_type === "calendar_event" ? "Sí" : "No"}
+												</DetailField>
+												<DetailField label="¿Cuándo ejecutar?">{timingSummary}</DetailField>
+												{action.timing_mode === "offset" && action.offset_value && action.offset_unit ? (
+													<>
+														<DetailField label="Cantidad programada">{action.offset_value}</DetailField>
+														<DetailField label="Unidad">
+															{OFFSET_UNIT_LABELS[action.offset_unit] ?? action.offset_unit}
+														</DetailField>
 													</>
-												)}
+												) : null}
+												{action.timing_mode === "scheduled" && action.scheduled_date ? (
+													<DetailField label="Fecha programada">
+														{formatScheduledDate(action.scheduled_date)}
+													</DetailField>
+												) : null}
+											</div>
+
+											<div className="grid gap-3 md:grid-cols-2">
+												<DetailField label="Título">{action.title || "Sin título"}</DetailField>
+												<DetailField label="Mensaje">
+													{action.message ? (
+														<p className="text-sm text-muted-foreground whitespace-pre-wrap">{action.message}</p>
+													) : (
+														<span className="text-sm text-muted-foreground">Sin mensaje</span>
+													)}
+												</DetailField>
+											</div>
+
+											<div className="grid gap-3 md:grid-cols-2">
+												<DetailField label="Destinatarios">
+													{recipients.length ? (
+														<div className="flex flex-wrap gap-2">
+															{recipients.map(({ userId, label }) => (
+																<Badge variant="outline" key={`${action.id}-${userId}`}>
+																	{label}
+																</Badge>
+															))}
+														</div>
+													) : (
+														<span className="text-sm text-muted-foreground">
+															Se notificará solo al creador de la acción
+														</span>
+													)}
+												</DetailField>
+												<DetailField label="Tipo de notificación">
+													{notificationTypes.length ? (
+														<div className="flex flex-wrap gap-2">
+															{notificationTypes.includes("in_app") && (
+																<Badge className="bg-blue-100 text-blue-700" variant="secondary">
+																	App
+																</Badge>
+															)}
+															{notificationTypes.includes("email") && (
+																<Badge className="bg-purple-100 text-purple-700" variant="secondary">
+																	Email
+																</Badge>
+															)}
+														</div>
+													) : (
+														<span className="text-sm text-muted-foreground">No configurado</span>
+													)}
+												</DetailField>
 											</div>
 										</div>
-										<div className="flex items-center gap-2">
-											<Button
-												type="button"
-												variant="ghost"
-												size="sm"
-												onClick={() => toggleFlujoAction(action.id, !action.enabled)}
-											>
-												{action.enabled ? "Desactivar" : "Activar"}
-											</Button>
-											<Button
-												type="button"
-												variant="ghost"
-												size="sm"
-												onClick={() => deleteFlujoAction(action.id)}
-												className="text-destructive hover:text-destructive hover:bg-destructive/10"
-											>
-												<Trash2 className="h-4 w-4" />
-											</Button>
-										</div>
-									</div>
-								</motion.div>
-							))
+									</motion.div>
+								);
+							})
 						)}
 					</div>
 				</div>
