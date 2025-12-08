@@ -37,6 +37,10 @@ export type FlujoAction = {
 	notification_types: ("in_app" | "email")[];
 	enabled: boolean;
 	executed_at: string | null;
+	/** When the action is scheduled to execute (set when obra reaches 100%) */
+	scheduled_for: string | null;
+	/** When the obra reached 100% and triggered this action */
+	triggered_at: string | null;
 };
 
 export type MaterialItem = {

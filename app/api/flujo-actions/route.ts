@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { emitEvent } from "@/lib/notifications/engine";
 import { z } from "zod";
 import {
 	ApiValidationError,
@@ -91,10 +93,10 @@ export async function GET(request: Request) {
 		const actionIds = actions?.map((a) => a.id) ?? [];
 		const { data: executions } = await supabase
 			.from("obra_flujo_executions")
-			.select("flujo_action_id, executed_at, status, scheduled_for")
+			.select("flujo_action_id, executed_at, status, scheduled_for, created_at")
 			.in("flujo_action_id", actionIds)
 			.eq("obra_id", obraId)
-			.order("executed_at", { ascending: false });
+			.order("created_at", { ascending: true });
 
 		// Group executions by action ID and determine overall status
 		// An action is "completed" only when ALL its executions are completed
@@ -102,6 +104,7 @@ export async function GET(request: Request) {
 			status: string;
 			executed_at: string | null;
 			scheduled_for: string | null;
+			created_at: string | null;
 		}>>();
 
 		for (const exec of executions ?? []) {
@@ -110,6 +113,7 @@ export async function GET(request: Request) {
 				status: exec.status,
 				executed_at: exec.executed_at,
 				scheduled_for: exec.scheduled_for,
+				created_at: exec.created_at,
 			});
 			executionsByAction.set(exec.flujo_action_id, existing);
 		}
@@ -120,23 +124,42 @@ export async function GET(request: Request) {
 
 			if (!actionExecutions || actionExecutions.length === 0) {
 				// No executions - action was never triggered
-				return { ...action, executed_at: null };
+				return { ...action, executed_at: null, scheduled_for: null, triggered_at: null };
 			}
 
 			// Check if ALL executions are completed
 			const allCompleted = actionExecutions.every((e) => e.status === "completed");
-			const anyFailed = actionExecutions.some((e) => e.status === "failed");
+
+			// Get the earliest triggered_at (when obra reached 100%)
+			const triggeredAt = actionExecutions
+				.filter((e) => e.created_at)
+				.sort((a, b) => new Date(a.created_at!).getTime() - new Date(b.created_at!).getTime())[0]?.created_at ?? null;
+
+			// Get the latest scheduled_for (when notification will be delivered)
+			const scheduledFor = actionExecutions
+				.filter((e) => e.scheduled_for)
+				.sort((a, b) => new Date(b.scheduled_for!).getTime() - new Date(a.scheduled_for!).getTime())[0]?.scheduled_for ?? null;
 
 			if (allCompleted) {
 				// Find the latest executed_at timestamp
 				const latestExecution = actionExecutions
 					.filter((e) => e.executed_at)
 					.sort((a, b) => new Date(b.executed_at!).getTime() - new Date(a.executed_at!).getTime())[0];
-				return { ...action, executed_at: latestExecution?.executed_at ?? null };
+				return {
+					...action,
+					executed_at: latestExecution?.executed_at ?? null,
+					scheduled_for: scheduledFor,
+					triggered_at: triggeredAt,
+				};
 			}
 
 			// If any failed or still pending, action is not fully completed
-			return { ...action, executed_at: null };
+			return {
+				...action,
+				executed_at: null,
+				scheduled_for: scheduledFor,
+				triggered_at: triggeredAt,
+			};
 		});
 
 		return NextResponse.json({ actions: actionsWithExecution });
@@ -267,6 +290,7 @@ export async function PUT(request: Request) {
 		} = await validateJsonBody(request, FlujoActionsUpdateSchema);
 
 		const supabase = await createClient();
+		const adminSupabase = createSupabaseAdminClient();
 
 		// Get current user
 		const { data: { user } } = await supabase.auth.getUser();
@@ -276,6 +300,10 @@ export async function PUT(request: Request) {
 				{ status: 401 }
 			);
 		}
+
+		// Check if timing is being changed - if so, we need to reschedule
+		const timingChanged = timingMode !== undefined || offsetValue !== undefined ||
+			offsetUnit !== undefined || scheduledDate !== undefined;
 
 		// Build update object
 		const updates: any = { updated_at: new Date().toISOString() };
@@ -302,11 +330,12 @@ export async function PUT(request: Request) {
 				: ["in_app"];
 		}
 
+		// Update the action in database
 		const { data: action, error: updateError } = await supabase
 			.from("obra_flujo_actions")
 			.update(updates)
 			.eq("id", id)
-			.select()
+			.select("*, obras!inner(tenant_id)")
 			.single();
 
 		if (updateError) {
@@ -315,6 +344,143 @@ export async function PUT(request: Request) {
 				{ error: "Failed to update flujo action" },
 				{ status: 500 }
 			);
+		}
+
+		// If timing changed, reschedule pending executions
+		if (timingChanged && action) {
+			// Fetch pending executions for this action
+			const { data: pendingExecutions } = await adminSupabase
+				.from("obra_flujo_executions")
+				.select("id, created_at, recipient_user_id, notification_types")
+				.eq("flujo_action_id", id)
+				.eq("status", "pending");
+
+			if (pendingExecutions && pendingExecutions.length > 0) {
+				// Get the original trigger time (when obra reached 100%)
+				const triggeredAt = new Date(pendingExecutions[0].created_at);
+
+				// Calculate new executeAt based on the NEW timing settings
+				// but relative to the ORIGINAL trigger time
+				let newExecuteAt: Date | null = null;
+				const finalTimingMode = action.timing_mode;
+				const finalOffsetValue = action.offset_value || 0;
+				const finalOffsetUnit = action.offset_unit || "days";
+				const finalScheduledDate = action.scheduled_date;
+
+				if (finalTimingMode === "immediate") {
+					// For immediate, execute now (or as soon as possible)
+					newExecuteAt = new Date();
+				} else if (finalTimingMode === "offset") {
+					// Calculate based on original trigger time + new offset
+					newExecuteAt = new Date(triggeredAt);
+					switch (finalOffsetUnit) {
+						case "minutes":
+							newExecuteAt = new Date(triggeredAt.getTime() + finalOffsetValue * 60 * 1000);
+							break;
+						case "hours":
+							newExecuteAt = new Date(triggeredAt.getTime() + finalOffsetValue * 60 * 60 * 1000);
+							break;
+						case "days":
+							newExecuteAt = new Date(triggeredAt.getTime() + finalOffsetValue * 24 * 60 * 60 * 1000);
+							break;
+						case "weeks":
+							newExecuteAt = new Date(triggeredAt.getTime() + finalOffsetValue * 7 * 24 * 60 * 60 * 1000);
+							break;
+						case "months":
+							newExecuteAt = new Date(triggeredAt);
+							newExecuteAt.setMonth(newExecuteAt.getMonth() + finalOffsetValue);
+							break;
+					}
+
+					// If the new time is in the past, execute now
+					if (newExecuteAt && newExecuteAt.getTime() < Date.now()) {
+						newExecuteAt = new Date();
+					}
+				} else if (finalTimingMode === "scheduled" && finalScheduledDate) {
+					newExecuteAt = new Date(finalScheduledDate);
+					// If scheduled time is in the past, execute now
+					if (newExecuteAt.getTime() < Date.now()) {
+						newExecuteAt = new Date();
+					}
+				}
+
+				if (newExecuteAt) {
+					const newScheduledFor = newExecuteAt.toISOString();
+					const tenantId = (action as any).obras?.tenant_id;
+					const notifTypes = action.notification_types?.length > 0
+						? action.notification_types
+						: ["in_app"];
+
+					console.info("Rescheduling flujo action", {
+						actionId: id,
+						oldExecutions: pendingExecutions.length,
+						newScheduledFor,
+						triggeredAt: triggeredAt.toISOString(),
+					});
+
+					// Delete old pending executions
+					await adminSupabase
+						.from("obra_flujo_executions")
+						.delete()
+						.eq("flujo_action_id", id)
+						.eq("status", "pending");
+
+					// Create new executions and emit events for each recipient
+					for (const oldExec of pendingExecutions) {
+						const recipientId = oldExec.recipient_user_id;
+
+						// Create new execution record
+						const { data: newExecution, error: execError } = await adminSupabase
+							.from("obra_flujo_executions")
+							.insert({
+								flujo_action_id: id,
+								obra_id: action.obra_id,
+								recipient_user_id: recipientId,
+								scheduled_for: newScheduledFor,
+								notification_types: notifTypes,
+								status: "pending",
+							})
+							.select("id")
+							.single();
+
+						if (execError) {
+							console.error("Failed to create rescheduled execution", {
+								actionId: id,
+								recipientId,
+								error: execError,
+							});
+							continue;
+						}
+
+						// Emit new event for the workflow
+						try {
+							await emitEvent("flujo.action.triggered", {
+								tenantId,
+								actorId: user.id,
+								recipientId,
+								obraId: action.obra_id,
+								actionId: id,
+								title: action.title,
+								message: action.message,
+								executeAt: newScheduledFor,
+								notificationTypes: notifTypes,
+								executionId: newExecution?.id,
+							});
+							console.info("Rescheduled flujo workflow emitted", {
+								actionId: id,
+								recipientId,
+								newScheduledFor,
+							});
+						} catch (eventError) {
+							console.error("Failed to emit rescheduled workflow", {
+								actionId: id,
+								recipientId,
+								error: eventError,
+							});
+						}
+					}
+				}
+			}
 		}
 
 		return NextResponse.json({ action });

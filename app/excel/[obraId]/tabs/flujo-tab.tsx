@@ -81,6 +81,10 @@ export function ObraFlujoTab({
 	const [editingActionId, setEditingActionId] = useState<string | null>(null);
 	const [editingTitle, setEditingTitle] = useState("");
 	const [editingMessage, setEditingMessage] = useState("");
+	const [editingTimingMode, setEditingTimingMode] = useState<"immediate" | "offset" | "scheduled">("immediate");
+	const [editingOffsetValue, setEditingOffsetValue] = useState<number>(1);
+	const [editingOffsetUnit, setEditingOffsetUnit] = useState<"minutes" | "hours" | "days" | "weeks" | "months">("days");
+	const [editingScheduledDate, setEditingScheduledDate] = useState<string>("");
 
 	const getUserDisplayById = (userId: string) => {
 		const user = obraUsers.find((u) => u.id === userId);
@@ -789,6 +793,24 @@ export function ObraFlujoTab({
 																				)}
 																			</div>
 
+																			{/* Scheduled execution time for triggered but not-yet-executed actions */}
+																			{!isExecuted && action.scheduled_for && (
+																				<div className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl shadow-sm shadow-amber-500/20">
+																					<Timer className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+																					<div>
+																						<span className="text-amber-700 dark:text-amber-300 text-sm font-medium block">Programada para ejecutar</span>
+																						<span className="text-amber-600/70 dark:text-amber-400/70 text-xs">
+																							{formatScheduledDate(action.scheduled_for)}
+																						</span>
+																						{action.triggered_at && (
+																							<span className="text-amber-600/50 dark:text-amber-400/50 text-xs block">
+																								(Obra completada: {formatScheduledDate(action.triggered_at)})
+																							</span>
+																						)}
+																					</div>
+																				</div>
+																			)}
+
 																			{/* Execution Info for completed actions */}
 																			{isExecuted && action.executed_at && (
 																				<div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl shadow-sm shadow-emerald-500/20">
@@ -828,6 +850,91 @@ export function ObraFlujoTab({
 																							placeholder="Mensaje de la acción"
 																						/>
 																					</div>
+
+																					{/* Timing Section */}
+																					<div className="space-y-2">
+																						<label className="text-xs font-medium text-foreground flex items-center gap-1">
+																							<Clock className="w-3 h-3" />
+																							¿Cuándo ejecutar?
+																						</label>
+																						<div className="flex gap-2 flex-wrap">
+																							<Button
+																								type="button"
+																								variant={editingTimingMode === "immediate" ? "default" : "outline"}
+																								size="sm"
+																								onClick={(e) => {
+																									e.stopPropagation();
+																									setEditingTimingMode("immediate");
+																								}}
+																							>
+																								Inmediato
+																							</Button>
+																							<Button
+																								type="button"
+																								variant={editingTimingMode === "offset" ? "default" : "outline"}
+																								size="sm"
+																								onClick={(e) => {
+																									e.stopPropagation();
+																									setEditingTimingMode("offset");
+																								}}
+																							>
+																								Después de X tiempo
+																							</Button>
+																							<Button
+																								type="button"
+																								variant={editingTimingMode === "scheduled" ? "default" : "outline"}
+																								size="sm"
+																								onClick={(e) => {
+																									e.stopPropagation();
+																									setEditingTimingMode("scheduled");
+																								}}
+																							>
+																								Fecha específica
+																							</Button>
+																						</div>
+																					</div>
+
+																					{editingTimingMode === "offset" && (
+																						<div className="flex gap-2 items-end">
+																							<div className="flex-1">
+																								<label className="text-xs font-medium text-foreground mb-1 block">Cantidad</label>
+																								<Input
+																									type="number"
+																									min="1"
+																									value={editingOffsetValue}
+																									onChange={(e) => setEditingOffsetValue(parseInt(e.target.value, 10) || 1)}
+																									className="text-sm"
+																								/>
+																							</div>
+																							<div className="flex-1">
+																								<label className="text-xs font-medium text-foreground mb-1 block">Unidad</label>
+																								<select
+																									className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+																									value={editingOffsetUnit}
+																									onChange={(e) => setEditingOffsetUnit(e.target.value as typeof editingOffsetUnit)}
+																								>
+																									<option value="minutes">Minutos</option>
+																									<option value="hours">Horas</option>
+																									<option value="days">Días</option>
+																									<option value="weeks">Semanas</option>
+																									<option value="months">Meses</option>
+																								</select>
+																							</div>
+																						</div>
+																					)}
+
+																					{editingTimingMode === "scheduled" && (
+																						<div className="space-y-1">
+																							<label className="text-xs font-medium text-foreground">Fecha y hora</label>
+																							<Input
+																								type="datetime-local"
+																								value={editingScheduledDate}
+																								onChange={(e) => setEditingScheduledDate(e.target.value)}
+																								className="text-sm"
+																							/>
+																						</div>
+																					)}
+
 																					<div className="flex gap-2 pt-2">
 																						<Button
 																							type="button"
@@ -837,6 +944,10 @@ export function ObraFlujoTab({
 																								updateFlujoAction(action.id, {
 																									title: editingTitle,
 																									message: editingMessage,
+																									timing_mode: editingTimingMode,
+																									offset_value: editingTimingMode === "offset" ? editingOffsetValue : null,
+																									offset_unit: editingTimingMode === "offset" ? editingOffsetUnit : null,
+																									scheduled_date: editingTimingMode === "scheduled" ? editingScheduledDate : null,
 																								});
 																								setEditingActionId(null);
 																							}}
@@ -871,6 +982,10 @@ export function ObraFlujoTab({
 																							setEditingActionId(action.id);
 																							setEditingTitle(action.title);
 																							setEditingMessage(action.message || "");
+																							setEditingTimingMode(action.timing_mode);
+																							setEditingOffsetValue(action.offset_value || 1);
+																							setEditingOffsetUnit(action.offset_unit || "days");
+																							setEditingScheduledDate(action.scheduled_date || "");
 																						}}
 																						className="flex-1 h-11 hover:bg-muted transition-colors"
 																					>

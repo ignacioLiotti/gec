@@ -906,21 +906,45 @@ export default function ObraDetailPage() {
 		if (!obraId || obraId === "undefined") return;
 
 		try {
+			// Convert snake_case to camelCase for API
+			const apiPayload: Record<string, unknown> = { id: actionId };
+			if (updates.title !== undefined) apiPayload.title = updates.title;
+			if (updates.message !== undefined) apiPayload.message = updates.message;
+			if (updates.timing_mode !== undefined) apiPayload.timingMode = updates.timing_mode;
+			if (updates.offset_value !== undefined) apiPayload.offsetValue = updates.offset_value;
+			if (updates.offset_unit !== undefined) apiPayload.offsetUnit = updates.offset_unit;
+			if (updates.scheduled_date !== undefined) apiPayload.scheduledDate = updates.scheduled_date;
+			if (updates.enabled !== undefined) apiPayload.enabled = updates.enabled;
+			if (updates.notification_types !== undefined) apiPayload.notificationTypes = updates.notification_types;
+
+			// Check if timing is being changed - need to reload to get new scheduled_for
+			const timingChanged = updates.timing_mode !== undefined ||
+				updates.offset_value !== undefined ||
+				updates.offset_unit !== undefined ||
+				updates.scheduled_date !== undefined;
+
 			const res = await fetch("/api/flujo-actions", {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ id: actionId, ...updates }),
+				body: JSON.stringify(apiPayload),
 			});
 			if (!res.ok) throw new Error("Failed to update flujo action");
-			setFlujoActions((prev) =>
-				prev.map((a) => (a.id === actionId ? { ...a, ...updates } : a))
-			);
+
+			// If timing changed, reload all actions to get updated scheduled_for
+			// Otherwise just update locally
+			if (timingChanged) {
+				await loadFlujoActions();
+			} else {
+				setFlujoActions((prev) =>
+					prev.map((a) => (a.id === actionId ? { ...a, ...updates } : a))
+				);
+			}
 			toast.success("Acción actualizada correctamente");
 		} catch (err) {
 			console.error("Error updating flujo action:", err);
 			toast.error("No se pudo actualizar la acción");
 		}
-	}, [obraId]);
+	}, [obraId, loadFlujoActions]);
 
 	const refreshCertificates = useCallback(async () => {
 		if (!obraId || obraId === "undefined") {
