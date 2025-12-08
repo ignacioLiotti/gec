@@ -49,13 +49,13 @@ const FlujoActionsUpdateSchema = z.object({
 	id: z.string().uuid(),
 	actionType: z.enum(["email", "calendar_event"]).optional(),
 	timingMode: z.enum(["immediate", "offset", "scheduled"]).optional(),
-	offsetValue: z.coerce.number().int().positive().optional(),
+	offsetValue: z.coerce.number().int().positive().nullish(),
 	offsetUnit: z
 		.enum(["minutes", "hours", "days", "weeks", "months"])
-		.optional(),
-	scheduledDate: z.string().min(1).optional(),
+		.nullish(),
+	scheduledDate: z.string().min(1).nullish(),
 	title: z.string().min(1).optional(),
-	message: z.string().nullish().optional(),
+	message: z.string().nullish(),
 	recipientUserIds: z.array(z.string().uuid()).optional(),
 	notificationTypes: z.array(z.enum(["in_app", "email"])).optional(),
 	enabled: z.boolean().optional(),
@@ -204,10 +204,10 @@ export async function POST(request: Request) {
 			);
 		}
 
-		// Get tenant_id from obra
+		// Get tenant_id and porcentaje from obra
 		const { data: obra, error: obraError } = await supabase
 			.from("obras")
-			.select("tenant_id")
+			.select("tenant_id, porcentaje")
 			.eq("id", obraId)
 			.is("deleted_at", null)
 			.single();
@@ -255,6 +255,108 @@ export async function POST(request: Request) {
 				{ error: "Failed to create flujo action" },
 				{ status: 500 }
 			);
+		}
+
+		// If obra is already at 100%, immediately trigger the action
+		if (obra.porcentaje >= 100 && action) {
+			const adminSupabase = createSupabaseAdminClient();
+			const now = new Date();
+
+			// Calculate executeAt based on timing settings
+			let executeAt: Date | null = null;
+			if (timingMode === "immediate") {
+				executeAt = now;
+			} else if (timingMode === "offset" && offsetValue) {
+				switch (offsetUnit) {
+					case "minutes":
+						executeAt = new Date(now.getTime() + offsetValue * 60 * 1000);
+						break;
+					case "hours":
+						executeAt = new Date(now.getTime() + offsetValue * 60 * 60 * 1000);
+						break;
+					case "days":
+						executeAt = new Date(now.getTime() + offsetValue * 24 * 60 * 60 * 1000);
+						break;
+					case "weeks":
+						executeAt = new Date(now.getTime() + offsetValue * 7 * 24 * 60 * 60 * 1000);
+						break;
+					case "months":
+						executeAt = new Date(now);
+						executeAt.setMonth(executeAt.getMonth() + offsetValue);
+						break;
+					default:
+						executeAt = new Date(now.getTime() + offsetValue * 24 * 60 * 60 * 1000);
+				}
+			} else if (timingMode === "scheduled" && scheduledDate) {
+				executeAt = new Date(scheduledDate);
+				// If scheduled time is in the past, execute now
+				if (executeAt.getTime() < now.getTime()) {
+					executeAt = now;
+				}
+			}
+
+			if (executeAt) {
+				const scheduledFor = executeAt.toISOString();
+
+				console.info("Triggering flujo action for already-completed obra", {
+					actionId: action.id,
+					obraId,
+					scheduledFor,
+				});
+
+				// Create execution records and emit events for each recipient
+				for (const recipientId of recipients) {
+					// Create execution record
+					const { data: execution, error: execError } = await adminSupabase
+						.from("obra_flujo_executions")
+						.insert({
+							flujo_action_id: action.id,
+							obra_id: obraId,
+							recipient_user_id: recipientId,
+							scheduled_for: scheduledFor,
+							notification_types: notifTypes,
+							status: "pending",
+						})
+						.select("id")
+						.single();
+
+					if (execError) {
+						console.error("Failed to create execution for new action", {
+							actionId: action.id,
+							recipientId,
+							error: execError,
+						});
+						continue;
+					}
+
+					// Emit workflow event
+					try {
+						await emitEvent("flujo.action.triggered", {
+							tenantId: obra.tenant_id,
+							actorId: user.id,
+							recipientId,
+							obraId,
+							actionId: action.id,
+							title,
+							message: message || null,
+							executeAt: scheduledFor,
+							notificationTypes: notifTypes,
+							executionId: execution?.id,
+						});
+						console.info("Flujo workflow emitted for new action on completed obra", {
+							actionId: action.id,
+							recipientId,
+							scheduledFor,
+						});
+					} catch (eventError) {
+						console.error("Failed to emit workflow for new action", {
+							actionId: action.id,
+							recipientId,
+							error: eventError,
+						});
+					}
+				}
+			}
 		}
 
 		return NextResponse.json({ action });

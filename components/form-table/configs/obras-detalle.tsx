@@ -7,11 +7,13 @@ import {
 	TabFilterOption,
 	HeaderGroup,
 	FormTableRow,
+	SaveRowsArgs,
 } from "@/components/form-table/types";
 import { requiredValidator } from "@/components/form-table/form-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import type { Obra } from "@/app/excel/schema";
 
 export type DetailAdvancedFilters = {
 	supMin: string;
@@ -54,6 +56,9 @@ export type ObrasDetalleRow = FormTableRow & {
 	plazoTotal?: number | null;
 	plazoTransc?: number | null;
 	porcentaje?: number | null;
+	onFinishFirstMessage?: string | null;
+	onFinishSecondMessage?: string | null;
+	onFinishSecondSendAt?: string | null;
 };
 
 const currencyFormatter = new Intl.NumberFormat("es-AR", {
@@ -65,6 +70,49 @@ function formatCurrency(value?: number | null) {
 	if (value == null) return "—";
 	return currencyFormatter.format(value);
 }
+
+const toNumber = (value: unknown): number => {
+	if (typeof value === "number") {
+		return Number.isFinite(value) ? value : 0;
+	}
+	if (typeof value === "string") {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : 0;
+	}
+	return 0;
+};
+
+const clampPercentage = (value: unknown): number => {
+	const pct = toNumber(value);
+	if (!Number.isFinite(pct)) return 0;
+	return Math.max(0, Math.min(100, pct));
+};
+
+const sanitizeText = (value?: string | null) => (value ?? "").trim();
+
+const mapDetailRowToPayload = (row: ObrasDetalleRow): Obra => {
+	const normalizedN = Math.trunc(toNumber(row.n));
+	return {
+		id: typeof row.id === "string" ? row.id : undefined,
+		n: normalizedN,
+		designacionYUbicacion: sanitizeText(row.designacionYUbicacion),
+		supDeObraM2: toNumber(row.supDeObraM2),
+		entidadContratante: sanitizeText(row.entidadContratante),
+		mesBasicoDeContrato: sanitizeText(row.mesBasicoDeContrato),
+		iniciacion: sanitizeText(row.iniciacion),
+		contratoMasAmpliaciones: toNumber(row.contratoMasAmpliaciones),
+		certificadoALaFecha: toNumber(row.certificadoALaFecha),
+		saldoACertificar: toNumber(row.saldoACertificar),
+		segunContrato: toNumber(row.segunContrato),
+		prorrogasAcordadas: toNumber(row.prorrogasAcordadas),
+		plazoTotal: toNumber(row.plazoTotal),
+		plazoTransc: toNumber(row.plazoTransc),
+		porcentaje: clampPercentage(row.porcentaje),
+		onFinishFirstMessage: row.onFinishFirstMessage ?? null,
+		onFinishSecondMessage: row.onFinishSecondMessage ?? null,
+		onFinishSecondSendAt: row.onFinishSecondSendAt ?? null,
+	};
+};
 
 const columns: ColumnDef<ObrasDetalleRow>[] = [
 	{
@@ -519,6 +567,9 @@ type ObrasDetalleApiRow = {
 	plazoTotal?: number | null;
 	plazoTransc?: number | null;
 	porcentaje?: number | null;
+	onFinishFirstMessage?: string | null;
+	onFinishSecondMessage?: string | null;
+	onFinishSecondSendAt?: string | null;
 };
 
 function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
@@ -538,17 +589,15 @@ function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 		plazoTotal: obra.plazoTotal ?? null,
 		plazoTransc: obra.plazoTransc ?? null,
 		porcentaje: obra.porcentaje ?? null,
+		onFinishFirstMessage: obra.onFinishFirstMessage ?? null,
+		onFinishSecondMessage: obra.onFinishSecondMessage ?? null,
+		onFinishSecondSendAt: obra.onFinishSecondSendAt ?? null,
 	};
 }
 
 const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["fetchRows"] =
-	async ({ page, limit }) => {
-		const params = new URLSearchParams({
-			page: String(page),
-			limit: String(limit),
-			status: "in-process",
-		});
-		const response = await fetch(`/api/obras?${params.toString()}`, {
+	async () => {
+		const response = await fetch(`/api/obras`, {
 			cache: "no-store",
 		});
 		if (!response.ok) {
@@ -559,10 +608,36 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 		const detalle = Array.isArray(payload.detalleObras)
 			? (payload.detalleObras as ObrasDetalleApiRow[])
 			: [];
+		const rows = detalle.map(mapObraToDetailRow);
 		return {
-			rows: detalle.map(mapObraToDetailRow),
-			pagination: payload.pagination ?? undefined,
+			rows,
+			pagination: {
+				page: 1,
+				limit: rows.length,
+				total: rows.length,
+				totalPages: 1,
+				hasNextPage: false,
+				hasPreviousPage: false,
+			},
 		};
+	};
+
+const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["onSave"] =
+	async ({ rows }: SaveRowsArgs<ObrasDetalleRow>) => {
+		const payload = {
+			detalleObras: rows.map((row) => mapDetailRowToPayload(row)),
+		};
+		const response = await fetch("/api/obras", {
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+		});
+		if (!response.ok) {
+			const errorPayload = await response.json().catch(() => ({}));
+			throw new Error(errorPayload?.error ?? "No se pudieron guardar las obras");
+		}
 	};
 
 export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters> = {
@@ -579,6 +654,7 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	applyFilters,
 	countActiveFilters,
 	fetchRows: fetchObrasDetalle,
+	onSave: saveObrasDetalle,
 	accordionRow: {
 		triggerLabel: "detalle extendido",
 		renderContent: (row) => {

@@ -294,9 +294,27 @@ export async function PUT(
 					{ obraId }
 				);
 			}
+
+			// Cancel pending flujo executions - they will be re-triggered when obra reaches 100% again
+			const { error: execDelErr } = await supabase
+				.from("obra_flujo_executions")
+				.delete()
+				.eq("obra_id", obraId)
+				.eq("status", "pending");
+			if (execDelErr) {
+				console.error(
+					"Obras [id] PUT: failed to delete pending flujo executions for reverted obra",
+					{ obraId, error: execDelErr }
+				);
+			} else {
+				console.info(
+					"Obras [id] PUT: deleted pending flujo executions for reverted obra",
+					{ obraId }
+				);
+			}
 		} catch (revertError) {
 			console.error(
-				"Obras [id] PUT: unexpected error while cleaning up calendar_events",
+				"Obras [id] PUT: unexpected error while cleaning up calendar_events/executions",
 				revertError
 			);
 		}

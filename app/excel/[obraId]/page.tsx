@@ -843,8 +843,8 @@ export default function ObraDetailPage() {
 			});
 
 			if (!res.ok) throw new Error("Failed to save flujo action");
-			const data = await res.json();
-			setFlujoActions((prev) => [...prev, data.action]);
+			// Reload all actions to get scheduled_for if obra is already at 100%
+			await loadFlujoActions();
 			setNewFlujoAction({
 				action_type: 'email',
 				timing_mode: 'immediate',
@@ -853,7 +853,7 @@ export default function ObraDetailPage() {
 				title: '',
 				message: '',
 				recipient_user_ids: [],
-				notification_types: ["in_app"],
+				notification_types: ["in_app", "email"],
 				enabled: true,
 			});
 			setSelectedRecipientUserId("");
@@ -864,7 +864,7 @@ export default function ObraDetailPage() {
 			console.error("Error saving flujo action:", err);
 			toast.error("No se pudo guardar la acción de flujo");
 		}
-	}, [obraId, newFlujoAction, obraUserRoles, selectedRecipientRoleId, selectedRecipientUserId]);
+	}, [obraId, newFlujoAction, obraUserRoles, selectedRecipientRoleId, selectedRecipientUserId, loadFlujoActions]);
 
 	const deleteFlujoAction = useCallback(async (actionId: string) => {
 		if (!obraId || obraId === "undefined") return;
@@ -907,13 +907,14 @@ export default function ObraDetailPage() {
 
 		try {
 			// Convert snake_case to camelCase for API
+			// Also convert empty strings to null for optional fields
 			const apiPayload: Record<string, unknown> = { id: actionId };
 			if (updates.title !== undefined) apiPayload.title = updates.title;
-			if (updates.message !== undefined) apiPayload.message = updates.message;
+			if (updates.message !== undefined) apiPayload.message = updates.message || null;
 			if (updates.timing_mode !== undefined) apiPayload.timingMode = updates.timing_mode;
 			if (updates.offset_value !== undefined) apiPayload.offsetValue = updates.offset_value;
 			if (updates.offset_unit !== undefined) apiPayload.offsetUnit = updates.offset_unit;
-			if (updates.scheduled_date !== undefined) apiPayload.scheduledDate = updates.scheduled_date;
+			if (updates.scheduled_date !== undefined) apiPayload.scheduledDate = updates.scheduled_date || null;
 			if (updates.enabled !== undefined) apiPayload.enabled = updates.enabled;
 			if (updates.notification_types !== undefined) apiPayload.notificationTypes = updates.notification_types;
 

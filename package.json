@@ -44,7 +44,7 @@
 		"@radix-ui/react-tabs": "^1.1.13",
 		"@radix-ui/react-tooltip": "^1.2.8",
 		"@remixicon/react": "^4.6.0",
-		"@sentry/nextjs": "^10.27.0",
+		"@sentry/nextjs": "^10.29.0",
 		"@supabase/ssr": "^0.5.2",
 		"@supabase/supabase-js": "^2.74.0",
 		"@tanstack/react-form": "^1.23.8",
