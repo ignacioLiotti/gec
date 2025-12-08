@@ -42,20 +42,20 @@ export type DetailAdvancedFilters = {
 type RangeFilterKey = Exclude<keyof DetailAdvancedFilters, "entidades">;
 
 export type ObrasDetalleRow = FormTableRow & {
-	n?: number | null;
+	n?: number | string | null;
 	designacionYUbicacion?: string | null;
-	supDeObraM2?: number | null;
+	supDeObraM2?: number | string | null;
 	entidadContratante?: string | null;
 	mesBasicoDeContrato?: string | null;
 	iniciacion?: string | null;
-	contratoMasAmpliaciones?: number | null;
-	certificadoALaFecha?: number | null;
-	saldoACertificar?: number | null;
-	segunContrato?: number | null;
-	prorrogasAcordadas?: number | null;
-	plazoTotal?: number | null;
-	plazoTransc?: number | null;
-	porcentaje?: number | null;
+	contratoMasAmpliaciones?: number | string | null;
+	certificadoALaFecha?: number | string | null;
+	saldoACertificar?: number | string | null;
+	segunContrato?: number | string | null;
+	prorrogasAcordadas?: number | string | null;
+	plazoTotal?: number | string | null;
+	plazoTransc?: number | string | null;
+	porcentaje?: number | string | null;
 	onFinishFirstMessage?: string | null;
 	onFinishSecondMessage?: string | null;
 	onFinishSecondSendAt?: string | null;
@@ -74,9 +74,9 @@ const generateRowId = () =>
 
 let nextSequentialN = 0;
 
-function formatCurrency(value?: number | null) {
-	if (value == null) return "—";
-	return currencyFormatter.format(value);
+function formatCurrency(value?: number | string | null) {
+	if (value == null || value === "") return "—";
+	return currencyFormatter.format(toNumber(value));
 }
 
 const toNumber = (value: unknown): number => {
@@ -190,6 +190,18 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 			onBlur: requiredValidator("Designación y Ubicación"),
 		},
 		defaultValue: "",
+		cellMenuItems: [
+			{
+				id: "open-obra",
+				label: "Abrir detalle de la obra",
+				onSelect: (row) => {
+					if (typeof window === "undefined") return;
+					const targetId = row.id;
+					if (!targetId) return;
+					window.location.href = `/excel/${targetId}`;
+				},
+			},
+		],
 	},
 	{
 		id: "supDeObraM2",

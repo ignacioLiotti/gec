@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,6 +19,57 @@ import type {
 	FormTableRow,
 } from "./types";
 import { escapeRegExp, formatDateSafe } from "./table-utils";
+
+/**
+ * LocalInput: A buffered input that manages local state during typing
+ * and only syncs to the form on blur. This prevents cascading re-renders
+ * on every keystroke.
+ */
+function LocalInput({
+	value: externalValue,
+	onChange: syncToForm,
+	onBlur,
+	transformOnBlur,
+	...props
+}: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur"> & {
+	value: string | number | null | undefined;
+	onChange: (value: unknown) => void;
+	onBlur?: () => void;
+	transformOnBlur?: (value: string) => unknown;
+}) {
+	const [localValue, setLocalValue] = useState(() => externalValue ?? "");
+	const isTypingRef = useRef(false);
+
+	// Sync external value to local state only when not actively typing
+	useEffect(() => {
+		if (!isTypingRef.current) {
+			setLocalValue(externalValue ?? "");
+		}
+	}, [externalValue]);
+
+	const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		isTypingRef.current = true;
+		setLocalValue(e.target.value);
+	}, []);
+
+	const handleBlur = useCallback(() => {
+		isTypingRef.current = false;
+		const finalValue = transformOnBlur
+			? transformOnBlur(String(localValue))
+			: localValue;
+		syncToForm(finalValue);
+		onBlur?.();
+	}, [localValue, syncToForm, onBlur, transformOnBlur]);
+
+	return (
+		<Input
+			{...props}
+			value={localValue}
+			onChange={handleChange}
+			onBlur={handleBlur}
+		/>
+	);
+}
 
 type EditableCellValue = string | number | readonly string[] | null | undefined;
 
@@ -69,6 +120,16 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 
 function checkedLabel(value: boolean) {
 	return value ? "Activo" : "Inactivo";
+}
+
+function parseNumericInput(value: EditableCellValue): number | null {
+	if (value == null) return null;
+	const raw = String(value).trim();
+	if (!raw) return null;
+	const normalized = raw.replace(/[^\d+\-.,]/g, "").replace(",", ".");
+	if (!normalized) return null;
+	const parsed = Number(normalized);
+	return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function renderReadOnlyValue<Row extends FormTableRow>(
@@ -253,41 +314,45 @@ function renderEditableContent<Row extends FormTableRow>({
 	switch (cellType) {
 		case "currency":
 			return (
-				<Input
-					type="number"
-					step="0.01"
+				<LocalInput
+					type="text"
+					inputMode="decimal"
 					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
 					value={value ?? ""}
-					onChange={(event) => {
-						const next = event.target.value;
-						setValue(next === "" ? null : Number(next));
-					}}
+					onChange={setValue}
 					onBlur={handleBlur}
+					transformOnBlur={(val) => {
+						const parsed = parseNumericInput(val);
+						return parsed == null ? null : Number(parsed.toFixed(2));
+					}}
 					placeholder="0.00"
 					required={column.required}
 				/>
 			);
 		case "number":
 			return (
-				<Input
-					type="number"
+				<LocalInput
+					type="text"
+					inputMode="decimal"
+					pattern="[0-9.,\\-]*"
 					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
 					value={value ?? ""}
-					onChange={(event) => {
-						const next = event.target.value;
-						setValue(next === "" ? null : Number(next));
-					}}
+					onChange={setValue}
 					onBlur={handleBlur}
+					transformOnBlur={(val) => {
+						const parsed = parseNumericInput(val);
+						return parsed == null ? null : parsed;
+					}}
 					required={column.required}
 				/>
 			);
 		case "date":
 			return (
-				<Input
+				<LocalInput
 					type="date"
 					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
 					value={value ?? ""}
-					onChange={(event) => setValue(event.target.value)}
+					onChange={setValue}
 					onBlur={handleBlur}
 					required={column.required}
 				/>
@@ -332,10 +397,10 @@ function renderEditableContent<Row extends FormTableRow>({
 				: [];
 			return (
 				<div className="space-y-1 w-full h-full">
-					<Input
+					<LocalInput
 						value={tagsStr}
 						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 focus-visible:opacity-100 opacity-0 peer children-input-hidden"
-						onChange={(event) => setValue(event.target.value)}
+						onChange={setValue}
 						onBlur={handleBlur}
 						placeholder="Ej: diseño, arquitectura"
 					/>
@@ -359,10 +424,10 @@ function renderEditableContent<Row extends FormTableRow>({
 					: text || config.href || "#";
 			return (
 				<div className="space-y-1 overflow-hidden">
-					<Input
+					<LocalInput
 						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
 						value={text}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={setValue}
 						onBlur={handleBlur}
 						placeholder="https://..."
 						required={column.required}
@@ -393,9 +458,9 @@ function renderEditableContent<Row extends FormTableRow>({
 						<AvatarImage src={text} alt={fallback} />
 						<AvatarFallback>{fallback}</AvatarFallback>
 					</Avatar>
-					<Input
+					<LocalInput
 						value={text}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={setValue}
 						onBlur={handleBlur}
 						placeholder="https://..."
 					/>
@@ -415,9 +480,9 @@ function renderEditableContent<Row extends FormTableRow>({
 							</span>
 						)}
 					</div>
-					<Input
+					<LocalInput
 						value={src}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={setValue}
 						onBlur={handleBlur}
 						placeholder="https://..."
 					/>
@@ -427,9 +492,9 @@ function renderEditableContent<Row extends FormTableRow>({
 		case "badge":
 			return (
 				<div className="space-y-1">
-					<Input
+					<LocalInput
 						value={value ?? ""}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={setValue}
 						onBlur={handleBlur}
 						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
 					/>
@@ -441,9 +506,9 @@ function renderEditableContent<Row extends FormTableRow>({
 		case "text-icon":
 			return (
 				<div className="space-y-1 children-input-hidden">
-					<Input
+					<LocalInput
 						value={value ?? ""}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={setValue}
 						onBlur={handleBlur}
 					/>
 					<div>{renderReadOnlyValue(value, row, column, highlightQuery)}</div>
@@ -451,10 +516,10 @@ function renderEditableContent<Row extends FormTableRow>({
 			);
 		default:
 			return (
-				<Input
+				<LocalInput
 					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
 					value={value ?? ""}
-					onChange={(event) => setValue(event.target.value)}
+					onChange={setValue}
 					onBlur={handleBlur}
 					required={column.required}
 				/>
