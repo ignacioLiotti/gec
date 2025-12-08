@@ -29,7 +29,7 @@ export default async function WorkflowTestPage() {
 			<div>
 				<h1 className="text-2xl font-semibold">Workflow Email Testing</h1>
 				<p className="text-sm text-muted-foreground">
-					Usa este panel para disparar workflows simples de envío de emails. El
+					Usa este panel para disparar workflows simples de envío de emails. El4
 					primero envía inmediatamente y el segundo espera 5 minutos antes de
 					mandar el correo.
 				</p>

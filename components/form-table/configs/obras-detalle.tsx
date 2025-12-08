@@ -66,6 +66,14 @@ const currencyFormatter = new Intl.NumberFormat("es-AR", {
 	currency: "ARS",
 });
 
+const FALLBACK_ID = () => `row-${Date.now()}-${Math.random()}`;
+const generateRowId = () =>
+	typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+		? crypto.randomUUID()
+		: FALLBACK_ID();
+
+let nextSequentialN = 0;
+
 function formatCurrency(value?: number | null) {
 	if (value == null) return "—";
 	return currencyFormatter.format(value);
@@ -90,8 +98,42 @@ const clampPercentage = (value: unknown): number => {
 
 const sanitizeText = (value?: string | null) => (value ?? "").trim();
 
-const mapDetailRowToPayload = (row: ObrasDetalleRow): Obra => {
-	const normalizedN = Math.trunc(toNumber(row.n));
+const updateSequentialSeedFromRows = (rows: ObrasDetalleRow[]) => {
+	const max = rows.reduce((maxValue, row) => {
+		const current = toNumber(row.n);
+		return current > maxValue ? current : maxValue;
+	}, 0);
+	nextSequentialN = Math.max(nextSequentialN, max);
+};
+
+const createNewRow = (): ObrasDetalleRow => {
+	nextSequentialN += 1;
+	return {
+		id: generateRowId(),
+		n: nextSequentialN,
+		designacionYUbicacion: "",
+		supDeObraM2: 0,
+		entidadContratante: "",
+		mesBasicoDeContrato: "",
+		iniciacion: "",
+		contratoMasAmpliaciones: 0,
+		certificadoALaFecha: 0,
+		saldoACertificar: 0,
+		segunContrato: 0,
+		prorrogasAcordadas: 0,
+		plazoTotal: 0,
+		plazoTransc: 0,
+		porcentaje: 0,
+		onFinishFirstMessage: null,
+		onFinishSecondMessage: null,
+		onFinishSecondSendAt: null,
+	};
+};
+
+const mapDetailRowToPayload = (row: ObrasDetalleRow, index: number): Obra => {
+	const parsedN = toNumber(row.n);
+	const normalizedN =
+		Number.isFinite(parsedN) && parsedN >= 1 ? Math.trunc(parsedN) : index + 1;
 	return {
 		id: typeof row.id === "string" ? row.id : undefined,
 		n: normalizedN,
@@ -118,11 +160,12 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 	{
 		id: "n",
 		label: "N°",
-		field: "n",
-		required: true,
-		enableHide: false,
-		enablePin: true,
-		cellType: "text",
+	field: "n",
+	required: true,
+	enableHide: false,
+	enablePin: true,
+	editable: false,
+	cellType: "text",
 		sortFn: (a, b) => (a.n ?? 0) - (b.n ?? 0),
 		searchFn: (row, query) => String(row.n ?? "").includes(query),
 		validators: {
@@ -609,6 +652,7 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 			? (payload.detalleObras as ObrasDetalleApiRow[])
 			: [];
 		const rows = detalle.map(mapObraToDetailRow);
+		updateSequentialSeedFromRows(rows);
 		return {
 			rows,
 			pagination: {
@@ -624,21 +668,25 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 
 const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["onSave"] =
 	async ({ rows }: SaveRowsArgs<ObrasDetalleRow>) => {
-		const payload = {
-			detalleObras: rows.map((row) => mapDetailRowToPayload(row)),
-		};
-		const response = await fetch("/api/obras", {
-			method: "PUT",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(payload),
-		});
-		if (!response.ok) {
-			const errorPayload = await response.json().catch(() => ({}));
-			throw new Error(errorPayload?.error ?? "No se pudieron guardar las obras");
-		}
+	const payload = {
+		detalleObras: rows.map((row, index) => mapDetailRowToPayload(row, index)),
 	};
+	const response = await fetch("/api/obras", {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify(payload),
+	});
+	if (!response.ok) {
+		const errorPayload = await response.json().catch(() => ({}));
+		const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
+		const detailsMessage = errorPayload?.details
+			? JSON.stringify(errorPayload.details)
+			: null;
+		throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
+	}
+};
 
 export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters> = {
 	tableId: "form-table-obras-detalle",
@@ -655,6 +703,7 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	countActiveFilters,
 	fetchRows: fetchObrasDetalle,
 	onSave: saveObrasDetalle,
+	createRow: createNewRow,
 	accordionRow: {
 		triggerLabel: "detalle extendido",
 		renderContent: (row) => {
