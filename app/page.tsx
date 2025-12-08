@@ -40,6 +40,10 @@ export default function Home() {
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             Bienvenido
           </Badge>
+          <button onClick={() => { throw new Error("Test Sentry error"); }}>
+            Test Sentry
+          </button>
+
 
           <div className="space-y-4">
             <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">

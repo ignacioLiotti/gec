@@ -72,6 +72,7 @@ export async function GET(request: Request) {
 
 		const supabase = await createClient();
 
+		// Fetch flujo actions
 		const { data: actions, error } = await supabase
 			.from("obra_flujo_actions")
 			.select("*")
@@ -86,7 +87,59 @@ export async function GET(request: Request) {
 			);
 		}
 
-		return NextResponse.json({ actions });
+		// Fetch ALL execution records for these actions (not just completed)
+		const actionIds = actions?.map((a) => a.id) ?? [];
+		const { data: executions } = await supabase
+			.from("obra_flujo_executions")
+			.select("flujo_action_id, executed_at, status, scheduled_for")
+			.in("flujo_action_id", actionIds)
+			.eq("obra_id", obraId)
+			.order("executed_at", { ascending: false });
+
+		// Group executions by action ID and determine overall status
+		// An action is "completed" only when ALL its executions are completed
+		const executionsByAction = new Map<string, Array<{
+			status: string;
+			executed_at: string | null;
+			scheduled_for: string | null;
+		}>>();
+
+		for (const exec of executions ?? []) {
+			const existing = executionsByAction.get(exec.flujo_action_id) ?? [];
+			existing.push({
+				status: exec.status,
+				executed_at: exec.executed_at,
+				scheduled_for: exec.scheduled_for,
+			});
+			executionsByAction.set(exec.flujo_action_id, existing);
+		}
+
+		// Merge execution status into actions
+		const actionsWithExecution = actions?.map((action) => {
+			const actionExecutions = executionsByAction.get(action.id);
+
+			if (!actionExecutions || actionExecutions.length === 0) {
+				// No executions - action was never triggered
+				return { ...action, executed_at: null };
+			}
+
+			// Check if ALL executions are completed
+			const allCompleted = actionExecutions.every((e) => e.status === "completed");
+			const anyFailed = actionExecutions.some((e) => e.status === "failed");
+
+			if (allCompleted) {
+				// Find the latest executed_at timestamp
+				const latestExecution = actionExecutions
+					.filter((e) => e.executed_at)
+					.sort((a, b) => new Date(b.executed_at!).getTime() - new Date(a.executed_at!).getTime())[0];
+				return { ...action, executed_at: latestExecution?.executed_at ?? null };
+			}
+
+			// If any failed or still pending, action is not fully completed
+			return { ...action, executed_at: null };
+		});
+
+		return NextResponse.json({ actions: actionsWithExecution });
 	} catch (error: any) {
 		console.error("Error in GET /api/flujo-actions:", error);
 		if (error instanceof ApiValidationError) {

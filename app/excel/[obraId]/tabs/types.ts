@@ -36,6 +36,7 @@ export type FlujoAction = {
 	recipient_user_ids: string[];
 	notification_types: ("in_app" | "email")[];
 	enabled: boolean;
+	executed_at: string | null;
 };
 
 export type MaterialItem = {

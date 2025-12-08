@@ -151,7 +151,7 @@ export default function ObraDetailPage() {
 		title: '',
 		message: '',
 		recipient_user_ids: [],
-		notification_types: ["in_app"],
+		notification_types: ["in_app", "email"],
 		enabled: true,
 	});
 
@@ -902,6 +902,26 @@ export default function ObraDetailPage() {
 		}
 	}, [obraId]);
 
+	const updateFlujoAction = useCallback(async (actionId: string, updates: Partial<FlujoAction>) => {
+		if (!obraId || obraId === "undefined") return;
+
+		try {
+			const res = await fetch("/api/flujo-actions", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ id: actionId, ...updates }),
+			});
+			if (!res.ok) throw new Error("Failed to update flujo action");
+			setFlujoActions((prev) =>
+				prev.map((a) => (a.id === actionId ? { ...a, ...updates } : a))
+			);
+			toast.success("Acción actualizada correctamente");
+		} catch (err) {
+			console.error("Error updating flujo action:", err);
+			toast.error("No se pudo actualizar la acción");
+		}
+	}, [obraId]);
+
 	const refreshCertificates = useCallback(async () => {
 		if (!obraId || obraId === "undefined") {
 			return;
@@ -1164,6 +1184,7 @@ export default function ObraDetailPage() {
 								saveFlujoAction={saveFlujoAction}
 								toggleFlujoAction={toggleFlujoAction}
 								deleteFlujoAction={deleteFlujoAction}
+								updateFlujoAction={updateFlujoAction}
 								flujoActions={flujoActions}
 								isLoadingFlujoActions={isLoadingFlujoActions}
 							/>
