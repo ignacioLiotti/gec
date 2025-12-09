@@ -381,8 +381,8 @@ const headerGroups: HeaderGroup[] = [
 
 const tabFilters: TabFilterOption<ObrasDetalleRow>[] = [
 	{ id: "all", label: "Todas" },
-	{ id: "in-process", label: "En proceso", predicate: (row) => (row.porcentaje ?? 0) < 100 },
-	{ id: "completed", label: "Completadas", predicate: (row) => (row.porcentaje ?? 0) >= 100 },
+	{ id: "in-process", label: "En proceso", predicate: (row) => toNumber(row.porcentaje) < 100 },
+	{ id: "completed", label: "Completadas", predicate: (row) => toNumber(row.porcentaje) >= 100 },
 ];
 
 const createFilters = (): DetailAdvancedFilters => ({
@@ -523,11 +523,12 @@ const renderFilters = ({
 };
 
 const applyFilters = (row: ObrasDetalleRow, filters: DetailAdvancedFilters) => {
-	const matchesRange = (value: number | null | undefined, minStr: string, maxStr: string) => {
+	const matchesRange = (value: string | number | null | undefined, minStr: string, maxStr: string) => {
+		const numValue = toNumber(value);
 		const min = minStr ? Number(minStr) : null;
 		const max = maxStr ? Number(maxStr) : null;
-		if (min != null && (value == null || value < min)) return false;
-		if (max != null && (value == null || value > max)) return false;
+		if (min != null && numValue < min) return false;
+		if (max != null && numValue > max) return false;
 		return true;
 	};
 
@@ -719,7 +720,7 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	accordionRow: {
 		triggerLabel: "detalle extendido",
 		renderContent: (row) => {
-			const avance = Math.max(0, Math.min(100, row.porcentaje ?? 0));
+			const avance = clampPercentage(row.porcentaje);
 			return (
 				<div className="space-y-4">
 					<div className="grid gap-4 text-sm md:grid-cols-3">
