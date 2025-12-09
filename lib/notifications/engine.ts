@@ -43,7 +43,7 @@ export function defineRule(eventType: string, rule: Rule) {
 export async function emitEvent(
 	eventType: string,
 	ctx: EventContext
-): Promise<void> {
+): Promise<{ runId: string } | null> {
 	const expandedEffects = await expandEffectsForEvent(eventType, ctx);
 	if (!expandedEffects.length) {
 		console.info("[notifications] emitEvent skipped (no effects)", {
@@ -54,7 +54,7 @@ export async function emitEvent(
 				executionId: ctx.executionId ?? null,
 			},
 		});
-		return;
+		return null;
 	}
 	const serializableEffects = expandedEffects
 		.map((eff) => {
@@ -106,7 +106,13 @@ export async function emitEvent(
 		recipients,
 		executionId: ctx.executionId ?? null,
 	});
-	await start(deliverEffectsWorkflow, [serializableEffects]);
+	const run = await start(deliverEffectsWorkflow, [serializableEffects]);
+	console.info("[notifications] workflow started", {
+		eventType,
+		runId: run.runId,
+		executionId: ctx.executionId ?? null,
+	});
+	return { runId: run.runId };
 }
 
 export function getRegistryForDebug() {

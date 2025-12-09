@@ -282,7 +282,7 @@ export async function executeFlujoActions(
 							notificationTypes,
 							executeAt: scheduledAtIso,
 						});
-						await emitEvent("flujo.action.triggered", {
+						const result = await emitEvent("flujo.action.triggered", {
 							tenantId,
 							actorId: currentUserId,
 							recipientId,
@@ -293,6 +293,21 @@ export async function executeFlujoActions(
 							executeAt: scheduledAtIso,
 							notificationTypes,
 							executionId,
+						});
+
+						// Store the workflow run ID for future cancellation
+						if (result?.runId && executionId) {
+							await adminSupabase
+								.from("obra_flujo_executions")
+								.update({ workflow_run_id: result.runId })
+								.eq("id", executionId);
+						}
+
+						console.info("Flujo workflow emitted", {
+							actionId: action.id,
+							recipientId,
+							executionId,
+							runId: result?.runId,
 						});
 					} catch (eventError) {
 						console.error("Failed to schedule flujo workflow", {

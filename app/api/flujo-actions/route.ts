@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { emitEvent } from "@/lib/notifications/engine";
+import { cancelWorkflowRun } from "@/lib/workflow/cancel";
 import { z } from "zod";
 import {
 	ApiValidationError,
@@ -331,7 +332,7 @@ export async function POST(request: Request) {
 
 					// Emit workflow event
 					try {
-						await emitEvent("flujo.action.triggered", {
+						const result = await emitEvent("flujo.action.triggered", {
 							tenantId: obra.tenant_id,
 							actorId: user.id,
 							recipientId,
@@ -343,10 +344,20 @@ export async function POST(request: Request) {
 							notificationTypes: notifTypes,
 							executionId: execution?.id,
 						});
+
+						// Store the workflow run ID for future cancellation
+						if (result?.runId && execution?.id) {
+							await adminSupabase
+								.from("obra_flujo_executions")
+								.update({ workflow_run_id: result.runId })
+								.eq("id", execution.id);
+						}
+
 						console.info("Flujo workflow emitted for new action on completed obra", {
 							actionId: action.id,
 							recipientId,
 							scheduledFor,
+							runId: result?.runId,
 						});
 					} catch (eventError) {
 						console.error("Failed to emit workflow for new action", {
@@ -450,10 +461,10 @@ export async function PUT(request: Request) {
 
 		// If timing changed, reschedule pending executions
 		if (timingChanged && action) {
-			// Fetch pending executions for this action
+			// Fetch pending executions for this action (including workflow_run_id)
 			const { data: pendingExecutions } = await adminSupabase
 				.from("obra_flujo_executions")
-				.select("id, created_at, recipient_user_id, notification_types")
+				.select("id, created_at, recipient_user_id, notification_types, workflow_run_id")
 				.eq("flujo_action_id", id)
 				.eq("status", "pending");
 
@@ -520,6 +531,13 @@ export async function PUT(request: Request) {
 						triggeredAt: triggeredAt.toISOString(),
 					});
 
+					// Cancel running workflows before deleting executions
+					for (const oldExec of pendingExecutions) {
+						if (oldExec.workflow_run_id) {
+							await cancelWorkflowRun(oldExec.workflow_run_id);
+						}
+					}
+
 					// Delete old pending executions
 					await adminSupabase
 						.from("obra_flujo_executions")
@@ -556,7 +574,7 @@ export async function PUT(request: Request) {
 
 						// Emit new event for the workflow
 						try {
-							await emitEvent("flujo.action.triggered", {
+							const result = await emitEvent("flujo.action.triggered", {
 								tenantId,
 								actorId: user.id,
 								recipientId,
@@ -568,10 +586,20 @@ export async function PUT(request: Request) {
 								notificationTypes: notifTypes,
 								executionId: newExecution?.id,
 							});
+
+							// Store the new workflow run ID
+							if (result?.runId && newExecution?.id) {
+								await adminSupabase
+									.from("obra_flujo_executions")
+									.update({ workflow_run_id: result.runId })
+									.eq("id", newExecution.id);
+							}
+
 							console.info("Rescheduled flujo workflow emitted", {
 								actionId: id,
 								recipientId,
 								newScheduledFor,
+								runId: result?.runId,
 							});
 						} catch (eventError) {
 							console.error("Failed to emit rescheduled workflow", {
