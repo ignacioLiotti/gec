@@ -20,6 +20,8 @@ import type {
 } from "./types";
 import { escapeRegExp, formatDateSafe } from "./table-utils";
 
+export type EditableCellValue = string | number | readonly string[] | null | undefined;
+
 /**
  * LocalInput: A buffered input that manages local state during typing
  * and only syncs to the form on blur. This prevents cascading re-renders
@@ -31,21 +33,23 @@ function LocalInput({
 	onBlur,
 	transformOnBlur,
 	...props
-}: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur"> & {
-	value: string | number | null | undefined;
+}: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur" | "value"> & {
+	value: EditableCellValue;
 	onChange: (value: unknown) => void;
 	onBlur?: () => void;
 	transformOnBlur?: (value: string) => unknown;
 }) {
-	const [localValue, setLocalValue] = useState(() => externalValue ?? "");
+	// Convert external value to string for the input
+	const normalizedExternal = externalValue == null ? "" : String(externalValue);
+	const [localValue, setLocalValue] = useState(() => normalizedExternal);
 	const isTypingRef = useRef(false);
 
 	// Sync external value to local state only when not actively typing
 	useEffect(() => {
 		if (!isTypingRef.current) {
-			setLocalValue(externalValue ?? "");
+			setLocalValue(normalizedExternal);
 		}
-	}, [externalValue]);
+	}, [normalizedExternal]);
 
 	const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
 		isTypingRef.current = true;
@@ -55,7 +59,7 @@ function LocalInput({
 	const handleBlur = useCallback(() => {
 		isTypingRef.current = false;
 		const finalValue = transformOnBlur
-			? transformOnBlur(String(localValue))
+			? transformOnBlur(localValue)
 			: localValue;
 		syncToForm(finalValue);
 		onBlur?.();
@@ -71,9 +75,7 @@ function LocalInput({
 	);
 }
 
-type EditableCellValue = string | number | readonly string[] | null | undefined;
-
-type EditableContentArgs<Row extends FormTableRow> = {
+export type EditableContentArgs<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
 	row: Row;
 	value: EditableCellValue;
@@ -300,7 +302,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 	}
 }
 
-function renderEditableContent<Row extends FormTableRow>({
+export function renderEditableContent<Row extends FormTableRow>({
 	column,
 	row,
 	value,

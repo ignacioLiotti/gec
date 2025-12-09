@@ -12,6 +12,11 @@ const rateLimitEnabled =
 
 // Allowed sources for CSP
 const trustedSources = ["'self'", "https://*.supabase.co"];
+const sentrySources = [
+	"https://*.sentry.io",
+	"https://*.ingest.sentry.io",
+	"https://*.ingest.us.sentry.io",
+];
 
 // WebSocket sources
 const wsSources = ["wss://*.supabase.co"];
@@ -33,7 +38,9 @@ const securityHeaders: Record<string, string> = {
 		`style-src ${trustedSources.join(" ")} 'unsafe-inline'`,
 		`img-src ${trustedSources.join(" ")} data: blob:`,
 		`font-src ${trustedSources.join(" ")}`,
-		`connect-src ${trustedSources.join(" ")} ${wsSources.join(" ")}`,
+		`connect-src ${trustedSources
+			.concat(sentrySources)
+			.join(" ")} ${wsSources.join(" ")}`,
 		`media-src ${trustedSources.join(" ")} data: blob:`,
 		`worker-src ${trustedSources.join(" ")} blob:`,
 		"frame-ancestors 'none'",

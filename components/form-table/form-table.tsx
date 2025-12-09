@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, useRef, Fragment } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import type { AnyFormState } from "@tanstack/form-core";
@@ -8,7 +8,6 @@ import {
 	useReactTable,
 	getCoreRowModel,
 	ColumnDef as TanStackColumnDef,
-	flexRender,
 	VisibilityState,
 } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
@@ -35,16 +34,11 @@ import {
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuTrigger,
-	ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import {
-	Tooltip,
-	TooltipContent,
 	TooltipProvider,
-	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ColumnResizer, balanceTableColumns } from "@/components/ui/column-resizer";
 import { ColumnVisibilityMenu } from "@/components/data-table/column-visibility-menu";
@@ -57,14 +51,11 @@ import {
 	Minus,
 	Loader2,
 	ChevronLeft,
-	ChevronDown,
 	ChevronRight,
 } from "lucide-react";
 import type {
-	AccordionRowConfig,
 	ColumnField,
 	ColumnDef,
-	FieldValidators,
 	FormFieldComponent,
 	FormTableConfig,
 	FormTableRow,
@@ -83,9 +74,9 @@ import {
 	tableRowToCsv,
 	copyToClipboard,
 } from "./table-utils";
-import { renderCellByType } from "./cell-renderers";
 import { FormTableProvider, useFormTable as useFormTableContext } from "./context";
 import type { FormTableContextValue } from "./context";
+import { MemoizedTableRow } from "./table-body";
 
 export const useFormTable = useFormTableContext;
 
@@ -452,146 +443,29 @@ export function FormTableContent({ className }: { className?: string }) {
 									</td>
 								</tr>
 							) : (
-								table.getRowModel().rows.map((row, rowIndex) => {
-									const { dirty, cells } = getRowDirtyState(row.original.id);
-									const dirtyCellIds = new Set(cells.map((cell) => cell.id));
-									const hasInitialSnapshot = hasInitialRow(row.original.id);
-									const expanded = hasAccordionRows ? isRowExpanded(row.original.id) : false;
-									const visibleCells = row.getVisibleCells();
-									const visibleLeafCount = visibleCells.length;
-									const accordionLabel = accordionRowConfig?.triggerLabel ?? "detalles";
-									return (
-										<Fragment key={row.original.id}>
-											<tr
-												className={cn(
-													"border-b transition-colors duration-150 group relative",
-													rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
-													dirty ? "bg-amber-50/60 group/row-dirty" : ""
-												)}
-											>
-												{visibleCells.map((cell) => {
-													const columnId = cell.column.id;
-													const columnMeta = columnsById[columnId];
-													if (!columnMeta) return null;
-													const cellDirty =
-														dirtyCellIds.has(columnId) || isCellDirty(row.original.id, columnMeta);
-													const baseClassName = cn(
-														"outline outline-border border-border relative group-hover:bg-[hsl(50,17%,95%)]",
-														rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]"
-													);
-													return (
-														<td key={cell.id} {...getStickyProps(columnId, baseClassName)}>
-															{renderCellByType({
-																column: columnMeta,
-																row: row.original,
-																rowId: row.original.id,
-																FieldComponent,
-																highlightQuery,
-																isCellDirty: cellDirty,
-																isRowDirty: dirty,
-																onCopyCell: handleCopyCell,
-																onCopyColumn: () => handleCopyColumn(columnMeta),
-																onCopyRow: () => handleCopyRow(row.original),
-																onClearValue:
-																	columnMeta.editable === false
-																		? undefined
-																		: () => handleClearCell(row.original.id, columnMeta),
-																onRestoreValue:
-																	cellDirty && hasInitialSnapshot
-																		? () => handleRestoreCell(row.original.id, columnMeta)
-																		: undefined,
-																canRestore: cellDirty && hasInitialSnapshot,
-																customMenuItems: columnMeta.cellMenuItems,
-															})}
-														</td>
-													);
-												})}
-												<td
-													className={cn(
-														"px-4 py-3 text-right outline outline-border border-border group-hover:bg-[hsl(50,17%,95%)] space-y-2",
-														rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]"
-													)}
-												>
-													{dirty && (
-														<Tooltip>
-															<TooltipTrigger asChild>
-																<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-100 bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm transition-all duration-150">
-																	Sin guardar
-																</div>
-															</TooltipTrigger>
-															<TooltipContent>
-																Los cambios de esta fila aún no han sido guardados. <br /><br /> Ha modificado las columnas:
-																<ul>
-																	{cells.map((cell) => (
-																		<li key={cell.id}>
-																			<Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
-																				{cell.label}
-																			</Badge>
-																		</li>
-																	))}
-																</ul>
-															</TooltipContent>
-														</Tooltip>
-													)}
-													{accordionRowConfig && !accordionAlwaysOpen && (
-														<div className="flex justify-end">
-															{accordionRowConfig.renderTrigger ? (
-																accordionRowConfig.renderTrigger({
-																	row: row.original,
-																	isOpen: expanded,
-																	toggle: () => toggleAccordionRow(row.original.id),
-																})
-															) : (
-																<Button
-																	type="button"
-																	variant="ghost"
-																	size="sm"
-																	aria-expanded={expanded}
-																	onClick={() => toggleAccordionRow(row.original.id)}
-																	className="gap-1 text-muted-foreground hover:text-foreground"
-																>
-																	{expanded ? (
-																		<>
-																			<ChevronDown className="h-4 w-4" />
-																			<span>{`Ocultar ${accordionLabel}`}</span>
-																		</>
-																	) : (
-																		<>
-																			<ChevronRight className="h-4 w-4" />
-																			<span>{`Ver ${accordionLabel}`}</span>
-																		</>
-																	)}
-																</Button>
-															)}
-														</div>
-													)}
-													<Button
-														type="button"
-														variant="ghost"
-														size="sm"
-														onClick={() => handleDelete(row.original.id)}
-														className="text-destructive hover:text-destructive"
-													>
-														Eliminar
-													</Button>
-												</td>
-											</tr>
-											{accordionRowConfig && expanded && (
-												<tr className="bg-muted/40">
-													<td
-														colSpan={visibleLeafCount + 1}
-														className={cn(
-															"px-6 py-4 text-left text-sm text-foreground border-b border-border",
-															accordionRowConfig.contentClassName
-														)}
-													>
-														{accordionRowConfig.renderContent(row.original)}
-													</td>
-												</tr>
-											)}
-										</Fragment>
-									);
-								})
+								table.getRowModel().rows.map((row, rowIndex) => (
+									<MemoizedTableRow
+										key={row.original.id}
+										row={row}
+										rowIndex={rowIndex}
+										columnsById={columnsById}
+										FieldComponent={FieldComponent}
+										highlightQuery={highlightQuery}
+										hasInitialSnapshot={hasInitialRow(row.original.id)}
+										hasAccordionRows={hasAccordionRows}
+										accordionRowConfig={accordionRowConfig}
+										accordionAlwaysOpen={accordionAlwaysOpen}
+										isExpanded={hasAccordionRows ? isRowExpanded(row.original.id) : false}
+										getStickyProps={getStickyProps}
+										onToggleAccordion={toggleAccordionRow}
+										onDelete={handleDelete}
+										onClearCell={handleClearCell}
+										onRestoreCell={handleRestoreCell}
+										onCopyCell={handleCopyCell}
+										onCopyColumn={handleCopyColumn}
+										onCopyRow={handleCopyRow}
+									/>
+								))
 							)}
 						</tbody>
 					</table>
