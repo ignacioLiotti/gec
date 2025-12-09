@@ -1173,38 +1173,41 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [sortedRows.length, pageSize]);
 
 	useEffect(() => {
-		if (!isServerPaging && page > clientTotalPages) {
+		if (page > clientTotalPages) {
 			setPage(clientTotalPages);
 		}
-	}, [clientTotalPages, isServerPaging, page]);
+	}, [clientTotalPages, page]);
+
+	// Detect if server returned more rows than requested (server doesn't support pagination)
+	const serverReturnedAllRows = isServerPaging && sortedRows.length > pageSize;
+
+	// Use client-side pagination if server returned all rows
+	const useClientPagination = !isServerPaging || serverReturnedAllRows;
 
 	const processedRows = useMemo(() => {
-		if (isServerPaging) {
-			return sortedRows;
-		}
 		const start = (page - 1) * pageSize;
 		return sortedRows.slice(start, start + pageSize);
-	}, [isServerPaging, page, pageSize, sortedRows]);
+	}, [page, pageSize, sortedRows]);
 
 	const processedRowsRef = useRef<Row[]>(processedRows);
 	useEffect(() => {
 		processedRowsRef.current = processedRows;
 	}, [processedRows]);
 
-	const datasetTotalCount = isServerPaging
-		? serverMeta.total || processedRows.length
-		: sortedRows.length;
+	const datasetTotalCount = useClientPagination
+		? sortedRows.length
+		: serverMeta.total || sortedRows.length;
 
-	const totalPages = isServerPaging
-		? serverMeta.totalPages || 1
-		: clientTotalPages;
+	const totalPages = useClientPagination
+		? clientTotalPages
+		: serverMeta.totalPages || 1;
 
-	const hasNextPage = isServerPaging
-		? serverMeta.hasNextPage
-		: page < clientTotalPages;
-	const hasPreviousPage = isServerPaging
-		? serverMeta.hasPreviousPage
-		: page > 1;
+	const hasNextPage = useClientPagination
+		? page < clientTotalPages
+		: serverMeta.hasNextPage;
+	const hasPreviousPage = useClientPagination
+		? page > 1
+		: serverMeta.hasPreviousPage;
 
 	const totalRowCount = datasetTotalCount;
 	const visibleRowCount = processedRows.length;

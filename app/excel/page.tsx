@@ -29,7 +29,7 @@ export default function ExcelPage() {
 
 				<FormTableToolbar />
 				<FormTableTabs />
-				<FormTableContent className=" max-w-[calc(98vw-var(--sidebar-current-width))] " />
+				<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] " />
 				<FormTablePagination />
 			</div>
 		</FormTable>

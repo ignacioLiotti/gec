@@ -166,7 +166,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 	enablePin: true,
 	editable: false,
 	cellType: "text",
-		sortFn: (a, b) => (a.n ?? 0) - (b.n ?? 0),
+		sortFn: (a, b) => toNumber(a.n) - toNumber(b.n),
 		searchFn: (row, query) => String(row.n ?? "").includes(query),
 		validators: {
 			onBlur: requiredValidator("N°"),
