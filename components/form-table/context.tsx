@@ -51,6 +51,7 @@ export type FormTableColumnsState<Row extends FormTableRow> = {
 	tableRef: React.MutableRefObject<HTMLTableElement | null>;
 	colRefs: React.MutableRefObject<(HTMLTableColElement | null)[]>;
 	colWidths: Record<number, number>;
+	enableResizing: boolean;
 };
 
 export type FormTableSortingState = {
@@ -73,6 +74,7 @@ export type FormTablePaginationState = {
 	setPage: Dispatch<SetStateAction<number>>;
 	pageSize: number;
 	setPageSize: (size: number) => void;
+	lockedPageSize?: number;
 	hasNextPage: boolean;
 	hasPreviousPage: boolean;
 	totalPages: number;
@@ -114,6 +116,7 @@ export type FormTableRowState<Row extends FormTableRow> = {
 
 export type FormTableActions = {
 	save: () => Promise<void>;
+	discard: () => void;
 	addRow: () => void;
 };
 
@@ -150,4 +153,3 @@ export function useFormTable<Row extends FormTableRow, Filters>() {
 	}
 	return ctx as unknown as FormTableContextValue<Row, Filters>;
 }
-

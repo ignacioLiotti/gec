@@ -160,17 +160,17 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 	{
 		id: "n",
 		label: "N°",
-	field: "n",
-	required: true,
-	enableHide: false,
-	enablePin: true,
-	editable: false,
-	cellType: "text",
-		sortFn: (a, b) => toNumber(a.n) - toNumber(b.n),
-		searchFn: (row, query) => String(row.n ?? "").includes(query),
-		validators: {
-			onBlur: requiredValidator("N°"),
-		},
+		field: "n",
+		required: true,
+		enableHide: false,
+		enablePin: true,
+		editable: false,
+		cellType: "text",
+		// sortFn: (a, b) => toNumber(a.n) - toNumber(b.n),
+		// searchFn: (row, query) => String(row.n ?? "").includes(query),
+		// validators: {
+		// 	onBlur: requiredValidator("N°"),
+		// },
 		defaultValue: null,
 	},
 	{
@@ -490,7 +490,7 @@ const renderFilters = ({
 					/>
 				</div>
 			</div>
-			{( [
+			{([
 				["cmaMin", "cmaMax", "Contrato + Ampliaciones"],
 				["cafMin", "cafMax", "Certificado a la fecha"],
 				["sacMin", "sacMax", "Saldo a certificar"],
@@ -681,25 +681,25 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 
 const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["onSave"] =
 	async ({ rows }: SaveRowsArgs<ObrasDetalleRow>) => {
-	const payload = {
-		detalleObras: rows.map((row, index) => mapDetailRowToPayload(row, index)),
+		const payload = {
+			detalleObras: rows.map((row, index) => mapDetailRowToPayload(row, index)),
+		};
+		const response = await fetch("/api/obras", {
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+		});
+		if (!response.ok) {
+			const errorPayload = await response.json().catch(() => ({}));
+			const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
+			const detailsMessage = errorPayload?.details
+				? JSON.stringify(errorPayload.details)
+				: null;
+			throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
+		}
 	};
-	const response = await fetch("/api/obras", {
-		method: "PUT",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify(payload),
-	});
-	if (!response.ok) {
-		const errorPayload = await response.json().catch(() => ({}));
-		const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
-		const detailsMessage = errorPayload?.details
-			? JSON.stringify(errorPayload.details)
-			: null;
-		throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
-	}
-};
 
 export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters> = {
 	tableId: "form-table-obras-detalle",
@@ -710,6 +710,7 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	tabFilters,
 	searchPlaceholder: "Buscar en columnas de obras",
 	defaultPageSize: 10,
+	showActionsColumn: false,
 	createFilters,
 	renderFilters,
 	applyFilters,
@@ -717,72 +718,72 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	fetchRows: fetchObrasDetalle,
 	onSave: saveObrasDetalle,
 	createRow: createNewRow,
-	accordionRow: {
-		triggerLabel: "detalle extendido",
-		renderContent: (row) => {
-			const avance = clampPercentage(row.porcentaje);
-			return (
-				<div className="space-y-4">
-					<div className="grid gap-4 text-sm md:grid-cols-3">
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Entidad contratante</p>
-							<p className="font-medium text-foreground">{row.entidadContratante || "Sin datos"}</p>
-						</div>
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Mes básico de contrato</p>
-							<p className="font-medium text-foreground">{row.mesBasicoDeContrato || "—"}</p>
-						</div>
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Iniciación</p>
-							<p className="font-medium text-foreground">{row.iniciacion || "—"}</p>
-						</div>
-					</div>
-					<div className="grid gap-4 text-sm md:grid-cols-4">
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Contrato + Ampliaciones</p>
-							<p className="font-semibold">{formatCurrency(row.contratoMasAmpliaciones)}</p>
-						</div>
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Certificado a la fecha</p>
-							<p className="font-semibold">{formatCurrency(row.certificadoALaFecha)}</p>
-						</div>
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Saldo a certificar</p>
-							<p className="font-semibold">{formatCurrency(row.saldoACertificar)}</p>
-						</div>
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Según contrato</p>
-							<p className="font-semibold">{formatCurrency(row.segunContrato)}</p>
-						</div>
-					</div>
-					<div className="grid gap-4 text-sm md:grid-cols-3">
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Prórrogas acordadas</p>
-							<p className="font-medium">{row.prorrogasAcordadas ?? "—"}</p>
-						</div>
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Plazo total</p>
-							<p className="font-medium">{row.plazoTotal ?? "—"}</p>
-						</div>
-						<div>
-							<p className="text-xs uppercase text-muted-foreground">Plazo transcurrido</p>
-							<p className="font-medium">{row.plazoTransc ?? "—"}</p>
-						</div>
-					</div>
-					<div className="space-y-2">
-						<p className="text-xs uppercase text-muted-foreground">Avance físico</p>
-						<div className="flex items-center gap-3">
-							<div className="h-2 flex-1 rounded-full bg-muted">
-								<div
-									className="h-2 rounded-full bg-orange-primary transition-all"
-									style={{ width: `${avance}%` }}
-								/>
-							</div>
-							<span className="text-sm font-semibold text-foreground">{avance}%</span>
-						</div>
-					</div>
-				</div>
-			);
-		},
-	},
+	// accordionRow: {
+	// 	triggerLabel: "detalle extendido",
+	// 	renderContent: (row) => {
+	// 		const avance = clampPercentage(row.porcentaje);
+	// 		return (
+	// 			<div className="space-y-4">
+	// 				<div className="grid gap-4 text-sm md:grid-cols-3">
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Entidad contratante</p>
+	// 						<p className="font-medium text-foreground">{row.entidadContratante || "Sin datos"}</p>
+	// 					</div>
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Mes básico de contrato</p>
+	// 						<p className="font-medium text-foreground">{row.mesBasicoDeContrato || "—"}</p>
+	// 					</div>
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Iniciación</p>
+	// 						<p className="font-medium text-foreground">{row.iniciacion || "—"}</p>
+	// 					</div>
+	// 				</div>
+	// 				<div className="grid gap-4 text-sm md:grid-cols-4">
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Contrato + Ampliaciones</p>
+	// 						<p className="font-semibold">{formatCurrency(row.contratoMasAmpliaciones)}</p>
+	// 					</div>
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Certificado a la fecha</p>
+	// 						<p className="font-semibold">{formatCurrency(row.certificadoALaFecha)}</p>
+	// 					</div>
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Saldo a certificar</p>
+	// 						<p className="font-semibold">{formatCurrency(row.saldoACertificar)}</p>
+	// 					</div>
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Según contrato</p>
+	// 						<p className="font-semibold">{formatCurrency(row.segunContrato)}</p>
+	// 					</div>
+	// 				</div>
+	// 				<div className="grid gap-4 text-sm md:grid-cols-3">
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Prórrogas acordadas</p>
+	// 						<p className="font-medium">{row.prorrogasAcordadas ?? "—"}</p>
+	// 					</div>
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Plazo total</p>
+	// 						<p className="font-medium">{row.plazoTotal ?? "—"}</p>
+	// 					</div>
+	// 					<div>
+	// 						<p className="text-xs uppercase text-muted-foreground">Plazo transcurrido</p>
+	// 						<p className="font-medium">{row.plazoTransc ?? "—"}</p>
+	// 					</div>
+	// 				</div>
+	// 				<div className="space-y-2">
+	// 					<p className="text-xs uppercase text-muted-foreground">Avance físico</p>
+	// 					<div className="flex items-center gap-3">
+	// 						<div className="h-2 flex-1 rounded-full bg-muted">
+	// 							<div
+	// 								className="h-2 rounded-full bg-orange-primary transition-all"
+	// 								style={{ width: `${avance}%` }}
+	// 							/>
+	// 						</div>
+	// 						<span className="text-sm font-semibold text-foreground">{avance}%</span>
+	// 					</div>
+	// 				</div>
+	// 			</div>
+	// 		);
+	// 	},
+	// },
 };

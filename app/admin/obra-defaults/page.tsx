@@ -3,18 +3,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { 
-  FolderPlus, 
-  TableProperties, 
-  Trash2, 
-  Loader2, 
+import {
+  FolderPlus,
+  TableProperties,
+  Trash2,
+  Loader2,
+  ScanLine,
+  Plus,
+  Folder,
+  FileText,
   ChevronDown,
   ChevronUp,
-  Link2,
-  FileText,
-  Settings2,
-  ScanLine,
-  Eye,
+  Hash,
+  Type,
+  Calendar,
+  DollarSign,
+  ToggleLeft,
+  Table2,
+  X,
 } from "lucide-react";
 
 import { OcrTemplateConfigurator } from "./_components/OcrTemplateConfigurator";
@@ -22,10 +28,8 @@ import { OcrTemplateConfigurator } from "./_components/OcrTemplateConfigurator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -41,87 +45,446 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
-import { TABLA_DATA_TYPES, type TablaColumnDataType } from "@/lib/tablas";
+import { normalizeFieldKey } from "@/lib/tablas";
+
+type OcrColumn = {
+  id: string;
+  label: string;
+  fieldKey: string;
+  dataType: string;
+  required: boolean;
+  scope: "parent" | "item";
+};
 
 type DefaultFolder = {
   id: string;
   name: string;
   path: string;
   position: number;
+  // OCR folder fields
+  isOcr?: boolean;
+  ocrTemplateId?: string | null;
+  ocrTemplateName?: string | null;
+  hasNestedData?: boolean;
+  columns?: Array<{
+    fieldKey: string;
+    label: string;
+    dataType: string;
+    ocrScope?: string;
+  }>;
 };
 
-type DefaultTablaColumn = {
-  id?: string;
-  field_key?: string;
-  label: string;
-  data_type: TablaColumnDataType;
-  position: number;
-  required: boolean;
-  config: Record<string, unknown>;
-};
-
-type DefaultTabla = {
+type OcrTemplate = {
   id: string;
   name: string;
   description: string | null;
-  source_type: "manual" | "csv" | "ocr";
-  linked_folder_path: string | null;
-  settings: Record<string, unknown>;
-  position: number;
-  columns: DefaultTablaColumn[];
+  template_file_name: string | null;
+  regions: Array<{
+    id: string;
+    label: string;
+    type: "single" | "table";
+    tableColumns?: string[];
+  }>;
+  columns: Array<{ fieldKey: string; label: string; dataType: string; ocrScope?: string }>;
+  is_active: boolean;
 };
+
+// Get icon for data type
+function getDataTypeIcon(dataType: string) {
+  switch (dataType) {
+    case "number":
+      return <Hash className="h-3 w-3" />;
+    case "currency":
+      return <DollarSign className="h-3 w-3" />;
+    case "date":
+      return <Calendar className="h-3 w-3" />;
+    case "boolean":
+      return <ToggleLeft className="h-3 w-3" />;
+    default:
+      return <Type className="h-3 w-3" />;
+  }
+}
+
+// Folder Row Component
+function FolderRow({
+  folder,
+  onDelete,
+  index,
+}: {
+  folder: DefaultFolder;
+  onDelete: () => void;
+  index: number;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const isOcr = folder.isOcr;
+  const hasColumns = folder.columns && folder.columns.length > 0;
+
+  const parentColumns = folder.columns?.filter(c => c.ocrScope === "parent") ?? [];
+  const itemColumns = folder.columns?.filter(c => c.ocrScope !== "parent") ?? [];
+
+  if (!isOcr) {
+    // Simple folder row
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 20 }}
+        transition={{ delay: index * 0.03 }}
+        className="group flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+      >
+        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+          <Folder className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{folder.name}</p>
+          <p className="text-xs text-muted-foreground font-mono">/{folder.path}</p>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </motion.div>
+    );
+  }
+
+  // OCR folder with expandable details
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 20 }}
+      transition={{ delay: index * 0.03 }}
+    >
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div className="rounded-lg border bg-card overflow-hidden border-amber-200 dark:border-amber-800">
+          <CollapsibleTrigger asChild>
+            <div className="group flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors">
+              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                <Table2 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-sm truncate">{folder.name}</p>
+                  <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                    OCR
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-mono">/{folder.path}</span>
+                  {hasColumns && ` · ${folder.columns!.length} campos`}
+                  {folder.ocrTemplateName && ` · ${folder.ocrTemplateName}`}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                {isOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+          </CollapsibleTrigger>
+
+          <CollapsibleContent>
+            <div className="border-t p-4 space-y-4 bg-muted/30">
+              {folder.ocrTemplateName && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Plantilla OCR</p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <ScanLine className="h-4 w-4 text-purple-500" />
+                    <span>{folder.ocrTemplateName}</span>
+                  </div>
+                </div>
+              )}
+
+              {folder.hasNestedData && (
+                <div>
+                  <Badge variant="outline" className="text-xs">
+                    Datos anidados (Documento + Items)
+                  </Badge>
+                </div>
+              )}
+
+              {hasColumns && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Campos de datos</p>
+
+                  {parentColumns.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Nivel documento</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                        {parentColumns.map((col) => (
+                          <div
+                            key={col.fieldKey}
+                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                          >
+                            {getDataTypeIcon(col.dataType)}
+                            <span className="flex-1 truncate">{col.label}</span>
+                            <Badge variant="outline" className="text-[9px] font-mono">
+                              {col.dataType}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {itemColumns.length > 0 && (
+                    <div>
+                      {parentColumns.length > 0 && (
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Nivel item</p>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                        {itemColumns.map((col) => (
+                          <div
+                            key={col.fieldKey}
+                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                          >
+                            {getDataTypeIcon(col.dataType)}
+                            <span className="flex-1 truncate">{col.label}</span>
+                            <Badge variant="outline" className="text-[9px] font-mono">
+                              {col.dataType}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </motion.div>
+  );
+}
+
+// OCR Template Card Component with expandable details
+function OcrTemplateCard({
+  template,
+  onDelete,
+  index,
+}: {
+  template: OcrTemplate;
+  onDelete: () => void;
+  index: number;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const tableRegions = template.regions.filter(r => r.type === "table");
+  const parentColumns = template.columns.filter(c => c.ocrScope === "parent");
+  const itemColumns = template.columns.filter(c => c.ocrScope !== "parent");
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ delay: index * 0.03 }}
+    >
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div className="rounded-lg border bg-card overflow-hidden">
+          <CollapsibleTrigger asChild>
+            <div className="flex items-center gap-3 p-4 cursor-pointer hover:bg-accent/50 transition-colors">
+              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                <ScanLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-sm truncate">{template.name}</p>
+                  {!template.is_active && (
+                    <Badge variant="secondary" className="text-[10px]">Inactiva</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {template.columns.length} campos · {template.regions.length} regiones
+                  {tableRegions.length > 0 && ` · ${tableRegions.length} tablas`}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                {isOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+          </CollapsibleTrigger>
+
+          <CollapsibleContent>
+            <div className="border-t p-4 space-y-4 bg-muted/30">
+              {template.description && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Descripción</p>
+                  <p className="text-sm">{template.description}</p>
+                </div>
+              )}
+
+              {template.template_file_name && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Archivo de plantilla</p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-xs">{template.template_file_name}</span>
+                  </div>
+                </div>
+              )}
+
+              {template.regions.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Regiones de extracción</p>
+                  <div className="space-y-2">
+                    {template.regions.map((region) => (
+                      <div
+                        key={region.id}
+                        className="flex items-start gap-2 p-2 rounded bg-background border text-sm"
+                      >
+                        {region.type === "table" ? (
+                          <TableProperties className="h-4 w-4 text-blue-500 mt-0.5" />
+                        ) : (
+                          <div className="h-4 w-4 rounded border-2 border-purple-500 mt-0.5" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{region.label}</span>
+                            <Badge variant={region.type === "table" ? "default" : "secondary"} className="text-[10px]">
+                              {region.type === "table" ? "Tabla" : "Campo"}
+                            </Badge>
+                          </div>
+                          {region.type === "table" && region.tableColumns && region.tableColumns.length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Columnas: {region.tableColumns.join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {template.columns.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Campos de datos</p>
+
+                  {parentColumns.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Nivel documento</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                        {parentColumns.map((col) => (
+                          <div
+                            key={col.fieldKey}
+                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                          >
+                            {getDataTypeIcon(col.dataType)}
+                            <span className="flex-1 truncate">{col.label}</span>
+                            <Badge variant="outline" className="text-[9px] font-mono">
+                              {col.dataType}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {itemColumns.length > 0 && (
+                    <div>
+                      {parentColumns.length > 0 && (
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Nivel item</p>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                        {itemColumns.map((col) => (
+                          <div
+                            key={col.fieldKey}
+                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                          >
+                            {getDataTypeIcon(col.dataType)}
+                            <span className="flex-1 truncate">{col.label}</span>
+                            <Badge variant="outline" className="text-[9px] font-mono">
+                              {col.dataType}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </motion.div>
+  );
+}
+
+const DATA_TYPES = ["text", "number", "currency", "date", "boolean"] as const;
 
 export default function ObraDefaultsPage() {
   const [folders, setFolders] = useState<DefaultFolder[]>([]);
-  const [tablas, setTablas] = useState<DefaultTabla[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
+  // Folder dialog state
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
-  const [isAddTablaOpen, setIsAddTablaOpen] = useState(false);
-  
+  const [folderMode, setFolderMode] = useState<"normal" | "ocr">("normal");
   const [newFolderName, setNewFolderName] = useState("");
   const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
-  
-  // Tabla form state
-  const [newTablaName, setNewTablaName] = useState("");
-  const [newTablaDescription, setNewTablaDescription] = useState("");
-  const [newTablaSourceType, setNewTablaSourceType] = useState<"manual" | "ocr">("manual");
-  const [newTablaLinkedFolder, setNewTablaLinkedFolder] = useState("");
-  const [newTablaOcrDocType, setNewTablaOcrDocType] = useState("");
-  const [newTablaOcrInstructions, setNewTablaOcrInstructions] = useState("");
-  const [newTablaHasNestedData, setNewTablaHasNestedData] = useState(false);
-  const [newTablaColumns, setNewTablaColumns] = useState<Array<{
-    label: string;
-    dataType: TablaColumnDataType;
-    required: boolean;
-    ocrScope?: "parent" | "item";
-    fieldKey?: string;
-  }>>([{ label: "", dataType: "text", required: false, fieldKey: "columna_1" }]);
-  const [isSubmittingTabla, setIsSubmittingTabla] = useState(false);
 
-  const [expandedTablaId, setExpandedTablaId] = useState<string | null>(null);
+  // OCR folder state
+  const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState("");
+  const [newFolderHasNested, setNewFolderHasNested] = useState(false);
+  const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
 
   // OCR Templates state
-  type OcrTemplate = {
-    id: string;
-    name: string;
-    description: string | null;
-    template_file_name: string | null;
-    regions: Array<{
-      id: string;
-      label: string;
-      type: "single" | "table";
-      tableColumns?: string[];
-    }>;
-    columns: Array<{ fieldKey: string; label: string; dataType: string; ocrScope?: string }>;
-    is_active: boolean;
-  };
-
   const [ocrTemplates, setOcrTemplates] = useState<OcrTemplate[]>([]);
   const [isOcrConfigOpen, setIsOcrConfigOpen] = useState(false);
-  const [newTablaOcrTemplateId, setNewTablaOcrTemplateId] = useState<string>("");
+
+  const resetFolderForm = useCallback(() => {
+    setNewFolderName("");
+    setFolderMode("normal");
+    setNewFolderOcrTemplateId("");
+    setNewFolderHasNested(false);
+    setNewFolderColumns([]);
+  }, []);
 
   const fetchOcrTemplates = useCallback(async () => {
     try {
@@ -141,7 +504,6 @@ export default function ObraDefaultsPage() {
       if (!res.ok) throw new Error("Failed to load defaults");
       const data = await res.json();
       setFolders(data.folders ?? []);
-      setTablas(data.tablas ?? []);
     } catch (error) {
       console.error(error);
       toast.error("Error cargando configuración");
@@ -155,11 +517,42 @@ export default function ObraDefaultsPage() {
     void fetchOcrTemplates();
   }, [fetchDefaults, fetchOcrTemplates]);
 
-  useEffect(() => {
-    if (newTablaSourceType !== "ocr" && newTablaOcrTemplateId) {
-      setNewTablaOcrTemplateId("");
+  // When template is selected, populate columns from template
+  const handleTemplateSelect = useCallback((templateId: string) => {
+    setNewFolderOcrTemplateId(templateId);
+
+    if (!templateId) {
+      setNewFolderColumns([]);
+      setNewFolderHasNested(false);
+      return;
     }
-  }, [newTablaOcrTemplateId, newTablaSourceType]);
+
+    const template = ocrTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    const mappedColumns: OcrColumn[] = template.columns.map((col, index) => ({
+      id: crypto.randomUUID(),
+      label: col.label,
+      fieldKey: col.fieldKey || normalizeFieldKey(col.label),
+      dataType: DATA_TYPES.includes(col.dataType as typeof DATA_TYPES[number]) ? col.dataType : "text",
+      required: false,
+      scope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
+    }));
+
+    setNewFolderColumns(mappedColumns);
+
+    // Check if has nested data (both parent and item columns)
+    const hasParent = mappedColumns.some(c => c.scope === "parent");
+    const hasItem = mappedColumns.some(c => c.scope === "item");
+    setNewFolderHasNested(hasParent && hasItem);
+  }, [ocrTemplates]);
+
+  // Sync columns scope when hasNested changes
+  useEffect(() => {
+    if (!newFolderHasNested) {
+      setNewFolderColumns(prev => prev.map(col => ({ ...col, scope: "item" as const })));
+    }
+  }, [newFolderHasNested]);
 
   const handleDeleteOcrTemplate = async (id: string) => {
     try {
@@ -168,9 +561,9 @@ export default function ObraDefaultsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      
+
       if (!res.ok) throw new Error("Error deleting template");
-      
+
       setOcrTemplates((prev) => prev.filter((t) => t.id !== id));
       toast.success("Plantilla eliminada");
     } catch (error) {
@@ -185,25 +578,56 @@ export default function ObraDefaultsPage() {
 
   const handleAddFolder = async () => {
     if (!newFolderName.trim()) return;
-    
+
+    if (folderMode === "ocr") {
+      if (!newFolderOcrTemplateId) {
+        toast.error("Seleccioná una plantilla OCR");
+        return;
+      }
+      if (newFolderColumns.length === 0) {
+        toast.error("Agregá al menos una columna");
+        return;
+      }
+    }
+
     try {
       setIsSubmittingFolder(true);
+
+      const payload: Record<string, unknown> = {
+        type: "folder",
+        name: newFolderName.trim(),
+      };
+
+      if (folderMode === "ocr") {
+        payload.isOcr = true;
+        payload.ocrTemplateId = newFolderOcrTemplateId;
+        payload.hasNestedData = newFolderHasNested;
+        payload.columns = newFolderColumns.map((col, index) => ({
+          label: col.label,
+          fieldKey: col.fieldKey || normalizeFieldKey(col.label),
+          dataType: col.dataType,
+          required: col.required,
+          position: index,
+          ocrScope: newFolderHasNested ? col.scope : "item",
+        }));
+      }
+
       const res = await fetch("/api/obra-defaults", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "folder", name: newFolderName.trim() }),
+        body: JSON.stringify(payload),
       });
-      
+
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Error creating folder");
       }
-      
+
       const { folder } = await res.json();
       setFolders((prev) => [...prev, folder]);
-      setNewFolderName("");
+      resetFolderForm();
       setIsAddFolderOpen(false);
-      toast.success("Carpeta agregada");
+      toast.success(folderMode === "ocr" ? "Carpeta OCR agregada" : "Carpeta agregada");
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Error agregando carpeta");
@@ -219,9 +643,9 @@ export default function ObraDefaultsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "folder", id }),
       });
-      
+
       if (!res.ok) throw new Error("Error deleting folder");
-      
+
       setFolders((prev) => prev.filter((folder) => folder.id !== id));
       toast.success("Carpeta eliminada");
     } catch (error) {
@@ -230,151 +654,39 @@ export default function ObraDefaultsPage() {
     }
   };
 
-  const resetTablaForm = () => {
-    setNewTablaName("");
-    setNewTablaDescription("");
-    setNewTablaSourceType("manual");
-    setNewTablaLinkedFolder("");
-    setNewTablaOcrDocType("");
-    setNewTablaOcrInstructions("");
-    setNewTablaHasNestedData(false);
-    setNewTablaOcrTemplateId("");
-    setNewTablaColumns([{ label: "", dataType: "text", required: false, fieldKey: "columna_1" }]);
-  };
-
-  const handleAddTabla = async () => {
-    if (!newTablaName.trim()) return;
-    
-    const validColumns = newTablaColumns.filter((col) => col.label.trim());
-    if (validColumns.length === 0) {
-      toast.error("Necesitás al menos una columna");
-      return;
-    }
-    
-    try {
-      setIsSubmittingTabla(true);
-      const columnsPayload = validColumns.map((col, index) => ({
-        label: col.label.trim() || `Columna ${index + 1}`,
-        fieldKey: (col as any).fieldKey || (col as any).field_key || col.label || `col_${index + 1}`,
-        dataType: col.dataType,
-        required: Boolean(col.required),
-        ocrScope: col.ocrScope,
-        position: index,
-      }));
-
-      const res = await fetch("/api/obra-defaults", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "tabla",
-          name: newTablaName.trim(),
-          description: newTablaDescription.trim() || null,
-          sourceType: newTablaSourceType,
-          linkedFolderPath: newTablaSourceType === "ocr" ? newTablaLinkedFolder : null,
-          ocrDocType: newTablaSourceType === "ocr" ? newTablaOcrDocType : null,
-          ocrInstructions: newTablaSourceType === "ocr" ? newTablaOcrInstructions : null,
-          hasNestedData: newTablaSourceType === "ocr" ? newTablaHasNestedData : false,
-          ocrTemplateId: newTablaSourceType === "ocr" ? newTablaOcrTemplateId || null : null,
-          columns: columnsPayload,
-        }),
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Error creating tabla");
-      }
-      
-      const { tabla } = await res.json();
-      setTablas((prev) => [...prev, tabla]);
-      resetTablaForm();
-      setIsAddTablaOpen(false);
-      toast.success("Tabla agregada");
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : "Error agregando tabla");
-    } finally {
-      setIsSubmittingTabla(false);
-    }
-  };
-
-  const handleDeleteTabla = async (id: string) => {
-    try {
-      const res = await fetch("/api/obra-defaults", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "tabla", id }),
-      });
-      
-      if (!res.ok) throw new Error("Error deleting tabla");
-      
-      setTablas((prev) => prev.filter((tabla) => tabla.id !== id));
-      toast.success("Tabla eliminada");
-    } catch (error) {
-      console.error(error);
-      toast.error("Error eliminando tabla");
-    }
-  };
-
   const handleAddColumn = () => {
-    setNewTablaColumns((prev) => [
+    setNewFolderColumns(prev => [
       ...prev,
-      { label: "", dataType: "text", required: false, fieldKey: `columna_${prev.length + 1}` },
+      {
+        id: crypto.randomUUID(),
+        label: "",
+        fieldKey: "",
+        dataType: "text",
+        required: false,
+        scope: "item",
+      },
     ]);
   };
 
-  const handleRemoveColumn = (index: number) => {
-    setNewTablaColumns((prev) => prev.filter((_, i) => i !== index));
+  const handleRemoveColumn = (id: string) => {
+    setNewFolderColumns(prev => prev.filter(col => col.id !== id));
   };
 
-  const handleColumnChange = (
-    index: number,
-    field: "label" | "dataType" | "required" | "ocrScope",
-    value: any
-  ) => {
-    setNewTablaColumns((prev) =>
-      prev.map((col, i) => (i === index ? { ...col, [field]: value } : col))
-    );
+  const handleColumnChange = (id: string, field: keyof OcrColumn, value: string | boolean) => {
+    setNewFolderColumns(prev => prev.map(col => {
+      if (col.id !== id) return col;
+      const updated = { ...col, [field]: value };
+      // Auto-generate fieldKey from label if not manually set
+      if (field === "label" && typeof value === "string") {
+        updated.fieldKey = normalizeFieldKey(value);
+      }
+      return updated;
+    }));
   };
 
-  const handleTemplateSelect = useCallback((templateId: string | null) => {
-    const normalizedId = templateId ?? "";
-    setNewTablaOcrTemplateId(normalizedId);
-    if (!templateId) {
-      setNewTablaHasNestedData(false);
-      setNewTablaColumns([{ label: "", dataType: "text", required: false, fieldKey: "columna_1" }]);
-      return;
-    }
-    const template = ocrTemplates.find((tpl) => tpl.id === templateId);
-    if (!template) return;
-
-    const mappedColumns = template.columns.map((col, index) => {
-      const normalizedType = TABLA_DATA_TYPES.includes(col.dataType as TablaColumnDataType)
-        ? (col.dataType as TablaColumnDataType)
-        : "text";
-      return {
-        label: col.label,
-        dataType: normalizedType,
-        required: false,
-        ocrScope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
-        fieldKey: col.fieldKey || `col_${index + 1}`,
-      };
-    });
-
-    setNewTablaColumns(
-      mappedColumns.length > 0
-        ? mappedColumns
-        : [{ label: "", dataType: "text", required: false, fieldKey: "columna_1" }]
-    );
-
-    const hasParent = mappedColumns.some((col) => col.ocrScope === "parent");
-    const hasItem = mappedColumns.some((col) => col.ocrScope !== "parent");
-    setNewTablaHasNestedData(hasParent && hasItem);
-    setNewTablaOcrDocType((prev) => prev || template.name || prev);
-    setNewTablaName((prev) => prev || template.name || prev);
-    if (newTablaSourceType !== "ocr") {
-      setNewTablaSourceType("ocr");
-    }
-  }, [newTablaSourceType, ocrTemplates]);
+  const isCreateFolderDisabled =
+    !newFolderName.trim() ||
+    (folderMode === "ocr" && (!newFolderOcrTemplateId || newFolderColumns.length === 0));
 
   if (isLoading) {
     return (
@@ -386,653 +698,329 @@ export default function ObraDefaultsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
+      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-amber-500 to-orange-600 bg-clip-text text-transparent">
+        <h1 className="text-3xl font-bold tracking-tight">
           Configuración de Obras
         </h1>
-        <p className="text-muted-foreground mt-2">
-          Definí las carpetas y tablas que se crearán automáticamente en cada nueva obra.
+        <p className="text-muted-foreground mt-1">
+          Definí la estructura predeterminada para cada nueva obra
         </p>
       </div>
 
       {/* Folders Section */}
-      <Card className="border-amber-500/20 bg-gradient-to-br from-amber-50/50 to-orange-50/30 dark:from-amber-950/20 dark:to-orange-950/10">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <FolderPlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <CardTitle>Carpetas por defecto</CardTitle>
-                <CardDescription>
-                  Estructura de carpetas inicial para documentos
-                </CardDescription>
-              </div>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <FolderPlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsAddFolderOpen(true)}
-              className="border-amber-500/30 hover:bg-amber-500/10"
-            >
-              <FolderPlus className="h-4 w-4 mr-2" />
-              Agregar carpeta
-            </Button>
+            <div>
+              <h2 className="text-xl font-semibold">Carpetas</h2>
+              <p className="text-sm text-muted-foreground">
+                Estructura de archivos que se crea en cada nueva obra
+              </p>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
+          <Button
+            onClick={() => setIsAddFolderOpen(true)}
+            className="bg-amber-500 hover:bg-amber-600 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva carpeta
+          </Button>
+        </div>
+
+        <div className="space-y-2">
           {folders.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <FolderPlus className="h-12 w-12 mx-auto mb-3 opacity-20" />
-              <p>No hay carpetas configuradas.</p>
-              <p className="text-sm">Las obras nuevas no tendrán carpetas predefinidas.</p>
+            <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+              <FolderPlus className="h-12 w-12 mx-auto opacity-20 mb-2" />
+              <p className="text-sm font-medium">Sin carpetas configuradas</p>
+              <p className="text-xs">Las carpetas se crearán automáticamente en cada nueva obra</p>
             </div>
           ) : (
-            <div className="grid gap-2">
-              <AnimatePresence>
-                {folders.map((folder, index) => (
-                  <motion.div
-                    key={folder.id}
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="group flex items-center justify-between p-3 rounded-lg bg-background/60 border border-border/50 hover:border-amber-500/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded bg-amber-500/10 flex items-center justify-center">
-                        <FileText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{folder.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{folder.path}</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteFolder(folder.id)}
-                      className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
+            <AnimatePresence mode="popLayout">
+              {folders.map((folder, index) => (
+                <FolderRow
+                  key={folder.id}
+                  folder={folder}
+                  index={index}
+                  onDelete={() => handleDeleteFolder(folder.id)}
+                />
+              ))}
+            </AnimatePresence>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* OCR Templates Section */}
-      <Card className="border-purple-500/20 bg-gradient-to-br from-purple-50/50 to-fuchsia-50/30 dark:from-purple-950/20 dark:to-fuchsia-950/10">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <ScanLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <CardTitle>Plantillas OCR</CardTitle>
-                <CardDescription>
-                  Define regiones de extracción para procesar documentos automáticamente
-                </CardDescription>
-              </div>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+              <ScanLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsOcrConfigOpen(true)}
-              className="border-purple-500/30 hover:bg-purple-500/10"
-            >
-              <ScanLine className="h-4 w-4 mr-2" />
-              Nueva plantilla
-            </Button>
+            <div>
+              <h2 className="text-xl font-semibold">Plantillas OCR</h2>
+              <p className="text-sm text-muted-foreground">
+                Configuración de extracción automática de datos
+              </p>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          {ocrTemplates.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <ScanLine className="h-12 w-12 mx-auto mb-3 opacity-20" />
-              <p>No hay plantillas OCR configuradas.</p>
-              <p className="text-sm">Creá plantillas para extraer datos de documentos automáticamente.</p>
-            </div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <AnimatePresence>
-                {ocrTemplates.map((template, index) => (
-                  <motion.div
-                    key={template.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="group p-4 rounded-lg bg-background/60 border border-border/50 hover:border-purple-500/30 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <ScanLine className="h-4 w-4 text-purple-500 shrink-0" />
-                          <p className="font-medium truncate">{template.name}</p>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {template.regions.slice(0, 3).map((region, i) => (
-                            <Badge
-                              key={i}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {region.type === "table" ? "📊" : "📝"} {region.label}
-                            </Badge>
-                          ))}
-                          {template.regions.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{template.regions.length - 3} más
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {template.columns.length} campos • {template.regions.filter(r => r.type === "table").length} tablas
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                          title="Ver plantilla"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteOcrTemplate(template.id)}
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <Button
+            onClick={() => setIsOcrConfigOpen(true)}
+            className="bg-purple-500 hover:bg-purple-600 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva plantilla
+          </Button>
+        </div>
 
-      {/* Tablas Section */}
-      <Card className="border-blue-500/20 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-blue-950/20 dark:to-indigo-950/10">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <TableProperties className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <CardTitle>Tablas por defecto</CardTitle>
-                <CardDescription>
-                  Tablas de datos predefinidas con sus columnas
-                </CardDescription>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsAddTablaOpen(true)}
-              className="border-blue-500/30 hover:bg-blue-500/10"
-            >
-              <TableProperties className="h-4 w-4 mr-2" />
-              Agregar tabla
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {tablas.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <TableProperties className="h-12 w-12 mx-auto mb-3 opacity-20" />
-              <p>No hay tablas configuradas.</p>
-              <p className="text-sm">Las obras nuevas no tendrán tablas predefinidas.</p>
+        <div className="space-y-3">
+          {ocrTemplates.length === 0 ? (
+            <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+              <ScanLine className="h-12 w-12 mx-auto opacity-20 mb-2" />
+              <p className="text-sm font-medium">Sin plantillas configuradas</p>
+              <p className="text-xs">Las plantillas definen cómo extraer datos de documentos</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              <AnimatePresence>
-                {tablas.map((tabla, index) => (
-                  <motion.div
-                    key={tabla.id}
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="rounded-lg bg-background/60 border border-border/50 hover:border-blue-500/30 transition-colors overflow-hidden"
-                  >
-                    <div
-                      className="flex items-center justify-between p-3 cursor-pointer"
-                      onClick={() =>
-                        setExpandedTablaId(expandedTablaId === tabla.id ? null : tabla.id)
-                      }
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded bg-blue-500/10 flex items-center justify-center">
-                          <TableProperties className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{tabla.name}</p>
-                            <Badge
-                              variant="outline"
-                              className={
-                                tabla.source_type === "ocr"
-                                  ? "border-purple-500/50 text-purple-600 dark:text-purple-400"
-                                  : "border-gray-500/50"
-                              }
-                            >
-                              {tabla.source_type === "ocr" ? "OCR" : "Manual"}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{tabla.columns.length} columnas</span>
-                            {tabla.linked_folder_path && (
-                              <>
-                                <span>•</span>
-                                <span className="flex items-center gap-1">
-                                  <Link2 className="h-3 w-3" />
-                                  {tabla.linked_folder_path}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteTabla(tabla.id);
-                          }}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                        {expandedTablaId === tabla.id ? (
-                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </div>
-                    </div>
-                    
-                    <AnimatePresence>
-                      {expandedTablaId === tabla.id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="border-t border-border/50"
-                        >
-                          <div className="p-3 space-y-2">
-                            {tabla.description && (
-                              <p className="text-sm text-muted-foreground mb-3">
-                                {tabla.description}
-                              </p>
-                            )}
-                            <div className="grid gap-1">
-                              {tabla.columns.map((col) => (
-                                <div
-                                  key={col.id || col.field_key}
-                                  className="flex items-center justify-between py-1 px-2 rounded bg-muted/30 text-sm"
-                                >
-                                  <span className="font-medium">{col.label}</span>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="secondary" className="text-xs">
-                                      {col.data_type}
-                                    </Badge>
-                                    {col.required && (
-                                      <Badge variant="destructive" className="text-xs">
-                                        requerido
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
+            <AnimatePresence mode="popLayout">
+              {ocrTemplates.map((template, index) => (
+                <OcrTemplateCard
+                  key={template.id}
+                  template={template}
+                  index={index}
+                  onDelete={() => handleDeleteOcrTemplate(template.id)}
+                />
+              ))}
+            </AnimatePresence>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Add Folder Dialog */}
-      <Dialog open={isAddFolderOpen} onOpenChange={setIsAddFolderOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={isAddFolderOpen} onOpenChange={(open) => {
+        setIsAddFolderOpen(open);
+        if (!open) resetFolderForm();
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FolderPlus className="h-5 w-5 text-amber-500" />
-              Nueva carpeta por defecto
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+                folderMode === "ocr"
+                  ? "bg-amber-100 dark:bg-amber-900/30"
+                  : "bg-amber-100 dark:bg-amber-900/30"
+              }`}>
+                {folderMode === "ocr" ? (
+                  <Table2 className="h-4 w-4 text-amber-600" />
+                ) : (
+                  <FolderPlus className="h-4 w-4 text-amber-600" />
+                )}
+              </div>
+              {folderMode === "ocr" ? "Nueva carpeta OCR" : "Nueva carpeta"}
             </DialogTitle>
             <DialogDescription>
-              Esta carpeta se creará automáticamente en cada nueva obra.
+              {folderMode === "ocr"
+                ? "Esta carpeta se vinculará a una tabla OCR para extraer datos automáticamente."
+                : "Esta carpeta se creará automáticamente en cada nueva obra."}
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4 py-4">
+            {/* Folder Type Toggle */}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={folderMode === "normal" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFolderMode("normal")}
+                className="flex-1"
+              >
+                <Folder className="h-4 w-4 mr-2" />
+                Carpeta normal
+              </Button>
+              <Button
+                type="button"
+                variant={folderMode === "ocr" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFolderMode("ocr")}
+                className="flex-1"
+              >
+                <Table2 className="h-4 w-4 mr-2" />
+                Carpeta OCR
+              </Button>
+            </div>
+
+            {/* Folder Name */}
             <div className="space-y-2">
               <Label>Nombre de la carpeta</Label>
               <Input
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="Ej. Órdenes de Compra"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void handleAddFolder();
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddFolderOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => void handleAddFolder()}
-              disabled={isSubmittingFolder || !newFolderName.trim()}
-            >
-              {isSubmittingFolder ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <FolderPlus className="h-4 w-4" />
-              )}
-              Agregar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Tabla Dialog */}
-      <Dialog
-        open={isAddTablaOpen}
-        onOpenChange={(open) => {
-          setIsAddTablaOpen(open);
-          if (!open) resetTablaForm();
-        }}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <TableProperties className="h-5 w-5 text-blue-500" />
-              Nueva tabla por defecto
-            </DialogTitle>
-            <DialogDescription>
-              Esta tabla se creará automáticamente en cada nueva obra.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-6 py-4">
-            {/* Basic Info */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Nombre</Label>
-                <Input
-                  value={newTablaName}
-                  onChange={(e) => setNewTablaName(e.target.value)}
-                  placeholder="Ej. Materiales"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select
-                  value={newTablaSourceType}
-                  onValueChange={(value) =>
-                    setNewTablaSourceType(value as "manual" | "ocr")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="ocr">OCR (extracción automática)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Descripción (opcional)</Label>
-              <Textarea
-                value={newTablaDescription}
-                onChange={(e) => setNewTablaDescription(e.target.value)}
-                placeholder="Contexto u objetivo de esta tabla"
-                rows={2}
+                placeholder={folderMode === "ocr" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
               />
             </div>
 
-            {/* OCR Settings */}
-            {newTablaSourceType === "ocr" && (
-              <div className="space-y-4 p-4 rounded-lg border border-purple-500/20 bg-purple-50/50 dark:bg-purple-950/20">
-                <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                  <Settings2 className="h-4 w-4" />
-                  <span className="font-medium">Configuración OCR</span>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Carpeta vinculada</Label>
-                  <Select
-                    value={newTablaLinkedFolder}
-                    onValueChange={setNewTablaLinkedFolder}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar carpeta..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {folders.map((folder) => (
-                        <SelectItem key={folder.id} value={folder.path}>
-                          {folder.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Los documentos subidos a esta carpeta se procesarán automáticamente
-                  </p>
-                </div>
-
+            {/* OCR Specific Fields */}
+            {folderMode === "ocr" && (
+              <>
+                {/* Template Selection */}
                 <div className="space-y-2">
                   <Label>Plantilla OCR</Label>
-                  <Select
-                    value={newTablaOcrTemplateId || "none"}
-                    onValueChange={(value) =>
-                      handleTemplateSelect(value === "none" ? null : value)
-                    }
-                    disabled={ocrTemplates.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar plantilla..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin plantilla (configuración manual)</SelectItem>
-                      {ocrTemplates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name} ({template.columns.length} campos)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   {ocrTemplates.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      No hay plantillas disponibles todavía. Creá una en la sección superior.
-                    </p>
+                    <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
+                      No hay plantillas disponibles. Creá una primero.
+                    </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Las columnas se pueden autocompletar usando una plantilla existente.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Tipo de documento</Label>
-                  <Input
-                    value={newTablaOcrDocType}
-                    onChange={(e) => setNewTablaOcrDocType(e.target.value)}
-                    placeholder="Ej. Orden de compra"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Instrucciones adicionales (opcional)</Label>
-                  <Textarea
-                    value={newTablaOcrInstructions}
-                    onChange={(e) => setNewTablaOcrInstructions(e.target.value)}
-                    placeholder="Instrucciones específicas para la extracción..."
-                    rows={2}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Datos anidados</p>
-                    <p className="text-xs text-muted-foreground">
-                      El documento contiene listas de items
-                    </p>
-                  </div>
-                  <Switch
-                    checked={newTablaHasNestedData}
-                    onCheckedChange={setNewTablaHasNestedData}
-                  />
-                </div>
-              </div>
-            )}
-
-            <Separator />
-
-            {/* Columns */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Columnas</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddColumn}
-                >
-                  Agregar columna
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {newTablaColumns.map((col, index) => (
-                  <div
-                    key={index}
-                    className="grid gap-2 p-3 rounded-lg bg-muted/30 border border-border/50"
-                    style={{
-                      gridTemplateColumns:
-                        newTablaSourceType === "ocr" && newTablaHasNestedData
-                          ? "1fr 120px 100px 80px 40px"
-                          : "1fr 120px 80px 40px",
-                    }}
-                  >
-                    <Input
-                      value={col.label}
-                      onChange={(e) =>
-                        handleColumnChange(index, "label", e.target.value)
-                      }
-                      placeholder="Nombre de columna"
-                    />
                     <Select
-                      value={col.dataType}
-                      onValueChange={(value) =>
-                        handleColumnChange(index, "dataType", value)
-                      }
+                      value={newFolderOcrTemplateId || undefined}
+                      onValueChange={handleTemplateSelect}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Seleccionar plantilla..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {TABLA_DATA_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
+                        {ocrTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            <span className="flex items-center gap-2">
+                              <ScanLine className="h-4 w-4 text-purple-500" />
+                              {template.name} ({template.columns.length} campos)
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {newTablaSourceType === "ocr" && newTablaHasNestedData && (
-                      <Select
-                        value={col.ocrScope ?? "item"}
-                        onValueChange={(value) =>
-                          handleColumnChange(index, "ocrScope", value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="parent">Documento</SelectItem>
-                          <SelectItem value="item">Item</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <div className="flex items-center justify-center">
-                      <Switch
-                        checked={col.required}
-                        onCheckedChange={(value) =>
-                          handleColumnChange(index, "required", value)
-                        }
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveColumn(index)}
-                      disabled={newTablaColumns.length <= 1}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  )}
+                </div>
+
+                {/* Nested Data Toggle */}
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div>
+                    <p className="text-sm font-medium">Datos anidados</p>
+                    <p className="text-xs text-muted-foreground">
+                      El documento tiene datos a nivel documento e items
+                    </p>
                   </div>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {newTablaSourceType === "ocr" && newTablaHasNestedData
-                  ? "Columnas: Nombre | Tipo | Scope | Requerido | Eliminar"
-                  : "Columnas: Nombre | Tipo | Requerido | Eliminar"}
-              </p>
-            </div>
+                  <Switch
+                    checked={newFolderHasNested}
+                    onCheckedChange={setNewFolderHasNested}
+                    disabled={Boolean(newFolderOcrTemplateId)}
+                  />
+                </div>
+
+                {/* Columns */}
+                {newFolderColumns.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Columnas de la tabla</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddColumn}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Agregar
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                      {newFolderColumns.map((col) => (
+                        <div
+                          key={col.id}
+                          className="flex items-center gap-2 p-2 rounded-lg border bg-background"
+                        >
+                          <Input
+                            value={col.label}
+                            onChange={(e) => handleColumnChange(col.id, "label", e.target.value)}
+                            placeholder="Nombre columna"
+                            className="flex-1 h-8 text-sm"
+                          />
+                          <Select
+                            value={col.dataType}
+                            onValueChange={(value) => handleColumnChange(col.id, "dataType", value)}
+                          >
+                            <SelectTrigger className="w-28 h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DATA_TYPES.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                  {type}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {newFolderHasNested && (
+                            <Select
+                              value={col.scope}
+                              onValueChange={(value) => handleColumnChange(col.id, "scope", value)}
+                            >
+                              <SelectTrigger className="w-24 h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="parent">Doc</SelectItem>
+                                <SelectItem value="item">Item</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveColumn(col.id)}
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground">
+                      {newFolderHasNested
+                        ? "Nombre | Tipo | Scope (Doc/Item) | Eliminar"
+                        : "Nombre | Tipo | Eliminar"}
+                    </p>
+                  </div>
+                )}
+
+                {newFolderOcrTemplateId && newFolderColumns.length === 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddColumn}
+                    className="w-full"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar columna
+                  </Button>
+                )}
+              </>
+            )}
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsAddTablaOpen(false)}
-            >
+            <Button variant="outline" onClick={() => {
+              setIsAddFolderOpen(false);
+              resetFolderForm();
+            }}>
               Cancelar
             </Button>
             <Button
-              onClick={() => void handleAddTabla()}
-              disabled={
-                isSubmittingTabla ||
-                !newTablaName.trim() ||
-                !newTablaColumns.some((col) => col.label.trim())
-              }
+              onClick={() => void handleAddFolder()}
+              disabled={isSubmittingFolder || isCreateFolderDisabled}
+              className="bg-amber-500 hover:bg-amber-600"
             >
-              {isSubmittingTabla ? (
+              {isSubmittingFolder ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
+              ) : folderMode === "ocr" ? (
+                <Table2 className="h-4 w-4" />
               ) : (
-                <TableProperties className="h-4 w-4" />
+                <FolderPlus className="h-4 w-4" />
               )}
-              Agregar tabla
+              {folderMode === "ocr" ? "Crear carpeta OCR" : "Crear carpeta"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1047,4 +1035,3 @@ export default function ObraDefaultsPage() {
     </div>
   );
 }
-

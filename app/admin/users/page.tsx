@@ -3,8 +3,8 @@ import UserRow from "./user-row";
 import ImpersonateBanner from "./_components/impersonate-banner";
 import { InviteUsersDialog } from "./_components/invite-users-dialog";
 import { PendingInvitationsList } from "./_components/pending-invitations-list";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
 export default async function AdminUsersPage() {
@@ -17,10 +17,10 @@ export default async function AdminUsersPage() {
 
   const { data: memberships, error: membershipsError } = await supabase
     .from("memberships")
-    .select("tenant_id")
+    .select("tenant_id, role")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true });
   console.log("[admin/users] memberships", memberships, membershipsError);
-  let resolvedMemberships = memberships;
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
@@ -30,12 +30,10 @@ export default async function AdminUsersPage() {
   console.log("[admin/users] profile lookup", profile, profileError);
   const isSuperAdmin = (profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
 
-  if ((!resolvedMemberships || resolvedMemberships.length === 0) && isSuperAdmin) {
-    console.log("[admin/users] no memberships found; using default tenant for superadmin");
-    resolvedMemberships = [{ tenant_id: DEFAULT_TENANT_ID }];
-  }
-
-  const tenantId = resolvedMemberships?.[0]?.tenant_id ?? DEFAULT_TENANT_ID;
+  const { tenantId } = await resolveTenantMembership(
+    (memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+    { isSuperAdmin }
+  );
   console.log("[admin/users] resolved tenantId", tenantId);
   if (!tenantId) return <div className="p-6 text-sm">No se encontró membresía de organización.</div>;
 
@@ -145,5 +143,4 @@ function UsersTable({
 // ImpersonateBanner moved to ./_components/impersonate-banner
 
 // UserRow moved to ./user-row (client component)
-
 

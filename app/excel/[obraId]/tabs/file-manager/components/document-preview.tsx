@@ -2,7 +2,7 @@
 
 import { Download, Eye, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import ForgeViewer from "@/app/viewer/forgeviewer";
+import ForgeViewer from "@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer";
 import { EnhancedDocumentViewer } from "@/components/viewer/enhanced-document-viewer";
 import type { FileSystemItem } from "../types";
 

@@ -11,6 +11,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   admin: "Administración",
   users: "Usuarios",
   roles: "Roles",
+  macro: "Macro Tablas",
   excel: "Excel",
   certificados: "Certificados",
   notifications: "Notificaciones",
@@ -105,6 +106,9 @@ export function PageBreadcrumb() {
     </nav>
   );
 }
+
+
+
 
 
 

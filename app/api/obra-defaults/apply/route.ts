@@ -23,7 +23,7 @@ async function getAuthContext() {
 }
 
 /**
- * Apply default folders and tablas to a newly created obra
+ * Apply default folders and OCR tablas to a newly created obra
  */
 export async function POST(request: Request) {
 	const { supabase, user, tenantId } = await getAuthContext();
@@ -68,17 +68,28 @@ export async function POST(request: Request) {
 
 		if (foldersError) throw foldersError;
 
-		// Fetch default tablas with columns
+		// Fetch default OCR tablas with columns
 		const { data: defaultTablas, error: tablasError } = await supabase
 			.from("obra_default_tablas")
 			.select("id, name, description, source_type, linked_folder_path, settings, position, ocr_template_id")
 			.eq("tenant_id", tenantId)
+			.eq("source_type", "ocr")
 			.order("position", { ascending: true });
 
-		if (tablasError) throw tablasError;
+		if (tablasError) {
+			console.error("[apply-defaults] Error fetching tablas:", tablasError);
+		}
 
-		const tablaIds = (defaultTablas ?? []).map((tabla) => tabla.id);
-		let columnsData: any[] = [];
+		// Fetch columns for OCR tablas
+		const tablaIds = (defaultTablas ?? []).map(t => t.id);
+		let columnsMap = new Map<string, Array<{
+			field_key: string;
+			label: string;
+			data_type: string;
+			position: number;
+			required: boolean;
+			config: Record<string, unknown>;
+		}>>();
 
 		if (tablaIds.length > 0) {
 			const { data: columns, error: columnsError } = await supabase
@@ -87,29 +98,44 @@ export async function POST(request: Request) {
 				.in("default_tabla_id", tablaIds)
 				.order("position", { ascending: true });
 
-			if (columnsError) throw columnsError;
-			columnsData = columns ?? [];
+			if (columnsError) {
+				console.error("[apply-defaults] Error fetching columns:", columnsError);
+			} else if (columns) {
+				columns.forEach(col => {
+					const existing = columnsMap.get(col.default_tabla_id) ?? [];
+					existing.push({
+						field_key: col.field_key,
+						label: col.label,
+						data_type: col.data_type,
+						position: col.position,
+						required: col.required,
+						config: (col.config as Record<string, unknown>) ?? {},
+					});
+					columnsMap.set(col.default_tabla_id, existing);
+				});
+			}
 		}
 
-		// Group columns by tabla
-		const columnsByTabla = new Map<string, any[]>();
-		for (const column of columnsData) {
-			const tablaId = column.default_tabla_id;
-			const existing = columnsByTabla.get(tablaId) ?? [];
-			existing.push(column);
-			columnsByTabla.set(tablaId, existing);
-		}
+		// Create a map of folder path -> default tabla
+		const tablaByFolderPath = new Map<string, (typeof defaultTablas)[0]>();
+		(defaultTablas ?? []).forEach(tabla => {
+			if (tabla.linked_folder_path) {
+				tablaByFolderPath.set(tabla.linked_folder_path, tabla);
+			}
+		});
 
-		// Ensure folders exist in storage so linked OCR tablas resolve their paths
+		// Create folders in storage and track created tablas
 		const createdFolders = defaultFolders ?? [];
-		const folderPaths = new Set<string>();
+		let tablasCreated = 0;
+
 		for (const folder of createdFolders) {
 			const folderPath =
 				typeof folder?.path === "string" && folder.path.length > 0
 					? folder.path
 					: null;
 			if (!folderPath) continue;
-			folderPaths.add(folderPath);
+
+			// Create folder in storage
 			try {
 				const keepPath = `${obraId}/${folderPath}/.keep`;
 				await supabase.storage
@@ -124,33 +150,35 @@ export async function POST(request: Request) {
 					storageError
 				);
 			}
-		}
 
-		// Create tablas
-		const createdTablas: string[] = [];
+			// Check if this folder has a linked OCR tabla
+			const defaultTabla = tablaByFolderPath.get(folderPath);
+			if (!defaultTabla) continue;
 
-		for (const defaultTabla of defaultTablas ?? []) {
-			// Build settings, updating ocrFolder path if linked
-			const settings: Record<string, unknown> = {
-				...((defaultTabla.settings as Record<string, unknown>) ?? {}),
-			};
+			// Check if tabla with same name already exists for this obra
+			const { data: existingTabla } = await supabase
+				.from("obra_tablas")
+				.select("id")
+				.eq("obra_id", obraId)
+				.eq("name", defaultTabla.name)
+				.maybeSingle();
 
-			if (
-				defaultTabla.source_type === "ocr" &&
-				defaultTabla.linked_folder_path &&
-				folderPaths.has(defaultTabla.linked_folder_path)
-			) {
-				settings.ocrFolder = defaultTabla.linked_folder_path;
+			if (existingTabla) {
+				// Skip if already exists
+				continue;
 			}
-			if (
-				defaultTabla.source_type === "ocr" &&
-				defaultTabla.ocr_template_id &&
-				!settings.ocrTemplateId
-			) {
+
+			// Build settings for the new tabla
+			const defaultSettings = (defaultTabla.settings as Record<string, unknown>) ?? {};
+			const settings: Record<string, unknown> = {
+				...defaultSettings,
+				ocrFolder: folderPath,
+			};
+			if (defaultTabla.ocr_template_id) {
 				settings.ocrTemplateId = defaultTabla.ocr_template_id;
 			}
 
-			// Insert the tabla
+			// Create the tabla
 			const { data: tabla, error: tablaError } = await supabase
 				.from("obra_tablas")
 				.insert({
@@ -168,12 +196,12 @@ export async function POST(request: Request) {
 				continue;
 			}
 
-			createdTablas.push(tabla.id);
+			tablasCreated++;
 
-			// Insert columns for this tabla
-			const defaultColumns = columnsByTabla.get(defaultTabla.id) ?? [];
+			// Create columns for the tabla
+			const defaultColumns = columnsMap.get(defaultTabla.id) ?? [];
 			if (defaultColumns.length > 0) {
-				const columnsPayload = defaultColumns.map((col) => ({
+				const columnsPayload = defaultColumns.map(col => ({
 					tabla_id: tabla.id,
 					field_key: col.field_key,
 					label: col.label,
@@ -197,7 +225,7 @@ export async function POST(request: Request) {
 			ok: true,
 			applied: {
 				folders: createdFolders.length,
-				tablas: createdTablas.length,
+				tablas: tablasCreated,
 			},
 		});
 	} catch (error) {
@@ -208,4 +236,3 @@ export async function POST(request: Request) {
 		);
 	}
 }
-

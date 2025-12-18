@@ -198,8 +198,19 @@ export async function proxy(req: NextRequest) {
 			resolvedMemberships = [{ tenant_id: DEFAULT_TENANT_ID, role: "admin" }];
 		}
 
-		const tenantId = resolvedMemberships?.[0]?.tenant_id ?? DEFAULT_TENANT_ID;
-		const membershipRole = resolvedMemberships?.[0]?.role;
+		const preferredTenantId = req.cookies.get("active_tenant_id")?.value;
+		const preferredMembership =
+			preferredTenantId && resolvedMemberships
+				? resolvedMemberships.find(
+						(membership) => membership.tenant_id === preferredTenantId
+				  )
+				: undefined;
+
+		const activeMembership = preferredMembership ?? resolvedMemberships?.[0];
+
+		const tenantId =
+			activeMembership?.tenant_id ?? DEFAULT_TENANT_ID;
+		const membershipRole = activeMembership?.role;
 		const isAdmin =
 			membershipRole === "owner" || membershipRole === "admin" || isSuperAdmin;
 

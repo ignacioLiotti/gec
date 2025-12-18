@@ -40,10 +40,11 @@ import {
   ArrowLeft,
   Table2,
   XIcon,
+  ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Sentry from '@sentry/nextjs';
-import ForgeViewer from '@/app/viewer/forgeviewer';
+import ForgeViewer from '@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer';
 import { EnhancedDocumentViewer } from '@/components/viewer/enhanced-document-viewer';
 import FolderFront from '@/components/ui/FolderFront';
 import { DocumentSheet } from './components/document-sheet';
@@ -2267,16 +2268,28 @@ export function FileManager({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {selectedFolder.ocrTablaId && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => handleNavigateToTabla(selectedFolder.ocrTablaId)}
-                className="gap-1.5"
-              >
-                <Table2 className="w-3.5 h-3.5" />
-                Ver tabla
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleNavigateToTabla(selectedFolder.ocrTablaId)}
+                  className="gap-1.5"
+                >
+                  <Table2 className="w-3.5 h-3.5" />
+                  Ver tabla
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/excel/${obraId}/tabla/${selectedFolder.ocrTablaId}/reporte`)}
+                  className="gap-1.5"
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  Reporte
+                </Button>
+              </>
             )}
             {selectedFolder.ocrEnabled && hasTablaSchema && (
               <Button

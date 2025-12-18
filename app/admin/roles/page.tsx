@@ -7,8 +7,8 @@ import UserOverrides from "./_components/user-overrides";
 import PermissionsManager from "./_components/permissions-manager";
 import RoleRow from "./_components/role-row";
 import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
 type Role = {
@@ -43,10 +43,9 @@ export default async function RolesAdminPage() {
   const { data: memberships, error: membershipsError } = await supabase
     .from("memberships")
     .select("tenant_id, role")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true });
   console.log("[admin/roles] memberships", memberships, membershipsError);
-  let resolvedMemberships = memberships;
-
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("is_superadmin")
@@ -55,12 +54,10 @@ export default async function RolesAdminPage() {
   console.log("[admin/roles] profile lookup", profile, profileError);
   const isSuperAdmin = (profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
 
-  if ((!resolvedMemberships || resolvedMemberships.length === 0) && isSuperAdmin) {
-    console.log("[admin/roles] no memberships found; using default tenant for superadmin");
-    resolvedMemberships = [{ tenant_id: DEFAULT_TENANT_ID, role: null }];
-  }
-
-  const tenantId = resolvedMemberships?.[0]?.tenant_id ?? DEFAULT_TENANT_ID;
+  const { tenantId } = await resolveTenantMembership(
+    (memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+    { isSuperAdmin }
+  );
   console.log("[admin/roles] resolved tenantId", tenantId);
 
   // Ensure user has the admin permission (admin:roles) within this tenant
@@ -233,5 +230,3 @@ function RolePermissionsSection({ roles, permissions }: { roles: Role[]; permiss
 
 // Client islands
 // Client components moved to ./_components
-
-

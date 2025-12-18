@@ -5,19 +5,23 @@ import {
 	Home,
 	Users,
 	ShieldCheck,
-	Wrench,
 	ChevronDown,
 	FileText,
 	Bell,
 	FileCheck,
 	Database,
-	Play,
 	User,
 	KeyRound,
 	Settings2,
+	Layers,
+	Sparkles,
+	PlusCircle,
+	Check,
+	Building2,
+	Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import {
 	Sidebar,
@@ -37,6 +41,14 @@ import {
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { getRouteAccessConfig, type Role } from "@/lib/route-access";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type NavItem = {
 	title: string;
@@ -98,6 +110,16 @@ const navItems: NavItem[] = [
 		href: "/profile",
 		icon: User,
 	},
+	{
+		title: "Onboarding",
+		href: "/onboarding?preview=1",
+		icon: Sparkles,
+	},
+	{
+		title: "Nueva obra",
+		href: "/tenants/new",
+		icon: PlusCircle,
+	},
 
 ];
 
@@ -106,6 +128,11 @@ const adminItems: NavItem[] = [
 		title: "Usuarios",
 		href: "/admin/users",
 		icon: Users,
+	},
+	{
+		title: "Organizaciones",
+		href: "/admin/tenants",
+		icon: Building2,
 	},
 	{
 		title: "Roles y Permisos",
@@ -118,6 +145,11 @@ const adminItems: NavItem[] = [
 		icon: Settings2,
 	},
 	{
+		title: "Macro Tablas",
+		href: "/admin/macro-tables",
+		icon: Layers,
+	},
+	{
 		title: "Secretos API",
 		href: "/admin/tenant-secrets",
 		icon: KeyRound,
@@ -126,11 +158,6 @@ const adminItems: NavItem[] = [
 		title: "Auditoría",
 		href: "/admin/audit-log",
 		icon: FileText,
-	},
-	{
-		title: "Workflows",
-		href: "/admin/workflows",
-		icon: Play,
 	},
 ];
 
@@ -164,6 +191,7 @@ const adminItems: NavItem[] = [
 export function AppSidebar({
 	user,
 	userRoles,
+	tenants,
 	...props
 }: React.ComponentProps<typeof Sidebar> & {
 	user?: { email?: string } | null;
@@ -173,9 +201,39 @@ export function AppSidebar({
 		isSuperAdmin: boolean;
 		tenantId: string | null;
 	} | null;
+	tenants?: { id: string; name: string | null }[];
 }) {
 	const pathname = usePathname();
+	const router = useRouter();
 	const { state } = useSidebar();
+	const [switchingTenantId, setSwitchingTenantId] = React.useState<string | null>(null);
+	const tenantOptions = tenants ?? [];
+	const activeTenantId = userRoles?.tenantId ?? null;
+
+	const handleTenantSwitch = React.useCallback(
+		async (tenantId: string) => {
+			setSwitchingTenantId(tenantId);
+			try {
+				const response = await fetch(`/api/tenants/${tenantId}/switch`, {
+					method: "POST",
+				});
+				if (!response.ok) {
+					console.error("[tenant-switch] failed", response.status);
+					return;
+				}
+				router.refresh();
+			} catch (error) {
+				console.error("[tenant-switch] error", error);
+			} finally {
+				setSwitchingTenantId((current) => (current === tenantId ? null : current));
+			}
+		},
+		[router]
+	);
+	const activeTenant =
+		tenantOptions.find((tenant) => tenant.id === activeTenantId) ??
+		tenantOptions[0] ??
+		null;
 
 	// Helper function to check if user can access a route
 	const canAccessRoute = React.useCallback(
@@ -234,16 +292,92 @@ export function AppSidebar({
 			<SidebarHeader>
 				<SidebarMenu>
 					<SidebarMenuItem>
-						<SidebarMenuButton size="lg" asChild>
-							<Link href="/" className='container'>
-								{/* if sidebar is closed make logo smaller */}
-								<div className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === 'collapsed' ? 'size-8' : 'size-10'}`} />
-								<div className="grid flex-1 text-left text-sm leading-tight pt-[5px]">
-									<span className="truncate font-semibold font-mono text-lg leading-[16px]">Sintesis</span>
-									<span className="truncate text-xs">Plataforma de gestión</span>
-								</div>
-							</Link>
-						</SidebarMenuButton>
+						<div className="space-y-2">
+							<SidebarMenuButton size="lg" asChild>
+								<Link href="/" className="container">
+									{/* if sidebar is closed make logo smaller */}
+									<div
+										className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${
+											state === "collapsed" ? "size-8" : "size-10"
+										}`}
+									/>
+									<div className="grid flex-1 text-left text-sm leading-tight pt-[5px]">
+										<span className="truncate font-semibold font-mono text-lg leading-[16px]">
+											Sintesis
+										</span>
+										<span className="truncate text-xs">Plataforma de gestión</span>
+									</div>
+								</Link>
+							</SidebarMenuButton>
+							{tenantOptions.length > 0 ? (
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<button
+											className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2 text-left text-sm font-medium"
+											type="button"
+										>
+											<div className="min-w-0">
+												<p className="text-xs font-normal text-muted-foreground">Organización</p>
+												<p className="truncate">{activeTenant?.name ?? "Seleccionar"}</p>
+											</div>
+											<ChevronDown className="ml-2 size-4 text-muted-foreground" />
+										</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										align="start"
+										side="bottom"
+										className="w-64"
+									>
+										<DropdownMenuLabel>Tus organizaciones</DropdownMenuLabel>
+										<DropdownMenuSeparator />
+										{tenantOptions.map((tenant) => {
+											const isActive = tenant.id === activeTenantId;
+											const isPending = switchingTenantId === tenant.id;
+											return (
+												<DropdownMenuItem
+													key={tenant.id}
+													onSelect={(event) => {
+														event.preventDefault();
+														if (!isPending) {
+															void handleTenantSwitch(tenant.id);
+														}
+													}}
+													className="cursor-pointer"
+													disabled={isPending}
+												>
+													<div className="flex w-full items-center gap-2">
+														<span className="truncate">
+															{tenant.name ?? "Sin nombre"}
+														</span>
+														{isPending ? (
+															<Loader2 className="ml-auto size-4 animate-spin text-muted-foreground" />
+														) : (
+															isActive && (
+																<Check className="ml-auto size-4 text-primary" />
+															)
+														)}
+													</div>
+												</DropdownMenuItem>
+											);
+										})}
+										<DropdownMenuSeparator />
+										<DropdownMenuItem asChild>
+											<Link href="/tenants/new" className="flex items-center gap-2">
+												<PlusCircle className="size-4" />
+												<span>Crear organización</span>
+											</Link>
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							) : (
+								<Link
+									href="/tenants/new"
+									className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
+								>
+									Crear organización
+								</Link>
+							)}
+						</div>
 					</SidebarMenuItem>
 				</SidebarMenu>
 			</SidebarHeader>

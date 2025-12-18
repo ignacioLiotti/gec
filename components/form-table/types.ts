@@ -148,6 +148,8 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	tabFilters?: TabFilterOption<Row>[];
 	searchPlaceholder?: string;
 	defaultPageSize?: number;
+	pageSizeOptions?: number[];
+	lockedPageSize?: number;
 	createFilters?: () => Filters;
 	renderFilters?: (props: FilterRendererProps<Filters>) => ReactNode;
 	applyFilters?: (row: Row, filters: Filters) => boolean;
@@ -159,7 +161,15 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	emptyStateMessage?: string;
 	accordionRow?: AccordionRowConfig<Row>;
 	showInlineSearch?: boolean;
+	enableColumnResizing?: boolean;
+	/** Whether to show the actions column (delete button, accordion toggle). Defaults to true. */
+	showActionsColumn?: boolean;
+	/** Controls whether the default toolbar should show the "Agregar fila" button. Defaults to true. */
+	allowAddRows?: boolean;
 };
+
+
+
 
 
 

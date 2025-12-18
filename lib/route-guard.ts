@@ -2,8 +2,10 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { getRouteAccessConfig, type Role } from "./route-access";
-
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+import {
+	resolveTenantMembership,
+	DEFAULT_TENANT_ID,
+} from "@/lib/tenant-selection";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
 /**
@@ -50,16 +52,11 @@ export async function getUserRoles(): Promise<{
 		console.error("Error fetching memberships:", membershipsError);
 	}
 
-	let resolvedMemberships = memberships;
-	if (
-		(!resolvedMemberships || resolvedMemberships.length === 0) &&
-		isSuperAdmin
-	) {
-		resolvedMemberships = [{ tenant_id: DEFAULT_TENANT_ID, role: "admin" }];
-	}
-
-	const tenantId = resolvedMemberships?.[0]?.tenant_id ?? DEFAULT_TENANT_ID;
-	const membershipRole = resolvedMemberships?.[0]?.role;
+	const { tenantId, activeMembership } = await resolveTenantMembership(
+		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+		{ isSuperAdmin }
+	);
+	const membershipRole = activeMembership?.role;
 
 	// Check if admin via membership
 	const isAdmin =

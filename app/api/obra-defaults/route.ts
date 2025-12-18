@@ -1,34 +1,23 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
-import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType, type TablaColumnDataType } from "@/lib/tablas";
+import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
 
 type DefaultFolder = {
 	id: string;
 	name: string;
 	path: string;
 	position: number;
-};
-
-type DefaultTablaColumn = {
-	id: string;
-	field_key: string;
-	label: string;
-	data_type: TablaColumnDataType;
-	position: number;
-	required: boolean;
-	config: Record<string, unknown>;
-};
-
-type DefaultTabla = {
-	id: string;
-	name: string;
-	description: string | null;
-	source_type: "manual" | "csv" | "ocr";
-	linked_folder_path: string | null;
-	settings: Record<string, unknown>;
-	position: number;
-	ocr_template_id?: string | null;
-	columns: DefaultTablaColumn[];
+	// OCR folder fields
+	isOcr?: boolean;
+	ocrTemplateId?: string | null;
+	ocrTemplateName?: string | null;
+	hasNestedData?: boolean;
+	columns?: Array<{
+		fieldKey: string;
+		label: string;
+		dataType: string;
+		ocrScope?: string;
+	}>;
 };
 
 async function getAuthContext() {
@@ -60,84 +49,110 @@ export async function GET() {
 	}
 
 	if (!tenantId) {
-		return NextResponse.json({ folders: [], tablas: [] });
+		return NextResponse.json({ folders: [] });
 	}
 
 	try {
-		const [foldersResult, tablasResult] = await Promise.all([
-			supabase
-				.from("obra_default_folders")
-				.select("id, name, path, position")
-				.eq("tenant_id", tenantId)
-				.order("position", { ascending: true }),
-			supabase
-				.from("obra_default_tablas")
-				.select(
-					"id, name, description, source_type, linked_folder_path, settings, position, ocr_template_id"
-				)
-				.eq("tenant_id", tenantId)
-				.order("position", { ascending: true }),
-		]);
-
-		const { data: folders, error: foldersError } = foldersResult;
-		const { data: tablas, error: tablasError } = tablasResult;
+		// Fetch folders
+		const { data: folders, error: foldersError } = await supabase
+			.from("obra_default_folders")
+			.select("id, name, path, position")
+			.eq("tenant_id", tenantId)
+			.order("position", { ascending: true });
 
 		if (foldersError) {
 			console.error("[obra-defaults:get] folders error:", foldersError);
 			throw foldersError;
 		}
+
+		// Fetch tablas to find OCR tablas linked to folders
+		const { data: tablas, error: tablasError } = await supabase
+			.from("obra_default_tablas")
+			.select("id, name, source_type, linked_folder_path, settings, ocr_template_id")
+			.eq("tenant_id", tenantId)
+			.eq("source_type", "ocr");
+
 		if (tablasError) {
 			console.error("[obra-defaults:get] tablas error:", tablasError);
-			throw tablasError;
 		}
 
-		// Fetch columns for all tablas
-		const tablaIds = (tablas ?? []).map((tabla) => tabla.id);
-		let columnsData: DefaultTablaColumn[] = [];
+		// Fetch OCR templates for names
+		const templateIds = (tablas ?? [])
+			.filter(t => t.ocr_template_id)
+			.map(t => t.ocr_template_id);
+
+		let templatesMap = new Map<string, string>();
+		if (templateIds.length > 0) {
+			const { data: templates } = await supabase
+				.from("ocr_templates")
+				.select("id, name")
+				.in("id", templateIds);
+
+			if (templates) {
+				templates.forEach(t => templatesMap.set(t.id, t.name));
+			}
+		}
+
+		// Fetch columns for OCR tablas
+		const tablaIds = (tablas ?? []).map(t => t.id);
+		let columnsMap = new Map<string, Array<{
+			fieldKey: string;
+			label: string;
+			dataType: string;
+			ocrScope?: string;
+		}>>();
 
 		if (tablaIds.length > 0) {
-			const { data: columns, error: columnsError } = await supabase
+			const { data: columns } = await supabase
 				.from("obra_default_tabla_columns")
-				.select("id, default_tabla_id, field_key, label, data_type, position, required, config")
+				.select("default_tabla_id, field_key, label, data_type, config")
 				.in("default_tabla_id", tablaIds)
 				.order("position", { ascending: true });
 
-			if (columnsError) throw columnsError;
-			columnsData = (columns ?? []) as any;
+			if (columns) {
+				columns.forEach(col => {
+					const existing = columnsMap.get(col.default_tabla_id) ?? [];
+					existing.push({
+						fieldKey: col.field_key,
+						label: col.label,
+						dataType: col.data_type,
+						ocrScope: (col.config as any)?.ocrScope,
+					});
+					columnsMap.set(col.default_tabla_id, existing);
+				});
+			}
 		}
 
-		// Group columns by tabla
-		const columnsByTabla = new Map<string, DefaultTablaColumn[]>();
-		for (const column of columnsData) {
-			const tablaId = (column as any).default_tabla_id;
-			const existing = columnsByTabla.get(tablaId) ?? [];
-			existing.push({
-				id: column.id,
-				field_key: column.field_key,
-				label: column.label,
-				data_type: ensureTablaDataType(column.data_type),
-				position: column.position,
-				required: column.required,
-				config: column.config as Record<string, unknown>,
-			});
-			columnsByTabla.set(tablaId, existing);
-		}
+		// Create a map of folder path -> linked tabla
+		const tablaByFolderPath = new Map<string, typeof tablas[0]>();
+		(tablas ?? []).forEach(tabla => {
+			if (tabla.linked_folder_path) {
+				tablaByFolderPath.set(tabla.linked_folder_path, tabla);
+			}
+		});
 
-		const tablasWithColumns: DefaultTabla[] = (tablas ?? []).map((tabla) => ({
-			id: tabla.id,
-			name: tabla.name,
-			description: tabla.description,
-			source_type: tabla.source_type as "manual" | "csv" | "ocr",
-			linked_folder_path: tabla.linked_folder_path,
-			settings: (tabla.settings as Record<string, unknown>) ?? {},
-			position: tabla.position,
-			ocr_template_id: tabla.ocr_template_id,
-			columns: columnsByTabla.get(tabla.id) ?? [],
-		}));
+		// Enrich folders with OCR info
+		const enrichedFolders: DefaultFolder[] = (folders ?? []).map(folder => {
+			const linkedTabla = tablaByFolderPath.get(folder.path);
+			if (!linkedTabla) {
+				return folder;
+			}
+
+			const settings = (linkedTabla.settings as Record<string, unknown>) ?? {};
+			return {
+				...folder,
+				isOcr: true,
+				ocrTemplateId: linkedTabla.ocr_template_id,
+				ocrTemplateName: linkedTabla.ocr_template_id
+					? templatesMap.get(linkedTabla.ocr_template_id)
+					: null,
+				hasNestedData: Boolean(settings.hasNestedData),
+				columns: columnsMap.get(linkedTabla.id) ?? [],
+			};
+		});
 
 		return NextResponse.json({
-			folders: folders ?? [],
-			tablas: tablasWithColumns,
+			folders: enrichedFolders,
 		});
 	} catch (error) {
 		console.error("[obra-defaults:get]", error);
@@ -164,7 +179,7 @@ export async function POST(request: Request) {
 
 	try {
 		const body = await request.json().catch(() => ({}));
-		const type = body.type as "folder" | "tabla";
+		const type = body.type as "folder";
 
 		if (type === "folder") {
 			const rawName = typeof body.name === "string" ? body.name.trim() : "";
@@ -177,136 +192,150 @@ export async function POST(request: Request) {
 				return NextResponse.json({ error: "Invalid folder name" }, { status: 400 });
 			}
 
-			// Get max position
-			const { data: existing } = await supabase
+			// Get max position for folders
+			const { data: existingFolders } = await supabase
 				.from("obra_default_folders")
 				.select("position")
 				.eq("tenant_id", tenantId)
 				.order("position", { ascending: false })
 				.limit(1);
 
-			const nextPosition = (existing?.[0]?.position ?? -1) + 1;
+			const nextFolderPosition = (existingFolders?.[0]?.position ?? -1) + 1;
 
-			const { data: folder, error } = await supabase
+			// Create the folder
+			const { data: folder, error: folderError } = await supabase
 				.from("obra_default_folders")
 				.insert({
 					tenant_id: tenantId,
 					name: rawName,
 					path,
-					position: nextPosition,
+					position: nextFolderPosition,
 				})
 				.select("id, name, path, position")
 				.single();
 
-			if (error) throw error;
+			if (folderError) throw folderError;
 
-			return NextResponse.json({ folder });
-		} else if (type === "tabla") {
-			const rawName = typeof body.name === "string" ? body.name.trim() : "";
-			if (!rawName) {
-				return NextResponse.json({ error: "Tabla name required" }, { status: 400 });
+			// Check if this is an OCR folder
+			const isOcr = body.isOcr === true;
+
+			if (!isOcr) {
+				return NextResponse.json({ folder });
 			}
 
-			const description = typeof body.description === "string" ? body.description : null;
-			const sourceType = ["manual", "csv", "ocr"].includes(body.sourceType)
-				? body.sourceType
-				: "manual";
-			const linkedFolderPath =
-				typeof body.linkedFolderPath === "string" && body.linkedFolderPath.trim()
-					? normalizeFolderName(body.linkedFolderPath)
-					: null;
-			const ocrTemplateId =
-				typeof body.ocrTemplateId === "string" && body.ocrTemplateId.trim()
-					? body.ocrTemplateId.trim()
-					: null;
-
+			// OCR folder - create linked tabla
+			const ocrTemplateId = typeof body.ocrTemplateId === "string" && body.ocrTemplateId.trim()
+				? body.ocrTemplateId.trim()
+				: null;
+			const hasNestedData = body.hasNestedData === true;
 			const rawColumns: Array<{
 				label: string;
+				fieldKey?: string;
 				dataType?: string;
 				required?: boolean;
 				ocrScope?: string;
-				fieldKey?: string;
+				position?: number;
 			}> = Array.isArray(body.columns) ? body.columns : [];
 
 			// Build settings
-			const settings: Record<string, unknown> = {};
-			if (sourceType === "ocr" && linkedFolderPath) {
-				settings.ocrFolder = linkedFolderPath;
-				if (typeof body.ocrDocType === "string" && body.ocrDocType.trim()) {
-					settings.ocrDocType = body.ocrDocType.trim();
-				}
-				if (typeof body.ocrInstructions === "string" && body.ocrInstructions.trim()) {
-					settings.ocrInstructions = body.ocrInstructions.trim();
-				}
-				if (body.hasNestedData) {
-					settings.hasNestedData = true;
-				}
-				if (ocrTemplateId) {
-					settings.ocrTemplateId = ocrTemplateId;
-				}
+			const settings: Record<string, unknown> = {
+				ocrFolder: path,
+				hasNestedData,
+			};
+			if (ocrTemplateId) {
+				settings.ocrTemplateId = ocrTemplateId;
 			}
 
-			// Get max position
-			const { data: existing } = await supabase
+			// Get max position for tablas
+			const { data: existingTablas } = await supabase
 				.from("obra_default_tablas")
 				.select("position")
 				.eq("tenant_id", tenantId)
 				.order("position", { ascending: false })
 				.limit(1);
 
-			const nextPosition = (existing?.[0]?.position ?? -1) + 1;
+			const nextTablaPosition = (existingTablas?.[0]?.position ?? -1) + 1;
 
-			// Create tabla
+			// Create the tabla
 			const { data: tabla, error: tablaError } = await supabase
 				.from("obra_default_tablas")
 				.insert({
 					tenant_id: tenantId,
 					name: rawName,
-					description,
-					source_type: sourceType,
-					linked_folder_path: linkedFolderPath,
+					description: null,
+					source_type: "ocr",
+					linked_folder_path: path,
 					settings,
-					position: nextPosition,
+					position: nextTablaPosition,
 					ocr_template_id: ocrTemplateId,
 				})
-				.select("id, name, description, source_type, linked_folder_path, settings, position, ocr_template_id")
+				.select("id, name, ocr_template_id")
 				.single();
 
-			if (tablaError) throw tablaError;
+			if (tablaError) {
+				// Rollback folder creation
+				await supabase.from("obra_default_folders").delete().eq("id", folder.id);
+				throw tablaError;
+			}
 
 			// Create columns
-			const columnsPayload = rawColumns.map((col, index) => ({
-				default_tabla_id: tabla.id,
-				field_key: normalizeFieldKey(col.fieldKey || col.label),
-				label: col.label,
-				data_type: ensureTablaDataType(col.dataType),
-				position: index,
-				required: Boolean(col.required),
-				config: col.ocrScope ? { ocrScope: col.ocrScope } : {},
-			}));
+			let insertedColumns: Array<{
+				fieldKey: string;
+				label: string;
+				dataType: string;
+				ocrScope?: string;
+			}> = [];
 
-			let insertedColumns: DefaultTablaColumn[] = [];
-			if (columnsPayload.length > 0) {
+			if (rawColumns.length > 0) {
+				const columnsPayload = rawColumns.map((col, index) => ({
+					default_tabla_id: tabla.id,
+					field_key: normalizeFieldKey(col.fieldKey || col.label),
+					label: col.label,
+					data_type: ensureTablaDataType(col.dataType),
+					position: col.position ?? index,
+					required: Boolean(col.required),
+					config: hasNestedData && col.ocrScope ? { ocrScope: col.ocrScope } : {},
+				}));
+
 				const { data: columns, error: columnsError } = await supabase
 					.from("obra_default_tabla_columns")
 					.insert(columnsPayload)
-					.select("id, field_key, label, data_type, position, required, config")
+					.select("field_key, label, data_type, config")
 					.order("position", { ascending: true });
 
 				if (columnsError) {
-					// Rollback tabla creation
-					await supabase.from("obra_default_tablas").delete().eq("id", tabla.id);
-					throw columnsError;
+					console.error("[obra-defaults:post] columns error:", columnsError);
+				} else if (columns) {
+					insertedColumns = columns.map(col => ({
+						fieldKey: col.field_key,
+						label: col.label,
+						dataType: col.data_type,
+						ocrScope: (col.config as any)?.ocrScope,
+					}));
 				}
-				insertedColumns = (columns ?? []) as any;
 			}
 
-			return NextResponse.json({
-				tabla: {
-					...tabla,
-					columns: insertedColumns,
-				},
-			});
+			// Get template name if applicable
+			let ocrTemplateName: string | null = null;
+			if (ocrTemplateId) {
+				const { data: template } = await supabase
+					.from("ocr_templates")
+					.select("name")
+					.eq("id", ocrTemplateId)
+					.single();
+				ocrTemplateName = template?.name ?? null;
+			}
+
+			const enrichedFolder: DefaultFolder = {
+				...folder,
+				isOcr: true,
+				ocrTemplateId,
+				ocrTemplateName,
+				hasNestedData,
+				columns: insertedColumns,
+			};
+
+			return NextResponse.json({ folder: enrichedFolder });
 		}
 
 		return NextResponse.json({ error: "Invalid type" }, { status: 400 });
@@ -332,7 +361,7 @@ export async function DELETE(request: Request) {
 
 	try {
 		const body = await request.json().catch(() => ({}));
-		const type = body.type as "folder" | "tabla";
+		const type = body.type as "folder";
 		const id = typeof body.id === "string" ? body.id : null;
 
 		if (!id) {
@@ -340,17 +369,26 @@ export async function DELETE(request: Request) {
 		}
 
 		if (type === "folder") {
+			// First get the folder to find its path
+			const { data: folder } = await supabase
+				.from("obra_default_folders")
+				.select("path")
+				.eq("id", id)
+				.eq("tenant_id", tenantId)
+				.single();
+
+			if (folder) {
+				// Delete any linked tabla (cascade will delete columns)
+				await supabase
+					.from("obra_default_tablas")
+					.delete()
+					.eq("tenant_id", tenantId)
+					.eq("linked_folder_path", folder.path);
+			}
+
+			// Delete the folder
 			const { error } = await supabase
 				.from("obra_default_folders")
-				.delete()
-				.eq("id", id)
-				.eq("tenant_id", tenantId);
-
-			if (error) throw error;
-		} else if (type === "tabla") {
-			// Columns will be deleted via CASCADE
-			const { error } = await supabase
-				.from("obra_default_tablas")
 				.delete()
 				.eq("id", id)
 				.eq("tenant_id", tenantId);
@@ -369,4 +407,3 @@ export async function DELETE(request: Request) {
 		);
 	}
 }
-

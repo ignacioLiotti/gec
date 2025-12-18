@@ -76,11 +76,11 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
-		path: "/admin/tenant-secrets",
+		path: "/admin/tenants",
 		allowedRoles: ["admin"],
 	},
 	{
-		path: "/admin/workflows",
+		path: "/admin/tenant-secrets",
 		allowedRoles: ["admin"],
 	},
 	{

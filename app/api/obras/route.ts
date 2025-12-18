@@ -6,6 +6,8 @@ import { emitEvent } from "@/lib/notifications/engine";
 import "@/lib/notifications/rules"; // register rules
 import { applyObraDefaults } from "@/lib/obra-defaults";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
@@ -65,13 +67,44 @@ export async function getAuthContext() {
 		return { supabase, user: null, tenantId: null };
 	}
 
-	const { data: membership, error: membershipError } = await supabase
-		.from("memberships")
-		.select("tenant_id")
-		.eq("user_id", user.id)
-		.order("created_at", { ascending: true })
-		.limit(1)
-		.maybeSingle();
+	const cookieStore = await cookies();
+	const preferredTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value;
+
+	let membership = null;
+	let membershipError = null;
+
+	if (preferredTenantId) {
+		const preferredResult = await supabase
+			.from("memberships")
+			.select("tenant_id")
+			.eq("user_id", user.id)
+			.eq("tenant_id", preferredTenantId)
+			.limit(1)
+			.maybeSingle();
+
+		membership = preferredResult.data ?? null;
+		membershipError = preferredResult.error;
+	} else {
+		console.log("[auth-context] preferred membership found", {
+			tenantId: membership?.tenant_id ?? null,
+		});
+	}
+
+	if (!membership) {
+		const fallbackResult = await supabase
+			.from("memberships")
+			.select("tenant_id")
+			.eq("user_id", user.id)
+			.order("created_at", { ascending: true })
+			.limit(1)
+			.maybeSingle();
+
+		if (!membershipError) {
+			membershipError = fallbackResult.error;
+		}
+
+		membership = fallbackResult.data ?? null;
+	}
 
 	if (membershipError) {
 		console.error("Failed to fetch tenant membership", membershipError);

@@ -62,7 +62,7 @@ export default function Home() {
               </Link>
             </Button>
             <Button asChild variant="ghost" size="lg">
-              <Link href="/onboarding">Configurar una nueva obra</Link>
+              <Link href="/tenants/new">Configurar una nueva obra</Link>
             </Button>
           </div>
         </motion.div>

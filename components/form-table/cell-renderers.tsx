@@ -58,12 +58,17 @@ function LocalInput({
 
 	const handleBlur = useCallback(() => {
 		isTypingRef.current = false;
-		const finalValue = transformOnBlur
-			? transformOnBlur(localValue)
-			: localValue;
-		syncToForm(finalValue);
+		const finalValue = transformOnBlur ? transformOnBlur(localValue) : localValue;
+		const shouldSync = transformOnBlur
+			? !Object.is(finalValue, externalValue)
+			: localValue !== normalizedExternal;
+
+		if (shouldSync) {
+			syncToForm(finalValue);
+		}
+
 		onBlur?.();
-	}, [localValue, syncToForm, onBlur, transformOnBlur]);
+	}, [localValue, syncToForm, onBlur, transformOnBlur, normalizedExternal, externalValue]);
 
 	return (
 		<Input
@@ -150,7 +155,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 	switch (cellType) {
 		case "number":
 			return (
-				<span className="font-mono tabular-nums">
+				<span className="font-mono tabular-nums ">
 					{typeof value === "number" ? value.toLocaleString() : String(value ?? "-")}
 				</span>
 			);
@@ -295,7 +300,11 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		}
 		default:
 			return (
-				<span>
+				<span
+					className={cn(
+						"w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden text-center flex items-center justify-center"
+					)}
+				>
 					<HighlightedText text={String(value || "-")} query={highlightQuery} />
 				</span>
 			);
@@ -337,7 +346,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					type="text"
 					inputMode="decimal"
 					pattern="[0-9.,\\-]*"
-					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
+					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden "
 					value={value ?? ""}
 					onChange={setValue}
 					onBlur={handleBlur}

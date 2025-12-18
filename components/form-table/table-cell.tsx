@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useRef, useState, useCallback } from "react";
+import { memo, useState, useCallback } from "react";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -16,8 +16,6 @@ import type {
 } from "./types";
 import type { EditableCellValue } from "./cell-renderers";
 import { renderEditableContent, renderReadOnlyValue } from "./cell-renderers";
-import { shallowEqualValues } from "./table-utils";
-
 type TableCellProps<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
 	row: Row;
@@ -25,8 +23,8 @@ type TableCellProps<Row extends FormTableRow> = {
 	FieldComponent: FormFieldComponent<Row>;
 	highlightQuery: string;
 	isRowDirty: boolean;
+	isCellDirty: boolean;
 	hasInitialSnapshot: boolean;
-	onDirtyChange: (columnId: string, isDirty: boolean) => void;
 	onCopyCell: (value: unknown) => void;
 	onCopyColumn: () => void;
 	onCopyRow: () => void;
@@ -41,9 +39,9 @@ type CellContentProps<Row extends FormTableRow> = {
 	row: Row;
 	highlightQuery: string;
 	isRowDirty: boolean;
+	isCellDirty: boolean;
 	hasInitialSnapshot: boolean;
 	editable: boolean;
-	onDirtyChange: (columnId: string, isDirty: boolean) => void;
 	onCopyCell: (value: unknown) => void;
 	onCopyColumn: () => void;
 	onCopyRow: () => void;
@@ -61,9 +59,9 @@ function CellContent<Row extends FormTableRow>({
 	row,
 	highlightQuery,
 	isRowDirty,
+	isCellDirty,
 	hasInitialSnapshot,
 	editable,
-	onDirtyChange,
 	onCopyCell,
 	onCopyColumn,
 	onCopyRow,
@@ -82,27 +80,6 @@ function CellContent<Row extends FormTableRow>({
 			setMenuOpened(true);
 		}
 	}, [menuOpened]);
-
-	// Track dirty state and notify parent
-	const initialValueRef = useRef<unknown>(fieldValue);
-	const [isCellDirty, setIsCellDirty] = useState(false);
-	const prevDirtyRef = useRef(false);
-
-	// On mount, store initial value
-	useEffect(() => {
-		initialValueRef.current = fieldValue;
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []); // Only on mount
-
-	// Check dirty on value change - optimized to avoid unnecessary parent updates
-	useEffect(() => {
-		const isDirty = !shallowEqualValues(fieldValue, initialValueRef.current);
-		if (isDirty !== prevDirtyRef.current) {
-			prevDirtyRef.current = isDirty;
-			setIsCellDirty(isDirty);
-			onDirtyChange(column.id, isDirty);
-		}
-	}, [fieldValue, onDirtyChange, column.id]);
 
 	const content = editable
 		? renderEditableContent({
@@ -183,8 +160,8 @@ function TableCellInner<Row extends FormTableRow>({
 	FieldComponent,
 	highlightQuery,
 	isRowDirty,
+	isCellDirty,
 	hasInitialSnapshot,
-	onDirtyChange,
 	onCopyCell,
 	onCopyColumn,
 	onCopyRow,
@@ -198,34 +175,35 @@ function TableCellInner<Row extends FormTableRow>({
 
 	return (
 		<FieldComponent name={fieldPath} validators={validators}>
-			{(field: any) => (
-				<CellContent
-					field={field}
-					column={column}
-					row={row}
-					highlightQuery={highlightQuery}
-					isRowDirty={isRowDirty}
-					hasInitialSnapshot={hasInitialSnapshot}
-					editable={editable}
-					onDirtyChange={onDirtyChange}
-					onCopyCell={onCopyCell}
-					onCopyColumn={onCopyColumn}
-					onCopyRow={onCopyRow}
-					onClearValue={onClearValue}
-					onRestoreValue={onRestoreValue}
-					customMenuItems={customMenuItems}
-				/>
-			)}
-		</FieldComponent>
-	);
-}
+				{(field: any) => (
+					<CellContent
+						field={field}
+						column={column}
+						row={row}
+						highlightQuery={highlightQuery}
+						isRowDirty={isRowDirty}
+						isCellDirty={isCellDirty}
+						hasInitialSnapshot={hasInitialSnapshot}
+						editable={editable}
+						onCopyCell={onCopyCell}
+						onCopyColumn={onCopyColumn}
+						onCopyRow={onCopyRow}
+						onClearValue={onClearValue}
+						onRestoreValue={onRestoreValue}
+						customMenuItems={customMenuItems}
+					/>
+				)}
+			</FieldComponent>
+		);
+	}
 
-export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => {
-	return (
-		prevProps.rowId === nextProps.rowId &&
-		prevProps.column.id === nextProps.column.id &&
-		prevProps.highlightQuery === nextProps.highlightQuery &&
-		prevProps.isRowDirty === nextProps.isRowDirty &&
-		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot
-	);
-}) as typeof TableCellInner;
+	export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => {
+		return (
+			prevProps.rowId === nextProps.rowId &&
+			prevProps.column.id === nextProps.column.id &&
+			prevProps.highlightQuery === nextProps.highlightQuery &&
+			prevProps.isRowDirty === nextProps.isRowDirty &&
+			prevProps.isCellDirty === nextProps.isCellDirty &&
+			prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot
+		);
+	}) as typeof TableCellInner;

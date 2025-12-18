@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import TenantSecretsPanel from "./tenant-secrets-panel";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
 type PageProps = {
@@ -24,20 +24,12 @@ export default async function TenantSecretsPage({ searchParams }: PageProps) {
 		? requestedTenantValue[0]
 		: requestedTenantValue;
 
-	let membershipQuery = supabase
+	const { data: memberships, error: membershipError } = await supabase
 		.from("memberships")
 		.select("tenant_id, role")
 		.eq("user_id", user.id)
 		.in("role", ["owner", "admin"])
-		.order("created_at", { ascending: true })
-		.limit(1);
-
-	if (requestedTenantId) {
-		membershipQuery = membershipQuery.eq("tenant_id", requestedTenantId);
-	}
-
-	const { data: membership, error: membershipError } =
-		await membershipQuery.maybeSingle();
+		.order("created_at", { ascending: true });
 
 	const { data: profile } = await supabase
 		.from("profiles")
@@ -56,10 +48,21 @@ export default async function TenantSecretsPage({ searchParams }: PageProps) {
 		);
 	}
 
-	let tenantId = membership?.tenant_id ?? null;
+	const { tenantId: preferredTenant } = await resolveTenantMembership(
+		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+		{ isSuperAdmin }
+	);
+	let tenantId = preferredTenant;
 
-	if (!tenantId && isSuperAdmin) {
-		tenantId = requestedTenantId ?? DEFAULT_TENANT_ID;
+	if (requestedTenantId) {
+		const hasRequested = (memberships ?? []).some(
+			(m) => m.tenant_id === requestedTenantId
+		);
+		if (hasRequested || isSuperAdmin) {
+			tenantId = requestedTenantId;
+		} else {
+			tenantId = null;
+		}
 	}
 
 	if (!tenantId) {

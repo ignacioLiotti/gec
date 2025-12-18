@@ -3,8 +3,8 @@ import { createClient } from "@/utils/supabase/server"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { resolveTenantMembership } from "@/lib/tenant-selection"
 
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
 const PAGE_SIZE = 50
 const TABLE_FILTERS: { label: string; value: string }[] = [
   { value: "", label: "Todas las tablas" },
@@ -67,6 +67,7 @@ export default async function AuditLogPage({
   const { data: memberships } = await supabase
     .from("memberships")
     .select("tenant_id, role")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true })
   const { data: profile } = await supabase
     .from("profiles")
@@ -75,14 +76,10 @@ export default async function AuditLogPage({
     .maybeSingle()
 
   const isSuperAdmin = profile?.is_superadmin ?? false
-  let resolvedMemberships = (memberships ?? []) as {
-    tenant_id: string | null
-    role: string | null
-  }[]
-  if ((!resolvedMemberships || resolvedMemberships.length === 0) && isSuperAdmin) {
-    resolvedMemberships = [{ tenant_id: DEFAULT_TENANT_ID, role: null }]
-  }
-  const tenantId = resolvedMemberships?.[0]?.tenant_id ?? null
+  const { tenantId } = await resolveTenantMembership(
+    (memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+    { isSuperAdmin }
+  )
 
   if (!tenantId) {
     return (

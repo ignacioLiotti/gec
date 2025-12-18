@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
+
+import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
+
 export async function GET(request: NextRequest) {
 	console.log("[AUTH-CALLBACK] GET request received");
 	const requestUrl = new URL(request.url);
@@ -60,6 +64,7 @@ export async function GET(request: NextRequest) {
 				.from("memberships")
 				.select("tenant_id")
 				.eq("user_id", user.id)
+				.order("created_at", { ascending: true })
 				.limit(1);
 			console.log("[AUTH-CALLBACK] memberships:", memberships);
 
@@ -69,13 +74,18 @@ export async function GET(request: NextRequest) {
 					"[AUTH-CALLBACK] No memberships, redirecting to onboarding"
 				);
 				// Update the redirect URL and create a new response with the same cookies
-				const onboardingResponse = NextResponse.redirect(
-					`${origin}/onboarding`
-				);
-				response.cookies.getAll().forEach((cookie) => {
-					onboardingResponse.cookies.set(cookie.name, cookie.value);
+				response.headers.set("Location", `${origin}/onboarding`);
+				return response;
+			}
+
+			const tenantId = memberships[0]?.tenant_id;
+			if (tenantId) {
+				response.cookies.set(ACTIVE_TENANT_COOKIE, tenantId, {
+					path: "/",
+					maxAge: 60 * 60 * 24 * 30,
+					sameSite: "lax",
 				});
-				return onboardingResponse;
+				redirectUrl = origin;
 			}
 		}
 
@@ -84,6 +94,7 @@ export async function GET(request: NextRequest) {
 			"[AUTH-CALLBACK] Response cookies:",
 			response.cookies.getAll().map((c) => c.name)
 		);
+		response.headers.set("Location", redirectUrl);
 		console.log("[AUTH-CALLBACK] Redirecting to:", redirectUrl);
 		return response;
 	}

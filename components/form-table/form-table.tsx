@@ -10,6 +10,7 @@ import {
 	ColumnDef as TanStackColumnDef,
 	VisibilityState,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -81,7 +82,8 @@ import { MemoizedTableRow } from "./table-body";
 export const useFormTable = useFormTableContext;
 
 export function FormTableToolbar() {
-	const { search, filters, columns, sorting, meta, actions } = useFormTable<FormTableRow, unknown>();
+	const { config, search, filters, columns, sorting, meta, actions } = useFormTable<FormTableRow, unknown>();
+	const allowAddRows = config.allowAddRows !== false;
 
 	const renderFiltersContent =
 		filters.renderContent ??
@@ -92,7 +94,7 @@ export function FormTableToolbar() {
 		);
 
 	return (
-		<div className="flex flex-wrap items-center justify-between gap-3">
+		<div className="flex flex-wrap items-center justify-between gap-3 relative">
 			<div className="flex flex-wrap items-center gap-2">
 				{search.showInline && (
 					<div className="relative">
@@ -164,25 +166,41 @@ export function FormTableToolbar() {
 						Limpiar orden
 					</Button>
 				)}
-				<Button
-					type="button"
-					onClick={actions.save}
-					disabled={!meta.hasUnsavedChanges || meta.isSaving}
-					variant={meta.hasUnsavedChanges ? "default" : "outline"}
-					className="gap-2"
-				>
-					{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-					{meta.isSaving ? "Guardando..." : "Guardar cambios"}
-				</Button>
-				<Button type="button" onClick={actions.addRow}>
-					Agregar fila vacía
-				</Button>
+				{/* floating actions in the middle of the page */}
+				<div className="flex justify-center items-center gap-2 w-full max-w-full absolute -bottom-[750px] left-0 right-0 mx-auto  z-50">
+					<Button
+						type="button"
+						onClick={actions.save}
+						disabled={!meta.hasUnsavedChanges || meta.isSaving}
+						variant={meta.hasUnsavedChanges ? "outline" : "default"}
+						className="gap-2"
+					>
+						{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+						{meta.isSaving ? "Guardando..." : "Guardar cambios"}
+					</Button>
+					{meta.hasUnsavedChanges && (
+						<Button
+							type="button"
+							onClick={actions.discard}
+							disabled={!meta.hasUnsavedChanges || meta.isSaving}
+							variant="destructiveSecondary"
+							className="gap-2"
+						>
+							Descartar cambios
+						</Button>
+					)}
+					{allowAddRows && (
+						<Button type="button" onClick={actions.addRow}>
+							Agregar fila vacía
+						</Button>
+					)}
+				</div>
 			</div>
 		</div>
 	);
 }
 
-export function FormTableTabs() {
+export function FormTableTabs({ className }: { className?: string }) {
 	const { tabs } = useFormTable<FormTableRow, unknown>();
 	if (!tabs.enabled || tabs.items.length === 0) {
 		return null;
@@ -192,9 +210,8 @@ export function FormTableTabs() {
 		<Tabs
 			value={tabs.activeTab ?? tabs.items[0]?.id ?? ""}
 			onValueChange={tabs.setActiveTab}
-			className="w-full max-w-full overflow-hidden"
 		>
-			<TabsList>
+			<TabsList className={cn("w-full max-w-full overflow-hidden flex-1 flex-grow", className)}>
 				{tabs.items.map((tab) => (
 					<TabsTrigger key={tab.id} value={tab.id} className="gap-2">
 						<span>{tab.label}</span>
@@ -220,7 +237,7 @@ export function FormTableContent({ className }: { className?: string }) {
 	} = useFormTable<FormTableRow, unknown>();
 
 	const columnDefs = columns.list;
-	const { tableRef, colRefs, colWidths, isColumnHidden, getStickyProps, columnIndexMap, columnsById, groupedColumnLookup } = columns;
+	const { tableRef, colRefs, colWidths, isColumnHidden, getStickyProps, columnIndexMap, columnsById, groupedColumnLookup, enableResizing } = columns;
 	const {
 		table,
 		FieldComponent,
@@ -241,6 +258,7 @@ export function FormTableContent({ className }: { className?: string }) {
 		visibleDataColumnCount,
 	} = rows;
 	const accordionAlwaysOpen = Boolean(accordionRowConfig?.alwaysOpen);
+	const showActionsColumn = config.showActionsColumn !== false;
 	const { serverError } = meta;
 	const { isServerPaging, isFetching } = pagination;
 	const headerGroups = config.headerGroups ?? [];
@@ -250,6 +268,20 @@ export function FormTableContent({ className }: { className?: string }) {
 		applyDirection,
 		clear: clearSort,
 	} = sorting;
+	const scrollParentRef = useRef<HTMLDivElement | null>(null);
+	const tableRows = table.getRowModel().rows;
+	const rowVirtualizer = useVirtualizer({
+		count: tableRows.length,
+		getScrollElement: () => scrollParentRef.current,
+		estimateSize: () => (accordionRowConfig ? 120 : 64),
+		overscan: 8,
+	});
+	const virtualRows = tableRows.length > 0 ? rowVirtualizer.getVirtualItems() : [];
+	const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+	const paddingBottom =
+		virtualRows.length > 0
+			? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
+			: 0;
 
 	return (
 		<>
@@ -258,14 +290,16 @@ export function FormTableContent({ className }: { className?: string }) {
 					{serverError}
 				</div>
 			)}
-			<div className={cn("relative border border-border rounded-lg overflow-x-auto w-full bg-white", className)}>
+			<div className={cn("relative border border-border rounded-none overflow-x-auto w-full bg-white", className)}>
 				{isServerPaging && isFetching && (
 					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm">
 						<Loader2 className="h-6 w-6 animate-spin text-primary" />
 						<p className="text-sm font-medium text-muted-foreground">Sincronizando con el servidor…</p>
 					</div>
 				)}
-				<div className="max-h-[70vh] overflow-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat min-h-[70vh]">
+				<div
+					ref={scrollParentRef}
+					className="max-h-[70vh] overflow-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat min-h-[70vh]">
 					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
@@ -280,14 +314,16 @@ export function FormTableContent({ className }: { className?: string }) {
 									}}
 								/>
 							))}
-							<col
-								ref={(el) => {
-									colRefs.current[columnDefs.length] = el;
-								}}
-								style={{
-									width: `${colWidths[columnDefs.length] ?? 140}px`,
-								}}
-							/>
+							{showActionsColumn && (
+								<col
+									ref={(el) => {
+										colRefs.current[columnDefs.length] = el;
+									}}
+									style={{
+										width: `${colWidths[columnDefs.length] ?? 140}px`,
+									}}
+								/>
+							)}
 						</colgroup>
 						<thead className="sticky top-0 z-30 bg-sidebar">
 							<tr>
@@ -343,7 +379,9 @@ export function FormTableContent({ className }: { className?: string }) {
 																	</ContextMenuContent>
 																</ContextMenu>
 															</div>
-															<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id]} mode="fixed" />
+															{enableResizing && (
+																<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id]} mode="fixed" />
+															)}
 														</th>
 													);
 												}
@@ -366,15 +404,19 @@ export function FormTableContent({ className }: { className?: string }) {
 													</th>
 												);
 											})}
-											<th
-												rowSpan={2}
-												className="relative px-4 py-4 text-right text-xs font-semibold uppercase outline outline-border bg-sidebar"
-											>
-												<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-end gap-2">
-													<span>Acciones</span>
-												</div>
-												<ColumnResizer tableId={tableId} colIndex={columnDefs.length} mode="fixed" />
-											</th>
+											{showActionsColumn && (
+												<th
+													rowSpan={2}
+													className="relative px-4 py-4 text-right text-xs font-semibold uppercase outline outline-border bg-sidebar"
+												>
+													<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-end gap-2">
+														<span>Acciones</span>
+													</div>
+													{enableResizing && (
+														<ColumnResizer tableId={tableId} colIndex={columnDefs.length} mode="fixed" />
+													)}
+												</th>
+											)}
 										</>
 									);
 								})()}
@@ -425,17 +467,19 @@ export function FormTableContent({ className }: { className?: string }) {
 													</ContextMenuContent>
 												</ContextMenu>
 											</div>
-											<ColumnResizer tableId={tableId} colIndex={colIndex} mode="fixed" />
+											{enableResizing && (
+												<ColumnResizer tableId={tableId} colIndex={colIndex} mode="fixed" />
+											)}
 										</th>
 									);
 								})}
 							</tr>
 						</thead>
 						<tbody className="bg-white">
-							{table.getRowModel().rows.length === 0 ? (
+							{tableRows.length === 0 ? (
 								<tr>
 									<td
-										colSpan={visibleDataColumnCount + 1}
+										colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
 										className="px-6 py-12 text-center text-sm text-muted-foreground"
 									>
 										{config.emptyStateMessage ??
@@ -443,31 +487,58 @@ export function FormTableContent({ className }: { className?: string }) {
 									</td>
 								</tr>
 							) : (
-								table.getRowModel().rows.map((row, rowIndex) => (
-									<MemoizedTableRow
-										key={row.original.id}
-										row={row}
-										rowIndex={rowIndex}
-										columnsById={columnsById}
-										FieldComponent={FieldComponent}
-										highlightQuery={highlightQuery}
-										hasInitialSnapshot={hasInitialRow(row.original.id)}
-										hasAccordionRows={hasAccordionRows}
-										accordionRowConfig={accordionRowConfig}
-										accordionAlwaysOpen={accordionAlwaysOpen}
-										isExpanded={hasAccordionRows ? isRowExpanded(row.original.id) : false}
-										getStickyProps={getStickyProps}
-										onToggleAccordion={toggleAccordionRow}
-										onDelete={handleDelete}
-										onClearCell={handleClearCell}
-										onRestoreCell={handleRestoreCell}
-										onCopyCell={handleCopyCell}
-										onCopyColumn={handleCopyColumn}
-										onCopyRow={handleCopyRow}
-									/>
-								))
+								<>
+									{paddingTop > 0 && (
+										<tr>
+											<td
+												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
+												style={{ height: `${paddingTop}px` }}
+											/>
+										</tr>
+									)}
+									{virtualRows.map((virtualRow) => {
+										const row = tableRows[virtualRow.index];
+										const rowId = row.original.id;
+										const { dirty: rowIsDirty } = getRowDirtyState(rowId);
+										return (
+											<MemoizedTableRow
+												key={rowId}
+												row={row}
+												rowIndex={virtualRow.index}
+												columnsById={columnsById}
+												FieldComponent={FieldComponent}
+												highlightQuery={highlightQuery}
+												hasInitialSnapshot={hasInitialRow(rowId)}
+												hasAccordionRows={hasAccordionRows}
+												accordionRowConfig={accordionRowConfig}
+												accordionAlwaysOpen={accordionAlwaysOpen}
+												isExpanded={isRowExpanded(rowId)}
+												isRowDirty={rowIsDirty}
+												showActionsColumn={showActionsColumn}
+												isCellDirty={isCellDirty}
+												getStickyProps={getStickyProps}
+												onToggleAccordion={toggleAccordionRow}
+												onDelete={handleDelete}
+												onClearCell={handleClearCell}
+												onRestoreCell={handleRestoreCell}
+												onCopyCell={handleCopyCell}
+												onCopyColumn={handleCopyColumn}
+												onCopyRow={handleCopyRow}
+											/>
+										);
+									})}
+									{paddingBottom > 0 && (
+										<tr>
+											<td
+												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
+												style={{ height: `${paddingBottom}px` }}
+											/>
+										</tr>
+									)}
+								</>
 							)}
 						</tbody>
+
 					</table>
 				</div>
 			</div>
@@ -482,6 +553,7 @@ export function FormTablePagination() {
 		setPage,
 		pageSize,
 		setPageSize,
+		lockedPageSize,
 		hasNextPage,
 		hasPreviousPage,
 		totalPages,
@@ -491,29 +563,34 @@ export function FormTablePagination() {
 		isServerPaging,
 		isFetching,
 	} = pagination;
+	const pageSizeLocked = typeof lockedPageSize === "number";
 
 	return (
 		<>
 			<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
 				<div className="flex items-center gap-2">
 					<span>Filas por página</span>
-					<Select
-						value={String(pageSize)}
-						onValueChange={(value) => {
-							setPageSize(Number(value));
-						}}
-					>
-						<SelectTrigger className="w-[90px]">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{options.map((size) => (
-								<SelectItem key={size} value={String(size)}>
-									{size}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					{pageSizeLocked ? (
+						<span className="font-medium text-foreground">{pageSize}</span>
+					) : (
+						<Select
+							value={String(pageSize)}
+							onValueChange={(value) => {
+								setPageSize(Number(value));
+							}}
+						>
+							<SelectTrigger className="w-[90px]">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{options.map((size) => (
+									<SelectItem key={size} value={String(size)}>
+										{size}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					)}
 				</div>
 				<div className="flex items-center gap-2">
 					<Button
@@ -590,6 +667,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	children,
 }: FormTableProps<Row, Filters>) {
 	const TABLE_ID = config.tableId;
+	const enableColumnResizing = config.enableColumnResizing ?? false;
+	const fetchRowsFn = config.fetchRows ?? null;
 	const isEmbedded = variant === "embedded";
 
 	// TanStack Form setup
@@ -625,11 +704,53 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const rowOrder = useStore(form.store, rowOrderSelector);
 	const rowsById = useStore(form.store, rowsByIdSelector);
+	const setFormRows = useCallback(
+		(nextRows: Row[]) => {
+			const nextOrder = nextRows.map((row) => row.id);
+			const nextMap = nextRows.reduce<Record<string, Row>>((acc, row) => {
+				acc[row.id] = { ...row };
+				return acc;
+			}, {});
+			setFormFieldValue("rowOrder", nextOrder);
+			setFormFieldValue("rowsById", nextMap);
+			initialValuesRef.current = snapshotValues(nextOrder, nextMap);
+		},
+		[form]
+	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [page, setPage] = useState(1);
 	const initialPageSize = config.defaultPageSize ?? DEFAULT_PAGE_SIZE;
-	const [pageSize, setPageSize] = useState(initialPageSize);
-	const [isServerPaging, setIsServerPaging] = useState(Boolean(config.fetchRows));
+	const pageSizeOptions = config.pageSizeOptions ?? PAGE_SIZE_OPTIONS;
+	const lockedPageSize = config.lockedPageSize;
+	const [pageSize, setPageSizeState] = useState(initialPageSize);
+	useEffect(() => {
+		if (lockedPageSize && pageSize !== lockedPageSize) {
+			setPageSizeState(lockedPageSize);
+		}
+	}, [lockedPageSize, pageSize]);
+	const paginationOptions = lockedPageSize ? [lockedPageSize] : pageSizeOptions;
+	const handleSetPageSize = useCallback((size: number) => {
+		if (lockedPageSize) return;
+		setPageSizeState(size);
+		setPage(1);
+		if (fetchRowsFn) {
+			void fetchRowsFn({ page: 1, limit: size, filters: filtersRef.current as Filters, search: searchRef.current }).then((result) => {
+				const fetchedRows = result.rows ?? [];
+				setFormRows(fetchedRows as Row[]);
+				setServerMeta((prev) => ({
+					page: 1,
+					limit: size,
+					total: result.pagination?.total ?? prev.total,
+					totalPages: result.pagination?.totalPages ?? prev.totalPages,
+					hasNextPage: result.pagination?.hasNextPage ?? prev.hasNextPage,
+					hasPreviousPage: result.pagination?.hasPreviousPage ?? prev.hasPreviousPage,
+				}));
+				setIsFetchingServerRows(false);
+			});
+		}
+	}, [lockedPageSize, fetchRowsFn, setFormRows]);
+	const [isServerPaging, setIsServerPaging] = useState(Boolean(fetchRowsFn));
+	const useClientPagination = !isServerPaging;
 	const [isFetchingServerRows, setIsFetchingServerRows] = useState(false);
 	const [serverError, setServerError] = useState<string | null>(null);
 	const [serverMeta, setServerMeta] = useState<ServerPaginationMeta>({
@@ -643,8 +764,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const initialValuesRef = useRef<FormValues<Row>>({ rowOrder: [], rowsById: {} });
 	const columns = config.columns;
 	const headerGroups = config.headerGroups ?? [];
-	const fetchRowsFn = config.fetchRows;
-	const defaultRows = config.defaultRows;
+		const defaultRows = config.defaultRows;
 
 	useEffect(() => {
 		setIsServerPaging(Boolean(fetchRowsFn));
@@ -703,20 +823,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const accordionAlwaysOpen = Boolean(accordionRowConfig?.alwaysOpen);
 	const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(() => new Set());
 	const autoExpandedRowsRef = useRef<Set<string>>(new Set());
-
-	const setFormRows = useCallback(
-		(nextRows: Row[]) => {
-			const nextOrder = nextRows.map((row) => row.id);
-			const nextMap = nextRows.reduce<Record<string, Row>>((acc, row) => {
-				acc[row.id] = { ...row };
-				return acc;
-			}, {});
-			setFormFieldValue("rowOrder", nextOrder);
-			setFormFieldValue("rowsById", nextMap);
-			initialValuesRef.current = snapshotValues(nextOrder, nextMap);
-		},
-		[form]
-	);
 
 	const hasInitialRow = useCallback(
 		(rowId: string) => Boolean(initialValuesRef.current.rowsById[rowId]),
@@ -851,7 +957,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	);
 
 	useEffect(() => {
-		if (typeof window === "undefined") return;
+		if (!enableColumnResizing || typeof window === "undefined") return;
 		try {
 			const stored = localStorage.getItem(`resizable-cols:${TABLE_ID}`);
 			if (stored) {
@@ -861,7 +967,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		} catch {
 			// ignore
 		}
-	}, [TABLE_ID]);
+	}, [TABLE_ID, enableColumnResizing]);
 
 	// Column management state
 	const [hiddenColumnIds, setHiddenColumnIds] = useState<string[]>(() =>
@@ -972,13 +1078,13 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [advancedFilteredRows, activeTab, tabFilters, hasTabFilters]);
 
 	const sortedRows = useMemo(() => {
-		if (!sortState.columnId) return tabFilteredRows;
+		if (!useClientPagination || !sortState.columnId) return tabFilteredRows;
 		const column = columns.find((col) => col.id === sortState.columnId);
 		if (!column) return tabFilteredRows;
 		const comparator = column.sortFn ?? defaultSortByField<Row>(column.field);
 		const sorted = [...tabFilteredRows].sort((a, b) => comparator(a, b));
 		return sortState.direction === "asc" ? sorted : sorted.reverse();
-	}, [tabFilteredRows, sortState]);
+	}, [tabFilteredRows, sortState, useClientPagination]);
 
 	const activeFilterCount = useMemo(() => {
 		if (!config.countActiveFilters || typeof filters === "undefined") return 0;
@@ -1068,13 +1174,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [recalcPinnedOffsets]);
 
 	useEffect(() => {
+		if (!enableColumnResizing) return;
 		const handleColumnResize: EventListener = () => {
 			recalcPinnedOffsets();
 		};
 		return attachColumnResizeListener(handleColumnResize);
-	}, [attachColumnResizeListener, recalcPinnedOffsets]);
+	}, [attachColumnResizeListener, recalcPinnedOffsets, enableColumnResizing]);
 
 	useEffect(() => {
+		if (!enableColumnResizing) return;
 		const handler: EventListener = (event) => {
 			const detail = (event as CustomEvent)?.detail as {
 				tableId?: string;
@@ -1090,7 +1198,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			});
 		};
 		return attachColumnResizeListener(handler);
-	}, [TABLE_ID, attachColumnResizeListener]);
+	}, [TABLE_ID, attachColumnResizeListener, enableColumnResizing]);
 
 	const getStickyProps = useCallback(
 		(columnId: string, baseClassName?: string) => {
@@ -1167,27 +1275,28 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setSortState({ columnId: null, direction: "asc" });
 	}, []);
 
-	const clientTotalPages = useMemo(() => {
-		if (sortedRows.length === 0) return 1;
-		return Math.max(1, Math.ceil(sortedRows.length / pageSize));
-	}, [sortedRows.length, pageSize]);
+const clientTotalPages = useMemo(() => {
+	if (sortedRows.length === 0) return 1;
+	return Math.max(1, Math.ceil(sortedRows.length / pageSize));
+}, [sortedRows.length, pageSize]);
 
 	useEffect(() => {
+		if (!useClientPagination) return;
 		if (page > clientTotalPages) {
 			setPage(clientTotalPages);
 		}
-	}, [clientTotalPages, page]);
+	}, [clientTotalPages, page, useClientPagination]);
 
 	// Detect if server returned more rows than requested (server doesn't support pagination)
-	const serverReturnedAllRows = isServerPaging && sortedRows.length > pageSize;
-
-	// Use client-side pagination if server returned all rows
-	const useClientPagination = !isServerPaging || serverReturnedAllRows;
+const serverReturnedAllRows = false;
 
 	const processedRows = useMemo(() => {
-		const start = (page - 1) * pageSize;
-		return sortedRows.slice(start, start + pageSize);
-	}, [page, pageSize, sortedRows]);
+		if (!fetchRowsFn) {
+			const start = (page - 1) * pageSize;
+			return sortedRows.slice(start, start + pageSize);
+		}
+		return sortedRows;
+	}, [page, pageSize, sortedRows, fetchRowsFn]);
 
 	const processedRowsRef = useRef<Row[]>(processedRows);
 	useEffect(() => {
@@ -1360,6 +1469,27 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}
 	}, [columns, config, hasUnsavedChanges, rowOrder, rows, rowsById]);
 
+	const handleDiscardChanges = useCallback(() => {
+		if (!hasUnsavedChanges) return;
+		const snapshot = snapshotValues(initialValuesRef.current.rowOrder, initialValuesRef.current.rowsById);
+		setFormFieldValue("rowOrder", snapshot.rowOrder);
+		setFormFieldValue("rowsById", snapshot.rowsById);
+		setExpandedRowIds((prev) => {
+			const allowed = new Set(snapshot.rowOrder);
+			let changed = false;
+			const next = new Set<string>();
+			prev.forEach((id) => {
+				if (allowed.has(id)) {
+					next.add(id);
+				} else {
+					changed = true;
+				}
+			});
+			return changed ? next : prev;
+		});
+		toast.info("Cambios descartados");
+	}, [hasUnsavedChanges, setFormFieldValue]);
+
 	const contextValue: FormTableContextValue<Row, Filters> = {
 		config,
 		tableId: TABLE_ID,
@@ -1397,6 +1527,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			tableRef,
 			colRefs,
 			colWidths,
+			enableResizing: enableColumnResizing,
 		},
 		sorting: {
 			state: sortState,
@@ -1415,17 +1546,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			page,
 			setPage,
 			pageSize,
-			setPageSize: (size: number) => {
-				setPageSize(size);
-				setPage(1);
-			},
+			setPageSize: handleSetPageSize,
+			lockedPageSize,
 			hasNextPage,
 			hasPreviousPage,
 			totalPages,
 			totalRowCount,
 			visibleRowCount,
 			datasetTotalCount,
-			options: PAGE_SIZE_OPTIONS,
+			options: paginationOptions,
 			isServerPaging,
 			isFetching: isFetchingServerRows,
 		},
@@ -1457,6 +1586,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		},
 		actions: {
 			save: handleSave,
+			discard: handleDiscardChanges,
 			addRow: handleAddRow,
 		},
 	};

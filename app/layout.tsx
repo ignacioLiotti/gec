@@ -9,6 +9,7 @@ import AuthController from "@/components/auth/auth-controller";
 import ImpersonateBanner from "./admin/users/_components/impersonate-banner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { QueryClientProvider } from "@/lib/query-client-provider";
 import NotificationsListener from "@/components/notifications/notifications-listener";
 import { Toaster } from "sonner";
 import { ExcelObraName } from "@/components/excel-obra-name";
@@ -53,6 +54,25 @@ export default async function RootLayout({
   const userRoles = user ? await getUserRoles() : null;
   console.log("[LAYOUT] userRoles:", userRoles);
 
+  type TenantRow = {
+    tenant_id: string;
+    tenants: { name: string | null } | null;
+  };
+  let tenantRows: TenantRow[] | null = null;
+  if (user) {
+    const { data } = await supabase
+      .from("memberships")
+      .select("tenant_id, tenants(name)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+    tenantRows = (data ?? null) as TenantRow[] | null;
+  }
+  const tenants =
+    tenantRows?.map((row) => ({
+      id: row.tenant_id,
+      name: row.tenants?.name ?? "Organización",
+    })) ?? [];
+
   return (
     <html lang="en">
       <head>
@@ -65,13 +85,14 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
       >
-        <SupabaseAuthListener />
-        <AuthController />
-        <Toaster position="bottom-right" richColors />
-        <NotificationsListener />
-        <SidebarProvider>
-          <AppSidebar user={user} userRoles={userRoles} />
-          <SidebarInset>
+        <QueryClientProvider>
+          <SupabaseAuthListener />
+          <AuthController />
+          <Toaster position="bottom-right" richColors />
+          <NotificationsListener />
+          <SidebarProvider>
+            <AppSidebar user={user} userRoles={userRoles} tenants={tenants} />
+            <SidebarInset>
             <header className="flex h-12 max-w-full shrink-0 items-center gap-4 border-b px-4">
               <div className="flex items-center gap-3 min-w-0">
                 <SidebarTrigger className="-ml-1" />
@@ -86,8 +107,9 @@ export default async function RootLayout({
               <PendingInvitationsBanner />
             </div> */}
             <main className="flex flex-1 flex-col gap-4">{children}</main>
-          </SidebarInset>
-        </SidebarProvider>
+            </SidebarInset>
+          </SidebarProvider>
+        </QueryClientProvider>
       </body>
     </html>
   );
