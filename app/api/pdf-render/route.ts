@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import puppeteer, { type Browser, type PuppeteerLaunchOptions } from "puppeteer-core";
+import puppeteer, { type Browser, type LaunchOptions } from "puppeteer-core";
 
 export const maxDuration = 60; // Allow up to 60 seconds for PDF generation
 export const dynamic = "force-dynamic";
@@ -72,7 +72,7 @@ function createFooterTemplate(): string {
  * - Local dev: Uses puppeteer's bundled Chromium or system Chrome
  * - Production (Vercel): Uses @sparticuz/chromium
  */
-async function getBrowserLaunchOptions(): Promise<PuppeteerLaunchOptions> {
+async function getBrowserLaunchOptions(): Promise<LaunchOptions> {
 	const isDev = process.env.NODE_ENV === "development";
 
 	if (isDev) {

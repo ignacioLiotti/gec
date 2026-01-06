@@ -1,8 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-
-import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
-
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 export async function GET(request: NextRequest) {

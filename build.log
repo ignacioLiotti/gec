@@ -1,0 +1,16 @@
+
+> multi-tenant@0.1.0 build
+> next build --turbopack
+
+ ⚠ Attempted to load /mnt/c/Users/Usuario/Desktop/projects/multi-tenant/node_modules/next/next-swc-fallback/@next/swc-linux-x64-gnu/next-swc.linux-x64-gnu.node, but it was not installed
+ ⚠ Attempted to load /mnt/c/Users/Usuario/Desktop/projects/multi-tenant/node_modules/next/next-swc-fallback/@next/swc-linux-x64-musl/next-swc.linux-x64-musl.node, but it was not installed
+ ⚠ Attempted to load @next/swc-linux-x64-gnu, but it was not installed
+ ⚠ Attempted to load @next/swc-linux-x64-musl, but it was not installed
+ ⚠ Attempted to load @next/swc-wasm-nodejs, but it was not installed
+ ⚠ Attempted to load @next/swc-wasm-web, but it was not installed
+ ⨯ Failed to load SWC binary for linux/x64, see more info here: https://nextjs.org/docs/messages/failed-loading-swc
+ ⨯ Failed to load next.config.ts, see more info here https://nextjs.org/docs/messages/next-config-error
+
+> Build error occurred
+Error: Failed to load SWC binary for linux/x64, see more info here: https://nextjs.org/docs/messages/failed-loading-swc
+    at ignore-listed frames

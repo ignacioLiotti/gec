@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export default function UserAssignments({ users, tenantId }: { users: { user_id: string; full_name: string | null }[]; tenantId: string }) {
+export default function UserAssignments({ users, tenantId }: { users: { user_id: string; full_name: string | null; email: string | null }[]; tenantId: string }) {
   const [selectedUser, setSelectedUser] = useState<string | null>(users[0]?.user_id ?? null);
   const [roles, setRoles] = useState<any[]>([]);
   const [userRoles, setUserRoles] = useState<any[]>([]);
@@ -35,13 +35,14 @@ export default function UserAssignments({ users, tenantId }: { users: { user_id:
   }
 
   const assignedIds = new Set(userRoles.map((r) => r.role_id));
+  console.log("users", users);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <select value={selectedUser ?? ""} onChange={(e) => setSelectedUser(e.target.value)} className="rounded-md border bg-background px-2 py-1 text-sm">
           {users.map((u) => (
-            <option key={u.user_id} value={u.user_id}>{u.full_name ?? u.user_id}</option>
+            <option key={u.user_id} value={u.user_id}>{u.full_name ?? u.email ?? u.user_id}</option>
           ))}
         </select>
         {loading && <span className="text-xs text-foreground/60">Loading...</span>}
@@ -57,7 +58,7 @@ export default function UserAssignments({ users, tenantId }: { users: { user_id:
           <tbody>
             {roles.map((r) => (
               <tr key={r.id} className="border-t">
-                <td className="px-3 py-2">{r.name} <span className="font-mono text-xs text-foreground/60">({r.key})</span></td>
+                <td className="px-3 py-2">{r.name}</td>
                 <td className="px-3 py-2">
                   {assignedIds.has(r.id) ? (
                     <button onClick={() => revoke(r.id)} className="rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Revoke</button>

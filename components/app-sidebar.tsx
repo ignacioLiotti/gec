@@ -6,19 +6,21 @@ import {
 	Users,
 	ShieldCheck,
 	ChevronDown,
+	ChevronRight,
 	FileText,
 	Bell,
-	FileCheck,
 	Database,
-	User,
 	KeyRound,
 	Settings2,
-	Layers,
-	Sparkles,
 	PlusCircle,
 	Check,
 	Building2,
 	Loader2,
+	Table2,
+	FolderCogIcon,
+	TableIcon,
+	Columns3Cog,
+	Columns3,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -39,6 +41,11 @@ import {
 	SidebarMenuSubItem,
 	useSidebar,
 } from "@/components/ui/sidebar";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { getRouteAccessConfig, type Role } from "@/lib/route-access";
 import {
@@ -95,30 +102,11 @@ const navItems: NavItem[] = [
 		href: "/excel",
 		icon: Database,
 	},
-	{
-		title: "Certificados",
-		href: "/certificados",
-		icon: FileCheck,
-	},
+
 	{
 		title: "Notificaciones",
 		href: "/notifications",
 		icon: Bell,
-	},
-	{
-		title: "Perfil",
-		href: "/profile",
-		icon: User,
-	},
-	{
-		title: "Onboarding",
-		href: "/onboarding?preview=1",
-		icon: Sparkles,
-	},
-	{
-		title: "Nueva obra",
-		href: "/tenants/new",
-		icon: PlusCircle,
 	},
 
 ];
@@ -130,11 +118,6 @@ const adminItems: NavItem[] = [
 		icon: Users,
 	},
 	{
-		title: "Organizaciones",
-		href: "/admin/tenants",
-		icon: Building2,
-	},
-	{
 		title: "Roles y Permisos",
 		href: "/admin/roles",
 		icon: ShieldCheck,
@@ -144,20 +127,24 @@ const adminItems: NavItem[] = [
 		href: "/admin/obra-defaults",
 		icon: Settings2,
 	},
+
 	{
-		title: "Macro Tablas",
-		href: "/admin/macro-tables",
-		icon: Layers,
+		title: "Auditoría",
+		href: "/admin/audit-log",
+		icon: FileText,
+	},
+];
+
+const ignacioItems: NavItem[] = [
+	{
+		title: "Organizaciones",
+		href: "/admin/tenants",
+		icon: Building2,
 	},
 	{
 		title: "Secretos API",
 		href: "/admin/tenant-secrets",
 		icon: KeyRound,
-	},
-	{
-		title: "Auditoría",
-		href: "/admin/audit-log",
-		icon: FileText,
 	},
 ];
 
@@ -188,10 +175,17 @@ const adminItems: NavItem[] = [
 // 	},
 // ];
 
+type SidebarMacroTable = {
+	id: string;
+	name: string;
+	position: number;
+};
+
 export function AppSidebar({
 	user,
 	userRoles,
 	tenants,
+	sidebarMacroTables,
 	...props
 }: React.ComponentProps<typeof Sidebar> & {
 	user?: { email?: string } | null;
@@ -202,6 +196,7 @@ export function AppSidebar({
 		tenantId: string | null;
 	} | null;
 	tenants?: { id: string; name: string | null }[];
+	sidebarMacroTables?: SidebarMacroTable[];
 }) {
 	const pathname = usePathname();
 	const router = useRouter();
@@ -245,6 +240,7 @@ export function AppSidebar({
 
 			// Check route access config
 			const config = getRouteAccessConfig(href);
+			console.log("config", config);
 			if (!config) {
 				// Route not protected, allow access
 				return true;
@@ -268,6 +264,8 @@ export function AppSidebar({
 		() => navItems.filter((item) => canAccessRoute(item.href)),
 		[canAccessRoute]
 	);
+	console.log("NavItems", navItems);
+	console.log("filteredNavItems", filteredNavItems);
 
 	// Filter admin items (only show to admins)
 	const filteredAdminItems = React.useMemo(
@@ -276,6 +274,15 @@ export function AppSidebar({
 				? adminItems
 				: [],
 		[userRoles]
+	);
+
+	// Filter Ignacio items (only show to superadmin or ignacioliotti@gmail.com)
+	const filteredIgnacioItems = React.useMemo(
+		() =>
+			userRoles?.isSuperAdmin || user?.email === "ignacioliotti@gmail.com"
+				? ignacioItems
+				: [],
+		[userRoles, user?.email]
 	);
 
 	// Filter dev items (only show to admins)
@@ -297,9 +304,8 @@ export function AppSidebar({
 								<Link href="/" className="container">
 									{/* if sidebar is closed make logo smaller */}
 									<div
-										className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${
-											state === "collapsed" ? "size-8" : "size-10"
-										}`}
+										className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === "collapsed" ? "size-8" : "size-10"
+											}`}
 									/>
 									<div className="grid flex-1 text-left text-sm leading-tight pt-[5px]">
 										<span className="truncate font-semibold font-mono text-lg leading-[16px]">
@@ -389,17 +395,62 @@ export function AppSidebar({
 						<SidebarGroupLabel>Principal</SidebarGroupLabel>
 						<SidebarGroupContent>
 							<SidebarMenu>
-								{filteredNavItems.map((item) => {
+								{filteredNavItems.map((item, index) => {
 									const isActive = pathname === item.href;
+									const showTablasBeforeThis = item.href === "/notifications" && sidebarMacroTables && sidebarMacroTables.length > 0;
+
 									return (
-										<SidebarMenuItem key={item.title}>
-											<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-												<Link href={item.href}>
-													<item.icon className="size-4" />
-													<span>{item.title}</span>
-												</Link>
-											</SidebarMenuButton>
-										</SidebarMenuItem>
+										<React.Fragment key={item.title}>
+											{/* Tablas dropdown - inserted before Notifications */}
+											{showTablasBeforeThis && (
+												<Collapsible defaultOpen className="group/collapsible">
+													<SidebarMenuItem>
+														<CollapsibleTrigger asChild>
+															<SidebarMenuButton tooltip="Tablas">
+																<Table2 className="size-4" />
+																<span>Tablas</span>
+																<ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+															</SidebarMenuButton>
+														</CollapsibleTrigger>
+														<CollapsibleContent>
+															<SidebarMenuSub>
+																{sidebarMacroTables.map((table) => {
+																	const isTableActive = pathname === `/macro/${table.id}`;
+																	return (
+																		<SidebarMenuSubItem key={table.id}>
+																			<SidebarMenuSubButton asChild isActive={isTableActive}>
+																				<Link href={`/macro/${table.id}`}>
+																					<Columns3 className="size-4" />
+																					{table.name}
+																				</Link>
+																			</SidebarMenuSubButton>
+																		</SidebarMenuSubItem>
+																	);
+																})}
+																{/* <SidebarMenuSubItem>
+																	<SidebarMenuSubButton asChild>
+																		<Link href="/macro">
+																			<Columns3Cog className="size-4" />
+																			<span>Todas las Tablas</span>
+																		</Link>
+																	</SidebarMenuSubButton>
+																</SidebarMenuSubItem> */}
+															</SidebarMenuSub>
+														</CollapsibleContent>
+													</SidebarMenuItem>
+												</Collapsible>
+											)}
+											<SidebarMenuItem>
+												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+													<Link href={item.href}>
+														<item.icon className="size-4" />
+														<span>{item.title}</span>
+													</Link>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+
+
+										</React.Fragment>
 									);
 								})}
 							</SidebarMenu>
@@ -417,6 +468,34 @@ export function AppSidebar({
 							<SidebarGroupContent>
 								<SidebarMenu>
 									{filteredAdminItems.map((item) => {
+										const isActive = pathname === item.href || pathname.startsWith(item.href);
+										return (
+											<SidebarMenuItem key={item.title}>
+												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+													<Link href={item.href}>
+														<item.icon className="size-4" />
+														<span>{item.title}</span>
+													</Link>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					</>
+				)}
+
+				{filteredIgnacioItems.length > 0 && (
+					<>
+						<Separator />
+
+						{/* Ignacio Navigation */}
+						<SidebarGroup className="bg-purple-500/20 rounded-lg p-2">
+							<SidebarGroupLabel>Ignacio</SidebarGroupLabel>
+							<SidebarGroupContent>
+								<SidebarMenu>
+									{filteredIgnacioItems.map((item) => {
 										const isActive = pathname === item.href || pathname.startsWith(item.href);
 										return (
 											<SidebarMenuItem key={item.title}>

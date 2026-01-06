@@ -104,7 +104,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
 
   const tenantId = tenantData?.tenant_id;
   let flujoCalendarEvents: CalendarEventPayload[] = [];
-  let availableRoles: { key: string; name: string | null }[] = [];
+  let availableRoles: { id: string; name: string | null }[] = [];
   let calendarEventRows: any[] = [];
 
   let calendarEvents: CalendarEventPayload[] = [...pendienteCalendarEvents];
@@ -136,15 +136,12 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     calendarEventRows = calendarRes.data ?? [];
 
     availableRoles = rolesData.map((r: any) => ({
-      key: String(r.key),
+      id: String(r.id),
       name: r.name ?? null,
     }));
 
-    // Map current user's roles in this tenant to role keys
-    const roleIds = userRoleIds.map((ur) => ur.role_id);
-    const userRoleKeys = rolesData
-      .filter((r: any) => roleIds.includes(r.id))
-      .map((r: any) => String(r.key));
+    // Get current user's role IDs in this tenant
+    const userRoleIdSet = new Set(userRoleIds.map((ur) => ur.role_id));
 
     // We no longer surface calendar events directly from obra_flujo_actions.
     // Instead, when an obra completes, executeFlujoActions creates rows in
@@ -155,7 +152,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       .filter((row) => {
         const audienceType = row.audience_type as string | null;
         const targetUserId = row.target_user_id as string | null;
-        const targetRoleKey = row.target_role_key as string | null;
+        const targetRoleId = row.target_role_id as string | null;
 
         let show = false;
 
@@ -164,7 +161,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
         } else if (audienceType === "user") {
           show = targetUserId === userId;
         } else if (audienceType === "role") {
-          show = Boolean(targetRoleKey && userRoleKeys.includes(targetRoleKey));
+          show = Boolean(targetRoleId && userRoleIdSet.has(targetRoleId));
         } else if (audienceType === "tenant") {
           show = true;
         }
@@ -175,9 +172,9 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
           title: row.title,
           audienceType,
           targetUserId,
-          targetRoleKey,
+          targetRoleId,
           currentUserId: userId,
-          userRoleKeys,
+          userRoleIds: Array.from(userRoleIdSet),
           show,
         });
 

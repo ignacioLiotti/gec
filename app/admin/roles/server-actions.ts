@@ -5,15 +5,13 @@ import { revalidatePath } from "next/cache";
 
 export async function createRole({
 	tenantId,
-	key,
 	name,
 }: {
 	tenantId: string;
-	key: string;
 	name: string;
 }) {
 	const supabase = await createClient();
-	await supabase.from("roles").insert({ tenant_id: tenantId, key, name });
+	await supabase.from("roles").insert({ tenant_id: tenantId, name });
 	revalidatePath("/admin/roles");
 }
 
@@ -27,7 +25,7 @@ export async function listRoles({ tenantId }: { tenantId: string }) {
 	const supabase = await createClient();
 	const { data } = await supabase
 		.from("roles")
-		.select("id, key, name")
+		.select("id, name")
 		.eq("tenant_id", tenantId)
 		.order("name");
 	return data ?? [];
@@ -181,15 +179,13 @@ export async function deletePermission({
 // Role update
 export async function updateRole({
 	roleId,
-	key,
 	name,
 }: {
 	roleId: string;
-	key: string;
 	name: string;
 }) {
 	const supabase = await createClient();
-	await supabase.from("roles").update({ key, name }).eq("id", roleId);
+	await supabase.from("roles").update({ name }).eq("id", roleId);
 	revalidatePath("/admin/roles");
 }
 

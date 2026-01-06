@@ -4,11 +4,12 @@ import { redirect } from "next/navigation";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function redirectWithError(path: string, message: string) {
+function redirectWithError(path: string, message: string): never {
 	const params = new URLSearchParams({ error: message });
 	const separator = path.includes("?") ? "&" : "?";
 	redirect(`${path}${separator}${params.toString()}`);
@@ -55,22 +56,25 @@ export async function createTenantAction(
 		);
 	}
 
-	const { data, error } = await supabase
+	// Use admin client to bypass RLS for bootstrapping operations
+	const adminClient = createSupabaseAdminClient();
+
+	const { data, error } = await adminClient
 		.from("tenants")
 		.insert({ name })
 		.select("id")
 		.single();
 
 	if (error || !data) {
-			let message = "No pudimos crear la organización, probá de nuevo.";
-			if (error?.code === "23505") {
-				message = "Ya existe una organización con ese nombre.";
+		let message = "No pudimos crear la organización, probá de nuevo.";
+		if (error?.code === "23505") {
+			message = "Ya existe una organización con ese nombre.";
 		}
 		console.error("[tenants:create] insert failed", error);
 		redirectWithError(errorPath, message);
 	}
 
-	const { error: membershipError } = await supabase
+	const { error: membershipError } = await adminClient
 		.from("memberships")
 		.insert({ tenant_id: data.id, user_id: user.id, role: "owner" });
 

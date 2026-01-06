@@ -1,6 +1,6 @@
 import { start } from "workflow/api";
 import { deliverEffectsWorkflow } from "./workflows";
-import { getUserEmailById, getUserIdsByRoleKey } from "./recipients";
+import { getUserEmailById, getUserIdsByRoleId } from "./recipients";
 
 export type EventContext = {
 	tenantId?: string | null;
@@ -128,25 +128,25 @@ export async function expandEffectsForEvent(
 
 	let recipientIds = await rule.recipients(ctx);
 
-	// Optional: allow rule recipients to encode "role:<roleKey>" for expansion
-	// so a rule can target all users with a given role key in the tenant.
-	const expandedRoleIds: string[] = [];
+	// Optional: allow rule recipients to encode "roleid:<uuid>" for expansion
+	// so a rule can target all users with a given role ID in the tenant.
+	const expandedRoleUserIds: string[] = [];
 	const directUserIds: string[] = [];
 
 	for (const id of recipientIds) {
-		if (id.startsWith("role:")) {
-			const roleKey = id.slice("role:".length);
-			const byRole = await getUserIdsByRoleKey({
-				roleKey,
+		if (id.startsWith("roleid:")) {
+			const roleId = id.slice("roleid:".length);
+			const byRole = await getUserIdsByRoleId({
+				roleId,
 				tenantId: ctx.tenantId ?? null,
 			});
-			expandedRoleIds.push(...byRole);
+			expandedRoleUserIds.push(...byRole);
 		} else {
 			directUserIds.push(id);
 		}
 	}
 
-	recipientIds = Array.from(new Set([...directUserIds, ...expandedRoleIds]));
+	recipientIds = Array.from(new Set([...directUserIds, ...expandedRoleUserIds]));
 	if (!recipientIds.length) return [] as any[];
 
 	const expanded = await Promise.all(

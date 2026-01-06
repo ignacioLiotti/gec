@@ -99,7 +99,9 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         field: "_obraName" as any,
         editable: false,
         cellType: "text",
+        cellConfig: undefined,
         enableHide: false,
+        enablePin: false,
       });
     }
 

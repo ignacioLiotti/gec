@@ -32,7 +32,7 @@
  * ============================================================================
  */
 
-export type Role = "admin" | "contable" | string; // Allow any string for flexibility, but prefer "admin" | "contable"
+export type Role = "admin" | string; // Allow any string for dynamic roles from database
 
 export interface RouteAccessConfig {
 	/**
@@ -53,20 +53,44 @@ export interface RouteAccessConfig {
 /**
  * Route access configuration
  * Add new routes here to control access
+ *
+ * NOTE: Roles are now dynamic and defined per-tenant in the database.
+ * - Admin routes use ["admin"] which is checked via membership role (owner/admin)
+ * - Other routes use [] to allow all authenticated users
+ * - Specific access control is handled via sidebar visibility and per-table permissions
  */
 export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
+	// === PUBLIC ROUTES (all authenticated users) ===
 	{
 		path: "/certificados",
-		allowedRoles: ["admin", "contable"],
+		allowedRoles: [], // Accessible to all authenticated users
 	},
 	{
 		path: "/excel",
-		allowedRoles: ["admin", "operativo"],
+		allowedRoles: [], // Accessible to all authenticated users
 	},
 	{
 		path: "/excel/[obraId]",
-		allowedRoles: ["admin", "contable", "operativo"],
+		allowedRoles: [], // Accessible to all authenticated users
 	},
+	{
+		path: "/profile",
+		allowedRoles: [], // Accessible to all authenticated users
+	},
+	{
+		path: "/macro",
+		allowedRoles: [], // Macro tables - visibility controlled by sidebar_macro_tables
+	},
+	{
+		path: "/macro/[id]",
+		allowedRoles: [], // Individual macro table - visibility controlled by sidebar_macro_tables
+	},
+	{
+		path: "/notifications",
+		allowedRoles: [], // Accessible to all authenticated users
+	},
+
+	// === ADMIN ROUTES (admin/owner only) ===
 	{
 		path: "/admin",
 		allowedRoles: ["admin"],
@@ -84,6 +108,22 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
+		path: "/admin/macro-tables",
+		allowedRoles: ["admin"],
+	},
+	{
+		path: "/admin/users",
+		allowedRoles: ["admin"],
+	},
+	{
+		path: "/admin/roles",
+		allowedRoles: ["admin"],
+	},
+	{
+		path: "/admin/obra-defaults",
+		allowedRoles: ["admin"],
+	},
+	{
 		path: "/dev",
 		allowedRoles: ["admin"],
 	},
@@ -91,16 +131,6 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		path: "/workflow-test",
 		allowedRoles: ["admin"],
 	},
-	{
-		path: "/profile",
-		// Perfil accesible para cualquier usuario autenticado
-		allowedRoles: [],
-	},
-	// Add more routes as needed
-	// {
-	//   path: "/admin/users",
-	//   allowedRoles: ["admin"],
-	// },
 ];
 
 /**

@@ -203,13 +203,12 @@ export async function proxy(req: NextRequest) {
 			preferredTenantId && resolvedMemberships
 				? resolvedMemberships.find(
 						(membership) => membership.tenant_id === preferredTenantId
-				  )
+					)
 				: undefined;
 
 		const activeMembership = preferredMembership ?? resolvedMemberships?.[0];
 
-		const tenantId =
-			activeMembership?.tenant_id ?? DEFAULT_TENANT_ID;
+		const tenantId = activeMembership?.tenant_id ?? DEFAULT_TENANT_ID;
 		const membershipRole = activeMembership?.role;
 		const isAdmin =
 			membershipRole === "owner" || membershipRole === "admin" || isSuperAdmin;
@@ -218,65 +217,15 @@ export async function proxy(req: NextRequest) {
 			return attachSecurityHeaders(res);
 		}
 
-		const roles: Role[] = [];
-
-		if (tenantId) {
-			try {
-				const { data: userRoleIds, error: userRoleIdsError } = await supabase
-					.from("user_roles")
-					.select("role_id")
-					.eq("user_id", user.id);
-
-				if (userRoleIdsError?.code === "54001") {
-					console.warn(
-						"Stack depth limit exceeded in middleware - skipping user_roles query"
-					);
-				} else if (userRoleIdsError) {
-					console.error(
-						"Error fetching user role IDs in middleware:",
-						userRoleIdsError
-					);
-				} else if (userRoleIds && userRoleIds.length > 0) {
-					const roleIds = userRoleIds.map((ur: any) => ur.role_id);
-					const { data: roleDetails, error: roleDetailsError } = await supabase
-						.from("roles")
-						.select("id, key, name, tenant_id")
-						.in("id", roleIds)
-						.eq("tenant_id", tenantId);
-
-					if (roleDetailsError) {
-						console.error(
-							"Error fetching role details in middleware:",
-							roleDetailsError
-						);
-					} else if (roleDetails) {
-						const roleKeyMapping: Record<string, Role> = {
-							"1": "contable",
-							admin: "admin",
-							contable: "contable",
-						};
-
-						for (const role of roleDetails) {
-							const roleKey = role.key;
-							if (roleKey) {
-								const mappedRole = roleKeyMapping[roleKey] || roleKey;
-								if (!roles.includes(mappedRole as Role)) {
-									roles.push(mappedRole as Role);
-								}
-							}
-						}
-					}
-				}
-			} catch (error) {
-				console.error("Exception fetching user roles in middleware:", error);
-			}
-		}
-
-		const hasAccess =
-			config.allowedRoles.length === 0 ||
-			config.allowedRoles.some((role) => roles.includes(role));
+		// For non-admin users, check if route has specific role requirements
+		// Currently all non-admin routes have empty allowedRoles (accessible to all authenticated users)
+		// Fine-grained access control is handled via:
+		// - sidebar_macro_tables for sidebar visibility
+		// - macro_table_permissions for per-table access
+		const hasAccess = config.allowedRoles.length === 0;
 
 		if (!hasAccess) {
+			// Route requires specific roles but user is not admin - redirect to home
 			const url = req.nextUrl.clone();
 			url.pathname = "/";
 			return attachSecurityHeaders(NextResponse.redirect(url));

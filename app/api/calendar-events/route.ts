@@ -15,8 +15,8 @@ export async function POST(request: Request) {
       body?.audienceType === "role" || body?.audienceType === "user"
         ? (body.audienceType as "role" | "user")
         : ("me" as "me" | "role" | "user")
-    const audienceRoleKey =
-      typeof body?.audienceRoleKey === "string" ? body.audienceRoleKey : null
+    const audienceRoleId =
+      typeof body?.audienceRoleId === "string" ? body.audienceRoleId : null
     const targetUserId =
       typeof body?.targetUserId === "string" ? body.targetUserId : null
 
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
         all_day: allDay,
         audience_type: audienceType,
         target_user_id: audienceType === "user" ? targetUserId : null,
-        target_role_key: audienceType === "role" ? audienceRoleKey : null,
+        target_role_id: audienceType === "role" ? audienceRoleId : null,
         deleted_at: null,
         deleted_by: null,
       })
@@ -97,15 +97,15 @@ export async function POST(request: Request) {
     const targetDate = startAt
     let target:
       | { type: "user"; userId: string }
-      | { type: "role"; tenantId: string; roleKey: string }
+      | { type: "role"; tenantId: string; roleId: string }
 
     if (audienceType === "user" && inserted.target_user_id) {
       target = { type: "user", userId: inserted.target_user_id as string }
-    } else if (audienceType === "role" && inserted.target_role_key) {
+    } else if (audienceType === "role" && inserted.target_role_id) {
       target = {
         type: "role",
         tenantId,
-        roleKey: inserted.target_role_key as string,
+        roleId: inserted.target_role_id as string,
       }
     } else {
       // Default: only the creator

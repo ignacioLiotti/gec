@@ -5,6 +5,7 @@ import SupabaseAuthListener from "@/components/auth/auth-listener";
 import AuthModal from "@/components/auth/auth-modal";
 import UserMenu from "@/components/auth/user-menu";
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import AuthController from "@/components/auth/auth-controller";
 import ImpersonateBanner from "./admin/users/_components/impersonate-banner";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -54,24 +55,80 @@ export default async function RootLayout({
   const userRoles = user ? await getUserRoles() : null;
   console.log("[LAYOUT] userRoles:", userRoles);
 
-  type TenantRow = {
-    tenant_id: string;
-    tenants: { name: string | null } | null;
-  };
-  let tenantRows: TenantRow[] | null = null;
+  // Check if user should see all organizations
+  const showAllOrgs = userRoles?.isSuperAdmin || user?.email === "ignacioliotti@gmail.com";
+
+  let tenants: { id: string; name: string }[] = [];
   if (user) {
-    const { data } = await supabase
-      .from("memberships")
-      .select("tenant_id, tenants(name)")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true });
-    tenantRows = (data ?? null) as TenantRow[] | null;
+    if (showAllOrgs) {
+      // Superadmin or ignacio sees ALL organizations (use admin client to bypass RLS)
+      const admin = createSupabaseAdminClient();
+      const { data: allTenants } = await admin
+        .from("tenants")
+        .select("id, name")
+        .order("name");
+      tenants = (allTenants ?? []).map((t) => ({
+        id: t.id,
+        name: t.name ?? "Organización",
+      }));
+      console.log("[LAYOUT] allTenants", allTenants);
+    } else {
+      // Regular users only see their memberships
+      type TenantRow = {
+        tenant_id: string;
+        tenants: { name: string | null } | null;
+      };
+      const { data } = await supabase
+        .from("memberships")
+        .select("tenant_id, tenants(name)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      const tenantRows = (data ?? null) as TenantRow[] | null;
+      tenants = tenantRows?.map((row) => ({
+        id: row.tenant_id,
+        name: row.tenants?.name ?? "Organización",
+      })) ?? [];
+    }
   }
-  const tenants =
-    tenantRows?.map((row) => ({
-      id: row.tenant_id,
-      name: row.tenants?.name ?? "Organización",
-    })) ?? [];
+
+  // Fetch sidebar macro tables for user
+  let sidebarMacroTables: { id: string; name: string; position: number }[] = [];
+  if (user && userRoles?.tenantId) {
+    const isAdminOrSuper = userRoles.isAdmin || userRoles.isSuperAdmin;
+
+    // Fetch all sidebar tables for the tenant (with role_id for filtering)
+    const { data: sidebarTables } = await supabase
+      .from("sidebar_macro_tables")
+      .select(`
+        role_id,
+        macro_table_id,
+        position,
+        macro_tables!inner(id, name, tenant_id)
+      `)
+      .eq("macro_tables.tenant_id", userRoles.tenantId)
+      .order("position");
+
+    if (sidebarTables && sidebarTables.length > 0) {
+      // Filter based on user access - use roleIds from getUserRoles()
+      const accessibleTables = isAdminOrSuper
+        ? sidebarTables // Admins see all
+        : sidebarTables.filter((t) => userRoles.roleIds.includes(t.role_id)); // Regular users see only their roles
+
+      // Deduplicate by macro_table_id (a table might be assigned to multiple roles)
+      const seen = new Set<string>();
+      sidebarMacroTables = accessibleTables
+        .filter((t) => {
+          if (seen.has(t.macro_table_id)) return false;
+          seen.add(t.macro_table_id);
+          return true;
+        })
+        .map((t) => ({
+          id: t.macro_table_id,
+          name: (t.macro_tables as unknown as { name: string }).name,
+          position: t.position,
+        }));
+    }
+  }
 
   return (
     <html lang="en">
@@ -91,22 +148,22 @@ export default async function RootLayout({
           <Toaster position="bottom-right" richColors />
           <NotificationsListener />
           <SidebarProvider>
-            <AppSidebar user={user} userRoles={userRoles} tenants={tenants} />
+            <AppSidebar user={user} userRoles={userRoles} tenants={tenants} sidebarMacroTables={sidebarMacroTables} />
             <SidebarInset>
-            <header className="flex h-12 max-w-full shrink-0 items-center gap-4 border-b px-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <SidebarTrigger className="-ml-1" />
-                <PageBreadcrumb />
-              </div>
-              <div className="flex items-center gap-2 ml-auto">
-                <ImpersonateBanner />
-                <UserMenu email={user?.email} userRoles={userRoles} />
-              </div>
-            </header>
-            {/* <div className="px-4 pt-4">
+              <header className="flex h-12 max-w-full shrink-0 items-center gap-4 border-b px-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <SidebarTrigger className="-ml-1" />
+                  <PageBreadcrumb />
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <ImpersonateBanner />
+                  <UserMenu email={user?.email} userRoles={userRoles} />
+                </div>
+              </header>
+              {/* <div className="px-4 pt-4">
               <PendingInvitationsBanner />
             </div> */}
-            <main className="flex flex-1 flex-col gap-4">{children}</main>
+              <main className="flex flex-1 flex-col gap-4">{children}</main>
             </SidebarInset>
           </SidebarProvider>
         </QueryClientProvider>

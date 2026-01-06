@@ -9,12 +9,12 @@ const ReminderSchema = z.object({
   description: z.string().nullish(),
   date: z.string().min(1),
   audienceType: z.enum(["me", "role"]).default("me"),
-  audienceRole: z.string().nullish(),
+  audienceRoleId: z.string().nullish(),
 })
 
 export async function POST(request: Request) {
   try {
-    const { title, description, date, audienceType, audienceRole } =
+    const { title, description, date, audienceType, audienceRoleId } =
       await validateJsonBody(request, ReminderSchema)
     const targetDate = new Date(date)
     if (Number.isNaN(targetDate.getTime())) {
@@ -40,11 +40,11 @@ export async function POST(request: Request) {
     const tenantId = (membership as any)?.tenant_id ?? null
 
     const target =
-      audienceType === "role" && tenantId && audienceRole
+      audienceType === "role" && tenantId && audienceRoleId
         ? {
             type: "role" as const,
             tenantId: tenantId as string,
-            roleKey: audienceRole as string,
+            roleId: audienceRoleId as string,
           }
         : {
             type: "user" as const,

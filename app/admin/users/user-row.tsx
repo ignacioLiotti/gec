@@ -8,9 +8,9 @@ export default function UserRow({
   allRoles,
   allPermissions,
 }: {
-  row: { user_id: string; full_name: string | null; membership_role: string };
+  row: { user_id: string; full_name: string | null; email: string | null; membership_role: string };
   tenantId: string;
-  allRoles: { id: string; key: string; name: string }[];
+  allRoles: { id: string; name: string }[];
   allPermissions: { id: string; key: string; description: string | null }[];
 }) {
   const [assignedRoles, setAssignedRoles] = useState<any[]>([]);
@@ -63,8 +63,8 @@ export default function UserRow({
   return (
     <tr className="border-t align-top">
       <td className="px-3 py-2">
-        <div className="text-sm font-medium">{row.full_name ?? row.user_id}</div>
-        <div className="text-xs text-foreground/60 font-mono">{row.user_id}</div>
+        <div className="text-sm font-medium">{row.full_name ?? row.email ?? row.user_id}</div>
+        <div className="text-xs text-foreground/60 font-mono">{row.email ?? row.user_id}</div>
         <form
           action={async () => {
             const fd = new FormData();

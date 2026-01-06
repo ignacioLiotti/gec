@@ -57,9 +57,9 @@ export interface EventCalendarProps {
   /**
    * Optional list of role options that can be used by higher-level
    * consumers (e.g. notifications calendar) to target events to roles.
-   * Typically comes from the `roles` table (key + name).
+   * Typically comes from the `roles` table (id + name).
    */
-  availableRoles?: { key: string; name: string | null }[]
+  availableRoles?: { id: string; name: string | null }[]
 }
 
 export function EventCalendar({

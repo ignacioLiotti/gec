@@ -699,18 +699,6 @@ export default function NewMacroTablePage() {
                         <div
                           key={obra.id}
                           className="rounded-lg border border-border/50 overflow-hidden"
-                          onDragStart={(event) => {
-                            const id = event.active?.id;
-                            if (typeof id === "string") setDraggingColumnId(id);
-                          }}
-                          onDragCancel={() => setDraggingColumnId(null)}
-                          onDragEnd={() => setDraggingColumnId(null)}
-                          onDragStart={(event) => {
-                            const id = event.active?.id;
-                            if (typeof id === "string") setDraggingColumnId(id);
-                          }}
-                          onDragCancel={() => setDraggingColumnId(null)}
-                          onDragEnd={() => setDraggingColumnId(null)}
                         >
                           <button
                             onClick={() => toggleObraExpansion(obra.id)}

@@ -25,10 +25,9 @@ export type GroupNotificationInput = Omit<
   "userId"
 > & {
   /**
-   * Target all users that have a role with this key in the tenant.
-   * This corresponds to roles.key in the database.
+   * Target all users that have this role ID assigned in the tenant.
    */
-  roleKey: string
+  roleId: string
 }
 
 /**
@@ -79,7 +78,7 @@ export async function notifyInAppForRole(
   const ctx: EventContext = {
     tenantId: input.tenantId ?? null,
     actorId: null,
-    roleKey: input.roleKey,
+    roleId: input.roleId,
     title: input.title,
     body: input.body ?? null,
     type: input.type ?? "info",
@@ -115,11 +114,11 @@ defineRule("custom.in_app", {
 
 defineRule("custom.in_app.role", {
   recipients: async (ctx) => {
-    const roleKey = (ctx.roleKey ?? ctx.role) as string | undefined
-    if (!roleKey) return []
-    // Use a pseudo recipient ID; the engine will expand "role:<key>"
-    // into concrete user IDs via roles + user_roles lookup.
-    return [`role:${roleKey}`]
+    const roleId = ctx.roleId as string | undefined
+    if (!roleId) return []
+    // Use a pseudo recipient ID; the engine will expand "roleid:<uuid>"
+    // into concrete user IDs via user_roles lookup.
+    return [`roleid:${roleId}`]
   },
   effects: [customInAppRule],
 })

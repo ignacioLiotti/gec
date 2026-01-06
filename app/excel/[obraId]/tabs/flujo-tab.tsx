@@ -487,7 +487,7 @@ export function ObraFlujoTab({
 															<SelectItem key={role.id} value={role.id}>
 																<div className="flex flex-col text-xs">
 																	<span className="font-medium">
-																		{role.name || role.key}
+																		{role.name}
 																	</span>
 																	<span className="text-[10px] text-muted-foreground">
 																		{members.length

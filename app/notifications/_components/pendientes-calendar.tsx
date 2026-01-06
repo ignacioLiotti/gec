@@ -31,7 +31,7 @@ export function PendientesCalendar({
   events: CalendarEventPayload[]
   onFlujoEventUpdate?: (eventId: string, title: string, description: string | undefined, start: string, end: string, allDay: boolean) => Promise<void>
   onFlujoEventDelete?: (eventId: string) => Promise<void>
-  availableRoles?: { key: string; name: string | null }[]
+  availableRoles?: { id: string; name: string | null }[]
 }) {
   const parsedEvents = useMemo<CalendarEvent[]>(() => {
     return events.map((event) => ({
@@ -61,7 +61,7 @@ export function PendientesCalendar({
           end: event.end.toISOString(),
           allDay: event.allDay ?? false,
           audienceType: event.audienceType ?? "me",
-          audienceRoleKey: event.audienceRole ?? null,
+          audienceRoleId: event.audienceRoleId ?? null,
         }),
       })
     } catch (error) {

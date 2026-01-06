@@ -21,6 +21,7 @@ import {
   FileStack,
   Sparkles,
   MoveHorizontal,
+  PanelLeft,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,12 @@ export default function EditMacroTablePage() {
   const [columns, setColumns] = useState<ColumnConfig[]>([]);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
 
+  // Sidebar configuration
+  type RoleOption = { id: string; key: string; name: string };
+  const [sidebarRoles, setSidebarRoles] = useState<RoleOption[]>([]);
+  const [selectedSidebarRoleIds, setSelectedSidebarRoleIds] = useState<Set<string>>(new Set());
+  const [isSavingSidebar, setIsSavingSidebar] = useState(false);
+
   const columnIds = columns.map((col) => col.id);
   const { getColumnWidth, startResize } = useColumnResize(columnIds);
   const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null);
@@ -173,6 +180,62 @@ export default function EditMacroTablePage() {
       console.error("Failed to load templates", error);
     }
   }, []);
+
+  // Fetch sidebar configuration
+  const fetchSidebarConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/macro-tables/${id}/sidebar`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Failed to load sidebar config:", res.status, errorData);
+        return;
+      }
+      const data = await res.json();
+      console.log("Sidebar config loaded:", data);
+      setSidebarRoles(data.roles ?? []);
+      const assignedRoleIds = new Set<string>(
+        (data.assignments ?? []).map((a: { role_id: string }) => a.role_id)
+      );
+      setSelectedSidebarRoleIds(assignedRoleIds);
+    } catch (error) {
+      console.error("Failed to load sidebar config", error);
+    }
+  }, [id]);
+
+  // Save sidebar configuration
+  const handleSaveSidebar = async () => {
+    try {
+      setIsSavingSidebar(true);
+      const res = await fetch(`/api/macro-tables/${id}/sidebar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleIds: Array.from(selectedSidebarRoleIds) }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Error saving sidebar config");
+      }
+      toast.success("Configuración de sidebar guardada");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Error guardando configuración");
+    } finally {
+      setIsSavingSidebar(false);
+    }
+  };
+
+  // Toggle sidebar role selection
+  const toggleSidebarRole = (roleId: string) => {
+    setSelectedSidebarRoleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(roleId)) {
+        next.delete(roleId);
+      } else {
+        next.add(roleId);
+      }
+      return next;
+    });
+  };
 
   // Fetch macro table data
   const fetchMacroTable = useCallback(async () => {
@@ -268,10 +331,11 @@ export default function EditMacroTablePage() {
       await fetchMacroTable();
       await fetchObrasWithTablas();
       await fetchTemplates();
+      await fetchSidebarConfig();
       setIsLoading(false);
     };
     void load();
-  }, [fetchMacroTable, fetchObrasWithTablas, fetchTemplates]);
+  }, [fetchMacroTable, fetchObrasWithTablas, fetchTemplates, fetchSidebarConfig]);
 
   // Toggle obra expansion
   const toggleObraExpansion = (obraId: string) => {
@@ -578,36 +642,105 @@ export default function EditMacroTablePage() {
         </TabsList>
 
         <TabsContent value="info">
-          <Card className="border-cyan-500/20">
-            <CardHeader>
-              <CardTitle className="text-lg">Información básica</CardTitle>
-              <CardDescription>
-                Nombre y descripción de la macro tabla
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nombre *</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ej: Resumen de materiales"
-                />
-              </div>
+          <div className="space-y-6">
+            <Card className="border-cyan-500/20">
+              <CardHeader>
+                <CardTitle className="text-lg">Información básica</CardTitle>
+                <CardDescription>
+                  Nombre y descripción de la macro tabla
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nombre *</Label>
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Ej: Resumen de materiales"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Descripción (opcional)</Label>
-                <Textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe el propósito de esta macro tabla..."
-                  rows={3}
-                />
-              </div>
-            </CardContent>
-          </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Descripción (opcional)</Label>
+                  <Textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Describe el propósito de esta macro tabla..."
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-purple-500/20">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <PanelLeft className="h-5 w-5 text-purple-500" />
+                  <div>
+                    <CardTitle className="text-lg">Visibilidad en Sidebar</CardTitle>
+                    <CardDescription>
+                      Seleccioná qué roles pueden ver esta tabla en el menú lateral
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {sidebarRoles.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    No hay roles configurados en esta organización.
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {sidebarRoles.map((role) => {
+                      const isSelected = selectedSidebarRoleIds.has(role.id);
+                      return (
+                        <label
+                          key={role.id}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                            isSelected
+                              ? "border-purple-500 bg-purple-50 dark:bg-purple-950/20"
+                              : "border-border hover:bg-muted/50"
+                          )}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSidebarRole(role.id)}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm truncate">{role.name}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    {selectedSidebarRoleIds.size === 0
+                      ? "Esta tabla no aparecerá en el sidebar de ningún rol"
+                      : `Visible para ${selectedSidebarRoleIds.size} ${selectedSidebarRoleIds.size === 1 ? "rol" : "roles"}`}
+                  </p>
+                  <Button
+                    onClick={handleSaveSidebar}
+                    disabled={isSavingSidebar}
+                    size="sm"
+                    className="gap-2 bg-purple-600 hover:bg-purple-700"
+                  >
+                    {isSavingSidebar ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Guardar visibilidad
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="sources">

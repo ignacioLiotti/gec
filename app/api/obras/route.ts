@@ -84,10 +84,11 @@ export async function getAuthContext() {
 
 		membership = preferredResult.data ?? null;
 		membershipError = preferredResult.error;
-	} else {
-		console.log("[auth-context] preferred membership found", {
-			tenantId: membership?.tenant_id ?? null,
-		});
+		if (membership) {
+			console.log("[auth-context] preferred membership found", {
+				tenantId: membership.tenant_id ?? null,
+			});
+		}
 	}
 
 	if (!membership) {

@@ -11,34 +11,30 @@ export async function getUserEmailById(userId: string): Promise<string | null> {
 }
 
 /**
- * Fetch user IDs for all users that have a role with the given key
- * (scoped optionally to a tenant via roles.tenant_id).
+ * Fetch user IDs for all users that have a specific role ID assigned.
  *
- * This uses the roles + user_roles tables instead of membership_role.
+ * This uses the user_roles table to find all users with the given role.
  */
-export async function getUserIdsByRoleKey(params: {
-	roleKey: string;
+export async function getUserIdsByRoleId(params: {
+	roleId: string;
 	tenantId?: string | null;
 }): Promise<string[]> {
 	try {
 		const admin = createSupabaseAdminClient();
 
-		// First resolve role IDs that match the key (and tenant if provided)
-		let rolesQuery = admin.from("roles").select("id");
-		rolesQuery = rolesQuery.eq("key", params.roleKey);
+		// Verify the role exists and optionally belongs to the tenant
+		let roleQuery = admin.from("roles").select("id").eq("id", params.roleId);
 		if (params.tenantId) {
-			rolesQuery = rolesQuery.eq("tenant_id", params.tenantId);
+			roleQuery = roleQuery.eq("tenant_id", params.tenantId);
 		}
 
-		const { data: roles, error: rolesError } = await rolesQuery;
-		if (rolesError || !roles || roles.length === 0) return [];
-
-		const roleIds = (roles as { id: string }[]).map((r) => r.id);
+		const { data: role, error: roleError } = await roleQuery.maybeSingle();
+		if (roleError || !role) return [];
 
 		const { data: userRoles, error: userRolesError } = await admin
 			.from("user_roles")
 			.select("user_id")
-			.in("role_id", roleIds);
+			.eq("role_id", params.roleId);
 
 		if (userRolesError || !userRoles) return [];
 

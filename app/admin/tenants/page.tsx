@@ -45,6 +45,9 @@ export default async function TenantsAdminPage() {
 	const isSuperAdmin =
 		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
 
+	// Check if user should see all organizations
+	const showAllOrgs = isSuperAdmin || user.email === "ignacioliotti@gmail.com";
+
 	const { data: memberships, error: membershipError } = await supabase
 		.from("memberships")
 		.select("tenant_id, role")
@@ -61,7 +64,7 @@ export default async function TenantsAdminPage() {
 	}
 
 	const memberTenantIds = (memberships ?? []).map((m) => m.tenant_id);
-	if (!isSuperAdmin && memberTenantIds.length === 0) {
+	if (!showAllOrgs && memberTenantIds.length === 0) {
 		return (
 			<div className="p-6 text-sm">
 				Necesitás ser administrador de al menos una organización para verla.
@@ -70,8 +73,8 @@ export default async function TenantsAdminPage() {
 	}
 
 	const adminClient = createSupabaseAdminClient();
-	const tenantClient = isSuperAdmin ? adminClient : supabase;
-	console.log("[admin/tenants] tenant query client", isSuperAdmin ? "admin" : "user", {
+	const tenantClient = showAllOrgs ? adminClient : supabase;
+	console.log("[admin/tenants] tenant query client", showAllOrgs ? "admin" : "user", {
 		memberTenantIds,
 	});
 	let tenantQuery = tenantClient
@@ -79,7 +82,7 @@ export default async function TenantsAdminPage() {
 		.select("id, name, created_at")
 		.order("created_at", { ascending: true });
 
-	if (!isSuperAdmin) {
+	if (!showAllOrgs) {
 		tenantQuery = tenantQuery.in("id", memberTenantIds);
 	}
 

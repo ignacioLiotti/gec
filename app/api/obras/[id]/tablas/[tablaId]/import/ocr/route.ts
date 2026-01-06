@@ -329,7 +329,49 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			storageInfoForError = storageInfo;
 		}
 
-		if (!file && typeof imageDataUrl !== "string") {
+		// If we have an existing file in storage but no new file/imageDataUrl, fetch it
+		let fetchedImageDataUrl: string | null = null;
+		if (!file && typeof imageDataUrl !== "string" && storageInfo) {
+			try {
+				const { data: fileData, error: downloadError } = await supabase.storage
+					.from(storageInfo.bucket)
+					.download(storageInfo.path);
+
+				if (downloadError) {
+					console.error("[tabla-rows:ocr-import] Failed to download existing file:", downloadError);
+					return NextResponse.json(
+						{ error: `No se pudo descargar el archivo: ${downloadError.message}` },
+						{ status: 400 }
+					);
+				}
+
+				if (fileData) {
+					const arrayBuffer = await fileData.arrayBuffer();
+					const buffer = Buffer.from(arrayBuffer);
+					const mime = fileData.type || "image/png";
+
+					if (!mime.startsWith("image/")) {
+						return NextResponse.json(
+							{ error: "El archivo existente no es una imagen" },
+							{ status: 400 }
+						);
+					}
+
+					const base64 = buffer.toString("base64");
+					fetchedImageDataUrl = `data:${mime};base64,${base64}`;
+				}
+			} catch (fetchError) {
+				console.error("[tabla-rows:ocr-import] Error fetching existing file:", fetchError);
+				return NextResponse.json(
+					{ error: "Error al obtener el archivo existente" },
+					{ status: 400 }
+				);
+			}
+		}
+
+		const effectiveImageDataUrl = typeof imageDataUrl === "string" ? imageDataUrl : fetchedImageDataUrl;
+
+		if (!file && !effectiveImageDataUrl) {
 			return NextResponse.json(
 				{ error: "Se requiere un archivo o imageDataUrl" },
 				{ status: 400 }
@@ -338,7 +380,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 		let extraction: Record<string, any> | null = null;
 
-		if (typeof imageDataUrl === "string" && imageDataUrl.startsWith("data:")) {
+		if (effectiveImageDataUrl && effectiveImageDataUrl.startsWith("data:")) {
 			const res = await generateObject({
 				model: openai("gpt-4o-mini"),
 				schema: extractionSchema,
@@ -350,7 +392,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 								type: "text",
 								text: instructions,
 							},
-							{ type: "image", image: imageDataUrl },
+							{ type: "image", image: effectiveImageDataUrl },
 						],
 					},
 				],

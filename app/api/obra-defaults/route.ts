@@ -106,8 +106,7 @@ export async function GET() {
 			const { data: columns } = await supabase
 				.from("obra_default_tabla_columns")
 				.select("default_tabla_id, field_key, label, data_type, config")
-				.in("default_tabla_id", tablaIds)
-				.order("position", { ascending: true });
+				.in("default_tabla_id", tablaIds);
 
 			if (columns) {
 				columns.forEach(col => {
@@ -124,7 +123,8 @@ export async function GET() {
 		}
 
 		// Create a map of folder path -> linked tabla
-		const tablaByFolderPath = new Map<string, typeof tablas[0]>();
+		type TablaType = NonNullable<typeof tablas>[number];
+		const tablaByFolderPath = new Map<string, TablaType>();
 		(tablas ?? []).forEach(tabla => {
 			if (tabla.linked_folder_path) {
 				tablaByFolderPath.set(tabla.linked_folder_path, tabla);
@@ -286,6 +286,12 @@ export async function POST(request: Request) {
 				ocrScope?: string;
 			}> = [];
 
+			console.log("[obra-defaults:post] Creating columns for default tabla:", {
+				tablaId: tabla.id,
+				rawColumnsCount: rawColumns.length,
+				rawColumns: rawColumns.map(c => ({ label: c.label, fieldKey: c.fieldKey })),
+			});
+
 			if (rawColumns.length > 0) {
 				const columnsPayload = rawColumns.map((col, index) => ({
 					default_tabla_id: tabla.id,
@@ -300,12 +306,12 @@ export async function POST(request: Request) {
 				const { data: columns, error: columnsError } = await supabase
 					.from("obra_default_tabla_columns")
 					.insert(columnsPayload)
-					.select("field_key, label, data_type, config")
-					.order("position", { ascending: true });
+					.select("field_key, label, data_type, config");
 
 				if (columnsError) {
 					console.error("[obra-defaults:post] columns error:", columnsError);
 				} else if (columns) {
+					console.log("[obra-defaults:post] Successfully created", columns.length, "columns for default tabla", tabla.id);
 					insertedColumns = columns.map(col => ({
 						fieldKey: col.field_key,
 						label: col.label,
@@ -313,6 +319,8 @@ export async function POST(request: Request) {
 						ocrScope: (col.config as any)?.ocrScope,
 					}));
 				}
+			} else {
+				console.warn("[obra-defaults:post] No columns provided for OCR folder - this will cause issues!");
 			}
 
 			// Get template name if applicable

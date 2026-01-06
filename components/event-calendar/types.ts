@@ -2,8 +2,6 @@ export type CalendarView = "month" | "week" | "day" | "agenda";
 
 export type PendienteStatus = "overdue" | "today" | "upcoming" | "nodate";
 
-export type MembershipRole = string;
-
 export interface CalendarEvent {
 	id: string;
 	title: string;
@@ -18,10 +16,10 @@ export interface CalendarEvent {
 	/**
 	 * Optional audience metadata used by higher-level apps (e.g. notifications).
 	 * - If audienceType is "me", the event is meant only for the creator.
-	 * - If "role", it targets all users with the given membership role in the tenant.
+	 * - If "role", it targets all users with the given role ID in the tenant.
 	 */
 	audienceType?: "me" | "role";
-	audienceRole?: MembershipRole;
+	audienceRoleId?: string;
 }
 
 export type EventColor =

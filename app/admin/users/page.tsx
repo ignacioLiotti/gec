@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import UserRow from "./user-row";
 import ImpersonateBanner from "./_components/impersonate-banner";
 import { InviteUsersDialog } from "./_components/invite-users-dialog";
@@ -60,7 +61,7 @@ export default async function AdminUsersPage() {
       .eq("tenant_id", tenantId),
     supabase
       .from("roles")
-      .select("id, key, name")
+      .select("id, name")
       .eq("tenant_id", tenantId)
       .order("name"),
     supabase.from("permissions").select("id, key, description").order("key"),
@@ -69,11 +70,33 @@ export default async function AdminUsersPage() {
   console.log("[admin/users] fetched roles", roles);
   console.log("[admin/users] fetched permissions", permissions);
 
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("user_id, full_name")
-    .in("user_id", (members ?? []).map((m) => m.user_id));
-  console.log("[admin/users] fetched profiles", profiles);
+  // Get user data from auth.users (email is in auth.users, not profiles)
+  const memberIds = (members ?? []).map((m) => m.user_id);
+  const admin = createSupabaseAdminClient();
+
+  const users = await Promise.all(
+    memberIds.map(async (userId) => {
+      const membership = members?.find((m) => m.user_id === userId);
+      try {
+        const { data } = await admin.auth.admin.getUserById(userId);
+        return {
+          user_id: data.user?.id ?? userId,
+          full_name: data.user?.user_metadata?.display_name ?? data.user?.user_metadata?.full_name ?? null,
+          email: data.user?.email ?? null,
+          membership_role: membership?.role ?? "member",
+        };
+      } catch (error) {
+        console.error(`Failed to fetch user ${userId}:`, error);
+        return {
+          user_id: userId,
+          full_name: null,
+          email: null,
+          membership_role: membership?.role ?? "member",
+        };
+      }
+    })
+  );
+  console.log("[admin/users] fetched users from auth", users);
 
   return (
     <div className="p-6 space-y-6">
@@ -84,11 +107,7 @@ export default async function AdminUsersPage() {
       <ImpersonateBanner />
       <PendingInvitationsList tenantId={tenantId} />
       <UsersTable
-        rows={(members ?? []).map((m) => ({
-          user_id: m.user_id,
-          full_name: profiles?.find((p) => p.user_id === m.user_id)?.full_name ?? m.user_id,
-          membership_role: m.role,
-        }))}
+        rows={users}
         tenantId={tenantId}
         allRoles={roles ?? []}
         allPermissions={permissions ?? []}
@@ -103,9 +122,9 @@ function UsersTable({
   allRoles,
   allPermissions,
 }: {
-  rows: { user_id: string; full_name: string | null; membership_role: string }[];
+  rows: { user_id: string; full_name: string | null; email: string | null; membership_role: string }[];
   tenantId: string;
-  allRoles: { id: string; key: string; name: string }[];
+  allRoles: { id: string; name: string }[];
   allPermissions: { id: string; key: string; description: string | null }[];
 }) {
   return (

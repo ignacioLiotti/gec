@@ -8,7 +8,7 @@ export type ScheduleOffset =
 
 export type ReminderTarget =
   | { type: "user"; userId: string }
-  | { type: "role"; tenantId: string; roleKey: string }
+  | { type: "role"; tenantId: string; roleId: string }
 
 export type CreateReminderInput = {
   targetDate: Date
@@ -66,7 +66,7 @@ export async function createReminder(input: CreateReminderInput): Promise<void> 
         // Role-targeted reminders expand to all members with that role in the tenant.
         return notifyInAppForRole({
           tenantId: target.tenantId,
-          roleKey: target.roleKey,
+          roleId: target.roleId,
           title,
           body: body ?? null,
           actionUrl: actionUrl ?? null,

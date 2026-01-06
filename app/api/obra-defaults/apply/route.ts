@@ -86,28 +86,32 @@ export async function POST(request: Request) {
 			field_key: string;
 			label: string;
 			data_type: string;
-			position: number;
 			required: boolean;
 			config: Record<string, unknown>;
 		}>>();
 
+		console.log("[apply-defaults] Fetching columns for tablas:", tablaIds);
+
 		if (tablaIds.length > 0) {
 			const { data: columns, error: columnsError } = await supabase
 				.from("obra_default_tabla_columns")
-				.select("default_tabla_id, field_key, label, data_type, position, required, config")
-				.in("default_tabla_id", tablaIds)
-				.order("position", { ascending: true });
+				.select("default_tabla_id, field_key, label, data_type, required, config")
+				.in("default_tabla_id", tablaIds);
+
+			console.log("[apply-defaults] Columns fetch result:", {
+				count: columns?.length ?? 0,
+				error: columnsError?.message,
+			});
 
 			if (columnsError) {
 				console.error("[apply-defaults] Error fetching columns:", columnsError);
 			} else if (columns) {
-				columns.forEach(col => {
+				columns.forEach((col, index) => {
 					const existing = columnsMap.get(col.default_tabla_id) ?? [];
 					existing.push({
 						field_key: col.field_key,
 						label: col.label,
 						data_type: col.data_type,
-						position: col.position,
 						required: col.required,
 						config: (col.config as Record<string, unknown>) ?? {},
 					});
@@ -117,7 +121,8 @@ export async function POST(request: Request) {
 		}
 
 		// Create a map of folder path -> default tabla
-		const tablaByFolderPath = new Map<string, (typeof defaultTablas)[0]>();
+		type DefaultTabla = NonNullable<typeof defaultTablas>[number];
+		const tablaByFolderPath = new Map<string, DefaultTabla>();
 		(defaultTablas ?? []).forEach(tabla => {
 			if (tabla.linked_folder_path) {
 				tablaByFolderPath.set(tabla.linked_folder_path, tabla);
@@ -200,13 +205,20 @@ export async function POST(request: Request) {
 
 			// Create columns for the tabla
 			const defaultColumns = columnsMap.get(defaultTabla.id) ?? [];
+			console.log("[apply-defaults] Creating tabla columns:", {
+				tablaId: tabla.id,
+				defaultTablaId: defaultTabla.id,
+				columnsFound: defaultColumns.length,
+				columnsMapKeys: Array.from(columnsMap.keys()),
+			});
+
 			if (defaultColumns.length > 0) {
-				const columnsPayload = defaultColumns.map(col => ({
+				const columnsPayload = defaultColumns.map((col, index) => ({
 					tabla_id: tabla.id,
 					field_key: col.field_key,
 					label: col.label,
 					data_type: col.data_type,
-					position: col.position,
+					position: index,
 					required: col.required,
 					config: col.config,
 				}));
@@ -217,7 +229,11 @@ export async function POST(request: Request) {
 
 				if (insertColumnsError) {
 					console.error("[apply-defaults] Error creating columns:", insertColumnsError);
+				} else {
+					console.log("[apply-defaults] Successfully created", columnsPayload.length, "columns for tabla", tabla.id);
 				}
+			} else {
+				console.warn("[apply-defaults] No columns found for default tabla", defaultTabla.id, "- OCR tabla will have no columns!");
 			}
 		}
 

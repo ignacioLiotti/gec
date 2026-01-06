@@ -54,7 +54,7 @@ interface EventDialogProps {
    * used when targeting events to "todos los usuarios con este rol".
    * If not provided, the role selector will be empty.
    */
-  availableRoles?: { key: string; name: string | null }[]
+  availableRoles?: { id: string; name: string | null }[]
 }
 
 export function EventDialog({
@@ -79,7 +79,7 @@ export function EventDialog({
   const [startDateOpen, setStartDateOpen] = useState(false)
   const [endDateOpen, setEndDateOpen] = useState(false)
   const [audienceType, setAudienceType] = useState<"me" | "role">("me")
-  const [audienceRole, setAudienceRole] = useState<string | "">("")
+  const [audienceRoleId, setAudienceRoleId] = useState<string | "">("")
 
   // Debug log to check what event is being passed
   useEffect(() => {
@@ -103,7 +103,7 @@ export function EventDialog({
       setColor((event.color as EventColor) || "sky")
       setCompleted(!!event.completed)
       setAudienceType(event.audienceType ?? "me")
-      setAudienceRole(event.audienceRole ?? "")
+      setAudienceRoleId(event.audienceRoleId ?? "")
       setError(null) // Reset error when opening dialog
     } else {
       resetForm()
@@ -122,7 +122,7 @@ export function EventDialog({
     setColor("sky")
     setCompleted(false)
     setAudienceType("me")
-    setAudienceRole("")
+    setAudienceRoleId("")
     setError(null)
   }
 
@@ -198,7 +198,7 @@ export function EventDialog({
       color,
       completed,
       audienceType,
-      audienceRole: audienceType === "role" ? (audienceRole || "member") : undefined,
+      audienceRoleId: audienceType === "role" ? audienceRoleId || undefined : undefined,
     })
   }
 
@@ -466,9 +466,9 @@ export function EventDialog({
                     Rol
                   </Label>
                   <Select
-                    value={audienceRole}
+                    value={audienceRoleId}
                     onValueChange={(value: string) =>
-                      setAudienceRole(value)
+                      setAudienceRoleId(value)
                     }
                     disabled={audienceType !== "role" || !availableRoles?.length}
                   >
@@ -480,8 +480,8 @@ export function EventDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {availableRoles?.map((role) => (
-                        <SelectItem key={role.key} value={role.key}>
-                          {role.name ?? role.key}
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name ?? role.id}
                         </SelectItem>
                       ))}
                     </SelectContent>
