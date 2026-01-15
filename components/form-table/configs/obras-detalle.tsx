@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Obra } from "@/app/excel/schema";
+import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 export type DetailAdvancedFilters = {
 	supMin: string;
@@ -166,6 +168,8 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enablePin: true,
 		editable: false,
 		cellType: "text",
+		width: 50,
+		enableResize: false,
 		// sortFn: (a, b) => toNumber(a.n) - toNumber(b.n),
 		// searchFn: (row, query) => String(row.n ?? "").includes(query),
 		// validators: {
@@ -180,6 +184,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		required: true,
 		enableHide: true,
 		enablePin: true,
+		editable: false,
 		cellType: "text",
 		sortFn: (a, b) =>
 			(a.designacionYUbicacion || "").localeCompare(b.designacionYUbicacion || "", "es", {
@@ -190,6 +195,24 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 			onBlur: requiredValidator("Designación y Ubicación"),
 		},
 		defaultValue: "",
+		cellConfig: {
+			renderReadOnly: ({ value, row }) => {
+				const text = String(value || "");
+				if (!text) return <span className="text-muted-foreground">-</span>;
+				const obraId = row.id;
+				if (!obraId) return <span className="font-semibold">{text}</span>;
+
+				return (
+					<Link
+						href={`/excel/${obraId}`}
+						className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors group absolute top-0 left-0 w-full h-full flex items-center justify-start p-2"
+					>
+						<ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+						<span className="group-hover:underline">{text}</span>
+					</Link>
+				);
+			},
+		},
 		cellMenuItems: [
 			{
 				id: "open-obra",
@@ -711,6 +734,7 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	searchPlaceholder: "Buscar en columnas de obras",
 	defaultPageSize: 10,
 	showActionsColumn: false,
+	enableColumnResizing: true,
 	createFilters,
 	renderFilters,
 	applyFilters,

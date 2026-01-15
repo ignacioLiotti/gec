@@ -7,6 +7,7 @@ import UserMenu from "@/components/auth/user-menu";
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import AuthController from "@/components/auth/auth-controller";
+import AuthGate from "@/components/auth/auth-gate";
 import ImpersonateBanner from "./admin/users/_components/impersonate-banner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -145,6 +146,7 @@ export default async function RootLayout({
         <QueryClientProvider>
           <SupabaseAuthListener />
           <AuthController />
+          <AuthGate />
           <Toaster position="bottom-right" richColors />
           <NotificationsListener />
           <SidebarProvider>

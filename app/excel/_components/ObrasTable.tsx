@@ -14,6 +14,7 @@ import { InBodyStates } from "./InBodyStates";
 import { CustomInput } from "./CustomInput";
 import { Input } from "@/components/ui/input";
 import { AnimatePresence, motion } from "framer-motion";
+import { ExternalLink } from "lucide-react";
 
 type AnyFormApi = {
   Field: any;
@@ -466,7 +467,13 @@ export function ObrasTable(props: ObrasTableProps) {
                                   {/* if there is no value for the name then asume its the first time it was created then make it editable */}
                                   {subField.state.value ? (
                                     <div className="min-h-[18px]">
-                                      <Link href={`/excel/${field.state.value[index]?.id}`} className="cursor-pointer" dangerouslySetInnerHTML={{ __html: highlightText(String(subField.state.value ?? ""), query) }} />
+                                      <Link
+                                        href={`/excel/${field.state.value[index]?.id}`}
+                                        className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors group"
+                                      >
+                                        <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                                        <span className="group-hover:underline" dangerouslySetInnerHTML={{ __html: highlightText(String(subField.state.value ?? ""), query) }} />
+                                      </Link>
                                     </div>
                                   ) : (
                                     <div className="min-h-[18px]">

@@ -86,6 +86,8 @@ export type ColumnDef<Row extends FormTableRow> = {
 		onSelect?: (row: Row) => void;
 	}>;
 	defaultValue?: unknown;
+	width?: number;
+	enableResize?: boolean;
 };
 
 export type HeaderGroup = {

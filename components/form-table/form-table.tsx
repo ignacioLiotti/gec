@@ -379,7 +379,7 @@ export function FormTableContent({ className }: { className?: string }) {
 																	</ContextMenuContent>
 																</ContextMenu>
 															</div>
-															{enableResizing && (
+															{enableResizing && column.enableResize !== false && (
 																<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id]} mode="fixed" />
 															)}
 														</th>
@@ -467,7 +467,7 @@ export function FormTableContent({ className }: { className?: string }) {
 													</ContextMenuContent>
 												</ContextMenu>
 											</div>
-											{enableResizing && (
+											{enableResizing && column.enableResize !== false && (
 												<ColumnResizer tableId={tableId} colIndex={colIndex} mode="fixed" />
 											)}
 										</th>
@@ -816,7 +816,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setFiltersDraft(filters);
 	}, [isFiltersOpen, filters]);
 	const [sortState, setSortState] = useState<SortState>({ columnId: null, direction: "asc" });
-	const [colWidths, setColWidths] = useState<Record<number, number>>({});
+	const [colWidths, setColWidths] = useState<Record<number, number>>(() => {
+		const initialWidths: Record<number, number> = {};
+		config.columns.forEach((col, index) => {
+			if (col.width) {
+				initialWidths[index] = col.width;
+			}
+		});
+		return initialWidths;
+	});
 	const colRefs = useRef<(HTMLTableColElement | null)[]>([]);
 	const accordionRowConfig = config.accordionRow;
 	const hasAccordionRows = Boolean(accordionRowConfig);

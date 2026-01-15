@@ -9,9 +9,10 @@ import { AnimatePresence, motion } from "framer-motion";
 type AuthModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  forcedOpen?: boolean;
 };
 
-export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
+export default function AuthModal({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
   const router = useRouter();
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
   const [email, setEmail] = useState("");
@@ -115,18 +116,33 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid grid-cols-2 ">
+    <div
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid grid-cols-2"
+      onClick={(e) => {
+        // Prevent dismissal via backdrop click when forced open
+        if (forcedOpen) {
+          e.stopPropagation();
+          return;
+        }
+        // Allow backdrop click to close if not forced
+        if (e.target === e.currentTarget) {
+          onOpenChange(false);
+        }
+      }}
+    >
       <div className="h-full w-full p-4">
         <AsciiScene />
       </div>
       <div className="flex h-full w-full flex-col bg-background px-4 py-6 text-foreground sm:px-10 sm:py-8">
         <div className="flex items-center justify-end gap-4">
-          <button
-            onClick={() => onOpenChange(false)}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-foreground/10"
-          >
-            Cerrar
-          </button>
+          {!forcedOpen && (
+            <button
+              onClick={() => onOpenChange(false)}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-foreground/10"
+            >
+              Cerrar
+            </button>
+          )}
         </div>
 
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 py-6">
