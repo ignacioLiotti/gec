@@ -14,6 +14,7 @@ import {
   subMonths,
   subWeeks,
 } from "date-fns"
+import { es } from "date-fns/locale"
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -187,8 +188,8 @@ export function EventCalendar({
     if (event.id) {
       onEventUpdate?.(event)
       // Show toast notification when an event is updated
-      toast(`Event "${event.title}" updated`, {
-        description: format(new Date(event.start), "MMM d, yyyy"),
+      toast(`Evento "${event.title}" actualizado`, {
+        description: capitalizeFirst(format(new Date(event.start), "MMM d, yyyy", { locale: es })),
         position: "bottom-left",
       })
     } else {
@@ -197,8 +198,8 @@ export function EventCalendar({
         id: Math.random().toString(36).substring(2, 11),
       })
       // Show toast notification when an event is added
-      toast(`Event "${event.title}" added`, {
-        description: format(new Date(event.start), "MMM d, yyyy"),
+      toast(`Evento "${event.title}" añadido`, {
+        description: capitalizeFirst(format(new Date(event.start), "MMM d, yyyy", { locale: es })),
         position: "bottom-left",
       })
     }
@@ -215,8 +216,8 @@ export function EventCalendar({
 
     // Show toast notification when an event is deleted
     if (deletedEvent) {
-      toast(`Event "${deletedEvent.title}" deleted`, {
-        description: format(new Date(deletedEvent.start), "MMM d, yyyy"),
+      toast(`Evento "${deletedEvent.title}" eliminado`, {
+        description: capitalizeFirst(format(new Date(deletedEvent.start), "MMM d, yyyy", { locale: es })),
         position: "bottom-left",
       })
     }
@@ -227,34 +228,41 @@ export function EventCalendar({
     onEventUpdate?.(updatedEvent)
 
     // Show toast notification when an event is updated via drag and drop
-    toast(`Event "${updatedEvent.title}" moved`, {
-      description: format(new Date(updatedEvent.start), "MMM d, yyyy"),
+    toast(`Evento "${updatedEvent.title}" movido`, {
+      description: capitalizeFirst(format(new Date(updatedEvent.start), "MMM d, yyyy", { locale: es })),
       position: "bottom-left",
+    })
+  }
+
+  const capitalizeFirst = (str: string) => {
+    // Capitalize first letter and any letter after space, comma, or dash
+    return str.replace(/(^|[ ,-])([a-záéíóúñü])/g, (match, prefix, letter) => {
+      return prefix + letter.toUpperCase()
     })
   }
 
   const viewTitle = useMemo(() => {
     if (view === "month") {
-      return format(currentDate, "MMMM yyyy")
+      return capitalizeFirst(format(currentDate, "MMMM yyyy", { locale: es }))
     } else if (view === "week") {
       const start = startOfWeek(currentDate, { weekStartsOn: 0 })
       const end = endOfWeek(currentDate, { weekStartsOn: 0 })
       if (isSameMonth(start, end)) {
-        return format(start, "MMMM yyyy")
+        return capitalizeFirst(format(start, "MMMM yyyy", { locale: es }))
       } else {
-        return `${format(start, "MMM")} - ${format(end, "MMM yyyy")}`
+        return `${capitalizeFirst(format(start, "MMM", { locale: es }))} - ${capitalizeFirst(format(end, "MMM yyyy", { locale: es }))}`
       }
     } else if (view === "day") {
       return (
         <>
           <span className="min-[480px]:hidden" aria-hidden="true">
-            {format(currentDate, "MMM d, yyyy")}
+            {capitalizeFirst(format(currentDate, "MMM d, yyyy", { locale: es }))}
           </span>
           <span className="max-[479px]:hidden min-md:hidden" aria-hidden="true">
-            {format(currentDate, "MMMM d, yyyy")}
+            {capitalizeFirst(format(currentDate, "MMMM d, yyyy", { locale: es }))}
           </span>
           <span className="max-md:hidden">
-            {format(currentDate, "EEE MMMM d, yyyy")}
+            {capitalizeFirst(format(currentDate, "EEE MMMM d, yyyy", { locale: es }))}
           </span>
         </>
       )
@@ -264,12 +272,12 @@ export function EventCalendar({
       const end = addDays(currentDate, AgendaDaysToShow - 1)
 
       if (isSameMonth(start, end)) {
-        return format(start, "MMMM yyyy")
+        return capitalizeFirst(format(start, "MMMM yyyy", { locale: es }))
       } else {
-        return `${format(start, "MMM")} - ${format(end, "MMM yyyy")}`
+        return `${capitalizeFirst(format(start, "MMM", { locale: es }))} - ${capitalizeFirst(format(end, "MMM yyyy", { locale: es }))}`
       }
     } else {
-      return format(currentDate, "MMMM yyyy")
+      return capitalizeFirst(format(currentDate, "MMMM yyyy", { locale: es }))
     }
   }, [currentDate, view])
 
@@ -302,14 +310,14 @@ export function EventCalendar({
                 size={16}
                 aria-hidden="true"
               />
-              <span className="max-[479px]:sr-only">Today</span>
+              <span className="max-[479px]:sr-only">Hoy</span>
             </Button>
             <div className="flex items-center sm:gap-2">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handlePrevious}
-                aria-label="Previous"
+                aria-label="Anterior"
               >
                 <ChevronLeftIcon size={16} aria-hidden="true" />
               </Button>
@@ -317,7 +325,7 @@ export function EventCalendar({
                 variant="ghost"
                 size="icon"
                 onClick={handleNext}
-                aria-label="Next"
+                aria-label="Siguiente"
               >
                 <ChevronRightIcon size={16} aria-hidden="true" />
               </Button>
@@ -332,10 +340,10 @@ export function EventCalendar({
                 <Button variant="outline" className="gap-1.5 max-[479px]:h-8">
                   <span>
                     <span className="min-[480px]:hidden" aria-hidden="true">
-                      {view.charAt(0).toUpperCase()}
+                      {view === "month" ? "M" : view === "week" ? "S" : view === "day" ? "D" : "A"}
                     </span>
                     <span className="max-[479px]:sr-only">
-                      {view.charAt(0).toUpperCase() + view.slice(1)}
+                      {view === "month" ? "Mes" : view === "week" ? "Semana" : view === "day" ? "Día" : "Agenda"}
                     </span>
                   </span>
                   <ChevronDownIcon
@@ -347,13 +355,13 @@ export function EventCalendar({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-32">
                 <DropdownMenuItem onClick={() => setView("month")}>
-                  Month <DropdownMenuShortcut>M</DropdownMenuShortcut>
+                  Mes <DropdownMenuShortcut>M</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setView("week")}>
-                  Week <DropdownMenuShortcut>W</DropdownMenuShortcut>
+                  Semana <DropdownMenuShortcut>W</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setView("day")}>
-                  Day <DropdownMenuShortcut>D</DropdownMenuShortcut>
+                  Día <DropdownMenuShortcut>D</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setView("agenda")}>
                   Agenda <DropdownMenuShortcut>A</DropdownMenuShortcut>
@@ -373,7 +381,7 @@ export function EventCalendar({
                   size={16}
                   aria-hidden="true"
                 />
-                <span className="max-sm:sr-only">New event</span>
+                <span className="max-sm:sr-only">Nuevo evento</span>
               </Button>
             )}
           </div>

@@ -340,6 +340,7 @@ export function FileManager({
   const parentMapRef = useRef<Map<string, FileSystemItem | null>>(new Map());
   const pendingFolderPathRef = useRef<string | null>(null);
   const pendingFilePathRef = useRef<string | null>(null);
+  const skipFilePathSyncRef = useRef(false);
   const lastOcrFolderIdRef = useRef<string | null>(null);
 
   const sanitizePath = useCallback((path: string | null | undefined) => {
@@ -940,8 +941,9 @@ export function FileManager({
 
     const bootstrap = async () => {
       try {
-        await refreshOcrFolderLinks({ skipCache: true });
-        await buildFileTree({ skipCache: true });
+        // Try to use cache first, only skip if no cached data exists
+        await refreshOcrFolderLinks({ skipCache: false });
+        await buildFileTree({ skipCache: false });
       } catch (error) {
         console.error('Error initializing documents data', error);
       }
@@ -951,10 +953,24 @@ export function FileManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraId]);
 
+  // Track previous ocrFolderLinks length to detect real changes vs initial load
+  const prevOcrFolderLinksLengthRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!obraId) return;
     if (ocrFolderLinks.length === 0) return;
-    void buildFileTree({ skipCache: true });
+
+    // Only rebuild if the length actually changed (not on initial load from cache)
+    if (prevOcrFolderLinksLengthRef.current === null) {
+      // First time seeing links, just record the length
+      prevOcrFolderLinksLengthRef.current = ocrFolderLinks.length;
+      return;
+    }
+
+    if (prevOcrFolderLinksLengthRef.current !== ocrFolderLinks.length) {
+      prevOcrFolderLinksLengthRef.current = ocrFolderLinks.length;
+      void buildFileTree({ skipCache: true });
+    }
   }, [obraId, ocrFolderLinks.length, buildFileTree]);
 
   useEffect(() => {
@@ -1200,11 +1216,47 @@ export function FileManager({
       }
       const parent = parentMapRef.current.get(doc.id) ?? undefined;
       suppressSelectionOnCloseRef.current = true;
-      await handleDocumentClick(doc, parent, { preserveFilter: true, emitSelection: false });
+
+      // Pre-fetch the signed URL and set previewUrl state BEFORE opening the sheet
+      let resolvedPreviewUrl: string | null = null;
+      if (doc.storagePath && !doc.apsUrn) {
+        const cachedBlobUrl = getCachedBlobUrl(doc.storagePath);
+        if (cachedBlobUrl) {
+          resolvedPreviewUrl = cachedBlobUrl;
+        } else {
+          const cachedSignedUrl = getCachedSignedUrl(doc.storagePath);
+          if (cachedSignedUrl) {
+            resolvedPreviewUrl = cachedSignedUrl;
+          } else {
+            // Fetch the signed URL
+            const { data } = await supabase.storage
+              .from('obra-documents')
+              .createSignedUrl(doc.storagePath, 3600);
+            if (data?.signedUrl) {
+              setCachedSignedUrl(doc.storagePath, data.signedUrl);
+              resolvedPreviewUrl = data.signedUrl;
+            }
+          }
+        }
+      }
+
+      // Set the previewUrl state FIRST
+      setPreviewUrl(resolvedPreviewUrl);
+
+      // Skip the file path sync effect to prevent it from clearing previewUrl
+      skipFilePathSyncRef.current = true;
+
+      // Then set up the document state and open the sheet
+      setSelectedDocument(doc);
+      setSheetDocument(doc);
+      if (parent && parent.type === 'folder') {
+        setSelectedFolder(parent);
+        ensureAncestorsExpanded(parent);
+      }
       displayedDocumentRef.current = doc;
       setIsDocumentSheetOpen(true);
     },
-    [findDocumentByStoragePath, handleDocumentClick]
+    [ensureAncestorsExpanded, findDocumentByStoragePath, supabase]
   );
 
   const handleDocumentViewModeChange = useCallback((mode: 'cards' | 'table') => {
@@ -1262,6 +1314,11 @@ export function FileManager({
   }, [fileTree, folderPathKey, folderPathSegments, selectedFolderId, handleFolderClick, findFolderBySegments]);
 
   useEffect(() => {
+    // Skip this sync when opening document sheet directly (e.g., from context menu)
+    if (skipFilePathSyncRef.current) {
+      skipFilePathSyncRef.current = false;
+      return;
+    }
     if (!fileTree) return;
     if (pendingFilePathRef.current === '__closing__') {
       if (filePathSegments.length === 0) {
@@ -1324,7 +1381,14 @@ export function FileManager({
       const { error } = await supabase.storage
         .from('obra-documents')
         .upload(folderPath, new Blob([''], { type: 'text/plain' }));
-      if (error) throw error;
+      if (error) {
+        // Check if it's a duplicate folder error
+        if (error.message?.toLowerCase().includes('already exists') || error.message?.toLowerCase().includes('duplicate')) {
+          toast.error('Ya existe una carpeta con ese nombre');
+          return;
+        }
+        throw error;
+      }
       toast.success('Carpeta creada correctamente');
       setIsCreateFolderOpen(false);
       resetNewFolderForm();
@@ -1394,8 +1458,16 @@ export function FileManager({
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || 'No se pudo crear la carpeta OCR');
+        let errorMessage = 'No se pudo crear la carpeta OCR';
+        try {
+          const json = await res.json();
+          errorMessage = json.error || errorMessage;
+        } catch {
+          // If not JSON, try text
+          const text = await res.text();
+          errorMessage = text || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       try {
@@ -2176,7 +2248,7 @@ export function FileManager({
     const columns: ColumnDef<OcrDocumentTableRow>[] = [docSourceColumn, ...tablaColumnDefs];
     return {
       tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${documentViewMode}-${ocrDocumentFilterPath ?? 'all'}`,
-      title: 'Documentos OCR',
+      title: 'Datos extraídos',
       searchPlaceholder: 'Buscar en esta tabla',
       columns,
       createFilters: () => ({ docPath: ocrDocumentFilterPath }),
@@ -2269,7 +2341,7 @@ export function FileManager({
           <div className="flex flex-wrap items-center gap-2">
             {selectedFolder.ocrTablaId && (
               <>
-                <Button
+                {/* <Button
                   type="button"
                   variant="outline"
                   size="sm"
@@ -2278,7 +2350,7 @@ export function FileManager({
                 >
                   <Table2 className="w-3.5 h-3.5" />
                   Ver tabla
-                </Button>
+                </Button> */}
                 <Button
                   type="button"
                   variant="outline"
@@ -2287,7 +2359,7 @@ export function FileManager({
                   className="gap-1.5"
                 >
                   <ClipboardList className="w-3.5 h-3.5" />
-                  Reporte
+                  Generar reporte
                 </Button>
               </>
             )}
@@ -2381,7 +2453,7 @@ export function FileManager({
 
       return (
         <div
-          className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg transition-colors ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''
+          className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg transition-colors mt-4 ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''
             }`}
           onDragEnter={handleDocumentAreaDragEnter}
           onDragOver={handleDocumentAreaDragOver}
@@ -2570,6 +2642,15 @@ export function FileManager({
           />
         </div>
       </div> */}
+
+      {/* Hidden file input for upload button */}
+      <input
+        id="file-upload"
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleUploadFiles}
+      />
 
       {/* Main Layout */}
       <div className={`flex-1 min-h-0 transition-all duration-300 ease-in-out max-h-[calc(90vh-9rem)] ${!selectedDocument && !selectedFolder?.ocrEnabled && (!selectedFolder || selectedFolder.id === 'root')

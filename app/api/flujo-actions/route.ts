@@ -370,7 +370,15 @@ export async function POST(request: Request) {
 			}
 		}
 
-		return NextResponse.json({ action });
+		// Return action with computed fields for optimistic UI update
+		return NextResponse.json({
+			action: {
+				...action,
+				executed_at: null,
+				scheduled_for: null,
+				triggered_at: null,
+			}
+		});
 	} catch (error: any) {
 		console.error("Error in POST /api/flujo-actions:", error);
 		if (error instanceof ApiValidationError) {

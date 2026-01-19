@@ -276,10 +276,10 @@ export function EnhancedDocumentViewer({
   const renderToolbar = () => (
     <div className="flex flex-col gap-2 p-3 border-b bg-muted/30">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           {/* File name */}
-          <span className="text-sm font-medium truncate max-w-[200px]">{fileName}</span>
+          <span className="text-lg font-medium truncate max-w-[200px]">{fileName}</span>
           {numPages > 0 && <Badge variant="outline">{numPages} pages</Badge>}
         </div>
 
@@ -299,23 +299,12 @@ export function EnhancedDocumentViewer({
             </>
           )}
 
-          {/* Download button */}
-          {onDownload && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onDownload}
-              title="Download"
-            >
-              <Download className="w-4 h-4" />
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Bottom toolbar - Controls */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full">
           {/* Zoom controls */}
           <Button
             variant="outline"
@@ -354,6 +343,17 @@ export function EnhancedDocumentViewer({
           >
             <RotateCw className="w-4 h-4" />
           </Button>
+          {onDownload && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDownload}
+              title="Download"
+              className="ml-auto"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+          )}
         </div>
 
         {/* Page navigation for PDFs */}
@@ -405,11 +405,10 @@ export function EnhancedDocumentViewer({
           <button
             key={page}
             onClick={() => goToPage(page)}
-            className={`w-full p-2 rounded border-2 transition-colors ${
-              page === pageNumber
-                ? 'border-primary bg-primary/10'
-                : 'border-transparent hover:border-muted-foreground/20 hover:bg-muted/40'
-            }`}
+            className={`w-full p-2 rounded border-2 transition-colors ${page === pageNumber
+              ? 'border-primary bg-primary/10'
+              : 'border-transparent hover:border-muted-foreground/20 hover:bg-muted/40'
+              }`}
           >
             <div className="h-24 w-full rounded border bg-background flex items-center justify-center text-xs text-muted-foreground">
               Page {page}

@@ -120,7 +120,7 @@ export default function NewMacroTablePage() {
   // Available data
   const [obras, setObras] = useState<Obra[]>([]);
   const [expandedObras, setExpandedObras] = useState<Set<string>>(new Set());
-  
+
   // Templates
   const [templates, setTemplates] = useState<DefaultTabla[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
@@ -252,7 +252,7 @@ export default function NewMacroTablePage() {
   // Select all tables matching a template name
   const selectByTemplate = (templateId: string | null) => {
     setSelectedTemplateId(templateId);
-    
+
     if (!templateId) {
       return;
     }
@@ -262,7 +262,7 @@ export default function NewMacroTablePage() {
 
     // Find all tables across all obras that match this template name
     const matchingTables: SelectedSource[] = [];
-    
+
     for (const obra of obras) {
       for (const tabla of obra.tablas) {
         // Match by name (case-insensitive)
@@ -393,8 +393,8 @@ export default function NewMacroTablePage() {
             column.columnType === "custom"
               ? "default"
               : column.columnType === "computed"
-              ? "secondary"
-              : "outline"
+                ? "secondary"
+                : "outline"
           }
           className={cn(
             "text-[10px]",
@@ -405,8 +405,8 @@ export default function NewMacroTablePage() {
           {column.columnType === "custom"
             ? "Personalizada"
             : column.columnType === "computed"
-            ? "Calculada"
-            : "Fuente"}
+              ? "Calculada"
+              : "Fuente"}
         </Badge>
       </div>
       <div className="grid grid-rows-[repeat(3,minmax(0,1fr))]">
@@ -499,7 +499,7 @@ export default function NewMacroTablePage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-6 max-w-full mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
@@ -564,7 +564,7 @@ export default function NewMacroTablePage() {
       </div>
 
       {/* Step Content */}
-      <Card className="border-cyan-500/20">
+      <Card className="border-cyan-500/20 max-w-full">
         <CardContent className="p-6">
           <AnimatePresence mode="wait">
             {/* Step 1: Basic Info */}
@@ -640,14 +640,14 @@ export default function NewMacroTablePage() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">
-                      Seleccioná una plantilla para agregar automáticamente todas las tablas 
+                      Seleccioná una plantilla para agregar automáticamente todas las tablas
                       que coincidan en todas las obras.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {templates.map((template) => {
                         const matchCount = getTemplateMatchCount(template);
                         const isSelected = selectedTemplateId === template.id;
-                        
+
                         return (
                           <Button
                             key={template.id}
@@ -663,8 +663,8 @@ export default function NewMacroTablePage() {
                           >
                             <FileStack className="h-3.5 w-3.5" />
                             {template.name}
-                            <Badge 
-                              variant={isSelected ? "secondary" : "outline"} 
+                            <Badge
+                              variant={isSelected ? "secondary" : "outline"}
                               className={cn(
                                 "text-xs ml-1",
                                 matchCount === 0 && "opacity-50"
@@ -685,7 +685,15 @@ export default function NewMacroTablePage() {
                   <div className="text-center py-8 text-muted-foreground">
                     <Database className="h-12 w-12 mx-auto mb-3 opacity-20" />
                     <p>No hay tablas disponibles.</p>
-                    <p className="text-sm">Creá tablas en tus obras primero.</p>
+                    <p className="text-sm mb-4">Creá tablas en tus obras primero.</p>
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push("/admin/obra-defaults")}
+                      className="gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Ir a Obras para crear tablas
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2">
@@ -866,81 +874,81 @@ export default function NewMacroTablePage() {
                                   />
                                 ))}
                               </colgroup>
-                            <SortableContent withoutSlot>
-                              <thead>
-                                <tr>
-                                  {columns.map((col) => {
-                                    const isSelected = col.id === selectedColumnId;
-                                    return (
-                                      <SortableItem key={col.id} value={col.id} asChild>
-                                        <th
-                                          scope="col"
-                                          onClick={() => handleSelectColumn(col.id)}
-                                          className={cn(
-                                            "cursor-pointer border-b border-border/60 px-4 py-3 text-left font-semibold transition",
-                                            isSelected
-                                              ? "bg-orange-50 text-orange-900"
-                                              : "text-muted-foreground hover:bg-muted/30",
-                                            draggingColumnId === col.id && "opacity-0"
-                                          )}
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <SortableItemHandle
-                                              aria-label="Reordenar columna"
-                                              className="h-8 w-8 shrink-0 rounded-md border border-dashed border-border/70 text-muted-foreground"
-                                            >
-                                              <GripVertical className="h-4 w-4" />
-                                            </SortableItemHandle>
-                                            <div className="flex-1 space-y-1">
-                                              <p className="truncate font-semibold leading-tight">
-                                                {col.label.trim() || "Sin nombre"}
-                                              </p>
-                                              <Badge
-                                                variant={
-                                                  col.columnType === "custom"
-                                                    ? "default"
-                                                    : col.columnType === "computed"
-                                                    ? "secondary"
-                                                    : "outline"
-                                                }
-                                                className={cn(
-                                                  "text-[10px]",
-                                                  col.columnType === "custom" && "bg-purple-500",
-                                                  col.columnType === "computed" && "bg-amber-500/80"
-                                                )}
+                              <SortableContent withoutSlot>
+                                <thead>
+                                  <tr>
+                                    {columns.map((col) => {
+                                      const isSelected = col.id === selectedColumnId;
+                                      return (
+                                        <SortableItem key={col.id} value={col.id} asChild>
+                                          <th
+                                            scope="col"
+                                            onClick={() => handleSelectColumn(col.id)}
+                                            className={cn(
+                                              "cursor-pointer border-b border-border/60 px-4 py-3 text-left font-semibold transition",
+                                              isSelected
+                                                ? "bg-orange-50 text-orange-900"
+                                                : "text-muted-foreground hover:bg-muted/30",
+                                              draggingColumnId === col.id && "opacity-0"
+                                            )}
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <SortableItemHandle
+                                                aria-label="Reordenar columna"
+                                                className="h-8 w-8 shrink-0 rounded-md border border-dashed border-border/70 text-muted-foreground"
                                               >
-                                                {col.columnType === "custom"
-                                                  ? "Personalizada"
-                                                  : col.columnType === "computed"
-                                                  ? "Calculada"
-                                                  : "Fuente"}
-                                              </Badge>
+                                                <GripVertical className="h-4 w-4" />
+                                              </SortableItemHandle>
+                                              <div className="flex-1 space-y-1">
+                                                <p className="truncate font-semibold leading-tight">
+                                                  {col.label.trim() || "Sin nombre"}
+                                                </p>
+                                                <Badge
+                                                  variant={
+                                                    col.columnType === "custom"
+                                                      ? "default"
+                                                      : col.columnType === "computed"
+                                                        ? "secondary"
+                                                        : "outline"
+                                                  }
+                                                  className={cn(
+                                                    "text-[10px]",
+                                                    col.columnType === "custom" && "bg-purple-500",
+                                                    col.columnType === "computed" && "bg-amber-500/80"
+                                                  )}
+                                                >
+                                                  {col.columnType === "custom"
+                                                    ? "Personalizada"
+                                                    : col.columnType === "computed"
+                                                      ? "Calculada"
+                                                      : "Fuente"}
+                                                </Badge>
+                                              </div>
+                                              <button
+                                                type="button"
+                                                aria-label="Ajustar ancho de columna"
+                                                className="flex h-8 w-8 shrink-0 cursor-col-resize items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground hover:bg-muted/50"
+                                                onPointerDown={(event) => startResize(col.id, event)}
+                                                onClick={(event) => event.stopPropagation()}
+                                              >
+                                                <MoveHorizontal className="h-4 w-4" />
+                                              </button>
                                             </div>
-                                            <button
-                                              type="button"
-                                              aria-label="Ajustar ancho de columna"
-                                              className="flex h-8 w-8 shrink-0 cursor-col-resize items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground hover:bg-muted/50"
-                                              onPointerDown={(event) => startResize(col.id, event)}
-                                              onClick={(event) => event.stopPropagation()}
-                                            >
-                                              <MoveHorizontal className="h-4 w-4" />
-                                            </button>
-                                          </div>
-                                        </th>
-                                      </SortableItem>
-                                    );
-                                  })}
-                                </tr>
-                              </thead>
-                            </SortableContent>
-                            <SortableOverlay>
-                              {({ value }) => {
-                                const overlayColumn = columns.find((c) => c.id === value);
-                                return overlayColumn ? renderColumnOverlay(overlayColumn) : null;
-                              }}
-                            </SortableOverlay>
-                            <tbody>
-                              {PREVIEW_ROW_INDICES.map((rowIndex) => (
+                                          </th>
+                                        </SortableItem>
+                                      );
+                                    })}
+                                  </tr>
+                                </thead>
+                              </SortableContent>
+                              <SortableOverlay>
+                                {({ value }) => {
+                                  const overlayColumn = columns.find((c) => c.id === value);
+                                  return overlayColumn ? renderColumnOverlay(overlayColumn) : null;
+                                }}
+                              </SortableOverlay>
+                              <tbody>
+                                {PREVIEW_ROW_INDICES.map((rowIndex) => (
                                   <tr key={`preview-row-${rowIndex}`}>
                                     {columns.map((col) => {
                                       const isSelected = col.id === selectedColumnId;
@@ -1017,8 +1025,8 @@ export default function NewMacroTablePage() {
                                       {col.columnType === "custom"
                                         ? "Personalizada"
                                         : col.columnType === "computed"
-                                        ? "Calculada"
-                                        : "Fuente"}
+                                          ? "Calculada"
+                                          : "Fuente"}
                                     </p>
                                   </div>
                                 </button>
@@ -1037,8 +1045,8 @@ export default function NewMacroTablePage() {
                                   selectedColumn.columnType === "custom"
                                     ? "default"
                                     : selectedColumn.columnType === "computed"
-                                    ? "secondary"
-                                    : "outline"
+                                      ? "secondary"
+                                      : "outline"
                                 }
                                 className={cn(
                                   selectedColumn.columnType === "custom" && "bg-purple-500",
@@ -1048,8 +1056,8 @@ export default function NewMacroTablePage() {
                                 {selectedColumn.columnType === "custom"
                                   ? "Columna personalizada"
                                   : selectedColumn.columnType === "computed"
-                                  ? "Columna calculada"
-                                  : "Columna fuente"}
+                                    ? "Columna calculada"
+                                    : "Columna fuente"}
                               </Badge>
                               <Button
                                 variant="ghost"

@@ -13,6 +13,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns"
+import { es } from "date-fns/locale"
 
 import {
   Popover,
@@ -61,7 +62,7 @@ export function MonthView({
   const weekdays = useMemo(() => {
     return Array.from({ length: 7 }).map((_, i) => {
       const date = addDays(startOfWeek(new Date()), i)
-      return format(date, "EEE")
+      return format(date, "EEE", { locale: es })
     })
   }, [])
 
@@ -255,7 +256,7 @@ export function MonthView({
                           >
                             <div className="space-y-2">
                               <div className="text-sm font-medium">
-                                {format(day, "EEE d")}
+                                {format(day, "EEE d", { locale: es })}
                               </div>
                               <div className="space-y-1">
                                 {sortEvents(allEvents).map((event) => {

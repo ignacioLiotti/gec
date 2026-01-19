@@ -94,7 +94,7 @@ export function FormTableToolbar() {
 		);
 
 	return (
-		<div className="flex flex-wrap items-center justify-between gap-3 relative">
+		<div className="flex flex-wrap items-center justify-between gap-3">
 			<div className="flex flex-wrap items-center gap-2">
 				{search.showInline && (
 					<div className="relative">
@@ -167,7 +167,7 @@ export function FormTableToolbar() {
 					</Button>
 				)}
 				{/* floating actions in the middle of the page */}
-				<div className="flex justify-center items-center gap-2 w-full max-w-full absolute -bottom-[750px] left-0 right-0 mx-auto  z-50">
+				<div className="flex justify-center items-center gap-2 w-full max-w-full absolute -bottom-[700px] left-0 right-0 mx-auto  z-50">
 					<Button
 						type="button"
 						onClick={actions.save}
@@ -764,7 +764,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const initialValuesRef = useRef<FormValues<Row>>({ rowOrder: [], rowsById: {} });
 	const columns = config.columns;
 	const headerGroups = config.headerGroups ?? [];
-		const defaultRows = config.defaultRows;
+	const defaultRows = config.defaultRows;
 
 	useEffect(() => {
 		setIsServerPaging(Boolean(fetchRowsFn));
@@ -1283,10 +1283,10 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setSortState({ columnId: null, direction: "asc" });
 	}, []);
 
-const clientTotalPages = useMemo(() => {
-	if (sortedRows.length === 0) return 1;
-	return Math.max(1, Math.ceil(sortedRows.length / pageSize));
-}, [sortedRows.length, pageSize]);
+	const clientTotalPages = useMemo(() => {
+		if (sortedRows.length === 0) return 1;
+		return Math.max(1, Math.ceil(sortedRows.length / pageSize));
+	}, [sortedRows.length, pageSize]);
 
 	useEffect(() => {
 		if (!useClientPagination) return;
@@ -1296,7 +1296,7 @@ const clientTotalPages = useMemo(() => {
 	}, [clientTotalPages, page, useClientPagination]);
 
 	// Detect if server returned more rows than requested (server doesn't support pagination)
-const serverReturnedAllRows = false;
+	const serverReturnedAllRows = false;
 
 	const processedRows = useMemo(() => {
 		if (!fetchRowsFn) {
@@ -1604,7 +1604,7 @@ const serverReturnedAllRows = false;
 			className="space-y-4 max-w-full overflow-hidden"
 		>
 			<div>
-				<h1 className="text-3xl font-bold">{config.title}</h1>
+				<h1 className="text-xl font-bold mt-2">{config.title}</h1>
 				{config.description && (
 					<p className="text-muted-foreground">{config.description}</p>
 				)}

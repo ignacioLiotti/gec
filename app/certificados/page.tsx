@@ -13,7 +13,7 @@ export default function CertificadosPage() {
   return (
     <div className="px-4 py-2">
       <FormTable config={certificadosConfig}>
-        <div className="space-y-1">
+        <div className="space-y-1 relative">
           <p className="text-sm uppercase tracking-wide text-orange-800/80 -mb-1">
             Gestión de certificados
           </p>

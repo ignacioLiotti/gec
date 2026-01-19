@@ -179,7 +179,7 @@ function FolderRow({
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-sm truncate">{folder.name}</p>
                   <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
-                    OCR
+                    Extracción
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -214,7 +214,7 @@ function FolderRow({
             <div className="border-t p-4 space-y-4 bg-muted/30">
               {folder.ocrTemplateName && (
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-1">Plantilla OCR</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Plantilla de extracción</p>
                   <div className="flex items-center gap-2 text-sm">
                     <ScanLine className="h-4 w-4 text-purple-500" />
                     <span>{folder.ocrTemplateName}</span>
@@ -581,7 +581,7 @@ export default function ObraDefaultsPage() {
 
     if (folderMode === "ocr") {
       if (!newFolderOcrTemplateId) {
-        toast.error("Seleccioná una plantilla OCR");
+        toast.error("Seleccioná una plantilla de extracción");
         return;
       }
       if (newFolderColumns.length === 0) {
@@ -627,7 +627,7 @@ export default function ObraDefaultsPage() {
       setFolders((prev) => [...prev, folder]);
       resetFolderForm();
       setIsAddFolderOpen(false);
-      toast.success(folderMode === "ocr" ? "Carpeta OCR agregada" : "Carpeta agregada");
+      toast.success(folderMode === "ocr" ? "Carpeta con extracción agregada" : "Carpeta agregada");
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Error agregando carpeta");
@@ -708,125 +708,135 @@ export default function ObraDefaultsPage() {
         </p>
       </div>
 
-      {/* Folders Section */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <FolderPlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+      <div className="flex gap-4 ">
+
+        {/* Folders Section */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <FolderPlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Carpetas Predeterminadas</h2>
+                <p className="text-sm text-muted-foreground">
+                  Estas carpetas se crean automáticamente en cada nueva obra
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold">Carpetas</h2>
-              <p className="text-sm text-muted-foreground">
-                Estructura de archivos que se crea en cada nueva obra
-              </p>
-            </div>
+            <Button
+              onClick={() => setIsAddFolderOpen(true)}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva carpeta
+            </Button>
           </div>
-          <Button
-            onClick={() => setIsAddFolderOpen(true)}
-            className="bg-amber-500 hover:bg-amber-600 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva carpeta
-          </Button>
-        </div>
 
-        <div className="space-y-2">
-          {folders.length === 0 ? (
-            <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-              <FolderPlus className="h-12 w-12 mx-auto opacity-20 mb-2" />
-              <p className="text-sm font-medium">Sin carpetas configuradas</p>
-              <p className="text-xs">Las carpetas se crearán automáticamente en cada nueva obra</p>
-            </div>
-          ) : (
-            <AnimatePresence mode="popLayout">
-              {folders.map((folder, index) => (
-                <FolderRow
-                  key={folder.id}
-                  folder={folder}
-                  index={index}
-                  onDelete={() => handleDeleteFolder(folder.id)}
-                />
-              ))}
-            </AnimatePresence>
-          )}
-        </div>
-      </section>
-
-      {/* OCR Templates Section */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-              <ScanLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold">Plantillas OCR</h2>
-              <p className="text-sm text-muted-foreground">
-                Configuración de extracción automática de datos
-              </p>
-            </div>
+          <div className="space-y-2">
+            {folders.length === 0 ? (
+              <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+                <FolderPlus className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <p className="text-sm font-medium">Sin carpetas configuradas</p>
+                <p className="text-xs">Agregá carpetas para organizar los documentos de tus obras</p>
+              </div>
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {folders.map((folder, index) => (
+                  <FolderRow
+                    key={folder.id}
+                    folder={folder}
+                    index={index}
+                    onDelete={() => handleDeleteFolder(folder.id)}
+                  />
+                ))}
+              </AnimatePresence>
+            )}
           </div>
-          <Button
-            onClick={() => setIsOcrConfigOpen(true)}
-            className="bg-purple-500 hover:bg-purple-600 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva plantilla
-          </Button>
-        </div>
+        </section>
 
-        <div className="space-y-3">
-          {ocrTemplates.length === 0 ? (
-            <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-              <ScanLine className="h-12 w-12 mx-auto opacity-20 mb-2" />
-              <p className="text-sm font-medium">Sin plantillas configuradas</p>
-              <p className="text-xs">Las plantillas definen cómo extraer datos de documentos</p>
+        {/* Extraction Templates Section */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <ScanLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Plantillas de Extracción</h2>
+                <p className="text-sm text-muted-foreground">
+                  Definen qué datos extraer de cada tipo de documento
+                </p>
+              </div>
             </div>
-          ) : (
-            <AnimatePresence mode="popLayout">
-              {ocrTemplates.map((template, index) => (
-                <OcrTemplateCard
-                  key={template.id}
-                  template={template}
-                  index={index}
-                  onDelete={() => handleDeleteOcrTemplate(template.id)}
-                />
-              ))}
-            </AnimatePresence>
-          )}
-        </div>
-      </section>
+            <Button
+              onClick={() => setIsOcrConfigOpen(true)}
+              className="bg-purple-500 hover:bg-purple-600 text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva plantilla
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {ocrTemplates.length === 0 ? (
+              <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+                <ScanLine className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <p className="text-sm font-medium">Sin plantillas configuradas</p>
+                <p className="text-xs">Creá una plantilla para empezar a extraer datos de tus documentos</p>
+              </div>
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {ocrTemplates.map((template, index) => (
+                  <OcrTemplateCard
+                    key={template.id}
+                    template={template}
+                    index={index}
+                    onDelete={() => handleDeleteOcrTemplate(template.id)}
+                  />
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
+        </section>
+      </div>
 
       {/* Add Folder Dialog */}
       <Dialog open={isAddFolderOpen} onOpenChange={(open) => {
         setIsAddFolderOpen(open);
         if (!open) resetFolderForm();
       }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto px-4">
+          <DialogHeader className="px-0">
             <DialogTitle className="flex items-center gap-2">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-                folderMode === "ocr"
-                  ? "bg-amber-100 dark:bg-amber-900/30"
-                  : "bg-amber-100 dark:bg-amber-900/30"
-              }`}>
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${folderMode === "ocr"
+                ? "bg-amber-100 dark:bg-amber-900/30"
+                : "bg-amber-100 dark:bg-amber-900/30"
+                }`}>
                 {folderMode === "ocr" ? (
                   <Table2 className="h-4 w-4 text-amber-600" />
                 ) : (
                   <FolderPlus className="h-4 w-4 text-amber-600" />
                 )}
               </div>
-              {folderMode === "ocr" ? "Nueva carpeta OCR" : "Nueva carpeta"}
+              {folderMode === "ocr" ? "Nueva carpeta con extracción" : "Nueva carpeta"}
             </DialogTitle>
             <DialogDescription>
               {folderMode === "ocr"
-                ? "Esta carpeta se vinculará a una tabla OCR para extraer datos automáticamente."
+                ? "Esta carpeta leerá los documentos que subas y extraerá los datos automáticamente para crear una tabla."
                 : "Esta carpeta se creará automáticamente en cada nueva obra."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Explanation */}
+            <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>Carpeta normal:</strong> Solo organiza archivos. <br />
+                <strong>Carpeta con extracción:</strong> Lee automáticamente los documentos (facturas, remitos, órdenes de compra, etc.) y extrae los datos para crear una tabla. Esa tabla queda disponible para usar en Macro Tablas.
+              </p>
+            </div>
+
             {/* Folder Type Toggle */}
             <div className="flex gap-2">
               <Button
@@ -847,7 +857,7 @@ export default function ObraDefaultsPage() {
                 className="flex-1"
               >
                 <Table2 className="h-4 w-4 mr-2" />
-                Carpeta OCR
+                Con extracción
               </Button>
             </div>
 
@@ -866,7 +876,7 @@ export default function ObraDefaultsPage() {
               <>
                 {/* Template Selection */}
                 <div className="space-y-2">
-                  <Label>Plantilla OCR</Label>
+                  <Label>Plantilla de extracción</Label>
                   {ocrTemplates.length === 0 ? (
                     <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
                       No hay plantillas disponibles. Creá una primero.
@@ -1014,13 +1024,13 @@ export default function ObraDefaultsPage() {
               className="bg-amber-500 hover:bg-amber-600"
             >
               {isSubmittingFolder ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : folderMode === "ocr" ? (
-                <Table2 className="h-4 w-4" />
+                <Table2 className="h-4 w-4 mr-2" />
               ) : (
-                <FolderPlus className="h-4 w-4" />
+                <FolderPlus className="h-4 w-4 mr-2" />
               )}
-              {folderMode === "ocr" ? "Crear carpeta OCR" : "Crear carpeta"}
+              Crear carpeta
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1032,6 +1042,6 @@ export default function ObraDefaultsPage() {
         onOpenChange={setIsOcrConfigOpen}
         onTemplateCreated={handleTemplateCreated}
       />
-    </div>
+    </div >
   );
 }

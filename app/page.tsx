@@ -329,9 +329,9 @@ export default function Home() {
                   Nueva Obra
                 </Button>
               </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Crear Nueva Obra</DialogTitle>
+              <DialogContent className="px-4 py-2">
+                <DialogHeader className="px-0 py-2">
+                  <DialogTitle className="text-lg font-medium">Crear Nueva Obra</DialogTitle>
                   <DialogDescription>
                     Completa la información básica de la obra. Podrás agregar más detalles después.
                   </DialogDescription>

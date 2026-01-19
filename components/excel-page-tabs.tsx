@@ -7,7 +7,7 @@ import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 const tabs = [
   { value: "general", label: "General", icon: Building2 },
   { value: "flujo", label: "Flujo", icon: Workflow },
-  { value: "certificates", label: "Certificados", icon: Receipt },
+  // { value: "certificates", label: "Certificados", icon: Receipt },
   { value: "documentos", label: "Documentos", icon: Folder },
 ];
 

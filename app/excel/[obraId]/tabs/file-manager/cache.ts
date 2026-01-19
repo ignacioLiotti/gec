@@ -8,7 +8,7 @@ const URL_CACHE_DURATION = 55 * 60 * 1000; // 55 minutes
 
 type CachedFileTree = { tree: FileSystemItem; timestamp: number };
 const fileTreeCache = new Map<string, CachedFileTree>();
-const FILE_TREE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const FILE_TREE_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
 type CachedBlob = { blobUrl: string; expiresAt: number };
 const blobCache = new Map<string, CachedBlob>();
@@ -20,7 +20,7 @@ const APS_CACHE_DURATION = 30 * 60 * 1000;
 
 type CachedOcrLinks = { links: any[]; timestamp: number };
 const ocrLinksCache = new Map<string, CachedOcrLinks>();
-const OCR_LINKS_CACHE_DURATION = 10 * 60 * 1000;
+const OCR_LINKS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
 export function getCachedFileTree(obraId: string): FileSystemItem | null {
 	const cached = fileTreeCache.get(obraId);

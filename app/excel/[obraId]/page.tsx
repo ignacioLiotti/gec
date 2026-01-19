@@ -26,7 +26,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ObraDocumentsTab } from "./tabs/documents-tab";
-import { ObraCertificatesTab } from "./tabs/certificates-tab";
+// import { ObraCertificatesTab } from "./tabs/certificates-tab";
 import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
 
@@ -142,6 +142,7 @@ export default function ObraDetailPage() {
 
 	const [flujoActions, setFlujoActions] = useState<FlujoAction[]>([]);
 	const [isLoadingFlujoActions, setIsLoadingFlujoActions] = useState(false);
+	const [isSavingFlujoAction, setIsSavingFlujoAction] = useState(false);
 	const [isAddingFlujoAction, setIsAddingFlujoAction] = useState(false);
 	const [newFlujoAction, setNewFlujoAction] = useState<Partial<FlujoAction>>({
 		action_type: 'email',
@@ -808,6 +809,8 @@ export default function ObraDetailPage() {
 			return;
 		}
 
+		setIsSavingFlujoAction(true);
+
 		try {
 			// Derive recipient user IDs from explicit selection and optional role
 			let recipientUserIds: string[] = [];
@@ -843,8 +846,17 @@ export default function ObraDetailPage() {
 			});
 
 			if (!res.ok) throw new Error("Failed to save flujo action");
-			// Reload all actions to get scheduled_for if obra is already at 100%
-			await loadFlujoActions();
+
+			// Get the created action from response
+			const data = await res.json();
+			const createdAction = data.action as FlujoAction;
+
+			// Optimistic update - add the new action immediately
+			if (createdAction) {
+				setFlujoActions((prev) => [...prev, createdAction]);
+			}
+
+			// Reset form and close immediately
 			setNewFlujoAction({
 				action_type: 'email',
 				timing_mode: 'immediate',
@@ -863,8 +875,10 @@ export default function ObraDetailPage() {
 		} catch (err) {
 			console.error("Error saving flujo action:", err);
 			toast.error("No se pudo guardar la acción de flujo");
+		} finally {
+			setIsSavingFlujoAction(false);
 		}
-	}, [obraId, newFlujoAction, obraUserRoles, selectedRecipientRoleId, selectedRecipientUserId, loadFlujoActions]);
+	}, [obraId, newFlujoAction, obraUserRoles, selectedRecipientRoleId, selectedRecipientUserId]);
 
 	const deleteFlujoAction = useCallback(async (actionId: string) => {
 		if (!obraId || obraId === "undefined") return;
@@ -1197,6 +1211,7 @@ export default function ObraDetailPage() {
 							<ObraFlujoTab
 								isAddingFlujoAction={isAddingFlujoAction}
 								setIsAddingFlujoAction={setIsAddingFlujoAction}
+								isSavingFlujoAction={isSavingFlujoAction}
 								newFlujoAction={newFlujoAction}
 								setNewFlujoAction={setNewFlujoAction}
 								selectedRecipientUserId={selectedRecipientUserId}
@@ -1214,7 +1229,7 @@ export default function ObraDetailPage() {
 								isLoadingFlujoActions={isLoadingFlujoActions}
 							/>
 
-							<ObraCertificatesTab
+							{/* <ObraCertificatesTab
 								certificates={certificates}
 								certificatesTotal={certificatesTotal}
 								certificatesLoading={certificatesLoading}
@@ -1225,7 +1240,7 @@ export default function ObraDetailPage() {
 								handleToggleAddCertificate={handleToggleAddCertificate}
 								handleCreateCertificate={handleCreateCertificate}
 								handleNewCertificateChange={handleNewCertificateChange}
-							/>
+							/> */}
 
 							<ObraDocumentsTab
 								obraId={obraId}

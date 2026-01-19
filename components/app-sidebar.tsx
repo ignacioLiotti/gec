@@ -21,6 +21,7 @@ import {
 	TableIcon,
 	Columns3Cog,
 	Columns3,
+	Layers,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -132,6 +133,11 @@ const adminItems: NavItem[] = [
 		title: "Auditoría",
 		href: "/admin/audit-log",
 		icon: FileText,
+	},
+	{
+		title: "Macro Tablas",
+		href: "/macro",
+		icon: Layers,
 	},
 ];
 
@@ -318,16 +324,26 @@ export function AppSidebar({
 							{tenantOptions.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<button
-											className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2 text-left text-sm font-medium"
-											type="button"
-										>
-											<div className="min-w-0">
-												<p className="text-xs font-normal text-muted-foreground">Organización</p>
-												<p className="truncate">{activeTenant?.name ?? "Seleccionar"}</p>
-											</div>
-											<ChevronDown className="ml-2 size-4 text-muted-foreground" />
-										</button>
+										{state === "collapsed" ? (
+											<button
+												className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2"
+												type="button"
+												title={activeTenant?.name ?? "Seleccionar organización"}
+											>
+												<Building2 className="size-5 text-muted-foreground" />
+											</button>
+										) : (
+											<button
+												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2 text-left text-sm font-medium"
+												type="button"
+											>
+												<div className="min-w-0">
+													<p className="text-xs font-normal text-muted-foreground">Organización</p>
+													<p className="truncate">{activeTenant?.name ?? "Seleccionar"}</p>
+												</div>
+												<ChevronDown className="ml-2 size-4 text-muted-foreground" />
+											</button>
+										)}
 									</DropdownMenuTrigger>
 									<DropdownMenuContent
 										align="start"
@@ -376,12 +392,22 @@ export function AppSidebar({
 									</DropdownMenuContent>
 								</DropdownMenu>
 							) : (
-								<Link
-									href="/tenants/new"
-									className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
-								>
-									Crear organización
-								</Link>
+								state === "collapsed" ? (
+									<Link
+										href="/tenants/new"
+										className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
+										title="Crear organización"
+									>
+										<PlusCircle className="size-5" />
+									</Link>
+								) : (
+									<Link
+										href="/tenants/new"
+										className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
+									>
+										Crear organización
+									</Link>
+								)
 							)}
 						</div>
 					</SidebarMenuItem>

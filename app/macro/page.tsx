@@ -294,12 +294,16 @@ export default function MacroTablesPage() {
     );
   }
 
+  // useEffect(() => {
+  //   if (!macroTablesQuery.isLoading && macroTables.length === 0) {
+  //     router.push("/admin/macro-tables/new");
+  //   }
+  // }, [macroTablesQuery.isLoading, macroTables.length, router]);
+
   if (macroTables.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 gap-4 text-center">
-        <Layers className="h-12 w-12 opacity-20" />
-        <p className="text-lg text-muted-foreground">No hay macro tablas configuradas.</p>
-        <Button onClick={() => router.push("/admin/macro-tables/new")}>Crear macro tabla</Button>
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }

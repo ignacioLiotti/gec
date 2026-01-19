@@ -17,7 +17,7 @@ export default function ExcelPage() {
 		<div className="px-4 py-2">
 
 			<FormTable config={obrasDetalleConfig}>
-				<div className="space-y-1">
+				<div className="space-y-1 relative">
 					{/* <p className="text-sm uppercase tracking-wide text-orange-800/80 -mb-1">
 
 					</p> */}
@@ -28,13 +28,13 @@ export default function ExcelPage() {
 						Filtrá, buscá y actualizá tus obras directamente desde esta vista.
 					</p> */}
 
-					<div className="w-full flex justify-between items-center gap-3">
+					<div className="w-full flex justify-between items-center gap-3 relative">
 						<FormTableTabs className="justify-end w-full items-end" />
 						<div className="flex items-center gap-2">
 							<Button variant="outline" size="sm" asChild>
 								<Link href="/excel/reporte" className="gap-2">
 									<FileText className="h-4 w-4" />
-									Reporte
+									Generar Reporte
 								</Link>
 							</Button>
 							<FormTableToolbar />

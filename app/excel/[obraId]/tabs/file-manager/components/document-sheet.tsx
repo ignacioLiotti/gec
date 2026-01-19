@@ -23,11 +23,16 @@ export function DocumentSheet({
 	previewUrl,
 	onDownload,
 }: DocumentSheetProps) {
+	console.log("document", document);
+	console.log("previewUrl", previewUrl);
 	return (
 		<Sheet open={isOpen} onOpenChange={onOpenChange}>
 			{document && (
 				<SheetContent side="right" className="flex w-full max-w-full flex-col p-0 sm:max-w-2xl">
-					<SheetHeader className="border-b bg-white px-6 py-4">
+					<SheetHeader className="sr-only hidden visually-hidden">
+						<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
+					</SheetHeader>
+					{/* <SheetHeader className="border-b bg-white px-6 py-4">
 						<div className="flex items-start justify-between gap-3">
 							<div className="min-w-0 flex-1">
 								<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
@@ -42,7 +47,7 @@ export function DocumentSheet({
 								Descargar
 							</Button>
 						</div>
-					</SheetHeader>
+					</SheetHeader> */}
 					<div className="flex-1 min-h-[60vh] overflow-hidden bg-white">
 						<DocumentPreview document={document} previewUrl={previewUrl} onDownload={onDownload} />
 					</div>

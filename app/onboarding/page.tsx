@@ -97,8 +97,8 @@ export default function OnboardingPage() {
 			toast.error(result.error);
 			setAcceptingId(null);
 		} else if (result.success) {
-			toast.success(`Joined ${result.tenantName}!`);
-			// Redirect to the tenant
+			toast.success(`¡Te uniste a ${result.tenantName}!`);
+			// Redirigir al tenant
 			router.push("/");
 			router.refresh();
 		}
@@ -107,7 +107,7 @@ export default function OnboardingPage() {
 	const handleCreateTenant = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (tenantName.trim().length < 3) {
-			toast.error("Organization name must be at least 3 characters");
+			toast.error("El nombre de la organización debe tener al menos 3 caracteres");
 			return;
 		}
 
@@ -119,20 +119,20 @@ export default function OnboardingPage() {
 
 			await createTenantAction("/onboarding", formData);
 
-			// createTenantAction will redirect, but if it doesn't, show success
-			toast.success("Organization created!");
+			// createTenantAction redirigirá, pero si no lo hace, mostrar éxito
+			toast.success("¡Organización creada!");
 		} catch (error: any) {
-			toast.error(error?.message || "Failed to create organization");
+			toast.error(error?.message || "Error al crear la organización");
 			setCreatingTenant(false);
 		}
 	};
 
 	if (loading) {
 		return (
-			<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+			<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f0efea] to-[#e5e4df]">
 				<Card className="w-full max-w-2xl">
 					<CardContent className="flex items-center justify-center py-12">
-						<Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+						<Loader2 className="h-8 w-8 animate-spin text-[#444444]" />
 					</CardContent>
 				</Card>
 			</div>
@@ -140,88 +140,87 @@ export default function OnboardingPage() {
 	}
 
 	return (
-		<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
+		<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f0efea] via-white to-[#e8e7e2] p-4">
 			<Card className="w-full max-w-2xl shadow-lg">
 				<CardHeader className="text-center">
 					<div className="flex justify-center mb-4">
-						<div className="p-4 bg-blue-100 rounded-full">
-							<Building2 className="h-10 w-10 text-blue-600" />
+						<div className="p-4 bg-[#fff0e6] rounded-full">
+							<Building2 className="h-10 w-10 text-[#ff5800]" />
 						</div>
 					</div>
-					<CardTitle className="text-2xl">Welcome to Síntesis</CardTitle>
+					<CardTitle className="text-2xl">Bienvenido a Síntesis</CardTitle>
 					<CardDescription className="text-base">
-						Set up your workspace to get started
+						Configura tu espacio de trabajo para comenzar
 					</CardDescription>
 				</CardHeader>
 
 				<CardContent className="space-y-6">
-					{/* Preview Mode Banner */}
+					{/* Banner de Modo Vista Previa */}
 					{previewMode && (
 						<div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
 							<p className="text-sm text-amber-800">
-								Preview mode: You already have an organization but are viewing onboarding.
+								Modo vista previa: Ya tienes una organización pero estás viendo la página de incorporación.
 							</p>
 						</div>
 					)}
 
-					{/* Error Message */}
+					{/* Mensaje de Error */}
 					{errorMessage && (
 						<div className="bg-red-50 border border-red-200 rounded-lg p-3">
 							<p className="text-sm text-red-700">{errorMessage}</p>
 						</div>
 					)}
 
-					{/* Toggle Tabs */}
-					<div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+					{/* Pestañas de Selección */}
+					<div className="flex gap-2 p-1 bg-[#f0efea] rounded-lg">
+						<button
+							onClick={() => setMode("create")}
+							className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-all ${mode === "create"
+									? "bg-white text-[#444444] shadow-sm"
+									: "text-[#666666] hover:text-[#444444]"
+								}`}
+						>
+							<div className="flex items-center justify-center gap-2">
+								<Plus className="h-4 w-4" />
+								Crear Organización
+							</div>
+						</button>
 						<button
 							onClick={() => setMode("join")}
-							className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-all ${
-								mode === "join"
-									? "bg-white text-gray-900 shadow-sm"
-									: "text-gray-600 hover:text-gray-900"
-							}`}
+							className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-all ${mode === "join"
+									? "bg-white text-[#444444] shadow-sm"
+									: "text-[#666666] hover:text-[#444444]"
+								}`}
 						>
 							<div className="flex items-center justify-center gap-2">
 								<UserPlus className="h-4 w-4" />
-								Join Organization
+								Unirse a Organización
 								{invitations.length > 0 && (
-									<span className="ml-1 px-1.5 py-0.5 text-xs font-bold bg-blue-600 text-white rounded-full">
+									<span className="ml-1 px-1.5 py-0.5 text-xs font-bold bg-[#ff5800] text-white rounded-full">
 										{invitations.length}
 									</span>
 								)}
 							</div>
 						</button>
-						<button
-							onClick={() => setMode("create")}
-							className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-all ${
-								mode === "create"
-									? "bg-white text-gray-900 shadow-sm"
-									: "text-gray-600 hover:text-gray-900"
-							}`}
-						>
-							<div className="flex items-center justify-center gap-2">
-								<Plus className="h-4 w-4" />
-								Create Organization
-							</div>
-						</button>
+
 					</div>
 
-					{/* Content Area */}
+					{/* Área de Contenido */}
 					{mode === "join" ? (
 						<div className="space-y-4">
 							<div>
-								<h3 className="text-lg font-semibold mb-2">Pending Invitations</h3>
-								<p className="text-sm text-gray-600 mb-4">
-									Accept an invitation to join an existing organization
+								<h3 className="text-lg font-semibold mb-2 text-[#444444]">Invitaciones Pendientes</h3>
+								<p className="text-sm text-[#666666] mb-4">
+									Acepta una invitación para unirte a una organización existente
 								</p>
 							</div>
 
 							{invitations.length === 0 ? (
-								<div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-									<Mail className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-									<p className="text-gray-600 font-medium mb-1">No pending invitations</p>
-									<p className="text-sm text-gray-500">
-										Ask an organization admin to invite you, or create your own organization.
+								<div className="text-center py-12 bg-[#f0efea] rounded-lg border-2 border-dashed border-[#d4d3ce]">
+									<Mail className="h-12 w-12 text-[#888888] mx-auto mb-3" />
+									<p className="text-[#444444] font-medium mb-1">Sin invitaciones pendientes</p>
+									<p className="text-sm text-[#666666]">
+										Pide a un administrador que te invite, o crea tu propia organización.
 									</p>
 								</div>
 							) : (
@@ -231,38 +230,38 @@ export default function OnboardingPage() {
 										const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)));
 
 										return (
-											<Card key={invitation.id} className="border-2 hover:border-blue-200 transition-colors">
+											<Card key={invitation.id} className="border-2 hover:border-[#ff5800]/30 transition-colors">
 												<CardContent className="p-4">
 													<div className="flex items-start justify-between gap-4">
 														<div className="flex-1 space-y-2">
 															<div className="flex items-center gap-2">
-																<Building2 className="h-5 w-5 text-blue-600" />
-																<h4 className="font-semibold text-gray-900">
-																	{invitation.tenant?.name || "Organization"}
+																<Building2 className="h-5 w-5 text-[#ff5800]" />
+																<h4 className="font-semibold text-[#444444]">
+																	{invitation.tenant?.name || "Organización"}
 																</h4>
 															</div>
 															<div className="space-y-1 text-sm">
-																<div className="flex items-center gap-2 text-gray-600">
+																<div className="flex items-center gap-2 text-[#666666]">
 																	<UserPlus className="h-4 w-4" />
 																	<span>
 																		{invitation.inviter?.full_name
-																			? `Invited by ${invitation.inviter.full_name}`
-																			: "Organization invitation"}
+																			? `Invitado por ${invitation.inviter.full_name}`
+																			: "Invitación de organización"}
 																	</span>
 																</div>
-																<div className="flex items-center gap-2 text-gray-600">
+																<div className="flex items-center gap-2 text-[#666666]">
 																	<CheckCircle2 className="h-4 w-4" />
 																	<span className="capitalize">
-																		Role: {invitation.invited_role}
+																		Rol: {invitation.invited_role}
 																	</span>
 																</div>
-																<div className="flex items-center gap-2 text-gray-600">
+																<div className="flex items-center gap-2 text-[#666666]">
 																	<Clock className="h-4 w-4" />
 																	<span>
-																		Expires in{" "}
+																		Expira en{" "}
 																		{timeRemaining < 24
-																			? `${timeRemaining} hours`
-																			: `${Math.floor(timeRemaining / 24)} days`}
+																			? `${timeRemaining} horas`
+																			: `${Math.floor(timeRemaining / 24)} días`}
 																	</span>
 																</div>
 															</div>
@@ -271,17 +270,17 @@ export default function OnboardingPage() {
 															<Button
 																onClick={() => handleAcceptInvitation(invitation)}
 																disabled={acceptingId === invitation.id}
-																className="bg-blue-600 hover:bg-blue-700"
+																className="bg-[#ff5800] hover:bg-[#e64f00]"
 															>
 																{acceptingId === invitation.id ? (
 																	<>
 																		<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-																		Joining...
+																		Uniéndose...
 																	</>
 																) : (
 																	<>
 																		<CheckCircle2 className="mr-2 h-4 w-4" />
-																		Accept
+																		Aceptar
 																	</>
 																)}
 															</Button>
@@ -290,7 +289,7 @@ export default function OnboardingPage() {
 																size="sm"
 																onClick={() => router.push(`/invitations/${invitation.token}`)}
 															>
-																View Details
+																Ver Detalles
 															</Button>
 														</div>
 													</div>
@@ -304,47 +303,47 @@ export default function OnboardingPage() {
 					) : (
 						<div className="space-y-4">
 							<div>
-								<h3 className="text-lg font-semibold mb-2">Create New Organization</h3>
-								<p className="text-sm text-gray-600 mb-4">
-									Start your own workspace and invite team members later
+								<h3 className="text-lg font-semibold mb-2 text-[#444444]">Crear Nueva Organización</h3>
+								<p className="text-sm text-[#666666] mb-4">
+									Inicia tu propio espacio de trabajo e invita a miembros del equipo después
 								</p>
 							</div>
 
 							<form onSubmit={handleCreateTenant} className="space-y-4">
 								<div className="space-y-2">
-									<label htmlFor="tenantName" className="text-sm font-medium text-gray-700">
-										Organization Name
+									<label htmlFor="tenantName" className="text-sm font-medium text-[#444444]">
+										Nombre de la Organización
 									</label>
 									<input
 										id="tenantName"
 										type="text"
 										value={tenantName}
 										onChange={(e) => setTenantName(e.target.value)}
-										placeholder="e.g., Acme Inc, Engineering Team"
-										className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+										placeholder="ej., Acme Inc, Equipo de Ingeniería"
+										className="w-full px-4 py-2 border border-[#d4d3ce] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5800] focus:border-transparent"
 										required
 										minLength={3}
 										disabled={creatingTenant}
 									/>
-									<p className="text-xs text-gray-500">
-										Minimum 3 characters
+									<p className="text-xs text-[#888888]">
+										Mínimo 3 caracteres
 									</p>
 								</div>
 
 								<Button
 									type="submit"
 									disabled={creatingTenant || tenantName.trim().length < 3}
-									className="w-full bg-blue-600 hover:bg-blue-700"
+									className="w-full bg-[#ff5800] hover:bg-[#e64f00]"
 								>
 									{creatingTenant ? (
 										<>
 											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-											Creating Organization...
+											Creando Organización...
 										</>
 									) : (
 										<>
 											<Plus className="mr-2 h-4 w-4" />
-											Create Organization
+											Crear Organización
 										</>
 									)}
 								</Button>

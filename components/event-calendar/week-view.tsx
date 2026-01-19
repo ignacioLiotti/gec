@@ -17,6 +17,7 @@ import {
   startOfDay,
   startOfWeek,
 } from "date-fns"
+import { es } from "date-fns/locale"
 
 import { cn } from "@/lib/utils"
 import {
@@ -244,7 +245,7 @@ export function WeekView({
             <span className="sm:hidden" aria-hidden="true">
               {format(day, "E")[0]} {format(day, "d")}
             </span>
-            <span className="max-sm:hidden">{format(day, "EEE dd")}</span>
+            <span className="max-sm:hidden">{format(day, "EEE dd", { locale: es })}</span>
           </div>
         ))}
       </div>
@@ -254,7 +255,7 @@ export function WeekView({
           <div className="grid grid-cols-8">
             <div className="border-border/70 relative border-r">
               <span className="text-muted-foreground/70 absolute bottom-0 left-0 h-6 w-16 max-w-full pe-2 text-right text-[10px] sm:pe-4 sm:text-xs">
-                All day
+                Todo el día
               </span>
             </div>
             {days.map((day, dayIndex) => {
@@ -348,20 +349,20 @@ export function WeekView({
                   width: `${positionedEvent.width * 100}%`,
                   zIndex: positionedEvent.zIndex,
                 }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="h-full w-full">
-                    <DraggableEvent
-                      event={positionedEvent.event}
-                      view="week"
-                      onClick={(e) => handleEventClick(positionedEvent.event, e)}
-                      showTime
-                      height={positionedEvent.height}
-                      draggable={interactive}
-                    />
-                  </div>
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="h-full w-full">
+                  <DraggableEvent
+                    event={positionedEvent.event}
+                    view="week"
+                    onClick={(e) => handleEventClick(positionedEvent.event, e)}
+                    showTime
+                    height={positionedEvent.height}
+                    draggable={interactive}
+                  />
                 </div>
-              ))}
+              </div>
+            ))}
 
             {/* Current time indicator - only show for today's column */}
             {currentTimeVisible && isToday(day) && (
@@ -395,11 +396,11 @@ export function WeekView({
                           "absolute h-[calc(var(--week-cells-height)/4)] w-full",
                           quarter === 0 && "top-0",
                           quarter === 1 &&
-                            "top-[calc(var(--week-cells-height)/4)]",
+                          "top-[calc(var(--week-cells-height)/4)]",
                           quarter === 2 &&
-                            "top-[calc(var(--week-cells-height)/4*2)]",
+                          "top-[calc(var(--week-cells-height)/4*2)]",
                           quarter === 3 &&
-                            "top-[calc(var(--week-cells-height)/4*3)]"
+                          "top-[calc(var(--week-cells-height)/4*3)]"
                         )}
                         disabled={!interactive}
                         onClick={() => {

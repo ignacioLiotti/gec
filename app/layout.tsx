@@ -134,11 +134,12 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <head>
-        <script
-          crossOrigin="anonymous"
-          src="https://unpkg.com/react-scan/dist/auto.global.js"
-        ></script>
-        {/* rest of your scripts go under */}
+        {process.env.NODE_ENV === "development" && (
+          <script
+            crossOrigin="anonymous"
+            src="https://unpkg.com/react-scan/dist/auto.global.js"
+          ></script>
+        )}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}

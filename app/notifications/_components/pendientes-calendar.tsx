@@ -65,7 +65,7 @@ export function PendientesCalendar({
         }),
       })
     } catch (error) {
-      console.error("Failed to schedule reminder for event:", error)
+      console.error("Error al programar recordatorio para el evento:", error)
     }
   }
 
@@ -103,7 +103,7 @@ export function PendientesCalendar({
           event.allDay || false
         )
       } catch (error) {
-        console.error("Failed to update flujo event:", error)
+        console.error("Error al actualizar evento de flujo:", error)
         return
       }
     }
@@ -131,7 +131,7 @@ export function PendientesCalendar({
       try {
         await onFlujoEventDelete(eventId)
       } catch (error) {
-        console.error("Failed to delete flujo event:", error)
+        console.error("Error al eliminar evento de flujo:", error)
         return
       }
     }

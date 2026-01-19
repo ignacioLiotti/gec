@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { motion } from "framer-motion";
-import { Calendar, Mail, Plus, Trash2, Clock, MessageSquare, User, Zap, Timer, CalendarClock, Check, Pencil } from "lucide-react";
+import { Calendar, Mail, Plus, Trash2, Clock, MessageSquare, User, Zap, Timer, CalendarClock, Check, Pencil, Loader2 } from "lucide-react";
 
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ const formatScheduledDate = (value: string) => {
 type FlujoTabProps = {
 	isAddingFlujoAction: boolean;
 	setIsAddingFlujoAction: Dispatch<SetStateAction<boolean>>;
+	isSavingFlujoAction: boolean;
 	newFlujoAction: Partial<FlujoAction>;
 	setNewFlujoAction: Dispatch<SetStateAction<Partial<FlujoAction>>>;
 	selectedRecipientUserId: string;
@@ -61,6 +62,7 @@ type FlujoTabProps = {
 export function ObraFlujoTab({
 	isAddingFlujoAction,
 	setIsAddingFlujoAction,
+	isSavingFlujoAction,
 	newFlujoAction,
 	setNewFlujoAction,
 	selectedRecipientUserId,
@@ -172,32 +174,29 @@ export function ObraFlujoTab({
 	return (
 		<TabsContent
 			value="flujo"
-			className="relative space-y-6 pb-6 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.12),_transparent_65%)]"
+			className="space-y-6"
 		>
 			<motion.section
 				initial={{ opacity: 0, y: 20 }}
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ duration: 0.4 }}
-				className="rounded-3xl border border-border/40 bg-gradient-to-br from-background via-card/80 to-background shadow-2xl shadow-primary/10 overflow-hidden backdrop-blur"
+				className="rounded-lg border bg-card shadow-sm overflow-hidden"
 			>
-				<div className="bg-gradient-to-r from-primary/15 via-transparent to-primary/5 px-6 py-6 border-b border-border/40 backdrop-blur-md">
+				<div className="bg-muted/50 px-6 py-4 border-b">
 					<div className="flex items-center justify-between">
-						<div className="space-y-1.5">
-							<div className="flex items-center gap-2.5">
-								<div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/20">
-									<Mail className="h-5 w-5 text-primary" />
-								</div>
-								<h2 className="text-xl font-bold tracking-tight">Flujo de Finalización</h2>
+						<div className="flex items-center gap-3">
+							<Mail className="h-5 w-5 text-primary" />
+							<div>
+								<h2 className="text-lg font-semibold">Flujo de Finalización</h2>
+								<p className="text-sm text-muted-foreground">
+									Configura acciones automáticas al alcanzar el 100% de la obra
+								</p>
 							</div>
-							<p className="text-sm text-muted-foreground ml-11">
-								Configura acciones automáticas al alcanzar el 100% de la obra
-							</p>
 						</div>
 						<Button
 							variant={isAddingFlujoAction ? "outline" : "default"}
 							onClick={() => setIsAddingFlujoAction((prev) => !prev)}
 							size="sm"
-							className="shadow-sm rounded-full"
 						>
 							<Plus className="h-4 w-4 mr-2" />
 							{isAddingFlujoAction ? "Cancelar" : "Nueva Acción"}
@@ -205,36 +204,32 @@ export function ObraFlujoTab({
 					</div>
 				</div>
 
-				<div className="p-6 md:p-8 space-y-6 bg-gradient-to-b from-background/80 via-card/60 to-background">
+				<div className="p-6 space-y-6">
 					{isAddingFlujoAction && (
 						<motion.div
 							initial={{ opacity: 0, height: 0 }}
 							animate={{ opacity: 1, height: "auto" }}
 							exit={{ opacity: 0, height: 0 }}
-							className="rounded-3xl border border-border/40 bg-gradient-to-br from-card via-background to-card shadow-xl shadow-primary/10 overflow-hidden max-w-lg"
+							className="rounded-lg border bg-card shadow-sm overflow-hidden max-w-lg"
 						>
 							{/* Header */}
-							<div className="bg-gradient-to-r from-primary via-primary to-primary/90 px-6 py-5 shadow-inner shadow-primary/40">
+							<div className="bg-muted/50 px-4 py-3 border-b">
 								<div className="flex items-center gap-3">
-									<div className="w-10 h-10 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
-										<Plus className="h-5 w-5 text-white" />
-									</div>
+									<Plus className="h-5 w-5 text-primary" />
 									<div>
-										<h3 className="text-white font-semibold text-lg">Nueva Acción</h3>
-										<p className="text-primary-foreground/80 text-sm">Configurar notificación automática</p>
+										<h3 className="font-semibold">Nueva Acción</h3>
+										<p className="text-muted-foreground text-sm">Configurar notificación automática</p>
 									</div>
 								</div>
 							</div>
 
 							{/* Content */}
-							<div className="p-6 space-y-5">
+							<div className="p-4 space-y-4">
 
 								{/* Title */}
-								<div className="space-y-2">
-									<label className="text-sm font-semibold text-foreground flex items-center gap-1">
-										<MessageSquare className="w-4 h-4 text-primary" />
-										Título
-										<span className="text-destructive">*</span>
+								<div className="space-y-1.5">
+									<label className="text-sm font-medium text-foreground">
+										Título <span className="text-destructive">*</span>
 									</label>
 									<Input
 										type="text"
@@ -243,42 +238,30 @@ export function ObraFlujoTab({
 										onChange={(e) =>
 											setNewFlujoAction((prev) => ({ ...prev, title: e.target.value }))
 										}
-										className="text-base"
 									/>
 								</div>
 
 								{/* Message */}
-								<div className="space-y-2">
-									<label className="text-sm font-semibold text-foreground flex items-center gap-2">
-										<MessageSquare className="w-4 h-4 text-primary" />
+								<div className="space-y-1.5">
+									<label className="text-sm font-medium text-foreground">
 										Mensaje
 									</label>
-									<div className="bg-muted/40 rounded-2xl border border-border/40 p-1 focus-within:ring-2 focus-within:ring-primary/30 transition-shadow">
-										<textarea
-											className="w-full rounded-md border-0 bg-transparent px-3 py-2 text-sm min-h-[100px] ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 placeholder:text-muted-foreground resize-none"
-											placeholder="Mensaje detallado de la acción..."
-											value={newFlujoAction.message || ""}
-											onChange={(e) =>
-												setNewFlujoAction((prev) => ({ ...prev, message: e.target.value }))
-											}
-										/>
-									</div>
+									<textarea
+										className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 placeholder:text-muted-foreground resize-none"
+										placeholder="Mensaje detallado de la acción..."
+										value={newFlujoAction.message || ""}
+										onChange={(e) =>
+											setNewFlujoAction((prev) => ({ ...prev, message: e.target.value }))
+										}
+									/>
 								</div>
 
-								{/* Calendar Event Toggle */}
-								<div className="flex gap-2 justify-center items-center">
-
-									<div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-none shadow-sm shadow-amber-500/20 w-full">
-										<div className="flex items-center gap-3 flex-1">
-											<Calendar className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-											<div>
-												<label className="text-amber-700 dark:text-amber-300 text-sm font-medium block">
-													Evento de calendario
-												</label>
-												<p className="text-amber-600/70 dark:text-amber-400/70 text-xs">
-													Añadir evento al calendario
-												</p>
-											</div>
+								{/* Toggles */}
+								<div className="grid grid-cols-2 gap-3">
+									<div className="flex items-center justify-between p-3 bg-muted/50 border rounded-md">
+										<div className="flex items-center gap-2">
+											<Calendar className="w-4 h-4 text-muted-foreground" />
+											<span className="text-sm">Evento calendario</span>
 										</div>
 										<Switch
 											checked={includeCalendarEvent}
@@ -291,44 +274,35 @@ export function ObraFlujoTab({
 										/>
 									</div>
 
-									<div className="flex items-center justify-between px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-none shadow-sm shadow-blue-500/20 w-full">
-									<div className="flex items-center gap-3 flex-1">
-										<Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-										<div>
-											<label className="text-blue-700 dark:text-blue-300 text-sm font-medium block">
-												Notificar por Email
-											</label>
-											<p className="text-blue-600/70 dark:text-blue-400/70 text-xs">
-												Siempre se notifica por App
-											</p>
+									<div className="flex items-center justify-between p-3 bg-muted/50 border rounded-md">
+										<div className="flex items-center gap-2">
+											<Mail className="w-4 h-4 text-muted-foreground" />
+											<span className="text-sm">Email</span>
 										</div>
+										<Switch
+											checked={newFlujoAction.notification_types?.includes("email") || false}
+											onCheckedChange={(checked) =>
+												setNewFlujoAction((prev) => ({
+													...prev,
+													notification_types: checked ? ["in_app", "email"] : ["in_app"],
+												}))
+											}
+										/>
 									</div>
-									<Switch
-										checked={newFlujoAction.notification_types?.includes("email") || false}
-										onCheckedChange={(checked) =>
-											setNewFlujoAction((prev) => ({
-												...prev,
-												notification_types: checked ? ["in_app", "email"] : ["in_app"],
-											}))
-										}
-									/>
-								</div>
-
 								</div>
 
 								{/* Timing Section */}
-								<div className="bg-muted/40 rounded-2xl border border-border/40 p-4 shadow-inner shadow-border/30">
-									<div className="flex items-center gap-2 text-muted-foreground text-sm mb-3">
-										<Clock className="w-4 h-4" />
-										<span>¿Cuándo ejecutar?</span>
-									</div>
+								<div className="space-y-2">
+									<label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+										<Clock className="w-4 h-4 text-muted-foreground" />
+										¿Cuándo ejecutar?
+									</label>
 									<div className="flex gap-2 flex-wrap">
 										<Button
 											type="button"
 											variant={newFlujoAction.timing_mode === "immediate" ? "default" : "outline"}
 											size="sm"
 											onClick={() => setNewFlujoAction((prev) => ({ ...prev, timing_mode: "immediate" }))}
-											className="transition-all hover:scale-105"
 										>
 											Inmediato
 										</Button>
@@ -337,7 +311,6 @@ export function ObraFlujoTab({
 											variant={newFlujoAction.timing_mode === "offset" ? "default" : "outline"}
 											size="sm"
 											onClick={() => setNewFlujoAction((prev) => ({ ...prev, timing_mode: "offset" }))}
-											className="transition-all hover:scale-105"
 										>
 											Después de X tiempo
 										</Button>
@@ -346,7 +319,6 @@ export function ObraFlujoTab({
 											variant={newFlujoAction.timing_mode === "scheduled" ? "default" : "outline"}
 											size="sm"
 											onClick={() => setNewFlujoAction((prev) => ({ ...prev, timing_mode: "scheduled" }))}
-											className="transition-all hover:scale-105"
 										>
 											Fecha específica
 										</Button>
@@ -357,43 +329,40 @@ export function ObraFlujoTab({
 									<motion.div
 										initial={{ opacity: 0, y: -10 }}
 										animate={{ opacity: 1, y: 0 }}
-										className="bg-muted/40 rounded-2xl border border-border/40 p-4 shadow-inner shadow-border/30"
+										className="grid grid-cols-2 gap-3"
 									>
-										<div className="flex gap-3 items-end">
-											<div className="flex-1">
-												<label className="text-sm font-semibold text-foreground mb-2 block">Cantidad</label>
-												<Input
-													type="number"
-													min="1"
-													value={newFlujoAction.offset_value || 1}
-													onChange={(e) =>
-														setNewFlujoAction((prev) => ({
-															...prev,
-															offset_value: parseInt(e.target.value, 10) || 1,
-														}))
-													}
-													className="text-base font-medium"
-												/>
-											</div>
-											<div className="flex-1">
-												<label className="text-sm font-semibold text-foreground mb-2 block">Unidad</label>
-												<select
-													className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-													value={newFlujoAction.offset_unit || "days"}
-													onChange={(e) =>
-														setNewFlujoAction((prev) => ({
-															...prev,
-															offset_unit: e.target.value as FlujoAction["offset_unit"],
-														}))
-													}
-												>
-													<option value="minutes">Minutos</option>
-													<option value="hours">Horas</option>
-													<option value="days">Días</option>
-													<option value="weeks">Semanas</option>
-													<option value="months">Meses</option>
-												</select>
-											</div>
+										<div className="space-y-1.5">
+											<label className="text-sm font-medium text-foreground">Cantidad</label>
+											<Input
+												type="number"
+												min="1"
+												value={newFlujoAction.offset_value || 1}
+												onChange={(e) =>
+													setNewFlujoAction((prev) => ({
+														...prev,
+														offset_value: parseInt(e.target.value, 10) || 1,
+													}))
+												}
+											/>
+										</div>
+										<div className="space-y-1.5">
+											<label className="text-sm font-medium text-foreground">Unidad</label>
+											<select
+												className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+												value={newFlujoAction.offset_unit || "days"}
+												onChange={(e) =>
+													setNewFlujoAction((prev) => ({
+														...prev,
+														offset_unit: e.target.value as FlujoAction["offset_unit"],
+													}))
+												}
+											>
+												<option value="minutes">Minutos</option>
+												<option value="hours">Horas</option>
+												<option value="days">Días</option>
+												<option value="weeks">Semanas</option>
+												<option value="months">Meses</option>
+											</select>
 										</div>
 									</motion.div>
 								)}
@@ -402,16 +371,15 @@ export function ObraFlujoTab({
 									<motion.div
 										initial={{ opacity: 0, y: -10 }}
 										animate={{ opacity: 1, y: 0 }}
-										className="bg-muted/40 rounded-2xl border border-border/40 p-4 shadow-inner shadow-border/30"
+										className="space-y-1.5"
 									>
-										<label className="text-sm font-semibold text-foreground mb-2 block">Fecha y hora</label>
+										<label className="text-sm font-medium text-foreground">Fecha y hora</label>
 										<Input
 											type="datetime-local"
 											value={newFlujoAction.scheduled_date || ""}
 											onChange={(e) =>
 												setNewFlujoAction((prev) => ({ ...prev, scheduled_date: e.target.value }))
 											}
-											className="text-base font-medium"
 										/>
 									</motion.div>
 								)}
@@ -424,137 +392,123 @@ export function ObraFlujoTab({
 
 
 								{/* Recipients */}
-								<div className="bg-muted/40 rounded-2xl border border-border/40 p-4 shadow-sm">
-									<div className="flex items-center gap-2 text-muted-foreground text-sm mb-3">
-										<User className="w-4 h-4" />
-										<span>Destinatarios</span>
-									</div>
-									<p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-										Si no seleccionás nada, se notificará solo al usuario actual. Podés elegir un
-										usuario específico, un rol, o ambos.
+								<div className="space-y-2">
+									<label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+										<User className="w-4 h-4 text-muted-foreground" />
+										Destinatarios
+									</label>
+									<p className="text-xs text-muted-foreground">
+										Si no seleccionás nada, se notificará solo al usuario actual.
 									</p>
-									<div className="grid gap-3 md:grid-cols-2">
-										<div>
-											<label className="text-xs font-semibold text-foreground mb-2 block">Usuario específico</label>
+									<div className="grid gap-3 grid-cols-2">
+										<div className="space-y-1.5">
+											<label className="text-xs font-medium text-foreground">Usuario</label>
 											<Select
 												value={selectedRecipientUserId || "none"}
 												onValueChange={(value) =>
 													setSelectedRecipientUserId(value === "none" ? "" : value)
 												}
 											>
-												<SelectTrigger className="w-full text-xs">
-													<SelectValue placeholder="Seleccionar usuario" />
+												<SelectTrigger className="w-full text-sm">
+													<SelectValue placeholder="Seleccionar" />
 												</SelectTrigger>
 												<SelectContent>
 													<SelectItem value="none">
-														<span className="text-xs text-muted-foreground">Ninguno (solo vos)</span>
+														<span className="text-muted-foreground">Ninguno</span>
 													</SelectItem>
 													{obraUsers.map((user) => (
 														<SelectItem key={user.id} value={user.id}>
-															<div className="flex flex-col text-xs">
-																<span className="font-medium">
-																	{getUserLabel(user)}
-																</span>
-																{user.full_name && user.email ? (
-																	<span className="text-[10px] text-muted-foreground">
-																		{user.email}
-																	</span>
-																) : null}
-															</div>
+															{getUserLabel(user)}
 														</SelectItem>
 													))}
 												</SelectContent>
 											</Select>
 										</div>
-										<div>
-											<label className="text-xs font-semibold text-foreground mb-2 block">Rol</label>
+										<div className="space-y-1.5">
+											<label className="text-xs font-medium text-foreground">Rol</label>
 											<Select
 												value={selectedRecipientRoleId || "none"}
 												onValueChange={(value) =>
 													setSelectedRecipientRoleId(value === "none" ? "" : value)
 												}
 											>
-												<SelectTrigger className="w-full text-xs">
-													<SelectValue placeholder="Seleccionar rol" />
+												<SelectTrigger className="w-full text-sm">
+													<SelectValue placeholder="Seleccionar" />
 												</SelectTrigger>
 												<SelectContent>
 													<SelectItem value="none">
-														<span className="text-xs text-muted-foreground">Ninguno</span>
+														<span className="text-muted-foreground">Ninguno</span>
 													</SelectItem>
-													{obraRoles.map((role) => {
-														const members = roleUserMap.get(role.id) ?? [];
-														return (
-															<SelectItem key={role.id} value={role.id}>
-																<div className="flex flex-col text-xs">
-																	<span className="font-medium">
-																		{role.name}
-																	</span>
-																	<span className="text-[10px] text-muted-foreground">
-																		{members.length
-																			? members.join(", ")
-																			: "Sin usuarios asignados"}
-																	</span>
-																</div>
-															</SelectItem>
-														);
-													})}
+													{obraRoles.map((role) => (
+														<SelectItem key={role.id} value={role.id}>
+															{role.name}
+														</SelectItem>
+													))}
 												</SelectContent>
 											</Select>
 										</div>
 									</div>
 								</div>
-
-								{/* Notification Type */}
-
 							</div>
 
 							{/* Footer Actions */}
-							<div className="px-6 pb-6">
-								<div className="flex gap-3">
-									<Button
-										type="button"
-										variant="outline"
-										onClick={() => {
-											setIsAddingFlujoAction(false);
-											setNewFlujoAction({
-												action_type: "email",
-												timing_mode: "immediate",
-												offset_value: 1,
-												offset_unit: "days",
-												title: "",
-												message: "",
-												recipient_user_ids: [],
-												notification_types: ["in_app", "email"],
-												enabled: true,
-											});
-										}}
-										className="flex-1 h-11 hover:bg-muted transition-colors"
-									>
-										Cancelar
-									</Button>
-									<Button
-										type="button"
-										onClick={saveFlujoAction}
-										className="flex-1 h-11 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-sm"
-									>
-										<Plus className="h-4 w-4 mr-2" />
-										Guardar Acción
-									</Button>
-								</div>
+							<div className="px-4 py-3 bg-muted/30 border-t flex gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onClick={() => {
+										setIsAddingFlujoAction(false);
+										setNewFlujoAction({
+											action_type: "email",
+											timing_mode: "immediate",
+											offset_value: 1,
+											offset_unit: "days",
+											title: "",
+											message: "",
+											recipient_user_ids: [],
+											notification_types: ["in_app", "email"],
+											enabled: true,
+										});
+									}}
+									className="flex-1"
+									disabled={isSavingFlujoAction}
+								>
+									Cancelar
+								</Button>
+								<Button
+									type="button"
+									onClick={saveFlujoAction}
+									size="sm"
+									className="flex-1"
+									disabled={isSavingFlujoAction}
+								>
+									{isSavingFlujoAction ? (
+										<>
+											<Loader2 className="h-4 w-4 mr-1 animate-spin" />
+											Guardando...
+										</>
+									) : (
+										<>
+											<Plus className="h-4 w-4 mr-1" />
+											Guardar
+										</>
+									)}
+								</Button>
 							</div>
 						</motion.div>
 					)}
 
 					<div className="space-y-4">
 						{isLoadingFlujoActions ? (
-							<div className="flex flex-col items-center justify-center py-12 space-y-3 rounded-3xl border border-border/40 bg-card/80 shadow-inner shadow-primary/5">
-								<div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-								<p className="text-sm font-medium text-muted-foreground">Cargando acciones...</p>
+							<div className="flex flex-col items-center justify-center py-12 space-y-3">
+								<div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+								<p className="text-sm text-muted-foreground">Cargando acciones...</p>
 							</div>
 						) : flujoActions.length === 0 ? (
-							<div className="flex flex-col items-center justify-center py-12 space-y-3 rounded-3xl border-2 border-dashed border-border/50 bg-gradient-to-br from-background/80 to-muted/30 shadow-sm shadow-border/20">
-								<Mail className="h-12 w-12 text-muted-foreground/40" />
-								<p className="text-sm font-medium text-muted-foreground text-center max-w-md">
+							<div className="flex flex-col items-center justify-center py-12 space-y-3 rounded-lg border-2 border-dashed">
+								<Mail className="h-10 w-10 text-muted-foreground/40" />
+								<p className="text-sm text-muted-foreground text-center">
 									No hay acciones configuradas. Crea una nueva acción para comenzar.
 								</p>
 							</div>
@@ -577,68 +531,46 @@ export function ObraFlujoTab({
 										const isGroupCompleted = group.actions.every((a) => a.executed_at !== null);
 
 										return (
-											<div key={group.key} className="relative flex gap-6 pb-8">
+											<div key={group.key} className="relative flex gap-4 pb-6">
 												{/* Left Side: Timeline Step */}
-												<div className="relative flex flex-col items-center pt-2">
+												<div className="relative flex flex-col items-center pt-1">
 													{/* Icon Circle */}
-													<motion.div
-														initial={{ scale: 0, opacity: 0 }}
-														animate={{ scale: 1, opacity: 1 }}
-														transition={{ delay: groupIdx * 0.1, type: "spring" }}
-														className="relative z-10"
-													>
-														<div className={`w-12 h-12 rounded-full shadow-xl flex items-center justify-center ring-4 ring-background ${
-															isGroupCompleted
-																? "bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-emerald-500/30"
-																: "bg-gradient-to-br from-primary to-primary/80 shadow-primary/30"
+													<div className={`w-10 h-10 rounded-full flex items-center justify-center ${isGroupCompleted
+														? "bg-emerald-500 text-white"
+														: "bg-primary text-primary-foreground"
 														}`}>
-															{isGroupCompleted ? (
-																<Check className="w-6 h-6 text-white" />
-															) : firstAction.timing_mode === "immediate" ? (
-																<Zap className="w-6 h-6 text-white" />
-															) : firstAction.timing_mode === "offset" ? (
-																<Timer className="w-6 h-6 text-white" />
-															) : (
-																<CalendarClock className="w-6 h-6 text-white" />
-															)}
-														</div>
-													</motion.div>
+														{isGroupCompleted ? (
+															<Check className="w-5 h-5" />
+														) : firstAction.timing_mode === "immediate" ? (
+															<Zap className="w-5 h-5" />
+														) : firstAction.timing_mode === "offset" ? (
+															<Timer className="w-5 h-5" />
+														) : (
+															<CalendarClock className="w-5 h-5" />
+														)}
+													</div>
 
 													{/* Vertical Connector Line */}
 													{!isLast && (
-														<div className={`absolute top-14 bottom-0 left-1/2 -translate-x-1/2 w-1 rounded-full ${
-															isGroupCompleted
-																? "bg-gradient-to-b from-emerald-500/60 via-emerald-500/30 to-emerald-500/10"
-																: "bg-gradient-to-b from-primary/60 via-primary/30 to-primary/10"
-														}`} />
+														<div className={`absolute top-12 bottom-0 left-1/2 -translate-x-1/2 w-0.5 ${isGroupCompleted
+															? "bg-emerald-500/30"
+															: "bg-border"
+															}`} />
 													)}
 
 													{/* Timing Label */}
-													<motion.div
-														initial={{ opacity: 0, y: 10 }}
-														animate={{ opacity: 1, y: 0 }}
-														transition={{ delay: groupIdx * 0.1 + 0.1 }}
-														className="mt-3 text-center min-w-[120px]"
-													>
-														<div className={`rounded-full px-3 py-1.5 border ${
-															isGroupCompleted
-																? "bg-emerald-500/10 border-emerald-500/20"
-																: "bg-primary/10 border-primary/20"
-														}`}>
-															<p className={`text-xs font-semibold whitespace-nowrap ${
-																isGroupCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-primary"
-															}`}>
-																{timingSummary}
-															</p>
-														</div>
-														<p className="text-[10px] text-muted-foreground mt-1 font-medium">
+													<div className="mt-2 text-center min-w-[100px]">
+														<p className={`text-xs font-medium ${isGroupCompleted ? "text-emerald-600" : "text-foreground"}`}>
+															{timingSummary}
+														</p>
+														<p className="text-[10px] text-muted-foreground">
 															{group.actions.length} {group.actions.length === 1 ? "acción" : "acciones"}
 														</p>
-													</motion.div>
+													</div>
 												</div>
 
 												{/* Right Side: Actions */}
-												<div className="flex-1 flex flex-wrap items-start gap-4 pt-2">
+												<div className="flex-1 flex flex-wrap items-start gap-3 pt-1">
 													{group.actions.map((action, idx) => {
 														const recipients = (action.recipient_user_ids ?? []).map((userId) => ({
 															userId,
@@ -667,104 +599,72 @@ export function ObraFlujoTab({
 																<Accordion type="multiple" className="w-full">
 																	<AccordionItem
 																		value={action.id}
-																		className={`group rounded-none overflow-hidden transition-all max-w-sm ${!action.enabled ? "opacity-60" : ""}`}
+																		className={`rounded-lg border bg-card overflow-hidden max-w-sm ${!action.enabled ? "opacity-60" : ""}`}
 																	>
 																		{/* Header */}
-																		<div className={isExecuted ? "bg-emerald-600" : "bg-primary"}>
-																			<div className="flex items-center gap-3 pr-4">
+																		<div className={`border-b ${isExecuted ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-muted/50"}`}>
+																			<div className="flex items-center gap-2 pr-3">
 																				<AccordionTrigger className="flex-1 hover:no-underline px-3 py-2">
-																					<div className="flex items-center gap-3 flex-1">
-																						<div className="w-8 h-8 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
+																					<div className="flex items-center gap-2 flex-1">
+																						<div className={`w-7 h-7 rounded-md flex items-center justify-center ${isExecuted ? "bg-emerald-500 text-white" : "bg-primary/10 text-primary"}`}>
 																							{isExecuted ? (
-																								<Check className="h-5 w-5 text-white" />
+																								<Check className="h-4 w-4" />
 																							) : action.action_type === "calendar_event" ? (
-																								<Calendar className="h-4 w-4 text-white" />
+																								<Calendar className="h-4 w-4" />
 																							) : (
-																								<Mail className="h-5 w-5 text-white" />
+																								<Mail className="h-4 w-4" />
 																							)}
 																						</div>
-																						<div className="flex flex-col items-start gap-0.5 flex-1">
-																							<h4 className="font-semibold text-base text-white text-left">{action.title}</h4>
-																							<p className={`text-xs text-left ${isExecuted ? "text-emerald-100/80" : "text-primary-foreground/80"}`}>
-																								{isExecuted ? "Ejecutada" : "Notificación programada"}
+																						<div className="flex flex-col items-start flex-1">
+																							<h4 className="font-medium text-sm text-foreground text-left">{action.title}</h4>
+																							<p className="text-xs text-muted-foreground text-left">
+																								{isExecuted ? "Ejecutada" : timingSummary}
 																							</p>
 																						</div>
 																					</div>
 																				</AccordionTrigger>
 																				{isExecuted && (
-																					<div className="px-2 py-1 rounded-full text-xs font-medium bg-white/20 text-white border border-white/30">
+																					<span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500 text-white">
 																						Completada
-																					</div>
+																					</span>
 																				)}
 																			</div>
 																		</div>
 
 																		{/* Content */}
-																		<AccordionContent className="p-6 bg-gradient-to-b from-background/80 via-card/50 to-card">
-																			<div className="space-y-4">
-																				{/* Schedule Section */}
-																				<div className="bg-muted/40 rounded-none border border-border/40 p-4 shadow-sm flex items-center justify-between">
-																					<div>
-																						<p className="text-foreground font-medium">{timingSummary}</p>
-																						{action.offset_unit && (
-																							<p className="text-muted-foreground text-sm">
-																								{OFFSET_UNIT_LABELS[action.offset_unit] ?? action.offset_unit}
-																							</p>
-																						)}
-																					</div>
-																					{action.timing_mode === "offset" && action.offset_value ? (
-																						<div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-																							<span className="text-primary font-bold text-lg">{action.offset_value}</span>
-																						</div>
-																					) : (
-																						<div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-																							<Clock className="w-5 h-5 text-primary" />
-																						</div>
-																					)}
-																				</div>
-
+																		<AccordionContent className="p-4">
+																			<div className="space-y-3">
 																				{/* Calendar Event Badge */}
 																				{action.action_type === "calendar_event" && (
-																					<div className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl shadow-sm shadow-amber-500/20">
-																						<Calendar className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-																						<span className="text-amber-700 dark:text-amber-300 text-sm font-medium">Evento de calendario</span>
-																						<div className="ml-auto w-2 h-2 bg-amber-400 rounded-full" />
+																					<div className="flex items-center gap-2 p-2 bg-muted/50 border rounded-md text-sm">
+																						<Calendar className="w-4 h-4 text-muted-foreground" />
+																						<span>Evento de calendario</span>
 																					</div>
 																				)}
 
 																				{/* Message */}
 																				{action.message && (
-																					<div className="space-y-2">
-																						<div className="flex items-center gap-2 text-muted-foreground text-sm">
-																							<MessageSquare className="w-4 h-4" />
-																							<span>Mensaje</span>
-																						</div>
-																						<div className="bg-muted/40 rounded-2xl border border-border/40 p-4 shadow-inner shadow-border/20">
-																							<p className="text-foreground whitespace-pre-wrap">{action.message}</p>
-																						</div>
+																					<div className="space-y-1">
+																						<p className="text-xs font-medium text-muted-foreground">Mensaje</p>
+																						<p className="text-sm text-foreground whitespace-pre-wrap bg-muted/30 rounded-md p-2 border">{action.message}</p>
 																					</div>
 																				)}
 
 																				{/* Recipients */}
 																				{recipients.length > 0 && (
-																					<div className="space-y-2">
-																						<div className="flex items-center gap-2 text-muted-foreground text-sm">
-																							<User className="w-4 h-4" />
-																							<span>Destinatarios</span>
-																						</div>
-																						<div className="space-y-2">
+																					<div className="space-y-1">
+																						<p className="text-xs font-medium text-muted-foreground">Destinatarios</p>
+																						<div className="flex flex-wrap gap-1">
 																							{recipients.map(({ userId, label }) => (
-																								<div
+																								<span
 																									key={`${action.id}-${userId}`}
-																									className="flex items-center gap-3 px-4 py-3 bg-muted/40 rounded-2xl border border-border/40 shadow-sm"
+																									className="inline-flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs"
 																								>
-																									<div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center">
-																										<span className="text-primary-foreground text-xs font-medium">
-																											{label.charAt(0).toUpperCase()}
-																										</span>
-																									</div>
-																									<span className="text-foreground text-sm">{label}</span>
-																								</div>
+																									<span className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium">
+																										{label.charAt(0).toUpperCase()}
+																									</span>
+																									{label}
+																								</span>
 																							))}
 																						</div>
 																					</div>
@@ -772,63 +672,46 @@ export function ObraFlujoTab({
 
 																				{/* Notification Type */}
 																				{notificationTypes.length > 0 && (
-																					<div className="flex items-center justify-between px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl shadow-sm shadow-blue-500/20">
-																						<div className="flex items-center gap-3">
-																							<Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-																							<span className="text-blue-700 dark:text-blue-300 text-sm font-medium">Tipo de notificación</span>
-																						</div>
-																						<div className="flex gap-2">
-																							{notificationTypes.includes("in_app") && (
-																								<span className="text-blue-700 dark:text-blue-300 text-xs bg-blue-100 dark:bg-blue-900 px-3 py-1 rounded-lg font-medium">
-																									App
-																								</span>
-																							)}
-																							{notificationTypes.includes("email") && (
-																								<span className="text-blue-700 dark:text-blue-300 text-xs bg-blue-100 dark:bg-blue-900 px-3 py-1 rounded-lg font-medium">
-																									Email
-																								</span>
-																							)}
-																						</div>
+																					<div className="flex items-center gap-2 text-xs text-muted-foreground">
+																						<span>Notificar:</span>
+																						{notificationTypes.includes("in_app") && (
+																							<span className="px-1.5 py-0.5 bg-muted rounded">App</span>
+																						)}
+																						{notificationTypes.includes("email") && (
+																							<span className="px-1.5 py-0.5 bg-muted rounded">Email</span>
+																						)}
 																					</div>
 																				)}
 																			</div>
 
 																			{/* Scheduled execution time for triggered but not-yet-executed actions */}
 																			{!isExecuted && action.scheduled_for && (
-																				<div className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl shadow-sm shadow-amber-500/20">
-																					<Timer className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+																				<div className="flex items-center gap-2 mt-3 p-2 bg-muted/50 border rounded-md text-sm">
+																					<Timer className="w-4 h-4 text-muted-foreground" />
 																					<div>
-																						<span className="text-amber-700 dark:text-amber-300 text-sm font-medium block">Programada para ejecutar</span>
-																						<span className="text-amber-600/70 dark:text-amber-400/70 text-xs">
+																						<span className="font-medium">Programada: </span>
+																						<span className="text-muted-foreground">
 																							{formatScheduledDate(action.scheduled_for)}
 																						</span>
-																						{action.triggered_at && (
-																							<span className="text-amber-600/50 dark:text-amber-400/50 text-xs block">
-																								(Obra completada: {formatScheduledDate(action.triggered_at)})
-																							</span>
-																						)}
 																					</div>
 																				</div>
 																			)}
 
 																			{/* Execution Info for completed actions */}
 																			{isExecuted && action.executed_at && (
-																				<div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl shadow-sm shadow-emerald-500/20">
-																					<Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-																					<div>
-																						<span className="text-emerald-700 dark:text-emerald-300 text-sm font-medium block">Ejecutada</span>
-																						<span className="text-emerald-600/70 dark:text-emerald-400/70 text-xs">
-																							{formatScheduledDate(action.executed_at)}
-																						</span>
-																					</div>
+																				<div className="flex items-center gap-2 mt-3 p-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-md text-sm">
+																					<Check className="w-4 h-4 text-emerald-600" />
+																					<span className="text-emerald-700 dark:text-emerald-300">
+																						Ejecutada: {formatScheduledDate(action.executed_at)}
+																					</span>
 																				</div>
 																			)}
 
 																			{/* Edit Form for non-executed actions */}
 																			{isEditing && !isExecuted && (
-																				<div className="space-y-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl">
-																					<div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 text-sm font-medium mb-2">
-																						<Pencil className="w-4 h-4" />
+																				<div className="space-y-3 mt-3 p-3 bg-muted/30 border rounded-md">
+																					<div className="flex items-center gap-2 text-sm font-medium">
+																						<Pencil className="w-4 h-4 text-muted-foreground" />
 																						<span>Editando acción</span>
 																					</div>
 																					<div className="space-y-2">
@@ -972,11 +855,12 @@ export function ObraFlujoTab({
 																			)}
 
 																			{/* Footer Actions */}
-																			<div className="mt-6 flex gap-3 pt-4 border-t border-border/40">
+																			<div className="mt-4 flex gap-2 pt-3 border-t">
 																				{!isExecuted && !isEditing && (
 																					<Button
 																						type="button"
 																						variant="outline"
+																						size="sm"
 																						onClick={(e) => {
 																							e.stopPropagation();
 																							setEditingActionId(action.id);
@@ -987,7 +871,7 @@ export function ObraFlujoTab({
 																							setEditingOffsetUnit(action.offset_unit || "days");
 																							setEditingScheduledDate(action.scheduled_date || "");
 																						}}
-																						className="flex-1 h-11 hover:bg-muted transition-colors"
+																						className="flex-1"
 																					>
 																						<Pencil className="h-4 w-4 mr-2" />
 																						Editar
@@ -997,11 +881,12 @@ export function ObraFlujoTab({
 																					<Button
 																						type="button"
 																						variant="outline"
+																						size="sm"
 																						onClick={(e) => {
 																							e.stopPropagation();
 																							toggleFlujoAction(action.id, !action.enabled);
 																						}}
-																						className="flex-1 h-11 hover:bg-muted transition-colors"
+																						className="flex-1"
 																					>
 																						{action.enabled ? "Desactivar" : "Activar"}
 																					</Button>
@@ -1009,14 +894,14 @@ export function ObraFlujoTab({
 																				<Button
 																					type="button"
 																					variant="ghost"
+																					size="sm"
 																					onClick={(e) => {
 																						e.stopPropagation();
 																						deleteFlujoAction(action.id);
 																					}}
-																					className={`${isExecuted ? "flex-1" : ""} h-11 text-destructive hover:text-destructive hover:bg-destructive/15 transition-colors`}
+																					className="text-destructive hover:text-destructive hover:bg-destructive/10"
 																				>
-																					<Trash2 className="h-4 w-4 mr-2" />
-																					Eliminar
+																					<Trash2 className="h-4 w-4" />
 																				</Button>
 																			</div>
 																		</AccordionContent>

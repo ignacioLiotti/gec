@@ -408,16 +408,27 @@ export function OcrTemplateConfigurator({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-				<DialogHeader>
+			<DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col px-4">
+				<DialogHeader className="px-0">
 					<DialogTitle className="flex items-center gap-2">
 						<FileText className="h-5 w-5 text-purple-500" />
-						Configurar Plantilla OCR
+						Configurar Plantilla de Extracción
 					</DialogTitle>
 					<DialogDescription>
 						Subí un documento de ejemplo y marcá las regiones a extraer
 					</DialogDescription>
 				</DialogHeader>
+
+				{/* Explanation */}
+				<div className="rounded-md bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 p-3 my-4">
+					<p className="text-sm text-purple-800 dark:text-purple-200">
+						<strong>¿Qué es una plantilla de extracción?</strong> Es una configuración que le indica al sistema qué información extraer de un documento.
+						Por ejemplo, de una factura podés extraer: fecha, proveedor, monto total, y los ítems con sus precios.
+					</p>
+					<p className="text-xs text-purple-600 dark:text-purple-300 mt-2">
+						Primero creás la plantilla, luego la asignás a una carpeta con extracción. Cuando subas documentos a esa carpeta, el sistema los lee y crea las tablas automáticamente.
+					</p>
+				</div>
 
 				<div className="flex-1 grid lg:grid-cols-[1fr_320px] gap-4 overflow-hidden">
 					{/* Canvas Area */}
@@ -637,11 +648,10 @@ function RegionItem({
 			animate={{ opacity: 1, x: 0 }}
 			exit={{ opacity: 0, x: 10 }}
 			onClick={onSelect}
-			className={`p-3 rounded-lg border cursor-pointer transition-all ${
-				isSelected
-					? "bg-accent ring-2 ring-primary/30"
-					: "bg-card hover:bg-accent/50"
-			}`}
+			className={`p-3 rounded-lg border cursor-pointer transition-all ${isSelected
+				? "bg-accent ring-2 ring-primary/30"
+				: "bg-card hover:bg-accent/50"
+				}`}
 			style={{ borderLeftColor: region.color, borderLeftWidth: 4 }}
 		>
 			<div className="flex items-center gap-2">
@@ -660,11 +670,10 @@ function RegionItem({
 							e.stopPropagation();
 							onTypeChange("single");
 						}}
-						className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
-							region.type === "single"
-								? "bg-primary text-primary-foreground"
-								: "bg-muted hover:bg-muted/80"
-						}`}
+						className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${region.type === "single"
+							? "bg-primary text-primary-foreground"
+							: "bg-muted hover:bg-muted/80"
+							}`}
 						title="Valor único"
 					>
 						<Type className="h-3 w-3" />
@@ -675,11 +684,10 @@ function RegionItem({
 							onTypeChange("table");
 							setShowColumns(true);
 						}}
-						className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
-							region.type === "table"
-								? "bg-primary text-primary-foreground"
-								: "bg-muted hover:bg-muted/80"
-						}`}
+						className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${region.type === "table"
+							? "bg-primary text-primary-foreground"
+							: "bg-muted hover:bg-muted/80"
+							}`}
 						title="Tabla (múltiples filas)"
 					>
 						<Table2 className="h-3 w-3" />
