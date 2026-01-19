@@ -53,6 +53,8 @@ import { useSelectionStore } from './hooks/useSelectionStore';
 import { OcrTemplateConfigurator } from '@/app/admin/obra-defaults/_components/OcrTemplateConfigurator';
 import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType, TABLA_DATA_TYPES, type TablaColumnDataType } from '@/lib/tablas';
 import { cn } from '@/lib/utils';
+import { formatReadableBytes } from '@/lib/tenant-expenses';
+import type { UsageDelta } from '@/lib/tenant-usage';
 import type {
   FileSystemItem,
   FileManagerSelectionChange,
@@ -148,6 +150,27 @@ type FileManagerProps = {
   onSelectionChange?: (selection: FileManagerSelectionChange) => void;
 };
 
+type TenantPlanLimits = {
+  storageBytes: number | null;
+  aiTokens: number | null;
+  whatsappMessages: number | null;
+};
+
+type TenantUsageInfo = {
+  plan: {
+    key: string;
+    name: string;
+    limits: TenantPlanLimits;
+  };
+  usage: {
+    storageBytes: number;
+    aiTokens: number;
+    whatsappMessages: number;
+    periodStart: string;
+    periodEnd: string;
+  };
+};
+
 export function FileManager({
   obraId,
   materialOrders = [],
@@ -157,6 +180,8 @@ export function FileManager({
   onSelectionChange,
 }: FileManagerProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [usageInfo, setUsageInfo] = useState<TenantUsageInfo | null>(null);
+  const usageInfoRef = useRef<TenantUsageInfo | null>(null);
   const FileThumbnail = ({ item }: { item: FileSystemItem }) => {
     const storagePath = item.storagePath;
     // Check blob cache first, then signed URL cache
@@ -229,6 +254,134 @@ export function FileManager({
 
     return <>{getFileIcon(item.mimetype)}</>;
   };
+  const mapUsagePayload = useCallback((payload: any): TenantUsageInfo | null => {
+    if (!payload?.plan || !payload?.usage) {
+      return null;
+    }
+    const limits = payload.plan.limits ?? {};
+    const usage = payload.usage ?? {};
+    return {
+      plan: {
+        key: payload.plan.key ?? 'plan',
+        name: payload.plan.name ?? 'Plan',
+        limits: {
+          storageBytes:
+            typeof limits.storageBytes === 'number' ? limits.storageBytes : null,
+          aiTokens: typeof limits.aiTokens === 'number' ? limits.aiTokens : null,
+          whatsappMessages:
+            typeof limits.whatsappMessages === 'number'
+              ? limits.whatsappMessages
+              : null,
+        },
+      },
+      usage: {
+        storageBytes: Number(usage.storageBytes ?? 0),
+        aiTokens: Number(usage.aiTokens ?? 0),
+        whatsappMessages: Number(usage.whatsappMessages ?? 0),
+        periodStart: usage.periodStart ?? '',
+        periodEnd: usage.periodEnd ?? '',
+      },
+    };
+  }, []);
+
+  const fetchUsageInfo = useCallback(async () => {
+    try {
+      const response = await fetch('/api/tenant-usage', { cache: 'no-store' });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      const mapped = mapUsagePayload(payload);
+      if (mapped) {
+        setUsageInfo(mapped);
+        usageInfoRef.current = mapped;
+      }
+      return mapped;
+    } catch (error) {
+      console.error('[file-manager] Failed to load tenant usage', error);
+      return null;
+    }
+  }, [mapUsagePayload]);
+
+  const applyUsageDelta = useCallback(
+    async (
+      delta: UsageDelta,
+      options?: { reason?: string; metadata?: Record<string, unknown> }
+    ) => {
+      const storageDelta = Math.trunc(delta.storageBytes ?? 0);
+      const aiDelta = Math.trunc(delta.aiTokens ?? 0);
+      const whatsappDelta = Math.trunc(delta.whatsappMessages ?? 0);
+      if (storageDelta === 0 && aiDelta === 0 && whatsappDelta === 0) {
+        return;
+      }
+      try {
+        const response = await fetch('/api/tenant-usage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storageBytesDelta: storageDelta,
+            aiTokensDelta: aiDelta,
+            whatsappMessagesDelta: whatsappDelta,
+            reason: options?.reason,
+            metadata: options?.metadata,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const errorMessage =
+            typeof payload?.error === 'string'
+              ? payload.error
+              : 'No se pudo actualizar el uso del plan.';
+          toast.error(errorMessage);
+          return;
+        }
+        const mapped = mapUsagePayload(payload);
+        if (mapped) {
+          setUsageInfo(mapped);
+          usageInfoRef.current = mapped;
+        }
+      } catch (error) {
+        console.error('[file-manager] Failed to persist tenant usage', error);
+        toast.error('No se pudo registrar el uso de la organización.');
+      }
+    },
+    [mapUsagePayload]
+  );
+
+  const ensureStorageCapacity = useCallback(
+    async (bytesNeeded: number) => {
+      if (bytesNeeded <= 0) return true;
+      let snapshot = usageInfoRef.current;
+      if (!snapshot) {
+        snapshot = await fetchUsageInfo();
+      }
+      if (!snapshot) {
+        return true;
+      }
+      const limit = snapshot.plan.limits.storageBytes;
+      if (!limit || limit <= 0) {
+        return true;
+      }
+      const remaining = limit - snapshot.usage.storageBytes;
+      if (bytesNeeded <= remaining) {
+        return true;
+      }
+      toast.error(
+        `Superás tu límite de almacenamiento (${formatReadableBytes(
+          limit
+        )}). Eliminá archivos o actualizá tu plan.`
+      );
+      return false;
+    },
+    [fetchUsageInfo]
+  );
+
+  useEffect(() => {
+    usageInfoRef.current = usageInfo;
+  }, [usageInfo]);
+
+  useEffect(() => {
+    void fetchUsageInfo();
+  }, [fetchUsageInfo]);
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -295,6 +448,7 @@ export function FileManager({
   const [ocrFolderLinks, setOcrFolderLinks] = useState<OcrFolderLink[]>([]);
   const [isGlobalFileDragActive, setIsGlobalFileDragActive] = useState(false);
   const [isTemplateConfiguratorOpen, setIsTemplateConfiguratorOpen] = useState(false);
+  const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
 
   const ocrFolderMap = useMemo(() => {
     const map = new Map<string, OcrFolderLink>();
@@ -307,6 +461,29 @@ export function FileManager({
     ocrFolderLinks.forEach((link) => map.set(link.tablaId, link));
     return map;
   }, [ocrFolderLinks]);
+
+  const resolveOcrLinkForDocument = useCallback(
+    (doc: FileSystemItem | null) => {
+      if (!doc?.storagePath) return null;
+      if (doc.ocrFolderName) {
+        const normalized = normalizeFolderName(doc.ocrFolderName);
+        const direct = ocrFolderMap.get(doc.ocrFolderName);
+        if (direct) return direct;
+        const normalizedLink = ocrFolderMap.get(normalized);
+        if (normalizedLink) return normalizedLink;
+      }
+      const segments = doc.storagePath.split('/').filter(Boolean);
+      if (segments.length < 2) return null;
+      const folderSegment = segments[segments.length - 2];
+      const normalizedFolder = normalizeFolderName(folderSegment);
+      return (
+        ocrFolderMap.get(folderSegment) ||
+        ocrFolderMap.get(normalizedFolder) ||
+        null
+      );
+    },
+    [ocrFolderMap]
+  );
 
   // Table search state for OCR folders
   const [tableSearchQuery, setTableSearchQuery] = useState('');
@@ -957,24 +1134,24 @@ export function FileManager({
   }, [obraId]);
 
   // Track previous ocrFolderLinks length to detect real changes vs initial load
-  const prevOcrFolderLinksLengthRef = useRef<number | null>(null);
+  const prevOcrLinksFingerprintRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!obraId) return;
-    if (ocrFolderLinks.length === 0) return;
-
-    // Only rebuild if the length actually changed (not on initial load from cache)
-    if (prevOcrFolderLinksLengthRef.current === null) {
-      // First time seeing links, just record the length
-      prevOcrFolderLinksLengthRef.current = ocrFolderLinks.length;
+    if (ocrFolderLinks.length === 0) {
+      prevOcrLinksFingerprintRef.current = null;
       return;
     }
-
-    if (prevOcrFolderLinksLengthRef.current !== ocrFolderLinks.length) {
-      prevOcrFolderLinksLengthRef.current = ocrFolderLinks.length;
-      void buildFileTree({ skipCache: true });
+    const fingerprint = ocrFolderLinks
+      .map((link) => `${link.folderName ?? ""}:${link.tablaId ?? ""}:${link.columns?.length ?? 0}`)
+      .sort()
+      .join("|");
+    if (fingerprint === prevOcrLinksFingerprintRef.current) {
+      return;
     }
-  }, [obraId, ocrFolderLinks.length, buildFileTree]);
+    prevOcrLinksFingerprintRef.current = fingerprint;
+    void buildFileTree({ skipCache: true });
+  }, [obraId, ocrFolderLinks, buildFileTree]);
 
   useEffect(() => {
     if (!selectedFolder?.ocrEnabled) {
@@ -1516,6 +1693,9 @@ export function FileManager({
   const uploadFilesToFolder = useCallback(async (inputFiles: FileList | File[], targetFolder?: FileSystemItem | null) => {
     const filesArray = Array.isArray(inputFiles) ? inputFiles : Array.from(inputFiles);
     if (!filesArray.length) return;
+    const totalBytes = filesArray.reduce((sum, file) => sum + (file.size ?? 0), 0);
+    const hasSpace = await ensureStorageCapacity(totalBytes);
+    if (!hasSpace) return;
 
     const resolvedFolder =
       targetFolder ??
@@ -1544,6 +1724,8 @@ export function FileManager({
 
     setUploadingFiles(true);
     setCurrentUploadFolder(folderForUpload ?? fileTree ?? null);
+    let pendingUsageBytes = 0;
+    const uploadedFiles: { path: string; name: string }[] = [];
 
     try {
       for (const file of filesArray) {
@@ -1551,9 +1733,11 @@ export function FileManager({
 
         const { error } = await supabase.storage
           .from('obra-documents')
-          .upload(filePath, file);
+          .upload(filePath, file, { upsert: true });
 
         if (error) throw error;
+        pendingUsageBytes += file.size ?? 0;
+        uploadedFiles.push({ path: filePath, name: file.name });
 
         if (is3DModelFile(file.name)) {
           try {
@@ -1644,7 +1828,15 @@ export function FileManager({
               if (!importRes.ok) {
                 const out = await importRes.json().catch(() => ({} as any));
                 console.error('Tabla OCR import failed', out);
-                toast.error(`No se pudieron extraer datos para ${linkedTabla.tablaName}`);
+                const limitMessage =
+                  typeof out?.error === 'string'
+                    ? out.error
+                    : 'Superaste el límite de tokens de IA de tu plan.';
+                if (importRes.status === 402) {
+                  toast.warning(limitMessage);
+                } else {
+                  toast.error(`No se pudieron extraer datos para ${linkedTabla.tablaName}`);
+                }
                 continue;
               }
 
@@ -1665,6 +1857,17 @@ export function FileManager({
 
       toast.success(`${filesArray.length} file(s) uploaded successfully`);
 
+      if (pendingUsageBytes > 0) {
+        await applyUsageDelta(
+          { storageBytes: pendingUsageBytes },
+          {
+            reason: 'storage_upload',
+            metadata: { folderPath, files: uploadedFiles },
+          }
+        );
+        pendingUsageBytes = 0;
+      }
+
       if (importedTablaData) {
         await refreshOcrFolderLinks({ skipCache: true });
       }
@@ -1677,7 +1880,7 @@ export function FileManager({
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
     }
-  }, [buildFileTree, fileTree, getPathSegments, obraId, ocrTablaMap, onRefreshMaterials, refreshOcrFolderLinks, selectedFolder, supabase]);
+  }, [applyUsageDelta, buildFileTree, ensureStorageCapacity, fileTree, getPathSegments, obraId, ocrTablaMap, onRefreshMaterials, refreshOcrFolderLinks, selectedFolder, supabase]);
 
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
@@ -1786,8 +1989,12 @@ export function FileManager({
 
   const handleDelete = async (item: FileSystemItem) => {
     try {
+      const deletedPaths: string[] = [];
+      let bytesFreed = 0;
       if (item.type === 'file') {
         if (item.storagePath) {
+          bytesFreed = item.size ?? 0;
+          deletedPaths.push(item.storagePath);
           const { error } = await supabase.storage
             .from('obra-documents')
             .remove([item.storagePath]);
@@ -1805,7 +2012,12 @@ export function FileManager({
         if (listError) throw listError;
 
         if (files && files.length > 0) {
-          const filePaths = files.map(file => `${folderPath}/${file.name}`);
+          const filePaths = files.map(file => {
+            const fullPath = `${folderPath}/${file.name}`;
+            deletedPaths.push(fullPath);
+            bytesFreed += file.metadata?.size ?? 0;
+            return fullPath;
+          });
           const { error: deleteError } = await supabase.storage
             .from('obra-documents')
             .remove(filePaths);
@@ -1829,6 +2041,16 @@ export function FileManager({
       }
 
       buildFileTree({ skipCache: true });
+
+      if (bytesFreed > 0) {
+        await applyUsageDelta(
+          { storageBytes: -bytesFreed },
+          {
+            reason: 'storage_delete',
+            metadata: { paths: deletedPaths, itemId: item.id },
+          }
+        );
+      }
     } catch (error) {
       console.error('Error deleting:', error);
       toast.error('Error deleting item');
@@ -2039,12 +2261,19 @@ export function FileManager({
     );
   };
 
-  const documentBreadcrumb = useMemo(() => {
-    const doc = displayedDocumentRef.current ?? sheetDocument ?? selectedDocument;
-    if (!doc) return '';
-    const folderSegments = selectedFolder ? getPathSegments(selectedFolder) : [];
-    return [...folderSegments, doc.name].join(' / ');
-  }, [getPathSegments, selectedDocument, selectedFolder, sheetDocument]);
+  const activeDocument = sheetDocument ?? displayedDocumentRef.current ?? null;
+
+const canRetryActiveDocument = useMemo(
+  () => Boolean(resolveOcrLinkForDocument(activeDocument)),
+  [activeDocument, resolveOcrLinkForDocument]
+);
+
+const documentBreadcrumb = useMemo(() => {
+  const doc = activeDocument ?? selectedDocument;
+  if (!doc) return '';
+  const folderSegments = selectedFolder ? getPathSegments(selectedFolder) : [];
+  return [...folderSegments, doc.name].join(' / ');
+}, [activeDocument, getPathSegments, selectedDocument, selectedFolder]);
 
   const getFileIcon = (mimetype?: string) => {
     if (!mimetype) return <File className="w-8 h-8" />;
@@ -2269,6 +2498,61 @@ export function FileManager({
       onSave: canEditTabla ? handleSaveTablaRows : undefined,
     };
   }, [activeFolderLink, documentViewMode, documentsByStoragePath, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
+
+  const handleRetryDocumentOcr = useCallback(
+    async (doc: FileSystemItem | null) => {
+      if (!doc || !doc.storagePath) {
+        toast.error('Seleccioná un documento válido para reprocesar.');
+        return;
+      }
+      const link = resolveOcrLinkForDocument(doc);
+      if (!link) {
+        toast.error('Este documento no está vinculado a una tabla OCR.');
+        return;
+      }
+      try {
+        setRetryingDocumentId(doc.id);
+        const formData = new FormData();
+        formData.append('existingBucket', 'obra-documents');
+        formData.append('existingPath', doc.storagePath);
+        formData.append('existingFileName', doc.name);
+
+        const response = await fetch(
+          `/api/obras/${obraId}/tablas/${link.tablaId}/import/ocr?skipStorage=1`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        );
+        const payload = await response.json().catch(() => ({} as any));
+        if (!response.ok) {
+          const limitMessage =
+            typeof payload?.error === 'string'
+              ? payload.error
+              : 'Superaste el límite de tokens de IA de tu plan.';
+          if (response.status === 402) {
+            toast.warning(limitMessage);
+          } else {
+            toast.error(`No se pudo reprocesar ${link.tablaName}.`);
+          }
+          return;
+        }
+        toast.success(
+          payload?.inserted
+            ? `Se importaron ${payload.inserted} filas en ${link.tablaName}`
+            : `Documento reprocesado en ${link.tablaName}`
+        );
+        await refreshOcrFolderLinks({ skipCache: true });
+        await buildFileTree({ skipCache: true });
+      } catch (error) {
+        console.error('Error retrying OCR document', error);
+        toast.error('No se pudo reprocesar el documento.');
+      } finally {
+        setRetryingDocumentId(null);
+      }
+    },
+    [buildFileTree, obraId, refreshOcrFolderLinks, resolveOcrLinkForDocument]
+  );
 
   const ocrOrderItemsTableConfig = useMemo<FormTableConfig<OcrOrderItemRow, OcrOrderItemFilters>>(() => {
     return {
@@ -2684,12 +2968,14 @@ export function FileManager({
       </div>
 
       <DocumentSheet
-        isOpen={isDocumentSheetOpen && Boolean(sheetDocument ?? displayedDocumentRef.current)}
+        isOpen={isDocumentSheetOpen && Boolean(activeDocument)}
         onOpenChange={handleDocumentSheetOpenChange}
-        document={sheetDocument ?? displayedDocumentRef.current}
+        document={activeDocument}
         breadcrumb={documentBreadcrumb}
         previewUrl={previewUrl}
         onDownload={handleDownload}
+        onRetryOcr={canRetryActiveDocument ? handleRetryDocumentOcr : undefined}
+        retryingOcr={Boolean(activeDocument && retryingDocumentId === activeDocument.id)}
       />
 
       {/* Create Folder Dialog */}

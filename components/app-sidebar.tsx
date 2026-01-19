@@ -22,6 +22,8 @@ import {
 	Columns3Cog,
 	Columns3,
 	Layers,
+	Wallet,
+	Globe2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -139,6 +141,11 @@ const adminItems: NavItem[] = [
 		href: "/macro",
 		icon: Layers,
 	},
+	{
+		title: "Gastos API",
+		href: "/admin/expenses",
+		icon: Wallet,
+	},
 ];
 
 const ignacioItems: NavItem[] = [
@@ -151,6 +158,11 @@ const ignacioItems: NavItem[] = [
 		title: "Secretos API",
 		href: "/admin/tenant-secrets",
 		icon: KeyRound,
+	},
+	{
+		title: "Gastos Globales",
+		href: "/admin/expenses/all",
+		icon: Globe2,
 	},
 ];
 

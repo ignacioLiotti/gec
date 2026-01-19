@@ -9,6 +9,12 @@ import {
 	ensureTablaDataType,
 	MATERIALS_OCR_PROMPT,
 } from "@/lib/tablas";
+import {
+	fetchTenantPlan,
+	type SubscriptionPlanLimits,
+} from "@/lib/subscription-plans";
+import { incrementTenantUsage, logTenantUsageEvent } from "@/lib/tenant-usage";
+import { estimateUsdForTokens } from "@/lib/ai-pricing";
 
 type RouteContext = { params: Promise<{ id: string; tablaId: string }> };
 
@@ -22,6 +28,10 @@ type ColumnMeta = {
 };
 
 const DOCUMENTS_BUCKET = "obra-documents";
+const OCR_MODEL = process.env.OCR_MODEL ?? "gpt-4o-mini";
+const MIN_OCR_TOKEN_RESERVE = 1_500;
+const MAX_OCR_TOKEN_RESERVE = 8_000;
+const DEFAULT_OCR_TOKEN_RESERVE = 2_000;
 
 function zodTypeForColumn(column: ColumnMeta) {
 	switch (column.dataType) {
@@ -100,7 +110,7 @@ async function fetchTablaMeta(
 ) {
 	const { data, error } = await supabase
 		.from("obra_tablas")
-		.select("id, obra_id, name, source_type, settings")
+		.select("id, obra_id, name, source_type, settings, obras!inner(tenant_id)")
 		.eq("id", tablaId)
 		.eq("obra_id", obraId)
 		.maybeSingle();
@@ -150,6 +160,51 @@ function dataUrlToBuffer(imageDataUrl: string) {
 	return { buffer: Buffer.from(b64, "base64"), mime };
 }
 
+function estimateBase64Size(dataUrl: string | null): number {
+	if (!dataUrl) return 0;
+	const commaIndex = dataUrl.indexOf(",");
+	if (commaIndex === -1) return 0;
+	const base64 = dataUrl.slice(commaIndex + 1);
+	return Math.floor((base64.length * 3) / 4);
+}
+
+function estimateOcrTokenUsage(
+	file: File | null,
+	dataUrl: string | null
+): number {
+	const baseBytes =
+		typeof file?.size === "number" && file.size > 0
+			? file.size
+			: estimateBase64Size(dataUrl);
+	if (!baseBytes) {
+		return DEFAULT_OCR_TOKEN_RESERVE;
+	}
+	const approx = Math.round((baseBytes / 1024) * 40); // ~40 tokens per KB heuristic
+	return Math.min(
+		MAX_OCR_TOKEN_RESERVE,
+		Math.max(MIN_OCR_TOKEN_RESERVE, approx)
+	);
+}
+
+function extractTokenUsage(result: unknown): number {
+	const usage =
+		(result as any)?.response?.usage ??
+		(result as any)?.usage ??
+		(result as any)?.response?.body?.usage ??
+		null;
+	const candidate =
+		usage?.totalTokens ??
+		usage?.total_tokens ??
+		usage?.total ??
+		usage?.promptTokens ??
+		null;
+	const parsed =
+		typeof candidate === "string"
+			? Number.parseInt(candidate, 10)
+			: Number(candidate);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 async function uploadSourceToStorage({
 	supabase,
 	obraId,
@@ -177,7 +232,16 @@ async function uploadSourceToStorage({
 			.from(DOCUMENTS_BUCKET)
 			.upload(storagePath, buffer, { contentType, upsert: false });
 		if (error) throw error;
-		return { bucket: DOCUMENTS_BUCKET, path: storagePath, fileName };
+		const size =
+			typeof buffer.length === "number"
+				? buffer.length
+				: ((buffer as any).byteLength ?? 0);
+		return {
+			bucket: DOCUMENTS_BUCKET,
+			path: storagePath,
+			fileName,
+			uploadedBytes: size,
+		};
 	};
 
 	if (file) {
@@ -217,6 +281,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			{ status: 400 }
 		);
 	}
+	let resolvedTenantId: string | null = null;
+	let resolvedPlanLimits: SubscriptionPlanLimits | null = null;
+	let reservedTokens = 0;
+	let reservationApplied = false;
+	let tokensSettled = false;
 
 	// Track processing time
 	const startTime = Date.now();
@@ -224,6 +293,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		bucket: string;
 		path: string;
 		fileName: string;
+		uploadedBytes?: number;
 	} | null = null;
 
 	try {
@@ -236,6 +306,73 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			);
 		}
 
+		const tenantId =
+			(tablaMeta as unknown as { obras?: { tenant_id?: string | null } })?.obras
+				?.tenant_id ?? null;
+		if (!tenantId) {
+			return NextResponse.json(
+				{ error: "No encontramos la organización de esta obra" },
+				{ status: 400 }
+			);
+		}
+
+		const plan = await fetchTenantPlan(supabase, tenantId);
+		const planLimits = plan.limits;
+		resolvedTenantId = tenantId;
+		resolvedPlanLimits = planLimits;
+		const rollbackReservation = async (context: string) => {
+			if (!reservationApplied || reservedTokens <= 0) return;
+			try {
+				await incrementTenantUsage(
+					supabase,
+					tenantId,
+					{ aiTokens: -reservedTokens },
+					planLimits
+				);
+				await logTenantUsageEvent(supabase, {
+					tenantId,
+					kind: "ai_tokens",
+					amount: -reservedTokens,
+					context,
+					metadata: {
+						obraId: id,
+						tablaId,
+						reservedTokens,
+					},
+				});
+			} catch (rollbackError) {
+				console.error(
+					"[tabla-rows:ocr-import] Failed to rollback token reservation",
+					rollbackError
+				);
+				try {
+					await logTenantUsageEvent(supabase, {
+						tenantId,
+						kind: "ai_tokens",
+						amount: 0,
+						context: `${context}_failed`,
+						metadata: {
+							obraId: id,
+							tablaId,
+							reservedTokens,
+							error:
+								rollbackError instanceof Error
+									? rollbackError.message
+									: String(rollbackError),
+						},
+					});
+				} catch (logError) {
+					console.error(
+						"[tabla-rows:ocr-import] Failed to log rollback failure",
+						logError
+					);
+				}
+				return;
+			} finally {
+				reservationApplied = false;
+				reservedTokens = 0;
+			}
+		};
 		if ((tablaMeta.source_type as string) !== "ocr") {
 			return NextResponse.json(
 				{ error: "Esta tabla no está configurada para importación OCR" },
@@ -338,9 +475,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					.download(storageInfo.path);
 
 				if (downloadError) {
-					console.error("[tabla-rows:ocr-import] Failed to download existing file:", downloadError);
+					console.error(
+						"[tabla-rows:ocr-import] Failed to download existing file:",
+						downloadError
+					);
 					return NextResponse.json(
-						{ error: `No se pudo descargar el archivo: ${downloadError.message}` },
+						{
+							error: `No se pudo descargar el archivo: ${downloadError.message}`,
+						},
 						{ status: 400 }
 					);
 				}
@@ -361,7 +503,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					fetchedImageDataUrl = `data:${mime};base64,${base64}`;
 				}
 			} catch (fetchError) {
-				console.error("[tabla-rows:ocr-import] Error fetching existing file:", fetchError);
+				console.error(
+					"[tabla-rows:ocr-import] Error fetching existing file:",
+					fetchError
+				);
 				return NextResponse.json(
 					{ error: "Error al obtener el archivo existente" },
 					{ status: 400 }
@@ -369,7 +514,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			}
 		}
 
-		const effectiveImageDataUrl = typeof imageDataUrl === "string" ? imageDataUrl : fetchedImageDataUrl;
+		const effectiveImageDataUrl =
+			typeof imageDataUrl === "string" ? imageDataUrl : fetchedImageDataUrl;
 
 		if (!file && !effectiveImageDataUrl) {
 			return NextResponse.json(
@@ -378,11 +524,61 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			);
 		}
 
+		const enforceAiLimit =
+			typeof planLimits.aiTokens === "number" && planLimits.aiTokens > 0;
+		const tokenReservationTarget = enforceAiLimit
+			? estimateOcrTokenUsage(
+					file,
+					typeof imageDataUrl === "string" ? imageDataUrl : fetchedImageDataUrl
+				)
+			: 0;
+
+		if (enforceAiLimit && tokenReservationTarget > 0) {
+			try {
+				await incrementTenantUsage(
+					supabase,
+					tenantId,
+					{ aiTokens: tokenReservationTarget },
+					planLimits
+				);
+				await logTenantUsageEvent(supabase, {
+					tenantId,
+					kind: "ai_tokens",
+					amount: tokenReservationTarget,
+					context: "ocr_reservation",
+					metadata: {
+						obraId: id,
+						tablaId,
+					},
+				});
+				reservedTokens = tokenReservationTarget;
+				reservationApplied = true;
+			} catch (reservationError) {
+				const err = reservationError as Error & { code?: string };
+				const status =
+					err.code === "ai_limit_exceeded"
+						? 402
+						: err.code === "insufficient_privilege"
+							? 403
+							: 400;
+				return NextResponse.json(
+					{
+						error:
+							err.message ||
+							"Tu plan no tiene tokens de IA disponibles para procesar documentos.",
+					},
+					{ status }
+				);
+			}
+		}
+
 		let extraction: Record<string, any> | null = null;
+		let extractionResponse: Awaited<ReturnType<typeof generateObject>> | null =
+			null;
 
 		if (effectiveImageDataUrl && effectiveImageDataUrl.startsWith("data:")) {
-			const res = await generateObject({
-				model: openai("gpt-4o-mini"),
+			extractionResponse = await generateObject({
+				model: openai(OCR_MODEL),
 				schema: extractionSchema,
 				messages: [
 					{
@@ -398,7 +594,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				],
 				temperature: 0.1,
 			});
-			extraction = res.object;
+			extraction = extractionResponse.object;
 		} else if (file) {
 			const arrayBuffer = await file.arrayBuffer();
 			const buffer = Buffer.from(arrayBuffer);
@@ -408,8 +604,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				const base64 = buffer.toString("base64");
 				const dataUrl = `data:${mime};base64,${base64}`;
 
-				const res = await generateObject({
-					model: openai("gpt-4o-mini"),
+				extractionResponse = await generateObject({
+					model: openai(OCR_MODEL),
 					schema: extractionSchema,
 					messages: [
 						{
@@ -425,7 +621,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					],
 					temperature: 0.1,
 				});
-				extraction = res.object;
+				extraction = extractionResponse.object;
 			} else if (file.type?.includes("pdf")) {
 				return NextResponse.json(
 					{ error: "Convierte el PDF a imagen antes de enviarlo" },
@@ -445,6 +641,73 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				{ status: 422 }
 			);
 		}
+
+		const inferredTokenUsage = extractionResponse
+			? extractTokenUsage(extractionResponse)
+			: 0;
+		const actualTokenUsage =
+			inferredTokenUsage > 0
+				? inferredTokenUsage
+				: reservationApplied
+					? reservedTokens
+					: DEFAULT_OCR_TOKEN_RESERVE;
+
+		if (actualTokenUsage > 0) {
+			try {
+				await incrementTenantUsage(
+					supabase,
+					tenantId,
+					{
+						aiTokens: reservationApplied
+							? actualTokenUsage - reservedTokens
+							: actualTokenUsage,
+					},
+					planLimits
+				);
+				reservedTokens = actualTokenUsage;
+				reservationApplied = true;
+				tokensSettled = true;
+			} catch (usageError) {
+				const err = usageError as Error & { code?: string };
+				const status =
+					err.code === "ai_limit_exceeded"
+						? 402
+						: err.code === "insufficient_privilege"
+							? 403
+							: 400;
+				await rollbackReservation("ocr_reservation_rollback");
+				return NextResponse.json(
+					{
+						error:
+							err.message ||
+							"Tu organización superó el límite de tokens de IA disponible.",
+					},
+					{ status }
+				);
+			}
+		} else if (reservationApplied) {
+			await rollbackReservation("ocr_reservation_rollback");
+			tokensSettled = true;
+		}
+
+		const costUsd =
+			actualTokenUsage > 0
+				? estimateUsdForTokens(OCR_MODEL, actualTokenUsage)
+				: null;
+		await logTenantUsageEvent(supabase, {
+			tenantId,
+			kind: "ai_tokens",
+			amount: actualTokenUsage > 0 ? actualTokenUsage : reservedTokens,
+			context: actualTokenUsage > 0 ? "ocr_import" : "ocr_reservation",
+			metadata: {
+				obraId: id,
+				tablaId,
+				storagePath: storageInfo?.path ?? null,
+				fileName: storageInfo?.fileName ?? null,
+				model: OCR_MODEL,
+				costUsd,
+			},
+		});
 
 		if (previewMode) {
 			const meta: Record<string, unknown> = {};
@@ -478,6 +741,56 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				});
 				if (storageInfo) {
 					storageInfoForError = storageInfo;
+					if (
+						typeof storageInfo.uploadedBytes === "number" &&
+						storageInfo.uploadedBytes > 0
+					) {
+						try {
+							await incrementTenantUsage(
+								supabase,
+								tenantId,
+								{ storageBytes: storageInfo.uploadedBytes },
+								planLimits
+							);
+							await logTenantUsageEvent(supabase, {
+								tenantId,
+								kind: "storage_bytes",
+								amount: storageInfo.uploadedBytes,
+								context: "ocr_source_upload",
+								metadata: {
+									obraId: id,
+									tablaId,
+									path: storageInfo.path,
+									fileName: storageInfo.fileName,
+								},
+							});
+						} catch (storageLimitError) {
+							await supabase.storage
+								.from(storageInfo.bucket)
+								.remove([storageInfo.path])
+								.catch((removeError) =>
+									console.error(
+										"[tabla-rows:ocr-import] No se pudo eliminar archivo tras error de cuota",
+										removeError
+									)
+								);
+							const err = storageLimitError as Error & { code?: string };
+							const status =
+								err.code === "storage_limit_exceeded"
+									? 402
+									: err.code === "insufficient_privilege"
+										? 403
+										: 400;
+							return NextResponse.json(
+								{
+									error:
+										err.message ||
+										"Superaste el límite de almacenamiento disponible.",
+								},
+								{ status }
+							);
+						}
+					}
 				}
 			} catch (storageError) {
 				console.error("[tabla-rows:ocr-import] upload failed", storageError);
@@ -562,6 +875,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		console.error("[tabla-rows:ocr-import]", error);
 		const message =
 			error instanceof Error ? error.message : "Error desconocido";
+
+		if (
+			reservationApplied &&
+			!tokensSettled &&
+			reservedTokens > 0 &&
+			resolvedTenantId &&
+			resolvedPlanLimits
+		) {
+			await rollbackReservation("ocr_reservation_rollback");
+		}
 
 		// Track failed processing if we have file info
 		if (typeof storageInfoForError !== "undefined" && storageInfoForError) {

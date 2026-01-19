@@ -177,3 +177,4 @@ export function prepareTableForPrint(tableElement: HTMLTableElement): string {
 
 
 
+

@@ -108,6 +108,14 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
+		path: "/admin/expenses",
+		allowedRoles: ["admin"],
+	},
+	{
+		path: "/admin/expenses/all",
+		allowedRoles: ["admin"],
+	},
+	{
 		path: "/admin/macro-tables",
 		allowedRoles: ["admin"],
 	},
