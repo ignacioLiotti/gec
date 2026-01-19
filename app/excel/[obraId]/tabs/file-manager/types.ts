@@ -3,6 +3,8 @@
 import type { TablaColumnDataType } from "@/lib/tablas";
 import type { FormTableRow } from "@/components/form-table/types";
 
+export type DataInputMethod = 'ocr' | 'manual' | 'both';
+
 export type FileSystemItem = {
 	id: string;
 	name: string;
@@ -10,6 +12,7 @@ export type FileSystemItem = {
 	icon?: string;
 	children?: FileSystemItem[];
 	ocrEnabled?: boolean;
+	dataInputMethod?: DataInputMethod;
 	ocrTablaId?: string;
 	ocrTablaName?: string;
 	ocrFolderName?: string;
@@ -79,6 +82,7 @@ export type OcrFolderLink = {
 	rows: TablaDataRow[];
 	orders: MaterialOrder[];
 	documents: OcrDocumentStatus[];
+	dataInputMethod?: DataInputMethod;
 };
 
 export type OcrTablaColumn = {

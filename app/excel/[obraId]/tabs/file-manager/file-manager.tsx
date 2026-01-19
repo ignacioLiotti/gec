@@ -64,6 +64,7 @@ import type {
   TablaDataRow,
   OcrDocumentTableRow,
   SelectionChangeOptions,
+  DataInputMethod,
 } from './types';
 import {
   getCachedFileTree,
@@ -267,7 +268,8 @@ export function FileManager({
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [createFolderParent, setCreateFolderParent] = useState<FileSystemItem | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
-  const [createFolderMode, setCreateFolderMode] = useState<'normal' | 'ocr' | null>(null);
+  const [createFolderMode, setCreateFolderMode] = useState<'normal' | 'data' | null>(null);
+  const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>('both');
   const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState<string>('');
   const [newFolderDescription, setNewFolderDescription] = useState('');
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
@@ -317,6 +319,7 @@ export function FileManager({
 
   const resetNewFolderForm = useCallback(() => {
     setNewFolderName('');
+    setNewFolderDataInputMethod('both');
     setNewFolderOcrTemplateId('');
     setNewFolderDescription('');
     setNewFolderHasNested(false);
