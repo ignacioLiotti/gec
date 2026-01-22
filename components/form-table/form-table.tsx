@@ -82,8 +82,7 @@ import { MemoizedTableRow } from "./table-body";
 export const useFormTable = useFormTableContext;
 
 export function FormTableToolbar() {
-	const { config, search, filters, columns, sorting, meta, actions } = useFormTable<FormTableRow, unknown>();
-	const allowAddRows = config.allowAddRows !== false;
+	const { search, filters, columns, sorting } = useFormTable<FormTableRow, unknown>();
 
 	const renderFiltersContent =
 		filters.renderContent ??
@@ -166,35 +165,6 @@ export function FormTableToolbar() {
 						Limpiar orden
 					</Button>
 				)}
-				{/* floating actions in the middle of the page */}
-				<div className="flex justify-center items-center gap-2 w-full max-w-full absolute -bottom-[700px] left-0 right-0 mx-auto  z-50">
-					<Button
-						type="button"
-						onClick={actions.save}
-						disabled={!meta.hasUnsavedChanges || meta.isSaving}
-						variant={meta.hasUnsavedChanges ? "outline" : "default"}
-						className="gap-2"
-					>
-						{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-						{meta.isSaving ? "Guardando..." : "Guardar cambios"}
-					</Button>
-					{meta.hasUnsavedChanges && (
-						<Button
-							type="button"
-							onClick={actions.discard}
-							disabled={!meta.hasUnsavedChanges || meta.isSaving}
-							variant="destructiveSecondary"
-							className="gap-2"
-						>
-							Descartar cambios
-						</Button>
-					)}
-					{allowAddRows && (
-						<Button type="button" onClick={actions.addRow}>
-							Agregar fila vacía
-						</Button>
-					)}
-				</div>
 			</div>
 		</div>
 	);
@@ -547,7 +517,7 @@ export function FormTableContent({ className }: { className?: string }) {
 }
 
 export function FormTablePagination() {
-	const { pagination, filters } = useFormTable<FormTableRow, unknown>();
+	const { config, pagination, filters, meta, actions } = useFormTable<FormTableRow, unknown>();
 	const {
 		page,
 		setPage,
@@ -564,6 +534,7 @@ export function FormTablePagination() {
 		isFetching,
 	} = pagination;
 	const pageSizeLocked = typeof lockedPageSize === "number";
+	const allowAddRows = config.allowAddRows !== false;
 
 	return (
 		<>
@@ -591,6 +562,34 @@ export function FormTablePagination() {
 							</SelectContent>
 						</Select>
 					)}
+				</div>
+				<div className="flex items-center gap-2">
+					{allowAddRows && (
+						<Button type="button" variant="outline" size="sm" onClick={actions.addRow}>
+							Agregar fila vacía
+						</Button>
+					)}
+					{meta.hasUnsavedChanges && (
+						<Button
+							type="button"
+							onClick={actions.discard}
+							disabled={!meta.hasUnsavedChanges || meta.isSaving}
+							variant="destructiveSecondary"
+							size="sm"
+						>
+							Descartar cambios
+						</Button>
+					)}
+					<Button
+						type="button"
+						onClick={actions.save}
+						disabled={!meta.hasUnsavedChanges || meta.isSaving}
+						size="sm"
+						className="gap-2"
+					>
+						{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+						{meta.isSaving ? "Guardando..." : "Guardar cambios"}
+					</Button>
 				</div>
 				<div className="flex items-center gap-2">
 					<Button
@@ -621,22 +620,25 @@ export function FormTablePagination() {
 				</div>
 			</div>
 
-			{totalRowCount > 0 && (
-				<div className="flex justify-between items-center text-sm text-muted-foreground">
-					<p>
-						Mostrando <span className="font-medium text-foreground">{visibleRowCount}</span> de{" "}
-						<span className="font-medium text-foreground">{totalRowCount}</span> filas
-					</p>
-					{filters.activeCount > 0 && (
-						<p className="text-xs">
-							Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+			<div className="flex flex-wrap items-center justify-between gap-3">
+				{totalRowCount > 0 && (
+					<div className="flex items-center text-sm text-muted-foreground gap-4">
+						<p>
+							Mostrando <span className="font-medium text-foreground">{visibleRowCount}</span> de{" "}
+							<span className="font-medium text-foreground">{totalRowCount}</span> filas
 						</p>
-					)}
-				</div>
-			)}
+						{filters.activeCount > 0 && (
+							<p className="text-xs">
+								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+							</p>
+						)}
+					</div>
+				)}
+			</div>
 		</>
 	);
 }
+
 import { computeCellDirty, computeRowDirty, hasUnsavedChanges as hasUnsavedChangesUtil } from "./dirty-tracking";
 import { readPersistedArray, writePersistedArray } from "./persistence";
 

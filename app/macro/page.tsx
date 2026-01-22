@@ -193,9 +193,9 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   return (
     <FormTable config={config}>
       <div className="space-y-1 px-2 py-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 relative">
           <FormTableToolbar />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ">
             <Button
               variant="ghost"
               size="sm"
@@ -302,20 +302,28 @@ export default function MacroTablesPage() {
 
   if (macroTables.length === 0) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center p-12 gap-4 text-center">
+        <Layers className="h-12 w-12 text-muted-foreground opacity-30" />
+        <div>
+          <h2 className="text-lg font-semibold">No hay macro tablas</h2>
+          <p className="text-muted-foreground">Creá una macro tabla para agregar datos de múltiples fuentes.</p>
+        </div>
+        <Button onClick={() => router.push("/admin/macro-tables/new")} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Nueva macro tabla
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 pt-2 gap-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Macro tablas</h1>
-          <p className="text-muted-foreground">
+          {/* <p className="text-muted-foreground">
             Seleccioná una macro tabla para visualizar y editar sus datos.
-          </p>
+          </p> */}
         </div>
         <Button onClick={() => router.push("/admin/macro-tables/new")} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -323,7 +331,7 @@ export default function MacroTablesPage() {
         </Button>
       </div>
 
-      <Tabs value={selectedId ?? macroTables[0].id} onValueChange={handleTabChange} className="">
+      <Tabs value={selectedId ?? macroTables[0].id} onValueChange={handleTabChange} className=" pt-2">
         <TabsList className="flex gap-4 items-start justify-start border-none p-0 bg-transparent max-w-fit p-2 h-full">
           {macroTables.map((macro) => (
             <TabsTrigger

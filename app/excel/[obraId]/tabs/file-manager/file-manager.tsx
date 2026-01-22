@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
@@ -49,6 +50,7 @@ import { EnhancedDocumentViewer } from '@/components/viewer/enhanced-document-vi
 import FolderFront from '@/components/ui/FolderFront';
 import { DocumentSheet } from './components/document-sheet';
 import { FileTreeSidebar } from './components/file-tree-sidebar';
+import { AddRowDialog } from './components/add-row-dialog';
 import { useSelectionStore } from './hooks/useSelectionStore';
 import { OcrTemplateConfigurator } from '@/app/admin/obra-defaults/_components/OcrTemplateConfigurator';
 import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType, TABLA_DATA_TYPES, type TablaColumnDataType } from '@/lib/tablas';
@@ -419,6 +421,7 @@ export function FileManager({
   const [loading, setLoading] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [isAddRowDialogOpen, setIsAddRowDialogOpen] = useState(false);
   const [createFolderParent, setCreateFolderParent] = useState<FileSystemItem | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [createFolderMode, setCreateFolderMode] = useState<'normal' | 'data' | null>(null);
@@ -566,6 +569,7 @@ export function FileManager({
         node.ocrTablaColumns = link.columns;
         node.ocrTablaRows = link.rows;
         node.extractedData = link.orders;
+        node.dataInputMethod = link.dataInputMethod;
       }
       node.children?.forEach(child => stack.push(child));
     }
@@ -742,7 +746,7 @@ export function FileManager({
   );
 
   useEffect(() => {
-    if (createFolderMode !== 'ocr') return;
+    if (createFolderMode !== 'data') return;
     if (newFolderHasNested) return;
     setNewFolderColumns((prev) =>
       prev.map((column) =>
@@ -830,6 +834,10 @@ export function FileManager({
         ocrTables.map(async (tabla) => {
           const tablaSettings = (tabla.settings as Record<string, unknown>) ?? {};
           const folderName = typeof tablaSettings.ocrFolder === 'string' ? tablaSettings.ocrFolder : '';
+          const rawDataInputMethod = tablaSettings.dataInputMethod;
+          const dataInputMethod = (rawDataInputMethod === 'ocr' || rawDataInputMethod === 'manual' || rawDataInputMethod === 'both')
+            ? rawDataInputMethod as DataInputMethod
+            : 'both';
           if (!folderName) return null;
           const tablaColumnsRaw = Array.isArray(tabla.columns) ? (tabla.columns as Array<any>) : [];
           const normalizedColumns: OcrTablaColumn[] = tablaColumnsRaw.map((column) => ({
@@ -868,6 +876,7 @@ export function FileManager({
               rows,
               orders: mapTablaRowsToOrders(rows, tabla.id as string),
               documents,
+              dataInputMethod,
             } as OcrFolderLink;
           } catch (rowsError) {
             console.error('Error fetching tabla rows', rowsError);
@@ -879,6 +888,7 @@ export function FileManager({
               rows: [],
               orders: [],
               documents,
+              dataInputMethod,
             } as OcrFolderLink;
           }
         })
@@ -1121,9 +1131,9 @@ export function FileManager({
 
     const bootstrap = async () => {
       try {
-        // Try to use cache first, only skip if no cached data exists
-        await refreshOcrFolderLinks({ skipCache: false });
-        await buildFileTree({ skipCache: false });
+        // Always fetch fresh data on initial load to ensure newly created folders are visible
+        await refreshOcrFolderLinks({ skipCache: true });
+        await buildFileTree({ skipCache: true });
       } catch (error) {
         console.error('Error initializing documents data', error);
       }
@@ -1157,10 +1167,13 @@ export function FileManager({
     if (!selectedFolder?.ocrEnabled) {
       setDocumentViewMode('cards');
       setOcrDataViewMode('cards');
+      setOcrViewMode('table');
       lastOcrFolderIdRef.current = null;
       return;
     }
     if (lastOcrFolderIdRef.current !== selectedFolder.id) {
+      // For data folders, show the table view by default (ocrViewMode: 'documents' enables the data table)
+      setOcrViewMode('documents');
       setDocumentViewMode('table');
       lastOcrFolderIdRef.current = selectedFolder.id;
     }
@@ -1579,23 +1592,24 @@ export function FileManager({
     }
   }, [buildFileTree, createFolderParent, newFolderName, obraId, resetNewFolderForm, resolveParentSegments, supabase]);
 
-  const createOcrFolder = useCallback(async () => {
+  const createDataFolder = useCallback(async () => {
     const rawFolderName = newFolderName.trim();
     if (!rawFolderName) {
-      toast.error('Ingresá un nombre de carpeta OCR válido');
+      toast.error('Ingresá un nombre de carpeta válido');
       return;
     }
     const normalizedFolder = normalizeFolderName(rawFolderName);
     if (!normalizedFolder) {
-      toast.error('Ingresá un nombre de carpeta OCR válido');
+      toast.error('Ingresá un nombre de carpeta válido');
       return;
     }
-    if (!newFolderOcrTemplateId) {
-      toast.error('Elegí o creá una plantilla OCR');
+    const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
+    if (needsOcrTemplate && !newFolderOcrTemplateId) {
+      toast.error('Elegí o creá una plantilla de extracción');
       return;
     }
     if (newFolderColumns.length === 0) {
-      toast.error('Añadí al menos una columna para la tabla OCR');
+      toast.error('Añadí al menos una columna para la tabla');
       return;
     }
     if (newFolderHasNested) {
@@ -1617,10 +1631,11 @@ export function FileManager({
       const payload = {
         name: normalizedFolder,
         description: newFolderDescription.trim() || undefined,
-        sourceType: 'ocr' as const,
+        sourceType: 'ocr' as const, // Keep 'ocr' for backward compatibility with API
+        dataInputMethod: newFolderDataInputMethod,
         ocrFolderName: normalizedFolder,
         hasNestedData: newFolderHasNested,
-        ocrTemplateId: newFolderOcrTemplateId,
+        ocrTemplateId: needsOcrTemplate ? newFolderOcrTemplateId : undefined,
         columns: newFolderColumns.map((column, index) => ({
           label: column.label.trim() || `Columna ${index + 1}`,
           fieldKey: normalizeFieldKey(column.fieldKey),
@@ -1638,7 +1653,7 @@ export function FileManager({
       });
 
       if (!res.ok) {
-        let errorMessage = 'No se pudo crear la carpeta OCR';
+        let errorMessage = 'No se pudo crear la carpeta de datos';
         try {
           const json = await res.json();
           errorMessage = json.error || errorMessage;
@@ -1658,19 +1673,20 @@ export function FileManager({
         console.error('No se pudo crear la carpeta en almacenamiento', keepError);
       }
 
-      toast.success('Carpeta OCR creada y vinculada');
+      toast.success('Carpeta de datos creada');
       setIsCreateFolderOpen(false);
       resetNewFolderForm();
       await refreshOcrFolderLinks({ skipCache: true });
       await buildFileTree({ skipCache: true });
     } catch (error) {
-      console.error('Error creating OCR folder:', error);
-      toast.error(error instanceof Error ? error.message : 'Error creando carpeta OCR');
+      console.error('Error creating data folder:', error);
+      toast.error(error instanceof Error ? error.message : 'Error creando carpeta de datos');
     }
   }, [
     buildFileTree,
     createFolderParent,
     newFolderColumns,
+    newFolderDataInputMethod,
     newFolderDescription,
     newFolderHasNested,
     newFolderName,
@@ -1683,12 +1699,12 @@ export function FileManager({
   ]);
 
   const handleCreateFolder = useCallback(async () => {
-    if (createFolderMode === 'ocr') {
-      await createOcrFolder();
+    if (createFolderMode === 'data') {
+      await createDataFolder();
     } else {
       await createNormalFolder();
     }
-  }, [createFolderMode, createNormalFolder, createOcrFolder]);
+  }, [createFolderMode, createNormalFolder, createDataFolder]);
 
   const uploadFilesToFolder = useCallback(async (inputFiles: FileList | File[], targetFolder?: FileSystemItem | null) => {
     const filesArray = Array.isArray(inputFiles) ? inputFiles : Array.from(inputFiles);
@@ -1915,9 +1931,11 @@ export function FileManager({
     setIsGlobalFileDragActive(false);
   }, [uploadFilesToFolder]);
 
+  const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
-    (createFolderMode === 'ocr' && (!newFolderOcrTemplateId || newFolderColumns.length === 0));
+    (createFolderMode === 'data' && newFolderColumns.length === 0) ||
+    (createFolderMode === 'data' && needsOcrTemplate && !newFolderOcrTemplateId);
 
   const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -1961,9 +1979,9 @@ export function FileManager({
     }
   }, [uploadFilesToFolder]);
 
-  const openCreateFolderDialog = useCallback((mode: 'normal' | 'ocr', parent?: FileSystemItem | null) => {
+  const openCreateFolderDialog = useCallback((mode: 'normal' | 'data', parent?: FileSystemItem | null) => {
     if (parent && parent.ocrEnabled) {
-      toast.error('No podés crear carpetas dentro de una carpeta OCR');
+      toast.error('No podés crear carpetas dentro de una carpeta de datos');
       return;
     }
     setCreateFolderMode(mode);
@@ -1971,7 +1989,8 @@ export function FileManager({
     setNewFolderName('');
     setNewFolderHasNested(false);
     setIsCreateFolderOpen(true);
-    if (mode === 'ocr') {
+    if (mode === 'data') {
+      setNewFolderDataInputMethod('both');
       setNewFolderDescription('');
       setNewFolderOcrTemplateId('');
       setNewFolderColumns([
@@ -2070,6 +2089,20 @@ export function FileManager({
     return <File className="w-4 h-4 text-stone-400" />;
   };
 
+  // Get folder icon color based on data input method
+  const getFolderIconColor = (dataInputMethod?: DataInputMethod) => {
+    switch (dataInputMethod) {
+      case 'manual':
+        return 'text-blue-600';
+      case 'ocr':
+        return 'text-amber-600';
+      case 'both':
+        return 'text-purple-600';
+      default:
+        return 'text-stone-500';
+    }
+  };
+
   // NEW: Styled tree item with amber accents for OCR folders
   const renderTreeItem = (item: FileSystemItem, level: number = 0, parentFolder?: FileSystemItem) => {
     // const isExpanded = expandedFolders.has(item.id);
@@ -2108,8 +2141,10 @@ export function FileManager({
             transition-all duration-150
             ${isFolderSelected && isFolder
               ? isOCR
-                ? 'bg-amber-100 text-amber-900'
-                : 'bg-blue-50 text-blue-900'
+                ? item.dataInputMethod === 'manual' ? 'bg-blue-100 text-blue-900'
+                  : item.dataInputMethod === 'both' ? 'bg-purple-100 text-purple-900'
+                  : 'bg-amber-100 text-amber-900'
+                : 'bg-stone-100 text-stone-900'
               : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
             }
             ${isDocumentSelected && !isFolder ? 'bg-amber-50 ring-2 ring-amber-400' : ''}
@@ -2118,25 +2153,33 @@ export function FileManager({
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
           {isFolder && hasChildren ? (
-            <button
+            <span
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleFolder(item.id);
               }}
-              className="p-0.5 hover:bg-stone-200 rounded transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  toggleFolder(item.id);
+                }
+              }}
+              className="p-0.5 hover:bg-stone-200 rounded transition-colors cursor-pointer"
             >
-              {/* {isExpanded ? (
+              {isExpanded ? (
                 <ChevronDown className="w-3 h-3 text-stone-400" />
               ) : (
                 <ChevronRight className="w-3 h-3 text-stone-400" />
-              )} */}
-            </button>
+              )}
+            </span>
           ) : (
             <span className="w-4" />
           )}
 
           {isOCR ? (
-            <Table2 className="w-4 h-4 shrink-0 text-amber-600" />
+            <Table2 className={`w-4 h-4 shrink-0 ${getFolderIconColor(item.dataInputMethod)}`} />
           ) : isFolder ? (
             <Folder className="w-4 h-4 shrink-0 text-stone-400 group-hover:text-stone-500" />
           ) : (
@@ -2146,8 +2189,12 @@ export function FileManager({
           <span className="flex-1 text-left truncate">{item.name}</span>
 
           {isOCR && (
-            <span className="ml-auto text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
-              OCR
+            <span className={`ml-auto text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-medium ${
+              item.dataInputMethod === 'manual' ? 'bg-blue-100 text-blue-700' :
+              item.dataInputMethod === 'both' ? 'bg-purple-100 text-purple-700' :
+              'bg-amber-100 text-amber-700'
+            }`}>
+              {item.dataInputMethod === 'manual' ? 'Manual' : item.dataInputMethod === 'both' ? 'Mixta' : 'OCR'}
             </span>
           )}
 
@@ -2263,17 +2310,17 @@ export function FileManager({
 
   const activeDocument = sheetDocument ?? displayedDocumentRef.current ?? null;
 
-const canRetryActiveDocument = useMemo(
-  () => Boolean(resolveOcrLinkForDocument(activeDocument)),
-  [activeDocument, resolveOcrLinkForDocument]
-);
+  const canRetryActiveDocument = useMemo(
+    () => Boolean(resolveOcrLinkForDocument(activeDocument)),
+    [activeDocument, resolveOcrLinkForDocument]
+  );
 
-const documentBreadcrumb = useMemo(() => {
-  const doc = activeDocument ?? selectedDocument;
-  if (!doc) return '';
-  const folderSegments = selectedFolder ? getPathSegments(selectedFolder) : [];
-  return [...folderSegments, doc.name].join(' / ');
-}, [activeDocument, getPathSegments, selectedDocument, selectedFolder]);
+  const documentBreadcrumb = useMemo(() => {
+    const doc = activeDocument ?? selectedDocument;
+    if (!doc) return '';
+    const folderSegments = selectedFolder ? getPathSegments(selectedFolder) : [];
+    return [...folderSegments, doc.name].join(' / ');
+  }, [activeDocument, getPathSegments, selectedDocument, selectedFolder]);
 
   const getFileIcon = (mimetype?: string) => {
     if (!mimetype) return <File className="w-8 h-8" />;
@@ -2342,6 +2389,23 @@ const documentBreadcrumb = useMemo(() => {
     const normalizedKey = normalizeFolderName(folderKey);
     return ocrFolderMap.get(folderKey) || ocrFolderMap.get(normalizedKey) || null;
   }, [ocrFolderMap, selectedFolder]);
+
+  const handleAddManualRow = useCallback(() => {
+    const tablaId = selectedFolder?.ocrTablaId;
+    if (!tablaId) {
+      toast.error('No se encontró la tabla asociada');
+      return;
+    }
+    if (!activeFolderLink?.columns || activeFolderLink.columns.length === 0) {
+      toast.error('La tabla no tiene columnas configuradas');
+      return;
+    }
+    setIsAddRowDialogOpen(true);
+  }, [activeFolderLink?.columns, selectedFolder?.ocrTablaId]);
+
+  const handleRowAdded = useCallback(async () => {
+    await refreshOcrFolderLinks({ skipCache: true });
+  }, [refreshOcrFolderLinks]);
 
   const folderOrders = useMemo<MaterialOrder[]>(() => {
     if (!selectedFolder?.ocrEnabled) return [];
@@ -2617,7 +2681,7 @@ const documentBreadcrumb = useMemo(() => {
       <div className="space-y-2 mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-lg border border-stone-200 bg-white">
           <div className="flex items-center gap-3">
-            <Folder className="w-5 h-5 text-amber-600" />
+            <Table2 className={`w-5 h-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
             <h2 className="text-base font-semibold text-stone-800">{selectedFolder.name}</h2>
             <span className="text-sm text-stone-500">
               {documentViewMode === 'table'
@@ -2650,7 +2714,8 @@ const documentBreadcrumb = useMemo(() => {
                 </Button>
               </>
             )}
-            {selectedFolder.ocrEnabled && hasTablaSchema && (
+            {/* Only show toggle button if folder supports file viewing (not manual-only) */}
+            {selectedFolder.ocrEnabled && hasTablaSchema && activeFolderLink?.dataInputMethod !== 'manual' && (
               <Button
                 type="button"
                 variant={documentViewMode === 'table' ? 'default' : 'outline'}
@@ -2702,17 +2767,84 @@ const documentBreadcrumb = useMemo(() => {
             {!hasTablaSchema ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
                 <Table2 className="w-10 h-10 mb-3 text-stone-300" />
-                <p>Esta carpeta OCR todavía no tiene columnas configuradas.</p>
+                <p>Esta carpeta de datos todavía no tiene columnas configuradas.</p>
                 <p>Configuralas desde la pestaña Tablas para ver los datos acá.</p>
               </div>
             ) : ocrTableRows.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
                 <Table2 className="w-10 h-10 mb-3 text-stone-300" />
-                <p>No hay filas extraídas para esta tabla.</p>
-                <p className="text-xs text-stone-400 mt-1">Subí o reprocesá documentos para ver resultados.</p>
+                {activeFolderLink?.dataInputMethod === 'manual' ? (
+                  <>
+                    <p>Esta tabla no tiene filas todavía.</p>
+                    <p className="text-xs text-stone-400 mt-1">Agregá filas manualmente usando el botón de abajo.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddManualRow}
+                      className="mt-4 gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Agregar fila
+                    </Button>
+                  </>
+                ) : activeFolderLink?.dataInputMethod === 'ocr' ? (
+                  <>
+                    <p>No hay filas extraídas para esta tabla.</p>
+                    <p className="text-xs text-stone-400 mt-1">Subí documentos para extraer datos automáticamente.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => document.getElementById('file-upload')?.click()}
+                      className="mt-4 gap-2"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Subir documentos
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p>Esta tabla no tiene filas todavía.</p>
+                    <p className="text-xs text-stone-400 mt-1">Agregá filas manualmente o subí documentos para extraer datos.</p>
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddManualRow}
+                        className="gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Agregar fila
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById('file-upload')?.click()}
+                        className="gap-2"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Subir documentos
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
-              <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} className="max-h-[50vh]" />
+              <div className="flex flex-col h-full">
+                {(activeFolderLink?.dataInputMethod === 'manual' || activeFolderLink?.dataInputMethod === 'both') && (
+                  <div className="flex justify-end relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddManualRow}
+                      className="gap-2 absolute top-14 right-0 "
+                    >
+                      <Plus className="w-4 h-4" />
+                      Agregar fila
+                    </Button>
+                  </div>
+                )}
+                <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} className="max-h-[50vh]" />
+              </div>
             )}
           </div>
         </div>
@@ -2768,7 +2900,7 @@ const documentBreadcrumb = useMemo(() => {
                   <div className="pt-15 flex flex-col items-center justify-center w-full">
                     {item.type === 'folder' ? (
                       item.ocrEnabled ? (
-                        <Table2 className="w-10 h-10 text-amber-600 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                        <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
                       ) : (
                         <Folder className="w-10 h-10 text-stone-500 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
                       )
@@ -2952,7 +3084,7 @@ const documentBreadcrumb = useMemo(() => {
           documentViewMode={documentViewMode}
           onDocumentViewModeChange={handleDocumentViewModeChange}
           showDocumentToggle={Boolean(selectedFolder?.ocrEnabled && ocrViewMode === 'documents')}
-          onCreateFolderClick={() => openCreateFolderDialog('normal', fileTree)}
+          onCreateFolderClick={(mode) => openCreateFolderDialog(mode, fileTree)}
           fileTree={fileTree}
           renderTreeItem={renderTreeItem}
           loading={loading}
@@ -2989,11 +3121,11 @@ const documentBreadcrumb = useMemo(() => {
         <DialogContent className="px-4 py-6 max-w-3xl">
           <DialogHeader className="space-y-1">
             <DialogTitle>
-              {createFolderMode === 'ocr' ? 'Nueva carpeta OCR' : 'Nueva carpeta'}
+              {createFolderMode === 'data' ? 'Nueva carpeta de datos' : 'Nueva carpeta'}
             </DialogTitle>
             <DialogDescription>
-              {createFolderMode === 'ocr'
-                ? 'Asociá esta carpeta a una tabla OCR y configurá su plantilla.'
+              {createFolderMode === 'data'
+                ? 'Asociá esta carpeta a una tabla de datos y elegí cómo cargar la información.'
                 : 'Creá una carpeta estándar para organizar tus documentos.'}
             </DialogDescription>
           </DialogHeader>
@@ -3020,9 +3152,9 @@ const documentBreadcrumb = useMemo(() => {
           ) : (
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="ocr-folder-name" className="text-sm font-medium">Nombre de la carpeta OCR</Label>
+                <Label htmlFor="data-folder-name" className="text-sm font-medium">Nombre de la carpeta</Label>
                 <Input
-                  id="ocr-folder-name"
+                  id="data-folder-name"
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   placeholder="Ej. Ordenes de compra"
@@ -3031,59 +3163,188 @@ const documentBreadcrumb = useMemo(() => {
                   Ruta: Documentos/{createFolderParentPath ? `${createFolderParentPath}/` : ''}{normalizeFolderName(newFolderName) || 'mi-carpeta'}
                 </p>
               </div>
-              <div className="rounded-lg border border-purple-200 bg-purple-50/60 p-4 space-y-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div>
-                    <p className="text-sm font-semibold text-purple-900">Plantilla OCR</p>
-                    <p className="text-xs text-purple-700">
-                      Subí un documento para crearla o seleccioná una existente.
-                    </p>
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Método de carga de datos</Label>
+                <RadioGroup
+                  value={newFolderDataInputMethod}
+                  onValueChange={(value) => setNewFolderDataInputMethod(value as DataInputMethod)}
+                  className="grid grid-cols-3 gap-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="ocr" id="method-ocr" />
+                    <Label htmlFor="method-ocr" className="text-sm font-normal cursor-pointer">Solo OCR</Label>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsTemplateConfiguratorOpen(true)}
-                    className="gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Nueva plantilla
-                  </Button>
-                </div>
-                {isLoadingOcrTemplates ? (
-                  <div className="text-xs text-muted-foreground border border-dashed rounded-md px-3 py-2">
-                    Cargando plantillas...
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="manual" id="method-manual" />
+                    <Label htmlFor="method-manual" className="text-sm font-normal cursor-pointer">Solo manual</Label>
                   </div>
-                ) : ocrTemplates.length === 0 ? (
-                  <div className="text-xs text-purple-700 bg-white border border-purple-200 rounded-md px-3 py-2">
-                    No hay plantillas disponibles. Creá una a partir de un documento para continuar.
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="both" id="method-both" />
+                    <Label htmlFor="method-both" className="text-sm font-normal cursor-pointer">Ambos</Label>
                   </div>
-                ) : (
-                  <Select
-                    value={newFolderOcrTemplateId || undefined}
-                    onValueChange={(value) => handleNewFolderTemplateSelect(value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccioná una plantilla" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ocrTemplates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                </RadioGroup>
+                <p className="text-xs text-muted-foreground">
+                  {newFolderDataInputMethod === 'ocr' && 'Los datos se extraerán automáticamente de documentos subidos.'}
+                  {newFolderDataInputMethod === 'manual' && 'Los datos se ingresarán manualmente en la tabla.'}
+                  {newFolderDataInputMethod === 'both' && 'Podés cargar datos manualmente o extraerlos de documentos.'}
+                </p>
               </div>
+              {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                <div className="rounded-lg border border-purple-200 bg-purple-50/60 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold text-purple-900">Plantilla de extracción</p>
+                      <p className="text-xs text-purple-700">
+                        Subí un documento para crearla o seleccioná una existente.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsTemplateConfiguratorOpen(true)}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Nueva plantilla
+                    </Button>
+                  </div>
+                  {isLoadingOcrTemplates ? (
+                    <div className="text-xs text-muted-foreground border border-dashed rounded-md px-3 py-2">
+                      Cargando plantillas...
+                    </div>
+                  ) : ocrTemplates.length === 0 ? (
+                    <div className="text-xs text-purple-700 bg-white border border-purple-200 rounded-md px-3 py-2">
+                      No hay plantillas disponibles. Creá una a partir de un documento para continuar.
+                    </div>
+                  ) : (
+                    <Select
+                      value={newFolderOcrTemplateId || undefined}
+                      onValueChange={(value) => handleNewFolderTemplateSelect(value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccioná una plantilla" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ocrTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+              {newFolderDataInputMethod === 'manual' && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900">Columnas de la tabla</p>
+                      <p className="text-xs text-amber-700">
+                        Definí las columnas que tendrá la tabla de datos.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setNewFolderColumns(prev => [...prev, {
+                          id: crypto.randomUUID(),
+                          label: `Columna ${prev.length + 1}`,
+                          fieldKey: normalizeFieldKey(`columna_${prev.length + 1}`),
+                          dataType: 'text' as TablaColumnDataType,
+                          required: false,
+                        }]);
+                      }}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Agregar columna
+                    </Button>
+                  </div>
+                  {newFolderColumns.length === 0 ? (
+                    <div className="text-xs text-amber-700 bg-white border border-amber-200 rounded-md px-3 py-2">
+                      No hay columnas definidas. Agregá al menos una columna.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      {newFolderColumns.map((column, index) => (
+                        <div key={column.id} className="flex items-center gap-2 p-2 bg-white rounded border border-amber-100">
+                          <div className="flex-1 grid grid-cols-3 gap-2">
+                            <Input
+                              value={column.label}
+                              onChange={(e) => {
+                                const newLabel = e.target.value;
+                                setNewFolderColumns(prev => prev.map(c =>
+                                  c.id === column.id
+                                    ? { ...c, label: newLabel, fieldKey: normalizeFieldKey(newLabel) }
+                                    : c
+                                ));
+                              }}
+                              placeholder="Nombre"
+                              className="h-8 text-sm"
+                            />
+                            <Select
+                              value={column.dataType}
+                              onValueChange={(value) => {
+                                setNewFolderColumns(prev => prev.map(c =>
+                                  c.id === column.id ? { ...c, dataType: value as TablaColumnDataType } : c
+                                ));
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Texto</SelectItem>
+                                <SelectItem value="number">Número</SelectItem>
+                                <SelectItem value="currency">Moneda</SelectItem>
+                                <SelectItem value="date">Fecha</SelectItem>
+                                <SelectItem value="boolean">Sí/No</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <div className="flex items-center gap-2">
+                              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={column.required}
+                                  onChange={(e) => {
+                                    setNewFolderColumns(prev => prev.map(c =>
+                                      c.id === column.id ? { ...c, required: e.target.checked } : c
+                                    ));
+                                  }}
+                                  className="rounded border-stone-300"
+                                />
+                                Requerido
+                              </label>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setNewFolderColumns(prev => prev.filter(c => c.id !== column.id));
+                            }}
+                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="space-y-1 text-xs text-muted-foreground border border-dashed rounded-md px-3 py-2">
                 <p>
-                  La tabla OCR se creará con el mismo nombre de la carpeta:{" "}
+                  La tabla de datos se creará con el mismo nombre de la carpeta:{" "}
                   <span className="font-semibold text-stone-700">
                     {normalizeFolderName(newFolderName) || 'mi-carpeta'}
                   </span>
                 </p>
-                <p>Podés ajustar el nombre editando el campo “Nombre de la carpeta OCR”.</p>
               </div>
               <div className="space-y-2">
                 <Label>Descripción</Label>
@@ -3108,7 +3369,7 @@ const documentBreadcrumb = useMemo(() => {
                 Cancelar
               </Button>
               <Button onClick={handleCreateFolder} disabled={isCreateFolderDisabled}>
-                {createFolderMode === 'ocr' ? 'Crear carpeta OCR' : 'Crear carpeta'}
+                {createFolderMode === 'data' ? 'Crear carpeta de datos' : 'Crear carpeta'}
               </Button>
             </DialogFooter>
           )}
@@ -3120,6 +3381,17 @@ const documentBreadcrumb = useMemo(() => {
         onOpenChange={setIsTemplateConfiguratorOpen}
         onTemplateCreated={handleTemplateConfiguratorCreated}
       />
+
+      {selectedFolder?.ocrTablaId && activeFolderLink?.columns && (
+        <AddRowDialog
+          open={isAddRowDialogOpen}
+          onOpenChange={setIsAddRowDialogOpen}
+          columns={activeFolderLink.columns}
+          tablaId={selectedFolder.ocrTablaId}
+          obraId={obraId}
+          onRowAdded={handleRowAdded}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
@@ -3190,12 +3462,12 @@ const documentBreadcrumb = useMemo(() => {
                   <button
                     className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-stone-700"
                     onClick={() => {
-                      openCreateFolderDialog('ocr', parentFolder);
+                      openCreateFolderDialog('data', parentFolder);
                       setContextMenu(null);
                     }}
                   >
                     <Table2 className="w-4 h-4" />
-                    Crear carpeta OCR
+                    Crear carpeta de datos
                   </button>
                   <div className="my-1 h-px bg-stone-100" />
                 </>
@@ -3209,7 +3481,7 @@ const documentBreadcrumb = useMemo(() => {
                   }}
                 >
                   <Table2 className="w-4 h-4" />
-                  Ver tabla OCR
+                  Ver tabla de datos
                 </button>
               )}
               {contextMenu.item.id !== 'root' && (

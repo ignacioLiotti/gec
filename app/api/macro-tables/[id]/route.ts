@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
+import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 import {
   mapMacroTableToResponse,
   mapColumnToResponse,
@@ -20,13 +22,36 @@ async function getAuthContext() {
     return { supabase, user: null, tenantId: null };
   }
 
-  const { data: membership } = await supabase
-    .from("memberships")
-    .select("tenant_id")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  // Check for preferred tenant from cookie
+  const cookieStore = await cookies();
+  const preferredTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value;
+
+  let membership = null;
+
+  if (preferredTenantId) {
+    const preferredResult = await supabase
+      .from("memberships")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .eq("tenant_id", preferredTenantId)
+      .limit(1)
+      .maybeSingle();
+
+    membership = preferredResult.data ?? null;
+  }
+
+  // Fallback to oldest membership if no preferred tenant
+  if (!membership) {
+    const fallbackResult = await supabase
+      .from("memberships")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    membership = fallbackResult.data ?? null;
+  }
 
   const tenantId = membership?.tenant_id ?? null;
   return { supabase, user, tenantId };
@@ -312,6 +337,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 
 
 

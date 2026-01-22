@@ -147,6 +147,7 @@ export default function EditMacroTablePage() {
   const [sidebarRoles, setSidebarRoles] = useState<RoleOption[]>([]);
   const [selectedSidebarRoleIds, setSelectedSidebarRoleIds] = useState<Set<string>>(new Set());
   const [isSavingSidebar, setIsSavingSidebar] = useState(false);
+  const [tenantName, setTenantName] = useState<string | null>(null);
 
   const columnIds = columns.map((col) => col.id);
   const { getColumnWidth, startResize } = useColumnResize(columnIds);
@@ -193,6 +194,7 @@ export default function EditMacroTablePage() {
       const data = await res.json();
       console.log("Sidebar config loaded:", data);
       setSidebarRoles(data.roles ?? []);
+      setTenantName(typeof data.tenantName === "string" ? data.tenantName : null);
       const assignedRoleIds = new Set<string>(
         (data.assignments ?? []).map((a: { role_id: string }) => a.role_id)
       );
@@ -689,7 +691,7 @@ export default function EditMacroTablePage() {
               <CardContent className="space-y-4">
                 {sidebarRoles.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">
-                    No hay roles configurados en esta organización.
+                    {`No hay roles configurados para la organización ${tenantName ?? "actual"}.`}
                   </div>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

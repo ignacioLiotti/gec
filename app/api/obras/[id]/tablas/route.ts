@@ -190,6 +190,11 @@ export async function POST(request: Request, context: RouteContext) {
 		}
 
 		if (needsOcrFolder) {
+			const rawDataInputMethod =
+				typeof body.dataInputMethod === "string" ? body.dataInputMethod : "both";
+			const dataInputMethod = ["ocr", "manual", "both"].includes(rawDataInputMethod)
+				? rawDataInputMethod
+				: "both";
 			settings = {
 				...settings,
 				ocrFolder: normalizedOcrFolderName,
@@ -198,6 +203,7 @@ export async function POST(request: Request, context: RouteContext) {
 				ocrDocType: rawOcrDocType || null,
 				ocrInstructions: rawOcrInstructions || null,
 				ocrTemplateId: rawOcrTemplateId,
+				dataInputMethod,
 			};
 		}
 

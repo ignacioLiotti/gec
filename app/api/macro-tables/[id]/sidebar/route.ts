@@ -8,22 +8,7 @@ async function getAuthContext() {
 	} = await supabase.auth.getUser();
 
 	if (!user) {
-		return { supabase, user: null, tenantId: null, isAdmin: false };
-	}
-
-	// Get tenant from memberships (same pattern as other macro-tables routes)
-	const { data: membership } = await supabase
-		.from("memberships")
-		.select("tenant_id, role")
-		.eq("user_id", user.id)
-		.order("created_at", { ascending: true })
-		.limit(1)
-		.maybeSingle();
-
-	const tenantId = membership?.tenant_id ?? null;
-
-	if (!tenantId) {
-		return { supabase, user, tenantId: null, isAdmin: false };
+		return { supabase, user: null, isSuperAdmin: false };
 	}
 
 	// Check if superadmin
@@ -33,12 +18,11 @@ async function getAuthContext() {
 		.eq("user_id", user.id)
 		.maybeSingle();
 
-	const isAdmin =
-		membership?.role === "admin" ||
-		membership?.role === "owner" ||
-		profile?.is_superadmin === true;
-
-	return { supabase, user, tenantId, isAdmin };
+	return {
+		supabase,
+		user,
+		isSuperAdmin: profile?.is_superadmin === true,
+	};
 }
 
 // GET - Get sidebar assignments for a macro table
@@ -46,13 +30,12 @@ export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
-	const { supabase, user, tenantId, isAdmin } = await getAuthContext();
+	const { supabase, user, isSuperAdmin } = await getAuthContext();
 	const { id: macroTableId } = await params;
 
 	console.log("[sidebar-macro-tables:get] Auth context:", {
 		hasUser: !!user,
-		tenantId,
-		isAdmin,
+		isSuperAdmin,
 		macroTableId,
 	});
 
@@ -60,27 +43,51 @@ export async function GET(
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	if (!tenantId) {
-		console.log("[sidebar-macro-tables:get] No tenant ID found");
-		return NextResponse.json({ error: "No tenant selected" }, { status: 400 });
-	}
-
-	if (!isAdmin) {
-		console.log("[sidebar-macro-tables:get] User is not admin");
-		return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-	}
-
 	try {
-		// Verify macro table belongs to tenant
-		const { data: macroTable, error: mtError } = await supabase
+		// Load macro table to determine tenant
+		const { data: macroTable, error: macroError } = await supabase
 			.from("macro_tables")
-			.select("id")
+			.select("id, tenant_id")
 			.eq("id", macroTableId)
+			.maybeSingle();
+
+		if (macroError || !macroTable) {
+			console.error("[sidebar-macro-tables:get] Macro table lookup failed", macroError);
+			return NextResponse.json({ error: "Macro table not found" }, { status: 404 });
+		}
+
+		const tenantId = macroTable.tenant_id;
+		const { data: tenant, error: tenantError } = await supabase
+			.from("tenants")
+			.select("name")
+			.eq("id", tenantId)
+			.maybeSingle();
+
+		const tenantName = tenant?.name ?? null;
+
+		if (tenantError) {
+			console.error("[sidebar-macro-tables:get] Tenant lookup failed", tenantError);
+		}
+
+		// Check admin permissions for this tenant
+		const { data: membership } = await supabase
+			.from("memberships")
+			.select("role")
+			.eq("user_id", user.id)
 			.eq("tenant_id", tenantId)
 			.maybeSingle();
 
-		if (mtError || !macroTable) {
-			return NextResponse.json({ error: "Macro table not found" }, { status: 404 });
+		const isAdmin =
+			isSuperAdmin ||
+			membership?.role === "owner" ||
+			membership?.role === "admin";
+
+		if (!isAdmin) {
+			console.log("[sidebar-macro-tables:get] User is not admin for tenant", {
+				userId: user.id,
+				tenantId,
+			});
+			return NextResponse.json({ error: "Admin access required" }, { status: 403 });
 		}
 
 		// Get sidebar assignments for this macro table
@@ -106,10 +113,11 @@ export async function GET(
 			throw rolesError;
 		}
 
-		return NextResponse.json({
-			assignments: assignments ?? [],
-			roles: roles ?? [],
-		});
+			return NextResponse.json({
+				assignments: assignments ?? [],
+				roles: roles ?? [],
+				tenantName,
+			});
 	} catch (error) {
 		console.error("[sidebar-macro-tables:get]", error);
 		return NextResponse.json(
@@ -124,31 +132,46 @@ export async function POST(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
-	const { supabase, user, tenantId, isAdmin } = await getAuthContext();
+	const { supabase, user, isSuperAdmin } = await getAuthContext();
 	const { id: macroTableId } = await params;
 
 	if (!user) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	if (!tenantId || !isAdmin) {
-		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-	}
-
 	try {
 		const body = await request.json();
 		const roleIds: string[] = Array.isArray(body.roleIds) ? body.roleIds : [];
 
-		// Verify macro table belongs to tenant
-		const { data: macroTable, error: mtError } = await supabase
+		// Load macro table to determine tenant
+		const { data: macroTable, error: macroError } = await supabase
 			.from("macro_tables")
-			.select("id")
+			.select("id, tenant_id")
 			.eq("id", macroTableId)
+			.maybeSingle();
+
+		if (macroError || !macroTable) {
+			console.error("[sidebar-macro-tables:post] Macro table lookup failed", macroError);
+			return NextResponse.json({ error: "Macro table not found" }, { status: 404 });
+		}
+
+		const tenantId = macroTable.tenant_id;
+
+		// Ensure user can administer this tenant
+		const { data: membership } = await supabase
+			.from("memberships")
+			.select("role")
+			.eq("user_id", user.id)
 			.eq("tenant_id", tenantId)
 			.maybeSingle();
 
-		if (mtError || !macroTable) {
-			return NextResponse.json({ error: "Macro table not found" }, { status: 404 });
+		const isAdmin =
+			isSuperAdmin ||
+			membership?.role === "owner" ||
+			membership?.role === "admin";
+
+		if (!isAdmin) {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
 
 		// Get current assignments

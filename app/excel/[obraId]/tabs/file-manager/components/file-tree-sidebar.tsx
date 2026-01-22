@@ -2,8 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { FolderPlus, Grid3x3, Loader2, Search, Table2 } from "lucide-react";
+import { ChevronDown, Folder, FolderPlus, Loader2, Search, Table2 } from "lucide-react";
 import type { FileSystemItem } from "../types";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -14,7 +20,7 @@ type FileTreeSidebarProps = {
 	documentViewMode: "cards" | "table";
 	onDocumentViewModeChange: (mode: "cards" | "table") => void;
 	showDocumentToggle: boolean;
-	onCreateFolderClick: () => void;
+	onCreateFolderClick: (mode: "normal" | "data") => void;
 	fileTree: FileSystemItem | null;
 	renderTreeItem: (root: FileSystemItem) => ReactNode;
 	loading: boolean;
@@ -59,10 +65,25 @@ export function FileTreeSidebar({
 					<h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
 						Carpetas
 					</h2>
-					<Button variant="outline" size="xs" onClick={onCreateFolderClick}>
-						<FolderPlus className="w-4 h-4 mr-2" />
-						Crear carpeta
-					</Button>
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="outline" size="xs">
+								<FolderPlus className="w-4 h-4 mr-1" />
+								Crear
+								<ChevronDown className="w-3 h-3 ml-1" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onClick={() => onCreateFolderClick("normal")}>
+								<Folder className="w-4 h-4 mr-2 text-stone-500" />
+								Carpeta normal
+							</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => onCreateFolderClick("data")}>
+								<Table2 className="w-4 h-4 mr-2 text-amber-600" />
+								Carpeta de datos
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
 				{!fileTree ? (
 					loading ? (
@@ -84,9 +105,19 @@ export function FileTreeSidebar({
 			</div>
 			<div className="p-4 border-t border-stone-100 mt-2">
 				<p className="text-xs text-stone-400 mb-2">Leyenda</p>
-				<div className="flex items-center gap-2 text-xs text-stone-500">
-					<Table2 className="w-3.5 h-3.5 text-amber-600" />
-					<span>Carpeta con datos extraídos (OCR)</span>
+				<div className="space-y-1.5">
+					<div className="flex items-center gap-2 text-xs text-stone-500">
+						<Table2 className="w-3.5 h-3.5 text-amber-600" />
+						<span>Extracción OCR</span>
+					</div>
+					<div className="flex items-center gap-2 text-xs text-stone-500">
+						<Table2 className="w-3.5 h-3.5 text-blue-600" />
+						<span>Entrada manual</span>
+					</div>
+					<div className="flex items-center gap-2 text-xs text-stone-500">
+						<Table2 className="w-3.5 h-3.5 text-purple-600" />
+						<span>Mixta (OCR + manual)</span>
+					</div>
 				</div>
 			</div>
 		</div>

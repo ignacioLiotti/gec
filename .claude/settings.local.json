@@ -9,7 +9,8 @@
       "Bash(nul)",
       "Bash(docker exec:*)",
       "Bash(xargs ls:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

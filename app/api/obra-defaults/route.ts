@@ -1,14 +1,19 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
+import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
+
+type DataInputMethod = 'ocr' | 'manual' | 'both';
 
 type DefaultFolder = {
 	id: string;
 	name: string;
 	path: string;
 	position: number;
-	// OCR folder fields
+	// Data folder fields
 	isOcr?: boolean;
+	dataInputMethod?: DataInputMethod;
 	ocrTemplateId?: string | null;
 	ocrTemplateName?: string | null;
 	hasNestedData?: boolean;
@@ -30,13 +35,36 @@ async function getAuthContext() {
 		return { supabase, user: null, tenantId: null };
 	}
 
-	const { data: membership } = await supabase
-		.from("memberships")
-		.select("tenant_id")
-		.eq("user_id", user.id)
-		.order("created_at", { ascending: true })
-		.limit(1)
-		.maybeSingle();
+	// Check for preferred tenant from cookie (same logic as obras API)
+	const cookieStore = await cookies();
+	const preferredTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value;
+
+	let membership = null;
+
+	if (preferredTenantId) {
+		const preferredResult = await supabase
+			.from("memberships")
+			.select("tenant_id")
+			.eq("user_id", user.id)
+			.eq("tenant_id", preferredTenantId)
+			.limit(1)
+			.maybeSingle();
+
+		membership = preferredResult.data ?? null;
+	}
+
+	// Fallback to oldest membership if no preferred tenant
+	if (!membership) {
+		const fallbackResult = await supabase
+			.from("memberships")
+			.select("tenant_id")
+			.eq("user_id", user.id)
+			.order("created_at", { ascending: true })
+			.limit(1)
+			.maybeSingle();
+
+		membership = fallbackResult.data ?? null;
+	}
 
 	return { supabase, user, tenantId: membership?.tenant_id ?? null };
 }
@@ -131,7 +159,7 @@ export async function GET() {
 			}
 		});
 
-		// Enrich folders with OCR info
+		// Enrich folders with data folder info
 		const enrichedFolders: DefaultFolder[] = (folders ?? []).map(folder => {
 			const linkedTabla = tablaByFolderPath.get(folder.path);
 			if (!linkedTabla) {
@@ -139,9 +167,16 @@ export async function GET() {
 			}
 
 			const settings = (linkedTabla.settings as Record<string, unknown>) ?? {};
+			const rawDataInputMethod = settings.dataInputMethod;
+			const dataInputMethod: DataInputMethod =
+				rawDataInputMethod === 'ocr' || rawDataInputMethod === 'manual' || rawDataInputMethod === 'both'
+					? rawDataInputMethod
+					: 'both';
+
 			return {
 				...folder,
 				isOcr: true,
+				dataInputMethod,
 				ocrTemplateId: linkedTabla.ocr_template_id,
 				ocrTemplateName: linkedTabla.ocr_template_id
 					? templatesMap.get(linkedTabla.ocr_template_id)
@@ -237,10 +272,15 @@ export async function POST(request: Request) {
 				position?: number;
 			}> = Array.isArray(body.columns) ? body.columns : [];
 
+			// Parse dataInputMethod
+			const rawDataInputMethod = typeof body.dataInputMethod === "string" ? body.dataInputMethod : "both";
+			const dataInputMethod = ["ocr", "manual", "both"].includes(rawDataInputMethod) ? rawDataInputMethod : "both";
+
 			// Build settings
 			const settings: Record<string, unknown> = {
 				ocrFolder: path,
 				hasNestedData,
+				dataInputMethod,
 			};
 			if (ocrTemplateId) {
 				settings.ocrTemplateId = ocrTemplateId;

@@ -51,7 +51,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
 import { normalizeFieldKey } from "@/lib/tablas";
+
+type DataInputMethod = 'ocr' | 'manual' | 'both';
 
 type OcrColumn = {
   id: string;
@@ -67,8 +71,9 @@ type DefaultFolder = {
   name: string;
   path: string;
   position: number;
-  // OCR folder fields
-  isOcr?: boolean;
+  // Data folder fields
+  isOcr?: boolean; // Kept for backward compatibility, means it's a data folder
+  dataInputMethod?: DataInputMethod;
   ocrTemplateId?: string | null;
   ocrTemplateName?: string | null;
   hasNestedData?: boolean;
@@ -77,6 +82,7 @@ type DefaultFolder = {
     label: string;
     dataType: string;
     ocrScope?: string;
+    required?: boolean;
   }>;
 };
 
@@ -465,11 +471,12 @@ export default function ObraDefaultsPage() {
 
   // Folder dialog state
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
-  const [folderMode, setFolderMode] = useState<"normal" | "ocr">("normal");
+  const [folderMode, setFolderMode] = useState<"normal" | "data">("normal");
   const [newFolderName, setNewFolderName] = useState("");
   const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
 
-  // OCR folder state
+  // Data folder state
+  const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>("both");
   const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState("");
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
   const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
@@ -481,6 +488,7 @@ export default function ObraDefaultsPage() {
   const resetFolderForm = useCallback(() => {
     setNewFolderName("");
     setFolderMode("normal");
+    setNewFolderDataInputMethod("both");
     setNewFolderOcrTemplateId("");
     setNewFolderHasNested(false);
     setNewFolderColumns([]);
@@ -579,8 +587,10 @@ export default function ObraDefaultsPage() {
   const handleAddFolder = async () => {
     if (!newFolderName.trim()) return;
 
-    if (folderMode === "ocr") {
-      if (!newFolderOcrTemplateId) {
+    const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
+
+    if (folderMode === "data") {
+      if (needsOcrTemplate && !newFolderOcrTemplateId) {
         toast.error("Seleccioná una plantilla de extracción");
         return;
       }
@@ -598,17 +608,18 @@ export default function ObraDefaultsPage() {
         name: newFolderName.trim(),
       };
 
-      if (folderMode === "ocr") {
-        payload.isOcr = true;
-        payload.ocrTemplateId = newFolderOcrTemplateId;
-        payload.hasNestedData = newFolderHasNested;
+      if (folderMode === "data") {
+        payload.isOcr = true; // Kept for backward compatibility
+        payload.dataInputMethod = newFolderDataInputMethod;
+        payload.ocrTemplateId = needsOcrTemplate ? newFolderOcrTemplateId : null;
+        payload.hasNestedData = needsOcrTemplate ? newFolderHasNested : false;
         payload.columns = newFolderColumns.map((col, index) => ({
           label: col.label,
           fieldKey: col.fieldKey || normalizeFieldKey(col.label),
           dataType: col.dataType,
           required: col.required,
           position: index,
-          ocrScope: newFolderHasNested ? col.scope : "item",
+          ocrScope: newFolderHasNested && needsOcrTemplate ? col.scope : "item",
         }));
       }
 
@@ -627,7 +638,7 @@ export default function ObraDefaultsPage() {
       setFolders((prev) => [...prev, folder]);
       resetFolderForm();
       setIsAddFolderOpen(false);
-      toast.success(folderMode === "ocr" ? "Carpeta con extracción agregada" : "Carpeta agregada");
+      toast.success(folderMode === "data" ? "Carpeta de datos agregada" : "Carpeta agregada");
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Error agregando carpeta");
@@ -684,9 +695,11 @@ export default function ObraDefaultsPage() {
     }));
   };
 
+  const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
-    (folderMode === "ocr" && (!newFolderOcrTemplateId || newFolderColumns.length === 0));
+    (folderMode === "data" && newFolderColumns.length === 0) ||
+    (folderMode === "data" && needsOcrTemplate && !newFolderOcrTemplateId);
 
   if (isLoading) {
     return (
@@ -809,21 +822,21 @@ export default function ObraDefaultsPage() {
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto px-4">
           <DialogHeader className="px-0">
             <DialogTitle className="flex items-center gap-2">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${folderMode === "ocr"
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${folderMode === "data"
                 ? "bg-amber-100 dark:bg-amber-900/30"
                 : "bg-amber-100 dark:bg-amber-900/30"
                 }`}>
-                {folderMode === "ocr" ? (
+                {folderMode === "data" ? (
                   <Table2 className="h-4 w-4 text-amber-600" />
                 ) : (
                   <FolderPlus className="h-4 w-4 text-amber-600" />
                 )}
               </div>
-              {folderMode === "ocr" ? "Nueva carpeta con extracción" : "Nueva carpeta"}
+              {folderMode === "data" ? "Nueva carpeta de datos" : "Nueva carpeta"}
             </DialogTitle>
             <DialogDescription>
-              {folderMode === "ocr"
-                ? "Esta carpeta leerá los documentos que subas y extraerá los datos automáticamente para crear una tabla."
+              {folderMode === "data"
+                ? "Esta carpeta tendrá una tabla de datos asociada que podés llenar manualmente o con extracción de documentos."
                 : "Esta carpeta se creará automáticamente en cada nueva obra."}
             </DialogDescription>
           </DialogHeader>
@@ -833,7 +846,7 @@ export default function ObraDefaultsPage() {
             <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
               <p className="text-sm text-amber-800 dark:text-amber-200">
                 <strong>Carpeta normal:</strong> Solo organiza archivos. <br />
-                <strong>Carpeta con extracción:</strong> Lee automáticamente los documentos (facturas, remitos, órdenes de compra, etc.) y extrae los datos para crear una tabla. Esa tabla queda disponible para usar en Macro Tablas.
+                <strong>Carpeta de datos:</strong> Tiene una tabla asociada donde podés cargar datos manualmente o extraerlos de documentos. La tabla queda disponible para usar en Macro Tablas.
               </p>
             </div>
 
@@ -851,13 +864,13 @@ export default function ObraDefaultsPage() {
               </Button>
               <Button
                 type="button"
-                variant={folderMode === "ocr" ? "default" : "outline"}
+                variant={folderMode === "data" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setFolderMode("ocr")}
+                onClick={() => setFolderMode("data")}
                 className="flex-1"
               >
                 <Table2 className="h-4 w-4 mr-2" />
-                Con extracción
+                Carpeta de datos
               </Button>
             </div>
 
@@ -871,69 +884,105 @@ export default function ObraDefaultsPage() {
               />
             </div>
 
-            {/* OCR Specific Fields */}
-            {folderMode === "ocr" && (
+            {/* Data Folder Specific Fields */}
+            {folderMode === "data" && (
               <>
-                {/* Template Selection */}
-                <div className="space-y-2">
-                  <Label>Plantilla de extracción</Label>
-                  {ocrTemplates.length === 0 ? (
-                    <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
-                      No hay plantillas disponibles. Creá una primero.
+                {/* Data Input Method */}
+                <div className="space-y-3">
+                  <Label>Método de carga de datos</Label>
+                  <RadioGroup
+                    value={newFolderDataInputMethod}
+                    onValueChange={(value) => setNewFolderDataInputMethod(value as DataInputMethod)}
+                    className="grid grid-cols-3 gap-3"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="ocr" id="defaults-method-ocr" />
+                      <Label htmlFor="defaults-method-ocr" className="text-sm font-normal cursor-pointer">Solo OCR</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="manual" id="defaults-method-manual" />
+                      <Label htmlFor="defaults-method-manual" className="text-sm font-normal cursor-pointer">Solo manual</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="both" id="defaults-method-both" />
+                      <Label htmlFor="defaults-method-both" className="text-sm font-normal cursor-pointer">Ambos</Label>
+                    </div>
+                  </RadioGroup>
+                  <p className="text-xs text-muted-foreground">
+                    {newFolderDataInputMethod === 'ocr' && 'Los datos se extraerán automáticamente de documentos subidos.'}
+                    {newFolderDataInputMethod === 'manual' && 'Los datos se ingresarán manualmente en la tabla.'}
+                    {newFolderDataInputMethod === 'both' && 'Podés cargar datos manualmente o extraerlos de documentos.'}
+                  </p>
+                </div>
+
+                {/* Template Selection - Only when OCR is needed */}
+                {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                  <div className="space-y-2">
+                    <Label>Plantilla de extracción</Label>
+                    {ocrTemplates.length === 0 ? (
+                      <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
+                        No hay plantillas disponibles. Creá una primero.
+                      </div>
+                    ) : (
+                      <Select
+                        value={newFolderOcrTemplateId || undefined}
+                        onValueChange={handleTemplateSelect}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar plantilla..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ocrTemplates.map((template) => (
+                            <SelectItem key={template.id} value={template.id}>
+                              <span className="flex items-center gap-2">
+                                <ScanLine className="h-4 w-4 text-purple-500" />
+                                {template.name} ({template.columns.length} campos)
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                )}
+
+                {/* Nested Data Toggle - Only when OCR is needed */}
+                {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                  <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                    <div>
+                      <p className="text-sm font-medium">Datos anidados</p>
+                      <p className="text-xs text-muted-foreground">
+                        El documento tiene datos a nivel documento e items
+                      </p>
+                    </div>
+                    <Switch
+                      checked={newFolderHasNested}
+                      onCheckedChange={setNewFolderHasNested}
+                      disabled={Boolean(newFolderOcrTemplateId)}
+                    />
+                  </div>
+                )}
+
+                {/* Columns - Show for all data input methods */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Columnas de la tabla</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddColumn}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Agregar
+                    </Button>
+                  </div>
+
+                  {newFolderColumns.length === 0 ? (
+                    <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed text-center">
+                      No hay columnas definidas. Agregá al menos una columna.
                     </div>
                   ) : (
-                    <Select
-                      value={newFolderOcrTemplateId || undefined}
-                      onValueChange={handleTemplateSelect}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar plantilla..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ocrTemplates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>
-                            <span className="flex items-center gap-2">
-                              <ScanLine className="h-4 w-4 text-purple-500" />
-                              {template.name} ({template.columns.length} campos)
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                {/* Nested Data Toggle */}
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                  <div>
-                    <p className="text-sm font-medium">Datos anidados</p>
-                    <p className="text-xs text-muted-foreground">
-                      El documento tiene datos a nivel documento e items
-                    </p>
-                  </div>
-                  <Switch
-                    checked={newFolderHasNested}
-                    onCheckedChange={setNewFolderHasNested}
-                    disabled={Boolean(newFolderOcrTemplateId)}
-                  />
-                </div>
-
-                {/* Columns */}
-                {newFolderColumns.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>Columnas de la tabla</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddColumn}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Agregar
-                      </Button>
-                    </div>
-
                     <div className="space-y-2 max-h-[300px] overflow-y-auto">
                       {newFolderColumns.map((col) => (
                         <div
@@ -961,7 +1010,16 @@ export default function ObraDefaultsPage() {
                               ))}
                             </SelectContent>
                           </Select>
-                          {newFolderHasNested && (
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={col.required}
+                              onChange={(e) => handleColumnChange(col.id, "required", e.target.checked)}
+                              className="rounded border-stone-300"
+                            />
+                            Req.
+                          </label>
+                          {newFolderHasNested && (newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
                             <Select
                               value={col.scope}
                               onValueChange={(value) => handleColumnChange(col.id, "scope", value)}
@@ -987,26 +1045,8 @@ export default function ObraDefaultsPage() {
                         </div>
                       ))}
                     </div>
-
-                    <p className="text-[10px] text-muted-foreground">
-                      {newFolderHasNested
-                        ? "Nombre | Tipo | Scope (Doc/Item) | Eliminar"
-                        : "Nombre | Tipo | Eliminar"}
-                    </p>
-                  </div>
-                )}
-
-                {newFolderOcrTemplateId && newFolderColumns.length === 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleAddColumn}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Agregar columna
-                  </Button>
-                )}
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -1025,12 +1065,12 @@ export default function ObraDefaultsPage() {
             >
               {isSubmittingFolder ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : folderMode === "ocr" ? (
+              ) : folderMode === "data" ? (
                 <Table2 className="h-4 w-4 mr-2" />
               ) : (
                 <FolderPlus className="h-4 w-4 mr-2" />
               )}
-              Crear carpeta
+              {folderMode === "data" ? "Crear carpeta de datos" : "Crear carpeta"}
             </Button>
           </DialogFooter>
         </DialogContent>

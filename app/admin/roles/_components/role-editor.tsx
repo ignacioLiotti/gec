@@ -180,7 +180,7 @@ export function RoleEditor({
             </div>
 
             {/* Permissions */}
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[45vh] overflow-y-auto">
               <Tabs defaultValue="matrix">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="matrix" className="flex items-center gap-2">
@@ -193,7 +193,7 @@ export function RoleEditor({
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="matrix" className="mt-4 max-h-[650px] overflow-y-auto">
+                <TabsContent value="matrix" className="mt-4 ">
                   <PermissionMatrix
                     permissionsByCategory={permissionsByCategory}
                     selectedPermissions={selectedPermissions}
@@ -201,7 +201,7 @@ export function RoleEditor({
                   />
                 </TabsContent>
 
-                <TabsContent value="navigation" className="mt-4 max-h-[650px] overflow-y-auto">
+                <TabsContent value="navigation" className="mt-4 ">
                   <NavigationTree
                     selectedPermissions={selectedPermissions}
                     onChange={setSelectedPermissions}

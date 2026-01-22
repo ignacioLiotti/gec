@@ -59,6 +59,13 @@ export async function applyObraDefaults(
 
 		if (foldersError) throw foldersError;
 
+		console.info("[apply-obra-defaults] Found default folders:", {
+			tenantId,
+			obraId,
+			count: defaultFolders?.length ?? 0,
+			folders: defaultFolders?.map(f => f.path) ?? [],
+		});
+
 		// Fetch default OCR tablas that should be created alongside folders
 		const { data: defaultTablas, error: tablasError } = await supabase
 			.from("obra_default_tablas")
@@ -106,16 +113,23 @@ export async function applyObraDefaults(
 		let tablasCreated = 0;
 
 		// Create folders in storage
+		let foldersCreated = 0;
 		for (const folder of (defaultFolders ?? []) as DefaultFolder[]) {
 			const rawPath = typeof folder.path === "string" ? folder.path.trim() : "";
 			if (!rawPath) continue;
 			const keepPath = `${obraId}/${rawPath}/.keep`;
 			try {
-				await supabase.storage
+				const { error: uploadError } = await supabase.storage
 					.from("obra-documents")
 					.upload(keepPath, new Blob([""], { type: "text/plain" }), {
 						upsert: true,
 					});
+				if (uploadError) {
+					console.error("[apply-obra-defaults] Storage upload error for", keepPath, uploadError);
+				} else {
+					foldersCreated++;
+					console.info("[apply-obra-defaults] Created folder placeholder:", keepPath);
+				}
 			} catch (storageError) {
 				console.error(
 					"[apply-obra-defaults] Error creating placeholder for folder",
@@ -147,6 +161,10 @@ export async function applyObraDefaults(
 			};
 			if (defaultTabla.ocr_template_id) {
 				settings.ocrTemplateId = defaultTabla.ocr_template_id;
+			}
+			// Ensure dataInputMethod is passed through
+			if (!settings.dataInputMethod) {
+				settings.dataInputMethod = 'both';
 			}
 
 			const { data: createdTabla, error: tablaError } = await supabase
@@ -193,9 +211,16 @@ export async function applyObraDefaults(
 			}
 		}
 
+		console.info("[apply-obra-defaults] Completed:", {
+			obraId,
+			foldersConfigured: (defaultFolders ?? []).length,
+			foldersCreatedInStorage: foldersCreated,
+			tablasCreated,
+		});
+
 		return {
 			success: true,
-			foldersApplied: (defaultFolders ?? []).length,
+			foldersApplied: foldersCreated,
 			tablasApplied: tablasCreated,
 		};
 	} catch (error) {
