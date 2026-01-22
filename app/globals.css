@@ -191,3 +191,13 @@
 .pdf-preview .border-t-2 td {
 	padding: 10px 12px;
 }
+
+/* DEBUG: Virtualization testing animation - remove after testing */
+@keyframes virtualized-fade {
+	0% {
+		background-color: rgb(254 202 202); /* red-200 */
+	}
+	100% {
+		background-color: transparent;
+	}
+}

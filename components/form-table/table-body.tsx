@@ -78,9 +78,14 @@ function TableRowInner<Row extends FormTableRow>({
 			<tr
 				className={cn(
 					"border-b transition-colors duration-150 group relative",
+					"animate-virtualized-debug", // DEBUG: Testing virtualization - remove after testing
 					rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
 					isRowDirty ? "bg-amber-50/60 group/row-dirty" : ""
 				)}
+				style={{
+					// DEBUG: Fade animation for virtualization testing - remove after testing
+					animation: "virtualized-fade 2s ease-out",
+				}}
 			>
 				{visibleCells.map((cell) => {
 					const columnId = cell.column.id;

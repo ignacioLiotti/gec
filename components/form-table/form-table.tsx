@@ -244,7 +244,7 @@ export function FormTableContent({ className }: { className?: string }) {
 		count: tableRows.length,
 		getScrollElement: () => scrollParentRef.current,
 		estimateSize: () => (accordionRowConfig ? 120 : 64),
-		overscan: 8,
+		overscan: 15,
 	});
 	const virtualRows = tableRows.length > 0 ? rowVirtualizer.getVirtualItems() : [];
 	const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
@@ -1298,33 +1298,37 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [clientTotalPages, page, useClientPagination]);
 
 	// Detect if server returned more rows than requested (server doesn't support pagination)
-	const serverReturnedAllRows = false;
+	const serverReturnedAllRows = fetchRowsFn && sortedRows.length > pageSize && serverMeta.totalPages <= 1;
 
 	const processedRows = useMemo(() => {
-		if (!fetchRowsFn) {
+		// Client-side pagination when no fetchRowsFn OR when server returned all rows at once
+		if (!fetchRowsFn || serverReturnedAllRows) {
 			const start = (page - 1) * pageSize;
 			return sortedRows.slice(start, start + pageSize);
 		}
 		return sortedRows;
-	}, [page, pageSize, sortedRows, fetchRowsFn]);
+	}, [page, pageSize, sortedRows, fetchRowsFn, serverReturnedAllRows]);
 
 	const processedRowsRef = useRef<Row[]>(processedRows);
 	useEffect(() => {
 		processedRowsRef.current = processedRows;
 	}, [processedRows]);
 
-	const datasetTotalCount = useClientPagination
+	// Use client pagination values when server returned all rows at once
+	const useClientPaginationValues = useClientPagination || serverReturnedAllRows;
+
+	const datasetTotalCount = useClientPaginationValues
 		? sortedRows.length
 		: serverMeta.total || sortedRows.length;
 
-	const totalPages = useClientPagination
+	const totalPages = useClientPaginationValues
 		? clientTotalPages
 		: serverMeta.totalPages || 1;
 
-	const hasNextPage = useClientPagination
+	const hasNextPage = useClientPaginationValues
 		? page < clientTotalPages
 		: serverMeta.hasNextPage;
-	const hasPreviousPage = useClientPagination
+	const hasPreviousPage = useClientPaginationValues
 		? page > 1
 		: serverMeta.hasPreviousPage;
 
