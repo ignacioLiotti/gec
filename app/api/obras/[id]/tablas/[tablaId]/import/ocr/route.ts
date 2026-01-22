@@ -286,6 +286,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 	let reservedTokens = 0;
 	let reservationApplied = false;
 	let tokensSettled = false;
+	let rollbackReservation: ((context: string) => Promise<void>) | null = null;
 
 	// Track processing time
 	const startTime = Date.now();
@@ -320,7 +321,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		const planLimits = plan.limits;
 		resolvedTenantId = tenantId;
 		resolvedPlanLimits = planLimits;
-		const rollbackReservation = async (context: string) => {
+		rollbackReservation = async (context: string) => {
 			if (!reservationApplied || reservedTokens <= 0) return;
 			try {
 				await incrementTenantUsage(
@@ -445,7 +446,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		const existingBucket = form.get("existingBucket");
 		const existingPath = form.get("existingPath");
 		const existingFileName = form.get("existingFileName");
-		let storageInfo: { bucket: string; path: string; fileName: string } | null =
+		let storageInfo: {
+			bucket: string;
+			path: string;
+			fileName: string;
+			uploadedBytes?: number;
+		} | null =
 			typeof existingBucket === "string" &&
 			existingBucket.length > 0 &&
 			typeof existingPath === "string" &&
@@ -577,7 +583,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			null;
 
 		if (effectiveImageDataUrl && effectiveImageDataUrl.startsWith("data:")) {
-			extractionResponse = await generateObject({
+			const response = await generateObject({
 				model: openai(OCR_MODEL),
 				schema: extractionSchema,
 				messages: [
@@ -594,7 +600,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				],
 				temperature: 0.1,
 			});
-			extraction = extractionResponse.object;
+			if ("object" in response) {
+				extractionResponse = response;
+				extraction = response.object as Record<string, any>;
+			}
 		} else if (file) {
 			const arrayBuffer = await file.arrayBuffer();
 			const buffer = Buffer.from(arrayBuffer);
@@ -604,7 +613,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				const base64 = buffer.toString("base64");
 				const dataUrl = `data:${mime};base64,${base64}`;
 
-				extractionResponse = await generateObject({
+				const response = await generateObject({
 					model: openai(OCR_MODEL),
 					schema: extractionSchema,
 					messages: [
@@ -621,7 +630,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					],
 					temperature: 0.1,
 				});
-				extraction = extractionResponse.object;
+				if ("object" in response) {
+					extractionResponse = response;
+					extraction = response.object as Record<string, any>;
+				}
 			} else if (file.type?.includes("pdf")) {
 				return NextResponse.json(
 					{ error: "Convierte el PDF a imagen antes de enviarlo" },
@@ -876,14 +888,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		const message =
 			error instanceof Error ? error.message : "Error desconocido";
 
-		if (
-			reservationApplied &&
-			!tokensSettled &&
-			reservedTokens > 0 &&
-			resolvedTenantId &&
-			resolvedPlanLimits
-		) {
-			await rollbackReservation("ocr_reservation_rollback");
+			if (
+				rollbackReservation &&
+				reservationApplied &&
+				!tokensSettled &&
+				reservedTokens > 0 &&
+				resolvedTenantId &&
+				resolvedPlanLimits
+			) {
+				await rollbackReservation("ocr_reservation_rollback");
 		}
 
 		// Track failed processing if we have file info

@@ -197,9 +197,9 @@ function determineSeverity(percent: number | null): number {
 }
 
 function getRowStatus(usages: UsageDescriptor[]): (StatusDescriptor & { severity: number }) | null {
-	const statuses = usages
+	const statuses: (StatusDescriptor & { severity: number })[] = usages
 		.filter((usage) => usage.limitDefined)
-		.map((usage) => ({
+		.map((usage): StatusDescriptor & { severity: number } => ({
 			severity: usage.severity,
 			label:
 				usage.severity >= 3
@@ -214,7 +214,9 @@ function getRowStatus(usages: UsageDescriptor[]): (StatusDescriptor & { severity
 					? "destructive"
 					: usage.severity === 2
 						? "default"
-						: "secondary",
+						: usage.severity === 1
+							? "secondary"
+							: "outline",
 		}));
 	if (statuses.length === 0) {
 		return null;

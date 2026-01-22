@@ -32,6 +32,21 @@ type SubscriptionRow = {
 	} | null;
 };
 
+type RawSubscriptionRow = Omit<SubscriptionRow, "subscription_plans"> & {
+	subscription_plans:
+		| SubscriptionRow["subscription_plans"]
+		| SubscriptionRow["subscription_plans"][];
+};
+
+function normalizeSubscriptionRow(row: RawSubscriptionRow): SubscriptionRow {
+	return {
+		...row,
+		subscription_plans: Array.isArray(row.subscription_plans)
+			? row.subscription_plans[0] ?? null
+			: row.subscription_plans,
+	};
+}
+
 function normalizeLimit(value: number | string | null | undefined): number | null {
 	if (value === null || typeof value === "undefined") return null;
 	const parsed =
@@ -113,7 +128,7 @@ export async function fetchTenantPlan(
 	}
 
 	if (data) {
-		return mapPlan(data as SubscriptionRow);
+		return mapPlan(normalizeSubscriptionRow(data as RawSubscriptionRow));
 	}
 
 	// Fallback to default plan definition if tenant has no subscription yet.

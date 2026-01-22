@@ -59,11 +59,12 @@ export async function applyObraDefaults(
 
 		if (foldersError) throw foldersError;
 
+		const folderPaths = (defaultFolders as DefaultFolder[] | null)?.map((folder) => folder.path) ?? [];
 		console.info("[apply-obra-defaults] Found default folders:", {
 			tenantId,
 			obraId,
 			count: defaultFolders?.length ?? 0,
-			folders: defaultFolders?.map(f => f.path) ?? [],
+			folders: folderPaths,
 		});
 
 		// Fetch default OCR tablas that should be created alongside folders

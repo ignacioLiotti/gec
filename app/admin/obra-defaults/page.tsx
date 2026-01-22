@@ -875,14 +875,14 @@ export default function ObraDefaultsPage() {
             </div>
 
             {/* Folder Name */}
-            <div className="space-y-2">
-              <Label>Nombre de la carpeta</Label>
-              <Input
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder={folderMode === "ocr" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>Nombre de la carpeta</Label>
+            <Input
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder={folderMode === "data" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
+            />
+          </div>
 
             {/* Data Folder Specific Fields */}
             {folderMode === "data" && (

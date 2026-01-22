@@ -54,7 +54,22 @@ export default async function TenantExpensesPage() {
 		);
 	}
 
-	const membershipRows = (memberships ?? []) as MembershipRow[];
+	type MembershipRowRaw = {
+		tenant_id: string;
+		role: string;
+		tenants: { name: string | null } | { name: string | null }[] | null;
+	};
+	const membershipRows: MembershipRow[] = (memberships ?? []).map((row) => {
+		const typedRow = row as MembershipRowRaw;
+		const tenantInfo = Array.isArray(typedRow.tenants)
+			? typedRow.tenants[0] ?? null
+			: typedRow.tenants;
+		return {
+			tenant_id: typedRow.tenant_id,
+			role: typedRow.role,
+			tenants: tenantInfo,
+		};
+	});
 	if (membershipRows.length === 0) {
 		return (
 			<div className="p-6 text-sm">

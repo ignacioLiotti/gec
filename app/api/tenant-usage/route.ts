@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/utils/supabase/server";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
@@ -14,13 +15,19 @@ const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
 type MembershipRow = { tenant_id: string | null; role: string | null };
 
-async function resolveTenantContext(supabase: Awaited<ReturnType<typeof createClient>>) {
+type TenantContext =
+	| { user: User; tenantId: string; isSuperAdmin: boolean }
+	| { error: { status: number; message: string } };
+
+async function resolveTenantContext(
+	supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<TenantContext> {
 	const {
 		data: { user },
 	} = await supabase.auth.getUser();
 
 	if (!user) {
-		return { error: { status: 401, message: "Iniciá sesión para continuar." } } as const;
+		return { error: { status: 401, message: "Iniciá sesión para continuar." } };
 	}
 
 	const { data: memberships } = await supabase
@@ -49,10 +56,10 @@ async function resolveTenantContext(supabase: Awaited<ReturnType<typeof createCl
 				status: 403,
 				message: "No pudimos resolver tu organización activa.",
 			},
-		} as const;
+		};
 	}
 
-	return { user, tenantId, isSuperAdmin } as const;
+	return { user, tenantId, isSuperAdmin };
 }
 
 export async function GET() {
