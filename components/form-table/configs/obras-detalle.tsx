@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
 	FormTableConfig,
 	ColumnDef,
@@ -16,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Obra } from "@/app/excel/schema";
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 export type DetailAdvancedFilters = {
 	supMin: string;
@@ -202,13 +204,75 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 				const obraId = row.id;
 				if (!obraId) return <span className="font-semibold">{text}</span>;
 
+				const TextWithTooltip = () => {
+					const textRef = useRef<HTMLSpanElement>(null);
+					const [isOverflowing, setIsOverflowing] = useState(false);
+					const [isOpen, setIsOpen] = useState(false);
+
+					useEffect(() => {
+						const element = textRef.current;
+						if (!element) return;
+
+						const checkOverflow = () => {
+							const isOverflow = element.scrollWidth > element.clientWidth;
+							setIsOverflowing(isOverflow);
+							// Close tooltip if no longer overflowing
+							if (!isOverflow) {
+								setIsOpen(false);
+							}
+						};
+
+						// Check immediately and after a short delay to ensure layout is complete
+						checkOverflow();
+						const frameId = requestAnimationFrame(checkOverflow);
+
+						// Observe the element itself for size changes
+						const resizeObserver = new ResizeObserver(checkOverflow);
+						resizeObserver.observe(element);
+
+						// Also observe parent for column width changes
+						const parent = element.parentElement;
+						if (parent) {
+							resizeObserver.observe(parent);
+						}
+
+						return () => {
+							cancelAnimationFrame(frameId);
+							resizeObserver.disconnect();
+						};
+					}, [text]);
+
+					const handleOpenChange = (open: boolean) => {
+						// Only allow opening if text is overflowing
+						if (open && !isOverflowing) return;
+						setIsOpen(open);
+					};
+
+					return (
+						<TooltipProvider>
+							<Tooltip open={isOpen} onOpenChange={handleOpenChange}>
+								<TooltipTrigger asChild>
+									<span ref={textRef} className="group-hover:underline truncate">
+										{text}
+									</span>
+								</TooltipTrigger>
+								{isOverflowing && (
+									<TooltipContent side="left" align="start" className="max-w-xs">
+										{text}
+									</TooltipContent>
+								)}
+							</Tooltip>
+						</TooltipProvider>
+					);
+				};
+
 				return (
 					<Link
 						href={`/excel/${obraId}`}
 						className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors group absolute top-0 left-0 w-full h-full flex items-center justify-start p-2"
 					>
-						<ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-						<span className="group-hover:underline">{text}</span>
+						<ExternalLink className="min-h-4 min-w-4 max-w-4 max-h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+						<TextWithTooltip />
 					</Link>
 				);
 			},
