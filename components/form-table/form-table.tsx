@@ -10,7 +10,8 @@ import {
 	ColumnDef as TanStackColumnDef,
 	VisibilityState,
 } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
+// Virtualization disabled - was causing scroll re-renders
+// import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -113,33 +114,71 @@ export function FormTableToolbar() {
 								type="button"
 								variant={filters.activeCount > 0 ? "default" : "outline"}
 								size="sm"
-								className="gap-2"
+								className={cn(
+									"gap-2 transition-all",
+									filters.activeCount > 0 && "shadow-sm"
+								)}
 							>
 								<Filter className="h-4 w-4" />
-								<span>Filtros avanzados</span>
+								<span>Filtros</span>
 								{filters.activeCount > 0 && (
-									<Badge variant="secondary" className="ml-1">
+									<span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-[10px] font-semibold">
 										{filters.activeCount}
-									</Badge>
+									</span>
 								)}
 							</Button>
 						</SheetTrigger>
 						<SheetContent
 							side="right"
-							className="sm:w-[420px] w-[90vw] my-auto max-h-[96vh] overflow-y-auto px-6 py-7"
+							className="!max-w-[420px] p-0 flex flex-col border-l-0 shadow-2xl"
 						>
-							<SheetHeader>
-								<SheetTitle>Filtros avanzados</SheetTitle>
-							</SheetHeader>
-							<div className="mt-6 space-y-5">{renderFiltersContent}</div>
-							<SheetFooter className="mt-6 gap-2">
-								<Button type="button" variant="outline" onClick={filters.reset}>
-									Reiniciar
-								</Button>
-								<Button type="button" onClick={filters.apply}>
-									Aplicar
-								</Button>
-							</SheetFooter>
+							{/* Header */}
+							<div className="shrink-0 border-b bg-gradient-to-br from-muted/50 to-background px-6 py-5">
+								<SheetHeader className="space-y-1">
+									<div className="flex items-center gap-3">
+										<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+											<Filter className="h-4 w-4 text-primary" />
+										</div>
+										<div>
+											<SheetTitle className="text-lg">Filtros avanzados</SheetTitle>
+											<p className="text-xs text-muted-foreground mt-0.5">
+												{filters.activeCount > 0
+													? `${filters.activeCount} filtro${filters.activeCount > 1 ? 's' : ''} activo${filters.activeCount > 1 ? 's' : ''}`
+													: "Refina los resultados de la tabla"
+												}
+											</p>
+										</div>
+									</div>
+								</SheetHeader>
+							</div>
+
+							{/* Content */}
+							<div className="flex-1 overflow-y-auto px-6 py-5">
+								<div className="space-y-5">{renderFiltersContent}</div>
+							</div>
+
+							{/* Footer */}
+							<div className="shrink-0 border-t bg-muted/30 px-6 py-4">
+								<div className="flex items-center justify-between gap-3">
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onClick={filters.reset}
+										className="text-muted-foreground hover:text-foreground"
+									>
+										Reiniciar filtros
+									</Button>
+									<Button
+										type="button"
+										onClick={filters.apply}
+										size="sm"
+										className="px-6 shadow-sm"
+									>
+										Aplicar
+									</Button>
+								</div>
+							</div>
 						</SheetContent>
 					</Sheet>
 				)}
@@ -240,18 +279,13 @@ export function FormTableContent({ className }: { className?: string }) {
 	} = sorting;
 	const scrollParentRef = useRef<HTMLDivElement | null>(null);
 	const tableRows = table.getRowModel().rows;
-	const rowVirtualizer = useVirtualizer({
-		count: tableRows.length,
-		getScrollElement: () => scrollParentRef.current,
-		estimateSize: () => (accordionRowConfig ? 120 : 64),
-		overscan: 15,
-	});
-	const virtualRows = tableRows.length > 0 ? rowVirtualizer.getVirtualItems() : [];
-	const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
-	const paddingBottom =
-		virtualRows.length > 0
-			? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
-			: 0;
+
+	// Virtualization disabled for now - was causing scroll re-renders
+	// TODO: Re-enable with proper isolation when needed for very large datasets
+	const shouldVirtualize = false;
+	const virtualRows: { index: number; start: number; end: number }[] = [];
+	const paddingTop = 0;
+	const paddingBottom = 0;
 
 	return (
 		<>
@@ -269,7 +303,7 @@ export function FormTableContent({ className }: { className?: string }) {
 				)}
 				<div
 					ref={scrollParentRef}
-					className="max-h-[70vh] overflow-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat min-h-[70vh]">
+					className="max-h-[70vh] overflow-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
 					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
@@ -456,7 +490,7 @@ export function FormTableContent({ className }: { className?: string }) {
 											"No encontramos filas que coincidan con tu búsqueda o filtros. Ajusta los criterios o agrega una nueva fila vacía para comenzar."}
 									</td>
 								</tr>
-							) : (
+							) : shouldVirtualize ? (
 								<>
 									{paddingTop > 0 && (
 										<tr>
@@ -506,6 +540,38 @@ export function FormTableContent({ className }: { className?: string }) {
 										</tr>
 									)}
 								</>
+							) : (
+								// Non-virtualized rendering for small datasets
+								tableRows.map((row, rowIndex) => {
+									const rowId = row.original.id;
+									const { dirty: rowIsDirty } = getRowDirtyState(rowId);
+									return (
+										<MemoizedTableRow
+											key={rowId}
+											row={row}
+											rowIndex={rowIndex}
+											columnsById={columnsById}
+											FieldComponent={FieldComponent}
+											highlightQuery={highlightQuery}
+											hasInitialSnapshot={hasInitialRow(rowId)}
+											hasAccordionRows={hasAccordionRows}
+											accordionRowConfig={accordionRowConfig}
+											accordionAlwaysOpen={accordionAlwaysOpen}
+											isExpanded={isRowExpanded(rowId)}
+											isRowDirty={rowIsDirty}
+											showActionsColumn={showActionsColumn}
+											isCellDirty={isCellDirty}
+											getStickyProps={getStickyProps}
+											onToggleAccordion={toggleAccordionRow}
+											onDelete={handleDelete}
+											onClearCell={handleClearCell}
+											onRestoreCell={handleRestoreCell}
+											onCopyCell={handleCopyCell}
+											onCopyColumn={handleCopyColumn}
+											onCopyRow={handleCopyRow}
+										/>
+									);
+								})
 							)}
 						</tbody>
 
@@ -955,11 +1021,17 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}
 	}, [fetchRowsFn, defaultRows, setFormRows]);
 
-	const isCellDirty = (rowId: string, column: ColumnDef<Row>) =>
-		computeCellDirty(rowId, column, rowsById, initialValuesRef.current.rowsById);
+	const isCellDirty = useCallback(
+		(rowId: string, column: ColumnDef<Row>) =>
+			computeCellDirty(rowId, column, rowsById, initialValuesRef.current.rowsById),
+		[rowsById]
+	);
 
-	const getRowDirtyState = (rowId: string) =>
-		computeRowDirty(rowId, rowsById, columns, initialValuesRef.current.rowsById);
+	const getRowDirtyState = useCallback(
+		(rowId: string) =>
+			computeRowDirty(rowId, rowsById, columns, initialValuesRef.current.rowsById),
+		[rowsById, columns]
+	);
 
 	const hasUnsavedChanges = useMemo(
 		() => hasUnsavedChangesUtil(rowOrder, rowsById, columns, initialValuesRef.current.rowsById),

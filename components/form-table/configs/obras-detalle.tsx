@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from "react";
-import { useRef, useState, useEffect } from "react";
+import { memo, useState } from "react";
 import {
 	FormTableConfig,
 	ColumnDef,
@@ -14,10 +14,43 @@ import { requiredValidator } from "@/components/form-table/form-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import type { Obra } from "@/app/excel/schema";
-import { ExternalLink } from "lucide-react";
+import {
+	ExternalLink,
+	ChevronDown,
+	Ruler,
+	Building2,
+	Calendar,
+	DollarSign,
+	Clock,
+	type LucideIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+
+/**
+ * Pure CSS tooltip for truncated text - no React state, no scroll listeners.
+ * Uses native title attribute fallback with CSS enhancement.
+ */
+const TruncatedTextWithTooltip = memo(function TruncatedTextWithTooltip({
+	text
+}: {
+	text: string
+}) {
+	return (
+		<span
+			title={text}
+			className="group-hover:underline truncate block"
+		>
+			{text}
+		</span>
+	);
+});
 
 export type DetailAdvancedFilters = {
 	supMin: string;
@@ -204,75 +237,13 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 				const obraId = row.id;
 				if (!obraId) return <span className="font-semibold">{text}</span>;
 
-				const TextWithTooltip = () => {
-					const textRef = useRef<HTMLSpanElement>(null);
-					const [isOverflowing, setIsOverflowing] = useState(false);
-					const [isOpen, setIsOpen] = useState(false);
-
-					useEffect(() => {
-						const element = textRef.current;
-						if (!element) return;
-
-						const checkOverflow = () => {
-							const isOverflow = element.scrollWidth > element.clientWidth;
-							setIsOverflowing(isOverflow);
-							// Close tooltip if no longer overflowing
-							if (!isOverflow) {
-								setIsOpen(false);
-							}
-						};
-
-						// Check immediately and after a short delay to ensure layout is complete
-						checkOverflow();
-						const frameId = requestAnimationFrame(checkOverflow);
-
-						// Observe the element itself for size changes
-						const resizeObserver = new ResizeObserver(checkOverflow);
-						resizeObserver.observe(element);
-
-						// Also observe parent for column width changes
-						const parent = element.parentElement;
-						if (parent) {
-							resizeObserver.observe(parent);
-						}
-
-						return () => {
-							cancelAnimationFrame(frameId);
-							resizeObserver.disconnect();
-						};
-					}, [text]);
-
-					const handleOpenChange = (open: boolean) => {
-						// Only allow opening if text is overflowing
-						if (open && !isOverflowing) return;
-						setIsOpen(open);
-					};
-
-					return (
-						<TooltipProvider>
-							<Tooltip open={isOpen} onOpenChange={handleOpenChange}>
-								<TooltipTrigger asChild>
-									<span ref={textRef} className="group-hover:underline truncate">
-										{text}
-									</span>
-								</TooltipTrigger>
-								{isOverflowing && (
-									<TooltipContent side="left" align="start" className="max-w-xs">
-										{text}
-									</TooltipContent>
-								)}
-							</Tooltip>
-						</TooltipProvider>
-					);
-				};
-
 				return (
 					<Link
 						href={`/excel/${obraId}`}
-						className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors group absolute top-0 left-0 w-full h-full flex items-center justify-start p-2"
+						className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2"
 					>
-						<ExternalLink className="min-h-4 min-w-4 max-w-4 max-h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-						<TextWithTooltip />
+						<ExternalLink className="min-h-4 min-w-4 max-w-4 max-h-4 text-muted-foreground group-hover:text-primary" />
+						<TruncatedTextWithTooltip text={text} />
 					</Link>
 				);
 			},
@@ -496,6 +467,88 @@ const createFilters = (): DetailAdvancedFilters => ({
 	ptrMax: "",
 });
 
+// Filter section component for collapsible groups
+function FilterSection({
+	title,
+	icon: Icon,
+	children,
+	defaultOpen = true,
+	activeCount = 0,
+}: {
+	title: string;
+	icon: LucideIcon;
+	children: ReactNode;
+	defaultOpen?: boolean;
+	activeCount?: number;
+}) {
+	const [isOpen, setIsOpen] = useState(defaultOpen);
+
+	return (
+		<Collapsible open={isOpen} onOpenChange={setIsOpen}>
+			<CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 data-[state=open]:rounded-b-none data-[state=open]:border-b-0">
+				<div className="flex items-center gap-2.5">
+					<Icon className="h-4 w-4 text-muted-foreground" />
+					<span>{title}</span>
+					{activeCount > 0 && (
+						<span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+							{activeCount}
+						</span>
+					)}
+				</div>
+				<ChevronDown
+					className={cn(
+						"h-4 w-4 text-muted-foreground transition-transform duration-200",
+						isOpen && "rotate-180"
+					)}
+				/>
+			</CollapsibleTrigger>
+			<CollapsibleContent className="rounded-b-lg border border-t-0 bg-background px-3 py-3 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+				{children}
+			</CollapsibleContent>
+		</Collapsible>
+	);
+}
+
+// Range input component for min/max filters
+function RangeInputGroup({
+	label,
+	minValue,
+	maxValue,
+	onMinChange,
+	onMaxChange,
+	minPlaceholder = "Min",
+	maxPlaceholder = "Max",
+}: {
+	label: string;
+	minValue: string;
+	maxValue: string;
+	onMinChange: (value: string) => void;
+	onMaxChange: (value: string) => void;
+	minPlaceholder?: string;
+	maxPlaceholder?: string;
+}) {
+	return (
+		<div className="space-y-1.5">
+			<Label className="text-xs text-muted-foreground">{label}</Label>
+			<div className="flex items-center gap-2">
+				<Input
+					value={minValue}
+					onChange={(e) => onMinChange(e.target.value)}
+					placeholder={minPlaceholder}
+					className="h-8 text-sm"
+				/>
+				<span className="text-xs text-muted-foreground">a</span>
+				<Input
+					value={maxValue}
+					onChange={(e) => onMaxChange(e.target.value)}
+					placeholder={maxPlaceholder}
+					className="h-8 text-sm"
+				/>
+			</div>
+		</div>
+	);
+}
+
 const renderFilters = ({
 	filters,
 	onChange,
@@ -507,104 +560,188 @@ const renderFilters = ({
 		onChange((prev) => ({ ...prev, [key]: value }));
 	};
 
+	// Count active filters per section
+	const superficieActive = [filters.supMin, filters.supMax].filter(Boolean).length;
+	const entidadesActive = filters.entidades.length > 0 ? 1 : 0;
+	const fechasActive = [filters.mesYear, filters.mesContains, filters.iniYear, filters.iniContains].filter(Boolean).length;
+	const importesActive = [
+		filters.cmaMin, filters.cmaMax,
+		filters.cafMin, filters.cafMax,
+		filters.sacMin, filters.sacMax,
+	].filter(Boolean).length;
+	const plazosActive = [
+		filters.scMin, filters.scMax,
+		filters.paMin, filters.paMax,
+		filters.ptMin, filters.ptMax,
+		filters.ptrMin, filters.ptrMax,
+	].filter(Boolean).length;
+
 	return (
-		<div className="space-y-4">
-			<div className="grid grid-cols-2 gap-3">
-				<div>
-					<Label>Sup. mínima (m²)</Label>
-					<Input
-						value={filters.supMin}
-						onChange={(event) => handleRangeChange("supMin", event.target.value)}
-						placeholder="Ej: 100"
-					/>
-				</div>
-				<div>
-					<Label>Sup. máxima (m²)</Label>
-					<Input
-						value={filters.supMax}
-						onChange={(event) => handleRangeChange("supMax", event.target.value)}
-						placeholder="Ej: 1000"
-					/>
-				</div>
-			</div>
-			<div className="space-y-2">
-				<Label>Entidades (una por línea)</Label>
-				<Textarea
-					value={filters.entidades.join("\n")}
-					onChange={(event) => {
-						const values = event.currentTarget.value
-							.split(/\r?\n|,/)
-							.map((value) => value.trim())
-							.filter(Boolean);
-						onChange((prev) => ({ ...prev, entidades: values }));
-					}}
-					placeholder="Municipalidad, Provincia..."
+		<div className="space-y-3">
+			{/* Superficie */}
+			<FilterSection
+				title="Superficie"
+				icon={Ruler}
+				activeCount={superficieActive}
+				defaultOpen
+			>
+				<RangeInputGroup
+					label="Superficie de obra (m²)"
+					minValue={filters.supMin}
+					maxValue={filters.supMax}
+					onMinChange={(v) => handleRangeChange("supMin", v)}
+					onMaxChange={(v) => handleRangeChange("supMax", v)}
+					minPlaceholder="100"
+					maxPlaceholder="10000"
 				/>
-			</div>
-			<div className="grid grid-cols-2 gap-3">
-				<div>
-					<Label>Mes básico (año exacto)</Label>
-					<Input
-						value={filters.mesYear}
-						onChange={(event) => handleRangeChange("mesYear", event.target.value)}
-						placeholder="Ej: 2023"
+			</FilterSection>
+
+			{/* Entidades */}
+			<FilterSection
+				title="Entidad contratante"
+				icon={Building2}
+				activeCount={entidadesActive}
+				defaultOpen
+			>
+				<div className="space-y-1.5">
+					<Label className="text-xs text-muted-foreground">
+						Filtrar por entidades (una por linea o separadas por coma)
+					</Label>
+					<Textarea
+						value={filters.entidades.join("\n")}
+						onChange={(event) => {
+							const values = event.currentTarget.value
+								.split(/\r?\n|,/)
+								.map((value) => value.trim())
+								.filter(Boolean);
+							onChange((prev) => ({ ...prev, entidades: values }));
+						}}
+						placeholder="Municipalidad de Buenos Aires&#10;Gobierno de la Provincia..."
+						className="min-h-[80px] text-sm resize-none"
 					/>
+					{filters.entidades.length > 0 && (
+						<p className="text-[10px] text-muted-foreground">
+							{filters.entidades.length} entidad{filters.entidades.length > 1 ? "es" : ""} seleccionada{filters.entidades.length > 1 ? "s" : ""}
+						</p>
+					)}
 				</div>
-				<div>
-					<Label>Mes básico contiene</Label>
-					<Input
-						value={filters.mesContains}
-						onChange={(event) => handleRangeChange("mesContains", event.target.value)}
-						placeholder="Ej: enero"
-					/>
-				</div>
-			</div>
-			<div className="grid grid-cols-2 gap-3">
-				<div>
-					<Label>Iniciación (año)</Label>
-					<Input
-						value={filters.iniYear}
-						onChange={(event) => handleRangeChange("iniYear", event.target.value)}
-						placeholder="Ej: 2022"
-					/>
-				</div>
-				<div>
-					<Label>Iniciación contiene</Label>
-					<Input
-						value={filters.iniContains}
-						onChange={(event) => handleRangeChange("iniContains", event.target.value)}
-						placeholder="Ej: marzo"
-					/>
-				</div>
-			</div>
-			{([
-				["cmaMin", "cmaMax", "Contrato + Ampliaciones"],
-				["cafMin", "cafMax", "Certificado a la fecha"],
-				["sacMin", "sacMax", "Saldo a certificar"],
-				["scMin", "scMax", "Según contrato"],
-				["paMin", "paMax", "Prórrogas acordadas"],
-				["ptMin", "ptMax", "Plazo total"],
-				["ptrMin", "ptrMax", "Plazo total transc."],
-			] as Array<[RangeFilterKey, RangeFilterKey, string]>).map(([minKey, maxKey, label]) => (
-				<div key={minKey} className="grid grid-cols-2 gap-3">
-					<div>
-						<Label>{label} (mín)</Label>
-						<Input
-							value={filters[minKey]}
-							onChange={(event) => handleRangeChange(minKey, event.target.value)}
-							placeholder="0"
-						/>
+			</FilterSection>
+
+			{/* Fechas */}
+			<FilterSection
+				title="Fechas"
+				icon={Calendar}
+				activeCount={fechasActive}
+				defaultOpen
+			>
+				<div className="space-y-3">
+					<div className="space-y-1.5">
+						<Label className="text-xs text-muted-foreground">Mes basico de contrato</Label>
+						<div className="grid grid-cols-2 gap-2">
+							<Input
+								value={filters.mesYear}
+								onChange={(e) => handleRangeChange("mesYear", e.target.value)}
+								placeholder="Año (2024)"
+								className="h-8 text-sm"
+							/>
+							<Input
+								value={filters.mesContains}
+								onChange={(e) => handleRangeChange("mesContains", e.target.value)}
+								placeholder="Contiene (enero)"
+								className="h-8 text-sm"
+							/>
+						</div>
 					</div>
-					<div>
-						<Label>{label} (máx)</Label>
-						<Input
-							value={filters[maxKey]}
-							onChange={(event) => handleRangeChange(maxKey, event.target.value)}
-							placeholder="0"
-						/>
+					<div className="space-y-1.5">
+						<Label className="text-xs text-muted-foreground">Fecha de iniciacion</Label>
+						<div className="grid grid-cols-2 gap-2">
+							<Input
+								value={filters.iniYear}
+								onChange={(e) => handleRangeChange("iniYear", e.target.value)}
+								placeholder="Año (2024)"
+								className="h-8 text-sm"
+							/>
+							<Input
+								value={filters.iniContains}
+								onChange={(e) => handleRangeChange("iniContains", e.target.value)}
+								placeholder="Contiene (marzo)"
+								className="h-8 text-sm"
+							/>
+						</div>
 					</div>
 				</div>
-			))}
+			</FilterSection>
+
+			{/* Importes */}
+			<FilterSection
+				title="Importes"
+				icon={DollarSign}
+				activeCount={importesActive}
+				defaultOpen
+			>
+				<div className="space-y-3">
+					<RangeInputGroup
+						label="Contrato + Ampliaciones"
+						minValue={filters.cmaMin}
+						maxValue={filters.cmaMax}
+						onMinChange={(v) => handleRangeChange("cmaMin", v)}
+						onMaxChange={(v) => handleRangeChange("cmaMax", v)}
+					/>
+					<RangeInputGroup
+						label="Certificado a la fecha"
+						minValue={filters.cafMin}
+						maxValue={filters.cafMax}
+						onMinChange={(v) => handleRangeChange("cafMin", v)}
+						onMaxChange={(v) => handleRangeChange("cafMax", v)}
+					/>
+					<RangeInputGroup
+						label="Saldo a certificar"
+						minValue={filters.sacMin}
+						maxValue={filters.sacMax}
+						onMinChange={(v) => handleRangeChange("sacMin", v)}
+						onMaxChange={(v) => handleRangeChange("sacMax", v)}
+					/>
+				</div>
+			</FilterSection>
+
+			{/* Plazos */}
+			<FilterSection
+				title="Plazos"
+				icon={Clock}
+				activeCount={plazosActive}
+				defaultOpen
+			>
+				<div className="space-y-3">
+					<RangeInputGroup
+						label="Segun contrato (meses)"
+						minValue={filters.scMin}
+						maxValue={filters.scMax}
+						onMinChange={(v) => handleRangeChange("scMin", v)}
+						onMaxChange={(v) => handleRangeChange("scMax", v)}
+					/>
+					<RangeInputGroup
+						label="Prorrogas acordadas"
+						minValue={filters.paMin}
+						maxValue={filters.paMax}
+						onMinChange={(v) => handleRangeChange("paMin", v)}
+						onMaxChange={(v) => handleRangeChange("paMax", v)}
+					/>
+					<RangeInputGroup
+						label="Plazo total"
+						minValue={filters.ptMin}
+						maxValue={filters.ptMax}
+						onMinChange={(v) => handleRangeChange("ptMin", v)}
+						onMaxChange={(v) => handleRangeChange("ptMax", v)}
+					/>
+					<RangeInputGroup
+						label="Plazo transcurrido"
+						minValue={filters.ptrMin}
+						maxValue={filters.ptrMax}
+						onMinChange={(v) => handleRangeChange("ptrMin", v)}
+						onMaxChange={(v) => handleRangeChange("ptrMax", v)}
+					/>
+				</div>
+			</FilterSection>
 		</div>
 	);
 };

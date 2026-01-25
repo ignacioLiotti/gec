@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight,
   BarChart3,
@@ -13,7 +13,9 @@ import {
   Plus,
   ShieldCheck,
   Sparkles,
-  TrendingUp
+  TrendingUp,
+  Building2,
+  Activity
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -74,6 +76,8 @@ export default function Home() {
     mesBasicoDeContrato: "",
     iniciacion: "",
   });
+  const [newlyAddedObraId, setNewlyAddedObraId] = useState<string | null>(null);
+  const previousObrasRef = useRef<string[]>([]);
 
   useEffect(() => {
     fetchObras();
@@ -114,6 +118,16 @@ export default function Home() {
       setIsAuthenticated(true);
       const data = await response.json();
       const obrasData: Obra[] = data.detalleObras || [];
+
+      // Check for newly added obra
+      const currentIds = obrasData.map(o => o.id);
+      const newObraId = currentIds.find(id => !previousObrasRef.current.includes(id));
+      if (newObraId && previousObrasRef.current.length > 0) {
+        setNewlyAddedObraId(newObraId);
+        setTimeout(() => setNewlyAddedObraId(null), 3000);
+      }
+      previousObrasRef.current = currentIds;
+
       setObras(obrasData);
 
       // Calculate statistics
@@ -309,300 +323,394 @@ export default function Home() {
 
   // Show dashboard for authenticated users
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background/95 to-muted">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Dashboard de Obras
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Vista general de tus proyectos de construcción
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Nueva Obra
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="px-4 py-2">
-                <DialogHeader className="px-0 py-2">
-                  <DialogTitle className="text-lg font-medium">Crear Nueva Obra</DialogTitle>
-                  <DialogDescription>
-                    Completa la información básica de la obra. Podrás agregar más detalles después.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="designacion">
-                      Designación y Ubicación <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="designacion"
-                      placeholder="Ej: Construcción de edificio - Av. Corrientes 1234"
-                      value={newObra.designacionYUbicacion}
-                      onChange={(e) => setNewObra({ ...newObra, designacionYUbicacion: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="entidad">
-                      Entidad Contratante <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="entidad"
-                      placeholder="Ej: Municipalidad de Buenos Aires"
-                      value={newObra.entidadContratante}
-                      onChange={(e) => setNewObra({ ...newObra, entidadContratante: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="mes">Mes Básico de Contrato</Label>
-                    <Input
-                      id="mes"
-                      placeholder="Ej: Enero 2024"
-                      value={newObra.mesBasicoDeContrato}
-                      onChange={(e) => setNewObra({ ...newObra, mesBasicoDeContrato: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="iniciacion">Fecha de Iniciación</Label>
-                    <Input
-                      id="iniciacion"
-                      placeholder="Ej: Marzo 2024"
-                      value={newObra.iniciacion}
-                      onChange={(e) => setNewObra({ ...newObra, iniciacion: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleCreateObra} disabled={isCreating}>
-                    {isCreating ? "Creando..." : "Crear Obra"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-            <Button asChild variant="outline">
-              <Link href="/excel">
-                Ver Todas las Obras
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total de Obras</CardTitle>
-                <FolderKanban className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.total || 0}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Proyectos registrados
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.1 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">En Progreso</CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.inProgress || 0}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Obras activas
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.2 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Completadas</CardTitle>
-                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.completed || 0}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Obras finalizadas
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.3 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Progreso Promedio</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {stats?.avgProgress ? stats.avgProgress.toFixed(1) : 0}%
-                </div>
-                <div className="w-full bg-muted rounded-full h-2 mt-2">
-                  <div
-                    className="bg-primary h-2 rounded-full transition-all"
-                    style={{ width: `${stats?.avgProgress || 0}%` }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.4 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Valor Total Contratos</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(stats?.totalContractValue || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Suma de contratos + ampliaciones
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.5 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Certificado</CardTitle>
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(stats?.totalCertifiedValue || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Monto certificado a la fecha
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-
-        {/* Recent Obras */}
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/50">
+      <div className="mx-auto max-w-full px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header with gradient accent */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.6 }}
+          transition={{ duration: 0.4 }}
+          className="relative mb-10"
         >
-          <Card>
-            <CardHeader>
-              <CardTitle>Obras Recientes</CardTitle>
-              <CardDescription>
-                Últimas obras registradas en el sistema
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {obras.length === 0 ? (
-                <div className="text-center py-12 space-y-4">
-                  <FolderKanban className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <div>
-                    <p className="text-muted-foreground mb-2">
-                      No hay obras registradas. Crea tu primera obra para comenzar.
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Si acabas de registrarte, asegurate de{" "}
-                      <Link href="/onboarding" className="text-primary hover:underline">
-                        configurar tu organización
-                      </Link>
-                      {" "}primero.
-                    </p>
-                  </div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <Building2 className="h-5 w-5 text-primary" />
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {obras.slice(0, 5).map((obra) => (
-                    <Link
-                      key={obra.id}
-                      href={`/excel/${obra.id}`}
-                      className="block"
-                    >
-                      <div className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="font-mono">
-                              #{obra.n}
-                            </Badge>
-                            {obra.porcentaje >= 100 && (
-                              <Badge variant="default" className="bg-green-600">
-                                Completada
-                              </Badge>
-                            )}
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                  Panel de Control
+                </h1>
+              </div>
+              <p className="text-muted-foreground text-sm pl-[52px]">
+                Gestiona y supervisa tus proyectos de construccion
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2 shadow-sm">
+                    <Plus className="h-4 w-4" />
+                    Nueva Obra
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-xl border-0 bg-transparent p-0 shadow-none rounded-none">
+                  <div className="relative isolate overflow-hidden h-[85vh] border border-stone-200 bg-gradient-to-b from-stone-50 via-white to-stone-100 px-6 py-8">
+                    <div className="pointer-events-none absolute inset-0">
+                      <div className="absolute inset-x-10 top-0 h-16 bg-gradient-to-b from-white via-white/70 to-transparent" />
+                      <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-stone-200/50 to-transparent" />
+                      <div className="absolute inset-y-6 left-12 w-px bg-gradient-to-b from-stone-200 via-stone-100 to-stone-200" />
+                    </div>
+                    <div className="pointer-events-none absolute inset-y-8 left-5 flex w-6 flex-col items-center justify-between pr-4">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <span
+                          key={index}
+                          className="h-3.5 w-3.5 rounded-full bg-stone-200 shadow-inner shadow-stone-500/40"
+                        />
+                      ))}
+                    </div>
+                    <div className="absolute -top-8 left-16 right-16 h-10 rounded-full bg-black/5 blur-3xl" aria-hidden="true" />
+                    <div className="relative space-y-6 pl-8 flex flex-col gap-4 h-full justify-between">
+                      <div className="flex flex-col gap-2">
+                        <DialogHeader className="space-y-2 px-0">
+                          <DialogTitle className="text-2xl font-semibold text-stone-800">Crear Nueva Obra</DialogTitle>
+                          <DialogDescription className="text-base text-stone-500">
+                            Completa la informacion basica de la obra. Podras agregar mas detalles despues.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-5">
+                          <div className="space-y-2">
+                            <Label htmlFor="designacion" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
+                              Designacion y Ubicacion <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              id="designacion"
+                              placeholder="Ej: Construccion de edificio - Av. Corrientes 1234"
+                              value={newObra.designacionYUbicacion}
+                              onChange={(e) => setNewObra({ ...newObra, designacionYUbicacion: e.target.value })}
+                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
+                            />
                           </div>
-                          <p className="font-medium truncate">{obra.designacionYUbicacion}</p>
-                          <p className="text-sm text-muted-foreground">{obra.entidadContratante}</p>
-                        </div>
-                        <div className="flex items-center gap-4 ml-4">
-                          <div className="text-right">
-                            <div className="text-sm font-medium">{obra.porcentaje}%</div>
-                            <div className="w-24 bg-muted rounded-full h-2 mt-1">
-                              <div
-                                className="bg-primary h-2 rounded-full"
-                                style={{ width: `${obra.porcentaje}%` }}
-                              />
-                            </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="entidad" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
+                              Entidad Contratante <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              id="entidad"
+                              placeholder="Ej: Municipalidad de Buenos Aires"
+                              value={newObra.entidadContratante}
+                              onChange={(e) => setNewObra({ ...newObra, entidadContratante: e.target.value })}
+                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
+                            />
                           </div>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                          <div className="space-y-2">
+                            <Label htmlFor="mes" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
+                              Mes Basico de Contrato
+                            </Label>
+                            <Input
+                              id="mes"
+                              placeholder="Ej: Enero 2024"
+                              value={newObra.mesBasicoDeContrato}
+                              onChange={(e) => setNewObra({ ...newObra, mesBasicoDeContrato: e.target.value })}
+                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="iniciacion" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
+                              Fecha de Iniciacion
+                            </Label>
+                            <Input
+                              id="iniciacion"
+                              placeholder="Ej: Marzo 2024"
+                              value={newObra.iniciacion}
+                              onChange={(e) => setNewObra({ ...newObra, iniciacion: e.target.value })}
+                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
+                            />
+                          </div>
                         </div>
                       </div>
-                    </Link>
-                  ))}
-                  {obras.length > 5 && (
-                    <Button asChild variant="outline" className="w-full">
-                      <Link href="/excel">
-                        Ver todas las {obras.length} obras
-                      </Link>
-                    </Button>
+
+                      <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end ">
+                        <Button
+                          variant="outline"
+                          onClick={() => setDialogOpen(false)}
+                          className="border-stone-200 bg-white/70 text-stone-600 shadow-sm hover:bg-white"
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          onClick={handleCreateObra}
+                          disabled={isCreating}
+                          className="bg-stone-900 text-white  hover:bg-stone-800"
+                        >
+                          {isCreating ? "Creando..." : "Crear Obra"}
+                        </Button>
+                      </DialogFooter>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/excel">
+                  Ver Todas
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Main Grid Layout - Obras Recientes is now central */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Obras Recientes - Central & Prominent (takes 2 columns) */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="lg:col-span-2 order-first"
+          >
+            <Card className="border-0 shadow-lg pt-0 shadow-black/5 bg-card/80 backdrop-blur-sm overflow-hidden gap-0 pb-0">
+              <CardHeader className="border-b bg-primary/10 py-4 !pb-2" >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      <Activity className="h-4.5 w-4.5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Obras Recientes</CardTitle>
+                      <CardDescription className="text-xs mt-0.5">
+                        Tus proyectos mas recientes
+                      </CardDescription>
+                    </div>
+                  </div>
+                  {obras.length > 0 && (
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      {obras.length} total
+                    </Badge>
                   )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
+              </CardHeader>
+              <CardContent className="p-0 mt-0">
+                {obras.length === 0 ? (
+                  <div className="text-center py-16 px-6 space-y-4">
+                    <div className="mx-auto w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center">
+                      <FolderKanban className="h-8 w-8 text-muted-foreground/50" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-muted-foreground font-medium">
+                        No hay obras registradas
+                      </p>
+                      <p className="text-sm text-muted-foreground/70 max-w-sm mx-auto">
+                        Crea tu primera obra para comenzar a gestionar tus proyectos. Si acabas de registrarte,{" "}
+                        <Link href="/onboarding" className="text-primary hover:underline">
+                          configura tu organizacion
+                        </Link>
+                        {" "}primero.
+                      </p>
+                    </div>
+                    <Button onClick={() => setDialogOpen(true)} className="mt-4 gap-2">
+                      <Plus className="h-4 w-4" />
+                      Crear Primera Obra
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    <AnimatePresence mode="popLayout">
+                      {obras.slice(0, 5).map((obra, index) => (
+                        <motion.div
+                          key={obra.id}
+                          initial={newlyAddedObraId === obra.id ? { scale: 0.8, opacity: 0, y: -20 } : { opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1, y: 0 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          transition={{
+                            type: newlyAddedObraId === obra.id ? "spring" : "tween",
+                            stiffness: 500,
+                            damping: 30,
+                            delay: newlyAddedObraId === obra.id ? 0 : index * 0.05
+                          }}
+                          className={`relative ${newlyAddedObraId === obra.id ? 'z-10' : ''}`}
+                        >
+                          {newlyAddedObraId === obra.id && (
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: [0, 1, 1, 0] }}
+                              transition={{ duration: 2, times: [0, 0.1, 0.8, 1] }}
+                              className="absolute inset-0 bg-gradient-to-r from-green-500/10 via-green-500/5 to-transparent pointer-events-none"
+                            />
+                          )}
+                          <Link
+                            href={`/excel/${obra.id}`}
+                            className="flex items-center justify-between p-4 hover:bg-accent/50 transition-all duration-200 group"
+                          >
+                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted/70 font-mono text-sm font-semibold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                                {obra.n}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <p className="font-medium truncate text-sm">{obra.designacionYUbicacion}</p>
+                                  {obra.porcentaje >= 100 && (
+                                    <Badge variant="default" className="bg-green-600/90 text-[10px] h-5 shrink-0">
+                                      Completada
+                                    </Badge>
+                                  )}
+                                  {newlyAddedObraId === obra.id && (
+                                    <Badge variant="default" className="bg-blue-600 text-[10px] h-5 shrink-0 animate-pulse">
+                                      Nueva
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate">{obra.entidadContratante}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 ml-4 shrink-0">
+                              <div className="text-right">
+                                <div className="text-sm font-semibold tabular-nums">{obra.porcentaje}%</div>
+                                <div className="w-20 bg-muted rounded-full h-1.5 mt-1.5">
+                                  <motion.div
+                                    className="bg-primary h-1.5 rounded-full"
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${obra.porcentaje}%` }}
+                                    transition={{ duration: 0.5, delay: index * 0.05 }}
+                                  />
+                                </div>
+                              </div>
+                              <ArrowRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                            </div>
+                          </Link>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                    {obras.length > 5 && (
+                      <div className="p-3 bg-muted/30 mb-0 flex justify-end">
+                        <Button asChild variant="ghost" size="sm" className="w-fit text-muted-foreground hover:text-foreground">
+                          <Link href="/excel">
+                            Ver las {obras.length - 5} obras restantes
+                            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Stats Sidebar */}
+          <div className="space-y-4 lg:col-span-1">
+            {/* Quick Stats Card */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+            >
+              <Card className="border-0 shadow-md shadow-black/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Resumen</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="text-center p-3 rounded-xl bg-muted/50">
+                      <div className="text-2xl font-bold">{stats?.total || 0}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Total</div>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-blue-500/10">
+                      <div className="text-2xl font-bold text-blue-600">{stats?.inProgress || 0}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Activas</div>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-green-500/10">
+                      <div className="text-2xl font-bold text-green-600">{stats?.completed || 0}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Listas</div>
+                    </div>
+                  </div>
+
+                  {/* Progress Ring */}
+                  <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/30">
+                    <div className="relative h-14 w-14 shrink-0">
+                      <svg className="h-14 w-14 -rotate-90" viewBox="0 0 36 36">
+                        <path
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          className="text-muted"
+                        />
+                        <motion.path
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeDasharray={`${stats?.avgProgress || 0}, 100`}
+                          className="text-primary"
+                          initial={{ strokeDasharray: "0, 100" }}
+                          animate={{ strokeDasharray: `${stats?.avgProgress || 0}, 100` }}
+                          transition={{ duration: 1, delay: 0.5 }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xs font-bold">{stats?.avgProgress ? stats.avgProgress.toFixed(0) : 0}%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Progreso Promedio</p>
+                      <p className="text-xs text-muted-foreground">De todas las obras</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Financial Stats */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+            >
+              <Card className="border-0 shadow-md shadow-black/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Financiero</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="p-3 rounded-xl bg-muted/30 space-y-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <DollarSign className="h-3.5 w-3.5" />
+                      Valor Contratos
+                    </div>
+                    <div className="text-lg font-semibold truncate">
+                      {formatCurrency(stats?.totalContractValue || 0)}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-green-500/5 space-y-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                      Total Certificado
+                    </div>
+                    <div className="text-lg font-semibold text-green-700 truncate">
+                      {formatCurrency(stats?.totalCertifiedValue || 0)}
+                    </div>
+                  </div>
+                  {stats && stats.totalContractValue > 0 && (
+                    <div className="pt-2">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                        <span>Avance financiero</span>
+                        <span>{((stats.totalCertifiedValue / stats.totalContractValue) * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <motion.div
+                          className="bg-green-600 h-2 rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min((stats.totalCertifiedValue / stats.totalContractValue) * 100, 100)}%` }}
+                          transition={{ duration: 0.8, delay: 0.6 }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -76,16 +76,12 @@ function TableRowInner<Row extends FormTableRow>({
 	return (
 		<Fragment>
 			<tr
+				data-index={rowIndex}
 				className={cn(
-					"border-b transition-colors duration-150 group relative",
-					"animate-virtualized-debug", // DEBUG: Testing virtualization - remove after testing
+					"border-b group relative",
 					rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
 					isRowDirty ? "bg-amber-50/60 group/row-dirty" : ""
 				)}
-				style={{
-					// DEBUG: Fade animation for virtualization testing - remove after testing
-					animation: "virtualized-fade 2s ease-out",
-				}}
 			>
 				{visibleCells.map((cell) => {
 					const columnId = cell.column.id;
@@ -133,7 +129,7 @@ function TableRowInner<Row extends FormTableRow>({
 						{isRowDirty && (
 							<Tooltip>
 								<TooltipTrigger asChild>
-									<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-100 bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm transition-all duration-150">
+									<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-100 bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm">
 										Sin guardar
 									</div>
 								</TooltipTrigger>

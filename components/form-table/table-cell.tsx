@@ -97,7 +97,7 @@ function CellContent<Row extends FormTableRow>({
 	const body = (
 		<div
 			className={cn(
-				"transition-colors absolute top-0 left-0 w-full h-full",
+				"absolute top-0 left-0 w-full h-full",
 				isRowDirty ? "outline outline-amber-500/50 bg-amber-50/60 shadow-sm" : "",
 				isCellDirty
 					? "outline outline-amber-600/50 bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--color-amber-200)_5px,var(--color-amber-200)_6px,transparent_6px)] bg-repeat"
@@ -110,6 +110,13 @@ function CellContent<Row extends FormTableRow>({
 			)}
 		</div>
 	);
+
+	// PERFORMANCE DEBUG: Set to true to test without ContextMenu overhead
+	const DISABLE_CONTEXT_MENU = false;
+
+	if (DISABLE_CONTEXT_MENU) {
+		return body;
+	}
 
 	return (
 		<ContextMenu onOpenChange={handleOpenChange}>
