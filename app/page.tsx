@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,6 +17,7 @@ import {
   Building2,
   Activity
 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
 type Obra = {
   id: string;
@@ -63,11 +65,29 @@ const features = [
   },
 ];
 
+// Fetch function for obras data
+async function fetchObrasData(): Promise<{ obras: Obra[]; isAuthenticated: boolean }> {
+  const response = await fetch("/api/obras");
+
+  // If unauthorized, user is not authenticated
+  if (response.status === 401) {
+    return { obras: [], isAuthenticated: false };
+  }
+
+  // If there's an error, return empty data but authenticated
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: "Error desconocido" }));
+    console.error("API Error:", errorData);
+    return { obras: [], isAuthenticated: true };
+  }
+
+  const data = await response.json();
+  return { obras: data.detalleObras || [], isAuthenticated: true };
+}
+
 export default function Home() {
-  const [obras, setObras] = useState<Obra[]>([]);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const queryClient = useQueryClient();
+  const { prefetchObra } = usePrefetchObra();
   const [isCreating, setIsCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newObra, setNewObra] = useState({
@@ -79,92 +99,56 @@ export default function Home() {
   const [newlyAddedObraId, setNewlyAddedObraId] = useState<string | null>(null);
   const previousObrasRef = useRef<string[]>([]);
 
-  useEffect(() => {
-    fetchObras();
-  }, []);
+  // Use React Query for data fetching with caching
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['obras-dashboard'],
+    queryFn: fetchObrasData,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-  const fetchObras = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/obras");
+  const obras = data?.obras ?? [];
+  const isAuthenticated = data?.isAuthenticated ?? false;
 
-      // If unauthorized, user is not authenticated
-      if (response.status === 401) {
-        setIsAuthenticated(false);
-        setLoading(false);
-        return;
-      }
-
-      // If there's an error, try to get the error message
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Error desconocido" }));
-        console.error("API Error:", errorData);
-
-        // Set authenticated but with empty data - user might not have a tenant
-        setIsAuthenticated(true);
-        setObras([]);
-        setStats({
-          total: 0,
-          inProgress: 0,
-          completed: 0,
-          avgProgress: 0,
-          totalContractValue: 0,
-          totalCertifiedValue: 0,
-        });
-        setLoading(false);
-        return;
-      }
-
-      setIsAuthenticated(true);
-      const data = await response.json();
-      const obrasData: Obra[] = data.detalleObras || [];
-
-      // Check for newly added obra
-      const currentIds = obrasData.map(o => o.id);
-      const newObraId = currentIds.find(id => !previousObrasRef.current.includes(id));
-      if (newObraId && previousObrasRef.current.length > 0) {
-        setNewlyAddedObraId(newObraId);
-        setTimeout(() => setNewlyAddedObraId(null), 3000);
-      }
-      previousObrasRef.current = currentIds;
-
-      setObras(obrasData);
-
-      // Calculate statistics
-      const total = obrasData.length;
-      const completed = obrasData.filter(o => o.porcentaje >= 100).length;
-      const inProgress = total - completed;
-      const avgProgress = total > 0
-        ? obrasData.reduce((sum, o) => sum + o.porcentaje, 0) / total
-        : 0;
-      const totalContractValue = obrasData.reduce((sum, o) => sum + (o.contratoMasAmpliaciones || 0), 0);
-      const totalCertifiedValue = obrasData.reduce((sum, o) => sum + (o.certificadoALaFecha || 0), 0);
-
-      setStats({
-        total,
-        inProgress,
-        completed,
-        avgProgress,
-        totalContractValue,
-        totalCertifiedValue,
-      });
-    } catch (error) {
-      console.error("Error fetching obras:", error);
-      // Set default empty state on error
-      setIsAuthenticated(true);
-      setObras([]);
-      setStats({
+  // Calculate statistics from the cached data
+  const stats = useMemo<DashboardStats | null>(() => {
+    if (!data?.isAuthenticated) return null;
+    const obrasData = data.obras;
+    const total = obrasData.length;
+    if (total === 0) {
+      return {
         total: 0,
         inProgress: 0,
         completed: 0,
         avgProgress: 0,
         totalContractValue: 0,
         totalCertifiedValue: 0,
-      });
-    } finally {
-      setLoading(false);
+      };
     }
-  };
+    const completed = obrasData.filter(o => o.porcentaje >= 100).length;
+    const inProgress = total - completed;
+    const avgProgress = obrasData.reduce((sum, o) => sum + o.porcentaje, 0) / total;
+    const totalContractValue = obrasData.reduce((sum, o) => sum + (o.contratoMasAmpliaciones || 0), 0);
+    const totalCertifiedValue = obrasData.reduce((sum, o) => sum + (o.certificadoALaFecha || 0), 0);
+    return {
+      total,
+      inProgress,
+      completed,
+      avgProgress,
+      totalContractValue,
+      totalCertifiedValue,
+    };
+  }, [data]);
+
+  // Track newly added obras for animation
+  const currentIds = obras.map(o => o.id);
+  if (previousObrasRef.current.length > 0) {
+    const newObraId = currentIds.find(id => !previousObrasRef.current.includes(id));
+    if (newObraId && newlyAddedObraId !== newObraId) {
+      setNewlyAddedObraId(newObraId);
+      setTimeout(() => setNewlyAddedObraId(null), 3000);
+    }
+  }
+  previousObrasRef.current = currentIds;
 
   const handleCreateObra = async () => {
     if (!newObra.designacionYUbicacion.trim() || !newObra.entidadContratante.trim()) {
@@ -217,7 +201,8 @@ export default function Home() {
         mesBasicoDeContrato: "",
         iniciacion: "",
       });
-      fetchObras();
+      // Invalidate cache to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ['obras-dashboard'] });
     } catch (error) {
       console.error("Error creating obra:", error);
       toast.error("Error al crear la obra");

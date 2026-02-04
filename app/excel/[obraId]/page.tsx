@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { obraSchema, type Obra } from "../schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +73,114 @@ const emptyObra: Obra = {
 
 const DOCUMENTS_BUCKET = "obra-documents";
 
+// Query functions for React Query caching
+async function fetchObraDetail(obraId: string): Promise<Obra> {
+	const response = await fetch(`/api/obras/${obraId}`);
+	if (!response.ok) {
+		const result = await response.json().catch(() => ({}));
+		throw new Error(result.error ?? "No se pudo cargar la obra");
+	}
+	const data = await response.json();
+	return data.obra as Obra;
+}
+
+async function fetchMemoriaNotes(obraId: string): Promise<MemoriaNote[]> {
+	const res = await fetch(`/api/obras/${obraId}/memoria`);
+	if (!res.ok) return [];
+	const out = await res.json();
+	const items = Array.isArray(out?.notes) ? out.notes : [];
+	return items.map((n: any) => ({
+		id: String(n.id),
+		text: String(n.text ?? ""),
+		createdAt: String(n.createdAt ?? n.created_at ?? ""),
+		userId: String(n.userId ?? n.user_id ?? ""),
+		userName: typeof n.userName === "string" ? n.userName : n.user_name ?? null,
+	}));
+}
+
+async function fetchMaterialOrders(obraId: string): Promise<MaterialOrder[]> {
+	const res = await fetch(`/api/obras/${obraId}/materials`);
+	if (!res.ok) return [];
+	const data = await res.json();
+	const orders = (data?.orders || []) as Array<any>;
+	return orders.map((o: any) => ({
+		id: String(o.id),
+		nroOrden: String(o.nroOrden || o.id),
+		solicitante: String(o.solicitante || ""),
+		gestor: String(o.gestor || ""),
+		proveedor: String(o.proveedor || ""),
+		docPath: o.docPath,
+		docBucket: o.docBucket,
+		items: (o.items || []).map((it: any, idx: number) => ({
+			id: `${o.id}-i-${idx}`,
+			cantidad: Number(it.cantidad || 0),
+			unidad: String(it.unidad || ""),
+			material: String(it.material || ""),
+			precioUnitario: Number(it.precioUnitario || 0),
+		})),
+	}));
+}
+
+async function fetchCertificates(obraId: string): Promise<{ certificates: Certificate[]; total: number }> {
+	const response = await fetch(`/api/obras/${obraId}/certificates`);
+	if (!response.ok) {
+		throw new Error("Failed to load certificates");
+	}
+	const data = await response.json();
+	return { certificates: data.certificates || [], total: data.total || 0 };
+}
+
+async function fetchObraRecipients(obraId: string): Promise<{ roles: ObraRole[]; users: ObraUser[]; userRoles: ObraUserRole[] }> {
+	const res = await fetch(`/api/obra-recipients?obraId=${obraId}`);
+	if (!res.ok) return { roles: [], users: [], userRoles: [] };
+	const data = await res.json();
+	return {
+		roles: data.roles ?? [],
+		users: data.users ?? [],
+		userRoles: data.userRoles ?? [],
+	};
+}
+
+async function fetchFlujoActions(obraId: string): Promise<FlujoAction[]> {
+	const res = await fetch(`/api/flujo-actions?obraId=${obraId}`);
+	if (!res.ok) throw new Error("Failed to load flujo actions");
+	const data = await res.json();
+	return data.actions || [];
+}
+
+async function fetchPendientes(obraId: string): Promise<PendingDoc[]> {
+	const res = await fetch(`/api/obras/${obraId}/pendientes`);
+	if (!res.ok) return [];
+	const data = await res.json();
+	return (data?.pendientes ?? []).map((p: any) => ({
+		id: p.id as string,
+		name: String(p.name ?? ""),
+		poliza: String(p.poliza ?? ""),
+		dueMode: (p.dueMode ?? "fixed") as "fixed" | "after_completion",
+		dueDate: String(p.dueDate ?? ""),
+		offsetDays: Number(p.offsetDays ?? 0),
+		done: Boolean(p.done ?? false),
+	}));
+}
+
+type MemoriaNote = {
+	id: string;
+	text: string;
+	createdAt: string;
+	userId: string;
+	userName: string | null;
+};
+
+type PendingDoc = { 
+	id: string; 
+	name: string; 
+	poliza: string; 
+	dueMode: "fixed" | "after_completion"; 
+	dueDate: string; 
+	offsetDays: number; 
+	done: boolean 
+};
+
 const toLocalDateTimeValue = (value: string | null) => {
 	if (!value) return null;
 	const hasTimezone = /(?:[Zz]|[+-]\d{2}:\d{2})$/.test(value);
@@ -94,17 +203,79 @@ const toIsoDateTime = (value: string | null) => {
 
 export default function ObraDetailPage() {
 	const params = useParams();
+	const queryClient = useQueryClient();
 	const obraId = useMemo(() => {
 		const raw = (params as Record<string, string | string[] | undefined>)?.obraId;
 		if (Array.isArray(raw)) return raw[0];
 		return raw;
 	}, [params]);
-	const [routeError, setRouteError] = useState<string | null>(null);
-	const [isLoading, setIsLoading] = useState(true);
-	const [loadError, setLoadError] = useState<string | null>(null);
-	const [certificates, setCertificates] = useState<Certificate[]>([]);
-	const [certificatesTotal, setCertificatesTotal] = useState(0);
-	const [certificatesLoading, setCertificatesLoading] = useState(true);
+
+	// React Query hooks for cached data fetching
+	const obraQuery = useQuery({
+		queryKey: ['obra', obraId],
+		queryFn: () => fetchObraDetail(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const memoriaQuery = useQuery({
+		queryKey: ['obra', obraId, 'memoria'],
+		queryFn: () => fetchMemoriaNotes(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const materialsQuery = useQuery({
+		queryKey: ['obra', obraId, 'materials'],
+		queryFn: () => fetchMaterialOrders(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const certificatesQuery = useQuery({
+		queryKey: ['obra', obraId, 'certificates'],
+		queryFn: () => fetchCertificates(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const recipientsQuery = useQuery({
+		queryKey: ['obra', obraId, 'recipients'],
+		queryFn: () => fetchObraRecipients(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 10 * 60 * 1000, // Recipients change less often
+	});
+
+	const flujoActionsQuery = useQuery({
+		queryKey: ['obra', obraId, 'flujo-actions'],
+		queryFn: () => fetchFlujoActions(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const pendientesQuery = useQuery({
+		queryKey: ['obra', obraId, 'pendientes'],
+		queryFn: () => fetchPendientes(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 5 * 60 * 1000,
+	});
+
+	// Derived state from queries
+	const isLoading = obraQuery.isLoading;
+	const loadError = obraQuery.error?.message ?? null;
+	const routeError = !obraId || obraId === "undefined" ? "Obra no encontrada" : null;
+	const certificates = certificatesQuery.data?.certificates ?? [];
+	const certificatesTotal = certificatesQuery.data?.total ?? 0;
+	const certificatesLoading = certificatesQuery.isLoading;
+	const memoriaNotes = memoriaQuery.data ?? [];
+	const materialOrders = materialsQuery.data ?? [];
+	const obraRoles = recipientsQuery.data?.roles ?? [];
+	const obraUsers = recipientsQuery.data?.users ?? [];
+	const obraUserRoles = recipientsQuery.data?.userRoles ?? [];
+	const flujoActions = flujoActionsQuery.data ?? [];
+	const isLoadingFlujoActions = flujoActionsQuery.isLoading;
+
+	// Local state for UI
 	const [isAddingCertificate, setIsAddingCertificate] = useState(false);
 	const [newCertificate, setNewCertificate] = useState<NewCertificateFormState>(
 		() => ({ ...certificateFormDefault })
@@ -116,32 +287,18 @@ export default function ObraDetailPage() {
 	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
 	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
 
-	type MemoriaNote = {
-		id: string;
-		text: string;
-		createdAt: string;
-		userId: string;
-		userName: string | null;
-	};
 	const [isMemoriaOpen, setIsMemoriaOpen] = useState(false);
 	const [memoriaDraft, setMemoriaDraft] = useState("");
-	const [memoriaNotes, setMemoriaNotes] = useState<MemoriaNote[]>([]);
 
-	type PendingDoc = { id: string; name: string; poliza: string; dueMode: "fixed" | "after_completion"; dueDate: string; offsetDays: number; done: boolean };
 	const [pendingDocs, setPendingDocs] = useState<PendingDoc[]>([
 		{ id: "doc-1", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
 		{ id: "doc-2", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
 		{ id: "doc-3", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
 	]);
 
-	const [obraRoles, setObraRoles] = useState<ObraRole[]>([]);
-	const [obraUsers, setObraUsers] = useState<ObraUser[]>([]);
-	const [obraUserRoles, setObraUserRoles] = useState<ObraUserRole[]>([]);
 	const [selectedRecipientUserId, setSelectedRecipientUserId] = useState<string>("");
 	const [selectedRecipientRoleId, setSelectedRecipientRoleId] = useState<string>("");
 
-	const [flujoActions, setFlujoActions] = useState<FlujoAction[]>([]);
-	const [isLoadingFlujoActions, setIsLoadingFlujoActions] = useState(false);
 	const [isSavingFlujoAction, setIsSavingFlujoAction] = useState(false);
 	const [isAddingFlujoAction, setIsAddingFlujoAction] = useState(false);
 	const [newFlujoAction, setNewFlujoAction] = useState<Partial<FlujoAction>>({
@@ -155,9 +312,6 @@ export default function ObraDetailPage() {
 		notification_types: ["in_app", "email"],
 		enabled: true,
 	});
-
-	// Start with no material orders; they are loaded from `/api/obras/:obraId/materials`
-	const [materialOrders, setMaterialOrders] = useState<MaterialOrder[]>([]);
 
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
@@ -426,46 +580,10 @@ export default function ObraDetailPage() {
 		return items.reduce((acc, it) => acc + it.cantidad * it.precioUnitario, 0);
 	}, []);
 
-	// Load persisted material orders (if any)
-	const refreshMaterialOrders = useCallback(async () => {
-		if (!obraId) return;
-		try {
-			const res = await fetch(`/api/obras/${obraId}/materials`);
-			if (!res.ok) {
-				// If the endpoint fails, keep current state (don't re-introduce any fake data)
-				return;
-			}
-			const data = await res.json();
-			const orders = (data?.orders || []) as Array<any>;
-
-			const mapped: MaterialOrder[] = orders.map((o: any) => ({
-				id: String(o.id),
-				nroOrden: String(o.nroOrden || o.id),
-				solicitante: String(o.solicitante || ""),
-				gestor: String(o.gestor || ""),
-				proveedor: String(o.proveedor || ""),
-				docPath: o.docPath,
-				docBucket: o.docBucket,
-				items: (o.items || []).map((it: any, idx: number) => ({
-					id: `${o.id}-i-${idx}`,
-					cantidad: Number(it.cantidad || 0),
-					unidad: String(it.unidad || ""),
-					material: String(it.material || ""),
-					precioUnitario: Number(it.precioUnitario || 0),
-				})),
-			}));
-
-			// Always replace materialOrders with whatever the backend returns
-			setMaterialOrders(mapped);
-
-		} catch {
-			// no-op
-		}
-	}, [obraId]);
-
-	useEffect(() => {
-		void refreshMaterialOrders();
-	}, [refreshMaterialOrders]);
+	// Invalidate material orders cache to trigger refetch
+	const refreshMaterialOrders = useCallback(() => {
+		queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'materials'] });
+	}, [obraId, queryClient]);
 
 	const form = useForm({
 		defaultValues: emptyObra,
@@ -498,17 +616,9 @@ export default function ObraDetailPage() {
 
 				toast.success("Obra actualizada correctamente");
 
-				try {
-					const refresh = await fetch(`/api/obras/${obraId}`);
-					if (refresh.ok) {
-						const refreshed = await refresh.json();
-						applyObraToForm(refreshed.obra as Obra);
-						// After successful save, the current values become the new initial values
-						setInitialFormValues(refreshed.obra as Obra);
-					}
-				} catch (refreshError) {
-					console.error("Error refrescando la obra", refreshError);
-				}
+				// Invalidate cache and refetch
+				queryClient.invalidateQueries({ queryKey: ['obra', obraId] });
+				queryClient.invalidateQueries({ queryKey: ['obras-dashboard'] });
 			} catch (error) {
 				console.error(error);
 				toast.error(
@@ -553,39 +663,19 @@ export default function ObraDetailPage() {
 		})();
 	}, []);
 
-	// Load persisted memoria notes for this obra
+	// Apply obra data to form when it loads
 	useEffect(() => {
-		if (!obraId) return;
-		let cancelled = false;
+		if (obraQuery.data) {
+			applyObraToForm(obraQuery.data);
+		}
+	}, [obraQuery.data, applyObraToForm]);
 
-		void (async () => {
-			try {
-				const res = await fetch(`/api/obras/${obraId}/memoria`);
-				if (!res.ok) return;
-				const out = await res.json();
-				if (cancelled) return;
-				const items = Array.isArray(out?.notes) ? out.notes : [];
-				setMemoriaNotes(
-					items.map((n: any) => ({
-						id: String(n.id),
-						text: String(n.text ?? ""),
-						createdAt: String(n.createdAt ?? n.created_at ?? ""),
-						userId: String(n.userId ?? n.user_id ?? ""),
-						userName:
-							typeof n.userName === "string"
-								? n.userName
-								: n.user_name ?? null,
-					})),
-				);
-			} catch {
-				// ignore load errors silently for now
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [obraId]);
+	// Apply pendientes data when it loads
+	useEffect(() => {
+		if (pendientesQuery.data && pendientesQuery.data.length > 0) {
+			setPendingDocs(pendientesQuery.data);
+		}
+	}, [pendientesQuery.data]);
 
 	const getErrorMessage = useCallback((errors: unknown): string => {
 		if (!errors) return "";
