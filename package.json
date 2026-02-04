@@ -108,6 +108,6 @@
 		"vitest": "^4.0.14"
 	},
 	"overrides": {
-		"@supabase/node-fetch": false
+		"@supabase/node-fetch": "npm:node-fetch@^2.6.7"
 	}
 }
