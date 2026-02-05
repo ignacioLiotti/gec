@@ -171,14 +171,14 @@ type MemoriaNote = {
 	userName: string | null;
 };
 
-type PendingDoc = { 
-	id: string; 
-	name: string; 
-	poliza: string; 
-	dueMode: "fixed" | "after_completion"; 
-	dueDate: string; 
-	offsetDays: number; 
-	done: boolean 
+type PendingDoc = {
+	id: string;
+	name: string;
+	poliza: string;
+	dueMode: "fixed" | "after_completion";
+	dueDate: string;
+	offsetDays: number;
+	done: boolean
 };
 
 const toLocalDateTimeValue = (value: string | null) => {
@@ -595,7 +595,7 @@ export default function ObraDetailPage() {
 		},
 		onSubmit: async ({ value }) => {
 			if (!obraId || obraId === "undefined") {
-				setRouteError("Obra no encontrada");
+				toast.error("Obra no encontrada");
 				return;
 			}
 			try {
@@ -666,20 +666,6 @@ export default function ObraDetailPage() {
 		})();
 	}, []);
 
-	// Apply obra data to form when it loads
-	useEffect(() => {
-		if (obraQuery.data) {
-			applyObraToForm(obraQuery.data);
-		}
-	}, [obraQuery.data, applyObraToForm]);
-
-	// Apply pendientes data when it loads
-	useEffect(() => {
-		if (pendientesQuery.data && pendientesQuery.data.length > 0) {
-			setPendingDocs(pendientesQuery.data);
-		}
-	}, [pendientesQuery.data]);
-
 	const getErrorMessage = useCallback((errors: unknown): string => {
 		if (!errors) return "";
 		if (Array.isArray(errors)) {
@@ -713,6 +699,20 @@ export default function ObraDetailPage() {
 		},
 		[form]
 	);
+
+	// Apply obra data to form when it loads
+	useEffect(() => {
+		if (obraQuery.data) {
+			applyObraToForm(obraQuery.data);
+		}
+	}, [obraQuery.data, applyObraToForm]);
+
+	// Apply pendientes data when it loads
+	useEffect(() => {
+		if (pendientesQuery.data && pendientesQuery.data.length > 0) {
+			setPendingDocs(pendientesQuery.data);
+		}
+	}, [pendientesQuery.data]);
 
 	const handleNewCertificateChange = useCallback(
 		(field: keyof NewCertificateFormState, value: string) => {
@@ -852,48 +852,7 @@ export default function ObraDetailPage() {
 		}
 	}, [obraId]);
 
-	// Flujo Actions functions
-	const loadFlujoActions = useCallback(async () => {
-		if (!obraId || obraId === "undefined") return;
-		setIsLoadingFlujoActions(true);
-		try {
-			const res = await fetch(`/api/flujo-actions?obraId=${obraId}`);
-			if (!res.ok) throw new Error("Failed to load flujo actions");
-			const data = await res.json();
-			setFlujoActions(data.actions || []);
-		} catch (err) {
-			console.error("Error loading flujo actions:", err);
-			toast.error("No se pudieron cargar las acciones de flujo");
-		} finally {
-			setIsLoadingFlujoActions(false);
-		}
-	}, [obraId]);
-
-	useEffect(() => {
-		loadFlujoActions();
-	}, [loadFlujoActions]);
-
-	// Load roles and users for this obra's tenant to power the flujo recipients selector
-	useEffect(() => {
-		if (!obraId || obraId === "undefined") return;
-		let cancelled = false;
-		(async () => {
-			try {
-				const res = await fetch(`/api/obra-recipients?obraId=${obraId}`);
-				if (!res.ok) return;
-				const data = await res.json();
-				if (cancelled) return;
-				setObraRoles(data.roles ?? []);
-				setObraUsers(data.users ?? []);
-				setObraUserRoles(data.userRoles ?? []);
-			} catch (error) {
-				console.error("Error loading obra recipients", error);
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [obraId]);
+	// Recipients are now loaded via React Query (recipientsQuery) - no manual effect needed
 
 	const saveFlujoAction = useCallback(async () => {
 		if (!obraId || obraId === "undefined") return;
@@ -946,7 +905,10 @@ export default function ObraDetailPage() {
 
 			// Optimistic update - add the new action immediately
 			if (createdAction) {
-				setFlujoActions((prev) => [...prev, createdAction]);
+				queryClient.setQueryData<FlujoAction[]>(
+					['obra', obraId, 'flujo-actions'],
+					(prev = []) => [...prev, createdAction]
+				);
 			}
 
 			// Reset form and close immediately
@@ -971,7 +933,7 @@ export default function ObraDetailPage() {
 		} finally {
 			setIsSavingFlujoAction(false);
 		}
-	}, [obraId, newFlujoAction, obraUserRoles, selectedRecipientRoleId, selectedRecipientUserId]);
+	}, [obraId, newFlujoAction, obraUserRoles, queryClient, selectedRecipientRoleId, selectedRecipientUserId]);
 
 	const deleteFlujoAction = useCallback(async (actionId: string) => {
 		if (!obraId || obraId === "undefined") return;
@@ -981,13 +943,16 @@ export default function ObraDetailPage() {
 				method: "DELETE",
 			});
 			if (!res.ok) throw new Error("Failed to delete flujo action");
-			setFlujoActions((prev) => prev.filter((a) => a.id !== actionId));
+			queryClient.setQueryData<FlujoAction[]>(
+				['obra', obraId, 'flujo-actions'],
+				(prev = []) => prev.filter((a) => a.id !== actionId)
+			);
 			toast.success("Acción de flujo eliminada");
 		} catch (err) {
 			console.error("Error deleting flujo action:", err);
 			toast.error("No se pudo eliminar la acción de flujo");
 		}
-	}, [obraId]);
+	}, [obraId, queryClient]);
 
 	const toggleFlujoAction = useCallback(async (actionId: string, enabled: boolean) => {
 		if (!obraId || obraId === "undefined") return;
@@ -999,15 +964,16 @@ export default function ObraDetailPage() {
 				body: JSON.stringify({ id: actionId, enabled }),
 			});
 			if (!res.ok) throw new Error("Failed to toggle flujo action");
-			setFlujoActions((prev) =>
-				prev.map((a) => (a.id === actionId ? { ...a, enabled } : a))
+			queryClient.setQueryData<FlujoAction[]>(
+				['obra', obraId, 'flujo-actions'],
+				(prev = []) => prev.map((a) => (a.id === actionId ? { ...a, enabled } : a))
 			);
 			toast.success(enabled ? "Acción activada" : "Acción desactivada");
 		} catch (err) {
 			console.error("Error toggling flujo action:", err);
 			toast.error("No se pudo actualizar la acción");
 		}
-	}, [obraId]);
+	}, [obraId, queryClient]);
 
 	const updateFlujoAction = useCallback(async (actionId: string, updates: Partial<FlujoAction>) => {
 		if (!obraId || obraId === "undefined") return;
@@ -1041,10 +1007,11 @@ export default function ObraDetailPage() {
 			// If timing changed, reload all actions to get updated scheduled_for
 			// Otherwise just update locally
 			if (timingChanged) {
-				await loadFlujoActions();
+				await queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'flujo-actions'] });
 			} else {
-				setFlujoActions((prev) =>
-					prev.map((a) => (a.id === actionId ? { ...a, ...updates } : a))
+				queryClient.setQueryData<FlujoAction[]>(
+					['obra', obraId, 'flujo-actions'],
+					(prev = []) => prev.map((a) => (a.id === actionId ? { ...a, ...updates } : a))
 				);
 			}
 			toast.success("Acción actualizada correctamente");
@@ -1052,46 +1019,21 @@ export default function ObraDetailPage() {
 			console.error("Error updating flujo action:", err);
 			toast.error("No se pudo actualizar la acción");
 		}
-	}, [obraId, loadFlujoActions]);
+	}, [obraId, queryClient]);
 
 	const refreshCertificates = useCallback(async () => {
 		if (!obraId || obraId === "undefined") {
 			return;
 		}
-
-		if (mountedRef.current) {
-			setCertificatesLoading(true);
-		}
-
-		try {
-			const response = await fetch(`/api/obras/${obraId}/certificates`);
-			if (!response.ok) {
-				throw new Error("Failed to load certificates");
-			}
-
-			const data = await response.json();
-
-			if (!mountedRef.current) {
-				return;
-			}
-
-			setCertificates(data.certificates || []);
-			setCertificatesTotal(data.total || 0);
-		} catch (error) {
-			console.error("Error loading certificates:", error);
-		} finally {
-			if (mountedRef.current) {
-				setCertificatesLoading(false);
-			}
-		}
-	}, [obraId]);
+		await queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'certificates'] });
+	}, [obraId, queryClient]);
 
 	const handleCreateCertificate = useCallback(
 		async (event: FormEvent<HTMLFormElement>) => {
 			event.preventDefault();
 
 			if (!obraId || obraId === "undefined") {
-				setRouteError("Obra no encontrada");
+				toast.error("Obra no encontrada");
 				return;
 			}
 
@@ -1162,51 +1104,6 @@ export default function ObraDetailPage() {
 		},
 		[obraId, newCertificate, refreshCertificates]
 	);
-
-	useEffect(() => {
-		if (!obraId || obraId === "undefined") {
-			setRouteError("Obra no encontrada");
-			setIsLoading(false);
-			return;
-		}
-
-		let isMounted = true;
-
-		async function loadObra() {
-			setIsLoading(true);
-			try {
-				const response = await fetch(`/api/obras/${obraId}`);
-				if (!response.ok) {
-					const result = await response.json().catch(() => ({}));
-					throw new Error(result.error ?? "No se pudo cargar la obra");
-				}
-
-				const data = await response.json();
-				if (!isMounted) return;
-
-				applyObraToForm(data.obra as Obra);
-
-				setLoadError(null);
-			} catch (error) {
-				console.error(error);
-				if (isMounted) {
-					setLoadError(
-						error instanceof Error ? error.message : "No se pudo cargar la obra"
-					);
-				}
-			} finally {
-				if (isMounted) {
-					setIsLoading(false);
-				}
-			}
-		}
-
-		void loadObra();
-
-		return () => {
-			isMounted = false;
-		};
-	}, [obraId, applyObraToForm]);
 
 	useEffect(() => {
 		void refreshCertificates();
@@ -1398,19 +1295,20 @@ export default function ObraDetailPage() {
 													const out = await res.json();
 													const note = out?.note;
 													if (note) {
-														setMemoriaNotes((prev) => [
-															{
-																id: String(note.id),
-																text: String(note.text ?? ""),
-																createdAt: String(note.createdAt ?? note.created_at ?? ""),
-																userId: String(note.userId ?? note.user_id ?? ""),
-																userName:
-																	typeof note.userName === "string"
-																		? note.userName
-																		: note.user_name ?? null,
-															},
-															...prev,
-														]);
+														const newNote: MemoriaNote = {
+															id: String(note.id),
+															text: String(note.text ?? ""),
+															createdAt: String(note.createdAt ?? note.created_at ?? ""),
+															userId: String(note.userId ?? note.user_id ?? ""),
+															userName:
+																typeof note.userName === "string"
+																	? note.userName
+																	: note.user_name ?? null,
+														};
+														queryClient.setQueryData<MemoriaNote[]>(
+															['obra', obraId, 'memoria'],
+															(prev = []) => [newNote, ...prev]
+														);
 													}
 													setMemoriaDraft("");
 												} catch (err) {

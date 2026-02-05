@@ -19,6 +19,7 @@ import { MainWrapper } from "@/components/main-wrapper";
 import { PendingInvitationsBanner } from "@/components/invitations/pending-invitations-banner";
 import { getUserRoles } from "@/lib/route-guard";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -149,6 +150,7 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
       >
+        <SpeedInsights />
         <QueryClientProvider>
           <SupabaseAuthListener />
           <AuthController />
@@ -175,6 +177,7 @@ export default async function RootLayout({
             </SidebarInset>
           </SidebarProvider>
         </QueryClientProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
