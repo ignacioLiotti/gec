@@ -522,7 +522,10 @@ export default function ObraDetailPage() {
 			items: normalizedItems,
 		};
 
-		setMaterialOrders((prev) => [order, ...prev]);
+		queryClient.setQueryData<MaterialOrder[]>(
+			['obra', obraId, 'materials'],
+			(prev = []) => [order, ...prev]
+		);
 		setOrderFilters((prev) => ({ ...prev, [order.id]: "" }));
 		setExpandedOrders((prev) => {
 			const next = new Set(prev);
@@ -531,7 +534,7 @@ export default function ObraDetailPage() {
 		});
 		setIsAddOrderOpen(false);
 		setNewOrder({ ...emptyNewOrderForm });
-	}, [newOrder]);
+	}, [newOrder, obraId, queryClient]);
 
 	const toggleOrderExpanded = useCallback((orderId: string) => {
 		setExpandedOrders((prev) => {
