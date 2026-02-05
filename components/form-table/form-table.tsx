@@ -499,15 +499,61 @@ export function FormTableContent({ className }: { className?: string }) {
 											/>
 										</tr>
 									)}
-									{virtualRows.map((virtualRow) => {
-										const row = tableRows[virtualRow.index];
+{virtualRows.map((virtualRow) => {
+											const row = tableRows[virtualRow.index];
+											const rowId = row.original.id;
+											const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
+											// Create a stable string key of dirty cell IDs for memoization
+											const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
+											return (
+												<MemoizedTableRow
+													key={rowId}
+													row={row}
+													rowIndex={virtualRow.index}
+													columnsById={columnsById}
+													FieldComponent={FieldComponent}
+													highlightQuery={highlightQuery}
+													hasInitialSnapshot={hasInitialRow(rowId)}
+													hasAccordionRows={hasAccordionRows}
+													accordionRowConfig={accordionRowConfig}
+													accordionAlwaysOpen={accordionAlwaysOpen}
+													isExpanded={isRowExpanded(rowId)}
+													isRowDirty={rowIsDirty}
+													dirtyCellIds={dirtyCellIds}
+													showActionsColumn={showActionsColumn}
+													isCellDirty={isCellDirty}
+													getStickyProps={getStickyProps}
+													onToggleAccordion={toggleAccordionRow}
+													onDelete={handleDelete}
+													onClearCell={handleClearCell}
+													onRestoreCell={handleRestoreCell}
+													onCopyCell={handleCopyCell}
+													onCopyColumn={handleCopyColumn}
+													onCopyRow={handleCopyRow}
+												/>
+											);
+										})}
+									{paddingBottom > 0 && (
+										<tr>
+											<td
+												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
+												style={{ height: `${paddingBottom}px` }}
+											/>
+										</tr>
+									)}
+								</>
+							) : (
+// Non-virtualized rendering for small datasets
+									tableRows.map((row, rowIndex) => {
 										const rowId = row.original.id;
-										const { dirty: rowIsDirty } = getRowDirtyState(rowId);
+										const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
+										// Create a stable string key of dirty cell IDs for memoization
+										const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
 										return (
 											<MemoizedTableRow
 												key={rowId}
 												row={row}
-												rowIndex={virtualRow.index}
+												rowIndex={rowIndex}
 												columnsById={columnsById}
 												FieldComponent={FieldComponent}
 												highlightQuery={highlightQuery}
@@ -517,6 +563,7 @@ export function FormTableContent({ className }: { className?: string }) {
 												accordionAlwaysOpen={accordionAlwaysOpen}
 												isExpanded={isRowExpanded(rowId)}
 												isRowDirty={rowIsDirty}
+												dirtyCellIds={dirtyCellIds}
 												showActionsColumn={showActionsColumn}
 												isCellDirty={isCellDirty}
 												getStickyProps={getStickyProps}
@@ -529,48 +576,7 @@ export function FormTableContent({ className }: { className?: string }) {
 												onCopyRow={handleCopyRow}
 											/>
 										);
-									})}
-									{paddingBottom > 0 && (
-										<tr>
-											<td
-												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
-												style={{ height: `${paddingBottom}px` }}
-											/>
-										</tr>
-									)}
-								</>
-							) : (
-								// Non-virtualized rendering for small datasets
-								tableRows.map((row, rowIndex) => {
-									const rowId = row.original.id;
-									const { dirty: rowIsDirty } = getRowDirtyState(rowId);
-									return (
-										<MemoizedTableRow
-											key={rowId}
-											row={row}
-											rowIndex={rowIndex}
-											columnsById={columnsById}
-											FieldComponent={FieldComponent}
-											highlightQuery={highlightQuery}
-											hasInitialSnapshot={hasInitialRow(rowId)}
-											hasAccordionRows={hasAccordionRows}
-											accordionRowConfig={accordionRowConfig}
-											accordionAlwaysOpen={accordionAlwaysOpen}
-											isExpanded={isRowExpanded(rowId)}
-											isRowDirty={rowIsDirty}
-											showActionsColumn={showActionsColumn}
-											isCellDirty={isCellDirty}
-											getStickyProps={getStickyProps}
-											onToggleAccordion={toggleAccordionRow}
-											onDelete={handleDelete}
-											onClearCell={handleClearCell}
-											onRestoreCell={handleRestoreCell}
-											onCopyCell={handleCopyCell}
-											onCopyColumn={handleCopyColumn}
-											onCopyRow={handleCopyRow}
-										/>
-									);
-								})
+									})
 							)}
 						</tbody>
 
