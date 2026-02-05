@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -323,21 +323,32 @@ export default function ObraDetailPage() {
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
-	const router = useRouter();
-	const pathname = usePathname();
-	const searchParams = useSearchParams();
-	
-	// Derive activeTab from URL params
-	const activeTab = searchParams?.get("tab") || "general";
-
-	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
-		const params = new URLSearchParams(searchParams?.toString() || "");
-		for (const [key, value] of Object.entries(patch)) {
-			if (value == null || value === "") params.delete(key); else params.set(key, value);
-		}
-		const qs = params.toString();
-		router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-	}, [router, pathname, searchParams]);
+const router = useRouter();
+		const pathname = usePathname();
+		const searchParams = useSearchParams();
+		
+		// Use local state for immediate tab switching, sync to URL in background
+		const initialTab = searchParams?.get("tab") || "general";
+		const [activeTab, setActiveTab] = useState(initialTab);
+		
+		// Sync URL when tab changes (low priority, non-blocking)
+		const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
+			const params = new URLSearchParams(searchParams?.toString() || "");
+			for (const [key, value] of Object.entries(patch)) {
+				if (value == null || value === "") params.delete(key); else params.set(key, value);
+			}
+			const qs = params.toString();
+			// Use startTransition to mark URL update as low-priority
+			startTransition(() => {
+				router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+			});
+		}, [router, pathname, searchParams]);
+		
+		// Handle tab change: update local state immediately, sync URL in background
+		const handleTabChange = useCallback((value: string) => {
+			setActiveTab(value); // Immediate state update
+			setQueryParams({ tab: value }); // Background URL sync
+		}, [setQueryParams]);
 
 	// Import OC from PDF
 	const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -1123,11 +1134,11 @@ export default function ObraDetailPage() {
 			) : (
 				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
 					<div className="flex-1 min-w-0">
-						<Tabs
-							value={activeTab}
-							onValueChange={(value) => setQueryParams({ tab: value })}
-							className="space-y-4"
-						>
+<Tabs
+								value={activeTab}
+								onValueChange={handleTabChange}
+								className="space-y-4"
+							>
 							<div className="flex items-center justify-between mb-2 gap-2">
 								<ExcelPageTabs />
 								<div className="flex items-center gap-2">
