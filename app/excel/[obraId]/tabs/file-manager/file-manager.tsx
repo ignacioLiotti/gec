@@ -85,6 +85,8 @@ import {
   setCachedOcrLinks,
 } from './cache';
 import { CellType, FormTableConfig, FormTableRow, ColumnDef, ColumnField } from '@/components/form-table/types';
+import { FilterSection, RangeInputGroup, TextFilterInput } from '@/components/form-table/filter-components';
+import { FileText as FileTextIcon2, Hash, Type, DollarSign as DollarSignIcon, ToggleLeft } from 'lucide-react';
 
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
@@ -106,6 +108,9 @@ const is3DModelFile = (fileName: string): boolean => {
 
 type OcrDocumentTableFilters = {
   docPath: string | null;
+  /** Dynamic column filters keyed by fieldKey. For text columns, stores a search string.
+   *  For number/currency columns, stores { min: string; max: string }. */
+  columnFilters: Record<string, string | { min: string; max: string }>;
 };
 
 type OcrOrderItemRow = OcrDocumentTableRow & {
@@ -2605,27 +2610,271 @@ export function FileManager({
         },
       ],
     };
-    const columns: ColumnDef<OcrDocumentTableRow>[] = [docSourceColumn, ...tablaColumnDefs];
+    const allColumns: ColumnDef<OcrDocumentTableRow>[] = [docSourceColumn, ...tablaColumnDefs];
+
+    // Build initial empty column filters for all tabla columns
+    const buildEmptyColumnFilters = (): Record<string, string | { min: string; max: string }> => {
+      const cf: Record<string, string | { min: string; max: string }> = {};
+      tablaColumns.forEach((col) => {
+        if (col.dataType === 'number' || col.dataType === 'currency') {
+          cf[col.fieldKey] = { min: '', max: '' };
+        } else {
+          cf[col.fieldKey] = '';
+        }
+      });
+      return cf;
+    };
+
     return {
       tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${documentViewMode}-${ocrDocumentFilterPath ?? 'all'}`,
       title: 'Datos extraídos',
       searchPlaceholder: 'Buscar en esta tabla',
-      columns,
-      createFilters: () => ({ docPath: ocrDocumentFilterPath }),
+      columns: allColumns,
+      createFilters: (): OcrDocumentTableFilters => ({
+        docPath: ocrDocumentFilterPath,
+        columnFilters: buildEmptyColumnFilters(),
+      }),
+      renderFilters: ({ filters, onChange }) => {
+        // Group columns by data type for UI sections
+        const textCols = tablaColumns.filter((c) => c.dataType === 'text' || c.dataType === 'date');
+        const numericCols = tablaColumns.filter((c) => c.dataType === 'number' || c.dataType === 'currency');
+        const booleanCols = tablaColumns.filter((c) => c.dataType === 'boolean');
+
+        const textActiveCount = textCols.filter((c) => {
+          const v = filters.columnFilters[c.fieldKey];
+          return typeof v === 'string' && v.trim().length > 0;
+        }).length;
+
+        const numericActiveCount = numericCols.filter((c) => {
+          const v = filters.columnFilters[c.fieldKey];
+          if (typeof v === 'object' && v !== null) {
+            return (v.min ?? '').trim().length > 0 || (v.max ?? '').trim().length > 0;
+          }
+          return false;
+        }).length;
+
+        const booleanActiveCount = booleanCols.filter((c) => {
+          const v = filters.columnFilters[c.fieldKey];
+          return typeof v === 'string' && v.trim().length > 0;
+        }).length;
+
+        const docFilterActive = filters.docPath ? 1 : 0;
+
+        return (
+          <div className="space-y-3">
+            {/* Document source filter */}
+            {filters.docPath && (
+              <FilterSection
+                title="Documento origen"
+                icon={FileTextIcon2}
+                activeCount={docFilterActive}
+                defaultOpen
+              >
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    Filtrando por documento
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
+                      {ocrDocumentFilterName ?? 'Seleccionado'}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => {
+                        onChange((prev) => ({
+                          ...prev,
+                          docPath: null,
+                        }));
+                        clearOcrDocumentFilter();
+                      }}
+                    >
+                      Quitar
+                    </Button>
+                  </div>
+                </div>
+              </FilterSection>
+            )}
+
+            {/* Text / date columns */}
+            {textCols.length > 0 && (
+              <FilterSection
+                title="Texto"
+                icon={Type}
+                activeCount={textActiveCount}
+                defaultOpen
+              >
+                <div className="space-y-3">
+                  {textCols.map((col) => (
+                    <TextFilterInput
+                      key={col.id}
+                      label={col.label}
+                      value={(filters.columnFilters[col.fieldKey] as string) ?? ''}
+                      onChange={(v) =>
+                        onChange((prev) => ({
+                          ...prev,
+                          columnFilters: { ...prev.columnFilters, [col.fieldKey]: v },
+                        }))
+                      }
+                      placeholder={`Buscar en ${col.label}...`}
+                    />
+                  ))}
+                </div>
+              </FilterSection>
+            )}
+
+            {/* Numeric / currency columns */}
+            {numericCols.length > 0 && (
+              <FilterSection
+                title={numericCols.some((c) => c.dataType === 'currency') ? 'Valores' : 'Numeros'}
+                icon={numericCols.some((c) => c.dataType === 'currency') ? DollarSignIcon : Hash}
+                activeCount={numericActiveCount}
+                defaultOpen
+              >
+                <div className="space-y-3">
+                  {numericCols.map((col) => {
+                    const v = filters.columnFilters[col.fieldKey];
+                    const rangeVal = typeof v === 'object' && v !== null ? v : { min: '', max: '' };
+                    return (
+                      <RangeInputGroup
+                        key={col.id}
+                        label={col.label}
+                        minValue={rangeVal.min}
+                        maxValue={rangeVal.max}
+                        onMinChange={(val) =>
+                          onChange((prev) => ({
+                            ...prev,
+                            columnFilters: {
+                              ...prev.columnFilters,
+                              [col.fieldKey]: { ...rangeVal, min: val },
+                            },
+                          }))
+                        }
+                        onMaxChange={(val) =>
+                          onChange((prev) => ({
+                            ...prev,
+                            columnFilters: {
+                              ...prev.columnFilters,
+                              [col.fieldKey]: { ...rangeVal, max: val },
+                            },
+                          }))
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </FilterSection>
+            )}
+
+            {/* Boolean columns */}
+            {booleanCols.length > 0 && (
+              <FilterSection
+                title="Opciones"
+                icon={ToggleLeft}
+                activeCount={booleanActiveCount}
+                defaultOpen
+              >
+                <div className="space-y-3">
+                  {booleanCols.map((col) => (
+                    <div key={col.id} className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{col.label}</Label>
+                      <Select
+                        value={(filters.columnFilters[col.fieldKey] as string) ?? ''}
+                        onValueChange={(val) =>
+                          onChange((prev) => ({
+                            ...prev,
+                            columnFilters: { ...prev.columnFilters, [col.fieldKey]: val === '__all__' ? '' : val },
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Todos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">Todos</SelectItem>
+                          <SelectItem value="true">Si</SelectItem>
+                          <SelectItem value="false">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </FilterSection>
+            )}
+
+            {tablaColumns.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No hay columnas configuradas para filtrar.
+              </p>
+            )}
+          </div>
+        );
+      },
+      countActiveFilters: (filters: OcrDocumentTableFilters) => {
+        let count = 0;
+        if (filters.docPath) count += 1;
+        const cf = filters.columnFilters ?? {};
+        Object.values(cf).forEach((v) => {
+          if (typeof v === 'string') {
+            if (v.trim().length > 0) count += 1;
+          } else if (typeof v === 'object' && v !== null) {
+            if ((v.min ?? '').trim().length > 0 || (v.max ?? '').trim().length > 0) count += 1;
+          }
+        });
+        return count;
+      },
       applyFilters: (row: OcrDocumentTableRow, filters: OcrDocumentTableFilters) => {
-        if (!filters.docPath) return true;
-        const docPath = typeof (row as Record<string, unknown>).__docPath === 'string'
-          ? (row as Record<string, unknown>).__docPath
-          : null;
-        return docPath === filters.docPath;
+        // Document path filter
+        if (filters.docPath) {
+          const docPath = typeof (row as Record<string, unknown>).__docPath === 'string'
+            ? (row as Record<string, unknown>).__docPath
+            : null;
+          if (docPath !== filters.docPath) return false;
+        }
+        // Column filters
+        const cf = filters.columnFilters ?? {};
+        for (const col of tablaColumns) {
+          const filterVal = cf[col.fieldKey];
+          if (!filterVal) continue;
+          const cellValue = (row as Record<string, unknown>)[col.fieldKey];
+
+          if (typeof filterVal === 'string' && filterVal.trim().length > 0) {
+            // Text / date / boolean filter
+            if (col.dataType === 'boolean') {
+              const boolStr = String(cellValue ?? '').toLowerCase();
+              if (filterVal === 'true' && boolStr !== 'true') return false;
+              if (filterVal === 'false' && boolStr !== 'false') return false;
+            } else {
+              const cellStr = String(cellValue ?? '').toLowerCase();
+              if (!cellStr.includes(filterVal.trim().toLowerCase())) return false;
+            }
+          } else if (typeof filterVal === 'object' && filterVal !== null) {
+            // Number / currency range filter
+            const numVal = typeof cellValue === 'number' ? cellValue : Number(cellValue);
+            if (!Number.isFinite(numVal)) {
+              // If cell has no valid number and filter is set, exclude
+              if (filterVal.min.trim() || filterVal.max.trim()) return false;
+              continue;
+            }
+            if (filterVal.min.trim()) {
+              const minNum = Number(filterVal.min);
+              if (Number.isFinite(minNum) && numVal < minNum) return false;
+            }
+            if (filterVal.max.trim()) {
+              const maxNum = Number(filterVal.max);
+              if (Number.isFinite(maxNum) && numVal > maxNum) return false;
+            }
+          }
+        }
+        return true;
       },
       defaultRows: ocrTableRows,
-      // tabFilters: [{ id: 'all', label: 'Todas' }],
       emptyStateMessage: 'Sin datos disponibles para esta tabla.',
       showInlineSearch: true,
       onSave: canEditTabla ? handleSaveTablaRows : undefined,
     };
-  }, [activeFolderLink, documentViewMode, documentsByStoragePath, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
+  }, [activeFolderLink, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
 
   const handleRetryDocumentOcr = useCallback(
     async (doc: FileSystemItem | null) => {
