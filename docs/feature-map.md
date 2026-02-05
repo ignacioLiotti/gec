@@ -31,6 +31,11 @@
 - OCR-enabled folders automatically link uploaded documents to obra tablas, feeding macro tables and reminders.
 - **Key files:** `app/excel/[obraId]/tabs/documents-tab.tsx`, `app/excel/[obraId]/tabs/file-manager/file-manager.tsx`, `app/admin/obra-defaults/page.tsx`, `app/api/ocr-templates/route.ts`, `lib/tablas.ts`
 
+## Quick Actions (Acciones rápidas)
+- Tenant admins configure multi-step actions from default folders; each action appears as a floating panel on the Obra General tab.
+- Steps adapt to folder nature (upload, OCR import, or manual row entry) and refresh Documents after each step.
+- **Key files:** `docs/quick-actions.md`, `app/admin/obra-defaults/page.tsx`, `components/quick-actions/quick-actions-panel.tsx`, `app/api/obra-defaults/route.ts`
+
 ## Material Orders & 3D Models
 - OCR imports parse invoices via AI, persist orders/items, and display them beside project documents.
 - If uploads are 3D models, they are sent through Autodesk Platform Services; stored URNs enable the viewer integrations.
