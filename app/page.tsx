@@ -8,14 +8,13 @@ import {
   BarChart3,
   CheckCircle2,
   Clock,
-  DollarSign,
   FolderKanban,
   Plus,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
-  Building2,
-  Activity
+  Activity,
+  AlertTriangle,
+  Target
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -33,7 +32,12 @@ type Obra = {
   porcentaje: number;
   contratoMasAmpliaciones: number;
   certificadoALaFecha: number;
+  saldoACertificar: number;
   entidadContratante: string;
+  plazoTotal: number;
+  plazoTransc: number;
+  segunContrato: number;
+  prorrogasAcordadas: number;
 };
 
 type DashboardStats = {
@@ -43,6 +47,11 @@ type DashboardStats = {
   avgProgress: number;
   totalContractValue: number;
   totalCertifiedValue: number;
+  totalPendingValue: number;
+  obrasAtRisk: number;
+  obrasOnTrack: number;
+  avgTimeProgress: number;
+  totalSurface: number;
 };
 
 const features = [
@@ -63,7 +72,7 @@ const features = [
   },
 ];
 
-// Fetch function for obras data
+// Fetch function for obras data with all analytics fields
 async function fetchObrasData(): Promise<{ obras: Obra[]; isAuthenticated: boolean }> {
   const response = await fetch("/api/obras");
 
@@ -80,7 +89,22 @@ async function fetchObrasData(): Promise<{ obras: Obra[]; isAuthenticated: boole
   }
 
   const data = await response.json();
-  return { obras: data.detalleObras || [], isAuthenticated: true };
+  // Map the response to ensure all fields have defaults
+  const obras = (data.detalleObras || []).map((o: Record<string, unknown>) => ({
+    id: o.id as string,
+    n: o.n as number,
+    designacionYUbicacion: o.designacionYUbicacion as string,
+    porcentaje: (o.porcentaje as number) || 0,
+    contratoMasAmpliaciones: (o.contratoMasAmpliaciones as number) || 0,
+    certificadoALaFecha: (o.certificadoALaFecha as number) || 0,
+    saldoACertificar: (o.saldoACertificar as number) || 0,
+    entidadContratante: o.entidadContratante as string,
+    plazoTotal: (o.plazoTotal as number) || 0,
+    plazoTransc: (o.plazoTransc as number) || 0,
+    segunContrato: (o.segunContrato as number) || 0,
+    prorrogasAcordadas: (o.prorrogasAcordadas as number) || 0,
+  }));
+  return { obras, isAuthenticated: true };
 }
 
 export default function Home() {
@@ -120,6 +144,11 @@ export default function Home() {
         avgProgress: 0,
         totalContractValue: 0,
         totalCertifiedValue: 0,
+        totalPendingValue: 0,
+        obrasAtRisk: 0,
+        obrasOnTrack: 0,
+        avgTimeProgress: 0,
+        totalSurface: 0,
       };
     }
     const completed = obrasData.filter(o => o.porcentaje >= 100).length;
@@ -127,6 +156,24 @@ export default function Home() {
     const avgProgress = obrasData.reduce((sum, o) => sum + o.porcentaje, 0) / total;
     const totalContractValue = obrasData.reduce((sum, o) => sum + (o.contratoMasAmpliaciones || 0), 0);
     const totalCertifiedValue = obrasData.reduce((sum, o) => sum + (o.certificadoALaFecha || 0), 0);
+    const totalPendingValue = obrasData.reduce((sum, o) => sum + (o.saldoACertificar || 0), 0);
+    
+    // Calculate obras at risk (time progress > work progress by more than 15%)
+    const activeObras = obrasData.filter(o => o.porcentaje < 100);
+    const obrasAtRisk = activeObras.filter(o => {
+      const timeProgress = o.plazoTotal > 0 ? (o.plazoTransc / o.plazoTotal) * 100 : 0;
+      return timeProgress > o.porcentaje + 15;
+    }).length;
+    const obrasOnTrack = inProgress - obrasAtRisk;
+    
+    // Average time progress for active obras
+    const avgTimeProgress = activeObras.length > 0
+      ? activeObras.reduce((sum, o) => {
+          const timeProgress = o.plazoTotal > 0 ? (o.plazoTransc / o.plazoTotal) * 100 : 0;
+          return sum + timeProgress;
+        }, 0) / activeObras.length
+      : 0;
+    
     return {
       total,
       inProgress,
@@ -134,7 +181,24 @@ export default function Home() {
       avgProgress,
       totalContractValue,
       totalCertifiedValue,
+      totalPendingValue,
+      obrasAtRisk,
+      obrasOnTrack,
+      avgTimeProgress,
+      totalSurface: 0,
     };
+  }, [data]);
+
+  // Get obras that need attention (behind schedule or low progress)
+  const alertObras = useMemo(() => {
+    if (!data?.obras) return [];
+    return data.obras
+      .filter(o => {
+        if (o.porcentaje >= 100) return false;
+        const timeProgress = o.plazoTotal > 0 ? (o.plazoTransc / o.plazoTotal) * 100 : 0;
+        return timeProgress > o.porcentaje + 10; // More than 10% behind
+      })
+      .slice(0, 3);
   }, [data]);
 
   // Track newly added obras for animation
@@ -306,31 +370,26 @@ export default function Home() {
 
   // Show dashboard for authenticated users
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/50">
+    <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Header with gradient accent */}
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="relative mb-10"
+          className="relative mb-8"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <Building2 className="h-5 w-5 text-primary" />
-                </div>
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                  Panel de Control
-                </h1>
-              </div>
-              <p className="text-muted-foreground text-sm pl-[52px]">
-                Gestiona y supervisa tus proyectos de construccion
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                Panel de Control
+              </h1>
+              <p className="text-muted-foreground text-sm">
+                Resumen de {stats?.total || 0} obras activas
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <Button size="sm" className="w-full gap-2 shadow-sm sm:w-auto" onClick={() => setDialogOpen(true)}>
+              <Button size="sm" className="w-full gap-2 sm:w-auto" onClick={() => setDialogOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Nueva Obra
               </Button>
@@ -405,34 +464,113 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* Main Grid Layout - Obras Recientes is now central */}
+        {/* Key Metrics Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          >
+            <Card className="border-0 shadow-sm bg-card">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Obras Activas</p>
+                    <p className="text-2xl font-bold mt-1">{stats?.inProgress || 0}</p>
+                  </div>
+                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                    <Activity className="h-5 w-5 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.15 }}
+          >
+            <Card className="border-0 shadow-sm bg-card">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Completadas</p>
+                    <p className="text-2xl font-bold mt-1 text-green-600">{stats?.completed || 0}</p>
+                  </div>
+                  <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+          >
+            <Card className="border-0 shadow-sm bg-card">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">En Riesgo</p>
+                    <p className="text-2xl font-bold mt-1 text-amber-600">{stats?.obrasAtRisk || 0}</p>
+                  </div>
+                  <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.25 }}
+          >
+            <Card className="border-0 shadow-sm bg-card">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Avance Prom.</p>
+                    <p className="text-2xl font-bold mt-1">{stats?.avgProgress?.toFixed(0) || 0}%</p>
+                  </div>
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Target className="h-5 w-5 text-primary" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* Main Grid Layout */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Obras Recientes - Central & Prominent (takes 2 columns) */}
+          {/* Obras Recientes - takes 2 columns */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
             className="lg:col-span-2 order-first"
           >
-            <Card className="border-0 shadow-lg pt-0 shadow-black/5 bg-card/80 backdrop-blur-sm overflow-hidden gap-0 pb-0">
-              <CardHeader className="border-b bg-primary/10 py-4 !pb-2" >
+            <Card className="border-0 shadow-sm bg-card overflow-hidden">
+              <CardHeader className="border-b py-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                      <Activity className="h-4.5 w-4.5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg">Obras Recientes</CardTitle>
-                      <CardDescription className="text-xs mt-0.5">
-                        Tus proyectos mas recientes
-                      </CardDescription>
-                    </div>
+                  <div>
+                    <CardTitle className="text-base font-medium">Obras Recientes</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Acceso rapido a tus proyectos
+                    </CardDescription>
                   </div>
-                  {obras.length > 0 && (
-                    <Badge variant="secondary" className="font-mono text-xs self-start sm:self-auto">
-                      {obras.length} total
-                    </Badge>
-                  )}
+                  <Button asChild variant="ghost" size="sm" className="text-xs">
+                    <Link href="/excel">
+                      Ver todas
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </Link>
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="p-0 mt-0">
@@ -461,185 +599,147 @@ export default function Home() {
                 ) : (
                   <div className="divide-y">
                     <AnimatePresence mode="popLayout">
-                      {obras.slice(0, 5).map((obra, index) => (
-                        <motion.div
-                          key={obra.id}
-                          initial={newlyAddedObraId === obra.id ? { scale: 0.8, opacity: 0, y: -20 } : { opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1, y: 0 }}
-                          exit={{ scale: 0.8, opacity: 0 }}
-                          transition={{
-                            type: newlyAddedObraId === obra.id ? "spring" : "tween",
-                            stiffness: 500,
-                            damping: 30,
-                            delay: newlyAddedObraId === obra.id ? 0 : index * 0.05
-                          }}
-                          className={`relative ${newlyAddedObraId === obra.id ? 'z-10' : ''}`}
-                        >
-                          {newlyAddedObraId === obra.id && (
-                            <motion.div
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: [0, 1, 1, 0] }}
-                              transition={{ duration: 2, times: [0, 0.1, 0.8, 1] }}
-                              className="absolute inset-0 bg-gradient-to-r from-green-500/10 via-green-500/5 to-transparent pointer-events-none"
-                            />
-                          )}
-                          <Link
-                            href={`/excel/${obra.id}`}
-                            className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 hover:bg-accent/50 transition-all duration-200 group"
+                      {obras.slice(0, 6).map((obra, index) => {
+                        const timeProgress = obra.plazoTotal > 0 ? (obra.plazoTransc / obra.plazoTotal) * 100 : 0;
+                        const isBehind = timeProgress > obra.porcentaje + 10;
+                        return (
+                          <motion.div
+                            key={obra.id}
+                            initial={newlyAddedObraId === obra.id ? { scale: 0.95, opacity: 0 } : { opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            transition={{ duration: 0.2, delay: index * 0.03 }}
+                            className={`relative ${newlyAddedObraId === obra.id ? 'z-10' : ''}`}
                           >
-                            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted/70 font-mono text-sm font-semibold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                            {newlyAddedObraId === obra.id && (
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: [0, 1, 1, 0] }}
+                                transition={{ duration: 2, times: [0, 0.1, 0.8, 1] }}
+                                className="absolute inset-0 bg-gradient-to-r from-green-500/10 via-green-500/5 to-transparent pointer-events-none"
+                              />
+                            )}
+                            <Link
+                              href={`/excel/${obra.id}`}
+                              onMouseEnter={() => prefetchObra(obra.id)}
+                              className="flex items-center gap-4 p-3 hover:bg-muted/50 transition-colors group"
+                            >
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted font-mono text-xs font-semibold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
                                 {obra.n}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <p className="font-medium truncate text-sm">{obra.designacionYUbicacion}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium truncate">{obra.designacionYUbicacion}</p>
                                   {obra.porcentaje >= 100 && (
-                                    <Badge variant="default" className="bg-green-600/90 text-[10px] h-5 shrink-0">
+                                    <Badge variant="secondary" className="bg-green-100 text-green-700 text-[10px] h-5 shrink-0">
                                       Completada
                                     </Badge>
                                   )}
-                                  {newlyAddedObraId === obra.id && (
-                                    <Badge variant="default" className="bg-blue-600 text-[10px] h-5 shrink-0 animate-pulse">
-                                      Nueva
+                                  {isBehind && obra.porcentaje < 100 && (
+                                    <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px] h-5 shrink-0">
+                                      Atrasada
                                     </Badge>
                                   )}
                                 </div>
                                 <p className="text-xs text-muted-foreground truncate">{obra.entidadContratante}</p>
                               </div>
-                            </div>
-                            <div className="flex items-center justify-between gap-3 sm:gap-4 sm:ml-4 w-full sm:w-auto">
-                              <div className="text-left sm:text-right flex-1 sm:flex-none">
+                              <div className="text-right shrink-0 w-16">
                                 <div className="text-sm font-semibold tabular-nums">{obra.porcentaje}%</div>
-                                <div className="w-full sm:w-20 bg-muted rounded-full h-1.5 mt-1.5">
-                                  <motion.div
-                                    className="bg-primary h-1.5 rounded-full"
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${obra.porcentaje}%` }}
-                                    transition={{ duration: 0.5, delay: index * 0.05 }}
+                                <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                                  <div
+                                    className={`h-1.5 rounded-full transition-all ${
+                                      obra.porcentaje >= 100 ? 'bg-green-500' : isBehind ? 'bg-amber-500' : 'bg-primary'
+                                    }`}
+                                    style={{ width: `${obra.porcentaje}%` }}
                                   />
                                 </div>
                               </div>
-                              <ArrowRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                            </div>
-                          </Link>
-                        </motion.div>
-                      ))}
+                              <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary transition-colors shrink-0" />
+                            </Link>
+                          </motion.div>
+                        );
+                      })}
                     </AnimatePresence>
-                    {obras.length > 5 && (
-                      <div className="p-3 bg-muted/30 mb-0 flex justify-end">
-                        <Button asChild variant="ghost" size="sm" className="w-fit text-muted-foreground hover:text-foreground">
-                          <Link href="/excel">
-                            Ver las {obras.length - 5} obras restantes
-                            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Stats Sidebar */}
+          {/* Right Sidebar */}
           <div className="space-y-4 lg:col-span-1">
-            {/* Quick Stats Card */}
+            {/* Alerts Card - Obras at Risk */}
+            {alertObras.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+              >
+                <Card className="border-0 shadow-sm bg-amber-50/50 border-amber-200/50">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <CardTitle className="text-sm font-medium text-amber-800">Requieren Atencion</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {alertObras.map((obra) => {
+                      const timeProgress = obra.plazoTotal > 0 ? (obra.plazoTransc / obra.plazoTotal) * 100 : 0;
+                      const delay = Math.round(timeProgress - obra.porcentaje);
+                      return (
+                        <Link
+                          key={obra.id}
+                          href={`/excel/${obra.id}`}
+                          className="block p-2 rounded-lg bg-white/60 hover:bg-white transition-colors"
+                        >
+                          <p className="text-xs font-medium text-foreground truncate">{obra.designacionYUbicacion}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-amber-700">
+                              {delay}% atrasada
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              ({obra.porcentaje}% avance / {timeProgress.toFixed(0)}% tiempo)
+                            </span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Financial Summary */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
+              transition={{ duration: 0.4, delay: 0.25 }}
             >
-              <Card className="border-0 shadow-md shadow-black/5">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Resumen</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="text-center p-3 rounded-xl bg-muted/50">
-                      <div className="text-xl sm:text-2xl font-bold">{stats?.total || 0}</div>
-                      <div className="text-xs sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Total</div>
-                    </div>
-                    <div className="text-center p-3 rounded-xl bg-blue-500/10">
-                      <div className="text-xl sm:text-2xl font-bold text-blue-600">{stats?.inProgress || 0}</div>
-                      <div className="text-xs sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Activas</div>
-                    </div>
-                    <div className="text-center p-3 rounded-xl bg-green-500/10">
-                      <div className="text-xl sm:text-2xl font-bold text-green-600">{stats?.completed || 0}</div>
-                      <div className="text-xs sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Listas</div>
-                    </div>
-                  </div>
-
-                  {/* Progress Ring */}
-                  <div className="flex items-center gap-4 p-3 rounded-xl bg-muted/30">
-                    <div className="relative h-14 w-14 shrink-0">
-                      <svg className="h-14 w-14 -rotate-90" viewBox="0 0 36 36">
-                        <path
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          className="text-muted"
-                        />
-                        <motion.path
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          strokeDasharray={`${stats?.avgProgress || 0}, 100`}
-                          className="text-primary"
-                          initial={{ strokeDasharray: "0, 100" }}
-                          animate={{ strokeDasharray: `${stats?.avgProgress || 0}, 100` }}
-                          transition={{ duration: 1, delay: 0.5 }}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-xs font-bold">{stats?.avgProgress ? stats.avgProgress.toFixed(0) : 0}%</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Progreso Promedio</p>
-                      <p className="text-xs text-muted-foreground">De todas las obras</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Financial Stats */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-            >
-              <Card className="border-0 shadow-md shadow-black/5">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Financiero</CardTitle>
+              <Card className="border-0 shadow-sm bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Resumen Financiero</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="p-3 rounded-xl bg-muted/30 space-y-1">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <DollarSign className="h-3.5 w-3.5" />
-                      Valor Contratos
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">Valor Total Contratos</span>
+                      <span className="text-sm font-semibold tabular-nums">{formatCurrency(stats?.totalContractValue || 0)}</span>
                     </div>
-                    <div className="text-lg font-semibold truncate">
-                      {formatCurrency(stats?.totalContractValue || 0)}
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">Certificado</span>
+                      <span className="text-sm font-semibold text-green-600 tabular-nums">{formatCurrency(stats?.totalCertifiedValue || 0)}</span>
                     </div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-green-500/5 space-y-1">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                      Total Certificado
-                    </div>
-                    <div className="text-lg font-semibold text-green-700 truncate">
-                      {formatCurrency(stats?.totalCertifiedValue || 0)}
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">Pendiente</span>
+                      <span className="text-sm font-semibold text-amber-600 tabular-nums">{formatCurrency(stats?.totalPendingValue || 0)}</span>
                     </div>
                   </div>
+                  
                   {stats && stats.totalContractValue > 0 && (
-                    <div className="pt-2">
-                      <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                        <span>Avance financiero</span>
-                        <span>{((stats.totalCertifiedValue / stats.totalContractValue) * 100).toFixed(1)}%</span>
+                    <div className="pt-2 border-t">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-2">
+                        <span>Avance financiero global</span>
+                        <span className="font-medium">{((stats.totalCertifiedValue / stats.totalContractValue) * 100).toFixed(1)}%</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <motion.div
@@ -651,6 +751,68 @@ export default function Home() {
                       </div>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Time vs Progress Comparison */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+            >
+              <Card className="border-0 shadow-sm bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Avance vs Tiempo</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">Avance de obra</span>
+                          <span className="font-medium">{stats?.avgProgress?.toFixed(0) || 0}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <motion.div
+                            className="bg-primary h-2 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${stats?.avgProgress || 0}%` }}
+                            transition={{ duration: 0.8, delay: 0.5 }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">Tiempo transcurrido</span>
+                          <span className="font-medium">{stats?.avgTimeProgress?.toFixed(0) || 0}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <motion.div
+                            className="bg-blue-500 h-2 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${stats?.avgTimeProgress || 0}%` }}
+                            transition={{ duration: 0.8, delay: 0.6 }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-2 text-center">
+                      {stats && stats.avgProgress >= stats.avgTimeProgress ? (
+                        <Badge variant="secondary" className="bg-green-100 text-green-700 text-[10px]">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          En tiempo
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px]">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {((stats?.avgTimeProgress || 0) - (stats?.avgProgress || 0)).toFixed(0)}% de retraso promedio
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
