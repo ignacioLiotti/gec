@@ -882,26 +882,31 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setActiveTab(tabFilters[0]?.id ?? null);
 	}, [tabFilters]);
 	const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-	const configRef = useRef(config);
-	configRef.current = config;
-	const createFilters = useCallback(() => configRef.current.createFilters?.(), []);
-	const [filters, setFilters] = useState<Filters | undefined>(() => createFilters());
-	const [filtersDraft, setFiltersDraft] = useState<Filters | undefined>(() => createFilters());
+	const createFiltersRef = useRef(config.createFilters);
+	createFiltersRef.current = config.createFilters;
+	const [filters, setFilters] = useState<Filters | undefined>(() => config.createFilters?.());
+	const [filtersDraft, setFiltersDraft] = useState<Filters | undefined>(() => config.createFilters?.());
 	const filtersRef = useRef<Filters | undefined>(filters);
 	useEffect(() => {
 		filtersRef.current = filters;
 	}, [filters]);
-	// Reset filters only when the table identity changes
+	// Reset filters when the table identity changes
+	const prevTableIdRef = useRef(TABLE_ID);
 	useEffect(() => {
+		if (prevTableIdRef.current === TABLE_ID) return;
+		prevTableIdRef.current = TABLE_ID;
 		if (!hasFilters) return;
-		const initialFilters = createFilters();
+		const initialFilters = createFiltersRef.current?.();
 		if (typeof initialFilters === "undefined") return;
 		setFilters(initialFilters);
 		setFiltersDraft(initialFilters);
-	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [TABLE_ID, hasFilters]);
+	// Sync draft with applied filters when sheet opens
+	const prevIsFiltersOpenRef = useRef(isFiltersOpen);
 	useEffect(() => {
-		if (!isFiltersOpen || !filters) return;
+		const justOpened = isFiltersOpen && !prevIsFiltersOpenRef.current;
+		prevIsFiltersOpenRef.current = isFiltersOpen;
+		if (!justOpened || !filters) return;
 		setFiltersDraft(filters);
 	}, [isFiltersOpen, filters]);
 	const [sortState, setSortState] = useState<SortState>({ columnId: null, direction: "asc" });
@@ -999,7 +1004,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			setIsFetchingServerRows(true);
 			setServerError(null);
 			try {
-				const filtersForRequest = (filtersRef.current ?? createFilters()) as Filters;
+				const filtersForRequest = (filtersRef.current ?? createFiltersRef.current?.()) as Filters;
 				const result = await fetchRowsFn({
 					page,
 					limit: pageSize,
@@ -1033,7 +1038,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		return () => {
 			isMounted = false;
 		};
-	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [fetchRowsFn, page, pageSize, setFormRows]);
 
 	useEffect(() => {
@@ -1138,7 +1142,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	// Combined filtering pipeline - single pass through rows for search + advanced filters
 	// Returns both the filtered rows (before tab filter) and tab counts in one computation
 	const { baseFilteredRows, tabCounts } = useMemo(() => {
-		const applyFilters = configRef.current.applyFilters;
+		const applyFilters = config.applyFilters;
 		const hasAdvancedFilters = applyFilters && typeof filters !== "undefined";
 		
 		// Single pass: apply search + advanced filters together
@@ -1177,8 +1181,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}
 		
 		return { baseFilteredRows: filtered, tabCounts: counts };
-	// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [rows, normalizedSearch, columns, filters, tabFilters]);
+	}, [rows, normalizedSearch, columns, config.applyFilters, filters, tabFilters]);
 
 	// Apply tab filter (uses baseFilteredRows from above)
 	const tabFilteredRows = useMemo(() => {
@@ -1202,10 +1205,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [tabFilteredRows, sortState, useClientPagination, columns]);
 
 	const activeFilterCount = useMemo(() => {
-		if (!configRef.current.countActiveFilters || typeof filters === "undefined") return 0;
-		return configRef.current.countActiveFilters(filters);
-	// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [filters]);
+		if (!config.countActiveFilters || typeof filters === "undefined") return 0;
+		return config.countActiveFilters(filters);
+	}, [config, filters]);
 
 	// Persist hidden columns
 	useEffect(() => {
@@ -1357,11 +1359,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const handleResetAdvancedFilters = useCallback(() => {
 		if (!hasFilters) return;
-		const initial = createFilters();
+		const initial = createFiltersRef.current?.();
 		if (typeof initial === "undefined") return;
 		setFilters(initial);
 		setFiltersDraft(initial);
-	}, [createFilters, hasFilters]);
+	}, [hasFilters]);
 
 	const renderFiltersContent =
 		isFiltersOpen && typeof filtersDraft !== "undefined" && config.renderFilters

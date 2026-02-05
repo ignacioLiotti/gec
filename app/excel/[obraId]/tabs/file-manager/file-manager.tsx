@@ -2634,12 +2634,105 @@ export function FileManager({
         docPath: ocrDocumentFilterPath,
         columnFilters: buildEmptyColumnFilters(),
       }),
-      renderFilters: ({ filters: _f, onChange: _o }) => {
+      renderFilters: ({ filters: currentFilters, onChange }) => {
+        const textCols = tablaColumns.filter((c) => c.dataType === 'text' || c.dataType === 'date');
+        const numericCols = tablaColumns.filter((c) => c.dataType === 'number' || c.dataType === 'currency');
+
+        const textActiveCount = textCols.filter((c) => {
+          const v = currentFilters.columnFilters?.[c.fieldKey];
+          return typeof v === 'string' && v.trim().length > 0;
+        }).length;
+
+        const numericActiveCount = numericCols.filter((c) => {
+          const v = currentFilters.columnFilters?.[c.fieldKey];
+          return typeof v === 'object' && v !== null && ((v.min ?? '').trim().length > 0 || (v.max ?? '').trim().length > 0);
+        }).length;
+
         return (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {tablaColumns.length} columnas disponibles para filtrar. (Test: filters should show here)
-            </p>
+            {textCols.length > 0 && (
+              <FilterSection
+                title="Texto"
+                icon={Type}
+                activeCount={textActiveCount}
+                defaultOpen
+              >
+                <div className="space-y-3">
+                  {textCols.map((col) => (
+                    <TextFilterInput
+                      key={col.id}
+                      label={col.label}
+                      value={(currentFilters.columnFilters?.[col.fieldKey] as string) ?? ''}
+                      onChange={(v) =>
+                        onChange((prev) => ({
+                          ...prev,
+                          columnFilters: { ...prev.columnFilters, [col.fieldKey]: v },
+                        }))
+                      }
+                      placeholder={`Buscar en ${col.label}...`}
+                    />
+                  ))}
+                </div>
+              </FilterSection>
+            )}
+
+            {numericCols.length > 0 && (
+              <FilterSection
+                title={numericCols.some((c) => c.dataType === 'currency') ? 'Valores' : 'Numeros'}
+                icon={numericCols.some((c) => c.dataType === 'currency') ? DollarSignIcon : Hash}
+                activeCount={numericActiveCount}
+                defaultOpen
+              >
+                <div className="space-y-3">
+                  {numericCols.map((col) => {
+                    const v = currentFilters.columnFilters?.[col.fieldKey];
+                    const rangeVal = typeof v === 'object' && v !== null ? v : { min: '', max: '' };
+                    return (
+                      <RangeInputGroup
+                        key={col.id}
+                        label={col.label}
+                        minValue={rangeVal.min}
+                        maxValue={rangeVal.max}
+                        onMinChange={(val) =>
+                          onChange((prev) => ({
+                            ...prev,
+                            columnFilters: {
+                              ...prev.columnFilters,
+                              [col.fieldKey]: {
+                                ...(typeof prev.columnFilters?.[col.fieldKey] === 'object' && prev.columnFilters[col.fieldKey] !== null
+                                  ? prev.columnFilters[col.fieldKey] as { min: string; max: string }
+                                  : { min: '', max: '' }),
+                                min: val,
+                              },
+                            },
+                          }))
+                        }
+                        onMaxChange={(val) =>
+                          onChange((prev) => ({
+                            ...prev,
+                            columnFilters: {
+                              ...prev.columnFilters,
+                              [col.fieldKey]: {
+                                ...(typeof prev.columnFilters?.[col.fieldKey] === 'object' && prev.columnFilters[col.fieldKey] !== null
+                                  ? prev.columnFilters[col.fieldKey] as { min: string; max: string }
+                                  : { min: '', max: '' }),
+                                max: val,
+                              },
+                            },
+                          }))
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </FilterSection>
+            )}
+
+            {tablaColumns.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No hay columnas configuradas para filtrar.
+              </p>
+            )}
           </div>
         );
       },
