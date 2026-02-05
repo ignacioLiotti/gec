@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { AlertCircle, Building2, Calendar, DollarSign, FileText, MapPin, Percent, TrendingUp } from "lucide-react";
 
 import type { Obra } from "@/app/excel/schema";
+import type { OcrTablaColumn } from "./file-manager/types";
 import { QuickActionsPanel } from "@/components/quick-actions/quick-actions-panel";
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -31,13 +32,7 @@ type GeneralTabQuickActions = {
 		id: string;
 		name: string;
 		settings: Record<string, unknown>;
-		columns: Array<{
-			id: string;
-			fieldKey: string;
-			label: string;
-			dataType: string;
-			required: boolean;
-		}>;
+		columns: OcrTablaColumn[];
 	}>;
 	customStepRenderers?: Record<string, any>;
 };

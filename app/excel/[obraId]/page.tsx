@@ -31,6 +31,7 @@ import { ObraDocumentsTab } from "./tabs/documents-tab";
 import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
 import { prefetchDocuments } from "./tabs/file-manager/hooks/useDocumentsStore";
+import type { OcrTablaColumn } from "./tabs/file-manager/types";
 
 import type {
 	Certificate,
@@ -201,13 +202,7 @@ type ObraTabla = {
 	id: string;
 	name: string;
 	settings: Record<string, unknown>;
-	columns: Array<{
-		id: string;
-		fieldKey: string;
-		label: string;
-		dataType: string;
-		required: boolean;
-	}>;
+	columns: OcrTablaColumn[];
 };
 
 const toLocalDateTimeValue = (value: string | null) => {
@@ -312,7 +307,20 @@ export default function ObraDetailPage() {
 			const res = await fetch(`/api/obras/${obraId}/tablas`);
 			if (!res.ok) throw new Error("No se pudieron cargar las tablas");
 			const data = await res.json();
-			return (data.tablas ?? []) as ObraTabla[];
+			const normalizeDataType = (value: unknown): OcrTablaColumn["dataType"] => {
+				return value === "number" || value === "boolean" || value === "date" || value === "text" || value === "currency"
+					? value
+					: "text";
+			};
+
+			return (data.tablas ?? []).map((tabla: ObraTabla) => ({
+				...tabla,
+				columns: (tabla.columns ?? []).map((column) => ({
+					...column,
+					dataType: normalizeDataType(column.dataType),
+					required: Boolean(column.required),
+				})),
+			})) as ObraTabla[];
 		},
 		staleTime: 5 * 60 * 1000,
 	});

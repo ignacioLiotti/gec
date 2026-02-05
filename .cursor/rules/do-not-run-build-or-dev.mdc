@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+do not run npm run build or npm run dev as it messess up my local env as im already running it. if you need to reset the dev env or rebuild then ask me for it
