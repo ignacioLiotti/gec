@@ -17,19 +17,6 @@ import {
   Target
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +70,105 @@ const features = [
     icon: ShieldCheck,
   },
 ];
+
+type PieSlice = { name: string; value: number; fill: string };
+
+function SimplePieChart({ data }: { data: PieSlice[] }) {
+  const total = data.reduce((acc, entry) => acc + entry.value, 0);
+  const segments = total
+    ? data.reduce<{ stops: string[]; current: number }>(
+        (acc, entry) => {
+          const start = acc.current;
+          const end = start + (entry.value / total) * 100;
+          acc.stops.push(`${entry.fill} ${start}% ${end}%`);
+          acc.current = end;
+          return acc;
+        },
+        { stops: [], current: 0 }
+      ).stops
+    : ["#e5e7eb 0% 100%"];
+
+  return (
+    <div className="relative h-[120px] w-[120px] mx-auto">
+      <div
+        className="h-full w-full rounded-full"
+        style={{ backgroundImage: `conic-gradient(${segments.join(", ")})` }}
+      />
+      <div className="absolute inset-0 m-auto h-[70px] w-[70px] rounded-full bg-card" />
+    </div>
+  );
+}
+
+function SimpleBarList({
+  data,
+  labelSuffix = "",
+}: {
+  data: { name: string; value: number; fill: string }[];
+  labelSuffix?: string;
+}) {
+  const maxValue = Math.max(1, ...data.map((entry) => entry.value));
+  return (
+    <div className="space-y-3">
+      {data.map((entry) => (
+        <div key={entry.name} className="grid grid-cols-[72px_1fr_48px] items-center gap-3">
+          <span className="text-[11px] text-muted-foreground">{entry.name}</span>
+          <div className="h-2 rounded-full bg-muted">
+            <div
+              className="h-2 rounded-full"
+              style={{
+                width: `${Math.min((entry.value / maxValue) * 100, 100)}%`,
+                backgroundColor: entry.fill,
+              }}
+            />
+          </div>
+          <span className="text-[11px] text-muted-foreground text-right tabular-nums">
+            {entry.value}
+            {labelSuffix}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SimpleGroupedBars({
+  data,
+}: {
+  data: { name: string; contrato: number; certificado: number }[];
+}) {
+  const maxValue = Math.max(
+    1,
+    ...data.flatMap((entry) => [entry.contrato, entry.certificado])
+  );
+  return (
+    <div className="space-y-4">
+      {data.map((entry) => (
+        <div key={entry.name} className="space-y-2">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span className="max-w-[70%] truncate">{entry.name}</span>
+            <span className="tabular-nums">
+              {entry.contrato.toFixed(1)} / {entry.certificado.toFixed(1)}M
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            <div className="h-2 rounded-full bg-muted">
+              <div
+                className="h-2 rounded-full bg-blue-500"
+                style={{ width: `${Math.min((entry.contrato / maxValue) * 100, 100)}%` }}
+              />
+            </div>
+            <div className="h-2 rounded-full bg-muted">
+              <div
+                className="h-2 rounded-full bg-green-500"
+                style={{ width: `${Math.min((entry.certificado / maxValue) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // Fetch function for obras data with all analytics fields
 async function fetchObrasData(): Promise<{ obras: Obra[]; isAuthenticated: boolean }> {
@@ -825,32 +911,8 @@ export default function Home() {
                     <CardTitle className="text-sm font-medium text-muted-foreground">Estado de Obras</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[140px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={statusPieData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={35}
-                            outerRadius={55}
-                            paddingAngle={2}
-                            dataKey="value"
-                          >
-                            {statusPieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                          </Pie>
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '4px',
-                              fontSize: '12px'
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
+                    <div className="h-[140px] flex items-center justify-center">
+                      <SimplePieChart data={statusPieData} />
                     </div>
                     <div className="flex justify-center gap-4 mt-2">
                       {statusPieData.map((entry, index) => (
@@ -884,34 +946,7 @@ export default function Home() {
                   </CardHeader>
                   <CardContent>
                     <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={progressDistributionData} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                          <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                          <YAxis 
-                            type="category" 
-                            dataKey="name" 
-                            tick={{ fontSize: 11 }} 
-                            tickLine={false} 
-                            axisLine={false}
-                            width={50}
-                          />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '4px',
-                              fontSize: '12px'
-                            }}
-                            formatter={(value: number) => [`${value} obras`, 'Cantidad']}
-                          />
-                          <Bar dataKey="value" radius={[0, 2, 2, 0]}>
-                            {progressDistributionData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
+                      <SimpleBarList data={progressDistributionData} labelSuffix=" obras" />
                     </div>
                   </CardContent>
                 </Card>
@@ -931,39 +966,8 @@ export default function Home() {
                     <CardDescription className="text-xs">Top 5 obras (en millones ARS)</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={topObrasByValueData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                          <XAxis 
-                            dataKey="name" 
-                            tick={{ fontSize: 9 }} 
-                            tickLine={false} 
-                            axisLine={false}
-                            interval={0}
-                            angle={-15}
-                            textAnchor="end"
-                            height={50}
-                          />
-                          <YAxis 
-                            tick={{ fontSize: 11 }} 
-                            tickLine={false} 
-                            axisLine={false}
-                            tickFormatter={(value) => `${value}M`}
-                          />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '4px',
-                              fontSize: '12px'
-                            }}
-                            formatter={(value: number) => [`${value.toFixed(1)}M ARS`, '']}
-                          />
-                          <Bar dataKey="contrato" name="Contrato" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                          <Bar dataKey="certificado" name="Certificado" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                    <div className="h-[200px] overflow-y-auto pr-1">
+                      <SimpleGroupedBars data={topObrasByValueData} />
                     </div>
                     <div className="flex justify-center gap-4 mt-2">
                       <div className="flex items-center gap-1.5">
