@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 export async function POST(req: NextRequest) {
 	const res = NextResponse.json({ ok: true });
@@ -9,17 +9,21 @@ export async function POST(req: NextRequest) {
 		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 		{
 			cookies: {
-				get(name) {
-					return req.cookies.get(name)?.value;
+				getAll() {
+					return req.cookies.getAll().map((cookie) => ({
+						name: cookie.name,
+						value: cookie.value,
+					}));
 				},
-				set(name, value, options) {
-					res.cookies.set({ name, value, ...options });
-				},
-				remove(name, options) {
-					res.cookies.set({ name, value: "", ...options });
+				setAll(
+					cookies: { name: string; value: string; options: CookieOptions }[],
+				) {
+					cookies.forEach(({ name, value, options }) => {
+						res.cookies.set({ name, value, ...options });
+					});
 				},
 			},
-		}
+		},
 	);
 
 	const b64 = req.cookies.get("impersonator_session")?.value;

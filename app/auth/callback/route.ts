@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
@@ -23,10 +23,16 @@ export async function GET(request: NextRequest) {
 					getAll() {
 						return request.cookies.getAll();
 					},
-					setAll(cookiesToSet) {
+					setAll(
+						cookiesToSet: {
+							name: string;
+							value: string;
+							options: CookieOptions;
+						}[],
+					) {
 						console.log(
 							"[AUTH-CALLBACK] Setting cookies on response:",
-							cookiesToSet.map((c) => c.name)
+							cookiesToSet.map((c) => c.name),
 						);
 						cookiesToSet.forEach(({ name, value, options }) => {
 							// Set cookies directly on the response object
@@ -34,7 +40,7 @@ export async function GET(request: NextRequest) {
 						});
 					},
 				},
-			}
+			},
 		);
 
 		console.log("[AUTH-CALLBACK] Calling exchangeCodeForSession...");
@@ -68,7 +74,7 @@ export async function GET(request: NextRequest) {
 			// If no memberships, redirect to onboarding
 			if (!memberships || memberships.length === 0) {
 				console.log(
-					"[AUTH-CALLBACK] No memberships, redirecting to onboarding"
+					"[AUTH-CALLBACK] No memberships, redirecting to onboarding",
 				);
 				// Update the redirect URL and create a new response with the same cookies
 				response.headers.set("Location", `${origin}/onboarding`);
@@ -89,7 +95,7 @@ export async function GET(request: NextRequest) {
 		// Log cookies on the response
 		console.log(
 			"[AUTH-CALLBACK] Response cookies:",
-			response.cookies.getAll().map((c) => c.name)
+			response.cookies.getAll().map((c) => c.name),
 		);
 		response.headers.set("Location", redirectUrl);
 		console.log("[AUTH-CALLBACK] Redirecting to:", redirectUrl);

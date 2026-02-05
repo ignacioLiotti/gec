@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { getRouteAccessConfig, type Role } from "./lib/route-access";
 import { getClientIp, rateLimitByIp } from "@/lib/security/rate-limit";
 
@@ -72,8 +72,8 @@ function enforceCsrf(req: NextRequest) {
 				{
 					status: 403,
 					headers: { "content-type": "application/json" },
-				}
-			)
+				},
+			),
 		);
 	}
 	return null;
@@ -97,7 +97,7 @@ export async function proxy(req: NextRequest) {
 			if (!result.success) {
 				const retryAfter = Math.max(
 					1,
-					Math.ceil((result.reset - Date.now()) / 1000)
+					Math.ceil((result.reset - Date.now()) / 1000),
 				);
 				return attachSecurityHeaders(
 					new NextResponse(
@@ -114,8 +114,8 @@ export async function proxy(req: NextRequest) {
 								"x-ratelimit-remaining": "0",
 								"x-ratelimit-reset": result.reset.toString(),
 							},
-						}
-					)
+						},
+					),
 				);
 			}
 			rateLimitResult = result;
@@ -127,7 +127,7 @@ export async function proxy(req: NextRequest) {
 		res.headers.set("x-ratelimit-limit", rateLimitResult.limit.toString());
 		res.headers.set(
 			"x-ratelimit-remaining",
-			Math.max(rateLimitResult.remaining, 0).toString()
+			Math.max(rateLimitResult.remaining, 0).toString(),
 		);
 		res.headers.set("x-ratelimit-reset", rateLimitResult.reset.toString());
 	}
@@ -137,17 +137,21 @@ export async function proxy(req: NextRequest) {
 		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 		{
 			cookies: {
-				get(name) {
-					return req.cookies.get(name)?.value;
+				getAll() {
+					return req.cookies.getAll().map((cookie) => ({
+						name: cookie.name,
+						value: cookie.value,
+					}));
 				},
-				set(name, value, options) {
-					res.cookies.set({ name, value, ...options });
-				},
-				remove(name, options) {
-					res.cookies.set({ name, value: "", ...options });
+				setAll(
+					cookies: { name: string; value: string; options: CookieOptions }[],
+				) {
+					cookies.forEach(({ name, value, options }) => {
+						res.cookies.set({ name, value, ...options });
+					});
 				},
 			},
-		}
+		},
 	);
 
 	await supabase.auth.getSession();
@@ -186,7 +190,7 @@ export async function proxy(req: NextRequest) {
 		if (membershipsError) {
 			console.error(
 				"Error fetching memberships in middleware:",
-				membershipsError
+				membershipsError,
 			);
 		}
 
@@ -202,7 +206,7 @@ export async function proxy(req: NextRequest) {
 		const preferredMembership =
 			preferredTenantId && resolvedMemberships
 				? resolvedMemberships.find(
-						(membership) => membership.tenant_id === preferredTenantId
+						(membership) => membership.tenant_id === preferredTenantId,
 					)
 				: undefined;
 
