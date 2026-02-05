@@ -9,7 +9,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Folder, FolderPlus, Loader2, Search, Table2 } from "lucide-react";
+import { ChevronDown, Folder, FolderPlus, Loader2, RefreshCw, Search, Table2 } from "lucide-react";
 import type { FileSystemItem } from "../types";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -25,6 +25,8 @@ type FileTreeSidebarProps = {
 	renderTreeItem: (root: FileSystemItem) => ReactNode;
 	loading: boolean;
 	onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
+	onRefresh?: () => void;
+	isRefreshing?: boolean;
 };
 
 export function FileTreeSidebar({
@@ -39,6 +41,8 @@ export function FileTreeSidebar({
 	renderTreeItem,
 	loading,
 	onContextMenu,
+	onRefresh,
+	isRefreshing,
 }: FileTreeSidebarProps) {
 	return (
 		<div
@@ -65,6 +69,19 @@ export function FileTreeSidebar({
 					<h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
 						Carpetas
 					</h2>
+					<div className="flex items-center gap-1">
+						{onRefresh && (
+							<Button
+								variant="ghost"
+								size="xs"
+								onClick={onRefresh}
+								disabled={isRefreshing}
+								title="Sincronizar documentos"
+								className="h-7 w-7 p-0"
+							>
+								<RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
+							</Button>
+						)}
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button variant="outline" size="xs">
@@ -84,6 +101,7 @@ export function FileTreeSidebar({
 							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
+					</div>
 				</div>
 				{!fileTree ? (
 					loading ? (

@@ -30,6 +30,7 @@ import { ObraDocumentsTab } from "./tabs/documents-tab";
 // import { ObraCertificatesTab } from "./tabs/certificates-tab";
 import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
+import { prefetchDocuments } from "./tabs/file-manager/hooks/useDocumentsStore";
 
 import type {
 	Certificate,
@@ -209,6 +210,14 @@ export default function ObraDetailPage() {
 		if (Array.isArray(raw)) return raw[0];
 		return raw;
 	}, [params]);
+
+	// Prefetch documents in background when page loads (before user navigates to documents tab)
+	useEffect(() => {
+		if (obraId && obraId !== "undefined") {
+			// Fire and forget - don't block anything, just start loading in background
+			prefetchDocuments(obraId);
+		}
+	}, [obraId]);
 
 	// React Query hooks for cached data fetching
 	// Core obra data - always fetch

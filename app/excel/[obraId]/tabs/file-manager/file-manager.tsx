@@ -51,7 +51,7 @@ import FolderFront from '@/components/ui/FolderFront';
 import { DocumentSheet } from './components/document-sheet';
 import { FileTreeSidebar } from './components/file-tree-sidebar';
 import { AddRowDialog } from './components/add-row-dialog';
-import { useSelectionStore } from './hooks/useSelectionStore';
+import { useDocumentsStore, needsRefetch, markDocumentsFetched, setDocumentsLoading } from './hooks/useDocumentsStore';
 import { OcrTemplateConfigurator } from '@/app/admin/obra-defaults/_components/OcrTemplateConfigurator';
 import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType, TABLA_DATA_TYPES, type TablaColumnDataType } from '@/lib/tablas';
 import { cn } from '@/lib/utils';
@@ -389,11 +389,11 @@ export function FileManager({
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams?.toString() ?? '';
 
-  // State
-  const { state: selectionState, actions: selectionActions } = useSelectionStore();
-  const { fileTree, selectedFolder, selectedDocument, sheetDocument, expandedFolderIds } = selectionState;
+  // State - using global store for persistence across tab switches
+  const { state: documentsState, actions: documentsActions } = useDocumentsStore();
+  const { fileTree, selectedFolder, selectedDocument, sheetDocument, expandedFolderIds, isLoading: isStoreLoading, lastFetchedAt } = documentsState;
   const expandedFolders = expandedFolderIds;
-  const { setFileTree, setSelectedFolder, setSelectedDocument, setSheetDocument, setExpandedFolderIds } = selectionActions;
+  const { setFileTree, setSelectedFolder, setSelectedDocument, setSheetDocument, setExpandedFolderIds } = documentsActions;
   const updateExpandedFolders = useCallback(
     (updater: (prev: Set<string>) => Set<string>) => {
       setExpandedFolderIds(updater(new Set(expandedFolderIds)));
@@ -418,7 +418,9 @@ export function FileManager({
   const suppressSelectionOnCloseRef = useRef(false);
   const sheetCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  // Loading state is derived from global store + local refreshing state
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const loading = isStoreLoading || (needsRefetch(obraId) && !fileTree);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [isAddRowDialogOpen, setIsAddRowDialogOpen] = useState(false);
@@ -448,7 +450,9 @@ export function FileManager({
   const [itemToDelete, setItemToDelete] = useState<FileSystemItem | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
   const [currentUploadFolder, setCurrentUploadFolder] = useState<FileSystemItem | null>(null);
-  const [ocrFolderLinks, setOcrFolderLinks] = useState<OcrFolderLink[]>([]);
+  // ocrFolderLinks now comes from the global store (documentsState)
+  const ocrFolderLinks = documentsState.ocrFolderLinks;
+  const { setOcrFolderLinks } = documentsActions;
   const [isGlobalFileDragActive, setIsGlobalFileDragActive] = useState(false);
   const [isTemplateConfiguratorOpen, setIsTemplateConfiguratorOpen] = useState(false);
   const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
@@ -919,12 +923,12 @@ export function FileManager({
           .map(c => c.id) || [];
         foldersToExpand.push(...foldersWithContent);
         setExpandedFolderIds(new Set(foldersToExpand));
-        setLoading(false);
+        markDocumentsFetched();
         return;
       }
     }
 
-    setLoading(true);
+    setDocumentsLoading(true);
     try {
       // Check APS models cache
       let apsModels: Array<{ file_path: string; aps_urn: string }> = getCachedApsModels(obraId) ?? [];
@@ -1120,12 +1124,17 @@ export function FileManager({
       });
       toast.error('Error loading documents');
     } finally {
-      setLoading(false);
+      markDocumentsFetched();
     }
   }, [hydrateTreeWithOcrData, obraId, materialOrders, ocrFolderMap, rebuildParentMap, supabase]);
 
   useEffect(() => {
     if (!obraId) return;
+    // Skip if we already have fresh data for this obra (persisted from previous tab visit)
+    if (!needsRefetch(obraId) && fileTree) {
+      lastBootstrapObraIdRef.current = obraId;
+      return;
+    }
     if (lastBootstrapObraIdRef.current === obraId) return;
     lastBootstrapObraIdRef.current = obraId;
 
@@ -1705,6 +1714,23 @@ export function FileManager({
       await createNormalFolder();
     }
   }, [createFolderMode, createNormalFolder, createDataFolder]);
+
+  // Manual refresh handler for syncing documents when others have made changes
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      // Force refresh by skipping cache
+      await refreshOcrFolderLinks({ skipCache: true });
+      await buildFileTree({ skipCache: true });
+      toast.success('Documentos sincronizados');
+    } catch (error) {
+      console.error('Error refreshing documents:', error);
+      toast.error('Error al sincronizar documentos');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, refreshOcrFolderLinks, buildFileTree]);
 
   const uploadFilesToFolder = useCallback(async (inputFiles: FileList | File[], targetFolder?: FileSystemItem | null) => {
     const filesArray = Array.isArray(inputFiles) ? inputFiles : Array.from(inputFiles);
@@ -3089,6 +3115,8 @@ export function FileManager({
           renderTreeItem={renderTreeItem}
           loading={loading}
           onContextMenu={handleSidebarContextMenu}
+          onRefresh={handleManualRefresh}
+          isRefreshing={isRefreshing}
         />
 
         {/* Main Content */}
