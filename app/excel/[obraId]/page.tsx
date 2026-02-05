@@ -210,10 +210,6 @@ export default function ObraDetailPage() {
 		return raw;
 	}, [params]);
 
-	// Get active tab from URL for conditional query enabling
-	const searchParams = useSearchParams();
-	const activeTabFromUrl = searchParams?.get?.("tab") || "general";
-
 	// React Query hooks for cached data fetching
 	// Core obra data - always fetch
 	const obraQuery = useQuery({
@@ -223,51 +219,51 @@ export default function ObraDetailPage() {
 		staleTime: 5 * 60 * 1000,
 	});
 
-	// Memoria notes - defer until general tab is active or was previously visited
+	// Memoria notes - always fetch (lightweight)
 	const memoriaQuery = useQuery({
 		queryKey: ['obra', obraId, 'memoria'],
 		queryFn: () => fetchMemoriaNotes(obraId!),
-		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "general",
+		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
 	});
 
-	// Materials - defer until materiales tab is active
+	// Materials - always fetch (cached by React Query)
 	const materialsQuery = useQuery({
 		queryKey: ['obra', obraId, 'materials'],
 		queryFn: () => fetchMaterialOrders(obraId!),
-		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "materiales",
+		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
 	});
 
-	// Certificates - defer until certificados tab is active
+	// Certificates - always fetch (cached by React Query)
 	const certificatesQuery = useQuery({
 		queryKey: ['obra', obraId, 'certificates'],
 		queryFn: () => fetchCertificates(obraId!),
-		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "certificados",
+		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
 	});
 
-	// Recipients - defer until flujo tab is active
+	// Recipients - always fetch (cached by React Query)
 	const recipientsQuery = useQuery({
 		queryKey: ['obra', obraId, 'recipients'],
 		queryFn: () => fetchObraRecipients(obraId!),
-		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "flujo",
+		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 10 * 60 * 1000, // Recipients change less often
 	});
 
-	// Flujo actions - defer until flujo tab is active
+	// Flujo actions - always fetch (cached by React Query)
 	const flujoActionsQuery = useQuery({
 		queryKey: ['obra', obraId, 'flujo-actions'],
 		queryFn: () => fetchFlujoActions(obraId!),
-		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "flujo",
+		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
 	});
 
-	// Pendientes - defer until general tab (where they're shown)
+	// Pendientes - always fetch (cached by React Query)
 	const pendientesQuery = useQuery({
 		queryKey: ['obra', obraId, 'pendientes'],
 		queryFn: () => fetchPendientes(obraId!),
-		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "general",
+		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -329,9 +325,10 @@ export default function ObraDetailPage() {
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
 	const router = useRouter();
 	const pathname = usePathname();
-
-	// activeTab is derived from activeTabFromUrl (already computed above from searchParams)
-	const activeTab = activeTabFromUrl;
+	const searchParams = useSearchParams();
+	
+	// Derive activeTab from URL params
+	const activeTab = searchParams?.get("tab") || "general";
 
 	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
 		const params = new URLSearchParams(searchParams?.toString() || "");
