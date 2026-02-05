@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Layers, FileText, Settings, Plus } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FormTable,
   FormTableContent,
@@ -38,12 +38,6 @@ type MacroTableRowData = MacroRow & {
   [key: string]: unknown;
 };
 
-const ROWS_CACHE_TTL = 5 * 60 * 1000;
-const rowsCache = new Map<
-  string,
-  Map<number, { data: { rows: MacroTableRowData[]; pagination: unknown }; timestamp: number }>
->();
-
 function mapDataTypeToCell(dataType: string): "text" | "number" | "currency" | "checkbox" | "date" {
   switch (dataType) {
     case "number":
@@ -61,11 +55,70 @@ function mapDataTypeToCell(dataType: string): "text" | "number" | "currency" | "
 
 function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) {
   const router = useRouter();
-  const [columns, setColumns] = useState<MacroTableColumn[]>(macroTable.columns ?? []);
+  const queryClient = useQueryClient();
+  const columns = macroTable.columns ?? [];
 
-  useEffect(() => {
-    setColumns(macroTable.columns ?? []);
-  }, [macroTable]);
+  // Stable references for fetchRows and onSave to avoid config recreation
+  const macroTableIdRef = useRef(macroTable.id);
+  macroTableIdRef.current = macroTable.id;
+
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
+
+  // Stable fetchRows function - uses ref to avoid recreating config on every render
+  const fetchRows = useCallback(async ({ page, limit }: { page: number; limit: number }) => {
+    const tableId = macroTableIdRef.current;
+    const res = await fetch(`/api/macro-tables/${tableId}/rows?page=${page}&limit=${limit}`);
+    if (!res.ok) throw new Error("Failed to fetch rows");
+    const data = await res.json();
+    const rows: MacroTableRowData[] = (data.rows ?? []).map((row: MacroRow) => ({
+      ...row,
+      id: row.id,
+      _sourceTablaId: row._sourceTablaId,
+      _sourceTablaName: row._sourceTablaName,
+      _obraId: row._obraId,
+      _obraName: row._obraName,
+    }));
+    return {
+      rows,
+      pagination: data.pagination,
+    };
+  }, []);
+
+  // Stable onSave function
+  const onSave = useCallback(async ({ dirtyRows }: { dirtyRows: MacroTableRowData[] }) => {
+    const tableId = macroTableIdRef.current;
+    const cols = columnsRef.current;
+    const customColumnIds = new Set(
+      cols.filter((c) => c.columnType === "custom").map((c) => c.id),
+    );
+    const customValues: Array<{ sourceRowId: string; columnId: string; value: unknown }> = [];
+
+    for (const row of dirtyRows) {
+      for (const colId of customColumnIds) {
+        customValues.push({
+          sourceRowId: row.id,
+          columnId: colId,
+          value: row[colId],
+        });
+      }
+    }
+
+    if (customValues.length === 0) return;
+
+    const res = await fetch(`/api/macro-tables/${tableId}/rows`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customValues }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? "Error guardando cambios");
+    }
+    // Invalidate React Query cache for this macro table's rows
+    queryClient.invalidateQueries({ queryKey: ['macro-table-rows', tableId] });
+  }, [queryClient]);
 
   const config = useMemo(() => {
     if (columns.length === 0) return null;
@@ -105,66 +158,6 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       });
     }
 
-    const fetchRows = async ({ page, limit }: { page: number; limit: number }) => {
-      let tableCache = rowsCache.get(macroTable.id);
-      if (!tableCache) {
-        tableCache = new Map();
-        rowsCache.set(macroTable.id, tableCache);
-      }
-      const cached = tableCache.get(page);
-      if (cached && Date.now() - cached.timestamp < ROWS_CACHE_TTL) {
-        return cached.data;
-      }
-      const res = await fetch(`/api/macro-tables/${macroTable.id}/rows?page=${page}&limit=${limit}`);
-      if (!res.ok) throw new Error("Failed to fetch rows");
-      const data = await res.json();
-      const rows: MacroTableRowData[] = (data.rows ?? []).map((row: MacroRow) => ({
-        ...row,
-        id: row.id,
-        _sourceTablaId: row._sourceTablaId,
-        _sourceTablaName: row._sourceTablaName,
-        _obraId: row._obraId,
-        _obraName: row._obraName,
-      }));
-      const payload = {
-        rows,
-        pagination: data.pagination,
-      };
-      tableCache.set(page, { data: payload, timestamp: Date.now() });
-      return payload;
-    };
-
-    const onSave = async ({ dirtyRows }: { dirtyRows: MacroTableRowData[] }) => {
-      const customColumnIds = new Set(
-        columns.filter((c) => c.columnType === "custom").map((c) => c.id),
-      );
-      const customValues: Array<{ sourceRowId: string; columnId: string; value: unknown }> = [];
-
-      for (const row of dirtyRows) {
-        for (const colId of customColumnIds) {
-          customValues.push({
-            sourceRowId: row.id,
-            columnId: colId,
-            value: row[colId],
-          });
-        }
-      }
-
-      if (customValues.length === 0) return;
-
-      const res = await fetch(`/api/macro-tables/${macroTable.id}/rows`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customValues }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Error guardando cambios");
-      }
-      rowsCache.delete(macroTable.id);
-    };
-
     return {
       tableId: `macro-table-${macroTable.id}`,
       title: macroTable.name,
@@ -180,7 +173,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       showActionsColumn: false,
       allowAddRows: false,
     };
-  }, [columns, macroTable]);
+  }, [columns, macroTable.id, macroTable.name, macroTable.description, fetchRows, onSave]);
 
   if (!config) {
     return (

@@ -210,7 +210,12 @@ export default function ObraDetailPage() {
 		return raw;
 	}, [params]);
 
+	// Get active tab from URL for conditional query enabling
+	const searchParams = useSearchParams();
+	const activeTabFromUrl = searchParams?.get?.("tab") || "general";
+
 	// React Query hooks for cached data fetching
+	// Core obra data - always fetch
 	const obraQuery = useQuery({
 		queryKey: ['obra', obraId],
 		queryFn: () => fetchObraDetail(obraId!),
@@ -218,45 +223,51 @@ export default function ObraDetailPage() {
 		staleTime: 5 * 60 * 1000,
 	});
 
+	// Memoria notes - defer until general tab is active or was previously visited
 	const memoriaQuery = useQuery({
 		queryKey: ['obra', obraId, 'memoria'],
 		queryFn: () => fetchMemoriaNotes(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "general",
 		staleTime: 5 * 60 * 1000,
 	});
 
+	// Materials - defer until materiales tab is active
 	const materialsQuery = useQuery({
 		queryKey: ['obra', obraId, 'materials'],
 		queryFn: () => fetchMaterialOrders(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "materiales",
 		staleTime: 5 * 60 * 1000,
 	});
 
+	// Certificates - defer until certificados tab is active
 	const certificatesQuery = useQuery({
 		queryKey: ['obra', obraId, 'certificates'],
 		queryFn: () => fetchCertificates(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "certificados",
 		staleTime: 5 * 60 * 1000,
 	});
 
+	// Recipients - defer until flujo tab is active
 	const recipientsQuery = useQuery({
 		queryKey: ['obra', obraId, 'recipients'],
 		queryFn: () => fetchObraRecipients(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "flujo",
 		staleTime: 10 * 60 * 1000, // Recipients change less often
 	});
 
+	// Flujo actions - defer until flujo tab is active
 	const flujoActionsQuery = useQuery({
 		queryKey: ['obra', obraId, 'flujo-actions'],
 		queryFn: () => fetchFlujoActions(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "flujo",
 		staleTime: 5 * 60 * 1000,
 	});
 
+	// Pendientes - defer until general tab (where they're shown)
 	const pendientesQuery = useQuery({
 		queryKey: ['obra', obraId, 'pendientes'],
 		queryFn: () => fetchPendientes(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: !!obraId && obraId !== "undefined" && activeTabFromUrl === "general",
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -317,14 +328,13 @@ export default function ObraDetailPage() {
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
 	const router = useRouter();
-	const searchParams = useSearchParams();
 	const pathname = usePathname();
 
-	// Derive activeTab from URL params
-	const activeTab = searchParams?.get?.("tab") || "general";
+	// activeTab is derived from activeTabFromUrl (already computed above from searchParams)
+	const activeTab = activeTabFromUrl;
 
 	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
-		const params = new URLSearchParams(searchParams?.toString?.() || "");
+		const params = new URLSearchParams(searchParams?.toString() || "");
 		for (const [key, value] of Object.entries(patch)) {
 			if (value == null || value === "") params.delete(key); else params.set(key, value);
 		}
@@ -764,30 +774,7 @@ export default function ObraDetailPage() {
 		}
 	}, [obraId, currentUserId]);
 
-	const loadPendientes = useCallback(async () => {
-		if (!obraId || obraId === "undefined") return;
-		try {
-			const res = await fetch(`/api/obras/${obraId}/pendientes`);
-			if (!res.ok) throw new Error("No se pudieron cargar los pendientes");
-			const data = await res.json();
-			const list = (data?.pendientes ?? []).map((p: any) => ({
-				id: p.id as string,
-				name: String(p.name ?? ""),
-				poliza: String(p.poliza ?? ""),
-				dueMode: (p.dueMode ?? "fixed") as "fixed" | "after_completion",
-				dueDate: String(p.dueDate ?? ""),
-				offsetDays: Number(p.offsetDays ?? 0),
-				done: Boolean(p.done ?? false),
-			})) as PendingDoc[];
-			if (list.length > 0) setPendingDocs(list);
-		} catch (err) {
-			console.error(err);
-		}
-	}, [obraId]);
-
-	useEffect(() => {
-		loadPendientes();
-	}, [loadPendientes]);
+	// Pendientes are loaded via React Query (pendientesQuery) - no manual fetch needed
 
 	const savePendingDoc = useCallback(async (doc: PendingDoc, index: number) => {
 		if (!obraId || obraId === "undefined") return;
@@ -1105,9 +1092,7 @@ export default function ObraDetailPage() {
 		[obraId, newCertificate, refreshCertificates]
 	);
 
-	useEffect(() => {
-		void refreshCertificates();
-	}, [refreshCertificates]);
+	// Certificates are loaded via React Query (certificatesQuery) - no manual refetch on mount needed
 
 	return (
 		<div className="container max-w-full mx-auto px-4 pt-2">

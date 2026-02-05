@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
 /**
  * Pure CSS tooltip for truncated text - no React state, no scroll listeners.
@@ -49,6 +50,31 @@ const TruncatedTextWithTooltip = memo(function TruncatedTextWithTooltip({
 		>
 			{text}
 		</span>
+	);
+});
+
+/**
+ * Link component with hover prefetch for obra detail pages.
+ * Prefetches data when user hovers over the link for faster navigation.
+ */
+const ObraDetailLink = memo(function ObraDetailLink({
+	obraId,
+	text,
+}: {
+	obraId: string;
+	text: string;
+}) {
+	const { prefetchObra } = usePrefetchObra();
+
+	return (
+		<Link
+			href={`/excel/${obraId}`}
+			className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2"
+			onMouseEnter={() => prefetchObra(obraId)}
+		>
+			<ExternalLink className="min-h-4 min-w-4 max-w-4 max-h-4 text-muted-foreground group-hover:text-primary" />
+			<TruncatedTextWithTooltip text={text} />
+		</Link>
 	);
 });
 
@@ -237,15 +263,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 				const obraId = row.id;
 				if (!obraId) return <span className="font-semibold">{text}</span>;
 
-				return (
-					<Link
-						href={`/excel/${obraId}`}
-						className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2"
-					>
-						<ExternalLink className="min-h-4 min-w-4 max-w-4 max-h-4 text-muted-foreground group-hover:text-primary" />
-						<TruncatedTextWithTooltip text={text} />
-					</Link>
-				);
+				return <ObraDetailLink obraId={obraId} text={text} />;
 			},
 		},
 		cellMenuItems: [
@@ -877,8 +895,9 @@ function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 
 const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["fetchRows"] =
 	async () => {
+		// Use next revalidate for ISR-style caching (revalidate every 60 seconds)
 		const response = await fetch(`/api/obras`, {
-			cache: "no-store",
+			next: { revalidate: 60 },
 		});
 		if (!response.ok) {
 			const text = await response.text();
