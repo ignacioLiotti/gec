@@ -30,6 +30,7 @@ type TableRowProps<Row extends FormTableRow> = {
 	accordionAlwaysOpen: boolean;
 	isExpanded: boolean;
 	isRowDirty: boolean;
+	dirtyCellIds: string;
 	showActionsColumn: boolean;
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
 	getStickyProps: (columnId: string, baseClassName?: string) => {
@@ -57,6 +58,7 @@ function TableRowInner<Row extends FormTableRow>({
 	accordionAlwaysOpen,
 	isExpanded,
 	isRowDirty,
+	dirtyCellIds,
 	showActionsColumn,
 	isCellDirty,
 	getStickyProps,
@@ -68,6 +70,8 @@ function TableRowInner<Row extends FormTableRow>({
 	onCopyColumn,
 	onCopyRow,
 }: TableRowProps<Row>) {
+	// dirtyCellIds is used for memoization comparison (see MemoizedTableRow below)
+	void dirtyCellIds;
 	const visibleCells = row.getVisibleCells();
 	const visibleLeafCount = visibleCells.length;
 	const accordionLabel = accordionRowConfig?.triggerLabel ?? "detalles";
@@ -208,6 +212,7 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		prevProps.isExpanded === nextProps.isExpanded &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
 		prevProps.showActionsColumn === nextProps.showActionsColumn &&
-		prevProps.isRowDirty === nextProps.isRowDirty
+		prevProps.isRowDirty === nextProps.isRowDirty &&
+		prevProps.dirtyCellIds === nextProps.dirtyCellIds
 	);
 }) as typeof TableRowInner;
