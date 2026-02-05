@@ -1113,51 +1113,61 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const normalizedSearch = searchValue.trim().toLowerCase();
 	const highlightQuery = normalizedSearch;
 
-	const matchesGlobalSearch = useCallback(
-		(row: Row) => {
-			if (!normalizedSearch) return true;
-			return columns.some((column) => {
-				if (column.searchFn) {
-					return column.searchFn(row, normalizedSearch);
-				}
-				const rawValue = row[column.field];
-				return defaultSearchMatcher(rawValue, normalizedSearch);
-			});
-		},
-		[normalizedSearch, columns]
-	);
-
-	const searchFilteredRows = useMemo(
-		() => rows.filter((row) => matchesGlobalSearch(row)),
-		[rows, matchesGlobalSearch]
-	);
-
-	const advancedFilteredRows = useMemo(() => {
+	// Combined filtering pipeline - single pass through rows for search + advanced filters
+	// Returns both the filtered rows (before tab filter) and tab counts in one computation
+	const { baseFilteredRows, tabCounts } = useMemo(() => {
 		const applyFilters = config.applyFilters;
-		if (!applyFilters || typeof filters === "undefined") return searchFilteredRows;
-		return searchFilteredRows.filter((row) => applyFilters(row, filters));
-	}, [searchFilteredRows, config, filters]);
-
-	const tabCounts = useMemo(() => {
+		const hasAdvancedFilters = applyFilters && typeof filters !== "undefined";
+		
+		// Single pass: apply search + advanced filters together
+		const filtered: Row[] = [];
+		for (const row of rows) {
+			// Search filter
+			if (normalizedSearch) {
+				const matchesSearch = columns.some((column) => {
+					if (column.searchFn) {
+						return column.searchFn(row, normalizedSearch);
+					}
+					const rawValue = row[column.field];
+					return defaultSearchMatcher(rawValue, normalizedSearch);
+				});
+				if (!matchesSearch) continue;
+			}
+			
+			// Advanced filter
+			if (hasAdvancedFilters && !applyFilters(row, filters)) continue;
+			
+			filtered.push(row);
+		}
+		
+		// Compute tab counts from the filtered rows (single iteration)
 		const counts: Record<string, number> = {};
-		tabFilters.forEach((tab) => {
-			counts[tab.id] = tab.predicate
-				? advancedFilteredRows.filter(tab.predicate).length
-				: advancedFilteredRows.length;
-		});
-		return counts;
-	}, [advancedFilteredRows, tabFilters]);
+		for (const tab of tabFilters) {
+			if (tab.predicate) {
+				let count = 0;
+				for (const row of filtered) {
+					if (tab.predicate(row)) count++;
+				}
+				counts[tab.id] = count;
+			} else {
+				counts[tab.id] = filtered.length;
+			}
+		}
+		
+		return { baseFilteredRows: filtered, tabCounts: counts };
+	}, [rows, normalizedSearch, columns, config.applyFilters, filters, tabFilters]);
 
+	// Apply tab filter (uses baseFilteredRows from above)
 	const tabFilteredRows = useMemo(() => {
 		if (!hasTabFilters || !activeTab) {
-			return advancedFilteredRows;
+			return baseFilteredRows;
 		}
 		const currentTab = tabFilters.find((tab) => tab.id === activeTab);
 		if (!currentTab?.predicate) {
-			return advancedFilteredRows;
+			return baseFilteredRows;
 		}
-		return advancedFilteredRows.filter(currentTab.predicate);
-	}, [advancedFilteredRows, activeTab, tabFilters, hasTabFilters]);
+		return baseFilteredRows.filter(currentTab.predicate);
+	}, [baseFilteredRows, activeTab, tabFilters, hasTabFilters]);
 
 	const sortedRows = useMemo(() => {
 		if (!useClientPagination || !sortState.columnId) return tabFilteredRows;
@@ -1166,7 +1176,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		const comparator = column.sortFn ?? defaultSortByField<Row>(column.field);
 		const sorted = [...tabFilteredRows].sort((a, b) => comparator(a, b));
 		return sortState.direction === "asc" ? sorted : sorted.reverse();
-	}, [tabFilteredRows, sortState, useClientPagination]);
+	}, [tabFilteredRows, sortState, useClientPagination, columns]);
 
 	const activeFilterCount = useMemo(() => {
 		if (!config.countActiveFilters || typeof filters === "undefined") return 0;
@@ -1434,7 +1444,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			const clearedValue = getClearedValue(column);
 			setFormFieldValue(`rowsById.${rowId}.${column.field}` as const, () => clearedValue as Row[ColumnField<Row>]);
 		},
-		[form]
+		[setFormFieldValue]
 	);
 
 	const handleRestoreCell = useCallback(
@@ -1444,7 +1454,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			const initialValue = initialRow[column.field];
 			setFormFieldValue(`rowsById.${rowId}.${column.field}` as const, () => initialValue as Row[ColumnField<Row>]);
 		},
-		[form]
+		[setFormFieldValue]
 	);
 
 	const handleCopyCell = useCallback(async (value: unknown) => {
@@ -1517,7 +1527,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}));
 		setPage(1);
 		toast.success("Fila vacía agregada");
-	}, [columns, config, form, setFormFieldValue, setPage]);
+	}, [columns, config, setFormFieldValue]);
 
 	const handleDelete = useCallback((id: string) => {
 		setFormFieldValue("rowOrder", (prev: string[] = []) => prev.filter((rowId) => rowId !== id));
@@ -1528,7 +1538,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return next;
 		});
 		toast.success("Fila eliminada");
-	}, [form]);
+	}, [setFormFieldValue]);
 
 	const handleSave = useCallback(async () => {
 		if (!hasUnsavedChanges) return;
