@@ -1130,19 +1130,29 @@ export function FileManager({
 
   useEffect(() => {
     if (!obraId) return;
-    // Skip if we already have fresh data for this obra (persisted from previous tab visit)
-    if (!needsRefetch(obraId) && fileTree) {
+    const shouldRefetchTree = needsRefetch(obraId) || !fileTree;
+    const shouldRefetchOcr = ocrFolderLinks.length === 0;
+
+    // Skip if everything is already fresh
+    if (!shouldRefetchTree && !shouldRefetchOcr) {
       lastBootstrapObraIdRef.current = obraId;
       return;
     }
-    if (lastBootstrapObraIdRef.current === obraId) return;
+    if (lastBootstrapObraIdRef.current === obraId && !shouldRefetchTree && !shouldRefetchOcr) {
+      return;
+    }
     lastBootstrapObraIdRef.current = obraId;
 
     const bootstrap = async () => {
       try {
-        // Always fetch fresh data on initial load to ensure newly created folders are visible
-        await refreshOcrFolderLinks({ skipCache: true });
-        await buildFileTree({ skipCache: true });
+        // Fetch OCR links if missing, to hydrate tags quickly
+        if (shouldRefetchOcr) {
+          await refreshOcrFolderLinks({ skipCache: true });
+        }
+        // Only rebuild the tree if it’s stale or missing
+        if (shouldRefetchTree) {
+          await buildFileTree({ skipCache: true });
+        }
       } catch (error) {
         console.error('Error initializing documents data', error);
       }
@@ -1150,7 +1160,7 @@ export function FileManager({
 
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [obraId]);
+  }, [obraId, fileTree, ocrFolderLinks.length, buildFileTree, refreshOcrFolderLinks]);
 
   // Track previous ocrFolderLinks length to detect real changes vs initial load
   const prevOcrLinksFingerprintRef = useRef<string | null>(null);
@@ -1161,6 +1171,10 @@ export function FileManager({
       prevOcrLinksFingerprintRef.current = null;
       return;
     }
+    if (fileTree) {
+      hydrateTreeWithOcrData(fileTree);
+      setFileTree(fileTree);
+    }
     const fingerprint = ocrFolderLinks
       .map((link) => `${link.folderName ?? ""}:${link.tablaId ?? ""}:${link.columns?.length ?? 0}`)
       .sort()
@@ -1170,7 +1184,7 @@ export function FileManager({
     }
     prevOcrLinksFingerprintRef.current = fingerprint;
     void buildFileTree({ skipCache: true });
-  }, [obraId, ocrFolderLinks, buildFileTree]);
+  }, [obraId, ocrFolderLinks, fileTree, hydrateTreeWithOcrData, setFileTree, buildFileTree]);
 
   useEffect(() => {
     if (!selectedFolder?.ocrEnabled) {
