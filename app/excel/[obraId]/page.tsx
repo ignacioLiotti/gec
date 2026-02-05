@@ -575,7 +575,8 @@ const router = useRouter();
 		setOrderFilters((prev) => ({ ...prev, [orderId]: value }));
 	}, []);
 
-	const normalize = (v: string) => v.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+	// Memoize normalize function to avoid recreation on every render
+	const normalize = useCallback((v: string) => v.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase(), []);
 
 	const filteredOrders = useMemo(() => {
 		if (!globalMaterialsFilter.trim()) return materialOrders;
@@ -595,7 +596,7 @@ const router = useRouter();
 				normalize(order.proveedor).includes(q) ||
 				order.items.length > 0
 			);
-	}, [materialOrders, globalMaterialsFilter]);
+	}, [materialOrders, globalMaterialsFilter, normalize]);
 
 	const getOrderItemsFiltered = useCallback((order: MaterialOrder): MaterialItem[] => {
 		const of = orderFilters[order.id]?.trim() ?? "";
@@ -604,7 +605,7 @@ const router = useRouter();
 		return order.items.filter((it) =>
 			normalize(it.material).includes(q) || normalize(it.unidad).includes(q)
 		);
-	}, [orderFilters]);
+	}, [orderFilters, normalize]);
 
 	const getOrderTotal = useCallback((items: MaterialItem[]) => {
 		return items.reduce((acc, it) => acc + it.cantidad * it.precioUnitario, 0);
