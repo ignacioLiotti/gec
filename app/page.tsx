@@ -22,9 +22,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { QuickFormDialog, type QuickFormField } from "@/components/forms/quick-form-dialog";
 import { toast } from "sonner";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
@@ -309,7 +307,7 @@ export default function Home() {
   // Show dashboard for authenticated users
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/50">
-      <div className="mx-auto max-w-full px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto max-w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Header with gradient accent */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -331,111 +329,73 @@ export default function Home() {
                 Gestiona y supervisa tus proyectos de construccion
               </p>
             </div>
-            <div className="flex gap-2">
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-2 shadow-sm">
-                    <Plus className="h-4 w-4" />
-                    Nueva Obra
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-xl border-0 bg-transparent p-0 shadow-none rounded-none">
-                  <div className="relative isolate overflow-hidden h-[85vh] border border-stone-200 bg-gradient-to-b from-stone-50 via-white to-stone-100 px-6 py-8">
-                    <div className="pointer-events-none absolute inset-0">
-                      <div className="absolute inset-x-10 top-0 h-16 bg-gradient-to-b from-white via-white/70 to-transparent" />
-                      <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-stone-200/50 to-transparent" />
-                      <div className="absolute inset-y-6 left-12 w-px bg-gradient-to-b from-stone-200 via-stone-100 to-stone-200" />
-                    </div>
-                    <div className="pointer-events-none absolute inset-y-8 left-5 flex w-6 flex-col items-center justify-between pr-4">
-                      {Array.from({ length: 5 }).map((_, index) => (
-                        <span
-                          key={index}
-                          className="h-3.5 w-3.5 rounded-full bg-stone-200 shadow-inner shadow-stone-500/40"
-                        />
-                      ))}
-                    </div>
-                    <div className="absolute -top-8 left-16 right-16 h-10 rounded-full bg-black/5 blur-3xl" aria-hidden="true" />
-                    <div className="relative space-y-6 pl-8 flex flex-col gap-4 h-full justify-between">
-                      <div className="flex flex-col gap-2">
-                        <DialogHeader className="space-y-2 px-0">
-                          <DialogTitle className="text-2xl font-semibold text-stone-800">Crear Nueva Obra</DialogTitle>
-                          <DialogDescription className="text-base text-stone-500">
-                            Completa la informacion basica de la obra. Podras agregar mas detalles despues.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-5">
-                          <div className="space-y-2">
-                            <Label htmlFor="designacion" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
-                              Designacion y Ubicacion <span className="text-destructive">*</span>
-                            </Label>
-                            <Input
-                              id="designacion"
-                              placeholder="Ej: Construccion de edificio - Av. Corrientes 1234"
-                              value={newObra.designacionYUbicacion}
-                              onChange={(e) => setNewObra({ ...newObra, designacionYUbicacion: e.target.value })}
-                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="entidad" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
-                              Entidad Contratante <span className="text-destructive">*</span>
-                            </Label>
-                            <Input
-                              id="entidad"
-                              placeholder="Ej: Municipalidad de Buenos Aires"
-                              value={newObra.entidadContratante}
-                              onChange={(e) => setNewObra({ ...newObra, entidadContratante: e.target.value })}
-                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="mes" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
-                              Mes Basico de Contrato
-                            </Label>
-                            <Input
-                              id="mes"
-                              placeholder="Ej: Enero 2024"
-                              value={newObra.mesBasicoDeContrato}
-                              onChange={(e) => setNewObra({ ...newObra, mesBasicoDeContrato: e.target.value })}
-                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="iniciacion" className="text-xs font-semibold uppercase tracking-[0.08em] text-stone-500">
-                              Fecha de Iniciacion
-                            </Label>
-                            <Input
-                              id="iniciacion"
-                              placeholder="Ej: Marzo 2024"
-                              value={newObra.iniciacion}
-                              onChange={(e) => setNewObra({ ...newObra, iniciacion: e.target.value })}
-                              className="rounded-sm border-stone-200 bg-white/80 text-base text-stone-700 "
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end ">
-                        <Button
-                          variant="outline"
-                          onClick={() => setDialogOpen(false)}
-                          className="border-stone-200 bg-white/70 text-stone-600 shadow-sm hover:bg-white"
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          onClick={handleCreateObra}
-                          disabled={isCreating}
-                          className="bg-stone-900 text-white  hover:bg-stone-800"
-                        >
-                          {isCreating ? "Creando..." : "Crear Obra"}
-                        </Button>
-                      </DialogFooter>
-                    </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <Button size="sm" className="w-full gap-2 shadow-sm sm:w-auto" onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Nueva Obra
+              </Button>
+              <QuickFormDialog
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                title="Crear Nueva Obra"
+                description="Completa la informacion basica de la obra. Podras agregar mas detalles despues."
+                variant="dashboard"
+                fields={[
+                  {
+                    key: "designacionYUbicacion",
+                    label: "Designacion y Ubicacion",
+                    type: "text",
+                    required: true,
+                    placeholder: "Ej: Construccion de edificio - Av. Corrientes 1234",
+                  },
+                  {
+                    key: "entidadContratante",
+                    label: "Entidad Contratante",
+                    type: "text",
+                    required: true,
+                    placeholder: "Ej: Municipalidad de Buenos Aires",
+                  },
+                  {
+                    key: "mesBasicoDeContrato",
+                    label: "Mes Basico de Contrato",
+                    type: "text",
+                    placeholder: "Ej: Enero 2024",
+                  },
+                  {
+                    key: "iniciacion",
+                    label: "Fecha de Iniciacion",
+                    type: "text",
+                    placeholder: "Ej: Marzo 2024",
+                  },
+                ] as QuickFormField[]}
+                values={newObra}
+                onChange={(key: string, value: string) => setNewObra({ ...newObra, [key]: value })}
+                onSubmit={handleCreateObra}
+                isSubmitting={isCreating}
+                submitLabel={isCreating ? "Creando..." : "Crear Obra"}
+                cancelLabel="Cancelar"
+                renderFooter={({ onClose, onSubmit, isSubmitting }: { onClose: () => void; onSubmit: () => void; isSubmitting: boolean }) => (
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      disabled={isSubmitting}
+                      className="rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onSubmit}
+                      disabled={isSubmitting}
+                      className="flex items-center gap-2 rounded-md px-5 py-2 text-sm font-medium transition-all duration-200 bg-stone-800 text-white hover:bg-stone-700 active:bg-stone-900 disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      {isCreating ? "Creando..." : "Crear Obra"}
+                    </button>
                   </div>
-                </DialogContent>
-              </Dialog>
-              <Button asChild variant="outline" size="sm">
+                )}
+              />
+              <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
                 <Link href="/excel">
                   Ver Todas
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -456,7 +416,7 @@ export default function Home() {
           >
             <Card className="border-0 shadow-lg pt-0 shadow-black/5 bg-card/80 backdrop-blur-sm overflow-hidden gap-0 pb-0">
               <CardHeader className="border-b bg-primary/10 py-4 !pb-2" >
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
                       <Activity className="h-4.5 w-4.5 text-primary" />
@@ -469,7 +429,7 @@ export default function Home() {
                     </div>
                   </div>
                   {obras.length > 0 && (
-                    <Badge variant="secondary" className="font-mono text-xs">
+                    <Badge variant="secondary" className="font-mono text-xs self-start sm:self-auto">
                       {obras.length} total
                     </Badge>
                   )}
@@ -526,9 +486,8 @@ export default function Home() {
                           <Link
                             href={`/excel/${obra.id}`}
                             className="flex items-center justify-between p-4 hover:bg-accent/50 transition-all duration-200 group"
-                            onMouseEnter={() => prefetchObra(obra.id)}
                           >
-                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted/70 font-mono text-sm font-semibold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
                                 {obra.n}
                               </div>
@@ -549,10 +508,10 @@ export default function Home() {
                                 <p className="text-xs text-muted-foreground truncate">{obra.entidadContratante}</p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-4 ml-4 shrink-0">
-                              <div className="text-right">
+                            <div className="flex items-center justify-between gap-3 sm:gap-4 sm:ml-4 shrink-0">
+                              <div className="text-right sm:text-right flex-1 sm:flex-none">
                                 <div className="text-sm font-semibold tabular-nums">{obra.porcentaje}%</div>
-                                <div className="w-20 bg-muted rounded-full h-1.5 mt-1.5">
+                                <div className="w-full sm:w-20 bg-muted rounded-full h-1.5 mt-1.5">
                                   <motion.div
                                     className="bg-primary h-1.5 rounded-full"
                                     initial={{ width: 0 }}
@@ -596,18 +555,18 @@ export default function Home() {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Resumen</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="text-center p-3 rounded-xl bg-muted/50">
-                      <div className="text-2xl font-bold">{stats?.total || 0}</div>
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Total</div>
+                      <div className="text-xl sm:text-2xl font-bold">{stats?.total || 0}</div>
+                      <div className="text-xs sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Total</div>
                     </div>
                     <div className="text-center p-3 rounded-xl bg-blue-500/10">
-                      <div className="text-2xl font-bold text-blue-600">{stats?.inProgress || 0}</div>
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Activas</div>
+                      <div className="text-xl sm:text-2xl font-bold text-blue-600">{stats?.inProgress || 0}</div>
+                      <div className="text-xs sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Activas</div>
                     </div>
                     <div className="text-center p-3 rounded-xl bg-green-500/10">
-                      <div className="text-2xl font-bold text-green-600">{stats?.completed || 0}</div>
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Listas</div>
+                      <div className="text-xl sm:text-2xl font-bold text-green-600">{stats?.completed || 0}</div>
+                      <div className="text-xs sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Listas</div>
                     </div>
                   </div>
 

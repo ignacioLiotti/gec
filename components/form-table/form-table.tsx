@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
-import type { AnyFormState } from "@tanstack/form-core";
 import {
 	useReactTable,
 	getCoreRowModel,
@@ -760,12 +759,13 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		},
 	});
 	const setFormFieldValue = form.setFieldValue as (path: string, updater: any) => void;
+	type FormStateType = typeof form.store.state;
 
-	const rowOrderSelector = useCallback<(state: AnyFormState) => string[]>(
+	const rowOrderSelector = useCallback<(state: FormStateType) => string[]>(
 		(state) => (state.values?.rowOrder as string[]) ?? [],
 		[]
 	);
-	const rowsByIdSelector = useCallback<(state: AnyFormState) => Record<string, Row>>(
+	const rowsByIdSelector = useCallback<(state: FormStateType) => Record<string, Row>>(
 		(state) => (state.values?.rowsById as Record<string, Row>) ?? {},
 		[]
 	);
