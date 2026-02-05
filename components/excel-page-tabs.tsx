@@ -19,14 +19,14 @@ export function ExcelPageTabs() {
   if (!isExcelDetailPage) return null;
 
   return (
-    <TabsList >
+    <TabsList className="w-full justify-start gap-1 overflow-x-auto sm:w-auto">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         return (
           <TabsTrigger
             key={tab.value}
             value={tab.value}
-            className="gap-2"
+            className="gap-1.5 text-xs sm:text-sm"
           >
             <Icon className="h-4 w-4" />
             <span className="hidden sm:inline">{tab.label}</span>

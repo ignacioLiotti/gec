@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -21,12 +21,14 @@ import {
   ToggleLeft,
   Table2,
   X,
+  Zap,
 } from "lucide-react";
 
 import { OcrTemplateConfigurator } from "./_components/OcrTemplateConfigurator";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -84,6 +86,14 @@ type DefaultFolder = {
     ocrScope?: string;
     required?: boolean;
   }>;
+};
+
+type QuickAction = {
+  id: string;
+  name: string;
+  description: string | null;
+  folderPaths: string[];
+  position: number;
 };
 
 type OcrTemplate = {
@@ -467,6 +477,7 @@ const DATA_TYPES = ["text", "number", "currency", "date", "boolean"] as const;
 
 export default function ObraDefaultsPage() {
   const [folders, setFolders] = useState<DefaultFolder[]>([]);
+  const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Folder dialog state
@@ -481,6 +492,13 @@ export default function ObraDefaultsPage() {
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
   const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
 
+  // Quick actions state
+  const [isAddQuickActionOpen, setIsAddQuickActionOpen] = useState(false);
+  const [newQuickActionName, setNewQuickActionName] = useState("");
+  const [newQuickActionDescription, setNewQuickActionDescription] = useState("");
+  const [newQuickActionFolders, setNewQuickActionFolders] = useState<string[]>([]);
+  const [isSubmittingQuickAction, setIsSubmittingQuickAction] = useState(false);
+
   // OCR Templates state
   const [ocrTemplates, setOcrTemplates] = useState<OcrTemplate[]>([]);
   const [isOcrConfigOpen, setIsOcrConfigOpen] = useState(false);
@@ -492,6 +510,12 @@ export default function ObraDefaultsPage() {
     setNewFolderOcrTemplateId("");
     setNewFolderHasNested(false);
     setNewFolderColumns([]);
+  }, []);
+
+  const resetQuickActionForm = useCallback(() => {
+    setNewQuickActionName("");
+    setNewQuickActionDescription("");
+    setNewQuickActionFolders([]);
   }, []);
 
   const fetchOcrTemplates = useCallback(async () => {
@@ -512,6 +536,7 @@ export default function ObraDefaultsPage() {
       if (!res.ok) throw new Error("Failed to load defaults");
       const data = await res.json();
       setFolders(data.folders ?? []);
+      setQuickActions(data.quickActions ?? []);
     } catch (error) {
       console.error(error);
       toast.error("Error cargando configuración");
@@ -665,6 +690,76 @@ export default function ObraDefaultsPage() {
     }
   };
 
+  const toggleQuickActionFolder = useCallback((path: string) => {
+    setNewQuickActionFolders((prev) => {
+      if (prev.includes(path)) {
+        return prev.filter((item) => item !== path);
+      }
+      return [...prev, path];
+    });
+  }, []);
+
+  const handleAddQuickAction = async () => {
+    if (!newQuickActionName.trim()) {
+      toast.error("Ingresá un nombre para la acción");
+      return;
+    }
+    if (newQuickActionFolders.length === 0) {
+      toast.error("Seleccioná al menos una carpeta");
+      return;
+    }
+
+    try {
+      setIsSubmittingQuickAction(true);
+      const payload = {
+        type: "quick-action",
+        name: newQuickActionName.trim(),
+        description: newQuickActionDescription.trim() || null,
+        folderPaths: newQuickActionFolders,
+      };
+
+      const res = await fetch("/api/obra-defaults", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Error creando la acción");
+      }
+
+      const { quickAction } = await res.json();
+      setQuickActions((prev) => [...prev, quickAction]);
+      resetQuickActionForm();
+      setIsAddQuickActionOpen(false);
+      toast.success("Acción rápida creada");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Error creando la acción");
+    } finally {
+      setIsSubmittingQuickAction(false);
+    }
+  };
+
+  const handleDeleteQuickAction = async (id: string) => {
+    try {
+      const res = await fetch("/api/obra-defaults", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "quick-action", id }),
+      });
+
+      if (!res.ok) throw new Error("Error eliminando la acción");
+
+      setQuickActions((prev) => prev.filter((action) => action.id !== id));
+      toast.success("Acción rápida eliminada");
+    } catch (error) {
+      console.error(error);
+      toast.error("Error eliminando la acción");
+    }
+  };
+
   const handleAddColumn = () => {
     setNewFolderColumns(prev => [
       ...prev,
@@ -700,6 +795,12 @@ export default function ObraDefaultsPage() {
     !newFolderName.trim() ||
     (folderMode === "data" && newFolderColumns.length === 0) ||
     (folderMode === "data" && needsOcrTemplate && !newFolderOcrTemplateId);
+  const isCreateQuickActionDisabled =
+    !newQuickActionName.trim() || newQuickActionFolders.length === 0;
+
+  const folderNameByPath = useMemo(() => {
+    return new Map(folders.map((folder) => [folder.path, folder.name]));
+  }, [folders]);
 
   if (isLoading) {
     return (
@@ -721,10 +822,10 @@ export default function ObraDefaultsPage() {
         </p>
       </div>
 
-      <div className="flex gap-4 ">
+      <div className="flex flex-col xl:flex-row gap-6">
 
         {/* Folders Section */}
-        <section className="space-y-4">
+        <section className="space-y-4 flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
@@ -768,8 +869,79 @@ export default function ObraDefaultsPage() {
           </div>
         </section>
 
+        {/* Quick Actions Section */}
+        <section className="space-y-4 flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                <Zap className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Acciones rápidas</h2>
+                <p className="text-sm text-muted-foreground">
+                  Flujos de carga rápida con pasos por carpeta
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => setIsAddQuickActionOpen(true)}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva acción
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {quickActions.length === 0 ? (
+              <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+                <Zap className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <p className="text-sm font-medium">Sin acciones configuradas</p>
+                <p className="text-xs">Agregá acciones para acelerar cargas frecuentes</p>
+              </div>
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {quickActions.map((action, index) => (
+                  <motion.div
+                    key={action.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="group rounded-lg border bg-card p-4 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{action.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {action.description || `${action.folderPaths.length} pasos`}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteQuickAction(action.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {action.folderPaths.map((path, pathIndex) => (
+                        <Badge key={`${action.id}-${path}`} variant="secondary" className="text-[10px]">
+                          {pathIndex + 1}. {folderNameByPath.get(path) ?? path}
+                        </Badge>
+                      ))}
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
+        </section>
+
         {/* Extraction Templates Section */}
-        <section className="space-y-4">
+        <section className="space-y-4 flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
@@ -813,6 +985,112 @@ export default function ObraDefaultsPage() {
           </div>
         </section>
       </div>
+
+      {/* Quick Actions Dialog */}
+      <Dialog open={isAddQuickActionOpen} onOpenChange={(open) => {
+        setIsAddQuickActionOpen(open);
+        if (!open) resetQuickActionForm();
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto px-4">
+          <DialogHeader className="px-0">
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-orange-100 dark:bg-orange-900/30">
+                <Zap className="h-4 w-4 text-orange-600" />
+              </div>
+              Nueva acción rápida
+            </DialogTitle>
+            <DialogDescription>
+              Creá un flujo con pasos por carpeta para cargas repetitivas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nombre de la acción</Label>
+              <Input
+                value={newQuickActionName}
+                onChange={(e) => setNewQuickActionName(e.target.value)}
+                placeholder="Ej. Carga mensual"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Descripción (opcional)</Label>
+              <Textarea
+                value={newQuickActionDescription}
+                onChange={(e) => setNewQuickActionDescription(e.target.value)}
+                placeholder="Ej. Subir certificados y facturas"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label>Carpetas (orden de pasos)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Seleccioná las carpetas en el orden deseado.
+                </p>
+              </div>
+
+              {folders.length === 0 ? (
+                <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed text-center">
+                  No hay carpetas configuradas. Creá una carpeta primero.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {folders.map((folder) => {
+                    const orderIndex = newQuickActionFolders.indexOf(folder.path);
+                    const isSelected = orderIndex !== -1;
+
+                    return (
+                      <button
+                        key={folder.id}
+                        type="button"
+                        onClick={() => toggleQuickActionFolder(folder.path)}
+                        className={`w-full rounded-lg border p-3 flex items-center gap-3 text-left transition-colors ${isSelected ? "border-orange-500 bg-orange-50" : "hover:bg-accent/50"}`}
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                          {folder.isOcr ? <Table2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{folder.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono">/{folder.path}</p>
+                        </div>
+                        {isSelected ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Paso {orderIndex + 1}
+                          </Badge>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsAddQuickActionOpen(false);
+              resetQuickActionForm();
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void handleAddQuickAction()}
+              disabled={isSubmittingQuickAction || isCreateQuickActionDisabled}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              {isSubmittingQuickAction ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Zap className="h-4 w-4 mr-2" />
+              )}
+              Crear acción
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Folder Dialog */}
       <Dialog open={isAddFolderOpen} onOpenChange={(open) => {

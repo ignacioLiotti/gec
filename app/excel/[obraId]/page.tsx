@@ -182,6 +182,34 @@ type PendingDoc = {
 	done: boolean
 };
 
+type DefaultFolder = {
+	id: string;
+	name: string;
+	path: string;
+	isOcr?: boolean;
+	dataInputMethod?: "ocr" | "manual" | "both";
+};
+
+type QuickAction = {
+	id: string;
+	name: string;
+	description?: string | null;
+	folderPaths: string[];
+};
+
+type ObraTabla = {
+	id: string;
+	name: string;
+	settings: Record<string, unknown>;
+	columns: Array<{
+		id: string;
+		fieldKey: string;
+		label: string;
+		dataType: string;
+		required: boolean;
+	}>;
+};
+
 const toLocalDateTimeValue = (value: string | null) => {
 	if (!value) return null;
 	const hasTimezone = /(?:[Zz]|[+-]\d{2}:\d{2})$/.test(value);
@@ -210,6 +238,7 @@ export default function ObraDetailPage() {
 		if (Array.isArray(raw)) return raw[0];
 		return raw;
 	}, [params]);
+	const isValidObraId = Boolean(obraId && obraId !== "undefined");
 
 	// Prefetch documents in background when page loads (before user navigates to documents tab)
 	useEffect(() => {
@@ -272,7 +301,33 @@ export default function ObraDetailPage() {
 	const pendientesQuery = useQuery({
 		queryKey: ['obra', obraId, 'pendientes'],
 		queryFn: () => fetchPendientes(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: isValidObraId,
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const tablasQuery = useQuery({
+		queryKey: ["obra-tablas", obraId],
+		enabled: isValidObraId,
+		queryFn: async () => {
+			const res = await fetch(`/api/obras/${obraId}/tablas`);
+			if (!res.ok) throw new Error("No se pudieron cargar las tablas");
+			const data = await res.json();
+			return (data.tablas ?? []) as ObraTabla[];
+		},
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const defaultsQuery = useQuery({
+		queryKey: ["obra-defaults", obraId],
+		enabled: isValidObraId,
+		queryFn: async () => {
+			const res = await fetch("/api/obra-defaults");
+			if (!res.ok) {
+				const out = await res.json().catch(() => ({}));
+				throw new Error(out?.error || "No se pudieron cargar los defaults");
+			}
+			return res.json() as Promise<{ folders: DefaultFolder[]; quickActions: QuickAction[] }>;
+		},
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -290,6 +345,17 @@ export default function ObraDetailPage() {
 	const obraUserRoles = recipientsQuery.data?.userRoles ?? [];
 	const flujoActions = flujoActionsQuery.data ?? [];
 	const isLoadingFlujoActions = flujoActionsQuery.isLoading;
+
+	const customQuickActionSteps = useMemo(() => ({}), []);
+	const quickActionsAllData = useMemo(() => {
+		return {
+			obraId: String(obraId),
+			quickActions: defaultsQuery.data?.quickActions ?? [],
+			folders: defaultsQuery.data?.folders ?? [],
+			tablas: tablasQuery.data ?? [],
+			customStepRenderers: customQuickActionSteps,
+		};
+	}, [defaultsQuery.data, tablasQuery.data, customQuickActionSteps, obraId]);
 
 	// Local state for UI
 	const [isAddingCertificate, setIsAddingCertificate] = useState(false);
@@ -332,26 +398,26 @@ export default function ObraDetailPage() {
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
-const router = useRouter();
-		const pathname = usePathname();
-		const searchParams = useSearchParams();
-		
-		// Use local state for immediate tab switching, sync to URL in background
-		const initialTab = searchParams?.get("tab") || "general";
-		const [activeTab, setActiveTab] = useState(initialTab);
-		
-		// Sync URL when tab changes (low priority, non-blocking)
-		const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
-			const params = new URLSearchParams(searchParams?.toString() || "");
-			for (const [key, value] of Object.entries(patch)) {
-				if (value == null || value === "") params.delete(key); else params.set(key, value);
-			}
-			const qs = params.toString();
-			// Use startTransition to mark URL update as low-priority
-			startTransition(() => {
-				router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-			});
-		}, [router, pathname, searchParams]);
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+
+	// Use local state for immediate tab switching, sync to URL in background
+	const initialTab = searchParams?.get("tab") || "general";
+	const [activeTab, setActiveTab] = useState(initialTab);
+
+	// Sync URL when tab changes (low priority, non-blocking)
+	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
+		const params = new URLSearchParams(searchParams?.toString() || "");
+		for (const [key, value] of Object.entries(patch)) {
+			if (value == null || value === "") params.delete(key); else params.set(key, value);
+		}
+		const qs = params.toString();
+		// Use startTransition to mark URL update as low-priority
+		startTransition(() => {
+			router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+		});
+	}, [router, pathname, searchParams]);
 		
 		// Handle tab change: update local state immediately, sync URL in background
 		const handleTabChange = useCallback((value: string) => {
@@ -1143,14 +1209,14 @@ const router = useRouter();
 			) : (
 				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
 					<div className="flex-1 min-w-0">
-<Tabs
-								value={activeTab}
-								onValueChange={handleTabChange}
-								className="space-y-4"
-							>
-							<div className="flex items-center justify-between mb-2 gap-2">
+						<Tabs
+							value={activeTab}
+							onValueChange={handleTabChange}
+							className="space-y-4"
+						>
+							<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
 								<ExcelPageTabs />
-								<div className="flex items-center gap-2">
+								<div className="flex flex-wrap items-center gap-2 justify-end">
 
 									<motion.div
 										initial={{ opacity: 0 }}
@@ -1163,16 +1229,17 @@ const router = useRouter();
 											size="sm"
 											onClick={() => setIsGeneralTabEditMode(!isGeneralTabEditMode)}
 											className="gap-2"
+											aria-label={isGeneralTabEditMode ? "Modo Edición" : "Modo Vista Previa"}
 										>
 											{isGeneralTabEditMode ? (
 												<>
 													<Pencil className="h-4 w-4" />
-													Modo Edición
+													<span className="hidden sm:inline">Modo Edición</span>
 												</>
 											) : (
 												<>
 													<Eye className="h-4 w-4" />
-													Modo Vista Previa
+													<span className="hidden sm:inline">Modo Vista Previa</span>
 												</>
 											)}
 										</Button>
@@ -1183,9 +1250,10 @@ const router = useRouter();
 										size="sm"
 										onClick={() => setIsMemoriaOpen((open) => !open)}
 										className="gap-2"
+										aria-label="Memoria"
 									>
 										<StickyNote className="h-4 w-4" />
-										<span>Memoria</span>
+										<span className="hidden sm:inline">Memoria</span>
 									</Button>
 								</div>
 							</div>
@@ -1198,6 +1266,7 @@ const router = useRouter();
 								applyObraToForm={applyObraToForm}
 								initialFormValues={initialFormValues}
 								getErrorMessage={getErrorMessage}
+								quickActionsAllData={quickActionsAllData}
 							/>
 
 							<ObraFlujoTab

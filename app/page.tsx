@@ -485,7 +485,7 @@ export default function Home() {
                           )}
                           <Link
                             href={`/excel/${obra.id}`}
-                            className="flex items-center justify-between p-4 hover:bg-accent/50 transition-all duration-200 group"
+                            className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 hover:bg-accent/50 transition-all duration-200 group"
                           >
                             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted/70 font-mono text-sm font-semibold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
@@ -508,8 +508,8 @@ export default function Home() {
                                 <p className="text-xs text-muted-foreground truncate">{obra.entidadContratante}</p>
                               </div>
                             </div>
-                            <div className="flex items-center justify-between gap-3 sm:gap-4 sm:ml-4 shrink-0">
-                              <div className="text-right sm:text-right flex-1 sm:flex-none">
+                            <div className="flex items-center justify-between gap-3 sm:gap-4 sm:ml-4 w-full sm:w-auto">
+                              <div className="text-left sm:text-right flex-1 sm:flex-none">
                                 <div className="text-sm font-semibold tabular-nums">{obra.porcentaje}%</div>
                                 <div className="w-full sm:w-20 bg-muted rounded-full h-1.5 mt-1.5">
                                   <motion.div

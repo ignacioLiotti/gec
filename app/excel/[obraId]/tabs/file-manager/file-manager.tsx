@@ -1746,6 +1746,30 @@ export function FileManager({
     }
   }, [isRefreshing, refreshOcrFolderLinks, buildFileTree]);
 
+  const refreshDocumentsSilent = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await refreshOcrFolderLinks({ skipCache: true });
+      await buildFileTree({ skipCache: true });
+    } catch (error) {
+      console.error('Error refreshing documents:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, refreshOcrFolderLinks, buildFileTree]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<{ obraId?: string }>;
+      if (customEvent.detail?.obraId && customEvent.detail.obraId !== obraId) return;
+      void refreshDocumentsSilent();
+    };
+    window.addEventListener('obra:documents-refresh', handler);
+    return () => window.removeEventListener('obra:documents-refresh', handler);
+  }, [obraId, refreshDocumentsSilent]);
+
   const uploadFilesToFolder = useCallback(async (inputFiles: FileList | File[], targetFolder?: FileSystemItem | null) => {
     const filesArray = Array.isArray(inputFiles) ? inputFiles : Array.from(inputFiles);
     if (!filesArray.length) return;

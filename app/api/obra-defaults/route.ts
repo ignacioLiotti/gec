@@ -25,6 +25,14 @@ type DefaultFolder = {
 	}>;
 };
 
+type QuickAction = {
+	id: string;
+	name: string;
+	description: string | null;
+	folderPaths: string[];
+	position: number;
+};
+
 async function getAuthContext() {
 	const supabase = await createClient();
 	const {
@@ -77,7 +85,7 @@ export async function GET() {
 	}
 
 	if (!tenantId) {
-		return NextResponse.json({ folders: [] });
+		return NextResponse.json({ folders: [], quickActions: [] });
 	}
 
 	try {
@@ -186,8 +194,26 @@ export async function GET() {
 			};
 		});
 
+		const { data: quickActions, error: quickActionsError } = await supabase
+			.from("obra_default_quick_actions")
+			.select("id, name, description, folder_paths, position")
+			.eq("tenant_id", tenantId)
+			.order("position", { ascending: true });
+
+		if (quickActionsError) {
+			console.error("[obra-defaults:get] quick actions error:", quickActionsError);
+			throw quickActionsError;
+		}
+
 		return NextResponse.json({
 			folders: enrichedFolders,
+			quickActions: (quickActions ?? []).map((action): QuickAction => ({
+				id: action.id,
+				name: action.name,
+				description: action.description,
+				folderPaths: action.folder_paths ?? [],
+				position: action.position ?? 0,
+			})),
 		});
 	} catch (error) {
 		console.error("[obra-defaults:get]", error);
@@ -214,7 +240,7 @@ export async function POST(request: Request) {
 
 	try {
 		const body = await request.json().catch(() => ({}));
-		const type = body.type as "folder";
+		const type = body.type as "folder" | "quick-action";
 
 		if (type === "folder") {
 			const rawName = typeof body.name === "string" ? body.name.trim() : "";
@@ -386,6 +412,56 @@ export async function POST(request: Request) {
 			return NextResponse.json({ folder: enrichedFolder });
 		}
 
+		if (type === "quick-action") {
+			const rawName = typeof body.name === "string" ? body.name.trim() : "";
+			if (!rawName) {
+				return NextResponse.json({ error: "Action name required" }, { status: 400 });
+			}
+
+			const folderPaths = Array.isArray(body.folderPaths)
+				? body.folderPaths.filter((path: unknown) => typeof path === "string" && path.trim())
+				: [];
+
+			if (folderPaths.length === 0) {
+				return NextResponse.json({ error: "At least one folder required" }, { status: 400 });
+			}
+
+			const description = typeof body.description === "string" ? body.description.trim() : null;
+
+			const { data: existingActions } = await supabase
+				.from("obra_default_quick_actions")
+				.select("position")
+				.eq("tenant_id", tenantId)
+				.order("position", { ascending: false })
+				.limit(1);
+
+			const nextPosition = (existingActions?.[0]?.position ?? -1) + 1;
+
+			const { data: quickAction, error: quickActionError } = await supabase
+				.from("obra_default_quick_actions")
+				.insert({
+					tenant_id: tenantId,
+					name: rawName,
+					description,
+					folder_paths: folderPaths,
+					position: nextPosition,
+				})
+				.select("id, name, description, folder_paths, position")
+				.single();
+
+			if (quickActionError) throw quickActionError;
+
+			return NextResponse.json({
+				quickAction: {
+					id: quickAction.id,
+					name: quickAction.name,
+					description: quickAction.description,
+					folderPaths: quickAction.folder_paths ?? [],
+					position: quickAction.position ?? 0,
+				} as QuickAction,
+			});
+		}
+
 		return NextResponse.json({ error: "Invalid type" }, { status: 400 });
 	} catch (error) {
 		console.error("[obra-defaults:post]", error);
@@ -409,7 +485,7 @@ export async function DELETE(request: Request) {
 
 	try {
 		const body = await request.json().catch(() => ({}));
-		const type = body.type as "folder";
+		const type = body.type as "folder" | "quick-action";
 		const id = typeof body.id === "string" ? body.id : null;
 
 		if (!id) {
@@ -437,6 +513,14 @@ export async function DELETE(request: Request) {
 			// Delete the folder
 			const { error } = await supabase
 				.from("obra_default_folders")
+				.delete()
+				.eq("id", id)
+				.eq("tenant_id", tenantId);
+
+			if (error) throw error;
+		} else if (type === "quick-action") {
+			const { error } = await supabase
+				.from("obra_default_quick_actions")
 				.delete()
 				.eq("id", id)
 				.eq("tenant_id", tenantId);

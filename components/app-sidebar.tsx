@@ -319,13 +319,13 @@ export function AppSidebar({
 					<SidebarMenuItem>
 						<div className="space-y-2">
 							<SidebarMenuButton size="lg" asChild>
-								<Link href="/" className="container">
+								<Link href="/" className="flex w-full items-center gap-3 px-2 py-1.5">
 									{/* if sidebar is closed make logo smaller */}
 									<div
 										className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === "collapsed" ? "size-8" : "size-10"
 											}`}
 									/>
-									<div className="grid flex-1 text-left text-sm leading-tight pt-[5px]">
+									<div className="grid flex-1 text-left text-sm leading-tight">
 										<span className="truncate font-semibold font-mono text-lg leading-[16px]">
 											Sintesis
 										</span>
@@ -338,7 +338,7 @@ export function AppSidebar({
 									<DropdownMenuTrigger asChild>
 										{state === "collapsed" ? (
 											<button
-												className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2"
+												className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2.5"
 												type="button"
 												title={activeTenant?.name ?? "Seleccionar organización"}
 											>
@@ -346,7 +346,7 @@ export function AppSidebar({
 											</button>
 										) : (
 											<button
-												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2 text-left text-sm font-medium"
+												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium"
 												type="button"
 											>
 												<div className="min-w-0">

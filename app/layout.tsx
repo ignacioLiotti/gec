@@ -160,12 +160,12 @@ export default async function RootLayout({
           <SidebarProvider>
             <AppSidebar user={user} userRoles={userRoles} tenants={tenants} sidebarMacroTables={sidebarMacroTables} />
             <SidebarInset>
-              <header className="flex h-12 max-w-full shrink-0 items-center gap-4 border-b px-4">
-                <div className="flex items-center gap-3 min-w-0">
+              <header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <SidebarTrigger className="-ml-1" />
                   <PageBreadcrumb />
                 </div>
-                <div className="flex items-center gap-2 ml-auto">
+                <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:ml-auto">
                   <ImpersonateBanner />
                   <UserMenu email={user?.email} userRoles={userRoles} />
                 </div>
