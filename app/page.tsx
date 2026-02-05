@@ -17,6 +17,18 @@ import {
   Target
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -200,6 +212,52 @@ export default function Home() {
       })
       .slice(0, 3);
   }, [data]);
+
+  // Chart data: Progress distribution
+  const progressDistributionData = useMemo(() => {
+    if (!data?.obras || data.obras.length === 0) return [];
+    const ranges = [
+      { name: '0-25%', min: 0, max: 25, fill: '#ef4444' },
+      { name: '26-50%', min: 26, max: 50, fill: '#f59e0b' },
+      { name: '51-75%', min: 51, max: 75, fill: '#3b82f6' },
+      { name: '76-99%', min: 76, max: 99, fill: '#22c55e' },
+      { name: '100%', min: 100, max: 100, fill: '#10b981' },
+    ];
+    return ranges.map(range => ({
+      name: range.name,
+      value: data.obras.filter(o => 
+        range.max === 100 
+          ? o.porcentaje >= 100 
+          : o.porcentaje >= range.min && o.porcentaje <= range.max
+      ).length,
+      fill: range.fill,
+    })).filter(d => d.value > 0);
+  }, [data]);
+
+  // Chart data: Top obras by contract value
+  const topObrasByValueData = useMemo(() => {
+    if (!data?.obras || data.obras.length === 0) return [];
+    return [...data.obras]
+      .sort((a, b) => b.contratoMasAmpliaciones - a.contratoMasAmpliaciones)
+      .slice(0, 5)
+      .map(o => ({
+        name: o.designacionYUbicacion.length > 20 
+          ? o.designacionYUbicacion.substring(0, 20) + '...' 
+          : o.designacionYUbicacion,
+        contrato: o.contratoMasAmpliaciones / 1000000, // In millions
+        certificado: o.certificadoALaFecha / 1000000,
+      }));
+  }, [data]);
+
+  // Pie chart data for status
+  const statusPieData = useMemo(() => {
+    if (!stats) return [];
+    const data = [];
+    if (stats.completed > 0) data.push({ name: 'Completadas', value: stats.completed, fill: '#22c55e' });
+    if (stats.obrasOnTrack > 0) data.push({ name: 'En tiempo', value: stats.obrasOnTrack, fill: '#3b82f6' });
+    if (stats.obrasAtRisk > 0) data.push({ name: 'En riesgo', value: stats.obrasAtRisk, fill: '#f59e0b' });
+    return data;
+  }, [stats]);
 
   // Track newly added obras for animation
   const currentIds = obras.map(o => o.id);
@@ -755,69 +813,174 @@ export default function Home() {
               </Card>
             </motion.div>
 
-            {/* Time vs Progress Comparison */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-            >
-              <Card className="border-0 shadow-sm bg-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Avance vs Tiempo</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-muted-foreground">Avance de obra</span>
-                          <span className="font-medium">{stats?.avgProgress?.toFixed(0) || 0}%</span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2">
-                          <motion.div
-                            className="bg-primary h-2 rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${stats?.avgProgress || 0}%` }}
-                            transition={{ duration: 0.8, delay: 0.5 }}
+            {/* Status Distribution Pie Chart */}
+            {statusPieData.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+              >
+                <Card className="border-0 shadow-sm bg-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Estado de Obras</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[140px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={statusPieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={35}
+                            outerRadius={55}
+                            paddingAngle={2}
+                            dataKey="value"
+                          >
+                            {statusPieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '4px',
+                              fontSize: '12px'
+                            }}
                           />
-                        </div>
-                      </div>
+                        </PieChart>
+                      </ResponsiveContainer>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-muted-foreground">Tiempo transcurrido</span>
-                          <span className="font-medium">{stats?.avgTimeProgress?.toFixed(0) || 0}%</span>
+                    <div className="flex justify-center gap-4 mt-2">
+                      {statusPieData.map((entry, index) => (
+                        <div key={index} className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: entry.fill }} />
+                          <span className="text-[10px] text-muted-foreground">{entry.name} ({entry.value})</span>
                         </div>
-                        <div className="w-full bg-muted rounded-full h-2">
-                          <motion.div
-                            className="bg-blue-500 h-2 rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${stats?.avgTimeProgress || 0}%` }}
-                            transition={{ duration: 0.8, delay: 0.6 }}
-                          />
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                    <div className="pt-2 text-center">
-                      {stats && stats.avgProgress >= stats.avgTimeProgress ? (
-                        <Badge variant="secondary" className="bg-green-100 text-green-700 text-[10px]">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          En tiempo
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px]">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {((stats?.avgTimeProgress || 0) - (stats?.avgProgress || 0)).toFixed(0)}% de retraso promedio
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
           </div>
         </div>
+
+        {/* Charts Row */}
+        {obras.length > 0 && (
+          <div className="grid gap-6 lg:grid-cols-2 mt-6">
+            {/* Progress Distribution Chart */}
+            {progressDistributionData.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.35 }}
+              >
+                <Card className="border-0 shadow-sm bg-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Distribucion de Avance</CardTitle>
+                    <CardDescription className="text-xs">Obras por rango de progreso</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[200px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={progressDistributionData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
+                          <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                          <YAxis 
+                            type="category" 
+                            dataKey="name" 
+                            tick={{ fontSize: 11 }} 
+                            tickLine={false} 
+                            axisLine={false}
+                            width={50}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '4px',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: number) => [`${value} obras`, 'Cantidad']}
+                          />
+                          <Bar dataKey="value" radius={[0, 2, 2, 0]}>
+                            {progressDistributionData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Top Obras by Value Chart */}
+            {topObrasByValueData.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.4 }}
+              >
+                <Card className="border-0 shadow-sm bg-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Obras por Valor de Contrato</CardTitle>
+                    <CardDescription className="text-xs">Top 5 obras (en millones ARS)</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[200px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={topObrasByValueData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="name" 
+                            tick={{ fontSize: 9 }} 
+                            tickLine={false} 
+                            axisLine={false}
+                            interval={0}
+                            angle={-15}
+                            textAnchor="end"
+                            height={50}
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 11 }} 
+                            tickLine={false} 
+                            axisLine={false}
+                            tickFormatter={(value) => `${value}M`}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '4px',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: number) => [`${value.toFixed(1)}M ARS`, '']}
+                          />
+                          <Bar dataKey="contrato" name="Contrato" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="certificado" name="Certificado" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex justify-center gap-4 mt-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-sm bg-blue-500" />
+                        <span className="text-[10px] text-muted-foreground">Contrato</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-sm bg-green-500" />
+                        <span className="text-[10px] text-muted-foreground">Certificado</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
