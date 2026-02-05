@@ -888,19 +888,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [filters, setFilters] = useState<Filters | undefined>(() => createFilters());
 	const [filtersDraft, setFiltersDraft] = useState<Filters | undefined>(() => createFilters());
 	const filtersRef = useRef<Filters | undefined>(filters);
-	const debugRenderCount = useRef(0);
-	debugRenderCount.current++;
-	console.log("[v0] FormTable render #" + debugRenderCount.current + " table=" + TABLE_ID + " isFiltersOpen=" + isFiltersOpen);
-	if (debugRenderCount.current > 200) {
-		console.error("[v0] INFINITE RENDER DETECTED for table=" + TABLE_ID);
-		throw new Error("Infinite render loop detected in FormTable");
-	}
 	useEffect(() => {
 		filtersRef.current = filters;
 	}, [filters]);
 	// Reset filters only when the table identity changes
 	useEffect(() => {
-		console.log("[v0] Reset filters effect for TABLE_ID=" + TABLE_ID);
 		if (!hasFilters) return;
 		const initialFilters = createFilters();
 		if (typeof initialFilters === "undefined") return;
@@ -909,7 +901,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [TABLE_ID, hasFilters]);
 	useEffect(() => {
-		console.log("[v0] isFiltersOpen effect: open=" + isFiltersOpen + " hasFilters=" + !!filters);
 		if (!isFiltersOpen || !filters) return;
 		setFiltersDraft(filters);
 	}, [isFiltersOpen, filters]);
@@ -1372,7 +1363,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setFiltersDraft(initial);
 	}, [createFilters, hasFilters]);
 
-	console.log("[v0] Computing renderFiltersContent: isFiltersOpen=" + isFiltersOpen + " hasDraft=" + (typeof filtersDraft !== "undefined") + " hasRenderFilters=" + !!config.renderFilters);
 	const renderFiltersContent =
 		isFiltersOpen && typeof filtersDraft !== "undefined" && config.renderFilters
 			? config.renderFilters({
