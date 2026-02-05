@@ -526,6 +526,7 @@ export default function Home() {
                           <Link
                             href={`/excel/${obra.id}`}
                             className="flex items-center justify-between p-4 hover:bg-accent/50 transition-all duration-200 group"
+                            onMouseEnter={() => prefetchObra(obra.id)}
                           >
                             <div className="flex items-center gap-4 flex-1 min-w-0">
                               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted/70 font-mono text-sm font-semibold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
