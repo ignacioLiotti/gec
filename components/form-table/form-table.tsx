@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, useTransition, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import {
@@ -597,10 +597,12 @@ export function FormTablePagination() {
 		visibleRowCount,
 		isServerPaging,
 		isFetching,
+		isTransitioning,
 	} = pagination;
 	const pageSizeLocked = typeof lockedPageSize === "number";
 	const allowAddRows = config.allowAddRows !== false;
-
+	const isLoading = isFetching || isTransitioning;
+	
 	return (
 		<>
 			<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
@@ -614,8 +616,9 @@ export function FormTablePagination() {
 							onValueChange={(value) => {
 								setPageSize(Number(value));
 							}}
+							disabled={isLoading}
 						>
-							<SelectTrigger className="w-[90px]">
+							<SelectTrigger className={cn("w-[90px]", isLoading && "opacity-50")}>
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -627,6 +630,7 @@ export function FormTablePagination() {
 							</SelectContent>
 						</Select>
 					)}
+					{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
 				</div>
 				<div className="flex items-center gap-2">
 					{allowAddRows && (
@@ -657,31 +661,31 @@ export function FormTablePagination() {
 					</Button>
 				</div>
 				<div className="flex items-center gap-2">
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-						disabled={!hasPreviousPage || (isServerPaging && isFetching)}
-						className="gap-1"
-					>
-						<ChevronLeft className="h-4 w-4" />
-						Anterior
-					</Button>
-					<span className="text-xs text-muted-foreground">
-						Página {page} de {totalPages}
-					</span>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onClick={() => setPage((prev) => prev + 1)}
-						disabled={!hasNextPage || (isServerPaging && isFetching)}
-						className="gap-1"
-					>
-						Siguiente
-						<ChevronRight className="h-4 w-4" />
-					</Button>
+<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
+					disabled={!hasPreviousPage || isLoading}
+					className="gap-1"
+				>
+					<ChevronLeft className="h-4 w-4" />
+					Anterior
+				</Button>
+				<span className="text-xs text-muted-foreground">
+					Página {page} de {totalPages}
+				</span>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onClick={() => startTransition(() => setPage((prev) => prev + 1))}
+					disabled={!hasNextPage || isLoading}
+					className="gap-1"
+				>
+					Siguiente
+					<ChevronRight className="h-4 w-4" />
+				</Button>
 				</div>
 			</div>
 
@@ -797,22 +801,29 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}
 	}, [lockedPageSize, pageSize]);
 	const paginationOptions = lockedPageSize ? [lockedPageSize] : pageSizeOptions;
+	// Track if a page size change is in progress (for showing loading state)
+	const [isPageSizeTransitioning, startPageSizeTransition] = useTransition();
 	const handleSetPageSize = useCallback((size: number) => {
 		if (lockedPageSize) return;
-		setPageSizeState(size);
-		setPage(1);
+		// Use startTransition to make the re-render non-blocking
+		startPageSizeTransition(() => {
+			setPageSizeState(size);
+			setPage(1);
+		});
 		if (fetchRowsFn) {
 			void fetchRowsFn({ page: 1, limit: size, filters: filtersRef.current as Filters, search: searchRef.current }).then((result) => {
 				const fetchedRows = result.rows ?? [];
-				setFormRows(fetchedRows as Row[]);
-				setServerMeta((prev) => ({
-					page: 1,
-					limit: size,
-					total: result.pagination?.total ?? prev.total,
-					totalPages: result.pagination?.totalPages ?? prev.totalPages,
-					hasNextPage: result.pagination?.hasNextPage ?? prev.hasNextPage,
-					hasPreviousPage: result.pagination?.hasPreviousPage ?? prev.hasPreviousPage,
-				}));
+				startTransition(() => {
+					setFormRows(fetchedRows as Row[]);
+					setServerMeta((prev) => ({
+						page: 1,
+						limit: size,
+						total: result.pagination?.total ?? prev.total,
+						totalPages: result.pagination?.totalPages ?? prev.totalPages,
+						hasNextPage: result.pagination?.hasNextPage ?? prev.hasNextPage,
+						hasPreviousPage: result.pagination?.hasPreviousPage ?? prev.hasPreviousPage,
+					}));
+				});
 				setIsFetchingServerRows(false);
 			});
 		}
@@ -1638,22 +1649,23 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			setActiveTab,
 			counts: tabCounts,
 		},
-		pagination: {
-			page,
-			setPage,
-			pageSize,
-			setPageSize: handleSetPageSize,
-			lockedPageSize,
-			hasNextPage,
-			hasPreviousPage,
-			totalPages,
-			totalRowCount,
-			visibleRowCount,
-			datasetTotalCount,
-			options: paginationOptions,
-			isServerPaging,
-			isFetching: isFetchingServerRows,
-		},
+pagination: {
+		page,
+		setPage,
+		pageSize,
+		setPageSize: handleSetPageSize,
+		lockedPageSize,
+		hasNextPage,
+		hasPreviousPage,
+		totalPages,
+		totalRowCount,
+		visibleRowCount,
+		datasetTotalCount,
+		options: paginationOptions,
+		isServerPaging,
+		isFetching: isFetchingServerRows,
+		isTransitioning: isPageSizeTransitioning,
+	},
 		meta: {
 			hasUnsavedChanges,
 			isSaving,

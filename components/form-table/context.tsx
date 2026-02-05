@@ -84,6 +84,7 @@ export type FormTablePaginationState = {
 	options: number[];
 	isServerPaging: boolean;
 	isFetching: boolean;
+	isTransitioning: boolean;
 };
 
 export type FormTableMetaState = {
