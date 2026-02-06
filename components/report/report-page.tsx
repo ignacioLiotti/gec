@@ -29,6 +29,11 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	const router = useRouter();
 	const reportContentRef = useRef<HTMLDivElement>(null);
 
+	// Stabilize config reference - store the fetchData and other functions in refs
+	// so the fetchData callback doesn't depend on the entire config object.
+	const configRef = useRef(config);
+	configRef.current = config;
+
 	// Data state
 	const [data, setData] = useState<Row[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
@@ -40,8 +45,8 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		return { ...defaults, ...initialFilters };
 	});
 
-	// Report display state
-	const [reportState, setReportState] = useState<ReportState>({
+	// Report display state - initialize aggregations lazily from columns
+	const [reportState, setReportState] = useState<ReportState>(() => ({
 		companyName: "Nombre de la empresa",
 		description: config.description || `Reporte de ${config.title}`,
 		date: new Date().toLocaleDateString("es-AR"),
@@ -49,20 +54,20 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		hiddenColumnIds: [],
 		sortColumnId: null,
 		sortDirection: "asc",
-		aggregations: config.columns.reduce(
+		aggregations: config.columns.reduce<Record<string, AggregationType>>(
 			(acc, col) => {
 				acc[col.id] = col.defaultAggregation || "none";
 				return acc;
 			},
-			{} as Record<string, AggregationType>
+			{}
 		),
-	});
+	}));
 
-	// Fetch data
+	// Fetch data - uses ref to avoid re-creating when config object reference changes
 	const fetchData = useCallback(async () => {
 		try {
 			setIsLoading(true);
-			const result = await config.fetchData(filters);
+			const result = await configRef.current.fetchData(filters);
 			setData(result);
 		} catch (err) {
 			console.error(err);
@@ -70,13 +75,12 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		} finally {
 			setIsLoading(false);
 		}
-	}, [config, filters]);
+	}, [filters]);
 
 	// Initial fetch
 	useEffect(() => {
 		fetchData();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [fetchData]);
 
 	// Handle PDF generation
 	const handleGeneratePdf = useCallback(async () => {
@@ -140,13 +144,18 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		}));
 	}, []);
 
+	// Use columns from config (stable reference via useMemo)
+	const columns = useMemo(() => config.columns, [config.columns]);
+	const groupByOptions = useMemo(() => config.groupByOptions, [config.groupByOptions]);
+	const filterFields = useMemo(() => config.filterFields, [config.filterFields]);
+
 	// Group data by selected option
 	const groupedData = useMemo(() => {
 		if (reportState.viewMode === "full") {
 			return [{ key: config.title, data }];
 		}
 
-		const groupOption = config.groupByOptions?.find(
+		const groupOption = groupByOptions?.find(
 			(opt) => opt.id === reportState.viewMode
 		);
 		if (!groupOption) {
@@ -154,22 +163,31 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		}
 
 		const groups: Record<string, Row[]> = {};
-		data.forEach((row) => {
+		for (const row of data) {
 			const key = groupOption.groupBy(row) || "Sin asignar";
 			if (!groups[key]) groups[key] = [];
 			groups[key].push(row);
-		});
+		}
 
 		return Object.entries(groups)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([key, rows]) => ({ key, data: rows }));
-	}, [data, reportState.viewMode, config.groupByOptions, config.title]);
+	}, [data, reportState.viewMode, groupByOptions, config.title]);
 
-	// Visible columns (for settings)
+	// Visible columns (for settings panel)
 	const visibleColumns = useMemo(
-		() => config.columns.filter((col) => !reportState.hiddenColumnIds.includes(col.id)),
-		[config.columns, reportState.hiddenColumnIds]
+		() => columns.filter((col) => !reportState.hiddenColumnIds.includes(col.id)),
+		[columns, reportState.hiddenColumnIds]
 	);
+
+	// Handle back navigation
+	const handleBack = useCallback(() => {
+		if (backUrl) {
+			router.push(backUrl);
+		} else {
+			router.back();
+		}
+	}, [backUrl, router]);
 
 	return (
 		<div className="flex h-[calc(100vh-4rem)] overflow-hidden w-full">
@@ -179,7 +197,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					<Button
 						variant="ghost"
 						size="sm"
-						onClick={() => (backUrl ? router.push(backUrl) : router.back())}
+						onClick={handleBack}
 						className="gap-2 bg-background/80 backdrop-blur-sm"
 					>
 						<ChevronLeft className="h-4 w-4" />
@@ -223,13 +241,13 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 											key={key}
 											title={key}
 											data={groupData}
-											columns={config.columns}
+											columns={columns}
 											hiddenColumnIds={reportState.hiddenColumnIds}
 											sortColumnId={reportState.sortColumnId}
 											sortDirection={reportState.sortDirection}
 											onSort={handleSort}
 											aggregations={reportState.aggregations}
-											getRowId={config.getRowId}
+											getRowId={configRef.current.getRowId}
 											currencyLocale={config.currencyLocale}
 											currencyCode={config.currencyCode}
 										/>
@@ -242,13 +260,13 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 			</div>
 
 			{/* Right Sidebar - Filters & Settings */}
-			<div className="w-80 border-l bg-muted/30 flex flex-col">
+			<div className="w-80 border-l bg-muted/30 flex flex-col shrink-0">
 				<Tabs defaultValue="settings" className="flex-1 flex flex-col">
 					<div className="p-4 border-b">
 						<TabsList className="grid w-full grid-cols-2">
 							<TabsTrigger value="settings" className="gap-2">
 								<Settings className="h-4 w-4" />
-								Configuración
+								Configuracion
 							</TabsTrigger>
 							<TabsTrigger value="filters" className="gap-2">
 								<Filter className="h-4 w-4" />
@@ -262,7 +280,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 						<ScrollArea className="h-full max-h-[calc(100vh-10rem)]">
 							<div className="p-4 space-y-6">
 								{/* View Mode */}
-								{config.groupByOptions && config.groupByOptions.length > 0 && (
+								{groupByOptions && groupByOptions.length > 0 && (
 									<>
 										<div className="space-y-3">
 											<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
@@ -278,7 +296,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												>
 													Vista Completa
 												</Button>
-												{config.groupByOptions.map((opt) => (
+												{groupByOptions.map((opt) => (
 													<Button
 														key={opt.id}
 														variant={reportState.viewMode === opt.id ? "default" : "outline"}
@@ -302,10 +320,10 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 										Columnas Visibles
 									</h3>
 									<div className="space-y-2">
-										{config.columns.map((col) => {
+										{columns.map((col) => {
 											const isVisible = !reportState.hiddenColumnIds.includes(col.id);
 											return (
-												<div key={col.id} className="flex items-center space-x-2">
+												<div key={col.id} className="flex items-center gap-2">
 													<Checkbox
 														id={`col-${col.id}`}
 														checked={isVisible}
@@ -359,7 +377,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					<TabsContent value="filters" className="flex-1 p-0 m-0 overflow-hidden">
 						<ScrollArea className="h-full">
 							<div className="p-4 space-y-6">
-								{config.filterFields?.map((field) => (
+								{filterFields?.map((field) => (
 									<div key={String(field.id)} className="space-y-2">
 										<Label>{field.label}</Label>
 										{field.type === "text" && (
@@ -421,7 +439,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 											<div className="flex gap-2">
 												{[
 													{ value: "all", label: "Todos" },
-													{ value: "si", label: "Sí" },
+													{ value: "si", label: "Si" },
 													{ value: "no", label: "No" },
 												].map((opt) => (
 													<Button

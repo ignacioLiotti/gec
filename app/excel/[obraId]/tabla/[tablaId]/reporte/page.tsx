@@ -1,17 +1,19 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import { Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Printer, ChevronLeft, Filter, Settings, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import type { ReportColumn, AggregationType, ReportState } from "@/components/report/types";
-import { ReportTable } from "@/components/report/report-table";
+import { ReportPage } from "@/components/report";
+import type {
+	ReportColumn,
+	ReportColumnType,
+	ReportConfig,
+} from "@/components/report/types";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 
 type TablaColumn = {
 	id: string;
@@ -31,7 +33,15 @@ type OcrTableRow = {
 	[key: string]: unknown;
 };
 
-function mapDataTypeToReportType(dataType: string): ReportColumn<OcrTableRow>["type"] {
+type OcrReportFilters = {
+	search: string;
+};
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function mapDataTypeToReportType(dataType: string): ReportColumnType {
 	switch (dataType) {
 		case "number":
 			return "number";
@@ -46,337 +56,206 @@ function mapDataTypeToReportType(dataType: string): ReportColumn<OcrTableRow>["t
 	}
 }
 
-function OcrReportePageContent() {
-	const router = useRouter();
-	const params = useParams();
-	const obraId = params?.obraId as string;
-	const tablaId = params?.tablaId as string;
+function buildReportColumns(
+	tablaColumns: TablaColumn[],
+	hasDocSource: boolean
+): ReportColumn<OcrTableRow>[] {
+	const cols: ReportColumn<OcrTableRow>[] = tablaColumns.map((col) => ({
+		id: col.fieldKey,
+		label: col.label,
+		accessor: (row: OcrTableRow) => row[col.fieldKey],
+		type: mapDataTypeToReportType(col.dataType),
+		align:
+			col.dataType === "currency" || col.dataType === "number"
+				? ("right" as const)
+				: ("left" as const),
+		defaultAggregation:
+			col.dataType === "currency" || col.dataType === "number" ? "sum" : "none",
+	}));
 
-	const [tablaName, setTablaName] = useState<string>("");
-	const [columns, setColumns] = useState<TablaColumn[]>([]);
-	const [rows, setRows] = useState<OcrTableRow[]>([]);
-	const [isLoading, setIsLoading] = useState(true);
+	if (hasDocSource) {
+		cols.unshift({
+			id: "__docFileName",
+			label: "Documento",
+			accessor: (row: OcrTableRow) => row.__docFileName,
+			type: "text",
+			align: "left",
+		});
+	}
 
-	const [reportState, setReportState] = useState<ReportState>({
-		companyName: "Nombre de la empresa",
-		description: "",
-		date: new Date().toLocaleDateString("es-AR"),
-		viewMode: "full",
-		hiddenColumnIds: [],
-		sortColumnId: null,
-		sortDirection: "asc",
-		aggregations: {},
-	});
+	return cols;
+}
 
-	// Fetch tabla data
-	const fetchData = useCallback(async () => {
-		if (!obraId || !tablaId) return;
-		try {
-			setIsLoading(true);
+function buildReportConfig(
+	obraId: string,
+	tablaId: string,
+	tablaName: string,
+	tablaColumns: TablaColumn[],
+	hasDocSource: boolean
+): ReportConfig<OcrTableRow, OcrReportFilters> {
+	const reportColumns = buildReportColumns(tablaColumns, hasDocSource);
 
-			// Fetch tablas list to get columns
-			const tablasRes = await fetch(`/api/obras/${obraId}/tablas`);
-			if (!tablasRes.ok) throw new Error("No se pudo cargar las tablas");
-			const tablasData = await tablasRes.json();
-
-			// Find the specific tabla
-			const tabla = (tablasData.tablas || []).find((t: any) => t.id === tablaId);
-			if (!tabla) throw new Error("Tabla no encontrada");
-
-			const tablaColumns: TablaColumn[] = (tabla.columns || []).map((col: any) => ({
-				id: col.id,
-				fieldKey: col.fieldKey,
-				label: col.label,
-				dataType: col.dataType,
-				required: col.required,
-			}));
-			const name = tabla.name || "Tabla OCR";
-
-			setTablaName(name);
-			setColumns(tablaColumns);
-
-			// Fetch rows
-			const rowsRes = await fetch(`/api/obras/${obraId}/tablas/${tablaId}/rows?limit=200`);
+	return {
+		id: `ocr-tabla-${tablaId}`,
+		title: tablaName,
+		description: `Reporte de ${tablaName}`,
+		columns: reportColumns,
+		currencyLocale: "es-AR",
+		currencyCode: "ARS",
+		filterFields: [
+			{
+				id: "search",
+				label: "Buscar",
+				type: "text",
+				placeholder: "Buscar en todas las columnas",
+			},
+		],
+		defaultFilters: () => ({ search: "" }),
+		fetchData: async (filters: OcrReportFilters) => {
+			const rowsRes = await fetch(
+				`/api/obras/${obraId}/tablas/${tablaId}/rows?limit=200`
+			);
 			if (!rowsRes.ok) throw new Error("No se pudieron cargar las filas");
 			const rowsData = await rowsRes.json();
 			const tablaRows: TablaRow[] = rowsData.rows || [];
 
-			// Map rows to flat structure
-			const mappedRows: OcrTableRow[] = tablaRows.map((row) => {
+			let rows: OcrTableRow[] = tablaRows.map((row) => {
 				const mapped: OcrTableRow = { id: row.id };
 				tablaColumns.forEach((col) => {
 					mapped[col.fieldKey] = row.data?.[col.fieldKey] ?? null;
 				});
-				// Include doc source info if available
 				if (row.data?.__docFileName) {
 					mapped.__docFileName = row.data.__docFileName;
 				}
 				return mapped;
 			});
 
-			setRows(mappedRows);
+			const term = filters.search?.trim().toLowerCase();
+			if (term) {
+				rows = rows.filter((row) =>
+					reportColumns.some((col) => {
+						const value = row[col.id];
+						if (value == null) return false;
+						return String(value).toLowerCase().includes(term);
+					})
+				);
+			}
 
-			// Initialize aggregations
-			const initialAggregations: Record<string, AggregationType> = {};
-			tablaColumns.forEach((col) => {
-				initialAggregations[col.fieldKey] =
-					col.dataType === "currency" || col.dataType === "number" ? "sum" : "none";
-			});
+			return rows;
+		},
+		getRowId: (row: OcrTableRow) => row.id,
+	};
+}
 
-			setReportState((prev) => ({
-				...prev,
-				description: `Reporte de ${name}`,
-				aggregations: initialAggregations,
-			}));
-		} catch (err) {
-			console.error(err);
-			toast.error("Error al cargar datos para el reporte");
-		} finally {
-			setIsLoading(false);
-		}
-	}, [obraId, tablaId]);
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
+function OcrReportePageContent() {
+	const params = useParams();
+	const obraId = params?.obraId as string;
+	const tablaId = params?.tablaId as string;
+
+	const [tablaName, setTablaName] = useState<string>("");
+	const [tablaColumns, setTablaColumns] = useState<TablaColumn[]>([]);
+	const [hasDocSource, setHasDocSource] = useState(false);
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		fetchData();
-	}, [fetchData]);
+		const loadTabla = async () => {
+			if (!obraId || !tablaId) return;
+			try {
+				setIsLoading(true);
+				setError(null);
 
-	// Build report columns from tabla columns
-	const reportColumns = useMemo<ReportColumn<OcrTableRow>[]>(() => {
-		const cols: ReportColumn<OcrTableRow>[] = columns.map((col) => ({
-			id: col.fieldKey,
-			label: col.label,
-			accessor: (row) => row[col.fieldKey],
-			type: mapDataTypeToReportType(col.dataType),
-			align: col.dataType === "currency" || col.dataType === "number" ? "right" : "left",
-			defaultAggregation:
-				col.dataType === "currency" || col.dataType === "number" ? "sum" : "none",
-		}));
+				// Fetch tabla metadata to get columns
+				const tablasRes = await fetch(`/api/obras/${obraId}/tablas`);
+				if (!tablasRes.ok) throw new Error("No se pudo cargar las tablas");
+				const tablasData = await tablasRes.json();
 
-		// Add doc source column if rows have it
-		if (rows.some((r) => r.__docFileName)) {
-			cols.unshift({
-				id: "__docFileName",
-				label: "Documento",
-				accessor: (row) => row.__docFileName,
-				type: "text",
-				align: "left",
-			});
-		}
+				const tabla = (tablasData.tablas || []).find(
+					(t: { id: string }) => t.id === tablaId
+				);
+				if (!tabla) throw new Error("Tabla no encontrada");
 
-		return cols;
-	}, [columns, rows]);
+				const cols: TablaColumn[] = (tabla.columns || []).map(
+					(col: {
+						id: string;
+						fieldKey: string;
+						label: string;
+						dataType: string;
+						required: boolean;
+					}) => ({
+						id: col.id,
+						fieldKey: col.fieldKey,
+						label: col.label,
+						dataType: col.dataType,
+						required: col.required,
+					})
+				);
 
-	// Handle sorting
-	const handleSort = useCallback((columnId: string) => {
-		setReportState((prev) => ({
-			...prev,
-			sortColumnId: columnId,
-			sortDirection:
-				prev.sortColumnId === columnId && prev.sortDirection === "asc" ? "desc" : "asc",
-		}));
-	}, []);
+				setTablaName(tabla.name || "Tabla OCR");
+				setTablaColumns(cols);
 
-	// Toggle column visibility
-	const toggleColumnVisibility = useCallback((columnId: string) => {
-		setReportState((prev) => ({
-			...prev,
-			hiddenColumnIds: prev.hiddenColumnIds.includes(columnId)
-				? prev.hiddenColumnIds.filter((id) => id !== columnId)
-				: [...prev.hiddenColumnIds, columnId],
-		}));
-	}, []);
+				// Quick check if any rows have doc source info
+				const rowsRes = await fetch(
+					`/api/obras/${obraId}/tablas/${tablaId}/rows?limit=1`
+				);
+				if (rowsRes.ok) {
+					const rowsData = await rowsRes.json();
+					const firstRow = (rowsData.rows || [])[0];
+					setHasDocSource(!!firstRow?.data?.__docFileName);
+				}
+			} catch (err) {
+				console.error(err);
+				setError(
+					err instanceof Error ? err.message : "Error al cargar datos"
+				);
+			} finally {
+				setIsLoading(false);
+			}
+		};
 
-	// Set aggregation for a column
-	const setAggregation = useCallback((columnId: string, aggType: AggregationType) => {
-		setReportState((prev) => ({
-			...prev,
-			aggregations: { ...prev.aggregations, [columnId]: aggType },
-		}));
-	}, []);
+		void loadTabla();
+	}, [obraId, tablaId]);
 
-	// Visible columns (for settings)
-	const visibleColumns = useMemo(
-		() => reportColumns.filter((col) => !reportState.hiddenColumnIds.includes(col.id)),
-		[reportColumns, reportState.hiddenColumnIds]
-	);
+	const reportConfig = useMemo(() => {
+		if (!tablaColumns.length) return null;
+		return buildReportConfig(
+			obraId,
+			tablaId,
+			tablaName,
+			tablaColumns,
+			hasDocSource
+		);
+	}, [obraId, tablaId, tablaName, tablaColumns, hasDocSource]);
+
+	if (isLoading) {
+		return (
+			<div className="flex items-center justify-center h-[70vh]">
+				<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+			</div>
+		);
+	}
+
+	if (error || !reportConfig) {
+		return (
+			<div className="flex flex-col items-center justify-center h-[70vh] gap-3 text-muted-foreground">
+				<AlertCircle className="h-10 w-10" />
+				<p>{error ?? "No se pudo generar el reporte para esta tabla."}</p>
+				<Button variant="outline" onClick={() => window.history.back()}>
+					Volver
+				</Button>
+			</div>
+		);
+	}
 
 	return (
-		<div className="flex h-[calc(100vh-4rem)] overflow-hidden w-full">
-			{/* Print styles */}
-			<style>{`
-				@media print {
-					@page { size: A4; margin: 10mm; }
-					body { background: white !important; }
-					.no-print { display: none !important; }
-					.print-only { display: block !important; }
-					.report-container { overflow: visible !important; height: auto !important; }
-				}
-			`}</style>
-
-			{/* Main Content - Report Preview */}
-			<div className="w-full flex justify-center items-center pt-4 bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_10px,var(--border)_10px,var(--border)_11px,transparent_12px)] bg-repeat relative">
-				<div className="flex justify-center items-start gap-4 mb-6 no-print absolute top-0 left-0 w-full p-4">
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={() => router.back()}
-						className="gap-2"
-					>
-						<ChevronLeft className="h-4 w-4" />
-						Volver
-					</Button>
-					<div className="ml-auto">
-						<Button onClick={() => window.print()} className="gap-2">
-							<Printer className="h-4 w-4" />
-							Imprimir / PDF
-						</Button>
-					</div>
-				</div>
-
-				<div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-zinc-950 report-container overflow-auto relative max-w-[210mm] max-h-[297mm] h-full overflow-y-auto">
-					<div className="p-6 print:p-0">
-						<div className="space-y-6 max-w-[1200px] mx-auto print:max-w-none print:mx-0">
-							{/* Report Header Inputs */}
-							<div className="space-y-3 border-b pb-4 print:border-none">
-								<input
-									type="text"
-									value={reportState.companyName}
-									onChange={(e) =>
-										setReportState((prev) => ({
-											...prev,
-											companyName: e.target.value,
-										}))
-									}
-									className="text-2xl font-bold w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1 bg-transparent"
-									placeholder="Nombre de la empresa"
-								/>
-								<input
-									type="text"
-									value={reportState.description}
-									onChange={(e) =>
-										setReportState((prev) => ({
-											...prev,
-											description: e.target.value,
-										}))
-									}
-									className="text-lg text-muted-foreground w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1 bg-transparent"
-									placeholder="Descripción del reporte"
-								/>
-								<input
-									type="text"
-									value={reportState.date}
-									onChange={(e) =>
-										setReportState((prev) => ({ ...prev, date: e.target.value }))
-									}
-									className="text-sm text-muted-foreground w-full border-none outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1 bg-transparent"
-									placeholder="Fecha"
-								/>
-							</div>
-
-							{/* Report Tables */}
-							<div className="space-y-8">
-								{isLoading ? (
-									<div className="flex items-center justify-center py-12">
-										<Loader2 className="h-8 w-8 animate-spin text-primary" />
-									</div>
-								) : (
-									<ReportTable
-										title={tablaName}
-										data={rows}
-										columns={reportColumns}
-										hiddenColumnIds={reportState.hiddenColumnIds}
-										sortColumnId={reportState.sortColumnId}
-										sortDirection={reportState.sortDirection}
-										onSort={handleSort}
-										aggregations={reportState.aggregations}
-										getRowId={(row) => row.id}
-										currencyLocale="es-AR"
-										currencyCode="ARS"
-									/>
-								)}
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			{/* Right Sidebar - Settings */}
-			<div className="w-80 border-l bg-muted/30 flex flex-col no-print">
-				<Tabs defaultValue="settings" className="flex-1 flex flex-col">
-					<div className="p-4 border-b">
-						<TabsList className="grid w-full grid-cols-1">
-							<TabsTrigger value="settings" className="gap-2">
-								<Settings className="h-4 w-4" />
-								Configuración
-							</TabsTrigger>
-						</TabsList>
-					</div>
-
-					{/* SETTINGS TAB */}
-					<TabsContent value="settings" className="flex-1 p-0 m-0 overflow-hidden">
-						<ScrollArea className="h-full max-h-[calc(100vh-10rem)]">
-							<div className="p-4 space-y-6">
-								{/* Columns */}
-								<div className="space-y-3">
-									<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-										Columnas Visibles
-									</h3>
-									<div className="space-y-2">
-										{reportColumns.map((col) => {
-											const isVisible = !reportState.hiddenColumnIds.includes(col.id);
-											return (
-												<div key={col.id} className="flex items-center space-x-2">
-													<Checkbox
-														id={`col-${col.id}`}
-														checked={isVisible}
-														onCheckedChange={() => toggleColumnVisibility(col.id)}
-													/>
-													<Label
-														htmlFor={`col-${col.id}`}
-														className="text-sm font-normal cursor-pointer"
-													>
-														{col.label}
-													</Label>
-												</div>
-											);
-										})}
-									</div>
-								</div>
-
-								<Separator />
-
-								{/* Aggregations */}
-								<div className="space-y-3">
-									<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-										Totales
-									</h3>
-									<div className="space-y-3">
-										{visibleColumns.map((col) => (
-											<div key={col.id} className="space-y-1">
-												<Label className="text-xs">{col.label}</Label>
-												<select
-													className="w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-													value={reportState.aggregations[col.id] || "none"}
-													onChange={(e) =>
-														setAggregation(col.id, e.target.value as AggregationType)
-													}
-												>
-													<option value="none">Sin total</option>
-													<option value="sum">Suma</option>
-													<option value="count">Contar</option>
-													<option value="count-checked">Contar marcados</option>
-													<option value="average">Promedio</option>
-												</select>
-											</div>
-										))}
-									</div>
-								</div>
-							</div>
-						</ScrollArea>
-					</TabsContent>
-				</Tabs>
-			</div>
-		</div>
+		<ReportPage
+			config={reportConfig}
+			backUrl={`/excel/${obraId}`}
+		/>
 	);
 }
 
@@ -384,7 +263,9 @@ export default function Page() {
 	return (
 		<Suspense
 			fallback={
-				<div className="flex items-center justify-center h-screen">Cargando...</div>
+				<div className="flex items-center justify-center h-screen">
+					Cargando...
+				</div>
 			}
 		>
 			<OcrReportePageContent />

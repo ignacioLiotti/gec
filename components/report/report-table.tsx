@@ -1,9 +1,13 @@
 'use client';
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReportColumn, AggregationType } from "./types";
+
+/* ------------------------------------------------------------------ */
+/*  Props                                                              */
+/* ------------------------------------------------------------------ */
 
 type ReportTableProps<Row> = {
 	title: string;
@@ -19,28 +23,57 @@ type ReportTableProps<Row> = {
 	currencyCode?: string;
 };
 
+/* ------------------------------------------------------------------ */
+/*  Formatter cache                                                    */
+/* ------------------------------------------------------------------ */
+
+const formatterCache = new Map<string, Intl.NumberFormat>();
+
+function getNumberFormatter(locale: string, currency?: string): Intl.NumberFormat {
+	const key = currency ? `${locale}:currency:${currency}` : `${locale}:number`;
+	let fmt = formatterCache.get(key);
+	if (!fmt) {
+		fmt = currency
+			? new Intl.NumberFormat(locale, { style: "currency", currency })
+			: new Intl.NumberFormat(locale);
+		formatterCache.set(key, fmt);
+	}
+	return fmt;
+}
+
+function getDecimalFormatter(locale: string): Intl.NumberFormat {
+	const key = `${locale}:decimal:2`;
+	let fmt = formatterCache.get(key);
+	if (!fmt) {
+		fmt = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+		formatterCache.set(key, fmt);
+	}
+	return fmt;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Value formatting                                                   */
+/* ------------------------------------------------------------------ */
+
 function formatValue(
 	value: unknown,
 	type: ReportColumn<unknown>["type"],
-	currencyLocale = "es-AR",
-	currencyCode = "ARS"
+	currencyLocale: string,
+	currencyCode: string
 ): string {
 	if (value == null) return "-";
 
 	switch (type) {
 		case "currency": {
 			const num = typeof value === "number" ? value : Number(value) || 0;
-			return new Intl.NumberFormat(currencyLocale, {
-				style: "currency",
-				currency: currencyCode,
-			}).format(num);
+			return getNumberFormatter(currencyLocale, currencyCode).format(num);
 		}
 		case "number": {
 			const num = typeof value === "number" ? value : Number(value) || 0;
-			return num.toLocaleString(currencyLocale);
+			return getNumberFormatter(currencyLocale).format(num);
 		}
 		case "boolean":
-			return value ? "Sí" : "No";
+			return value ? "Si" : "No";
 		case "date":
 			if (!value) return "-";
 			return String(value);
@@ -49,12 +82,16 @@ function formatValue(
 	}
 }
 
+/* ------------------------------------------------------------------ */
+/*  Aggregation calculation                                            */
+/* ------------------------------------------------------------------ */
+
 function calculateAggregation<Row>(
 	data: Row[],
 	column: ReportColumn<Row>,
 	aggType: AggregationType,
-	currencyLocale = "es-AR",
-	currencyCode = "ARS"
+	currencyLocale: string,
+	currencyCode: string
 ): string | number | null {
 	if (aggType === "none") return null;
 
@@ -62,40 +99,84 @@ function calculateAggregation<Row>(
 
 	switch (aggType) {
 		case "sum": {
-			const numValues = values.map((v) => (typeof v === "number" ? v : Number(v) || 0));
-			const sum = numValues.reduce((a, b) => a + b, 0);
-			if (column.type === "currency") {
-				return new Intl.NumberFormat(currencyLocale, {
-					style: "currency",
-					currency: currencyCode,
-				}).format(sum);
+			let sum = 0;
+			for (const v of values) {
+				sum += typeof v === "number" ? v : Number(v) || 0;
 			}
-			return sum.toLocaleString(currencyLocale);
+			return column.type === "currency"
+				? getNumberFormatter(currencyLocale, currencyCode).format(sum)
+				: getNumberFormatter(currencyLocale).format(sum);
 		}
 		case "count":
 			return values.filter((v) => v != null && v !== "").length;
 		case "count-checked":
 			return values.filter((v) => v === true).length;
 		case "average": {
-			const nums = values
-				.map((v) => (typeof v === "number" ? v : Number(v) || 0))
-				.filter((n) => n !== 0);
-			if (nums.length === 0) return 0;
-			const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-			if (column.type === "currency") {
-				return new Intl.NumberFormat(currencyLocale, {
-					style: "currency",
-					currency: currencyCode,
-				}).format(avg);
+			const nums: number[] = [];
+			for (const v of values) {
+				const n = typeof v === "number" ? v : Number(v) || 0;
+				if (n !== 0) nums.push(n);
 			}
-			return avg.toLocaleString(currencyLocale, { maximumFractionDigits: 2 });
+			if (nums.length === 0) return 0;
+			let total = 0;
+			for (const n of nums) total += n;
+			const avg = total / nums.length;
+			return column.type === "currency"
+				? getNumberFormatter(currencyLocale, currencyCode).format(avg)
+				: getDecimalFormatter(currencyLocale).format(avg);
 		}
 		default:
 			return null;
 	}
 }
 
-export function ReportTable<Row>({
+/* ------------------------------------------------------------------ */
+/*  Sorting                                                            */
+/* ------------------------------------------------------------------ */
+
+function sortData<Row>(
+	data: Row[],
+	sortColumnId: string | null,
+	sortDirection: "asc" | "desc",
+	columns: ReportColumn<Row>[]
+): Row[] {
+	if (!sortColumnId) return data;
+
+	const sortColumn = columns.find((col) => col.id === sortColumnId);
+	if (!sortColumn) return data;
+
+	const sorted = [...data];
+	const dir = sortDirection === "asc" ? 1 : -1;
+
+	sorted.sort((a, b) => {
+		const aVal = sortColumn.accessor(a);
+		const bVal = sortColumn.accessor(b);
+
+		if (aVal == null && bVal == null) return 0;
+		if (aVal == null) return dir;
+		if (bVal == null) return -dir;
+
+		if (typeof aVal === "string" && typeof bVal === "string") {
+			return dir * aVal.localeCompare(bVal);
+		}
+
+		const aNum = Number(aVal);
+		const bNum = Number(bVal);
+		if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
+			return dir * (aNum - bNum);
+		}
+
+		return dir * String(aVal).localeCompare(String(bVal));
+	});
+
+	return sorted;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
+function ReportTableInner<Row>({
 	title,
 	data,
 	columns,
@@ -113,42 +194,15 @@ export function ReportTable<Row>({
 		[columns, hiddenColumnIds]
 	);
 
-	const sortedData = useMemo(() => {
-		if (!sortColumnId) return data;
+	const sortedData = useMemo(
+		() => sortData(data, sortColumnId, sortDirection, columns),
+		[data, sortColumnId, sortDirection, columns]
+	);
 
-		const sortColumn = columns.find((col) => col.id === sortColumnId);
-		if (!sortColumn) return data;
-
-		const sorted = [...data];
-		sorted.sort((a, b) => {
-			const aVal = sortColumn.accessor(a);
-			const bVal = sortColumn.accessor(b);
-
-			if (aVal == null && bVal == null) return 0;
-			if (aVal == null) return sortDirection === "asc" ? 1 : -1;
-			if (bVal == null) return sortDirection === "asc" ? -1 : 1;
-
-			if (typeof aVal === "string" && typeof bVal === "string") {
-				return sortDirection === "asc"
-					? aVal.localeCompare(bVal)
-					: bVal.localeCompare(aVal);
-			}
-
-			const aNum = Number(aVal);
-			const bNum = Number(bVal);
-			if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
-				return sortDirection === "asc" ? aNum - bNum : bNum - aNum;
-			}
-
-			return sortDirection === "asc"
-				? String(aVal).localeCompare(String(bVal))
-				: String(bVal).localeCompare(String(aVal));
-		});
-
-		return sorted;
-	}, [data, sortColumnId, sortDirection, columns]);
-
-	const hasAggregations = Object.values(aggregations).some((agg) => agg !== "none");
+	const hasAggregations = useMemo(
+		() => Object.values(aggregations).some((agg) => agg !== "none"),
+		[aggregations]
+	);
 
 	return (
 		<div className="space-y-2 break-inside-avoid">
@@ -251,3 +305,7 @@ export function ReportTable<Row>({
 		</div>
 	);
 }
+
+// Memoize to prevent re-renders when parent state (e.g. sidebar tab) changes
+// but table props remain the same.
+export const ReportTable = memo(ReportTableInner) as typeof ReportTableInner;
