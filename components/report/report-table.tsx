@@ -205,107 +205,104 @@ function ReportTableInner<Row>({
 	);
 
 	return (
-		<div className="space-y-2 break-inside-avoid">
-			<h3 className="text-lg font-semibold">{title}</h3>
-			<div className="border rounded-lg overflow-hidden">
-				<table className="w-full text-sm">
-					<thead className="bg-muted">
-						<tr>
-							{visibleColumns.map((col) => (
-								<th
-									key={col.id}
+		<div className="report-table-section">
+			<h3 className="report-group-title font-serif">{title}</h3>
+			<table className="report-table">
+				<thead>
+					<tr>
+						{visibleColumns.map((col) => (
+							<th
+								key={col.id}
+								className={cn(
+									"report-th cursor-pointer",
+									col.align === "right" && "text-right",
+									col.align === "center" && "text-center",
+									!col.align && "text-left"
+								)}
+								style={{ width: col.width }}
+								onClick={() => onSort(col.id)}
+							>
+								<div
 									className={cn(
-										"px-3 py-2 text-xs font-semibold uppercase cursor-pointer hover:bg-muted/80",
-										col.align === "right" && "text-right",
-										col.align === "center" && "text-center",
-										!col.align && "text-left"
+										"flex items-center gap-1",
+										col.align === "right" && "justify-end",
+										col.align === "center" && "justify-center"
 									)}
-									style={{ width: col.width }}
-									onClick={() => onSort(col.id)}
 								>
-									<div
+									<span>{col.label}</span>
+									{sortColumnId === col.id && (
+										sortDirection === "asc" ? (
+											<ChevronUp className="h-3 w-3 opacity-60" />
+										) : (
+											<ChevronDown className="h-3 w-3 opacity-60" />
+										)
+									)}
+								</div>
+							</th>
+						))}
+					</tr>
+				</thead>
+				<tbody>
+					{sortedData.map((row, idx) => (
+						<tr
+							key={getRowId(row)}
+							className={cn(
+								"report-tr",
+								idx % 2 === 1 && "report-tr-alt"
+							)}
+						>
+							{visibleColumns.map((col) => {
+								const value = col.accessor(row);
+								const displayValue = col.render
+									? col.render(value, row)
+									: formatValue(value, col.type, currencyLocale, currencyCode);
+
+								return (
+									<td
+										key={col.id}
 										className={cn(
-											"flex items-center gap-1",
-											col.align === "right" && "justify-end",
-											col.align === "center" && "justify-center"
+											"report-td",
+											col.align === "right" && "text-right",
+											col.align === "center" && "text-center",
+											col.type === "currency" && "font-mono"
 										)}
 									>
-										{col.label}
-										{sortColumnId === col.id &&
-											(sortDirection === "asc" ? (
-												<ChevronUp className="h-3 w-3" />
-											) : (
-												<ChevronDown className="h-3 w-3" />
-											))}
-									</div>
-								</th>
-							))}
+										{displayValue}
+									</td>
+								);
+							})}
 						</tr>
-					</thead>
-					<tbody>
-						{sortedData.map((row, idx) => (
-							<tr
-								key={getRowId(row)}
-								className={cn(
-									"border-t",
-									idx % 2 === 0 ? "bg-background" : "bg-muted/20"
-								)}
-							>
-								{visibleColumns.map((col) => {
-									const value = col.accessor(row);
-									const displayValue = col.render
-										? col.render(value, row)
-										: formatValue(value, col.type, currencyLocale, currencyCode);
-
-									return (
-										<td
-											key={col.id}
-											className={cn(
-												"px-3 py-2",
-												col.align === "right" && "text-right",
-												col.align === "center" && "text-center",
-												col.type === "currency" && "font-mono"
-											)}
-										>
-											{displayValue}
-										</td>
-									);
-								})}
-							</tr>
-						))}
-						{hasAggregations && (
-							<tr className="border-t-2 bg-muted/50 font-semibold">
-								{visibleColumns.map((col) => {
-									const aggType = aggregations[col.id] || "none";
-									const aggValue = calculateAggregation(
-										sortedData,
-										col,
-										aggType,
-										currencyLocale,
-										currencyCode
-									);
-									return (
-										<td
-											key={col.id}
-											className={cn(
-												"px-3 py-2",
-												col.align === "right" && "text-right",
-												col.align === "center" && "text-center"
-											)}
-										>
-											{aggValue ?? ""}
-										</td>
-									);
-								})}
-							</tr>
-						)}
-					</tbody>
-				</table>
-			</div>
+					))}
+					{hasAggregations && (
+						<tr className="report-totals-row">
+							{visibleColumns.map((col) => {
+								const aggType = aggregations[col.id] || "none";
+								const aggValue = calculateAggregation(
+									sortedData,
+									col,
+									aggType,
+									currencyLocale,
+									currencyCode
+								);
+								return (
+									<td
+										key={col.id}
+										className={cn(
+											"report-td",
+											col.align === "right" && "text-right",
+											col.align === "center" && "text-center"
+										)}
+									>
+										{aggValue ?? ""}
+									</td>
+								);
+							})}
+						</tr>
+					)}
+				</tbody>
+			</table>
 		</div>
 	);
 }
 
-// Memoize to prevent re-renders when parent state (e.g. sidebar tab) changes
-// but table props remain the same.
 export const ReportTable = memo(ReportTableInner) as typeof ReportTableInner;

@@ -29,8 +29,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	const router = useRouter();
 	const reportContentRef = useRef<HTMLDivElement>(null);
 
-	// Stabilize config reference - store the fetchData and other functions in refs
-	// so the fetchData callback doesn't depend on the entire config object.
+	// Stabilize config reference
 	const configRef = useRef(config);
 	configRef.current = config;
 
@@ -45,7 +44,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		return { ...defaults, ...initialFilters };
 	});
 
-	// Report display state - initialize aggregations lazily from columns
+	// Report display state
 	const [reportState, setReportState] = useState<ReportState>(() => ({
 		companyName: "Nombre de la empresa",
 		description: config.description || `Reporte de ${config.title}`,
@@ -63,7 +62,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		),
 	}));
 
-	// Fetch data - uses ref to avoid re-creating when config object reference changes
+	// Fetch data
 	const fetchData = useCallback(async () => {
 		try {
 			setIsLoading(true);
@@ -77,7 +76,6 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		}
 	}, [filters]);
 
-	// Initial fetch
 	useEffect(() => {
 		fetchData();
 	}, [fetchData]);
@@ -144,12 +142,12 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		}));
 	}, []);
 
-	// Use columns from config (stable reference via useMemo)
+	// Stable column references
 	const columns = useMemo(() => config.columns, [config.columns]);
 	const groupByOptions = useMemo(() => config.groupByOptions, [config.groupByOptions]);
 	const filterFields = useMemo(() => config.filterFields, [config.filterFields]);
 
-	// Group data by selected option
+	// Group data
 	const groupedData = useMemo(() => {
 		if (reportState.viewMode === "full") {
 			return [{ key: config.title, data }];
@@ -174,7 +172,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 			.map(([key, rows]) => ({ key, data: rows }));
 	}, [data, reportState.viewMode, groupByOptions, config.title]);
 
-	// Visible columns (for settings panel)
+	// Visible columns
 	const visibleColumns = useMemo(
 		() => columns.filter((col) => !reportState.hiddenColumnIds.includes(col.id)),
 		[columns, reportState.hiddenColumnIds]
@@ -192,13 +190,14 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	return (
 		<div className="flex h-[calc(100vh-4rem)] overflow-hidden w-full">
 			{/* Main Content - Report Preview */}
-			<div className="w-full flex justify-center items-center pt-4 relative">
-				<div className="flex justify-center items-start gap-4 mb-6 no-print absolute top-0 left-0 w-full p-4 z-10">
+			<div className="flex-1 flex flex-col min-w-0 bg-[#d5d0c8] dark:bg-zinc-900 relative">
+				{/* Toolbar */}
+				<div className="flex items-center gap-3 px-4 py-2.5 bg-[#cbc5bb] dark:bg-zinc-800 border-b border-[#b8b0a4] dark:border-zinc-700 no-print shrink-0">
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={handleBack}
-						className="gap-2 bg-background/80 backdrop-blur-sm"
+						className="gap-1.5 text-[#4a4540] dark:text-zinc-300 hover:bg-[#bfb8ad] dark:hover:bg-zinc-700"
 					>
 						<ChevronLeft className="h-4 w-4" />
 						Volver
@@ -207,7 +206,8 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 						<Button
 							onClick={handleGeneratePdf}
 							disabled={isGeneratingPdf || isLoading}
-							className="gap-2"
+							size="sm"
+							className="gap-2 bg-[#3d3a36] hover:bg-[#2a2825] text-[#f5f2ed] dark:bg-zinc-600 dark:hover:bg-zinc-500"
 						>
 							{isGeneratingPdf ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
@@ -219,21 +219,34 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					</div>
 				</div>
 
-				<div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-zinc-950 report-container overflow-auto relative max-w-[210mm] max-h-[297mm] h-full overflow-y-auto shadow-xl pdf-preview">
-					<div className="p-6" ref={reportContentRef}>
-						<div className="space-y-6 max-w-[1200px] mx-auto">
-							{/* Report Header */}
-							<div className="space-y-3 border-b pb-4">
-								<div className="text-2xl font-bold">{reportState.companyName}</div>
-								<div className="text-lg text-muted-foreground">{reportState.description}</div>
-								<div className="text-sm text-muted-foreground">{reportState.date}</div>
+				{/* Paper area */}
+				<div className="flex-1 overflow-auto flex justify-center py-8 px-4">
+					<div className="report-paper pdf-preview">
+						<div ref={reportContentRef}>
+							{/* Decorative top border - double line */}
+							<div className="report-border-top" />
+
+							{/* Document Header */}
+							<div className="report-header-block">
+								<div className="report-company font-serif text-balance">
+									{reportState.companyName}
+								</div>
+								<div className="report-divider" />
+								<div className="report-meta">
+									<div className="report-title-text font-serif">
+										{reportState.description}
+									</div>
+									<div className="report-date-text font-mono">
+										{reportState.date}
+									</div>
+								</div>
 							</div>
 
 							{/* Report Tables */}
-							<div className="space-y-8">
+							<div className="report-body">
 								{isLoading ? (
-									<div className="flex items-center justify-center py-12">
-										<Loader2 className="h-8 w-8 animate-spin text-primary" />
+									<div className="flex items-center justify-center py-16">
+										<Loader2 className="h-6 w-6 animate-spin text-[#8a8078]" />
 									</div>
 								) : (
 									groupedData.map(({ key, data: groupData }) => (
@@ -254,22 +267,25 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									))
 								)}
 							</div>
+
+							{/* Footer line */}
+							<div className="report-footer-line" />
 						</div>
 					</div>
 				</div>
 			</div>
 
 			{/* Right Sidebar - Filters & Settings */}
-			<div className="w-80 border-l bg-muted/30 flex flex-col shrink-0">
+			<div className="w-80 border-l border-[#c5bfb6] dark:border-zinc-700 bg-[#eae7e1] dark:bg-zinc-800 flex flex-col shrink-0">
 				<Tabs defaultValue="settings" className="flex-1 flex flex-col">
-					<div className="p-4 border-b">
-						<TabsList className="grid w-full grid-cols-2">
-							<TabsTrigger value="settings" className="gap-2">
-								<Settings className="h-4 w-4" />
+					<div className="px-4 pt-4 pb-3 border-b border-[#d5d0c8] dark:border-zinc-700">
+						<TabsList className="grid w-full grid-cols-2 bg-[#d5d0c8] dark:bg-zinc-700">
+							<TabsTrigger value="settings" className="gap-1.5 text-xs data-[state=active]:bg-[#f5f2ed] dark:data-[state=active]:bg-zinc-600">
+								<Settings className="h-3.5 w-3.5" />
 								Configuracion
 							</TabsTrigger>
-							<TabsTrigger value="filters" className="gap-2">
-								<Filter className="h-4 w-4" />
+							<TabsTrigger value="filters" className="gap-1.5 text-xs data-[state=active]:bg-[#f5f2ed] dark:data-[state=active]:bg-zinc-600">
+								<Filter className="h-3.5 w-3.5" />
 								Filtros
 							</TabsTrigger>
 						</TabsList>
@@ -278,18 +294,60 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					{/* SETTINGS TAB */}
 					<TabsContent value="settings" className="flex-1 p-0 m-0 overflow-hidden">
 						<ScrollArea className="h-full max-h-[calc(100vh-10rem)]">
-							<div className="p-4 space-y-6">
+							<div className="p-4 space-y-5">
+								{/* Header fields */}
+								<div className="space-y-3">
+									<h3 className="text-[11px] font-semibold text-[#8a8078] dark:text-zinc-400 uppercase tracking-widest">
+										Encabezado
+									</h3>
+									<div className="space-y-2">
+										<div className="space-y-1">
+											<Label className="text-xs text-[#6b645c] dark:text-zinc-400">Empresa</Label>
+											<Input
+												value={reportState.companyName}
+												onChange={(e) =>
+													setReportState((prev) => ({
+														...prev,
+														companyName: e.target.value,
+													}))
+												}
+												className="h-8 text-sm bg-[#f5f2ed] dark:bg-zinc-700 border-[#c5bfb6] dark:border-zinc-600"
+											/>
+										</div>
+										<div className="space-y-1">
+											<Label className="text-xs text-[#6b645c] dark:text-zinc-400">Descripcion</Label>
+											<Input
+												value={reportState.description}
+												onChange={(e) =>
+													setReportState((prev) => ({
+														...prev,
+														description: e.target.value,
+													}))
+												}
+												className="h-8 text-sm bg-[#f5f2ed] dark:bg-zinc-700 border-[#c5bfb6] dark:border-zinc-600"
+											/>
+										</div>
+									</div>
+								</div>
+
+								<Separator className="bg-[#d5d0c8] dark:bg-zinc-700" />
+
 								{/* View Mode */}
 								{groupByOptions && groupByOptions.length > 0 && (
 									<>
 										<div className="space-y-3">
-											<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+											<h3 className="text-[11px] font-semibold text-[#8a8078] dark:text-zinc-400 uppercase tracking-widest">
 												Modo de Vista
 											</h3>
-											<div className="grid grid-cols-1 gap-2">
+											<div className="grid grid-cols-1 gap-1.5">
 												<Button
 													variant={reportState.viewMode === "full" ? "default" : "outline"}
-													className="justify-start"
+													size="sm"
+													className={`justify-start text-xs h-8 ${
+														reportState.viewMode === "full"
+															? "bg-[#3d3a36] text-[#f5f2ed] hover:bg-[#2a2825]"
+															: "border-[#c5bfb6] text-[#4a4540] hover:bg-[#d5d0c8] bg-transparent"
+													}`}
 													onClick={() =>
 														setReportState((prev) => ({ ...prev, viewMode: "full" }))
 													}
@@ -300,7 +358,12 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 													<Button
 														key={opt.id}
 														variant={reportState.viewMode === opt.id ? "default" : "outline"}
-														className="justify-start"
+														size="sm"
+														className={`justify-start text-xs h-8 ${
+															reportState.viewMode === opt.id
+																? "bg-[#3d3a36] text-[#f5f2ed] hover:bg-[#2a2825]"
+																: "border-[#c5bfb6] text-[#4a4540] hover:bg-[#d5d0c8] bg-transparent"
+														}`}
 														onClick={() =>
 															setReportState((prev) => ({ ...prev, viewMode: opt.id }))
 														}
@@ -310,16 +373,16 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												))}
 											</div>
 										</div>
-										<Separator />
+										<Separator className="bg-[#d5d0c8] dark:bg-zinc-700" />
 									</>
 								)}
 
 								{/* Columns */}
 								<div className="space-y-3">
-									<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+									<h3 className="text-[11px] font-semibold text-[#8a8078] dark:text-zinc-400 uppercase tracking-widest">
 										Columnas Visibles
 									</h3>
-									<div className="space-y-2">
+									<div className="space-y-1.5">
 										{columns.map((col) => {
 											const isVisible = !reportState.hiddenColumnIds.includes(col.id);
 											return (
@@ -331,7 +394,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 													/>
 													<Label
 														htmlFor={`col-${col.id}`}
-														className="text-sm font-normal cursor-pointer"
+														className="text-xs font-normal cursor-pointer text-[#4a4540] dark:text-zinc-300"
 													>
 														{col.label}
 													</Label>
@@ -341,19 +404,19 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									</div>
 								</div>
 
-								<Separator />
+								<Separator className="bg-[#d5d0c8] dark:bg-zinc-700" />
 
 								{/* Aggregations */}
 								<div className="space-y-3">
-									<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+									<h3 className="text-[11px] font-semibold text-[#8a8078] dark:text-zinc-400 uppercase tracking-widest">
 										Totales
 									</h3>
-									<div className="space-y-3">
+									<div className="space-y-2.5">
 										{visibleColumns.map((col) => (
 											<div key={col.id} className="space-y-1">
-												<Label className="text-xs">{col.label}</Label>
+												<Label className="text-[11px] text-[#6b645c] dark:text-zinc-400">{col.label}</Label>
 												<select
-													className="w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+													className="w-full rounded border border-[#c5bfb6] dark:border-zinc-600 bg-[#f5f2ed] dark:bg-zinc-700 px-2.5 py-1 text-xs text-[#3d3a36] dark:text-zinc-200"
 													value={reportState.aggregations[col.id] || "none"}
 													onChange={(e) =>
 														setAggregation(col.id, e.target.value as AggregationType)
@@ -376,10 +439,10 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					{/* FILTERS TAB */}
 					<TabsContent value="filters" className="flex-1 p-0 m-0 overflow-hidden">
 						<ScrollArea className="h-full">
-							<div className="p-4 space-y-6">
+							<div className="p-4 space-y-5">
 								{filterFields?.map((field) => (
-									<div key={String(field.id)} className="space-y-2">
-										<Label>{field.label}</Label>
+									<div key={String(field.id)} className="space-y-1.5">
+										<Label className="text-xs text-[#6b645c] dark:text-zinc-400">{field.label}</Label>
 										{field.type === "text" && (
 											<Input
 												placeholder={field.placeholder}
@@ -390,6 +453,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														[field.id]: e.target.value,
 													}))
 												}
+												className="h-8 text-sm bg-[#f5f2ed] dark:bg-zinc-700 border-[#c5bfb6] dark:border-zinc-600"
 											/>
 										)}
 										{field.type === "number" && (
@@ -403,6 +467,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														[field.id]: e.target.value,
 													}))
 												}
+												className="h-8 text-sm bg-[#f5f2ed] dark:bg-zinc-700 border-[#c5bfb6] dark:border-zinc-600"
 											/>
 										)}
 										{field.type === "date" && (
@@ -415,11 +480,12 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														[field.id]: e.target.value,
 													}))
 												}
+												className="h-8 text-sm bg-[#f5f2ed] dark:bg-zinc-700 border-[#c5bfb6] dark:border-zinc-600"
 											/>
 										)}
 										{field.type === "select" && field.options && (
 											<select
-												className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
+												className="w-full rounded border border-[#c5bfb6] dark:border-zinc-600 bg-[#f5f2ed] dark:bg-zinc-700 px-2.5 py-1.5 text-xs text-[#3d3a36] dark:text-zinc-200"
 												value={String(filters[field.id] || "")}
 												onChange={(e) =>
 													setFilters((prev) => ({
@@ -436,7 +502,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 											</select>
 										)}
 										{field.type === "boolean-toggle" && (
-											<div className="flex gap-2">
+											<div className="flex gap-1.5">
 												{[
 													{ value: "all", label: "Todos" },
 													{ value: "si", label: "Si" },
@@ -448,7 +514,11 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 															filters[field.id] === opt.value ? "default" : "outline"
 														}
 														size="sm"
-														className="flex-1"
+														className={`flex-1 text-xs h-7 ${
+															filters[field.id] === opt.value
+																? "bg-[#3d3a36] text-[#f5f2ed]"
+																: "border-[#c5bfb6] text-[#4a4540] bg-transparent"
+														}`}
 														onClick={() =>
 															setFilters((prev) => ({
 																...prev,
@@ -464,8 +534,12 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									</div>
 								))}
 
-								<div className="pt-4">
-									<Button className="w-full" onClick={fetchData}>
+								<div className="pt-3">
+									<Button
+										size="sm"
+										className="w-full bg-[#3d3a36] hover:bg-[#2a2825] text-[#f5f2ed] text-xs"
+										onClick={fetchData}
+									>
 										Aplicar Filtros
 									</Button>
 								</div>
