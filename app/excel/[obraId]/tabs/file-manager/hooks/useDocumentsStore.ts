@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import type { FileSystemItem, OcrFolderLink } from "../types";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import {
@@ -134,19 +134,22 @@ export function getDocumentsState() {
 export function useDocumentsStore() {
 	const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-	const actions = {
-		setFileTree,
-		setOcrFolderLinks,
-		setSelectedFolder,
-		setSelectedDocument,
-		setSheetDocument,
-		setExpandedFolderIds,
-		setDocumentsLoading,
-		setLastFetchedAt,
-		markDocumentsFetched,
-		resetDocumentsStore,
-		setDocumentsState,
-	};
+	const actions = useMemo(
+		() => ({
+			setFileTree,
+			setOcrFolderLinks,
+			setSelectedFolder,
+			setSelectedDocument,
+			setSheetDocument,
+			setExpandedFolderIds,
+			setDocumentsLoading,
+			setLastFetchedAt,
+			markDocumentsFetched,
+			resetDocumentsStore,
+			setDocumentsState,
+		}),
+		[]
+	);
 
 	return { state, actions };
 }
@@ -173,21 +176,6 @@ export async function prefetchDocuments(obraId: string): Promise<void> {
 
 			const supabase = createSupabaseBrowserClient();
 
-			// Fetch OCR links first (needed to hydrate tree)
-			let ocrLinks = getCachedOcrLinks(obraId);
-			if (!ocrLinks) {
-				const ocrRes = await fetch(`/api/obras/${obraId}/ocr-folder-links`);
-				if (ocrRes.ok) {
-					const ocrData = await ocrRes.json();
-					const links = Array.isArray(ocrData.links) ? ocrData.links : [];
-					ocrLinks = links;
-					setCachedOcrLinks(obraId, links);
-				} else {
-					ocrLinks = [];
-				}
-			}
-			setOcrFolderLinks(ocrLinks || []);
-
 			// Fetch APS models (for 3D viewer)
 			let apsModels = getCachedApsModels(obraId);
 			if (!apsModels) {
@@ -203,54 +191,21 @@ export async function prefetchDocuments(obraId: string): Promise<void> {
 				}
 			}
 
-			// Fetch file tree
+			// Fetch enriched file tree (includes OCR metadata)
 			let cachedTree = getCachedFileTree(obraId);
-			if (!cachedTree) {
-				const { data: files, error } = await supabase.storage
-					.from("obra-documents")
-					.list(obraId, { limit: 1000 });
-
-				if (!error && files) {
-					// Build tree structure
-					const urnMap = new Map<string, string>();
-					apsModels?.forEach((m: { file_path: string; aps_urn: string }) => {
-						urnMap.set(m.file_path, m.aps_urn);
-					});
-
-					const root: FileSystemItem = {
-						id: "root",
-						name: "Documentos",
-						type: "folder",
-						children: [],
-					};
-
-					// Simple tree building from flat file list
-					const folderMap = new Map<string, FileSystemItem>();
-					folderMap.set("", root);
-
-					for (const file of files) {
-						if (file.name === ".emptyFolderPlaceholder") continue;
-
-						const isFolder = !file.metadata;
-						const item: FileSystemItem = {
-							id: file.id || file.name,
-							name: file.name,
-							type: isFolder ? "folder" : "file",
-							storagePath: `${obraId}/${file.name}`,
-							size: file.metadata?.size,
-							mimetype: file.metadata?.mimetype,
-							children: isFolder ? [] : undefined,
-							apsUrn: urnMap.get(`${obraId}/${file.name}`),
-						};
-
-						root.children!.push(item);
-						if (isFolder) {
-							folderMap.set(file.name, item);
-						}
+			let cachedOcrLinks = getCachedOcrLinks(obraId);
+			if (!cachedTree || !cachedOcrLinks) {
+				const res = await fetch(`/api/obras/${obraId}/documents-tree?limit=500`);
+				if (res.ok) {
+					const data = await res.json().catch(() => ({}));
+					const tree = data?.tree ?? null;
+					const links = Array.isArray(data?.links) ? data.links : [];
+					if (tree) {
+						cachedTree = tree as FileSystemItem;
+						setCachedFileTree(obraId, cachedTree);
 					}
-
-					cachedTree = root;
-					setCachedFileTree(obraId, root);
+					cachedOcrLinks = links;
+					setCachedOcrLinks(obraId, links);
 				}
 			}
 
@@ -258,6 +213,9 @@ export async function prefetchDocuments(obraId: string): Promise<void> {
 				setFileTree(cachedTree);
 				setSelectedFolder(cachedTree);
 				setExpandedFolderIds(new Set(["root"]));
+			}
+			if (cachedOcrLinks) {
+				setOcrFolderLinks(cachedOcrLinks);
 			}
 
 			markDocumentsFetched();

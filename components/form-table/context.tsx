@@ -23,10 +23,7 @@ export type FormTableFiltersState<Filters> = {
 	enabled: boolean;
 	value?: Filters;
 	draft?: Filters;
-	isOpen: boolean;
-	setIsOpen: (open: boolean) => void;
 	setDraft: (updater: (prev: Filters | undefined) => Filters | undefined) => void;
-	renderContent: ReactNode;
 	activeCount: number;
 	reset: () => void;
 	apply: () => void;

@@ -15,6 +15,7 @@ type DocumentSheetProps = {
 	onDownload: (doc: FileSystemItem) => void;
 	onRetryOcr?: (doc: FileSystemItem | null) => void;
 	retryingOcr?: boolean;
+	ocrStatusBadge?: React.ReactNode;
 };
 
 export function DocumentSheet({
@@ -26,6 +27,7 @@ export function DocumentSheet({
 	onDownload,
 	onRetryOcr,
 	retryingOcr = false,
+	ocrStatusBadge,
 }: DocumentSheetProps) {
 	return (
 		<Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -34,7 +36,10 @@ export function DocumentSheet({
 					<SheetHeader className="border-b bg-white px-6 py-4">
 						<div className="flex items-start justify-between gap-3">
 							<div className="min-w-0 flex-1">
-								<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
+								<div className="flex items-center gap-2">
+									<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
+									{ocrStatusBadge}
+								</div>
 								{breadcrumb && (
 									<SheetDescription className="truncate text-xs uppercase tracking-wide text-stone-400">
 										{breadcrumb}

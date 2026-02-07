@@ -88,6 +88,7 @@ export type ColumnDef<Row extends FormTableRow> = {
 	defaultValue?: unknown;
 	width?: number;
 	enableResize?: boolean;
+	enableSort?: boolean;
 };
 
 export type HeaderGroup = {
@@ -146,6 +147,7 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	title: string;
 	description?: string;
 	columns: ColumnDef<Row>[];
+	toolbarActions?: ReactNode;
 	headerGroups?: HeaderGroup[];
 	tabFilters?: TabFilterOption<Row>[];
 	searchPlaceholder?: string;
@@ -164,6 +166,10 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	accordionRow?: AccordionRowConfig<Row>;
 	showInlineSearch?: boolean;
 	enableColumnResizing?: boolean;
+	/** When true, applies client-side sorting on the currently loaded rows. Defaults to true. */
+	enableClientSort?: boolean;
+	/** Custom actions rendered next to the footer buttons (save/discard). */
+	footerActions?: ReactNode;
 	/** Whether to show the actions column (delete button, accordion toggle). Defaults to true. */
 	showActionsColumn?: boolean;
 	/** Controls whether the default toolbar should show the "Agregar fila" button. Defaults to true. */

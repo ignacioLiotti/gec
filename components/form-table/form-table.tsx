@@ -82,15 +82,20 @@ import { MemoizedTableRow } from "./table-body";
 export const useFormTable = useFormTableContext;
 
 export function FormTableToolbar() {
-	const { search, filters, columns, sorting } = useFormTable<FormTableRow, unknown>();
+	const { config, search, filters, columns, sorting } = useFormTable<FormTableRow, unknown>();
+	const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
 	const renderFiltersContent =
-		filters.renderContent ??
-		(
-			<p className="text-sm text-muted-foreground">
-				No hay filtros configurados para esta vista.
-			</p>
-		);
+		isFiltersOpen && typeof filters.draft !== "undefined" && config.renderFilters
+			? config.renderFilters({
+				filters: filters.draft,
+				onChange: (updater) => filters.setDraft((prev) => updater(prev ?? filters.draft)),
+			})
+			: (
+				<p className="text-sm text-muted-foreground">
+					No hay filtros configurados para esta vista.
+				</p>
+			);
 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3">
@@ -107,7 +112,7 @@ export function FormTableToolbar() {
 					</div>
 				)}
 				{filters.enabled && typeof filters.value !== "undefined" && (
-					<Sheet open={filters.isOpen} onOpenChange={filters.setIsOpen}>
+					<Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
 						<SheetTrigger asChild>
 							<Button
 								type="button"
@@ -170,7 +175,10 @@ export function FormTableToolbar() {
 									</Button>
 									<Button
 										type="button"
-										onClick={filters.apply}
+										onClick={() => {
+											filters.apply();
+											setIsFiltersOpen(false);
+										}}
 										size="sm"
 										className="px-6 shadow-sm"
 									>
@@ -195,6 +203,7 @@ export function FormTableToolbar() {
 					onBalanceColumns={columns.handleBalance}
 					disabled={false}
 				/>
+				{config.toolbarActions}
 			</div>
 			<div className="flex flex-wrap items-center gap-2">
 				{sorting.state.columnId && (
@@ -219,11 +228,16 @@ export function FormTableTabs({ className }: { className?: string }) {
 			value={tabs.activeTab ?? tabs.items[0]?.id ?? ""}
 			onValueChange={tabs.setActiveTab}
 		>
-			<TabsList className={cn("w-full max-w-full overflow-hidden flex-1 flex-grow", className)}>
+			<TabsList className={cn("w-full max-w-full overflow-hidden flex-1 flex-grow gap-1", className)}>
 				{tabs.items.map((tab) => (
-					<TabsTrigger key={tab.id} value={tab.id} className="gap-2">
+					<TabsTrigger
+						key={tab.id}
+						value={tab.id}
+
+						className="group gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground  data-[state=active]:shadow-none rounded-md"
+					>
 						<span>{tab.label}</span>
-						<span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+						<span className="rounded-full bg-muted px-2 py-0.5 text-xs group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white group-hover:bg-white/20 group-hover:text-white">
 							{tabs.counts[tab.id] ?? 0}
 						</span>
 					</TabsTrigger>
@@ -338,6 +352,7 @@ export function FormTableContent({ className }: { className?: string }) {
 												if (isColumnHidden(column.id)) return null;
 												const group = groupedColumnLookup.get(column.id);
 												if (!group) {
+													const isSortable = column.enableSort !== false;
 													return (
 														<th
 															key={`no-group-${column.id}`}
@@ -348,39 +363,55 @@ export function FormTableContent({ className }: { className?: string }) {
 															)}
 														>
 															<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
-																<ContextMenu>
-																	<ContextMenuTrigger asChild>
-																		<button
-																			type="button"
-																			onClick={() => toggleSort(column.id)}
-																			className="flex w-full items-center justify-between gap-2 text-left"
-																		>
-																			<span>{column.label}</span>
-																			<span className="text-muted-foreground">
-																				{sortState.columnId === column.id ? (
-																					sortState.direction === "asc" ? (
-																						<ArrowUp className="h-3.5 w-3.5" />
+																{isSortable ? (
+																	<ContextMenu>
+																		<ContextMenuTrigger asChild>
+																			<button
+																				type="button"
+																				onClick={() => toggleSort(column.id)}
+																				className="flex w-full items-center justify-between gap-2 text-left"
+																			>
+																				<span>{column.label}</span>
+																				<span className="text-muted-foreground flex items-center gap-2">
+																					{sortState.columnId === column.id ? (
+																						<>
+																							{pagination.isFetching && (
+																								<span className="relative inline-flex h-4 w-4 items-center justify-center">
+																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ left: 2, top: 2, animationDelay: "0ms" }} />
+																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ right: 2, top: 2, animationDelay: "120ms" }} />
+																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ left: 2, bottom: 2, animationDelay: "240ms" }} />
+																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ right: 2, bottom: 2, animationDelay: "360ms" }} />
+																								</span>
+																							)}
+																							{sortState.direction === "asc" ? (
+																								<ArrowUp className="h-3.5 w-3.5" />
+																							) : (
+																								<ArrowDown className="h-3.5 w-3.5" />
+																							)}
+																						</>
 																					) : (
-																						<ArrowDown className="h-3.5 w-3.5" />
-																					)
-																				) : (
-																					<ArrowUpDown className="h-3.5 w-3.5" />
-																				)}
-																			</span>
-																		</button>
-																	</ContextMenuTrigger>
-																	<ContextMenuContent>
-																		<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
-																			Orden ascendente
-																		</ContextMenuItem>
-																		<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
-																			Orden descendente
-																		</ContextMenuItem>
-																		<ContextMenuItem onClick={clearSort}>
-																			Quitar orden
-																		</ContextMenuItem>
-																	</ContextMenuContent>
-																</ContextMenu>
+																						<ArrowUpDown className="h-3.5 w-3.5" />
+																					)}
+																				</span>
+																			</button>
+																		</ContextMenuTrigger>
+																		<ContextMenuContent>
+																			<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
+																				Orden ascendente
+																			</ContextMenuItem>
+																			<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
+																				Orden descendente
+																			</ContextMenuItem>
+																			<ContextMenuItem onClick={clearSort}>
+																				Quitar orden
+																			</ContextMenuItem>
+																		</ContextMenuContent>
+																	</ContextMenu>
+																) : (
+																	<span className="flex w-full items-center justify-between gap-2 text-left text-muted-foreground">
+																		<span>{column.label}</span>
+																	</span>
+																)}
 															</div>
 															{enableResizing && column.enableResize !== false && (
 																<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id]} mode="fixed" />
@@ -432,43 +463,50 @@ export function FormTableContent({ className }: { className?: string }) {
 									const baseClassName = cn(
 										"relative px-4 py-4 text-left text-xs font-semibold uppercase outline outline-border bg-sidebar"
 									);
+									const isSortable = column.enableSort !== false;
 
 									return (
 										<th key={column.id} {...getStickyProps(column.id, baseClassName)}>
 											<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
-												<ContextMenu>
-													<ContextMenuTrigger asChild>
-														<button
-															type="button"
-															onClick={() => toggleSort(column.id)}
-															className="flex w-full items-center justify-between gap-2 text-left"
-														>
-															<span>{column.label}</span>
-															<span className="text-muted-foreground">
-																{sortState.columnId === column.id ? (
-																	sortState.direction === "asc" ? (
-																		<ArrowUp className="h-3.5 w-3.5" />
+												{isSortable ? (
+													<ContextMenu>
+														<ContextMenuTrigger asChild>
+															<button
+																type="button"
+																onClick={() => toggleSort(column.id)}
+																className="flex w-full items-center justify-between gap-2 text-left"
+															>
+																<span>{column.label}</span>
+																<span className="text-muted-foreground">
+																	{sortState.columnId === column.id ? (
+																		sortState.direction === "asc" ? (
+																			<ArrowUp className="h-3.5 w-3.5" />
+																		) : (
+																			<ArrowDown className="h-3.5 w-3.5" />
+																		)
 																	) : (
-																		<ArrowDown className="h-3.5 w-3.5" />
-																	)
-																) : (
-																	<ArrowUpDown className="h-3.5 w-3.5" />
-																)}
-															</span>
-														</button>
-													</ContextMenuTrigger>
-													<ContextMenuContent>
-														<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
-															Orden ascendente
-														</ContextMenuItem>
-														<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
-															Orden descendente
-														</ContextMenuItem>
-														<ContextMenuItem onClick={clearSort}>
-															Quitar orden
-														</ContextMenuItem>
-													</ContextMenuContent>
-												</ContextMenu>
+																		<ArrowUpDown className="h-3.5 w-3.5" />
+																	)}
+																</span>
+															</button>
+														</ContextMenuTrigger>
+														<ContextMenuContent>
+															<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
+																Orden ascendente
+															</ContextMenuItem>
+															<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
+																Orden descendente
+															</ContextMenuItem>
+															<ContextMenuItem onClick={clearSort}>
+																Quitar orden
+															</ContextMenuItem>
+														</ContextMenuContent>
+													</ContextMenu>
+												) : (
+													<span className="flex w-full items-center justify-between gap-2 text-left text-muted-foreground">
+														<span>{column.label}</span>
+													</span>
+												)}
 											</div>
 											{enableResizing && column.enableResize !== false && (
 												<ColumnResizer tableId={tableId} colIndex={colIndex} mode="fixed" />
@@ -499,52 +537,8 @@ export function FormTableContent({ className }: { className?: string }) {
 											/>
 										</tr>
 									)}
-{virtualRows.map((virtualRow) => {
-											const row = tableRows[virtualRow.index];
-											const rowId = row.original.id;
-											const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
-											// Create a stable string key of dirty cell IDs for memoization
-											const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
-											return (
-												<MemoizedTableRow
-													key={rowId}
-													row={row}
-													rowIndex={virtualRow.index}
-													columnsById={columnsById}
-													FieldComponent={FieldComponent}
-													highlightQuery={highlightQuery}
-													hasInitialSnapshot={hasInitialRow(rowId)}
-													hasAccordionRows={hasAccordionRows}
-													accordionRowConfig={accordionRowConfig}
-													accordionAlwaysOpen={accordionAlwaysOpen}
-													isExpanded={isRowExpanded(rowId)}
-													isRowDirty={rowIsDirty}
-													dirtyCellIds={dirtyCellIds}
-													showActionsColumn={showActionsColumn}
-													isCellDirty={isCellDirty}
-													getStickyProps={getStickyProps}
-													onToggleAccordion={toggleAccordionRow}
-													onDelete={handleDelete}
-													onClearCell={handleClearCell}
-													onRestoreCell={handleRestoreCell}
-													onCopyCell={handleCopyCell}
-													onCopyColumn={handleCopyColumn}
-													onCopyRow={handleCopyRow}
-												/>
-											);
-										})}
-									{paddingBottom > 0 && (
-										<tr>
-											<td
-												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
-												style={{ height: `${paddingBottom}px` }}
-											/>
-										</tr>
-									)}
-								</>
-							) : (
-// Non-virtualized rendering for small datasets
-									tableRows.map((row, rowIndex) => {
+									{virtualRows.map((virtualRow) => {
+										const row = tableRows[virtualRow.index];
 										const rowId = row.original.id;
 										const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
 										// Create a stable string key of dirty cell IDs for memoization
@@ -553,7 +547,7 @@ export function FormTableContent({ className }: { className?: string }) {
 											<MemoizedTableRow
 												key={rowId}
 												row={row}
-												rowIndex={rowIndex}
+												rowIndex={virtualRow.index}
 												columnsById={columnsById}
 												FieldComponent={FieldComponent}
 												highlightQuery={highlightQuery}
@@ -576,7 +570,51 @@ export function FormTableContent({ className }: { className?: string }) {
 												onCopyRow={handleCopyRow}
 											/>
 										);
-									})
+									})}
+									{paddingBottom > 0 && (
+										<tr>
+											<td
+												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
+												style={{ height: `${paddingBottom}px` }}
+											/>
+										</tr>
+									)}
+								</>
+							) : (
+								// Non-virtualized rendering for small datasets
+								tableRows.map((row, rowIndex) => {
+									const rowId = row.original.id;
+									const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
+									// Create a stable string key of dirty cell IDs for memoization
+									const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
+									return (
+										<MemoizedTableRow
+											key={rowId}
+											row={row}
+											rowIndex={rowIndex}
+											columnsById={columnsById}
+											FieldComponent={FieldComponent}
+											highlightQuery={highlightQuery}
+											hasInitialSnapshot={hasInitialRow(rowId)}
+											hasAccordionRows={hasAccordionRows}
+											accordionRowConfig={accordionRowConfig}
+											accordionAlwaysOpen={accordionAlwaysOpen}
+											isExpanded={isRowExpanded(rowId)}
+											isRowDirty={rowIsDirty}
+											dirtyCellIds={dirtyCellIds}
+											showActionsColumn={showActionsColumn}
+											isCellDirty={isCellDirty}
+											getStickyProps={getStickyProps}
+											onToggleAccordion={toggleAccordionRow}
+											onDelete={handleDelete}
+											onClearCell={handleClearCell}
+											onRestoreCell={handleRestoreCell}
+											onCopyCell={handleCopyCell}
+											onCopyColumn={handleCopyColumn}
+											onCopyRow={handleCopyRow}
+										/>
+									);
+								})
 							)}
 						</tbody>
 
@@ -608,7 +646,7 @@ export function FormTablePagination() {
 	const pageSizeLocked = typeof lockedPageSize === "number";
 	const allowAddRows = config.allowAddRows !== false;
 	const isLoading = isFetching || isTransitioning;
-	
+
 	return (
 		<>
 			<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
@@ -639,6 +677,7 @@ export function FormTablePagination() {
 					{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
 				</div>
 				<div className="flex items-center gap-2">
+					{config.footerActions}
 					{allowAddRows && (
 						<Button type="button" variant="outline" size="sm" onClick={actions.addRow}>
 							Agregar fila vacía
@@ -667,31 +706,31 @@ export function FormTablePagination() {
 					</Button>
 				</div>
 				<div className="flex items-center gap-2">
-<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
-					disabled={!hasPreviousPage || isLoading}
-					className="gap-1"
-				>
-					<ChevronLeft className="h-4 w-4" />
-					Anterior
-				</Button>
-				<span className="text-xs text-muted-foreground">
-					Página {page} de {totalPages}
-				</span>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					onClick={() => startTransition(() => setPage((prev) => prev + 1))}
-					disabled={!hasNextPage || isLoading}
-					className="gap-1"
-				>
-					Siguiente
-					<ChevronRight className="h-4 w-4" />
-				</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
+						disabled={!hasPreviousPage || isLoading}
+						className="gap-1"
+					>
+						<ChevronLeft className="h-4 w-4" />
+						Anterior
+					</Button>
+					<span className="text-xs text-muted-foreground">
+						Página {page} de {totalPages}
+					</span>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => startTransition(() => setPage((prev) => prev + 1))}
+						disabled={!hasNextPage || isLoading}
+						className="gap-1"
+					>
+						Siguiente
+						<ChevronRight className="h-4 w-4" />
+					</Button>
 				</div>
 			</div>
 
@@ -854,7 +893,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	useEffect(() => {
 		setIsServerPaging(Boolean(fetchRowsFn));
 	}, [fetchRowsFn]);
-	const defaultTabFilters: TabFilterOption<Row>[] = [{ id: "all", label: "Todas" }];
+	const defaultTabFilters = useMemo<TabFilterOption<Row>[]>(() => [{ id: "all", label: "Todas" }], []);
 	const tabFilters = Array.isArray(config.tabFilters) ? config.tabFilters : defaultTabFilters;
 	const hasTabFilters = Array.isArray(config.tabFilters) && tabFilters.length > 0;
 	const searchPlaceholder = config.searchPlaceholder ?? "Buscar...";
@@ -881,7 +920,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	useEffect(() => {
 		setActiveTab(tabFilters[0]?.id ?? null);
 	}, [tabFilters]);
-	const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 	const createFiltersRef = useRef(config.createFilters);
 	createFiltersRef.current = config.createFilters;
 	const [filters, setFilters] = useState<Filters | undefined>(() => config.createFilters?.());
@@ -901,14 +939,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setFilters(initialFilters);
 		setFiltersDraft(initialFilters);
 	}, [TABLE_ID, hasFilters]);
-	// Sync draft with applied filters when sheet opens
-	const prevIsFiltersOpenRef = useRef(isFiltersOpen);
+	// Keep filters draft in sync with applied filters
 	useEffect(() => {
-		const justOpened = isFiltersOpen && !prevIsFiltersOpenRef.current;
-		prevIsFiltersOpenRef.current = isFiltersOpen;
-		if (!justOpened || !filters) return;
-		setFiltersDraft(filters);
-	}, [isFiltersOpen, filters]);
+		if (!filters) return;
+		setFiltersDraft((prev) => (prev === filters ? prev : filters));
+	}, [filters]);
 	const [sortState, setSortState] = useState<SortState>({ columnId: null, direction: "asc" });
 	const [colWidths, setColWidths] = useState<Record<number, number>>(() => {
 		const initialWidths: Record<number, number> = {};
@@ -1144,7 +1179,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const { baseFilteredRows, tabCounts } = useMemo(() => {
 		const applyFilters = config.applyFilters;
 		const hasAdvancedFilters = applyFilters && typeof filters !== "undefined";
-		
+
 		// Single pass: apply search + advanced filters together
 		const filtered: Row[] = [];
 		for (const row of rows) {
@@ -1159,13 +1194,13 @@ export function FormTable<Row extends FormTableRow, Filters>({
 				});
 				if (!matchesSearch) continue;
 			}
-			
+
 			// Advanced filter
 			if (hasAdvancedFilters && !applyFilters(row, filters)) continue;
-			
+
 			filtered.push(row);
 		}
-		
+
 		// Compute tab counts from the filtered rows (single iteration)
 		const counts: Record<string, number> = {};
 		for (const tab of tabFilters) {
@@ -1179,7 +1214,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 				counts[tab.id] = filtered.length;
 			}
 		}
-		
+
 		return { baseFilteredRows: filtered, tabCounts: counts };
 	}, [rows, normalizedSearch, columns, config.applyFilters, filters, tabFilters]);
 
@@ -1195,14 +1230,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		return baseFilteredRows.filter(currentTab.predicate);
 	}, [baseFilteredRows, activeTab, tabFilters, hasTabFilters]);
 
+	const enableClientSort = config.enableClientSort !== false;
 	const sortedRows = useMemo(() => {
-		if (!useClientPagination || !sortState.columnId) return tabFilteredRows;
+		if (!enableClientSort || !sortState.columnId) return tabFilteredRows;
 		const column = columns.find((col) => col.id === sortState.columnId);
 		if (!column) return tabFilteredRows;
 		const comparator = column.sortFn ?? defaultSortByField<Row>(column.field);
 		const sorted = [...tabFilteredRows].sort((a, b) => comparator(a, b));
 		return sortState.direction === "asc" ? sorted : sorted.reverse();
-	}, [tabFilteredRows, sortState, useClientPagination, columns]);
+	}, [tabFilteredRows, sortState, enableClientSort, columns]);
 
 	const activeFilterCount = useMemo(() => {
 		if (!config.countActiveFilters || typeof filters === "undefined") return 0;
@@ -1354,7 +1390,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const handleApplyAdvancedFilters = useCallback(() => {
 		if (!hasFilters || typeof filtersDraft === "undefined") return;
 		setFilters(filtersDraft);
-		setIsFiltersOpen(false);
 	}, [filtersDraft, hasFilters]);
 
 	const handleResetAdvancedFilters = useCallback(() => {
@@ -1365,13 +1400,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setFiltersDraft(initial);
 	}, [hasFilters]);
 
-	const renderFiltersContent =
-		isFiltersOpen && typeof filtersDraft !== "undefined" && config.renderFilters
-			? config.renderFilters({
-				filters: filtersDraft,
-				onChange: (updater) => setFiltersDraft((prev) => updater(prev ?? filtersDraft)),
-			})
-			: null;
 
 	const toggleSort = useCallback((columnId: string) => {
 		setSortState((prev) => {
@@ -1625,10 +1653,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			enabled: hasFilters,
 			value: filters,
 			draft: filtersDraft,
-			isOpen: isFiltersOpen,
-			setIsOpen: setIsFiltersOpen,
 			setDraft: (updater) => setFiltersDraft((prev) => updater(prev)),
-			renderContent: renderFiltersContent,
 			activeCount: activeFilterCount,
 			reset: handleResetAdvancedFilters,
 			apply: handleApplyAdvancedFilters,
@@ -1664,23 +1689,23 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			setActiveTab,
 			counts: tabCounts,
 		},
-pagination: {
-		page,
-		setPage,
-		pageSize,
-		setPageSize: handleSetPageSize,
-		lockedPageSize,
-		hasNextPage,
-		hasPreviousPage,
-		totalPages,
-		totalRowCount,
-		visibleRowCount,
-		datasetTotalCount,
-		options: paginationOptions,
-		isServerPaging,
-		isFetching: isFetchingServerRows,
-		isTransitioning: isPageSizeTransitioning,
-	},
+		pagination: {
+			page,
+			setPage,
+			pageSize,
+			setPageSize: handleSetPageSize,
+			lockedPageSize,
+			hasNextPage,
+			hasPreviousPage,
+			totalPages,
+			totalRowCount,
+			visibleRowCount,
+			datasetTotalCount,
+			options: paginationOptions,
+			isServerPaging,
+			isFetching: isFetchingServerRows,
+			isTransitioning: isPageSizeTransitioning,
+		},
 		meta: {
 			hasUnsavedChanges,
 			isSaving,

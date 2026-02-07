@@ -126,7 +126,7 @@ export function FileTreeSidebar({
 				<div className="space-y-1.5">
 					<div className="flex items-center gap-2 text-xs text-stone-500">
 						<Table2 className="w-3.5 h-3.5 text-amber-600" />
-						<span>Extracción OCR</span>
+						<span>Extracción de datos</span>
 					</div>
 					<div className="flex items-center gap-2 text-xs text-stone-500">
 						<Table2 className="w-3.5 h-3.5 text-blue-600" />
@@ -134,7 +134,7 @@ export function FileTreeSidebar({
 					</div>
 					<div className="flex items-center gap-2 text-xs text-stone-500">
 						<Table2 className="w-3.5 h-3.5 text-purple-600" />
-						<span>Mixta (OCR + manual)</span>
+						<span>Mixta (extracción + manual)</span>
 					</div>
 				</div>
 			</div>

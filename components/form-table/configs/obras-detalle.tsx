@@ -224,6 +224,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		cellType: "text",
 		width: 50,
 		enableResize: false,
+		enableSort: false,
 		// sortFn: (a, b) => toNumber(a.n) - toNumber(b.n),
 		// searchFn: (row, query) => String(row.n ?? "").includes(query),
 		// validators: {

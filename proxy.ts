@@ -17,6 +17,7 @@ const sentrySources = [
 	"https://*.ingest.sentry.io",
 	"https://*.ingest.us.sentry.io",
 ];
+const vercelSources = ["https://va.vercel-scripts.com"];
 
 // WebSocket sources
 const wsSources = ["wss://*.supabase.co"];
@@ -34,7 +35,7 @@ const securityHeaders: Record<string, string> = {
 	"referrer-policy": "strict-origin-when-cross-origin",
 	"content-security-policy": [
 		`default-src ${trustedSources.join(" ")}`,
-		`script-src ${trustedSources.join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com`,
+		`script-src ${trustedSources.join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com ${vercelSources.join(" ")}`,
 		`style-src ${trustedSources.join(" ")} 'unsafe-inline'`,
 		`img-src ${trustedSources.join(" ")} data: blob:`,
 		`font-src ${trustedSources.join(" ")}`,
@@ -86,7 +87,8 @@ export async function proxy(req: NextRequest) {
 	}
 
 	let rateLimitResult = null;
-	if (rateLimitEnabled && req.nextUrl.pathname.startsWith("/api")) {
+	const isDocumentsTree = req.nextUrl.pathname.includes("/documents-tree");
+	if (rateLimitEnabled && req.nextUrl.pathname.startsWith("/api") && !isDocumentsTree) {
 		const ip = getClientIp(req);
 		if (ip) {
 			const identifier = `${ip}:${req.nextUrl.pathname}`;

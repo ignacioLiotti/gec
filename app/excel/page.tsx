@@ -399,15 +399,18 @@ export default function ExcelPage() {
 					{/* <p className="text-sm uppercase tracking-wide text-orange-800/80 -mb-1">
 
 					</p> */}
-					<h1 className="text-3xl font-bold text-foreground mb-2">
-						Panel de obras
-					</h1>
+					<div className="w-full flex items-end justify-between gap-3 mb-2">
+						<h1 className="text-5xl my-2 font-bold text-foreground">
+							Panel de obras
+						</h1>
+						<FormTableTabs className="justify-start" />
+					</div>
 					{/* <p className="text-sm text-slate-600">
 						Filtrá, buscá y actualizá tus obras directamente desde esta vista.
 					</p> */}
 
-					<div className="w-full flex justify-between items-center gap-3 relative">
-						<FormTableTabs className="justify-end w-full items-end" />
+					<div className="w-full flex items-center justify-between gap-2 relative">
+						<FormTableToolbar />
 						<div className="flex items-center gap-2">
 							<input
 								ref={inputRef}
@@ -436,7 +439,6 @@ export default function ExcelPage() {
 									Generar Reporte
 								</Link>
 							</Button>
-							<FormTableToolbar />
 						</div>
 					</div>
 					<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] " />

@@ -1225,46 +1225,51 @@ export default function ObraDetailPage() {
 						>
 							<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
 								<ExcelPageTabs />
-								<div className="flex flex-wrap items-center gap-2 justify-end">
-
-									<motion.div
-										initial={{ opacity: 0 }}
-										animate={{ opacity: 1 }}
-										className="flex justify-end "
-									>
+								{activeTab === "general" && (
+									<div className="flex flex-wrap items-center gap-2 justify-end">
+										<motion.div
+											initial={{ opacity: 0 }}
+											animate={{ opacity: 1 }}
+											className="flex justify-end"
+										>
+											<div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-0.5">
+												<Button
+													type="button"
+													variant={!isGeneralTabEditMode ? "default" : "ghost"}
+													size="sm"
+													className="gap-2 h-8 px-3"
+													aria-pressed={!isGeneralTabEditMode}
+													onClick={() => setIsGeneralTabEditMode(false)}
+												>
+													<Eye className="h-4 w-4" />
+													<span className="hidden sm:inline">Vista previa</span>
+												</Button>
+												<Button
+													type="button"
+													variant={isGeneralTabEditMode ? "default" : "ghost"}
+													size="sm"
+													className="gap-2 h-8 px-3"
+													aria-pressed={isGeneralTabEditMode}
+													onClick={() => setIsGeneralTabEditMode(true)}
+												>
+													<Pencil className="h-4 w-4" />
+													<span className="hidden sm:inline">Edición</span>
+												</Button>
+											</div>
+										</motion.div>
 										<Button
 											type="button"
-											variant="outline"
+											variant={isMemoriaOpen ? "default" : "outline"}
 											size="sm"
-											onClick={() => setIsGeneralTabEditMode(!isGeneralTabEditMode)}
+											onClick={() => setIsMemoriaOpen((open) => !open)}
 											className="gap-2"
-											aria-label={isGeneralTabEditMode ? "Modo Edición" : "Modo Vista Previa"}
+											aria-label="Memoria"
 										>
-											{isGeneralTabEditMode ? (
-												<>
-													<Pencil className="h-4 w-4" />
-													<span className="hidden sm:inline">Modo Edición</span>
-												</>
-											) : (
-												<>
-													<Eye className="h-4 w-4" />
-													<span className="hidden sm:inline">Modo Vista Previa</span>
-												</>
-											)}
+											<StickyNote className="h-4 w-4" />
+											<span className="hidden sm:inline">Memoria</span>
 										</Button>
-									</motion.div>
-									<Button
-										type="button"
-										variant={isMemoriaOpen ? "default" : "outline"}
-										size="sm"
-										onClick={() => setIsMemoriaOpen((open) => !open)}
-										className="gap-2"
-										aria-label="Memoria"
-									>
-										<StickyNote className="h-4 w-4" />
-										<span className="hidden sm:inline">Memoria</span>
-									</Button>
-								</div>
+									</div>
+								)}
 							</div>
 
 							<ObraGeneralTab

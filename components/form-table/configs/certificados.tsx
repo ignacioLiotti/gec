@@ -3,6 +3,8 @@
 import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FilterSection, RangeInputGroup, TextFilterInput } from "@/components/form-table/filter-components";
+import { Building2, CalendarDays, DollarSign, ToggleLeft, Type } from "lucide-react";
 import { FormTableConfig, FormTableRow, FilterRendererProps, FetchRowsArgs, FetchRowsResult, SaveRowsArgs } from "../types";
 
 export type CertificadoRow = FormTableRow & {
@@ -248,43 +250,50 @@ function FiltersContent({ filters, onChange }: FilterRendererProps<CertificadosF
 		[onChange]
 	);
 
+	const montoActive = [filters.montoMin, filters.montoMax].filter(Boolean).length;
+	const enteActive = filters.enteContains.trim().length > 0 ? 1 : 0;
+	const estadoActive = [filters.facturado, filters.cobrado].filter((v) => v !== "all").length;
+	const fechasActive = [
+		filters.fechaFacturacionMin,
+		filters.fechaFacturacionMax,
+		filters.vencimientoMin,
+		filters.vencimientoMax,
+		filters.fechaPagoMin,
+		filters.fechaPagoMax,
+	].filter(Boolean).length;
+	const conceptoActive = filters.conceptoContains.trim().length > 0 ? 1 : 0;
+
 	return (
-		<div className="space-y-5">
-			<div className="rounded-lg border p-4 space-y-3">
-				<p className="text-sm font-semibold">Monto certificado</p>
-				<div className="flex items-center gap-2">
-					<Input
-						type="number"
-						placeholder="Mínimo"
-						value={filters.montoMin}
-						onChange={(event) => update("montoMin", event.target.value)}
-					/>
-					<span className="text-muted-foreground">a</span>
-					<Input
-						type="number"
-						placeholder="Máximo"
-						value={filters.montoMax}
-						onChange={(event) => update("montoMax", event.target.value)}
-					/>
-				</div>
-			</div>
-
-			<div className="rounded-lg border p-4 space-y-3">
-				<p className="text-sm font-semibold">Ente contratante</p>
-				<Input
-					placeholder="Contiene..."
-					value={filters.enteContains}
-					onChange={(event) => update("enteContains", event.target.value)}
+		<div className="space-y-3">
+			<FilterSection title="Monto certificado" icon={DollarSign} activeCount={montoActive} defaultOpen>
+				<RangeInputGroup
+					label="Monto"
+					minValue={filters.montoMin}
+					maxValue={filters.montoMax}
+					onMinChange={(value) => update("montoMin", value)}
+					onMaxChange={(value) => update("montoMax", value)}
+					minPlaceholder="Mínimo"
+					maxPlaceholder="Máximo"
 				/>
-			</div>
+			</FilterSection>
 
-			<div className="rounded-lg border p-4 space-y-4">
-				<ToggleGroup label="Facturado" value={filters.facturado} onChange={(value) => update("facturado", value)} />
-				<ToggleGroup label="Cobrado" value={filters.cobrado} onChange={(value) => update("cobrado", value)} />
-			</div>
+			<FilterSection title="Ente contratante" icon={Building2} activeCount={enteActive} defaultOpen>
+				<TextFilterInput
+					label="Contiene"
+					value={filters.enteContains}
+					onChange={(value) => update("enteContains", value)}
+					placeholder="Buscar ente..."
+				/>
+			</FilterSection>
 
-			<div className="rounded-lg border p-4 space-y-3">
-				<p className="text-sm font-semibold">Fechas</p>
+			<FilterSection title="Estado" icon={ToggleLeft} activeCount={estadoActive} defaultOpen>
+				<div className="space-y-4">
+					<ToggleGroup label="Facturado" value={filters.facturado} onChange={(value) => update("facturado", value)} />
+					<ToggleGroup label="Cobrado" value={filters.cobrado} onChange={(value) => update("cobrado", value)} />
+				</div>
+			</FilterSection>
+
+			<FilterSection title="Fechas" icon={CalendarDays} activeCount={fechasActive} defaultOpen>
 				<div className="space-y-3">
 					<div className="space-y-1">
 						<p className="text-xs text-muted-foreground uppercase">Facturación</p>
@@ -335,16 +344,16 @@ function FiltersContent({ filters, onChange }: FilterRendererProps<CertificadosF
 						</div>
 					</div>
 				</div>
-			</div>
+			</FilterSection>
 
-			<div className="rounded-lg border p-4 space-y-3">
-				<p className="text-sm font-semibold">Concepto</p>
-				<Input
-					placeholder="Contiene..."
+			<FilterSection title="Concepto" icon={Type} activeCount={conceptoActive} defaultOpen>
+				<TextFilterInput
+					label="Contiene"
 					value={filters.conceptoContains}
-					onChange={(event) => update("conceptoContains", event.target.value)}
+					onChange={(value) => update("conceptoContains", value)}
+					placeholder="Buscar concepto..."
 				/>
-			</div>
+			</FilterSection>
 		</div>
 	);
 }

@@ -177,45 +177,53 @@ export function AddRowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto px-4">
-        <DialogHeader className="px-0">
-          <DialogTitle>Agregar fila</DialogTitle>
-          <DialogDescription>
-            Completá los campos para agregar una nueva fila a la tabla.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto p-0">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle>Agregar fila</DialogTitle>
+            <DialogDescription>
+              Completá los campos para agregar una nueva fila a la tabla.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          {columns.map((column) => (
-            <div key={column.id} className="space-y-2">
-              <Label htmlFor={column.fieldKey} className="text-sm font-medium">
-                {column.label}
-                {column.required && <span className="text-red-500 ml-1">*</span>}
-              </Label>
-              {renderField(column)}
-            </div>
-          ))}
-        </div>
+          <div className="grid gap-4 px-6 py-5">
+            {columns.map((column) => (
+              <div key={column.id} className="grid gap-2">
+                <Label htmlFor={column.fieldKey} className="text-sm font-medium">
+                  {column.label}
+                  {column.required && <span className="text-destructive ml-1">*</span>}
+                </Label>
+                {renderField(column)}
+              </div>
+            ))}
+          </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSubmitting}
-          >
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Guardando...
-              </>
-            ) : (
-              "Agregar fila"
-            )}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="px-6 pb-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Agregar fila"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
