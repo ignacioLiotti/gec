@@ -128,24 +128,184 @@
 	}
 }
 
-/* PDF Preview Mode Styles - Matches print output */
+/* ================================================================== */
+/*  Report Paper – Skeuomorphic / Governmental Document Style          */
+/* ================================================================== */
+
+/* The paper sheet itself */
+.report-paper {
+	width: 210mm;
+	min-height: 297mm;
+	background: #fcfaf6;
+	color: #1c1917;
+	box-shadow:
+		0 1px 3px rgba(0, 0, 0, 0.08),
+		0 4px 12px rgba(0, 0, 0, 0.06),
+		inset 0 0 60px 0 rgba(180, 170, 155, 0.07);
+	border: 1px solid #d5cfc5;
+	position: relative;
+	font-size: 11px;
+	line-height: 1.6;
+}
+
+/* Subtle paper texture via repeating gradient */
+.report-paper::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background:
+		repeating-linear-gradient(
+			0deg,
+			transparent,
+			transparent 27px,
+			rgba(180, 170, 155, 0.06) 27px,
+			rgba(180, 170, 155, 0.06) 28px
+		);
+	pointer-events: none;
+	z-index: 0;
+}
+
+.report-paper > div {
+	position: relative;
+	z-index: 1;
+}
+
+/* ---- Decorative borders ---- */
+.report-border-top {
+	height: 6px;
+	background: #3d3a36;
+	margin: 0 0 2px 0;
+	border-bottom: 2px solid #b0a898;
+}
+
+.report-footer-line {
+	margin-top: 32px;
+	height: 1px;
+	background: linear-gradient(to right, transparent, #b0a898, transparent);
+}
+
+/* ---- Document header ---- */
+.report-header-block {
+	padding: 28px 36px 20px;
+	text-align: center;
+}
+
+.report-company {
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: #2c2926;
+	text-transform: uppercase;
+}
+
+.report-divider {
+	width: 80px;
+	height: 1px;
+	background: #a09888;
+	margin: 10px auto;
+}
+
+.report-meta {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	padding: 0 4px;
+}
+
+.report-title-text {
+	font-size: 13px;
+	color: #5c554d;
+	font-style: italic;
+}
+
+.report-date-text {
+	font-size: 10px;
+	color: #8a8078;
+	letter-spacing: 0.06em;
+}
+
+/* ---- Report body (table area) ---- */
+.report-body {
+	padding: 0 36px 28px;
+}
+
+/* ---- Table section with group title ---- */
+.report-table-section {
+	margin-bottom: 24px;
+	break-inside: avoid;
+}
+
+.report-group-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #3d3a36;
+	padding-bottom: 6px;
+	margin-bottom: 8px;
+	border-bottom: 1px solid #c5bfb6;
+	letter-spacing: 0.02em;
+}
+
+/* ---- The table ---- */
+.report-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 10.5px;
+	line-height: 1.5;
+}
+
+.report-th {
+	padding: 7px 10px;
+	font-weight: 700;
+	font-size: 9px;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: #5c554d;
+	background: #ece8e0;
+	border-bottom: 2px solid #b0a898;
+	border-top: 1px solid #b0a898;
+	white-space: nowrap;
+}
+
+.report-th:hover {
+	background: #e4dfd6;
+}
+
+.report-td {
+	padding: 5px 10px;
+	border-bottom: 1px solid #ddd7ce;
+	vertical-align: top;
+	color: #2c2926;
+}
+
+.report-tr-alt {
+	background: rgba(180, 170, 155, 0.06);
+}
+
+/* Totals / aggregation row */
+.report-totals-row {
+	background: #ece8e0 !important;
+	font-weight: 700;
+	border-top: 2px solid #a09888;
+}
+
+.report-totals-row .report-td {
+	padding: 7px 10px;
+	border-bottom: none;
+	color: #2c2926;
+}
+
+/* ---- Hide non-print elements inside paper ---- */
+.report-paper .no-print {
+	display: none !important;
+}
+
+/* ---- PDF preview class (compatibility) ---- */
 .pdf-preview {
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-	font-size: 11px;
-	line-height: 1.5;
-	color: #1a1a1a;
-	background: white;
 }
 
 .pdf-preview .no-print {
 	display: none !important;
-}
-
-.pdf-preview table {
-	width: 100%;
-	border-collapse: collapse;
-	margin-bottom: 24px;
-	font-size: 0.95em;
 }
 
 .pdf-preview thead {
@@ -158,38 +318,6 @@
 
 .pdf-preview tfoot {
 	display: table-footer-group;
-}
-
-.pdf-preview th {
-	background-color: #f3f4f6;
-	font-weight: 600;
-	text-align: left;
-	padding: 10px 12px;
-	border-bottom: 2px solid #d1d5db;
-	font-size: 0.85em;
-	text-transform: uppercase;
-	letter-spacing: 0.025em;
-	color: #6b7280;
-}
-
-.pdf-preview td {
-	padding: 8px 12px;
-	border-bottom: 1px solid #e5e7eb;
-	vertical-align: top;
-}
-
-.pdf-preview tbody tr:nth-child(even) {
-	background-color: #f9fafb;
-}
-
-.pdf-preview .border-t-2 {
-	border-top: 2px solid #9ca3af;
-	background-color: #e5e7eb !important;
-	font-weight: 600;
-}
-
-.pdf-preview .border-t-2 td {
-	padding: 10px 12px;
 }
 
 /* Form Table scroll performance optimizations */

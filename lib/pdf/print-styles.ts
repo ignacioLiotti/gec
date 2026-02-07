@@ -1,6 +1,6 @@
 /**
  * Print-optimized CSS for PDF generation
- * Ensures proper pagination, table header repetition, and consistent styling
+ * Governmental / paper-skeuomorphic aesthetic
  */
 
 export type PrintStylesOptions = {
@@ -16,9 +16,9 @@ export type PrintStylesOptions = {
 
 const defaultOptions: Required<PrintStylesOptions> = {
 	baseFontSize: 11,
-	primaryColor: "#1a1a1a",
-	mutedColor: "#6b7280",
-	alternateRowBg: "#f9fafb",
+	primaryColor: "#2c2926",
+	mutedColor: "#5c554d",
+	alternateRowBg: "rgba(180, 170, 155, 0.06)",
 };
 
 /**
@@ -38,7 +38,7 @@ export function generatePrintStyles(options: PrintStylesOptions = {}): string {
 html, body {
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 	font-size: ${opts.baseFontSize}px;
-	line-height: 1.5;
+	line-height: 1.6;
 	color: ${opts.primaryColor};
 	background: white;
 	-webkit-print-color-adjust: exact;
@@ -61,28 +61,34 @@ html, body {
 	break-inside: avoid;
 }
 
-/* Report header styles */
+/* Report header styles – formal / governmental */
 .report-header {
 	margin-bottom: 24px;
 	padding-bottom: 16px;
-	border-bottom: 2px solid ${opts.primaryColor};
+	border-bottom: 3px double ${opts.primaryColor};
+	text-align: center;
 }
 
 .report-header .company-name {
 	font-size: 1.75em;
 	font-weight: 700;
-	margin-bottom: 4px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	margin-bottom: 6px;
 }
 
 .report-header .report-title {
-	font-size: 1.25em;
+	font-size: 1.15em;
 	color: ${opts.mutedColor};
+	font-style: italic;
 	margin-bottom: 4px;
 }
 
 .report-header .report-date {
-	font-size: 0.9em;
+	font-size: 0.85em;
 	color: ${opts.mutedColor};
+	letter-spacing: 0.06em;
+	font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
 }
 
 /* Table styles */
@@ -93,40 +99,39 @@ table {
 	font-size: 0.95em;
 }
 
-/* CRITICAL: This makes table headers repeat on each page */
+/* Table headers repeat on each printed page */
 thead {
 	display: table-header-group;
 }
 
-/* Ensure tbody doesn't break weirdly */
 tbody {
 	display: table-row-group;
 }
 
-/* Footer group for totals */
 tfoot {
 	display: table-footer-group;
 }
 
 th {
-	background-color: #f3f4f6;
-	font-weight: 600;
+	background-color: #ece8e0;
+	font-weight: 700;
 	text-align: left;
-	padding: 10px 12px;
-	border-bottom: 2px solid #d1d5db;
-	font-size: 0.85em;
+	padding: 7px 10px;
+	border-bottom: 2px solid #b0a898;
+	border-top: 1px solid #b0a898;
+	font-size: 0.8em;
 	text-transform: uppercase;
-	letter-spacing: 0.025em;
+	letter-spacing: 0.08em;
 	color: ${opts.mutedColor};
 }
 
 td {
-	padding: 8px 12px;
-	border-bottom: 1px solid #e5e7eb;
+	padding: 5px 10px;
+	border-bottom: 1px solid #ddd7ce;
 	vertical-align: top;
 }
 
-/* CRITICAL: Prevent rows from breaking across pages */
+/* Prevent rows from breaking across pages */
 tr {
 	page-break-inside: avoid;
 	break-inside: avoid;
@@ -137,11 +142,6 @@ tbody tr:nth-child(even) {
 	background-color: ${opts.alternateRowBg};
 }
 
-/* Hover is not needed for print, but won't hurt */
-tbody tr:hover {
-	background-color: #f3f4f6;
-}
-
 /* Text alignment utilities */
 .text-left { text-align: left; }
 .text-center { text-align: center; }
@@ -149,42 +149,49 @@ tbody tr:hover {
 
 /* Font weight utilities */
 .font-mono { font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace; }
-.font-bold { font-weight: 600; }
-.font-semibold { font-weight: 500; }
+.font-bold { font-weight: 700; }
+.font-semibold { font-weight: 600; }
 
 /* Aggregation/totals row */
-.totals-row {
-	background-color: #e5e7eb !important;
-	font-weight: 600;
-	border-top: 2px solid #9ca3af;
+.totals-row,
+.report-totals-row {
+	background-color: #ece8e0 !important;
+	font-weight: 700;
+	border-top: 2px solid #a09888;
 }
 
-.totals-row td {
-	padding: 10px 12px;
+.totals-row td,
+.report-totals-row td {
+	padding: 7px 10px;
+	border-bottom: none;
 }
 
 /* Group section styles */
-.group-section {
-	margin-bottom: 32px;
+.group-section,
+.report-table-section {
+	margin-bottom: 28px;
 	page-break-inside: avoid;
 }
 
-.group-section:last-child {
+.group-section:last-child,
+.report-table-section:last-child {
 	margin-bottom: 0;
 }
 
-.group-title {
-	font-size: 1.15em;
+.group-title,
+.report-group-title {
+	font-size: 1.1em;
 	font-weight: 600;
-	margin-bottom: 12px;
+	margin-bottom: 8px;
 	padding-bottom: 6px;
-	border-bottom: 1px solid #d1d5db;
+	border-bottom: 1px solid #c5bfb6;
+	letter-spacing: 0.02em;
 }
 
 /* Table container with border */
 .table-container {
-	border: 1px solid #d1d5db;
-	border-radius: 6px;
+	border: 1px solid #c5bfb6;
+	border-radius: 4px;
 	overflow: hidden;
 }
 
@@ -196,13 +203,13 @@ tbody tr:hover {
 
 /* Boolean display */
 .boolean-yes {
-	color: #059669;
-	font-weight: 500;
+	color: #3d7a45;
+	font-weight: 600;
 }
 
 .boolean-no {
-	color: #dc2626;
-	font-weight: 500;
+	color: #9c3a3a;
+	font-weight: 600;
 }
 
 /* Empty state */
@@ -231,6 +238,13 @@ img {
 .screen-only {
 	display: none !important;
 }
+
+/* Footer rule for end-of-document */
+.report-footer-line {
+	margin-top: 32px;
+	height: 1px;
+	background: #b0a898;
+}
 `.trim();
 }
 
@@ -256,10 +270,3 @@ export function wrapHtmlForPrint(
 </body>
 </html>`;
 }
-
-
-
-
-
-
-
