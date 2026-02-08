@@ -1,0 +1,27 @@
+{
+  "id": "pmc_v1",
+  "name": "Presupuesto -> Medicion -> Certificado",
+  "runKey": "period",
+  "steps": [
+    {
+      "id": "budget_base",
+      "type": "input",
+      "required": true,
+      "docKinds": ["budget_excel", "budget_pdf_extracted"]
+    },
+    {
+      "id": "measurement",
+      "type": "generate",
+      "requires": ["budget_base"],
+      "outputs": ["measurement_table"],
+      "mode": "human_input"
+    },
+    {
+      "id": "certificate",
+      "type": "generate",
+      "requires": ["measurement"],
+      "outputs": ["certificate_pdf", "certificate_xlsx"],
+      "mode": "auto"
+    }
+  ]
+}
