@@ -77,15 +77,15 @@ function SimplePieChart({ data }: { data: PieSlice[] }) {
   const total = data.reduce((acc, entry) => acc + entry.value, 0);
   const segments = total
     ? data.reduce<{ stops: string[]; current: number }>(
-        (acc, entry) => {
-          const start = acc.current;
-          const end = start + (entry.value / total) * 100;
-          acc.stops.push(`${entry.fill} ${start}% ${end}%`);
-          acc.current = end;
-          return acc;
-        },
-        { stops: [], current: 0 }
-      ).stops
+      (acc, entry) => {
+        const start = acc.current;
+        const end = start + (entry.value / total) * 100;
+        acc.stops.push(`${entry.fill} ${start}% ${end}%`);
+        acc.current = end;
+        return acc;
+      },
+      { stops: [], current: 0 }
+    ).stops
     : ["#e5e7eb 0% 100%"];
 
   return (
@@ -255,7 +255,7 @@ export default function Home() {
     const totalContractValue = obrasData.reduce((sum, o) => sum + (o.contratoMasAmpliaciones || 0), 0);
     const totalCertifiedValue = obrasData.reduce((sum, o) => sum + (o.certificadoALaFecha || 0), 0);
     const totalPendingValue = obrasData.reduce((sum, o) => sum + (o.saldoACertificar || 0), 0);
-    
+
     // Calculate obras at risk (time progress > work progress by more than 15%)
     const activeObras = obrasData.filter(o => o.porcentaje < 100);
     const obrasAtRisk = activeObras.filter(o => {
@@ -263,15 +263,15 @@ export default function Home() {
       return timeProgress > o.porcentaje + 15;
     }).length;
     const obrasOnTrack = inProgress - obrasAtRisk;
-    
+
     // Average time progress for active obras
     const avgTimeProgress = activeObras.length > 0
       ? activeObras.reduce((sum, o) => {
-          const timeProgress = o.plazoTotal > 0 ? (o.plazoTransc / o.plazoTotal) * 100 : 0;
-          return sum + timeProgress;
-        }, 0) / activeObras.length
+        const timeProgress = o.plazoTotal > 0 ? (o.plazoTransc / o.plazoTotal) * 100 : 0;
+        return sum + timeProgress;
+      }, 0) / activeObras.length
       : 0;
-    
+
     return {
       total,
       inProgress,
@@ -290,13 +290,11 @@ export default function Home() {
   // Get obras that need attention (behind schedule or low progress)
   const alertObras = useMemo(() => {
     if (!data?.obras) return [];
-    return data.obras
-      .filter(o => {
-        if (o.porcentaje >= 100) return false;
-        const timeProgress = o.plazoTotal > 0 ? (o.plazoTransc / o.plazoTotal) * 100 : 0;
-        return timeProgress > o.porcentaje + 10; // More than 10% behind
-      })
-      .slice(0, 3);
+    return data.obras.filter(o => {
+      if (o.porcentaje >= 100) return false;
+      const timeProgress = o.plazoTotal > 0 ? (o.plazoTransc / o.plazoTotal) * 100 : 0;
+      return timeProgress > o.porcentaje + 10; // More than 10% behind
+    });
   }, [data]);
 
   // Chart data: Progress distribution
@@ -311,9 +309,9 @@ export default function Home() {
     ];
     return ranges.map(range => ({
       name: range.name,
-      value: data.obras.filter(o => 
-        range.max === 100 
-          ? o.porcentaje >= 100 
+      value: data.obras.filter(o =>
+        range.max === 100
+          ? o.porcentaje >= 100
           : o.porcentaje >= range.min && o.porcentaje <= range.max
       ).length,
       fill: range.fill,
@@ -327,8 +325,8 @@ export default function Home() {
       .sort((a, b) => b.contratoMasAmpliaciones - a.contratoMasAmpliaciones)
       .slice(0, 5)
       .map(o => ({
-        name: o.designacionYUbicacion.length > 20 
-          ? o.designacionYUbicacion.substring(0, 20) + '...' 
+        name: o.designacionYUbicacion.length > 20
+          ? o.designacionYUbicacion.substring(0, 20) + '...'
           : o.designacionYUbicacion,
         contrato: o.contratoMasAmpliaciones / 1000000, // In millions
         certificado: o.certificadoALaFecha / 1000000,
@@ -521,7 +519,7 @@ export default function Home() {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="relative mb-8"
+          className="relative mb-3"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
@@ -615,8 +613,8 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
           >
-            <Card className="border-0 shadow-sm bg-card">
-              <CardContent className="p-4">
+            <Card className="border-0 shadow-sm bg-card py-0">
+              <CardContent className="py-3 px-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-wide">Obras Activas</p>
@@ -629,14 +627,14 @@ export default function Home() {
               </CardContent>
             </Card>
           </motion.div>
-          
+
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.15 }}
           >
-            <Card className="border-0 shadow-sm bg-card">
-              <CardContent className="p-4">
+            <Card className="border-0 shadow-sm bg-card py-0">
+              <CardContent className="py-3 px-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-wide">Completadas</p>
@@ -649,14 +647,14 @@ export default function Home() {
               </CardContent>
             </Card>
           </motion.div>
-          
+
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.2 }}
           >
-            <Card className="border-0 shadow-sm bg-card">
-              <CardContent className="p-4">
+            <Card className="border-0 shadow-sm bg-card py-0">
+              <CardContent className="py-3 px-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-wide">En Riesgo</p>
@@ -669,14 +667,14 @@ export default function Home() {
               </CardContent>
             </Card>
           </motion.div>
-          
+
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.25 }}
           >
-            <Card className="border-0 shadow-sm bg-card">
-              <CardContent className="p-4">
+            <Card className="border-0 shadow-sm bg-card py-0">
+              <CardContent className="py-3 px-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-wide">Avance Prom.</p>
@@ -791,9 +789,8 @@ export default function Home() {
                                 <div className="text-sm font-semibold tabular-nums">{obra.porcentaje}%</div>
                                 <div className="w-full bg-muted rounded-full h-1.5 mt-1">
                                   <div
-                                    className={`h-1.5 rounded-full transition-all ${
-                                      obra.porcentaje >= 100 ? 'bg-green-500' : isBehind ? 'bg-amber-500' : 'bg-primary'
-                                    }`}
+                                    className={`h-1.5 rounded-full transition-all ${obra.porcentaje >= 100 ? 'bg-green-500' : isBehind ? 'bg-amber-500' : 'bg-primary'
+                                      }`}
                                     style={{ width: `${obra.porcentaje}%` }}
                                   />
                                 </div>
@@ -826,7 +823,7 @@ export default function Home() {
                       <CardTitle className="text-sm font-medium text-amber-800">Requieren Atencion</CardTitle>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-2">
+                  <CardContent className="space-y-2 max-h-[260px] overflow-y-auto">
                     {alertObras.map((obra) => {
                       const timeProgress = obra.plazoTotal > 0 ? (obra.plazoTransc / obra.plazoTotal) * 100 : 0;
                       const delay = Math.round(timeProgress - obra.porcentaje);
@@ -854,7 +851,7 @@ export default function Home() {
             )}
 
             {/* Financial Summary */}
-            <motion.div
+            {/* <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.4, delay: 0.25 }}
@@ -878,7 +875,7 @@ export default function Home() {
                       <span className="text-sm font-semibold text-amber-600 tabular-nums">{formatCurrency(stats?.totalPendingValue || 0)}</span>
                     </div>
                   </div>
-                  
+
                   {stats && stats.totalContractValue > 0 && (
                     <div className="pt-2 border-t">
                       <div className="flex justify-between text-xs text-muted-foreground mb-2">
@@ -897,10 +894,10 @@ export default function Home() {
                   )}
                 </CardContent>
               </Card>
-            </motion.div>
+            </motion.div> */}
 
             {/* Status Distribution Pie Chart */}
-            {statusPieData.length > 0 && (
+            {/* {statusPieData.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -925,36 +922,32 @@ export default function Home() {
                   </CardContent>
                 </Card>
               </motion.div>
-            )}
-          </div>
-        </div>
+            )} */}
+            {obras.length > 0 && (
+              <div className="grid gap-6 lg:grid-cols-1 mt-6">
+                {/* Progress Distribution Chart */}
+                {progressDistributionData.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.35 }}
+                  >
+                    <Card className="border-0 shadow-sm bg-card">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Distribucion de Avance</CardTitle>
+                        <CardDescription className="text-xs">Obras por rango de progreso</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[200px]">
+                          <SimpleBarList data={progressDistributionData} labelSuffix=" obras" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )}
 
-        {/* Charts Row */}
-        {obras.length > 0 && (
-          <div className="grid gap-6 lg:grid-cols-2 mt-6">
-            {/* Progress Distribution Chart */}
-            {progressDistributionData.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.35 }}
-              >
-                <Card className="border-0 shadow-sm bg-card">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Distribucion de Avance</CardTitle>
-                    <CardDescription className="text-xs">Obras por rango de progreso</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-[200px]">
-                      <SimpleBarList data={progressDistributionData} labelSuffix=" obras" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-
-            {/* Top Obras by Value Chart */}
-            {topObrasByValueData.length > 0 && (
+                {/* Top Obras by Value Chart */}
+                {/* {topObrasByValueData.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -982,9 +975,13 @@ export default function Home() {
                   </CardContent>
                 </Card>
               </motion.div>
+            )} */}
+              </div>
             )}
           </div>
-        )}
+        </div>
+
+        {/* Charts Row */}
       </div>
     </div>
   );

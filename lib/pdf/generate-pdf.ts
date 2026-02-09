@@ -38,6 +38,11 @@ export async function generatePdf(
 		// Remove any elements marked as screen-only or no-print
 		clone.querySelectorAll(".screen-only, .no-print").forEach((el) => el.remove());
 
+		// Remove in-report header decorations so we don't duplicate the PDF header
+		clone
+			.querySelectorAll(".report-border-top, .report-header-block, .report-footer-line")
+			.forEach((el) => el.remove());
+
 		// Remove any interactive elements (inputs that should show their values)
 		clone.querySelectorAll("input, button").forEach((el) => {
 			if (el instanceof HTMLInputElement) {

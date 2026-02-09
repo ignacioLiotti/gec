@@ -128,6 +128,7 @@ export const certificadosReportConfig: ReportConfig<CertificadoRow, CertificadoF
 	id: "certificados",
 	title: "Certificados",
 	description: "Reporte de certificados",
+	templateCategory: "certificados",
 	columns,
 	groupByOptions: [
 		{
@@ -205,6 +206,27 @@ export const certificadosReportConfig: ReportConfig<CertificadoRow, CertificadoF
 		vencimientoMin: "",
 		vencimientoMax: "",
 	}),
+	compare: {
+		label: "Comparar facturación",
+		buildCompareFilters: (filters) => {
+			const start = filters.fechaFacturacionMin;
+			const end = filters.fechaFacturacionMax;
+			if (!start || !end) return null;
+			const startDate = new Date(start);
+			const endDate = new Date(end);
+			if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+				return null;
+			}
+			const diff = endDate.getTime() - startDate.getTime();
+			const prevStart = new Date(startDate.getTime() - diff);
+			const prevEnd = new Date(endDate.getTime() - diff);
+			return {
+				...filters,
+				fechaFacturacionMin: prevStart.toISOString().slice(0, 10),
+				fechaFacturacionMax: prevEnd.toISOString().slice(0, 10),
+			};
+		},
+	},
 	fetchData: async (filters) => {
 		const params = new URLSearchParams();
 		if (filters.montoMin?.trim()) params.set("montoMin", filters.montoMin.trim());

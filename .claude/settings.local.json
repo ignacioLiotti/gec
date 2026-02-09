@@ -10,7 +10,8 @@
       "Bash(docker exec:*)",
       "Bash(xargs ls:*)",
       "Bash(git add:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []

@@ -138,6 +138,7 @@ export const obrasReportConfig: ReportConfig<ObraRow, ObraFilters> = {
 	id: "obras",
 	title: "Obras",
 	description: "Reporte de obras",
+	templateCategory: "obras",
 	columns,
 	groupByOptions: [
 		{

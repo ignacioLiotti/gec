@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
-import { Pencil, Eye, StickyNote, X } from "lucide-react";
+import { Pencil, Eye, StickyNote, X, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
@@ -27,11 +27,21 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ObraDocumentsTab } from "./tabs/documents-tab";
-// import { ObraCertificatesTab } from "./tabs/certificates-tab";
 import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
 import { prefetchDocuments } from "./tabs/file-manager/hooks/useDocumentsStore";
 import type { OcrTablaColumn } from "./tabs/file-manager/types";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+	Sheet,
+	SheetContent,
+} from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import type {
 	Certificate,
@@ -353,6 +363,19 @@ export default function ObraDetailPage() {
 	const obraUserRoles = recipientsQuery.data?.userRoles ?? [];
 	const flujoActions = flujoActionsQuery.data ?? [];
 	const isLoadingFlujoActions = flujoActionsQuery.isLoading;
+	const obraData = obraQuery.data;
+	const obraTimeProgress =
+		obraData && obraData.plazoTotal > 0
+			? (obraData.plazoTransc / obraData.plazoTotal) * 100
+			: 0;
+	const obraDelay =
+		obraData && obraData.porcentaje != null
+			? Math.round(obraTimeProgress - obraData.porcentaje)
+			: 0;
+	const isObraAtRisk =
+		!!obraData &&
+		(obraData.porcentaje ?? 0) < 100 &&
+		obraTimeProgress > (obraData.porcentaje ?? 0) + 10;
 
 	const customQuickActionSteps = useMemo(() => ({}), []);
 	const quickActionsAllData = useMemo(() => {
@@ -409,6 +432,7 @@ export default function ObraDetailPage() {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const isMobile = useIsMobile();
 
 	// Use local state for immediate tab switching, sync to URL in background
 	const initialTab = searchParams?.get("tab") || "general";
@@ -426,12 +450,12 @@ export default function ObraDetailPage() {
 			router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
 		});
 	}, [router, pathname, searchParams]);
-		
-		// Handle tab change: update local state immediately, sync URL in background
-		const handleTabChange = useCallback((value: string) => {
-			setActiveTab(value); // Immediate state update
-			setQueryParams({ tab: value }); // Background URL sync
-		}, [setQueryParams]);
+
+	// Handle tab change: update local state immediately, sync URL in background
+	const handleTabChange = useCallback((value: string) => {
+		setActiveTab(value); // Immediate state update
+		setQueryParams({ tab: value }); // Background URL sync
+	}, [setQueryParams]);
 
 	// Import OC from PDF
 	const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -1186,6 +1210,126 @@ export default function ObraDetailPage() {
 
 	// Certificates are loaded via React Query (certificatesQuery) - no manual refetch on mount needed
 
+	const memoriaHeader = (
+		<div className="flex items-center justify-between gap-2">
+			<div className="flex items-center gap-2">
+				<StickyNote className="h-4 w-4 text-primary" />
+				<h2 className="text-sm font-semibold">Memoria descriptiva de la obra</h2>
+			</div>
+		</div>
+	);
+
+	const memoriaContent = (
+		<>
+			{!isMobile && memoriaHeader}
+
+			<div className="space-y-2">
+				<label className="text-xs font-medium text-muted-foreground">
+					Nueva nota
+				</label>
+				<Textarea
+					value={memoriaDraft}
+					onChange={(e) => setMemoriaDraft(e.target.value)}
+					placeholder="Escribe aquí notas, decisiones o contexto importante sobre esta obra..."
+					className="min-h-[80px] text-sm"
+				/>
+				<div className="flex justify-end">
+					<Button
+						type="button"
+						size="sm"
+						disabled={!memoriaDraft.trim()}
+						onClick={async () => {
+							const text = memoriaDraft.trim();
+							if (!text || !obraId || obraId === "undefined") return;
+							try {
+								const res = await fetch(`/api/obras/${obraId}/memoria`, {
+									method: "POST",
+									headers: { "Content-Type": "application/json" },
+									body: JSON.stringify({ text }),
+								});
+								if (!res.ok) {
+									const out = await res.json().catch(() => ({} as any));
+									throw new Error(out?.error || "No se pudo guardar la nota");
+								}
+								const out = await res.json();
+								const note = out?.note;
+								if (note) {
+									const newNote: MemoriaNote = {
+										id: String(note.id),
+										text: String(note.text ?? ""),
+										createdAt: String(note.createdAt ?? note.created_at ?? ""),
+										userId: String(note.userId ?? note.user_id ?? ""),
+										userName:
+											typeof note.userName === "string"
+												? note.userName
+												: note.user_name ?? null,
+									};
+									queryClient.setQueryData<MemoriaNote[]>(
+										['obra', obraId, 'memoria'],
+										(prev = []) => [newNote, ...prev]
+									);
+								}
+								setMemoriaDraft("");
+							} catch (err) {
+								console.error(err);
+								const message =
+									err instanceof Error ? err.message : "No se pudo guardar la nota";
+								toast.error(message);
+							}
+						}}
+					>
+						Guardar nota
+					</Button>
+				</div>
+			</div>
+
+			<Separator />
+
+			<div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+				{memoriaNotes.length === 0 ? (
+					<p className="text-xs text-muted-foreground">
+						Todavía no hay notas para esta obra. Usa este espacio para registrar decisiones,
+						aclaraciones o contexto importante.
+					</p>
+				) : (
+					memoriaNotes.map((note) => (
+						<div
+							key={note.id}
+							className="rounded-md border bg-background/60 px-3 py-2 text-xs space-y-1"
+						>
+							<div className="flex items-center justify-between gap-2">
+								<div className="flex items-center gap-2">
+									<div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
+										{(note.userName || "?")
+											.split(" ")
+											.filter(Boolean)
+											.slice(0, 2)
+											.map((part) => part[0])
+											.join("")}
+									</div>
+									<div className="flex flex-col">
+										<span className="font-medium text-foreground">
+											{note.userName || "Usuario"}
+										</span>
+										{currentUserId === note.userId && (
+											<span className="text-[10px] text-muted-foreground">
+												Tú
+											</span>
+										)}
+									</div>
+								</div>
+								<span className="text-[10px] text-muted-foreground">
+									{new Date(note.createdAt).toLocaleDateString("es-AR")}
+								</span>
+							</div>
+							<p className="text-foreground leading-relaxed">{note.text}</p>
+						</div>
+					))
+				)}
+			</div>
+		</>
+	);
+
 	return (
 		<div className="container max-w-full mx-auto px-4 pt-2">
 			{routeError ? (
@@ -1224,7 +1368,23 @@ export default function ObraDetailPage() {
 							className="space-y-4"
 						>
 							<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
-								<ExcelPageTabs />
+								<div className="flex flex-wrap items-center gap-2">
+									<ExcelPageTabs />
+									{isObraAtRisk && (
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Badge className="bg-amber-100 text-amber-800 border-amber-200 rounded-md py-1.5">
+													<AlertTriangle className="h-3.5 w-3.5 mr-1" />
+													{obraDelay}% atrasada
+												</Badge>
+											</TooltipTrigger>
+											<TooltipContent className="max-w-xs">
+												Se calcula comparando el avance de tiempo con el avance físico.
+												Si el tiempo transcurrido supera el avance en más de 10%, la obra se marca como atrasada.
+											</TooltipContent>
+										</Tooltip>
+									)}
+								</div>
 								{activeTab === "general" && (
 									<div className="flex flex-wrap items-center gap-2 justify-end">
 										<motion.div
@@ -1242,7 +1402,7 @@ export default function ObraDetailPage() {
 													onClick={() => setIsGeneralTabEditMode(false)}
 												>
 													<Eye className="h-4 w-4" />
-													<span className="hidden sm:inline">Vista previa</span>
+													<span className={cn("hidden sm:inline text-base md:text-sm", !isGeneralTabEditMode ? "inline" : "hidden")}>Vista previa</span>
 												</Button>
 												<Button
 													type="button"
@@ -1253,7 +1413,7 @@ export default function ObraDetailPage() {
 													onClick={() => setIsGeneralTabEditMode(true)}
 												>
 													<Pencil className="h-4 w-4" />
-													<span className="hidden sm:inline">Edición</span>
+													<span className={cn("hidden sm:inline text-base md:text-sm", isGeneralTabEditMode ? "inline" : "hidden")}>Edición</span>
 												</Button>
 											</div>
 										</motion.div>
@@ -1325,139 +1485,30 @@ export default function ObraDetailPage() {
 
 						</Tabs>
 					</div>
-					<AnimatePresence>
-						{isMemoriaOpen && (
-							<motion.aside
-								initial={{ x: 320, opacity: 0 }}
-								animate={{ x: 0, opacity: 1 }}
-								exit={{ x: 320, opacity: 0 }}
-								transition={{ duration: 0.25, ease: "easeOut" }}
-								className="w-full lg:w-80 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4"
-							>
-								<div className="flex items-center justify-between gap-2">
-									<div className="flex items-center gap-2">
-										<StickyNote className="h-4 w-4 text-primary" />
-										<h2 className="text-sm font-semibold">Memoria descriptiva de la obra</h2>
-									</div>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										onClick={() => setIsMemoriaOpen(false)}
-									>
-										<X className="h-4 w-4" />
-									</Button>
+					{isMobile ? (
+						<Sheet open={isMemoriaOpen} onOpenChange={setIsMemoriaOpen}>
+							<SheetContent side="bottom" className="h-[70vh] p-4">
+								<div className="flex flex-col gap-4">
+									{memoriaHeader}
+									{memoriaContent}
 								</div>
-
-								<div className="space-y-2">
-									<label className="text-xs font-medium text-muted-foreground">
-										Nueva nota
-									</label>
-									<Textarea
-										value={memoriaDraft}
-										onChange={(e) => setMemoriaDraft(e.target.value)}
-										placeholder="Escribe aquí notas, decisiones o contexto importante sobre esta obra..."
-										className="min-h-[80px] text-sm"
-									/>
-									<div className="flex justify-end">
-										<Button
-											type="button"
-											size="sm"
-											disabled={!memoriaDraft.trim()}
-											onClick={async () => {
-												const text = memoriaDraft.trim();
-												if (!text || !obraId || obraId === "undefined") return;
-												try {
-													const res = await fetch(`/api/obras/${obraId}/memoria`, {
-														method: "POST",
-														headers: { "Content-Type": "application/json" },
-														body: JSON.stringify({ text }),
-													});
-													if (!res.ok) {
-														const out = await res.json().catch(() => ({} as any));
-														throw new Error(out?.error || "No se pudo guardar la nota");
-													}
-													const out = await res.json();
-													const note = out?.note;
-													if (note) {
-														const newNote: MemoriaNote = {
-															id: String(note.id),
-															text: String(note.text ?? ""),
-															createdAt: String(note.createdAt ?? note.created_at ?? ""),
-															userId: String(note.userId ?? note.user_id ?? ""),
-															userName:
-																typeof note.userName === "string"
-																	? note.userName
-																	: note.user_name ?? null,
-														};
-														queryClient.setQueryData<MemoriaNote[]>(
-															['obra', obraId, 'memoria'],
-															(prev = []) => [newNote, ...prev]
-														);
-													}
-													setMemoriaDraft("");
-												} catch (err) {
-													console.error(err);
-													const message =
-														err instanceof Error ? err.message : "No se pudo guardar la nota";
-													toast.error(message);
-												}
-											}}
-										>
-											Guardar nota
-										</Button>
-									</div>
-								</div>
-
-								<Separator />
-
-								<div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-									{memoriaNotes.length === 0 ? (
-										<p className="text-xs text-muted-foreground">
-											Todavía no hay notas para esta obra. Usa este espacio para registrar decisiones,
-											aclaraciones o contexto importante.
-										</p>
-									) : (
-										memoriaNotes.map((note) => (
-											<div
-												key={note.id}
-												className="rounded-md border bg-background/60 px-3 py-2 text-xs space-y-1"
-											>
-												<div className="flex items-center justify-between gap-2">
-													<div className="flex items-center gap-2">
-														<div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
-															{(note.userName || "?")
-																.split(" ")
-																.filter(Boolean)
-																.slice(0, 2)
-																.map((part) => part[0])
-																.join("")}
-														</div>
-														<div className="flex flex-col">
-															<span className="font-medium text-foreground">
-																{note.userName || "Usuario"}
-															</span>
-															{currentUserId === note.userId && (
-																<span className="text-[10px] text-muted-foreground">
-																	Tú
-																</span>
-															)}
-														</div>
-													</div>
-													<p className="text-[10px] text-muted-foreground">
-														{new Date(note.createdAt).toLocaleString()}
-													</p>
-												</div>
-												<p className="whitespace-pre-wrap text-foreground">
-													{note.text}
-												</p>
-											</div>
-										))
-									)}
-								</div>
-							</motion.aside>
-						)}
-					</AnimatePresence>
+							</SheetContent>
+						</Sheet>
+					) : (
+						<AnimatePresence>
+							{isMemoriaOpen && (
+								<motion.aside
+									initial={{ x: 320, opacity: 0 }}
+									animate={{ x: 0, opacity: 1 }}
+									exit={{ x: 320, opacity: 0 }}
+									transition={{ duration: 0.25, ease: "easeOut" }}
+									className="w-full lg:w-80 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4"
+								>
+									{memoriaContent}
+								</motion.aside>
+							)}
+						</AnimatePresence>
+					)}
 				</div>
 			)}
 		</div>

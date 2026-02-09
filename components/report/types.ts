@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export type ReportColumnType = "text" | "number" | "currency" | "boolean" | "date" | "custom";
 
-export type AggregationType = "none" | "sum" | "count" | "count-checked" | "average";
+export type AggregationType = "none" | "sum" | "count" | "count-checked" | "average" | "min" | "max";
 
 export type ReportColumn<Row> = {
 	id: string;
@@ -42,6 +42,10 @@ export type ReportConfig<Row, Filters = Record<string, unknown>> = {
 	title: string;
 	description?: string;
 	columns: ReportColumn<Row>[];
+	/** Optional metadata used for sharing / templates */
+	shareMeta?: Record<string, unknown>;
+	/** Optional category key used for template suggestions */
+	templateCategory?: string;
 	/** Available grouping options */
 	groupByOptions?: ReportGroupByOption<Row>[];
 	/** Filter field definitions */
@@ -56,6 +60,11 @@ export type ReportConfig<Row, Filters = Record<string, unknown>> = {
 	currencyLocale?: string;
 	/** Currency code for currency columns */
 	currencyCode?: string;
+	/** Optional compare configuration */
+	compare?: {
+		label?: string;
+		buildCompareFilters: (filters: Filters) => Filters | null;
+	};
 };
 
 export type ReportState = {
@@ -67,4 +76,7 @@ export type ReportState = {
 	sortColumnId: string | null;
 	sortDirection: "asc" | "desc";
 	aggregations: Record<string, AggregationType>;
+	summaryDisplay: "row" | "card";
+	showMiniCharts: boolean;
+	summaryChartType: "bar" | "line";
 };

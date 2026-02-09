@@ -543,26 +543,27 @@ export function FormTableContent({ className }: { className?: string }) {
 										const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
 										// Create a stable string key of dirty cell IDs for memoization
 										const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
-										return (
-											<MemoizedTableRow
-												key={rowId}
-												row={row}
-												rowIndex={virtualRow.index}
-												columnsById={columnsById}
-												FieldComponent={FieldComponent}
-												highlightQuery={highlightQuery}
-												hasInitialSnapshot={hasInitialRow(rowId)}
-												hasAccordionRows={hasAccordionRows}
-												accordionRowConfig={accordionRowConfig}
-												accordionAlwaysOpen={accordionAlwaysOpen}
-												isExpanded={isRowExpanded(rowId)}
-												isRowDirty={rowIsDirty}
-												dirtyCellIds={dirtyCellIds}
-												showActionsColumn={showActionsColumn}
-												isCellDirty={isCellDirty}
-												getStickyProps={getStickyProps}
-												onToggleAccordion={toggleAccordionRow}
-												onDelete={handleDelete}
+									return (
+										<MemoizedTableRow
+											key={rowId}
+											row={row}
+											rowIndex={virtualRow.index}
+											columnsById={columnsById}
+											FieldComponent={FieldComponent}
+											highlightQuery={highlightQuery}
+											hasInitialSnapshot={hasInitialRow(rowId)}
+											hasAccordionRows={hasAccordionRows}
+											accordionRowConfig={accordionRowConfig}
+											accordionAlwaysOpen={accordionAlwaysOpen}
+											isExpanded={isRowExpanded(rowId)}
+											isRowDirty={rowIsDirty}
+											dirtyCellIds={dirtyCellIds}
+											showActionsColumn={showActionsColumn}
+											isColumnHidden={isColumnHidden}
+											isCellDirty={isCellDirty}
+											getStickyProps={getStickyProps}
+											onToggleAccordion={toggleAccordionRow}
+											onDelete={handleDelete}
 												onClearCell={handleClearCell}
 												onRestoreCell={handleRestoreCell}
 												onCopyCell={handleCopyCell}
@@ -603,6 +604,7 @@ export function FormTableContent({ className }: { className?: string }) {
 											isRowDirty={rowIsDirty}
 											dirtyCellIds={dirtyCellIds}
 											showActionsColumn={showActionsColumn}
+											isColumnHidden={isColumnHidden}
 											isCellDirty={isCellDirty}
 											getStickyProps={getStickyProps}
 											onToggleAccordion={toggleAccordionRow}
@@ -754,7 +756,12 @@ export function FormTablePagination() {
 }
 
 import { computeCellDirty, computeRowDirty, hasUnsavedChanges as hasUnsavedChangesUtil } from "./dirty-tracking";
-import { readPersistedArray, writePersistedArray } from "./persistence";
+import {
+	readPersistedArray,
+	readPersistedNumber,
+	writePersistedArray,
+	writePersistedNumber,
+} from "./persistence";
 
 export { requiredValidator } from "./table-utils";
 
@@ -836,15 +843,26 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [page, setPage] = useState(1);
-	const initialPageSize = config.defaultPageSize ?? DEFAULT_PAGE_SIZE;
 	const pageSizeOptions = config.pageSizeOptions ?? PAGE_SIZE_OPTIONS;
 	const lockedPageSize = config.lockedPageSize;
+	const persistedPageSize = readPersistedNumber(`${TABLE_ID}:pageSize`);
+	const initialPageSize =
+		typeof lockedPageSize === "number"
+			? lockedPageSize
+			: persistedPageSize && pageSizeOptions.includes(persistedPageSize)
+				? persistedPageSize
+				: config.defaultPageSize ?? DEFAULT_PAGE_SIZE;
 	const [pageSize, setPageSizeState] = useState(initialPageSize);
 	useEffect(() => {
 		if (lockedPageSize && pageSize !== lockedPageSize) {
 			setPageSizeState(lockedPageSize);
 		}
 	}, [lockedPageSize, pageSize]);
+	useEffect(() => {
+		if (!lockedPageSize) {
+			writePersistedNumber(`${TABLE_ID}:pageSize`, pageSize);
+		}
+	}, [TABLE_ID, lockedPageSize, pageSize]);
 	const paginationOptions = lockedPageSize ? [lockedPageSize] : pageSizeOptions;
 	// Track if a page size change is in progress (for showing loading state)
 	const [isPageSizeTransitioning, startPageSizeTransition] = useTransition();

@@ -12,12 +12,17 @@ import type { ReportColumn, AggregationType } from "./types";
 type ReportTableProps<Row> = {
 	title: string;
 	data: Row[];
+	compareData?: Row[] | null;
+	showCompare?: boolean;
 	columns: ReportColumn<Row>[];
 	hiddenColumnIds: string[];
 	sortColumnId: string | null;
 	sortDirection: "asc" | "desc";
 	onSort: (columnId: string) => void;
 	aggregations: Record<string, AggregationType>;
+	summaryDisplay?: "row" | "card";
+	showMiniCharts?: boolean;
+	summaryChartType?: "bar" | "line";
 	getRowId: (row: Row) => string;
 	currencyLocale?: string;
 	currencyCode?: string;
@@ -86,13 +91,11 @@ function formatValue(
 /*  Aggregation calculation                                            */
 /* ------------------------------------------------------------------ */
 
-function calculateAggregation<Row>(
+function calculateAggregationRaw<Row>(
 	data: Row[],
 	column: ReportColumn<Row>,
 	aggType: AggregationType,
-	currencyLocale: string,
-	currencyCode: string
-): string | number | null {
+): number | null {
 	if (aggType === "none") return null;
 
 	const values = data.map((row) => column.accessor(row));
@@ -103,9 +106,7 @@ function calculateAggregation<Row>(
 			for (const v of values) {
 				sum += typeof v === "number" ? v : Number(v) || 0;
 			}
-			return column.type === "currency"
-				? getNumberFormatter(currencyLocale, currencyCode).format(sum)
-				: getNumberFormatter(currencyLocale).format(sum);
+			return sum;
 		}
 		case "count":
 			return values.filter((v) => v != null && v !== "").length;
@@ -120,14 +121,57 @@ function calculateAggregation<Row>(
 			if (nums.length === 0) return 0;
 			let total = 0;
 			for (const n of nums) total += n;
-			const avg = total / nums.length;
-			return column.type === "currency"
-				? getNumberFormatter(currencyLocale, currencyCode).format(avg)
-				: getDecimalFormatter(currencyLocale).format(avg);
+			return total / nums.length;
+		}
+		case "min": {
+			const nums = values
+				.map((v) => (typeof v === "number" ? v : Number(v)))
+				.filter((v) => Number.isFinite(v));
+			if (nums.length === 0) return 0;
+			return Math.min(...nums);
+		}
+		case "max": {
+			const nums = values
+				.map((v) => (typeof v === "number" ? v : Number(v)))
+				.filter((v) => Number.isFinite(v));
+			if (nums.length === 0) return 0;
+			return Math.max(...nums);
 		}
 		default:
 			return null;
 	}
+}
+
+function formatAggregationValue(
+	value: number | null,
+	column: ReportColumn<unknown>,
+	aggType: AggregationType,
+	currencyLocale: string,
+	currencyCode: string
+): string {
+	if (value == null || aggType === "none") return "";
+	if (aggType === "count" || aggType === "count-checked") {
+		return String(value);
+	}
+	if (column.type === "currency") {
+		return getNumberFormatter(currencyLocale, currencyCode).format(value);
+	}
+	if (column.type === "number") {
+		return getNumberFormatter(currencyLocale).format(value);
+	}
+	return getDecimalFormatter(currencyLocale).format(value);
+}
+
+function formatDelta(
+	value: number,
+	column: ReportColumn<unknown>,
+	currencyLocale: string,
+	currencyCode: string
+): string {
+	if (column.type === "currency") {
+		return getNumberFormatter(currencyLocale, currencyCode).format(value);
+	}
+	return getDecimalFormatter(currencyLocale).format(value);
 }
 
 /* ------------------------------------------------------------------ */
@@ -179,12 +223,17 @@ function sortData<Row>(
 function ReportTableInner<Row>({
 	title,
 	data,
+	compareData = null,
+	showCompare = false,
 	columns,
 	hiddenColumnIds,
 	sortColumnId,
 	sortDirection,
 	onSort,
 	aggregations,
+	summaryDisplay = "row",
+	showMiniCharts = true,
+	summaryChartType = "bar",
 	getRowId,
 	currencyLocale = "es-AR",
 	currencyCode = "ARS",
@@ -204,103 +253,250 @@ function ReportTableInner<Row>({
 		[aggregations]
 	);
 
+	const summaryItems = useMemo(() => {
+		const items = visibleColumns
+			.map((col) => {
+				const aggType = aggregations[col.id] || "none";
+				if (aggType === "none") return null;
+				const raw = calculateAggregationRaw(sortedData, col, aggType);
+				const series = sortedData
+					.map((row) => {
+						const value = col.accessor(row);
+						const num = typeof value === "number" ? value : Number(value);
+						return Number.isFinite(num) ? num : null;
+					})
+					.filter((value): value is number => value !== null);
+				const sampled =
+					series.length > 24
+						? series.filter((_, idx) => idx % Math.ceil(series.length / 24) === 0)
+						: series;
+				return {
+					id: col.id,
+					label: col.label,
+					type: col.type,
+					align: col.align,
+					aggType,
+					raw,
+					value: formatAggregationValue(
+						raw,
+						col,
+						aggType,
+						currencyLocale,
+						currencyCode
+					),
+					series: sampled,
+				};
+			})
+			.filter(Boolean) as Array<{
+				id: string;
+				label: string;
+				type: ReportColumn<Row>["type"];
+				align?: ReportColumn<Row>["align"];
+				aggType: AggregationType;
+				raw: number | null;
+				value: string;
+				series: number[];
+			}>;
+
+		return { items };
+	}, [aggregations, currencyCode, currencyLocale, sortedData, visibleColumns]);
+
+	function getSparklinePoints(series: number[]) {
+		if (!series.length) return "";
+		const min = Math.min(...series);
+		const max = Math.max(...series);
+		const range = max - min || 1;
+		return series
+			.map((value, index) => {
+				const x = series.length === 1 ? 50 : (index / (series.length - 1)) * 100;
+				const y = 100 - ((value - min) / range) * 100;
+				return `${x},${y}`;
+			})
+			.join(" ");
+	}
+
+	function getBarHeights(series: number[]) {
+		if (!series.length) return [];
+		const min = Math.min(...series);
+		const max = Math.max(...series);
+		const range = max - min || 1;
+		return series.map((value) => ((value - min) / range) * 100);
+	}
+
 	return (
 		<div className="report-table-section">
 			<h3 className="report-group-title font-serif">{title}</h3>
-			<table className="report-table">
-				<thead>
-					<tr>
-						{visibleColumns.map((col) => (
-							<th
-								key={col.id}
-								className={cn(
-									"report-th cursor-pointer",
-									col.align === "right" && "text-right",
-									col.align === "center" && "text-center",
-									!col.align && "text-left"
-								)}
-								style={{ width: col.width }}
-								onClick={() => onSort(col.id)}
-							>
-								<div
+			<div className="report-table-scroll">
+				<table className="report-table">
+					<thead>
+						<tr>
+							{visibleColumns.map((col) => (
+								<th
+									key={col.id}
 									className={cn(
-										"flex items-center gap-1",
-										col.align === "right" && "justify-end",
-										col.align === "center" && "justify-center"
+										"report-th cursor-pointer",
+										col.align === "right" && "text-right",
+										col.align === "center" && "text-center",
+										!col.align && "text-left"
 									)}
+									style={{ width: col.width }}
+									onClick={() => onSort(col.id)}
 								>
-									<span>{col.label}</span>
-									{sortColumnId === col.id && (
-										sortDirection === "asc" ? (
-											<ChevronUp className="h-3 w-3 opacity-60" />
-										) : (
-											<ChevronDown className="h-3 w-3 opacity-60" />
-										)
+									<div
+										className={cn(
+											"flex items-center gap-1",
+											col.align === "right" && "justify-end",
+											col.align === "center" && "justify-center"
+										)}
+									>
+										<span>{col.label}</span>
+										{sortColumnId === col.id && (
+											sortDirection === "asc" ? (
+												<ChevronUp className="h-3 w-3 opacity-60" />
+											) : (
+												<ChevronDown className="h-3 w-3 opacity-60" />
+											)
+										)}
+									</div>
+								</th>
+							))}
+						</tr>
+					</thead>
+					<tbody>
+						{sortedData.map((row, idx) => (
+							<tr
+								key={getRowId(row)}
+								className={cn(
+									"report-tr",
+									idx % 2 === 1 && "report-tr-alt"
+								)}
+							>
+								{visibleColumns.map((col) => {
+									const value = col.accessor(row);
+									const displayValue = col.render
+										? col.render(value, row)
+										: formatValue(value, col.type, currencyLocale, currencyCode);
+
+									return (
+										<td
+											key={col.id}
+											className={cn(
+												"report-td",
+												col.align === "right" && "text-right",
+												col.align === "center" && "text-center",
+												col.type === "currency" && "font-mono"
+											)}
+										>
+											{displayValue}
+										</td>
+									);
+								})}
+							</tr>
+						))}
+						{hasAggregations && summaryDisplay === "row" && (
+							<tr className="report-totals-row">
+								{visibleColumns.map((col) => {
+									const aggType = aggregations[col.id] || "none";
+									const aggRaw = calculateAggregationRaw(sortedData, col, aggType);
+									const aggValue = formatAggregationValue(
+										aggRaw,
+										col,
+										aggType,
+										currencyLocale,
+										currencyCode
+									);
+									const compareRaw = showCompare && compareData
+										? calculateAggregationRaw(compareData, col, aggType)
+										: null;
+									const delta =
+										compareRaw != null && aggRaw != null
+											? aggRaw - compareRaw
+											: null;
+									const deltaPct =
+										compareRaw && compareRaw !== 0 && delta != null
+											? (delta / compareRaw) * 100
+											: null;
+									return (
+										<td
+											key={col.id}
+											className={cn(
+												"report-td",
+												col.align === "right" && "text-right",
+												col.align === "center" && "text-center"
+											)}
+										>
+											{aggValue ?? ""}
+											{showCompare && delta != null && aggType !== "none" && (
+												<div
+													className={cn(
+														"mt-1 text-[10px] font-semibold",
+														delta > 0 && "text-emerald-600",
+														delta < 0 && "text-red-600",
+														delta === 0 && "text-muted-foreground"
+													)}
+												>
+													{delta > 0 ? "+" : ""}
+													{formatDelta(delta, col, currencyLocale, currencyCode)}
+													{deltaPct != null && Number.isFinite(deltaPct) && (
+														<span className="ml-1">
+															({deltaPct > 0 ? "+" : ""}
+															{deltaPct.toFixed(1)}%)
+														</span>
+													)}
+												</div>
+											)}
+										</td>
+									);
+								})}
+							</tr>
+						)}
+					</tbody>
+				</table>
+			</div>
+
+			{hasAggregations && summaryDisplay === "card" && (
+				<div className="report-summary-card bg-primary">
+					<div className="report-summary-title">Resumen</div>
+					<div className="report-summary-grid">
+						{summaryItems.items.map((item) => {
+							const value = item.value || "-";
+							return (
+								<div key={item.id} className="report-summary-item">
+									<div className="report-summary-label">{item.label}</div>
+									<div className="report-summary-value">{value}</div>
+									{showMiniCharts && summaryChartType === "bar" && (
+										<div className="report-summary-chart">
+											<svg viewBox="0 0 100 100" preserveAspectRatio="none">
+												{getBarHeights(item.series).map((height, idx) => {
+													const barWidth = 100 / Math.max(item.series.length, 1);
+													return (
+														<rect
+															key={`${item.id}-bar-${idx}`}
+															x={idx * barWidth + 1}
+															y={100 - height}
+															width={Math.max(barWidth - 2, 1)}
+															height={height}
+														/>
+													);
+												})}
+											</svg>
+										</div>
+									)}
+									{showMiniCharts && summaryChartType === "line" && item.series.length > 1 && (
+										<div className="report-summary-chart">
+											<svg viewBox="0 0 100 100" preserveAspectRatio="none">
+												<polyline points={getSparklinePoints(item.series)} />
+											</svg>
+										</div>
 									)}
 								</div>
-							</th>
-						))}
-					</tr>
-				</thead>
-				<tbody>
-					{sortedData.map((row, idx) => (
-						<tr
-							key={getRowId(row)}
-							className={cn(
-								"report-tr",
-								idx % 2 === 1 && "report-tr-alt"
-							)}
-						>
-							{visibleColumns.map((col) => {
-								const value = col.accessor(row);
-								const displayValue = col.render
-									? col.render(value, row)
-									: formatValue(value, col.type, currencyLocale, currencyCode);
+							);
+						})}
+					</div>
+				</div>
+			)}
 
-								return (
-									<td
-										key={col.id}
-										className={cn(
-											"report-td",
-											col.align === "right" && "text-right",
-											col.align === "center" && "text-center",
-											col.type === "currency" && "font-mono"
-										)}
-									>
-										{displayValue}
-									</td>
-								);
-							})}
-						</tr>
-					))}
-					{hasAggregations && (
-						<tr className="report-totals-row">
-							{visibleColumns.map((col) => {
-								const aggType = aggregations[col.id] || "none";
-								const aggValue = calculateAggregation(
-									sortedData,
-									col,
-									aggType,
-									currencyLocale,
-									currencyCode
-								);
-								return (
-									<td
-										key={col.id}
-										className={cn(
-											"report-td",
-											col.align === "right" && "text-right",
-											col.align === "center" && "text-center"
-										)}
-									>
-										{aggValue ?? ""}
-									</td>
-								);
-							})}
-						</tr>
-					)}
-				</tbody>
-			</table>
+			<div className="report-section-separator" />
 		</div>
 	);
 }

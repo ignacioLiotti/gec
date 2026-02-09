@@ -16,9 +16,9 @@ export type PrintStylesOptions = {
 
 const defaultOptions: Required<PrintStylesOptions> = {
 	baseFontSize: 11,
-	primaryColor: "#2c2926",
-	mutedColor: "#5c554d",
-	alternateRowBg: "rgba(180, 170, 155, 0.06)",
+	primaryColor: "#1f2328",
+	mutedColor: "#6b7280",
+	alternateRowBg: "#f7f8fb",
 };
 
 /**
@@ -113,12 +113,12 @@ tfoot {
 }
 
 th {
-	background-color: #ece8e0;
+	background-color: #f1f3f6;
 	font-weight: 700;
 	text-align: left;
 	padding: 7px 10px;
-	border-bottom: 2px solid #b0a898;
-	border-top: 1px solid #b0a898;
+	border-bottom: 2px solid #c7cbd3;
+	border-top: 1px solid #c7cbd3;
 	font-size: 0.8em;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
@@ -127,7 +127,7 @@ th {
 
 td {
 	padding: 5px 10px;
-	border-bottom: 1px solid #ddd7ce;
+	border-bottom: 1px solid #e1e4ea;
 	vertical-align: top;
 }
 
@@ -155,9 +155,9 @@ tbody tr:nth-child(even) {
 /* Aggregation/totals row */
 .totals-row,
 .report-totals-row {
-	background-color: #ece8e0 !important;
+	background-color: #eef1f5 !important;
 	font-weight: 700;
-	border-top: 2px solid #a09888;
+	border-top: 2px solid #c7cbd3;
 }
 
 .totals-row td,
@@ -170,8 +170,10 @@ tbody tr:nth-child(even) {
 .group-section,
 .report-table-section {
 	margin-bottom: 28px;
-	page-break-inside: avoid;
+	page-break-inside: auto;
+	break-inside: auto;
 }
+
 
 .group-section:last-child,
 .report-table-section:last-child {
@@ -184,13 +186,13 @@ tbody tr:nth-child(even) {
 	font-weight: 600;
 	margin-bottom: 8px;
 	padding-bottom: 6px;
-	border-bottom: 1px solid #c5bfb6;
+	border-bottom: 1px solid #d4d7dd;
 	letter-spacing: 0.02em;
 }
 
 /* Table container with border */
 .table-container {
-	border: 1px solid #c5bfb6;
+	border: 1px solid #d4d7dd;
 	border-radius: 4px;
 	overflow: hidden;
 }
@@ -243,7 +245,7 @@ img {
 .report-footer-line {
 	margin-top: 32px;
 	height: 1px;
-	background: #b0a898;
+	background: #c7cbd3;
 }
 `.trim();
 }

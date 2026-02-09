@@ -76,17 +76,27 @@ async function getBrowserLaunchOptions(): Promise<LaunchOptions> {
 	const isDev = process.env.NODE_ENV === "development";
 
 	if (isDev) {
+		const fs = await import("fs");
+		const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+		if (envPath && fs.existsSync(envPath)) {
+			return {
+				executablePath: envPath,
+				headless: true,
+				args: ["--no-sandbox", "--disable-setuid-sandbox"],
+			};
+		}
 		// For local development, try to use puppeteer's bundled Chromium
 		try {
 			// Dynamic import puppeteer (full version with bundled Chromium)
 			const puppeteerFull = await import("puppeteer");
 			const executablePath = puppeteerFull.default.executablePath();
-			
-			return {
-				executablePath,
-				headless: true,
-				args: ["--no-sandbox", "--disable-setuid-sandbox"],
-			};
+			if (fs.existsSync(executablePath)) {
+				return {
+					executablePath,
+					headless: true,
+					args: ["--no-sandbox", "--disable-setuid-sandbox"],
+				};
+			}
 		} catch {
 			// Fallback: try common Chrome installation paths on Windows
 			const commonPaths = [
@@ -97,7 +107,6 @@ async function getBrowserLaunchOptions(): Promise<LaunchOptions> {
 
 			for (const chromePath of commonPaths) {
 				try {
-					const fs = await import("fs");
 					if (fs.existsSync(chromePath)) {
 						return {
 							executablePath: chromePath,
@@ -111,9 +120,27 @@ async function getBrowserLaunchOptions(): Promise<LaunchOptions> {
 			}
 
 			throw new Error(
-				"No Chrome installation found. Please install Chrome or run: npm install puppeteer"
+				"No Chrome installation found. Install Chrome or run: npx puppeteer browsers install chrome"
 			);
 		}
+		// If puppeteer is installed but no browser was downloaded, fall back to system Chrome
+		const fallbackPaths = [
+			"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+			"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+			process.env.LOCALAPPDATA + "\\Google\\Chrome\\Application\\chrome.exe",
+		];
+		for (const chromePath of fallbackPaths) {
+			if (fs.existsSync(chromePath)) {
+				return {
+					executablePath: chromePath,
+					headless: true,
+					args: ["--no-sandbox", "--disable-setuid-sandbox"],
+				};
+			}
+		}
+		throw new Error(
+			"No Chromium executable found. Run: npx puppeteer browsers install chrome"
+		);
 	}
 
 	// Production: use @sparticuz/chromium for serverless

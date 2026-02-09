@@ -18,6 +18,27 @@ export function writePersistedArray(key: string, value: string[]) {
 	}
 }
 
+export function readPersistedNumber(key: string): number | null {
+	if (typeof window === "undefined") return null;
+	try {
+		const raw = window.localStorage.getItem(key);
+		if (!raw) return null;
+		const parsed = Number(JSON.parse(raw));
+		return Number.isFinite(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+export function writePersistedNumber(key: string, value: number) {
+	if (typeof window === "undefined") return;
+	try {
+		window.localStorage.setItem(key, JSON.stringify(value));
+	} catch {
+		// ignore
+	}
+}
+
 
 
 

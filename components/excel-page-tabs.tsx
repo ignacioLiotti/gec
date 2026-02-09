@@ -19,7 +19,7 @@ export function ExcelPageTabs() {
   if (!isExcelDetailPage) return null;
 
   return (
-    <TabsList className="w-full justify-start gap-1 overflow-x-auto sm:w-auto">
+    <TabsList className="w-full justify-center sm:justify-start gap-1 overflow-x-auto sm:w-auto h-10">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         return (
@@ -28,8 +28,8 @@ export function ExcelPageTabs() {
             value={tab.value}
             className="gap-1.5 text-xs sm:text-sm"
           >
-            <Icon className="h-4 w-4" />
-            <span className="hidden sm:inline">{tab.label}</span>
+            <Icon className="sm:h-4 sm:w-4 h-5 w-5" />
+            <span className="inline text-base md:text-sm">{tab.label}</span>
           </TabsTrigger>
         );
       })}

@@ -135,34 +135,19 @@
 /* The paper sheet itself */
 .report-paper {
 	width: 210mm;
-	min-height: 297mm;
-	background: #fcfaf6;
-	color: #1c1917;
+	background: #f7f7f8;
+	color: #1f2328;
 	box-shadow:
-		0 1px 3px rgba(0, 0, 0, 0.08),
-		0 4px 12px rgba(0, 0, 0, 0.06),
-		inset 0 0 60px 0 rgba(180, 170, 155, 0.07);
-	border: 1px solid #d5cfc5;
+		0 1px 3px rgba(31, 35, 40, 0.08),
+		0 4px 12px rgba(31, 35, 40, 0.06),
+		inset 0 0 60px 0 rgba(120, 128, 138, 0.06);
+	border: 1px solid #d5d7dd;
 	position: relative;
 	font-size: 11px;
 	line-height: 1.6;
-}
-
-/* Subtle paper texture via repeating gradient */
-.report-paper::before {
-	content: '';
-	position: absolute;
-	inset: 0;
-	background:
-		repeating-linear-gradient(
-			0deg,
-			transparent,
-			transparent 27px,
-			rgba(180, 170, 155, 0.06) 27px,
-			rgba(180, 170, 155, 0.06) 28px
-		);
-	pointer-events: none;
-	z-index: 0;
+	display: inline-block;
+	height: fit-content;
+	align-self: flex-start;
 }
 
 .report-paper > div {
@@ -173,60 +158,62 @@
 /* ---- Decorative borders ---- */
 .report-border-top {
 	height: 6px;
-	background: #3d3a36;
+	background: #2b2f36;
 	margin: 0 0 2px 0;
-	border-bottom: 2px solid #b0a898;
+	border-bottom: 2px solid #c7cbd3;
 }
 
 .report-footer-line {
 	margin-top: 32px;
 	height: 1px;
-	background: linear-gradient(to right, transparent, #b0a898, transparent);
+	background: linear-gradient(to right, transparent, #c7cbd3, transparent);
 }
 
 /* ---- Document header ---- */
 .report-header-block {
 	padding: 28px 36px 20px;
-	text-align: center;
+	text-align: start;
 }
 
 .report-company {
 	font-size: 22px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
-	color: #2c2926;
+	color: #1f2328;
 	text-transform: uppercase;
 }
 
 .report-divider {
-	width: 80px;
+	width: 10vw;
 	height: 1px;
-	background: #a09888;
-	margin: 10px auto;
+	background: #c7cbd3;
+	margin: 10px auto 10px 0;
 }
 
 .report-meta {
 	display: flex;
-	justify-content: space-between;
+	justify-content: flex-start;
 	align-items: baseline;
 	padding: 0 4px;
+	gap: 12px;
 }
 
 .report-title-text {
 	font-size: 13px;
-	color: #5c554d;
+	color: #5b616b;
 	font-style: italic;
 }
 
 .report-date-text {
 	font-size: 10px;
-	color: #8a8078;
+	color: #7a8088;
 	letter-spacing: 0.06em;
 }
 
 /* ---- Report body (table area) ---- */
 .report-body {
 	padding: 0 36px 28px;
+	background: white;
 }
 
 /* ---- Table section with group title ---- */
@@ -235,13 +222,28 @@
 	break-inside: avoid;
 }
 
+.report-section-separator {
+	margin: 16px 0 0;
+	height: 1px;
+	background: #c7cbd3;
+	position: relative;
+}
+
+.report-section-separator::after {
+	content: "";
+	display: block;
+	height: 1px;
+	margin-top: 3px;
+	background: #e0e3e9;
+}
+
 .report-group-title {
 	font-size: 13px;
 	font-weight: 600;
-	color: #3d3a36;
+	color: #2b2f36;
 	padding-bottom: 6px;
 	margin-bottom: 8px;
-	border-bottom: 1px solid #c5bfb6;
+	border-bottom: 1px solid #d4d7dd;
 	letter-spacing: 0.02em;
 }
 
@@ -259,39 +261,100 @@
 	font-size: 9px;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
-	color: #5c554d;
-	background: #ece8e0;
-	border-bottom: 2px solid #b0a898;
-	border-top: 1px solid #b0a898;
+	color: #5b616b;
+	background: #f1f3f6;
+	border-bottom: 2px solid #c7cbd3;
+	border-top: 1px solid #c7cbd3;
 	white-space: nowrap;
 }
 
 .report-th:hover {
-	background: #e4dfd6;
+	background: #e6e9ee;
 }
 
 .report-td {
 	padding: 5px 10px;
-	border-bottom: 1px solid #ddd7ce;
+	border-bottom: 1px solid #e1e4ea;
 	vertical-align: top;
-	color: #2c2926;
+	color: #1f2328;
 }
 
 .report-tr-alt {
-	background: rgba(180, 170, 155, 0.06);
+	background: #f7f8fb;
 }
 
 /* Totals / aggregation row */
 .report-totals-row {
-	background: #ece8e0 !important;
+	background: #eef1f5 !important;
 	font-weight: 700;
-	border-top: 2px solid #a09888;
+	border-top: 2px solid #c7cbd3;
 }
 
 .report-totals-row .report-td {
 	padding: 7px 10px;
 	border-bottom: none;
-	color: #2c2926;
+	color: #1f2328;
+}
+
+.report-summary-card {
+	margin-top: 14px;
+	padding: 12px 14px;
+	border: 1px solid #d5d8df;
+	background: #f5f6f8;
+	border-radius: 8px;
+}
+
+.report-summary-title {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: #6b7280;
+	margin-bottom: 10px;
+}
+
+.report-summary-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 10px 14px;
+}
+
+.report-summary-item {
+	display: grid;
+	gap: 4px;
+}
+
+.report-summary-label {
+	font-size: 10px;
+	color: #6b7280;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.report-summary-value {
+	font-size: 13px;
+	font-weight: 600;
+	color: #1f2328;
+}
+
+.report-summary-chart {
+	margin-top: 8px;
+	height: 36px;
+}
+
+.report-summary-chart svg {
+	width: 100%;
+	height: 100%;
+}
+
+.report-summary-chart polyline {
+	fill: none;
+	stroke: #2b2f36;
+	stroke-width: 2;
+}
+
+.report-summary-chart rect {
+	fill: #2b2f36;
 }
 
 /* ---- Hide non-print elements inside paper ---- */
@@ -301,7 +364,9 @@
 
 /* ---- PDF preview class (compatibility) ---- */
 .pdf-preview {
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	font-family:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+		Arial, sans-serif;
 }
 
 .pdf-preview .no-print {
@@ -318,6 +383,16 @@
 
 .pdf-preview tfoot {
 	display: table-footer-group;
+}
+
+/* Report table overflow handling */
+.report-table-scroll {
+	width: 100%;
+	overflow-x: auto;
+}
+
+.report-table {
+	min-width: 800px;
 }
 
 /* Form Table scroll performance optimizations */

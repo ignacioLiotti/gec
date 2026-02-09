@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
 			"@supabase/node-fetch",
 			"puppeteer-core",
 			"@sparticuz/chromium",
+			"xlsx",
 		],
 	},
 	// webpack: (config, { isServer }) => {

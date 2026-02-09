@@ -32,6 +32,7 @@ type TableRowProps<Row extends FormTableRow> = {
 	isRowDirty: boolean;
 	dirtyCellIds: string;
 	showActionsColumn: boolean;
+	isColumnHidden: (columnId: string) => boolean;
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
 	getStickyProps: (columnId: string, baseClassName?: string) => {
 		className: string;
@@ -60,6 +61,7 @@ function TableRowInner<Row extends FormTableRow>({
 	isRowDirty,
 	dirtyCellIds,
 	showActionsColumn,
+	isColumnHidden,
 	isCellDirty,
 	getStickyProps,
 	onToggleAccordion,
@@ -73,7 +75,8 @@ function TableRowInner<Row extends FormTableRow>({
 	// dirtyCellIds is used for memoization comparison (see MemoizedTableRow below)
 	void dirtyCellIds;
 	const visibleCells = row.getVisibleCells();
-	const visibleLeafCount = visibleCells.length;
+	const filteredCells = visibleCells.filter((cell) => !isColumnHidden(cell.column.id));
+	const visibleLeafCount = filteredCells.length;
 	const accordionLabel = accordionRowConfig?.triggerLabel ?? "detalles";
 	const rowData = row.original;
 
@@ -87,7 +90,7 @@ function TableRowInner<Row extends FormTableRow>({
 					isRowDirty ? "bg-amber-50/60 group/row-dirty" : ""
 				)}
 			>
-				{visibleCells.map((cell) => {
+				{filteredCells.map((cell) => {
 					const columnId = cell.column.id;
 					const columnMeta = columnsById[columnId];
 					if (!columnMeta) return null;

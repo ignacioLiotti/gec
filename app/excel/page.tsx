@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Upload } from "lucide-react";
 import Papa from "papaparse";
@@ -22,6 +22,7 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type CsvObra = {
 	n?: number | string | null;
@@ -42,6 +43,13 @@ type CsvObra = {
 
 type CsvRow = (string | null | undefined)[];
 type CsvPreviewRow = CsvObra & { _rowIndex: number };
+type ObraListItem = {
+	id: string;
+	n?: number | null;
+	designacionYUbicacion?: string | null;
+	entidadContratante?: string | null;
+	porcentaje?: number | null;
+};
 
 const normalizeHeader = (value: string) => {
 	const raw = value.trim();
@@ -101,6 +109,7 @@ const buildHeaders = (rows: CsvRow[], headerRows: number) => {
 };
 
 export default function ExcelPage() {
+	const isMobile = useIsMobile();
 	const [isImporting, setIsImporting] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -108,6 +117,8 @@ export default function ExcelPage() {
 	const [previewRows, setPreviewRows] = useState<CsvPreviewRow[]>([]);
 	const [pendingUpdates, setPendingUpdates] = useState<CsvObra[]>([]);
 	const [pendingFileName, setPendingFileName] = useState<string>("");
+	const [mobileObras, setMobileObras] = useState<ObraListItem[]>([]);
+	const [isLoadingMobile, setIsLoadingMobile] = useState(false);
 
 	const headerAliases = useMemo(
 		() => ({
@@ -294,6 +305,34 @@ export default function ExcelPage() {
 		[headerAliases]
 	);
 
+	useEffect(() => {
+		if (!isMobile) return;
+		let cancelled = false;
+		const loadObras = async () => {
+			try {
+				setIsLoadingMobile(true);
+				const response = await fetch("/api/obras", { cache: "no-store" });
+				if (!response.ok) throw new Error("No se pudieron obtener las obras");
+				const payload = await response.json();
+				const obras = Array.isArray(payload.detalleObras) ? payload.detalleObras : [];
+				if (!cancelled) {
+					setMobileObras(obras);
+				}
+			} catch (error) {
+				console.error(error);
+				if (!cancelled) {
+					toast.error("No se pudieron cargar las obras");
+				}
+			} finally {
+				if (!cancelled) setIsLoadingMobile(false);
+			}
+		};
+		void loadObras();
+		return () => {
+			cancelled = true;
+		};
+	}, [isMobile]);
+
 	const handleImportClick = useCallback(() => {
 		inputRef.current?.click();
 	}, []);
@@ -339,6 +378,53 @@ export default function ExcelPage() {
 		setPreviewRows([]);
 		setPendingFileName("");
 	}, []);
+
+	if (isMobile) {
+		return (
+			<div className="flex-1 px-4 py-4 space-y-4">
+				<div className="flex items-center justify-between gap-2">
+					<h1 className="text-2xl font-bold text-foreground">Panel de obras</h1>
+					<Button variant="outline" size="sm" asChild>
+						<Link href="/excel/reporte" className="gap-2">
+							<FileText className="h-4 w-4" />
+							Reporte
+						</Link>
+					</Button>
+				</div>
+				{isLoadingMobile ? (
+					<div className="text-sm text-muted-foreground">Cargando obras...</div>
+				) : (
+					<div className="grid grid-cols-1 gap-3">
+						{mobileObras.map((obra) => (
+							<Link
+								key={obra.id}
+								href={`/excel/${obra.id}`}
+								className="rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-muted/40"
+							>
+								<div className="text-xs text-muted-foreground">
+									#{obra.n ?? "-"}
+								</div>
+								<div className="text-base font-semibold text-foreground">
+									{toText(obra.designacionYUbicacion) || "Obra"}
+								</div>
+								<div className="text-sm text-muted-foreground">
+									{toText(obra.entidadContratante)}
+								</div>
+								<div className="mt-2 text-sm font-medium text-foreground">
+									Avance: {clampPercentage(obra.porcentaje).toFixed(1)}%
+								</div>
+							</Link>
+						))}
+						{mobileObras.length === 0 && (
+							<div className="text-sm text-muted-foreground">
+								No hay obras para mostrar.
+							</div>
+						)}
+					</div>
+				)}
+			</div>
+		);
+	}
 
 	return (
 		<div className="px-4 py-2">

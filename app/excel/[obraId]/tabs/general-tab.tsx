@@ -123,7 +123,7 @@ export function ObraGeneralTab({
 							form.handleSubmit();
 						}}
 					>
-						<div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+						<div className="flex flex-col lg:grid lg:grid-cols-1 lg:grid-cols-3 gap-4">
 							<motion.div
 								initial={{ opacity: 0, scale: 0.95 }}
 								animate={{ opacity: 1, scale: 1 }}
@@ -325,17 +325,17 @@ export function ObraGeneralTab({
 						<motion.section
 							initial={{ opacity: 0, y: 20 }}
 							animate={{ opacity: 1, y: 0 }}
-								transition={{ delay: 0.3 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden"
-							>
-								<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
-									<div className="flex items-center gap-2">
-										<DollarSign className="h-5 w-5 text-primary" />
-										<h2 className="text-base sm:text-lg font-semibold">Datos Financieros</h2>
-									</div>
+							transition={{ delay: 0.3 }}
+							className="rounded-lg border bg-card shadow-sm overflow-hidden"
+						>
+							<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
+								<div className="flex items-center gap-2">
+									<DollarSign className="h-5 w-5 text-primary" />
+									<h2 className="text-base sm:text-lg font-semibold">Datos Financieros</h2>
 								</div>
-								<div className="p-4 sm:p-6 space-y-4">
-									<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							</div>
+							<div className="p-4 sm:p-6 space-y-4">
+								<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 									<form.Field name="contratoMasAmpliaciones">
 										{(field: any) => (
 											<div>
@@ -536,7 +536,7 @@ export function ObraGeneralTab({
 				<div className="space-y-6">
 					<div className="flex flex-col lg:flex-row gap-4">
 						<div className="flex-1 space-y-6 min-w-0">
-							<div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:auto-rows-fr">
+							<div className="flex flex-col lg:grid lg:grid-cols-1 lg:grid-cols-3 gap-4 lg:auto-rows-fr">
 								<motion.div
 									initial={{ opacity: 0, scale: 0.95 }}
 									animate={{ opacity: 1, scale: 1 }}
@@ -578,10 +578,10 @@ export function ObraGeneralTab({
 											<h2 className="text-base sm:text-lg font-semibold">Información General</h2>
 										</div>
 									</div>
-									<div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+									<div className="p-4 sm:p-6 space-y-1 sm:space-y-6">
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("designacionYUbicacion") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>
@@ -600,7 +600,7 @@ export function ObraGeneralTab({
 										<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 											<div
 												className={cn(
-													"p-3 rounded-md transition-colors",
+													"px-3 lg:p-3  rounded-md transition-colors",
 													isFieldDirty("entidadContratante") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
@@ -618,7 +618,7 @@ export function ObraGeneralTab({
 
 											<div
 												className={cn(
-													"p-3 rounded-md transition-colors",
+													"px-3 lg:p-3  rounded-md transition-colors",
 													isFieldDirty("mesBasicoDeContrato") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
@@ -636,7 +636,7 @@ export function ObraGeneralTab({
 
 											<div
 												className={cn(
-													"p-3 rounded-md transition-colors",
+													"px-3 lg:p-3  rounded-md transition-colors",
 													isFieldDirty("iniciacion") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
@@ -654,7 +654,7 @@ export function ObraGeneralTab({
 
 											<div
 												className={cn(
-													"p-3 rounded-md transition-colors",
+													"px-3 lg:p-3  rounded-md transition-colors",
 													isFieldDirty("n") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
@@ -672,7 +672,7 @@ export function ObraGeneralTab({
 
 											<div
 												className={cn(
-													"p-3 rounded-md transition-colors",
+													"px-3 lg:p-3  rounded-md transition-colors",
 													isFieldDirty("supDeObraM2") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
@@ -708,7 +708,7 @@ export function ObraGeneralTab({
 									<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("contratoMasAmpliaciones") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>
@@ -725,7 +725,7 @@ export function ObraGeneralTab({
 
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("certificadoALaFecha") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>
@@ -742,7 +742,7 @@ export function ObraGeneralTab({
 
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("saldoACertificar") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>
@@ -763,7 +763,7 @@ export function ObraGeneralTab({
 									<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("segunContrato") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>
@@ -780,7 +780,7 @@ export function ObraGeneralTab({
 
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("prorrogasAcordadas") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>
@@ -797,7 +797,7 @@ export function ObraGeneralTab({
 
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("plazoTotal") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>
@@ -814,7 +814,7 @@ export function ObraGeneralTab({
 
 										<div
 											className={cn(
-												"p-3 rounded-md transition-colors",
+												"px-3 lg:p-3  rounded-md transition-colors",
 												isFieldDirty("plazoTransc") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 											)}
 										>

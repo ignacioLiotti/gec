@@ -52,6 +52,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  FolderIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Sentry from '@sentry/nextjs';
@@ -2085,7 +2086,7 @@ export function FileManager({
   const getFolderIconColor = (dataInputMethod?: DataInputMethod) => {
     switch (dataInputMethod) {
       case 'manual':
-        return 'text-blue-600';
+        return 'text-green-600';
       case 'ocr':
         return 'text-amber-600';
       case 'both':
@@ -2146,7 +2147,7 @@ export function FileManager({
             transition-all duration-150
             ${isFolderSelected && isFolder
               ? isOCR
-                ? item.dataInputMethod === 'manual' ? 'bg-blue-100 text-blue-900'
+                ? item.dataInputMethod === 'manual' ? 'bg-green-100 text-green-900'
                   : item.dataInputMethod === 'both' ? 'bg-purple-100 text-purple-900'
                     : 'bg-amber-100 text-amber-900'
                 : 'bg-stone-100 text-stone-900'
@@ -2160,12 +2161,53 @@ export function FileManager({
           <span className="w-4" />
 
           {isFolder ? (
-            <Folder className="w-4 h-4 shrink-0 text-stone-400 group-hover:text-stone-500" />
+            <FolderIcon className={cn("w-4 h-4 text-stone-400 ", getFolderIconColor(item.dataInputMethod))} />
           ) : (
             getTreeFileIcon(item.mimetype)
           )}
 
           <span className="flex-1 text-left truncate">{item.name}</span>
+
+          {isOCR && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 relative -mx-2">
+                  <span
+                    aria-label={
+                      item.dataInputMethod === 'manual'
+                        ? 'Carga manual'
+                        : item.dataInputMethod === 'both'
+                          ? 'Mixta: extracción + manual'
+                          : 'Extracción de datos'
+                    }
+                    className={` inline-flex items-center justify-center  px-1.5 py-0.5 ${item.dataInputMethod === 'manual'
+                      ? ' text-green-700 '
+                      : item.dataInputMethod === 'both'
+                        ? ' text-purple-700 '
+                        : ' text-amber-700 '
+                      }`}
+                  >
+                    {item.dataInputMethod === 'manual' ? (
+                      <Hand className="w-3 h-3" />
+                    ) : item.dataInputMethod === 'both' ? (
+                      <Layers className="w-3 h-3" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" />
+                    )}
+                  </span>
+                </div>
+
+              </TooltipTrigger>
+              <TooltipContent>
+                {item.dataInputMethod === 'manual'
+                  ? 'Carga manual'
+                  : item.dataInputMethod === 'both'
+                    ? 'Mixta: extracción + manual'
+                    : 'Extracción de datos'}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
 
           {isFolder && countValue !== null && (
             <Tooltip>
@@ -2180,42 +2222,7 @@ export function FileManager({
             </Tooltip>
           )}
 
-          {isOCR && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  aria-label={
-                    item.dataInputMethod === 'manual'
-                      ? 'Carga manual'
-                      : item.dataInputMethod === 'both'
-                        ? 'Mixta: extracción + manual'
-                        : 'Extracción de datos'
-                  }
-                  className={`ml-auto inline-flex items-center justify-center rounded-full border px-1.5 py-0.5 ${item.dataInputMethod === 'manual'
-                    ? 'bg-blue-100 text-blue-700 border-blue-200'
-                    : item.dataInputMethod === 'both'
-                      ? 'bg-purple-100 text-purple-700 border-purple-200'
-                      : 'bg-amber-100 text-amber-700 border-amber-200'
-                    }`}
-                >
-                  {item.dataInputMethod === 'manual' ? (
-                    <Hand className="w-3 h-3" />
-                  ) : item.dataInputMethod === 'both' ? (
-                    <Layers className="w-3 h-3" />
-                  ) : (
-                    <Sparkles className="w-3 h-3" />
-                  )}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {item.dataInputMethod === 'manual'
-                  ? 'Carga manual'
-                  : item.dataInputMethod === 'both'
-                    ? 'Mixta: extracción + manual'
-                    : 'Extracción de datos'}
-              </TooltipContent>
-            </Tooltip>
-          )}
+
 
           {/* {!isFolder && item.size && (
             <span className="text-xs text-stone-400">
@@ -2967,6 +2974,37 @@ export function FileManager({
     };
   }, [obraId, ocrOrderItemRows, selectedFolder?.id]);
 
+  function NotchTail({ side = "right", className = "" }) {
+    return (
+      <svg
+        width="60"
+        height="42"
+        viewBox="0 0 60 42"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        className={[
+          "pointer-events-none absolute bottom-[-1px] h-[42px] w-[60px]",
+          side === "right" ? "right-[-59px]" : "left-[-59px] scale-x-[-1]",
+          className,
+        ].join(" ")}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Fill */}
+        <path
+          d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60H0V1Z"
+          className="fill-[var(--notch-bg)]"
+        />
+        {/* Stroke */}
+        <path
+          d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60"
+          className="fill-none stroke-[var(--notch-stroke)]"
+          strokeWidth="1"
+        />
+      </svg>
+    );
+  }
+
+
   // Render main content
   const renderMainContent = () => {
     if (loading) {
@@ -3002,61 +3040,83 @@ export function FileManager({
     const files = items.filter(item => item.type === 'file' && item.name !== '.keep');
     const sortedItems = [...folders, ...files];
 
-    // OCR folder toggle header for documents mode
+    // Unified folder header (tab style) for both OCR and normal folders
     const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
-    const ocrToggleHeader = selectedFolder.ocrEnabled ? (
-      <div className="space-y-2 mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-lg border border-stone-200 bg-white">
-          <div className="flex items-center gap-3">
-            <Table2 className={`w-5 h-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
-            <h2 className="text-base font-semibold text-stone-800">{selectedFolder.name}</h2>
+    const showArchivosTablaToggle = selectedFolder.ocrEnabled && hasTablaSchema && activeFolderLink?.dataInputMethod !== "manual";
+    const folderContentHeader = (
+      <div className="mb-0">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          {/* LEFT TAB */}
+          <div
+            className="relative z-10 flex items-center gap-3 border border-b-0 -mb-[2px] border-stone-200 bg-white h-full px-4 py-3 rounded-tr-md rounded-tl-xl overflow-visible"
+            style={{
+              ["--notch-bg"]: "white",
+              ["--notch-stroke"]: "rgb(231 229 228)", // stone-200
+            }}
+          >
+            {/* Tail on the right */}
+            <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? "h-[54px] mb-[1px]" : "")} />
+
+            {selectedFolder.ocrEnabled ? (
+              <Table2 className={`w-5 h-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
+            ) : (
+              <Folder className="w-5 h-5 text-stone-500" />
+            )}
+            <h2 className="text-xl font-semibold text-stone-800">{selectedFolder.name}</h2>
             <span className="text-sm text-stone-500">
-              {documentViewMode === 'table'
+              {selectedFolder.ocrEnabled && documentViewMode === "table"
                 ? `(${ocrFilteredRowCount} filas)`
                 : `(${files.length} archivos)`}
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Only show toggle button if folder supports file viewing (not manual-only) */}
-            {selectedFolder.ocrEnabled && hasTablaSchema && activeFolderLink?.dataInputMethod !== 'manual' && (
+
+          {/* RIGHT TAB */}
+          <div
+            className="relative z-10 flex flex-wrap items-center gap-2 border border-b-0 -mb-[2px] border-stone-200 bg-white h-full px-4 pl-1 pt-2 pb-1 rounded-tl-md rounded-tr-xl overflow-visible"
+            style={{
+              ["--notch-bg"]: "white",
+              ["--notch-stroke"]: "rgb(231 229 228)", // stone-200
+            }}
+          >
+            {/* Tail on the left */}
+            <NotchTail side="left" className={cn(" mb-[2px]", activeFolderLink?.dataInputMethod === "manual" || !selectedFolder.ocrEnabled ? "h-[46px] mb-[1px]" : "h-[50px]")} />
+
+            {/* Only show Archivos/Tabla toggle for OCR folders with tabla schema and file viewing */}
+            {showArchivosTablaToggle && (
               <div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-0.5">
                 <Button
                   type="button"
-                  variant={documentViewMode === 'cards' ? 'default' : 'ghost'}
+                  variant={documentViewMode === "cards" ? "default" : "ghost"}
                   size="sm"
                   className="gap-1.5 h-8 px-3"
-                  aria-pressed={documentViewMode === 'cards'}
-                  onClick={() => handleDocumentViewModeChange('cards')}
+                  aria-pressed={documentViewMode === "cards"}
+                  onClick={() => handleDocumentViewModeChange("cards")}
                 >
                   <Folder className="w-3.5 h-3.5" />
                   Archivos
                 </Button>
                 <Button
                   type="button"
-                  variant={documentViewMode === 'table' ? 'default' : 'ghost'}
+                  variant={documentViewMode === "table" ? "default" : "ghost"}
                   size="sm"
                   className="gap-1.5 h-8 px-3"
-                  aria-pressed={documentViewMode === 'table'}
-                  onClick={() => handleDocumentViewModeChange('table')}
+                  aria-pressed={documentViewMode === "table"}
+                  onClick={() => handleDocumentViewModeChange("table")}
                 >
                   <Table2 className="w-3.5 h-3.5" />
                   Tabla
                 </Button>
               </div>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleQuickUploadClick}
-              className="gap-1.5"
-            >
+
+            <Button type="button" variant="outline" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
               <Upload className="w-3.5 h-3.5" />
               Subir archivos
             </Button>
           </div>
         </div>
-        {hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
+
+        {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
             <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
               Filtrando: {ocrDocumentFilterName ?? 'Documento seleccionado'}
@@ -3072,14 +3132,14 @@ export function FileManager({
           </div>
         )}
       </div>
-    ) : null;
+    );
 
     if (isOcrDocumentsMode && documentViewMode === 'table') {
       const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
       return (
         <div className="h-full flex flex-col">
-          {ocrToggleHeader}
-          <div className="flex-1 rounded-lg border border-stone-200 bg-white shadow-sm overflow-hidden pt-0 px-4">
+          {folderContentHeader}
+          <div className="flex-1 rounded-lg border rounded-t-none border-stone-200 bg-white shadow-sm overflow-hidden pt-0 px-4">
             {!hasTablaSchema ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
                 <Table2 className="w-10 h-10 mb-3 text-stone-300" />
@@ -3157,16 +3217,17 @@ export function FileManager({
     const folderBody = (() => {
       if (sortedItems.length === 0) {
         return (
-          <div className="flex h-full flex-col items-center justify-center text-stone-400">
-            <Folder className="w-16 h-16 mb-4 opacity-20" />
-            <p>Esta carpeta está vacía</p>
+          <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center rounded-lg bg-white">
+            <Folder className="w-10 h-10 mb-3 text-stone-300" />
+            <p>Esta carpeta está vacía.</p>
+            <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
             <Button
               variant="outline"
               size="sm"
               onClick={() => document.getElementById('file-upload')?.click()}
-              className="mt-4"
+              className="mt-4 gap-2"
             >
-              <Upload className="w-4 h-4 mr-2" />
+              <Upload className="w-4 h-4" />
               Subir archivos
             </Button>
           </div>
@@ -3175,7 +3236,7 @@ export function FileManager({
 
       return (
         <div
-          className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg transition-colors mt-4 ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''
+          className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg transition-colors mt-12 ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''
             }`}
           onDragEnter={handleDocumentAreaDragEnter}
           onDragOver={handleDocumentAreaDragOver}
@@ -3242,27 +3303,8 @@ export function FileManager({
         onDragLeave={handleDocumentAreaDragLeave}
         onDrop={handleDocumentAreaDrop}
       >
-        {ocrToggleHeader}
-        {!selectedFolder.ocrEnabled && (
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 mb-4 rounded-lg border border-stone-200 bg-white">
-            <div className="flex items-center gap-3">
-              <Folder className="w-5 h-5 text-stone-500" />
-              <h2 className="text-base font-semibold text-stone-800">{selectedFolder.name}</h2>
-              <span className="text-sm text-stone-500">({files.length} archivos)</span>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleQuickUploadClick}
-              className="gap-1.5"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Subir archivos
-            </Button>
-          </div>
-        )}
-        <div className="flex-1 min-h-[320px]">{folderBody}</div>
+        {folderContentHeader}
+        <div className="flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-stone-200">{folderBody}</div>
       </div>
     );
 
@@ -3305,7 +3347,7 @@ export function FileManager({
   }, [closeDocumentPreview]);
 
   return (
-    <div className="relative min-h-[calc(100vh-9rem)] flex flex-col gap-4 bg-stone-50">
+    <div className="relative min-h-[calc(100vh-9rem)] flex flex-col gap-4">
       {/* Upload animation overlay */}
       <AnimatePresence>
         {isUploadingOcrFolder && (
