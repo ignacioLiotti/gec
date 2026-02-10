@@ -78,7 +78,7 @@ export function EventDialog({
   const [error, setError] = useState<string | null>(null)
   const [startDateOpen, setStartDateOpen] = useState(false)
   const [endDateOpen, setEndDateOpen] = useState(false)
-  const [audienceType, setAudienceType] = useState<"me" | "role">("me")
+  const [audienceType, setAudienceType] = useState<"me" | "role" | "user" | "tenant">("me")
   const [audienceRoleId, setAudienceRoleId] = useState<string | "">("")
 
   // Debug log to check what event is being passed
@@ -199,6 +199,8 @@ export function EventDialog({
       completed,
       audienceType,
       audienceRoleId: audienceType === "role" ? audienceRoleId || undefined : undefined,
+      obraId: event?.obraId,
+      obraName: event?.obraName,
     })
   }
 

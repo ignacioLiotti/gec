@@ -40,6 +40,7 @@ import {
   CalendarView,
   DayView,
   EventDialog,
+  EventViewDialog,
   EventGap,
   EventHeight,
   MonthView,
@@ -76,6 +77,7 @@ export function EventCalendar({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<CalendarView>(initialView)
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false)
+  const [isEventViewOpen, setIsEventViewOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const interactive = !readOnly
 
@@ -150,7 +152,7 @@ export function EventCalendar({
     if (!interactive) return
     console.log("Event selected:", event) // Debug log
     setSelectedEvent(event)
-    setIsEventDialogOpen(true)
+    setIsEventViewOpen(true)
   }
 
   const handleEventCreate = (startTime: Date) => {
@@ -180,6 +182,7 @@ export function EventCalendar({
       allDay: false,
     }
     setSelectedEvent(newEvent)
+    setIsEventViewOpen(false)
     setIsEventDialogOpen(true)
   }
 
@@ -212,6 +215,7 @@ export function EventCalendar({
     const deletedEvent = events.find((e) => e.id === eventId)
     onEventDelete?.(eventId)
     setIsEventDialogOpen(false)
+    setIsEventViewOpen(false)
     setSelectedEvent(null)
 
     // Show toast notification when an event is deleted
@@ -424,6 +428,21 @@ export function EventCalendar({
             />
           )}
         </div>
+
+        {interactive && (
+          <EventViewDialog
+            event={selectedEvent}
+            isOpen={isEventViewOpen}
+            onClose={() => {
+              setIsEventViewOpen(false)
+            }}
+            onEdit={() => {
+              setIsEventViewOpen(false)
+              setIsEventDialogOpen(true)
+            }}
+            allowEdit={interactive}
+          />
+        )}
 
         {interactive && (
           <EventDialog

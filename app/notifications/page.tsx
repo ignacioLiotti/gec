@@ -6,6 +6,7 @@ import { NotificationsTable } from "./_components/notifications-table";
 import { revalidatePath } from "next/cache";
 import { addHours } from "date-fns";
 import { PendientesCalendar, type CalendarEventPayload } from "./_components/pendientes-calendar";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 
 type NotificationRow = {
   id: string;
@@ -22,9 +23,21 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;
+  const currentUserEmail = auth.user?.email ?? null;
   if (!userId) {
     return (
       <div className="p-6 text-sm">Inicia sesión para ver tus notificaciones.</div>
+    );
+  }
+
+  const { data: memberships } = await supabase
+    .from("memberships")
+    .select("tenant_id, role")
+    .eq("user_id", userId);
+  const { tenantId } = await resolveTenantMembership(memberships);
+  if (!tenantId) {
+    return (
+      <div className="p-6 text-sm">No se encontró una organización activa.</div>
     );
   }
 
@@ -38,17 +51,20 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       .from("notifications")
       .select(selectCols)
       .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false }),
     supabase
       .from("notifications")
       .select(selectCols)
       .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
       .is("read_at", null)
       .order("created_at", { ascending: false }),
     supabase
       .from("notifications")
       .select(selectCols)
       .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
       .eq("type", "reminder")
       .order("created_at", { ascending: false }),
   ]);
@@ -66,7 +82,8 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     const { data: pendRows } = await supabase
       .from("obra_pendientes")
       .select("id,name,obra_id,due_date")
-      .in("id", pendienteIds);
+      .in("id", pendienteIds)
+      .eq("tenant_id", tenantId);
     for (const r of pendRows ?? []) {
       pendientesById[(r as any).id] = { name: (r as any).name, obra_id: (r as any).obra_id ?? null, due_date: (r as any).due_date ?? null };
     }
@@ -76,6 +93,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       .from("pendiente_schedules")
       .select("pendiente_id,run_at,stage")
       .in("pendiente_id", pendienteIds)
+      .eq("tenant_id", tenantId)
       .eq("stage", "due_today");
     for (const s of schedRows ?? []) {
       // Extract date part from timestamp in local timezone
@@ -84,36 +102,19 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     }
   }
 
-  const pendienteCalendarItems = parsePendienteRows((reminders ?? []) as NotificationRow[], pendientesById, dueBySchedule);
-  const pendienteCalendarEvents = buildCalendarEvents(pendienteCalendarItems);
-  console.log("[notifications/calendar] pendienteCalendarEvents", pendienteCalendarEvents.map((ev) => ({
-    source: "pendiente",
-    id: ev.id,
-    title: ev.title,
-    start: ev.start,
-    end: ev.end,
-  })));
-
   // Fetch flujo actions for calendar view
-  const { data: tenantData } = await supabase
-    .from("memberships")
-    .select("tenant_id")
-    .eq("user_id", userId)
-    .limit(1)
-    .maybeSingle();
-
-  const tenantId = tenantData?.tenant_id;
   let flujoCalendarEvents: CalendarEventPayload[] = [];
   let availableRoles: { id: string; name: string | null }[] = [];
   let calendarEventRows: any[] = [];
+  let obraNameById = new Map<string, string>();
 
-  let calendarEvents: CalendarEventPayload[] = [...pendienteCalendarEvents];
+  let calendarEvents: CalendarEventPayload[] = [];
 
   if (tenantId) {
-    const [obrasRes, rolesRes, userRoleIdsRes, calendarRes] = await Promise.all([
+    const [obrasRes, rolesRes, userRoleIdsRes, calendarRes, membershipUsersRes] = await Promise.all([
       supabase
         .from("obras")
-        .select("id")
+        .select("id,designacion_y_ubicacion")
         .eq("tenant_id", tenantId),
       supabase
         .from("roles")
@@ -128,9 +129,19 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
         .from("calendar_events")
         .select("*")
         .eq("tenant_id", tenantId),
+      supabase
+        .from("memberships")
+        .select("user_id,users(email)")
+        .eq("tenant_id", tenantId),
     ]);
 
     const obras = obrasRes.data ?? [];
+    obraNameById = new Map(
+      obras.map((obra: any) => [
+        obra.id as string,
+        (obra.designacion_y_ubicacion as string) ?? "",
+      ])
+    );
     const rolesData = rolesRes.data ?? [];
     const userRoleIds = (userRoleIdsRes.data ?? []) as { role_id: string }[];
     calendarEventRows = calendarRes.data ?? [];
@@ -139,6 +150,9 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       id: String(r.id),
       name: r.name ?? null,
     }));
+    const roleNameById = new Map(
+      rolesData.map((role: any) => [role.id as string, role.name as string])
+    );
 
     // Get current user's role IDs in this tenant
     const userRoleIdSet = new Set(userRoleIds.map((ur) => ur.role_id));
@@ -148,6 +162,25 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     // calendar_events for calendar_event actions at the correct relative time.
 
     // Filter calendar events based on audience and current user's roles
+    const userIds = new Set<string>();
+    for (const row of calendarEventRows ?? []) {
+      if (row.created_by) userIds.add(String(row.created_by));
+      if (row.target_user_id) userIds.add(String(row.target_user_id));
+    }
+    const { data: profileRows } = userIds.size
+      ? await supabase
+          .from("profiles")
+          .select("user_id,full_name")
+          .in("user_id", Array.from(userIds))
+      : { data: [] as any[] };
+    const userNameById = new Map(
+      (profileRows ?? []).map((p: any) => [p.user_id as string, p.full_name as string])
+    );
+    const membershipRows = (membershipUsersRes?.data ?? []) as any[];
+    const userEmailById = new Map(
+      membershipRows.map((row) => [row.user_id as string, row.users?.email as string])
+    );
+
     const calendarEventsFromTable: CalendarEventPayload[] = (calendarEventRows ?? [])
       .filter((row) => {
         const audienceType = row.audience_type as string | null;
@@ -191,14 +224,57 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
         location: row.location ?? undefined,
         completed: Boolean(row.completed),
         pendingStatus: "upcoming" as const,
+        obraId: (row.obra_id as string | null) ?? undefined,
+        obraName: row.obra_id ? obraNameById.get(row.obra_id as string) : undefined,
+        audienceType: (row.audience_type as CalendarEventPayload["audienceType"]) ?? undefined,
+        targetUserId: (row.target_user_id as string | null) ?? undefined,
+        targetUserName: row.target_user_id
+          ? (row.target_user_id === userId
+              ? currentUserEmail ?? userNameById.get(row.target_user_id as string)
+              : userNameById.get(row.target_user_id as string) ??
+                userEmailById.get(row.target_user_id as string))
+          : undefined,
+        targetRoleId: (row.target_role_id as string | null) ?? undefined,
+        targetRoleName: row.target_role_id
+          ? roleNameById.get(row.target_role_id as string)
+          : undefined,
+        createdById: (row.created_by as string | null) ?? undefined,
+        createdByName: row.created_by
+          ? (row.created_by === userId
+              ? currentUserEmail ?? userNameById.get(row.created_by as string)
+              : userNameById.get(row.created_by as string) ??
+                userEmailById.get(row.created_by as string))
+          : undefined,
+        createdAt: row.created_at ? String(row.created_at) : undefined,
       }));
 
-    // Combine pendientes, flujo, and calendar_events rows
+    // Combine pendientes and calendar_events rows
     calendarEvents = [
-      ...pendienteCalendarEvents,
       ...calendarEventsFromTable,
     ];
   }
+
+  const pendienteCalendarItems = parsePendienteRows(
+    (reminders ?? []) as NotificationRow[],
+    pendientesById,
+    dueBySchedule
+  );
+  const pendienteCalendarEvents = buildCalendarEvents(
+    pendienteCalendarItems,
+    obraNameById
+  );
+  console.log("[notifications/calendar] pendienteCalendarEvents", pendienteCalendarEvents.map((ev) => ({
+    source: "pendiente",
+    id: ev.id,
+    title: ev.title,
+    start: ev.start,
+    end: ev.end,
+  })));
+
+  calendarEvents = [
+    ...pendienteCalendarEvents,
+    ...calendarEvents,
+  ];
 
   console.log("[notifications/calendar] final calendarEvents", calendarEvents.map((ev) => ({
     id: ev.id,
@@ -212,10 +288,17 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     const s = await createClient();
     const { data: me } = await s.auth.getUser();
     if (!me.user) return;
+    const { data: memberships } = await s
+      .from("memberships")
+      .select("tenant_id, role")
+      .eq("user_id", me.user.id);
+    const { tenantId } = await resolveTenantMembership(memberships);
+    if (!tenantId) return;
     await s
       .from("notifications")
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", me.user.id)
+      .eq("tenant_id", tenantId)
       .is("read_at", null);
   }
 
@@ -265,10 +348,20 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     const id = String(formData.get("id") ?? "");
     if (!id) return;
     const s = await createClient();
+    const { data: me } = await s.auth.getUser();
+    if (!me.user) return;
+    const { data: memberships } = await s
+      .from("memberships")
+      .select("tenant_id, role")
+      .eq("user_id", me.user.id);
+    const { tenantId } = await resolveTenantMembership(memberships);
+    if (!tenantId) return;
     await s
       .from("notifications")
       .update({ read_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", me.user.id)
+      .eq("tenant_id", tenantId);
   }
 
   async function deleteNotification(formData: FormData) {
@@ -278,6 +371,12 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     const s = await createClient();
     const { data: me } = await s.auth.getUser();
     if (!me.user) return;
+    const { data: memberships } = await s
+      .from("memberships")
+      .select("tenant_id, role")
+      .eq("user_id", me.user.id);
+    const { tenantId } = await resolveTenantMembership(memberships);
+    if (!tenantId) return;
 
     // Get the notification to check if it has a pendiente_id
     const { data: notification } = await s
@@ -285,6 +384,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       .select("pendiente_id")
       .eq("id", id)
       .eq("user_id", me.user.id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (!notification) return;
@@ -295,7 +395,8 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
       await s
         .from("obra_pendientes")
         .delete()
-        .eq("id", (notification as any).pendiente_id);
+        .eq("id", (notification as any).pendiente_id)
+        .eq("tenant_id", tenantId);
     } else {
       // If no pendiente_id, just delete the notification
       await s
@@ -315,12 +416,19 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     const s = await createClient();
     const { data: me } = await s.auth.getUser();
     if (!me.user) return;
+    const { data: memberships } = await s
+      .from("memberships")
+      .select("tenant_id, role")
+      .eq("user_id", me.user.id);
+    const { tenantId } = await resolveTenantMembership(memberships);
+    if (!tenantId) return;
 
     // Verify the pendiente exists and user has access
     const { data: pendiente } = await s
       .from("obra_pendientes")
       .select("obra_id")
       .eq("id", pendienteId)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (!pendiente) return;
@@ -336,13 +444,15 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     await s
       .from("pendiente_schedules")
       .delete()
-      .eq("pendiente_id", pendienteId);
+      .eq("pendiente_id", pendienteId)
+      .eq("tenant_id", tenantId);
 
     // Now delete the pendiente itself
     await s
       .from("obra_pendientes")
       .delete()
-      .eq("id", pendienteId);
+      .eq("id", pendienteId)
+      .eq("tenant_id", tenantId);
 
     revalidatePath("/notifications");
   }
@@ -1021,20 +1131,25 @@ function parsePendienteRows(
   });
 }
 
-function buildCalendarEvents(items: PendienteItem[]): CalendarEventPayload[] {
+function buildCalendarEvents(
+  items: PendienteItem[],
+  obraNameById?: Map<string, string>
+): CalendarEventPayload[] {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart);
   todayEnd.setDate(todayEnd.getDate() + 1);
 
   return items.map((item) => {
+    const resolvedObraName =
+      item.obraName ?? (item.obraId ? obraNameById?.get(item.obraId) : undefined);
     const baseStart = item.dueDateObj ? new Date(item.dueDateObj) : new Date(item.created_at);
     const startDate = new Date(baseStart);
     const endDate = addHours(startDate, 1);
     const hasExplicitTime = item.dueDateObj && (item.dueDateObj.getHours() !== 0 || item.dueDateObj.getMinutes() !== 0);
     const descriptionParts = [];
     if (item.documentName) descriptionParts.push(`Documento: ${item.documentName}`);
-    if (item.obraName) descriptionParts.push(`Obra: ${item.obraName}`);
+    if (resolvedObraName) descriptionParts.push(`Obra: ${resolvedObraName}`);
 
     let color: CalendarEventPayload["color"] = "emerald";
     let pendingStatus: CalendarEventPayload["pendingStatus"] = "upcoming";
@@ -1057,9 +1172,11 @@ function buildCalendarEvents(items: PendienteItem[]): CalendarEventPayload[] {
       end: endDate.toISOString(),
       allDay: !hasExplicitTime,
       color,
-      location: item.obraName ?? undefined,
+      location: resolvedObraName ?? undefined,
       pendingStatus,
       completed: false,
+      obraId: item.obraId ?? undefined,
+      obraName: resolvedObraName ?? undefined,
     };
   });
 }

@@ -20,6 +20,16 @@ export type CalendarEventPayload = {
   location?: string
   completed?: boolean
   pendingStatus?: PendienteStatus
+  obraId?: string
+  obraName?: string
+  createdAt?: string
+  createdById?: string
+  createdByName?: string
+  audienceType?: "me" | "user" | "role" | "tenant"
+  targetUserId?: string
+  targetUserName?: string
+  targetRoleId?: string
+  targetRoleName?: string
 }
 
 export function PendientesCalendar({
