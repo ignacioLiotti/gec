@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Download, Eye, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ForgeViewer from "@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer";
@@ -12,7 +13,7 @@ type DocumentPreviewProps = {
 	onDownload: (doc: FileSystemItem) => void;
 };
 
-export function DocumentPreview({ document, previewUrl, onDownload }: DocumentPreviewProps) {
+export const DocumentPreview = memo(function DocumentPreview({ document, previewUrl, onDownload }: DocumentPreviewProps) {
 	if (!document) {
 		return (
 			<div className="flex flex-col items-center justify-center h-full text-stone-400">
@@ -45,6 +46,7 @@ export function DocumentPreview({ document, previewUrl, onDownload }: DocumentPr
 					</div>
 				) : previewUrl && (isImage || isPdf) ? (
 					<EnhancedDocumentViewer
+						title={false}
 						url={previewUrl}
 						fileName={document.name}
 						fileType={isPdf ? "pdf" : "image"}
@@ -63,4 +65,4 @@ export function DocumentPreview({ document, previewUrl, onDownload }: DocumentPr
 			</div>
 		</div>
 	);
-}
+});

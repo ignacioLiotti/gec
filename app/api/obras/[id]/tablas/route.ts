@@ -235,6 +235,9 @@ export async function POST(request: Request, context: RouteContext) {
 				const { ocrScope, ...rest } = config;
 				config = rest;
 			}
+			if (incomingConfig?.ocrDescription && typeof incomingConfig?.ocrDescription === "string") {
+				config = { ...config, ocrDescription: incomingConfig.ocrDescription };
+			}
 			return {
 				field_key: fieldKey,
 				label,

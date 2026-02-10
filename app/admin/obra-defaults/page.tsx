@@ -66,6 +66,7 @@ type OcrColumn = {
   dataType: string;
   required: boolean;
   scope: "parent" | "item";
+  description?: string;
 };
 
 type DefaultFolder = {
@@ -85,6 +86,7 @@ type DefaultFolder = {
     dataType: string;
     ocrScope?: string;
     required?: boolean;
+    description?: string | null;
   }>;
 };
 
@@ -107,7 +109,7 @@ type OcrTemplate = {
     type: "single" | "table";
     tableColumns?: string[];
   }>;
-  columns: Array<{ fieldKey: string; label: string; dataType: string; ocrScope?: string }>;
+  columns: Array<{ fieldKey: string; label: string; dataType: string; ocrScope?: string; description?: string }>;
   is_active: boolean;
 };
 
@@ -473,7 +475,7 @@ function OcrTemplateCard({
   );
 }
 
-const DATA_TYPES = ["text", "number", "currency", "date", "boolean"] as const;
+const DATA_TYPES = ["texto", "numero", "moneda", "fecha", "si/no"] as const;
 
 export default function ObraDefaultsPage() {
   const [folders, setFolders] = useState<DefaultFolder[]>([]);
@@ -570,6 +572,7 @@ export default function ObraDefaultsPage() {
       dataType: DATA_TYPES.includes(col.dataType as typeof DATA_TYPES[number]) ? col.dataType : "text",
       required: false,
       scope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
+      description: col.description,
     }));
 
     setNewFolderColumns(mappedColumns);
@@ -645,6 +648,7 @@ export default function ObraDefaultsPage() {
           required: col.required,
           position: index,
           ocrScope: newFolderHasNested && needsOcrTemplate ? col.scope : "item",
+          description: col.description,
         }));
       }
 
@@ -811,7 +815,7 @@ export default function ObraDefaultsPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8">
+    <div className="p-6 max-w-full mx-auto space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
@@ -1153,14 +1157,14 @@ export default function ObraDefaultsPage() {
             </div>
 
             {/* Folder Name */}
-          <div className="space-y-2">
-            <Label>Nombre de la carpeta</Label>
-            <Input
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              placeholder={folderMode === "data" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label>Nombre de la carpeta</Label>
+              <Input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder={folderMode === "data" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
+              />
+            </div>
 
             {/* Data Folder Specific Fields */}
             {folderMode === "data" && (

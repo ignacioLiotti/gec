@@ -259,7 +259,8 @@ export function FormTableContent({ className }: { className?: string }) {
 	} = useFormTable<FormTableRow, unknown>();
 
 	const columnDefs = columns.list;
-	const { tableRef, colRefs, colWidths, isColumnHidden, getStickyProps, columnIndexMap, columnsById, groupedColumnLookup, enableResizing } = columns;
+	const { tableRef, colRefs, colWidths, isColumnHidden, getStickyProps, columnIndexMap, columnsById, groupedColumnLookup, enableResizing, hiddenIds } = columns;
+	const hiddenColumnIdsKey = useMemo(() => hiddenIds.join(","), [hiddenIds]);
 	const {
 		table,
 		FieldComponent,
@@ -558,6 +559,7 @@ export function FormTableContent({ className }: { className?: string }) {
 											isExpanded={isRowExpanded(rowId)}
 											isRowDirty={rowIsDirty}
 											dirtyCellIds={dirtyCellIds}
+											hiddenColumnIdsKey={hiddenColumnIdsKey}
 											showActionsColumn={showActionsColumn}
 											isColumnHidden={isColumnHidden}
 											isCellDirty={isCellDirty}
@@ -603,6 +605,7 @@ export function FormTableContent({ className }: { className?: string }) {
 											isExpanded={isRowExpanded(rowId)}
 											isRowDirty={rowIsDirty}
 											dirtyCellIds={dirtyCellIds}
+											hiddenColumnIdsKey={hiddenColumnIdsKey}
 											showActionsColumn={showActionsColumn}
 											isColumnHidden={isColumnHidden}
 											isCellDirty={isCellDirty}

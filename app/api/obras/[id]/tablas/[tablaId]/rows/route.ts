@@ -127,6 +127,13 @@ export async function POST(request: Request, context: RowsContext) {
 							(row as any)[column.fieldKey]
 						);
 					}
+					// Preserve document linkage metadata if present on the row payload.
+					if (typeof (row as any).__docPath === "string") {
+						data.__docPath = (row as any).__docPath;
+					}
+					if (typeof (row as any).__docFileName === "string") {
+						data.__docFileName = (row as any).__docFileName;
+					}
 					return {
 						id: row.id as string,
 						tabla_id: tablaId,

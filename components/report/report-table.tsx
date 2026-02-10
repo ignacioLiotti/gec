@@ -56,6 +56,79 @@ function getDecimalFormatter(locale: string): Intl.NumberFormat {
 	return fmt;
 }
 
+function parseNumericValue(value: unknown): number | null {
+	if (value == null) return null;
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value === "boolean") return value ? 1 : 0;
+	if (typeof value !== "string") {
+		const num = Number(value);
+		return Number.isFinite(num) ? num : null;
+	}
+
+	let str = value.trim();
+	if (!str) return null;
+
+	let isNegative = false;
+	if (str.startsWith("(") && str.endsWith(")")) {
+		isNegative = true;
+		str = str.slice(1, -1).trim();
+	}
+
+	// Remove currency symbols and spaces
+	str = str.replace(/[^\d,.-]/g, "");
+
+	const hasComma = str.includes(",");
+	const hasDot = str.includes(".");
+
+	if (hasComma && hasDot) {
+		// Assume dot is thousands separator, comma is decimal
+		str = str.replace(/\./g, "").replace(",", ".");
+	} else if (hasComma && !hasDot) {
+		// Assume comma is decimal
+		str = str.replace(",", ".");
+	} else {
+		// Only dot or only digits: keep as-is
+	}
+
+	const num = Number(str);
+	if (!Number.isFinite(num)) return null;
+	return isNegative ? -num : num;
+}
+
+function parseDateValue(value: unknown): number | null {
+	if (value == null) return null;
+	if (value instanceof Date && !Number.isNaN(value.getTime())) {
+		return value.getTime();
+	}
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value;
+	}
+	if (typeof value !== "string") return null;
+	const raw = value.trim();
+	if (!raw) return null;
+
+	const native = Date.parse(raw);
+	if (!Number.isNaN(native)) return native;
+
+	const match = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})(?:\s+.*)?$/);
+	if (match) {
+		const day = Number(match[1]);
+		const month = Number(match[2]) - 1;
+		const year = Number(match[3]);
+		const date = new Date(year, month, day);
+		const ts = date.getTime();
+		return Number.isNaN(ts) ? null : ts;
+	}
+
+	return null;
+}
+
+function formatDateValue(value: unknown, locale: string): string {
+	const ts = parseDateValue(value);
+	if (ts == null) return String(value ?? "-");
+	return new Intl.DateTimeFormat(locale).format(new Date(ts));
+}
+
 /* ------------------------------------------------------------------ */
 /*  Value formatting                                                   */
 /* ------------------------------------------------------------------ */
@@ -70,22 +143,23 @@ function formatValue(
 
 	switch (type) {
 		case "currency": {
-			const num = typeof value === "number" ? value : Number(value) || 0;
+			const num = parseNumericValue(value) ?? 0;
 			return getNumberFormatter(currencyLocale, currencyCode).format(num);
 		}
 		case "number": {
-			const num = typeof value === "number" ? value : Number(value) || 0;
+			const num = parseNumericValue(value) ?? 0;
 			return getNumberFormatter(currencyLocale).format(num);
 		}
 		case "boolean":
 			return value ? "Si" : "No";
 		case "date":
 			if (!value) return "-";
-			return String(value);
+			return formatDateValue(value, currencyLocale);
 		default:
 			return String(value ?? "-");
 	}
 }
+
 
 /* ------------------------------------------------------------------ */
 /*  Aggregation calculation                                            */
@@ -100,11 +174,38 @@ function calculateAggregationRaw<Row>(
 
 	const values = data.map((row) => column.accessor(row));
 
+	if (column.type === "date") {
+		if (aggType === "count" || aggType === "count-checked") {
+			return aggType === "count"
+				? values.filter((v) => v != null && v !== "").length
+				: values.filter((v) => v === true).length;
+		}
+		const timestamps = values
+			.map((v) => parseDateValue(v))
+			.filter((v): v is number => v != null && Number.isFinite(v));
+		if (timestamps.length === 0) return 0;
+		switch (aggType) {
+			case "min":
+				return Math.min(...timestamps);
+			case "max":
+				return Math.max(...timestamps);
+			case "average":
+			case "sum": {
+				let total = 0;
+				for (const ts of timestamps) total += ts;
+				return total / timestamps.length;
+			}
+			default:
+				return null;
+		}
+	}
+
 	switch (aggType) {
 		case "sum": {
 			let sum = 0;
 			for (const v of values) {
-				sum += typeof v === "number" ? v : Number(v) || 0;
+				const num = parseNumericValue(v);
+				if (num != null) sum += num;
 			}
 			return sum;
 		}
@@ -115,8 +216,8 @@ function calculateAggregationRaw<Row>(
 		case "average": {
 			const nums: number[] = [];
 			for (const v of values) {
-				const n = typeof v === "number" ? v : Number(v) || 0;
-				if (n !== 0) nums.push(n);
+				const n = parseNumericValue(v);
+				if (n != null) nums.push(n);
 			}
 			if (nums.length === 0) return 0;
 			let total = 0;
@@ -125,15 +226,15 @@ function calculateAggregationRaw<Row>(
 		}
 		case "min": {
 			const nums = values
-				.map((v) => (typeof v === "number" ? v : Number(v)))
-				.filter((v) => Number.isFinite(v));
+				.map((v) => parseNumericValue(v))
+				.filter((v): v is number => v != null && Number.isFinite(v));
 			if (nums.length === 0) return 0;
 			return Math.min(...nums);
 		}
 		case "max": {
 			const nums = values
-				.map((v) => (typeof v === "number" ? v : Number(v)))
-				.filter((v) => Number.isFinite(v));
+				.map((v) => parseNumericValue(v))
+				.filter((v): v is number => v != null && Number.isFinite(v));
 			if (nums.length === 0) return 0;
 			return Math.max(...nums);
 		}
@@ -142,9 +243,9 @@ function calculateAggregationRaw<Row>(
 	}
 }
 
-function formatAggregationValue(
+function formatAggregationValue<Row>(
 	value: number | null,
-	column: ReportColumn<unknown>,
+	column: ReportColumn<Row>,
 	aggType: AggregationType,
 	currencyLocale: string,
 	currencyCode: string
@@ -152,6 +253,9 @@ function formatAggregationValue(
 	if (value == null || aggType === "none") return "";
 	if (aggType === "count" || aggType === "count-checked") {
 		return String(value);
+	}
+	if (column.type === "date") {
+		return formatDateValue(value, currencyLocale);
 	}
 	if (column.type === "currency") {
 		return getNumberFormatter(currencyLocale, currencyCode).format(value);
@@ -162,9 +266,9 @@ function formatAggregationValue(
 	return getDecimalFormatter(currencyLocale).format(value);
 }
 
-function formatDelta(
+function formatDelta<Row>(
 	value: number,
-	column: ReportColumn<unknown>,
+	column: ReportColumn<Row>,
 	currencyLocale: string,
 	currencyCode: string
 ): string {
@@ -436,7 +540,7 @@ function ReportTableInner<Row>({
 													)}
 												>
 													{delta > 0 ? "+" : ""}
-													{formatDelta(delta, col, currencyLocale, currencyCode)}
+														{formatDelta<Row>(delta, col, currencyLocale, currencyCode)}
 													{deltaPct != null && Number.isFinite(deltaPct) && (
 														<span className="ml-1">
 															({deltaPct > 0 ? "+" : ""}

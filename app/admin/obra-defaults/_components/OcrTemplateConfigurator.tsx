@@ -44,6 +44,7 @@ interface Region {
 	width: number;
 	height: number;
 	label: string;
+	description?: string;
 	color: string;
 	type: RegionType;
 	tableColumns?: string[];
@@ -60,6 +61,7 @@ interface OcrTemplate {
 		label: string;
 		dataType: string;
 		ocrScope?: string;
+		description?: string;
 	}>;
 	is_active: boolean;
 }
@@ -101,6 +103,7 @@ export function OcrTemplateConfigurator({
 	const [isDrawing, setIsDrawing] = useState(false);
 	const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
 	const [isSaving, setIsSaving] = useState(false);
+	const [saveError, setSaveError] = useState<string | null>(null);
 	const [scale, setScale] = useState(1);
 	const [isDrawModeEnabled, setIsDrawModeEnabled] = useState(true);
 
@@ -150,12 +153,7 @@ export function OcrTemplateConfigurator({
 				setImage(img);
 				setRegions([]);
 				setSelectedRegionId(null);
-
-				const canvas = canvasRef.current;
-				if (canvas) {
-					canvas.width = img.width;
-					canvas.height = img.height;
-				}
+				setScale(1);
 			};
 			img.src = event.target?.result as string;
 		};
@@ -234,6 +232,15 @@ export function OcrTemplateConfigurator({
 	useEffect(() => {
 		redraw();
 	}, [redraw]);
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas || !image) return;
+		canvas.width = image.width;
+		canvas.height = image.height;
+		canvas.style.width = `${image.width}px`;
+		canvas.style.height = `${image.height}px`;
+		redraw();
+	}, [image, redraw]);
 
 	// Mouse handlers
 	const handleMouseDown = useCallback(
@@ -315,6 +322,15 @@ export function OcrTemplateConfigurator({
 		setRegions((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
 	}, []);
 
+	const handleRegionDescriptionChange = useCallback(
+		(id: string, description: string) => {
+			setRegions((prev) =>
+				prev.map((r) => (r.id === id ? { ...r, description } : r)),
+			);
+		},
+		[],
+	);
+
 	const handleRegionTypeChange = useCallback((id: string, type: RegionType) => {
 		setRegions((prev) =>
 			prev.map((r) => {
@@ -373,6 +389,7 @@ export function OcrTemplateConfigurator({
 		}
 
 		setIsSaving(true);
+		setSaveError(null);
 
 		try {
 			const res = await fetch("/api/ocr-templates", {
@@ -388,7 +405,11 @@ export function OcrTemplateConfigurator({
 			});
 
 			if (!res.ok) {
-				const data = await res.json();
+				const data = await res.json().catch(() => ({}));
+				if (res.status === 409 && data?.code === "template_name_exists") {
+					setSaveError("Ya existe una plantilla con ese nombre");
+					return;
+				}
 				throw new Error(data.error || "Error guardando plantilla");
 			}
 
@@ -398,7 +419,10 @@ export function OcrTemplateConfigurator({
 			onOpenChange(false);
 		} catch (error) {
 			console.error(error);
-			toast.error(error instanceof Error ? error.message : "Error guardando plantilla");
+			const message =
+				error instanceof Error ? error.message : "Error guardando plantilla";
+			setSaveError(message);
+			toast.error(message);
 		} finally {
 			setIsSaving(false);
 		}
@@ -429,6 +453,11 @@ export function OcrTemplateConfigurator({
 						Primero creás la plantilla, luego la asignás a una carpeta con extracción. Cuando subas documentos a esa carpeta, el sistema los lee y crea las tablas automáticamente.
 					</p>
 				</div>
+				{saveError && (
+					<div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+						{saveError}
+					</div>
+				)}
 
 				<div className="flex-1 grid lg:grid-cols-[1fr_320px] gap-4 overflow-hidden">
 					{/* Canvas Area */}
@@ -575,6 +604,9 @@ export function OcrTemplateConfigurator({
 													isSelected={region.id === selectedRegionId}
 													onSelect={() => setSelectedRegionId(region.id)}
 													onLabelChange={(label) => handleRegionLabelChange(region.id, label)}
+													onDescriptionChange={(description) =>
+														handleRegionDescriptionChange(region.id, description)
+													}
 													onTypeChange={(type) => handleRegionTypeChange(region.id, type)}
 													onAddColumn={(col) => handleAddColumn(region.id, col)}
 													onRemoveColumn={(idx) => handleRemoveColumn(region.id, idx)}
@@ -617,6 +649,7 @@ function RegionItem({
 	isSelected,
 	onSelect,
 	onLabelChange,
+	onDescriptionChange,
 	onTypeChange,
 	onAddColumn,
 	onRemoveColumn,
@@ -626,6 +659,7 @@ function RegionItem({
 	isSelected: boolean;
 	onSelect: () => void;
 	onLabelChange: (label: string) => void;
+	onDescriptionChange: (description: string) => void;
 	onTypeChange: (type: RegionType) => void;
 	onAddColumn: (column: string) => void;
 	onRemoveColumn: (index: number) => void;
@@ -705,6 +739,15 @@ function RegionItem({
 				>
 					<X className="h-4 w-4" />
 				</Button>
+			</div>
+			<div className="mt-2" onClick={(e) => e.stopPropagation()}>
+				<Label className="text-xs text-muted-foreground">Descripcion (opcional)</Label>
+				<Input
+					value={region.description ?? ""}
+					onChange={(e) => onDescriptionChange(e.target.value)}
+					placeholder="Ej: Numero de orden visible en el encabezado"
+					className="mt-1 h-8 text-xs"
+				/>
 			</div>
 
 			{/* Table columns */}

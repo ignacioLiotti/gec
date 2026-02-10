@@ -22,6 +22,7 @@ type DefaultFolder = {
 		label: string;
 		dataType: string;
 		ocrScope?: string;
+		description?: string | null;
 	}>;
 };
 
@@ -136,6 +137,7 @@ export async function GET() {
 			label: string;
 			dataType: string;
 			ocrScope?: string;
+			description?: string | null;
 		}>>();
 
 		if (tablaIds.length > 0) {
@@ -152,6 +154,7 @@ export async function GET() {
 						label: col.label,
 						dataType: col.data_type,
 						ocrScope: (col.config as any)?.ocrScope,
+						description: (col.config as any)?.ocrDescription ?? null,
 					});
 					columnsMap.set(col.default_tabla_id, existing);
 				});
@@ -281,6 +284,19 @@ export async function POST(request: Request) {
 			const isOcr = body.isOcr === true;
 
 			if (!isOcr) {
+				const { data: job, error: jobError } = await supabase
+					.from("background_jobs")
+					.insert({
+						tenant_id: tenantId,
+						type: "apply_default_folder",
+						payload: { folderId: folder.id },
+					})
+					.select("id")
+					.single();
+
+				if (jobError) {
+					console.error("[obra-defaults:post] job enqueue error:", jobError);
+				}
 				return NextResponse.json({ folder });
 			}
 
@@ -295,8 +311,43 @@ export async function POST(request: Request) {
 				dataType?: string;
 				required?: boolean;
 				ocrScope?: string;
+				description?: string | null;
 				position?: number;
 			}> = Array.isArray(body.columns) ? body.columns : [];
+
+			let resolvedColumns = rawColumns;
+			if (resolvedColumns.length === 0 && ocrTemplateId) {
+				const { data: template, error: templateError } = await supabase
+					.from("ocr_templates")
+					.select("columns")
+					.eq("id", ocrTemplateId)
+					.maybeSingle();
+
+				if (templateError) {
+					console.error("[obra-defaults:post] template columns error:", templateError);
+				} else {
+					const templateColumns = Array.isArray((template as any)?.columns)
+						? ((template as any).columns as Array<{
+								label?: string;
+								fieldKey?: string;
+								dataType?: string;
+								ocrScope?: string;
+								description?: string;
+						  }>)
+						: [];
+					if (templateColumns.length > 0) {
+						resolvedColumns = templateColumns.map((col, index) => ({
+							label: col.label ?? `Columna ${index + 1}`,
+							fieldKey: col.fieldKey,
+							dataType: col.dataType ?? "text",
+							required: false,
+							ocrScope: col.ocrScope,
+							description: col.description ?? null,
+							position: index,
+						}));
+					}
+				}
+			}
 
 			// Parse dataInputMethod
 			const rawDataInputMethod = typeof body.dataInputMethod === "string" ? body.dataInputMethod : "both";
@@ -358,15 +409,20 @@ export async function POST(request: Request) {
 				rawColumns: rawColumns.map(c => ({ label: c.label, fieldKey: c.fieldKey })),
 			});
 
-			if (rawColumns.length > 0) {
-				const columnsPayload = rawColumns.map((col, index) => ({
+			if (resolvedColumns.length > 0) {
+				const columnsPayload = resolvedColumns.map((col, index) => ({
 					default_tabla_id: tabla.id,
 					field_key: normalizeFieldKey(col.fieldKey || col.label),
 					label: col.label,
 					data_type: ensureTablaDataType(col.dataType),
 					position: col.position ?? index,
 					required: Boolean(col.required),
-					config: hasNestedData && col.ocrScope ? { ocrScope: col.ocrScope } : {},
+					config:
+						hasNestedData && col.ocrScope
+							? { ocrScope: col.ocrScope, ocrDescription: col.description ?? null }
+							: col.description
+								? { ocrDescription: col.description }
+								: {},
 				}));
 
 				const { data: columns, error: columnsError } = await supabase
@@ -383,6 +439,7 @@ export async function POST(request: Request) {
 						label: col.label,
 						dataType: col.data_type,
 						ocrScope: (col.config as any)?.ocrScope,
+						description: (col.config as any)?.ocrDescription ?? null,
 					}));
 				}
 			} else {
@@ -408,6 +465,20 @@ export async function POST(request: Request) {
 				hasNestedData,
 				columns: insertedColumns,
 			};
+
+			const { data: job, error: jobError } = await supabase
+				.from("background_jobs")
+				.insert({
+					tenant_id: tenantId,
+					type: "apply_default_folder",
+					payload: { folderId: folder.id },
+				})
+				.select("id")
+				.single();
+
+			if (jobError) {
+				console.error("[obra-defaults:post] job enqueue error:", jobError);
+			}
 
 			return NextResponse.json({ folder: enrichedFolder });
 		}

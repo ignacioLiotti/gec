@@ -47,7 +47,7 @@ export function FileTreeSidebar({
 	return (
 		<div
 			className={cn(
-				"rounded-lg border border-stone-200 bg-white shadow-sm overflow-auto transition-all duration-300 ease-in-out",
+				"rounded-lg border border-stone-200 bg-white shadow-sm overflow-auto transition-all duration-300 ease-in-out flex flex-col justify-between",
 				!selectedFolder ? "h-full w-full" : "max-h-[320px] lg:max-h-full"
 			)}
 			onContextMenu={onContextMenu}
@@ -82,25 +82,25 @@ export function FileTreeSidebar({
 								<RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
 							</Button>
 						)}
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="outline" size="xs">
-								<FolderPlus className="w-4 h-4 mr-1" />
-								Crear
-								<ChevronDown className="w-3 h-3 ml-1" />
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
-							<DropdownMenuItem onClick={() => onCreateFolderClick("normal")}>
-								<Folder className="w-4 h-4 mr-2 text-stone-500" />
-								Carpeta normal
-							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => onCreateFolderClick("data")}>
-								<Table2 className="w-4 h-4 mr-2 text-amber-600" />
-								Carpeta de datos
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button variant="outline" size="xs">
+									<FolderPlus className="w-4 h-4 mr-1" />
+									Crear
+									<ChevronDown className="w-3 h-3 ml-1" />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end">
+								<DropdownMenuItem onClick={() => onCreateFolderClick("normal")}>
+									<Folder className="w-4 h-4 mr-2 text-stone-500" />
+									Carpeta normal
+								</DropdownMenuItem>
+								<DropdownMenuItem onClick={() => onCreateFolderClick("data")}>
+									<Table2 className="w-4 h-4 mr-2 text-amber-600" />
+									Carpeta de datos
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
 					</div>
 				</div>
 				{!fileTree ? (
@@ -121,7 +121,7 @@ export function FileTreeSidebar({
 					</div>
 				)}
 			</div>
-			<div className="p-4 border-t border-stone-100 mt-2">
+			<div className="p-4 border-t border-stone-100 mt-auto">
 				<p className="text-xs text-stone-400 mb-2">Leyenda</p>
 				<div className="space-y-1.5">
 					<div className="flex items-center gap-2 text-xs text-stone-500">

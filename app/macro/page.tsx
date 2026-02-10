@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Layers, FileText, Settings, Plus } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import {
   FormTableTabs,
   FormTableToolbar,
 } from "@/components/form-table/form-table";
+import type { ColumnDef } from "@/components/form-table/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,18 @@ function mapDataTypeToCell(dataType: string): "text" | "number" | "currency" | "
       return "text";
   }
 }
+
+const TruncatedTextWithTooltip = memo(function TruncatedTextWithTooltip({
+  text,
+}: {
+  text: string;
+}) {
+  return (
+    <span title={text} className="group-hover:underline truncate block">
+      {text}
+    </span>
+  );
+});
 
 function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) {
   const router = useRouter();
@@ -123,7 +136,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   const config = useMemo(() => {
     if (columns.length === 0) return null;
 
-    const columnDefs = columns.map((col) => {
+    const columnDefs: ColumnDef<MacroTableRowData>[] = columns.map((col) => {
       const isEditable = col.columnType === "custom";
       const cellType = mapDataTypeToCell(col.dataType);
 
@@ -135,7 +148,15 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         cellType,
         cellConfig: cellType === "currency"
           ? { currencyCode: "ARS", currencyLocale: "es-AR" }
-          : undefined,
+          : cellType === "text"
+            ? {
+                renderReadOnly: ({ value }: { value: unknown }) => {
+                  const text = String(value ?? "");
+                  if (!text) return <span className="text-muted-foreground">-</span>;
+                  return <TruncatedTextWithTooltip text={text} />;
+                },
+              }
+            : undefined,
         enableHide: true,
         enablePin: true,
       };
@@ -152,7 +173,13 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         field: "_obraName" as any,
         editable: false,
         cellType: "text",
-        cellConfig: undefined,
+        cellConfig: {
+          renderReadOnly: ({ value }: { value: unknown }) => {
+            const text = String(value ?? "");
+            if (!text) return <span className="text-muted-foreground">-</span>;
+            return <TruncatedTextWithTooltip text={text} />;
+          },
+        },
         enableHide: false,
         enablePin: false,
       });

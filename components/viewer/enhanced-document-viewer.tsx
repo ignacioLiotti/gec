@@ -73,6 +73,7 @@ type DocumentViewerProps = {
   url: string;
   fileName: string;
   fileType: 'pdf' | 'image';
+  title?: boolean;
   onDownload?: () => void;
 };
 
@@ -80,6 +81,7 @@ export function EnhancedDocumentViewer({
   url,
   fileName,
   fileType,
+  title = true,
   onDownload,
 }: DocumentViewerProps) {
   // Client-side only check
@@ -276,31 +278,32 @@ export function EnhancedDocumentViewer({
   const renderToolbar = () => (
     <div className="flex flex-col gap-2 p-3 border-b bg-muted/30">
       {/* Top toolbar */}
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2">
-          {/* File name */}
-          <span className="text-lg font-medium truncate max-w-[200px]">{fileName}</span>
-          {numPages > 0 && <Badge variant="outline">{numPages} pages</Badge>}
-        </div>
+      {title && (
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-medium truncate max-w-[200px]">{fileName}</span>
+            {numPages > 0 && <Badge variant="outline">{numPages} pages</Badge>}
+          </div>
 
-        <div className="flex items-center gap-2">
-          {/* PDF-specific controls */}
-          {fileType === 'pdf' && (
-            <>
-              <Button
-                variant={showThumbnails ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setShowThumbnails(!showThumbnails)}
-                title="Toggle thumbnails"
-              >
-                <List className="w-4 h-4" />
-              </Button>
-              <Separator orientation="vertical" className="h-6" />
-            </>
-          )}
+          <div className="flex items-center gap-2">
+            {/* PDF-specific controls */}
+            {fileType === 'pdf' && (
+              <>
+                <Button
+                  variant={showThumbnails ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowThumbnails(!showThumbnails)}
+                  title="Toggle thumbnails"
+                >
+                  <List className="w-4 h-4" />
+                </Button>
+                <Separator orientation="vertical" className="h-6" />
+              </>
+            )}
 
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Bottom toolbar - Controls */}
       <div className="flex items-center justify-between gap-2">

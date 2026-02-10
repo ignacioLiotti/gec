@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { MouseEvent } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { FormTable } from '@/components/form-table/form-table';
 import { createSupabaseBrowserClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -60,6 +60,7 @@ import ForgeViewer from '@/app/excel/[obraId]/tabs/file-manager/components/viewe
 import { EnhancedDocumentViewer } from '@/components/viewer/enhanced-document-viewer';
 import FolderFront from '@/components/ui/FolderFront';
 import { DocumentSheet } from './components/document-sheet';
+import { DocumentDataSheet } from './components/document-data-sheet';
 import { FileTreeSidebar } from './components/file-tree-sidebar';
 import { AddRowDialog } from './components/add-row-dialog';
 import { useDocumentsStore, needsRefetch, markDocumentsFetched, setDocumentsLoading } from './hooks/useDocumentsStore';
@@ -96,6 +97,7 @@ import {
   setCachedOcrLinks,
 } from './cache';
 import { CellType, FormTableConfig, FormTableRow, ColumnDef, ColumnField } from '@/components/form-table/types';
+import { createRowFromColumns } from '@/components/form-table/table-utils';
 import { FilterSection, RangeInputGroup, TextFilterInput } from '@/components/form-table/filter-components';
 import { FileText as FileTextIcon2, Hash, Type, DollarSign as DollarSignIcon, ToggleLeft } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -147,6 +149,7 @@ type OcrDraftColumn = {
   dataType: TablaColumnDataType;
   required: boolean;
   scope?: 'parent' | 'item';
+  description?: string;
 };
 
 type OcrTemplateOption = {
@@ -158,6 +161,7 @@ type OcrTemplateOption = {
     label: string;
     dataType: string;
     ocrScope?: string;
+    description?: string;
   }>;
 };
 
@@ -191,6 +195,104 @@ type TenantUsageInfo = {
   };
 };
 
+type FileThumbnailProps = {
+  item: FileSystemItem;
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  getFileIcon: (mimetype?: string) => ReactNode;
+  renderOcrStatusBadge: (item: FileSystemItem) => ReactNode;
+};
+
+const FileThumbnail = memo(function FileThumbnail({
+  item,
+  supabase,
+  getFileIcon,
+  renderOcrStatusBadge,
+}: FileThumbnailProps) {
+  const storagePath = item.storagePath;
+  // Check blob cache first, then signed URL cache
+  const initialUrl = storagePath
+    ? (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath))
+    : null;
+  const [thumbUrl, setThumbUrl] = useState<string | null>(initialUrl);
+
+  useEffect(() => {
+    if (!storagePath || !item.mimetype?.startsWith('image/')) {
+      setThumbUrl(null);
+      return;
+    }
+
+    // Check blob cache first (instant, no network)
+    const cachedBlob = getCachedBlobUrl(storagePath);
+    if (cachedBlob) {
+      setThumbUrl(cachedBlob);
+      return;
+    }
+
+    // Check signed URL cache
+    const cachedSignedUrl = getCachedSignedUrl(storagePath);
+    if (cachedSignedUrl) {
+      setThumbUrl(cachedSignedUrl);
+      // Preload to blob cache in background
+      preloadAndCacheFile(cachedSignedUrl, storagePath).then((blobUrl) => {
+        setThumbUrl(blobUrl);
+      });
+      return;
+    }
+
+    let isMounted = true;
+
+    (async () => {
+      const { data, error } = await supabase.storage
+        .from('obra-documents')
+        .createSignedUrl(storagePath, 3600); // 1 hour
+      if (!isMounted || error || !data?.signedUrl) return;
+      setCachedSignedUrl(storagePath, data.signedUrl);
+      // Set signed URL first for immediate display
+      setThumbUrl(data.signedUrl);
+      // Then preload to blob cache
+      const blobUrl = await preloadAndCacheFile(data.signedUrl, storagePath);
+      if (isMounted) {
+        setThumbUrl(blobUrl);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item.mimetype, storagePath, supabase]);
+
+  if (thumbUrl) {
+    return (
+      <div className="relative w-full h-full">
+        <img
+          src={thumbUrl}
+          alt={item.name}
+          className="w-full h-full object-cover rounded-none"
+          loading="lazy"
+        />
+        <div className="absolute top-2 right-2">
+          {renderOcrStatusBadge(item)}
+        </div>
+        <span
+          className="text-sm text-center truncate w-full text-stone-700 absolute bottom-0 left-0 right-0 px-2 py-1 bg-stone-200/50 backdrop-blur-sm"
+          title={item.name}
+        >
+          {item.name}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full">
+      {getFileIcon(item.mimetype)}
+      <div className="absolute top-2 right-2">
+        {renderOcrStatusBadge(item)}
+      </div>
+    </div>
+  );
+});
+
 export function FileManager({
   obraId,
   materialOrders = [],
@@ -202,88 +304,6 @@ export function FileManager({
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [usageInfo, setUsageInfo] = useState<TenantUsageInfo | null>(null);
   const usageInfoRef = useRef<TenantUsageInfo | null>(null);
-  const FileThumbnail = ({ item }: { item: FileSystemItem }) => {
-    const storagePath = item.storagePath;
-    // Check blob cache first, then signed URL cache
-    const initialUrl = storagePath
-      ? (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath))
-      : null;
-    const [thumbUrl, setThumbUrl] = useState<string | null>(initialUrl);
-
-    useEffect(() => {
-      if (!storagePath || !item.mimetype?.startsWith('image/')) {
-        setThumbUrl(null);
-        return;
-      }
-
-      // Check blob cache first (instant, no network)
-      const cachedBlob = getCachedBlobUrl(storagePath);
-      if (cachedBlob) {
-        setThumbUrl(cachedBlob);
-        return;
-      }
-
-      // Check signed URL cache
-      const cachedSignedUrl = getCachedSignedUrl(storagePath);
-      if (cachedSignedUrl) {
-        setThumbUrl(cachedSignedUrl);
-        // Preload to blob cache in background
-        preloadAndCacheFile(cachedSignedUrl, storagePath).then((blobUrl) => {
-          setThumbUrl(blobUrl);
-        });
-        return;
-      }
-
-      let isMounted = true;
-
-      (async () => {
-        const { data, error } = await supabase.storage
-          .from('obra-documents')
-          .createSignedUrl(storagePath, 3600); // 1 hour
-        if (!isMounted || error || !data?.signedUrl) return;
-        setCachedSignedUrl(storagePath, data.signedUrl);
-        // Set signed URL first for immediate display
-        setThumbUrl(data.signedUrl);
-        // Then preload to blob cache
-        const blobUrl = await preloadAndCacheFile(data.signedUrl, storagePath);
-        if (isMounted) {
-          setThumbUrl(blobUrl);
-        }
-      })();
-
-      return () => {
-        isMounted = false;
-      };
-    }, [item.mimetype, storagePath, supabase]);
-
-    if (thumbUrl) {
-      return (
-        <div className="relative w-full h-full">
-          <img
-            src={thumbUrl}
-            alt={item.name}
-            className="w-full h-full object-cover rounded-none"
-            loading="lazy"
-          />
-          <div className="absolute top-2 right-2">
-            {renderOcrStatusBadge(item)}
-          </div>
-          <span className="text-sm text-center truncate w-full text-stone-700 absolute bottom-0 left-0 right-0 px-2 py-1 bg-stone-200/50 backdrop-blur-sm" title={item.name}>
-            {item.name}
-          </span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="relative w-full h-full">
-        {getFileIcon(item.mimetype)}
-        <div className="absolute top-2 right-2">
-          {renderOcrStatusBadge(item)}
-        </div>
-      </div>
-    );
-  };
   const mapUsagePayload = useCallback((payload: any): TenantUsageInfo | null => {
     if (!payload?.plan || !payload?.usage) {
       return null;
@@ -535,6 +555,8 @@ export function FileManager({
   const [ocrDocumentFilterName, setOcrDocumentFilterName] = useState<string | null>(null);
   const [ocrDataViewMode, setOcrDataViewMode] = useState<'cards' | 'table'>('cards');
   const [ocrViewMode, setOcrViewMode] = useState<'table' | 'documents'>('table');
+  const ITEMS_PER_PAGE = 24;
+  const [folderPage, setFolderPage] = useState(1);
 
   const resetNewFolderForm = useCallback(() => {
     setNewFolderName('');
@@ -768,6 +790,7 @@ export function FileManager({
           dataType: normalizedType,
           required: false,
           scope: col.ocrScope === 'parent' ? 'parent' : 'item',
+          description: col.description,
         };
       });
       const hasParent = mappedColumns.some((col) => col.scope === 'parent');
@@ -799,7 +822,7 @@ export function FileManager({
   }, [handleNewFolderTemplateSelect]);
 
   const handleTemplateConfiguratorCreated = useCallback(
-    (template: { id: string; name: string; description: string | null; columns: Array<{ fieldKey: string; label: string; dataType: string; ocrScope?: string }> }) => {
+    (template: { id: string; name: string; description: string | null; columns: Array<{ fieldKey: string; label: string; dataType: string; ocrScope?: string; description?: string }> }) => {
       handleOcrTemplateCreated({
         id: template.id,
         name: template.name,
@@ -887,13 +910,13 @@ export function FileManager({
     if (segments.length === 0) return tree;
     let current: FileSystemItem | null = tree;
     for (const segment of segments) {
-      const next = current?.children?.find(
+      const nextFolder: FileSystemItem | undefined = current?.children?.find(
         (child) => child.type === 'folder' && child.name === segment
       );
-      if (!next) {
+      if (!nextFolder) {
         return current;
       }
-      current = next;
+      current = nextFolder;
     }
     return current;
   }, []);
@@ -1582,7 +1605,11 @@ export function FileManager({
           dataType: column.dataType,
           required: column.required,
           position: index,
-          config: newFolderHasNested ? { ocrScope: column.scope ?? 'item' } : undefined,
+          config: newFolderHasNested
+            ? { ocrScope: column.scope ?? 'item', ocrDescription: column.description ?? null }
+            : column.description
+              ? { ocrDescription: column.description }
+              : undefined,
         })),
       };
 
@@ -2069,21 +2096,21 @@ export function FileManager({
     }
   };
 
-  const confirmDelete = (item: FileSystemItem) => {
+  const confirmDelete = useCallback((item: FileSystemItem) => {
     setItemToDelete(item);
     setIsDeleteDialogOpen(true);
     setContextMenu(null);
-  };
+  }, []);
 
-  const getTreeFileIcon = (mimetype?: string) => {
+  const getTreeFileIcon = useCallback((mimetype?: string) => {
     if (!mimetype) return <File className="w-4 h-4 text-stone-400" />;
     if (mimetype.startsWith('image/')) return <ImageIcon className="w-4 h-4 text-stone-400" />;
     if (mimetype === 'application/pdf') return <FileText className="w-4 h-4 text-stone-400" />;
     return <File className="w-4 h-4 text-stone-400" />;
-  };
+  }, []);
 
   // Get folder icon color based on data input method
-  const getFolderIconColor = (dataInputMethod?: DataInputMethod) => {
+  const getFolderIconColor = useCallback((dataInputMethod?: DataInputMethod) => {
     switch (dataInputMethod) {
       case 'manual':
         return 'text-green-600';
@@ -2094,15 +2121,15 @@ export function FileManager({
       default:
         return 'text-stone-500';
     }
-  };
+  }, []);
 
-  const getFolderFileCount = (folder: FileSystemItem) => {
+  const getFolderFileCount = useCallback((folder: FileSystemItem) => {
     const children = folder.children ?? [];
     return children.filter((child) => child.type === 'file' && child.name !== '.keep').length;
-  };
+  }, []);
 
   // NEW: Styled tree item with amber accents for OCR folders
-  const renderTreeItem = (item: FileSystemItem, level: number = 0, parentFolder?: FileSystemItem) => {
+  const renderTreeItem = useCallback((item: FileSystemItem, level: number = 0, parentFolder?: FileSystemItem) => {
     if (item.type === 'file' && item.name === '.keep') {
       return null;
     }
@@ -2136,12 +2163,13 @@ export function FileManager({
           onDragOver={isFolder ? (event) => handleFolderDragOver(event, item) : undefined}
           onDragLeave={isFolder ? (event) => handleFolderDragLeave(event, item) : undefined}
           onDrop={isFolder ? (event) => handleFolderDrop(event, item) : undefined}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            if (item.id !== 'root') {
+          onContextMenu={isFolder && item.id !== 'root'
+            ? (e) => {
+              e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY, item: item });
             }
-          }}
+            : undefined
+          }
           className={`
             group w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-sm
             transition-all duration-150
@@ -2222,6 +2250,19 @@ export function FileManager({
             </Tooltip>
           )}
 
+          {item.id !== 'root' && (
+            <button
+              type="button"
+              className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-red-600"
+              onClick={(event) => {
+                event.stopPropagation();
+                confirmDelete(item);
+              }}
+              aria-label={`Eliminar ${item.type === 'folder' ? 'carpeta' : 'archivo'}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
 
 
           {/* {!isFolder && item.size && (
@@ -2238,19 +2279,24 @@ export function FileManager({
         )}
       </div>
     );
-  };
-
-  const handleSidebarContextMenu = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      setContextMenu({
-        x: event.clientX,
-        y: event.clientY,
-        item: fileTree ?? { id: 'root', name: 'Documentos', type: 'folder', children: [] },
-      });
-    },
-    [fileTree, setContextMenu]
-  );
+  }, [
+    confirmDelete,
+    draggedFolderId,
+    getFolderFileCount,
+    getFolderIconColor,
+    getTreeFileIcon,
+    handleDocumentClick,
+    handleFolderClick,
+    handleFolderDragEnter,
+    handleFolderDragLeave,
+    handleFolderDragOver,
+    handleFolderDrop,
+    normalizeFolderName,
+    ocrFolderMap,
+    renderOcrStatusBadge,
+    selectedDocument?.id,
+    selectedFolder?.id,
+  ]);
 
   const toggleOrderExpanded = (orderId: string) => {
     setExpandedOrders(prev => {
@@ -2336,10 +2382,65 @@ export function FileManager({
 
   const activeDocument = sheetDocument ?? displayedDocumentRef.current ?? null;
 
+  const activeDocumentOcrLink = useMemo(
+    () => (activeDocument ? resolveOcrLinkForDocument(activeDocument) : null),
+    [activeDocument, resolveOcrLinkForDocument]
+  );
+
+  const activeDocumentOcrColumns = useMemo(() => {
+    return activeDocumentOcrLink?.columns ?? [];
+  }, [activeDocumentOcrLink]);
+
+  const activeDocumentOcrRows = useMemo(() => {
+    if (!activeDocument?.storagePath) return [];
+    const link = activeDocumentOcrLink;
+    if (!link?.rows || !Array.isArray(link.rows) || !link.columns?.length) return [];
+    return (link.rows as TablaDataRow[])
+      .filter((row) => {
+        const data = (row?.data as Record<string, unknown>) ?? {};
+        return data.__docPath === activeDocument.storagePath;
+      })
+      .map((row) => {
+        const data = (row?.data as Record<string, unknown>) ?? {};
+        const mapped: OcrDocumentTableRow = { id: row.id };
+        link.columns.forEach((column) => {
+          mapped[column.fieldKey] = data[column.fieldKey];
+        });
+        return mapped;
+      });
+  }, [activeDocument, activeDocumentOcrLink]);
+
   const canRetryActiveDocument = useMemo(
     () => Boolean(resolveOcrLinkForDocument(activeDocument)),
     [activeDocument, resolveOcrLinkForDocument]
   );
+
+  const [isDocumentDataSheetOpen, setIsDocumentDataSheetOpen] = useState(false);
+
+  const hasActiveDocumentData = useMemo(
+    () => activeDocumentOcrRows.length > 0,
+    [activeDocumentOcrRows]
+  );
+
+
+  const toggleDocumentDataSheet = useCallback(() => {
+    if (!hasActiveDocumentData) return;
+    setIsDocumentDataSheetOpen((prev) => !prev);
+  }, [hasActiveDocumentData]);
+
+  useEffect(() => {
+    if (!isDocumentSheetOpen) {
+      setIsDocumentDataSheetOpen(false);
+    }
+  }, [isDocumentSheetOpen]);
+
+  useEffect(() => {
+    setFolderPage(1);
+  }, [selectedFolder?.id, documentViewMode, ocrViewMode]);
+
+  useEffect(() => {
+    setIsDocumentDataSheetOpen(false);
+  }, [activeDocument?.storagePath]);
 
   const documentBreadcrumb = useMemo(() => {
     const doc = activeDocument ?? selectedDocument;
@@ -2348,13 +2449,13 @@ export function FileManager({
     return [...folderSegments, doc.name].join(' / ');
   }, [activeDocument, getPathSegments, selectedDocument, selectedFolder]);
 
-  const getFileIcon = (mimetype?: string) => {
+  const getFileIcon = useCallback((mimetype?: string) => {
     if (!mimetype) return <File className="w-8 h-8" />;
     if (mimetype.startsWith('image/')) return <ImageIcon className="w-8 h-8" />;
     if (mimetype === 'application/pdf') return <FileText className="w-8 h-8" />;
     if (mimetype.includes('zip') || mimetype.includes('rar')) return <FileArchive className="w-8 h-8" />;
     return <File className="w-8 h-8" />;
-  };
+  }, []);
 
   const mapDataTypeToCellType = useCallback(
     (dataType: TablaColumnDataType): CellType => {
@@ -2373,6 +2474,84 @@ export function FileManager({
     },
     []
   );
+
+  const documentDataTableConfig = useMemo<FormTableConfig<OcrDocumentTableRow, OcrDocumentTableFilters> | null>(() => {
+    if (!activeDocument || !activeDocumentOcrLink || activeDocumentOcrColumns.length === 0) {
+      return null;
+    }
+
+    const tablaColumnDefs: ColumnDef<OcrDocumentTableRow>[] = activeDocumentOcrColumns.map((column) => ({
+      id: column.id,
+      label: column.label,
+      field: column.fieldKey as ColumnField<OcrDocumentTableRow>,
+      editable: true,
+      cellType: mapDataTypeToCellType(column.dataType),
+      required: column.required,
+    }));
+
+    const createRow = () => {
+      const row = createRowFromColumns<OcrDocumentTableRow>(tablaColumnDefs);
+      row.id = row.id || crypto.randomUUID();
+      row.__docPath = activeDocument.storagePath ?? '';
+      row.__docFileName = activeDocument.name ?? '';
+      return row;
+    };
+
+    const applyDocMeta = (row: OcrDocumentTableRow) => ({
+      ...row,
+      __docPath: row.__docPath ?? activeDocument.storagePath ?? '',
+      __docFileName: row.__docFileName ?? activeDocument.name ?? '',
+      source: (row as any).source ?? 'ocr',
+    });
+
+    return {
+      tableId: `ocr-doc-${obraId}-${activeDocument.id}`,
+      title: `Datos de ${activeDocument.name}`,
+      columns: tablaColumnDefs,
+      defaultRows: activeDocumentOcrRows,
+      createRow,
+      allowAddRows: true,
+      onSave: async ({ rows, dirtyRows, deletedRowIds }) => {
+        if (!obraId) return;
+        try {
+          const res = await fetch(
+            `/api/obras/${obraId}/tablas/${activeDocumentOcrLink.tablaId}/rows`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                rows: rows.map(applyDocMeta),
+                dirtyRows: dirtyRows.map(applyDocMeta),
+                deletedRowIds,
+              }),
+            }
+          );
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || 'No se pudieron guardar los cambios');
+          }
+          toast.success('Datos actualizados');
+          await refreshOcrFolderLinks({ skipCache: true });
+          await buildFileTree({ skipCache: true });
+        } catch (error) {
+          console.error(error);
+          toast.error(error instanceof Error ? error.message : 'No se pudo guardar la tabla');
+        }
+      },
+      emptyStateMessage: 'No hay datos extraídos para este documento.',
+      showInlineSearch: true,
+      lockedPageSize: 10,
+    };
+  }, [
+    activeDocument,
+    activeDocumentOcrColumns,
+    activeDocumentOcrLink,
+    activeDocumentOcrRows,
+    buildFileTree,
+    mapDataTypeToCellType,
+    obraId,
+    refreshOcrFolderLinks,
+  ]);
 
   const handleSaveTablaRows = useCallback(
     async ({
@@ -2573,7 +2752,10 @@ export function FileManager({
         },
       ],
     };
-    const allColumns: ColumnDef<OcrDocumentTableRow>[] = [docSourceColumn, ...tablaColumnDefs];
+    const includeDocSourceColumn = activeFolderLink?.dataInputMethod !== 'manual';
+    const allColumns: ColumnDef<OcrDocumentTableRow>[] = includeDocSourceColumn
+      ? [docSourceColumn, ...tablaColumnDefs]
+      : [...tablaColumnDefs];
 
     // Build initial empty column filters for all tabla columns
     const buildEmptyColumnFilters = (): Record<string, string | { min: string; max: string }> => {
@@ -2589,7 +2771,8 @@ export function FileManager({
     };
 
     return {
-      tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${documentViewMode}-${ocrDocumentFilterPath ?? 'all'}`,
+      tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}`,
+      title: selectedFolder?.name ?? 'Tabla OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns: allColumns,
       allowAddRows: false,
@@ -3039,6 +3222,12 @@ export function FileManager({
     const folders = items.filter(item => item.type === 'folder');
     const files = items.filter(item => item.type === 'file' && item.name !== '.keep');
     const sortedItems = [...folders, ...files];
+    const totalPages = Math.max(1, Math.ceil(sortedItems.length / ITEMS_PER_PAGE));
+    const currentPage = Math.min(folderPage, totalPages);
+    const pagedItems = sortedItems.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    );
 
     // Unified folder header (tab style) for both OCR and normal folders
     const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
@@ -3049,10 +3238,12 @@ export function FileManager({
           {/* LEFT TAB */}
           <div
             className="relative z-10 flex items-center gap-3 border border-b-0 -mb-[2px] border-stone-200 bg-white h-full px-4 py-3 rounded-tr-md rounded-tl-xl overflow-visible"
-            style={{
-              ["--notch-bg"]: "white",
-              ["--notch-stroke"]: "rgb(231 229 228)", // stone-200
-            }}
+            style={
+              {
+                "--notch-bg": "white",
+                "--notch-stroke": "rgb(231 229 228)", // stone-200
+              } as React.CSSProperties
+            }
           >
             {/* Tail on the right */}
             <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? "h-[54px] mb-[1px]" : "")} />
@@ -3072,11 +3263,13 @@ export function FileManager({
 
           {/* RIGHT TAB */}
           <div
-            className="relative z-10 flex flex-wrap items-center gap-2 border border-b-0 -mb-[2px] border-stone-200 bg-white h-full px-4 pl-1 pt-2 pb-1 rounded-tl-md rounded-tr-xl overflow-visible"
-            style={{
-              ["--notch-bg"]: "white",
-              ["--notch-stroke"]: "rgb(231 229 228)", // stone-200
-            }}
+            className="relative z-10 flex flex-wrap items-center gap-2 border border-b-0 -mb-[2px] border-stone-200 bg-white h-full px-4 pl-1 pt-3 pb-0 rounded-tl-md rounded-tr-xl overflow-visible"
+            style={
+              {
+                "--notch-bg": "white",
+                "--notch-stroke": "rgb(231 229 228)", // stone-200
+              } as React.CSSProperties
+            }
           >
             {/* Tail on the left */}
             <NotchTail side="left" className={cn(" mb-[2px]", activeFolderLink?.dataInputMethod === "manual" || !selectedFolder.ocrEnabled ? "h-[46px] mb-[1px]" : "h-[50px]")} />
@@ -3235,62 +3428,94 @@ export function FileManager({
       }
 
       return (
-        <div
-          className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg transition-colors mt-12 ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''
-            }`}
-          onDragEnter={handleDocumentAreaDragEnter}
-          onDragOver={handleDocumentAreaDragOver}
-          onDragLeave={handleDocumentAreaDragLeave}
-          onDrop={handleDocumentAreaDrop}
-        >
-          {sortedItems.map(item => {
-            const isDragTarget = draggedFolderId === item.id;
-            return (
-              <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
-                <div
-                  className={`flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative ${item.type === 'folder' && isDragTarget ? 'ring-2 ring-amber-500 ring-offset-2' : ''}`}
-                  onClick={() => {
-                    if (item.type === 'folder') {
-                      handleFolderClick(item);
-                    } else {
-                      handleDocumentClick(item, selectedFolder, { preserveFilter: true });
-                    }
-                  }}
-                  onDragEnter={item.type === 'folder' ? (event) => handleFolderDragEnter(event, item) : undefined}
-                  onDragOver={item.type === 'folder' ? (event) => handleFolderDragOver(event, item) : undefined}
-                  onDragLeave={item.type === 'folder' ? (event) => handleFolderDragLeave(event, item) : undefined}
-                  onDrop={item.type === 'folder' ? (event) => handleFolderDrop(event, item) : undefined}
-                >
-                  <div className="pt-15 flex flex-col items-center justify-center w-full">
-                    {item.type === 'folder' ? (
-                      item.ocrEnabled ? (
-                        <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
+        <>
+          <div
+            className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg transition-colors mt-12 ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''
+              }`}
+            onDragEnter={handleDocumentAreaDragEnter}
+            onDragOver={handleDocumentAreaDragOver}
+            onDragLeave={handleDocumentAreaDragLeave}
+            onDrop={handleDocumentAreaDrop}
+          >
+            {pagedItems.map(item => {
+              const isDragTarget = draggedFolderId === item.id;
+              return (
+                <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
+                  <div
+                    className={`flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative ${item.type === 'folder' && isDragTarget ? 'ring-2 ring-amber-500 ring-offset-2' : ''}`}
+                    onClick={() => {
+                      if (item.type === 'folder') {
+                        handleFolderClick(item);
+                      } else {
+                        handleDocumentClick(item, selectedFolder, { preserveFilter: true });
+                      }
+                    }}
+                    onDragEnter={item.type === 'folder' ? (event) => handleFolderDragEnter(event, item) : undefined}
+                    onDragOver={item.type === 'folder' ? (event) => handleFolderDragOver(event, item) : undefined}
+                    onDragLeave={item.type === 'folder' ? (event) => handleFolderDragLeave(event, item) : undefined}
+                    onDrop={item.type === 'folder' ? (event) => handleFolderDrop(event, item) : undefined}
+                  >
+                    <div className="pt-15 flex flex-col items-center justify-center w-full">
+                      {item.type === 'folder' ? (
+                        item.ocrEnabled ? (
+                          <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
+                        ) : (
+                          <Folder className="w-10 h-10 text-stone-500 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                        )
                       ) : (
-                        <Folder className="w-10 h-10 text-stone-500 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
-                      )
-                    ) : (
-                      <div className="absolute inset-0 top-0 flex items-center justify-center">
-                        <FileThumbnail item={item} />
-                      </div>
-                    )}
-                    <span className="text-sm text-center truncate w-full text-stone-700" title={item.name}>
-                      {item.name}
-                    </span>
-                    {item.type === 'file' && item.size && (
-                      <span className="text-xs text-stone-500">
-                        {(item.size / 1024).toFixed(1)} KB
+                        <div className="absolute inset-0 top-0 flex items-center justify-center">
+                          <FileThumbnail
+                            item={item}
+                            supabase={supabase}
+                            getFileIcon={getFileIcon}
+                            renderOcrStatusBadge={renderOcrStatusBadge}
+                          />
+                        </div>
+                      )}
+                      <span className="text-sm text-center truncate w-full text-stone-700" title={item.name}>
+                        {item.name}
                       </span>
-                    )}
-                  </div>
-                  {item.type === 'folder' ? (<FolderFront className="w-[110px] h-[80px] absolute -bottom-1 -left-1 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />) : null}
-                  <div className="absolute top-2 right-2">
-                    {renderOcrStatusBadge(item)}
+                      {item.type === 'file' && item.size && (
+                        <span className="text-xs text-stone-500">
+                          {(item.size / 1024).toFixed(1)} KB
+                        </span>
+                      )}
+                    </div>
+                    {item.type === 'folder' ? (<FolderFront className="w-[110px] h-[80px] absolute -bottom-1 -left-1 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />) : null}
+                    <div className="absolute top-2 right-2">
+                      {renderOcrStatusBadge(item)}
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+          {sortedItems.length > ITEMS_PER_PAGE && (
+            <div className="mt-6 flex items-center justify-between px-2 text-sm text-stone-500">
+              <span>
+                Página {currentPage} de {totalPages} · {sortedItems.length} items
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFolderPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFolderPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  Siguiente
+                </Button>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          )}
+        </>
       );
 
     })();
@@ -3338,6 +3563,7 @@ export function FileManager({
     if (!open) {
       // Close sheet first (triggers animation), then clear document after animation
       setIsDocumentSheetOpen(false);
+      setIsDocumentDataSheetOpen(false);
       // Wait for sheet close animation (300ms) before clearing document data
       sheetCloseTimeoutRef.current = setTimeout(() => {
         closeDocumentPreview();
@@ -3452,7 +3678,6 @@ export function FileManager({
           fileTree={fileTree}
           renderTreeItem={renderTreeItem}
           loading={loading}
-          onContextMenu={handleSidebarContextMenu}
           onRefresh={handleManualRefresh}
           isRefreshing={isRefreshing}
         />
@@ -3465,6 +3690,17 @@ export function FileManager({
         )}
       </div>
 
+      <DocumentDataSheet
+        isOpen={
+          isDocumentDataSheetOpen &&
+          Boolean(activeDocument) &&
+          hasActiveDocumentData
+        }
+        onOpenChange={(open) => setIsDocumentDataSheetOpen(open)}
+        document={activeDocument}
+        tableConfig={documentDataTableConfig}
+      />
+
       <DocumentSheet
         isOpen={isDocumentSheetOpen && Boolean(activeDocument)}
         onOpenChange={handleDocumentSheetOpenChange}
@@ -3475,6 +3711,9 @@ export function FileManager({
         ocrStatusBadge={activeDocument ? renderOcrStatusBadge(activeDocument) : null}
         onRetryOcr={canRetryActiveDocument ? handleRetryDocumentOcr : undefined}
         retryingOcr={Boolean(activeDocument && retryingDocumentId === activeDocument.id)}
+        onToggleDataSheet={toggleDocumentDataSheet}
+        showDataToggle={hasActiveDocumentData}
+        isDataSheetOpen={isDocumentDataSheetOpen}
       />
 
       {/* Create Folder Dialog */}
@@ -3779,7 +4018,7 @@ export function FileManager({
           <DialogHeader>
             <DialogTitle>Confirmar Eliminación</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
+          <div className="p-4">
             <p className="text-sm text-stone-500">
               ¿Estás seguro de que deseas eliminar{' '}
               <span className="font-semibold text-stone-800">{itemToDelete?.name}</span>?
@@ -3888,7 +4127,7 @@ type OcrDocumentSourceCellProps = {
   supabase: ReturnType<typeof createSupabaseBrowserClient>;
 };
 
-function OcrDocumentSourceCell({
+const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
   row,
   obraId,
   documentsByStoragePath,
@@ -4031,4 +4270,4 @@ function OcrDocumentSourceCell({
       </HoverCardPortal>
     </HoverCard>
   );
-}
+});

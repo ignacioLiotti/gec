@@ -1344,11 +1344,44 @@ export default function ObraDetailPage() {
 				<motion.div
 					initial={{ opacity: 0 }}
 					animate={{ opacity: 1 }}
-					className="flex items-center justify-center py-12"
+					className="animate-pulse space-y-4"
 				>
-					<div className="space-y-2 text-center">
-						<div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
-						<p className="text-sm text-muted-foreground">Cargando obra...</p>
+					<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
+						<div className="flex-1 min-w-0 space-y-4">
+							<div className="rounded-lg border border-stone-200 bg-white p-4">
+								<div className="h-6 w-48 rounded bg-stone-200" />
+								<div className="mt-3 h-4 w-72 rounded bg-stone-100" />
+								<div className="mt-2 h-4 w-64 rounded bg-stone-100" />
+							</div>
+
+							<div className="rounded-lg border border-stone-200 bg-white p-3">
+								<div className="flex gap-2">
+									<div className="h-8 w-24 rounded bg-stone-200" />
+									<div className="h-8 w-24 rounded bg-stone-100" />
+									<div className="h-8 w-24 rounded bg-stone-100" />
+									<div className="h-8 w-24 rounded bg-stone-100" />
+								</div>
+							</div>
+
+							<div className="rounded-lg border border-stone-200 bg-white p-4 space-y-3">
+								<div className="h-4 w-40 rounded bg-stone-200" />
+								<div className="h-32 rounded bg-stone-100" />
+								<div className="h-4 w-56 rounded bg-stone-100" />
+							</div>
+						</div>
+
+						<div className="w-full lg:w-[340px] space-y-4">
+							<div className="rounded-lg border border-stone-200 bg-white p-4 space-y-2">
+								<div className="h-4 w-32 rounded bg-stone-200" />
+								<div className="h-8 w-full rounded bg-stone-100" />
+								<div className="h-8 w-full rounded bg-stone-100" />
+							</div>
+							<div className="rounded-lg border border-stone-200 bg-white p-4 space-y-3">
+								<div className="h-4 w-28 rounded bg-stone-200" />
+								<div className="h-16 w-full rounded bg-stone-100" />
+								<div className="h-16 w-full rounded bg-stone-100" />
+							</div>
+						</div>
 					</div>
 				</motion.div>
 			) : loadError ? (

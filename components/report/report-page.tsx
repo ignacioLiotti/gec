@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileDown, ChevronLeft, Filter, Settings, Loader2, Share2, FileSpreadsheet } from "lucide-react";
+import { FileDown, ChevronLeft, Filter, Settings, Loader2, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import type { ReportConfig, ReportState, AggregationType } from "./types";
 import { ReportTable } from "./report-table";
@@ -371,6 +371,20 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		}));
 	}, []);
 
+	const getAggregationOptions = useCallback((type: string) => {
+		switch (type) {
+			case "number":
+			case "currency":
+				return ["none", "sum", "count", "average", "min", "max"];
+			case "boolean":
+				return ["none", "count", "count-checked"];
+			case "date":
+				return ["none", "count", "min", "max", "average"];
+			default:
+				return ["none", "count"];
+		}
+	}, []);
+
 	// Stable column references
 	const columns = useMemo(() => config.columns, [config.columns]);
 	const autoGroupByOptions = useMemo(() => {
@@ -560,16 +574,6 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={() => setIsShareDialogOpen(true)}
-								disabled={readOnly || isSharing}
-								className="gap-2"
-							>
-								<Share2 className="h-4 w-4" />
-								Compartir
-							</Button>
-							<Button
-								variant="outline"
-								size="sm"
 								onClick={handleExportCsv}
 								disabled={isLoading}
 								className="gap-2"
@@ -680,19 +684,19 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 				<div className="w-80 border-l border-[#d5d8df] dark:border-zinc-700 bg-[#f0f2f5] dark:bg-zinc-800 flex flex-col shrink-0">
 					<Tabs defaultValue="settings" className="flex-1 flex flex-col">
 						<div className="px-4 pt-4 pb-3 border-b border-[#d5d8df] dark:border-zinc-700">
-							<TabsList className="grid w-full grid-cols-4 bg-[#e2e5eb] dark:bg-zinc-700">
-								<TabsTrigger value="settings" className="gap-1.5 text-xs data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
+							<TabsList className="flex w-full flex-wrap gap-1 bg-[#e2e5eb] dark:bg-zinc-700">
+								<TabsTrigger value="settings" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
 									<Settings className="h-3.5 w-3.5" />
 									Configuracion
 								</TabsTrigger>
-								<TabsTrigger value="filters" className="gap-1.5 text-xs data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
+								<TabsTrigger value="filters" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
 									<Filter className="h-3.5 w-3.5" />
 									Filtros
 								</TabsTrigger>
-								<TabsTrigger value="visual" className="gap-1.5 text-xs data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
+								<TabsTrigger value="visual" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
 									Vista
 								</TabsTrigger>
-								<TabsTrigger value="presets" className="gap-1.5 text-xs data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
+								<TabsTrigger value="presets" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
 									Presets
 								</TabsTrigger>
 							</TabsList>
@@ -857,13 +861,23 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 																}
 																disabled={readOnly || !isVisible}
 															>
-																<option value="none">Sin total</option>
-																<option value="sum">Suma</option>
-																<option value="count">Contar</option>
-																<option value="count-checked">Contar marcados</option>
-																<option value="average">Promedio</option>
-																<option value="min">Mínimo</option>
-																<option value="max">Máximo</option>
+																{getAggregationOptions(col.type || "text").map((opt) => (
+																	<option key={opt} value={opt}>
+																		{opt === "none"
+																			? "Sin total"
+																			: opt === "sum"
+																				? "Suma"
+																				: opt === "count"
+																					? "Contar"
+																					: opt === "count-checked"
+																						? "Contar marcados"
+																						: opt === "average"
+																							? "Promedio"
+																							: opt === "min"
+																								? "Mínimo"
+																								: "Máximo"}
+																	</option>
+																))}
 															</select>
 														</div>
 													</div>

@@ -8,6 +8,7 @@ type Region = {
 	width: number;
 	height: number;
 	label: string;
+	description?: string;
 	color: string;
 	type: "single" | "table";
 	tableColumns?: string[];
@@ -18,6 +19,7 @@ type TemplateColumn = {
 	label: string;
 	dataType: string;
 	ocrScope?: "parent" | "item";
+	description?: string;
 };
 
 async function getAuthContext() {
@@ -87,6 +89,7 @@ export async function POST(request: Request) {
 		const body = await request.json().catch(() => ({}));
 
 		const name = typeof body.name === "string" ? body.name.trim() : "";
+		console.log("[ocr-templates:post] tenant", tenantId, "user", user.id, "name", name);
 		if (!name) {
 			return NextResponse.json({ error: "Template name required" }, { status: 400 });
 		}
@@ -115,6 +118,10 @@ export async function POST(request: Request) {
 		// Derive columns from regions
 		const columns: TemplateColumn[] = [];
 		for (const region of validRegions) {
+			const regionDescription =
+				typeof region.description === "string"
+					? region.description.trim()
+					: "";
 			if (region.type === "single") {
 				columns.push({
 					fieldKey: region.label
@@ -124,6 +131,7 @@ export async function POST(request: Request) {
 					label: region.label,
 					dataType: "text",
 					ocrScope: "parent",
+					description: regionDescription || undefined,
 				});
 			} else if (region.type === "table" && region.tableColumns) {
 				for (const col of region.tableColumns) {
@@ -135,6 +143,7 @@ export async function POST(request: Request) {
 						label: col,
 						dataType: "text",
 						ocrScope: "item",
+						description: regionDescription || undefined,
 					});
 				}
 			}
@@ -146,6 +155,18 @@ export async function POST(request: Request) {
 		const templateBucket = typeof body.templateBucket === "string" ? body.templateBucket : null;
 		const templatePath = typeof body.templatePath === "string" ? body.templatePath : null;
 		const templateFileName = typeof body.templateFileName === "string" ? body.templateFileName : null;
+
+		const { data: existing, error: existingError } = await supabase
+			.from("ocr_templates")
+			.select("id, name, is_active, tenant_id")
+			.eq("tenant_id", tenantId)
+			.eq("name", name);
+
+		if (existingError) {
+			console.error("[ocr-templates:post] existing check failed", existingError);
+		} else if (existing && existing.length > 0) {
+			console.log("[ocr-templates:post] existing templates", existing);
+		}
 
 		const { data: template, error } = await supabase
 			.from("ocr_templates")
@@ -165,7 +186,24 @@ export async function POST(request: Request) {
 			.select("id, name, description, template_file_name, regions, columns, is_active")
 			.single();
 
-		if (error) throw error;
+		if (error) {
+			const code = (error as any)?.code;
+			const message = (error as any)?.message ?? "";
+			if (code === "23505" && message.includes("ocr_templates_name_unique")) {
+				console.log("[ocr-templates:post] duplicate name constraint", {
+					tenantId,
+					name,
+				});
+				return NextResponse.json(
+					{
+						error: "Ya existe una plantilla con ese nombre",
+						code: "template_name_exists",
+					},
+					{ status: 409 },
+				);
+			}
+			throw error;
+		}
 
 		return NextResponse.json({ template });
 	} catch (error) {

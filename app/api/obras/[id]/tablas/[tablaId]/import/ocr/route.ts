@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
 
 import { createClient } from "@/utils/supabase/server";
 import {
@@ -28,10 +26,39 @@ type ColumnMeta = {
 };
 
 const DOCUMENTS_BUCKET = "obra-documents";
-const OCR_MODEL = process.env.OCR_MODEL ?? "gpt-4o-mini";
+const OCR_MODEL = process.env.OCR_MODEL ?? "gemini-2.5-flash";
+const GOOGLE_API_KEY =
+	process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GOOGLE_API_KEY;
 const MIN_OCR_TOKEN_RESERVE = 1_500;
 const MAX_OCR_TOKEN_RESERVE = 8_000;
 const DEFAULT_OCR_TOKEN_RESERVE = 2_000;
+const OCR_TIMEOUT_MS = Number(process.env.OCR_TIMEOUT_MS) || 90_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
+	return Promise.race([
+		promise,
+		new Promise<T>((_, reject) =>
+			setTimeout(() => reject(new Error(`${label} timeout`)), ms)
+		),
+	]);
+}
+
+function extractJsonFromText(raw: string) {
+	const trimmed = raw.trim();
+	if (!trimmed) {
+		throw new Error("Respuesta vacía del modelo");
+	}
+	const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+	if (fencedMatch?.[1]) {
+		return fencedMatch[1].trim();
+	}
+	const firstBrace = trimmed.indexOf("{");
+	const lastBrace = trimmed.lastIndexOf("}");
+	if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+		return trimmed.slice(firstBrace, lastBrace + 1);
+	}
+	throw new Error("No se encontró JSON en la respuesta del modelo");
+}
 
 function zodTypeForColumn(column: ColumnMeta) {
 	switch (column.dataType) {
@@ -62,8 +89,26 @@ function buildExtractionSchema(
 	const parentSchema = z.object(parentShape).passthrough();
 	const itemSchema = z.object(itemShape).passthrough();
 	return parentSchema.extend({
-		items: z.array(itemSchema).min(1),
+		items: z.array(itemSchema).optional(),
 	});
+}
+
+function buildEmptyExtraction(
+	parentColumns: ColumnMeta[],
+	itemColumns: ColumnMeta[]
+) {
+	const parent: Record<string, string> = {};
+	for (const column of parentColumns) {
+		parent[column.fieldKey] = "";
+	}
+	const item: Record<string, string> = {};
+	for (const column of itemColumns) {
+		item[column.fieldKey] = "";
+	}
+	return {
+		...parent,
+		items: [item],
+	};
 }
 
 function buildAutoInstructions({
@@ -84,8 +129,11 @@ function buildAutoInstructions({
 		lines.push("Campos de la orden:");
 		parentColumns.forEach((column) => {
 			const label = column.label || column.fieldKey;
+			const description = typeof column.config?.ocrDescription === "string"
+				? (column.config.ocrDescription as string)
+				: "";
 			lines.push(
-				`- ${label} (campo "${column.fieldKey}", tipo ${column.dataType})`
+				`- ${label} (campo "${column.fieldKey}", tipo ${column.dataType})${description ? ` - ${description}` : ""}`
 			);
 		});
 	}
@@ -93,12 +141,15 @@ function buildAutoInstructions({
 		lines.push("Campos por ítem (items[]):");
 		itemColumns.forEach((column) => {
 			const label = column.label || column.fieldKey;
+			const description = typeof column.config?.ocrDescription === "string"
+				? (column.config.ocrDescription as string)
+				: "";
 			lines.push(
-				`- ${label} (campo "${column.fieldKey}", tipo ${column.dataType})`
+				`- ${label} (campo "${column.fieldKey}", tipo ${column.dataType})${description ? ` - ${description}` : ""}`
 			);
 		});
 	}
-	lines.push('La propiedad "items" debe contener al menos un ítem legible.');
+	lines.push('Incluí "items" si ves filas claras; si no, devolvé una lista vacía.');
 	lines.push("No inventes valores; deja campos vacíos si no se pueden leer.");
 	return lines.join("\n");
 }
@@ -279,6 +330,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		return NextResponse.json(
 			{ error: "Parámetros incompletos" },
 			{ status: 400 }
+		);
+	}
+	if (!GOOGLE_API_KEY) {
+		console.error("[tabla-rows:ocr-import] Missing GOOGLE_API_KEY");
+		return NextResponse.json(
+			{
+				error: "Falta configurar GOOGLE_GENERATIVE_AI_API_KEY en el servidor.",
+			},
+			{ status: 500 }
 		);
 	}
 	let resolvedTenantId: string | null = null;
@@ -530,6 +590,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			);
 		}
 
+		if (effectiveImageDataUrl) {
+			const mimeMatch = effectiveImageDataUrl.match(/^data:([^;]+);/);
+			console.log("[tabla-rows:ocr-import] image info", {
+				mime: mimeMatch?.[1] ?? "unknown",
+				dataUrlLength: effectiveImageDataUrl.length,
+				startsWithData: effectiveImageDataUrl.startsWith("data:"),
+				model: OCR_MODEL,
+			});
+		} else if (file) {
+			console.log("[tabla-rows:ocr-import] file info", {
+				name: file.name,
+				type: file.type,
+				size: file.size,
+				model: OCR_MODEL,
+			});
+		}
+
 		const enforceAiLimit =
 			typeof planLimits.aiTokens === "number" && planLimits.aiTokens > 0;
 		const tokenReservationTarget = enforceAiLimit
@@ -579,30 +656,84 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		}
 
 		let extraction: Record<string, any> | null = null;
-		let extractionResponse: Awaited<ReturnType<typeof generateObject>> | null =
-			null;
+
+		console.log("[tabla-rows:ocr-import] OCR prompt:", instructions);
+
+		const runGenerateTextFallback = async (imageBytes: Uint8Array, mimeType: string) => {
+			const b64 = Buffer.from(imageBytes).toString("base64");
+			const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${OCR_MODEL}:generateContent?key=${GOOGLE_API_KEY}`;
+
+			const callGeminiRaw = async (prompt: string) => {
+				const body = {
+					contents: [{
+						parts: [
+							{ text: prompt },
+							{ inline_data: { mime_type: mimeType, data: b64 } },
+						],
+					}],
+					generationConfig: { temperature: 0.1 },
+				};
+				const res = await withTimeout(
+					fetch(apiUrl, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(body),
+					}),
+					OCR_TIMEOUT_MS,
+					"OCR text generation (raw)"
+				);
+				if (!res.ok) {
+					const errBody = await res.json().catch(() => ({}));
+					throw new Error(errBody?.error?.message ?? `Gemini API error ${res.status}`);
+				}
+				const json = await res.json();
+				return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+			};
+
+			// First attempt
+			const raw = await callGeminiRaw(
+				`${instructions}\n\nResponde SOLO con JSON válido, sin explicaciones ni markdown.`
+			);
+			console.log("[tabla-rows:ocr-import] generateText raw response", { length: raw.length });
+
+			if (!raw.trim()) {
+				throw new Error("El modelo devolvió una respuesta vacía. La imagen puede no contener datos legibles.");
+			}
+
+			try {
+				const jsonText = extractJsonFromText(raw);
+				const parsedJson = JSON.parse(jsonText);
+				const validated = extractionSchema.parse(parsedJson);
+				return { object: validated };
+			} catch (parseError) {
+				console.warn(
+					"[tabla-rows:ocr-import] generateText parse failed, retrying with template",
+					{ length: raw.length }
+				);
+			}
+
+			// Template retry
+			const emptyTemplate = buildEmptyExtraction(parentColumns, itemColumns);
+			const repairRaw = await callGeminiRaw(
+				`${instructions}\n\nDevolvé SOLO JSON válido siguiendo este template. Si no podés leer un campo, dejalo vacío ("").\n\nTEMPLATE JSON:\n${JSON.stringify(emptyTemplate)}\n\nResponde SOLO con JSON válido.`
+			);
+			if (!repairRaw.trim()) {
+				throw new Error("El modelo no pudo extraer datos de esta imagen.");
+			}
+			const jsonText = extractJsonFromText(repairRaw);
+			const parsedJson = JSON.parse(jsonText);
+			const validated = extractionSchema.parse(parsedJson);
+			return { object: validated };
+		};
 
 		if (effectiveImageDataUrl && effectiveImageDataUrl.startsWith("data:")) {
-			const response = await generateObject({
-				model: openai(OCR_MODEL),
-				schema: extractionSchema,
-				messages: [
-					{
-						role: "user",
-						content: [
-							{
-								type: "text",
-								text: instructions,
-							},
-							{ type: "image", image: effectiveImageDataUrl },
-						],
-					},
-				],
-				temperature: 0.1,
-			});
-			if ("object" in response) {
-				extractionResponse = response;
-				extraction = response.object as Record<string, any>;
+			const { buffer: imgBuf, mime: imgMime } = dataUrlToBuffer(effectiveImageDataUrl);
+			const imgBytes = new Uint8Array(imgBuf);
+			try {
+				const result = await runGenerateTextFallback(imgBytes, imgMime);
+				extraction = result.object as Record<string, any>;
+			} catch (err) {
+				console.error("[tabla-rows:ocr-import] OCR extraction failed", err);
 			}
 		} else if (file) {
 			const arrayBuffer = await file.arrayBuffer();
@@ -610,29 +741,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 			if (file.type?.startsWith("image/")) {
 				const mime = file.type || "image/png";
-				const base64 = buffer.toString("base64");
-				const dataUrl = `data:${mime};base64,${base64}`;
+				const fileBytes = new Uint8Array(buffer);
 
-				const response = await generateObject({
-					model: openai(OCR_MODEL),
-					schema: extractionSchema,
-					messages: [
-						{
-							role: "user",
-							content: [
-								{
-									type: "text",
-									text: instructions,
-								},
-								{ type: "image", image: dataUrl },
-							],
-						},
-					],
-					temperature: 0.1,
-				});
-				if ("object" in response) {
-					extractionResponse = response;
-					extraction = response.object as Record<string, any>;
+				try {
+					const result = await runGenerateTextFallback(fileBytes, mime);
+					extraction = result.object as Record<string, any>;
+				} catch (err) {
+					console.error("[tabla-rows:ocr-import] OCR extraction failed", err);
 				}
 			} else if (file.type?.includes("pdf")) {
 				return NextResponse.json(
@@ -648,19 +763,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		}
 
 		if (!extraction) {
+			console.warn(
+				"[tabla-rows:ocr-import] OCR failed, no data extracted"
+			);
+			if (rollbackReservation && reservationApplied && !tokensSettled) {
+				await rollbackReservation("ocr_extraction_failed");
+			}
 			return NextResponse.json(
-				{ error: "No se pudo extraer información de la orden" },
+				{ error: "No se pudieron extraer datos de la imagen. Intentá con una imagen más nítida o con otro formato." },
 				{ status: 422 }
 			);
 		}
+		if (!Array.isArray((extraction as any).items)) {
+			(extraction as any).items = [];
+		}
+		if ((extraction as any).items.length === 0) {
+			const emptyItem = buildEmptyExtraction(parentColumns, itemColumns).items;
+			(extraction as any).items = emptyItem;
+		}
 
-		const inferredTokenUsage = extractionResponse
-			? extractTokenUsage(extractionResponse)
-			: 0;
 		const actualTokenUsage =
-			inferredTokenUsage > 0
-				? inferredTokenUsage
-				: reservationApplied
+			reservationApplied
 					? reservedTokens
 					: DEFAULT_OCR_TOKEN_RESERVE;
 

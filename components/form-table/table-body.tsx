@@ -31,6 +31,7 @@ type TableRowProps<Row extends FormTableRow> = {
 	isExpanded: boolean;
 	isRowDirty: boolean;
 	dirtyCellIds: string;
+	hiddenColumnIdsKey: string;
 	showActionsColumn: boolean;
 	isColumnHidden: (columnId: string) => boolean;
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
@@ -60,6 +61,7 @@ function TableRowInner<Row extends FormTableRow>({
 	isExpanded,
 	isRowDirty,
 	dirtyCellIds,
+	hiddenColumnIdsKey,
 	showActionsColumn,
 	isColumnHidden,
 	isCellDirty,
@@ -74,6 +76,7 @@ function TableRowInner<Row extends FormTableRow>({
 }: TableRowProps<Row>) {
 	// dirtyCellIds is used for memoization comparison (see MemoizedTableRow below)
 	void dirtyCellIds;
+	void hiddenColumnIdsKey;
 	const visibleCells = row.getVisibleCells();
 	const filteredCells = visibleCells.filter((cell) => !isColumnHidden(cell.column.id));
 	const visibleLeafCount = filteredCells.length;
@@ -216,6 +219,7 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
 		prevProps.showActionsColumn === nextProps.showActionsColumn &&
 		prevProps.isRowDirty === nextProps.isRowDirty &&
-		prevProps.dirtyCellIds === nextProps.dirtyCellIds
+		prevProps.dirtyCellIds === nextProps.dirtyCellIds &&
+		prevProps.hiddenColumnIdsKey === nextProps.hiddenColumnIdsKey
 	);
 }) as typeof TableRowInner;
