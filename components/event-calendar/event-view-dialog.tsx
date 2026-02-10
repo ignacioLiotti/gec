@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ type EventViewDialogProps = {
   isOpen: boolean
   onClose: () => void
   onEdit?: () => void
+  onToggleComplete?: (completed: boolean) => void
   allowEdit?: boolean
 }
 
@@ -29,6 +31,7 @@ export function EventViewDialog({
   isOpen,
   onClose,
   onEdit,
+  onToggleComplete,
   allowEdit = true,
 }: EventViewDialogProps) {
   if (!event) {
@@ -122,6 +125,21 @@ export function EventViewDialog({
           <div className="grid gap-1">
             <span className="text-muted-foreground">Audiencia</span>
             <span className="text-foreground">{audienceLabel}</span>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div className="grid gap-0.5">
+              <span className="text-sm font-medium">Marcar como completado</span>
+              <span className="text-xs text-muted-foreground">
+                Los eventos completados no aparecen como atrasados.
+              </span>
+            </div>
+            <Checkbox
+              checked={Boolean(event.completed)}
+              onCheckedChange={(checked) => {
+                onToggleComplete?.(Boolean(checked))
+              }}
+            />
           </div>
         </div>
 

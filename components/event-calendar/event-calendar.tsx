@@ -436,6 +436,16 @@ export function EventCalendar({
             onClose={() => {
               setIsEventViewOpen(false)
             }}
+            onToggleComplete={(completed) => {
+              if (!selectedEvent) return
+              handleEventUpdate({
+                ...selectedEvent,
+                completed,
+              })
+              setSelectedEvent((prev) =>
+                prev ? { ...prev, completed } : prev
+              )
+            }}
             onEdit={() => {
               setIsEventViewOpen(false)
               setIsEventDialogOpen(true)
