@@ -1,10 +1,27 @@
 "use client";
 
+import React, { memo } from "react";
+import dynamic from "next/dynamic";
 import { Download, Eye, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import ForgeViewer from "@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer";
-import { EnhancedDocumentViewer } from "@/components/viewer/enhanced-document-viewer";
 import type { FileSystemItem } from "../types";
+
+// Lazy-load heavy viewers so they only mount when actually needed inside the sheet
+const ForgeViewer = dynamic(
+	() => import("@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer"),
+	{ ssr: false }
+);
+const EnhancedDocumentViewer = dynamic(
+	() => import("@/components/viewer/enhanced-document-viewer").then((m) => ({ default: m.EnhancedDocumentViewer })),
+	{
+		ssr: false,
+		loading: () => (
+			<div className="flex items-center justify-center h-full">
+				<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+			</div>
+		),
+	}
+);
 
 type DocumentPreviewProps = {
 	document: FileSystemItem | null;
@@ -12,7 +29,11 @@ type DocumentPreviewProps = {
 	onDownload: (doc: FileSystemItem) => void;
 };
 
-export function DocumentPreview({ document, previewUrl, onDownload }: DocumentPreviewProps) {
+export const DocumentPreview = memo(function DocumentPreview({
+	document,
+	previewUrl,
+	onDownload,
+}: DocumentPreviewProps) {
 	if (!document) {
 		return (
 			<div className="flex flex-col items-center justify-center h-full text-stone-400">
@@ -63,4 +84,4 @@ export function DocumentPreview({ document, previewUrl, onDownload }: DocumentPr
 			</div>
 		</div>
 	);
-}
+});

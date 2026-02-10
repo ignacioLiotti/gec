@@ -57,6 +57,7 @@ import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType, TABLA_DATA
 import { cn } from '@/lib/utils';
 import { formatReadableBytes } from '@/lib/tenant-expenses';
 import type { UsageDelta } from '@/lib/tenant-usage';
+import React from 'react';
 import type {
   FileSystemItem,
   FileManagerSelectionChange,
@@ -178,6 +179,80 @@ type TenantUsageInfo = {
   };
 };
 
+// Extracted as a top-level memoized component to avoid re-creation on every FileManager render
+type FileThumbnailProps = {
+  item: FileSystemItem;
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  getFileIcon: (mimetype?: string) => React.ReactNode;
+};
+
+const FileThumbnail = React.memo(function FileThumbnail({ item, supabase, getFileIcon }: FileThumbnailProps) {
+  const storagePath = item.storagePath;
+  const initialUrl = storagePath
+    ? (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath))
+    : null;
+  const [thumbUrl, setThumbUrl] = useState<string | null>(initialUrl);
+
+  useEffect(() => {
+    if (!storagePath || !item.mimetype?.startsWith('image/')) {
+      setThumbUrl(null);
+      return;
+    }
+
+    const cachedBlob = getCachedBlobUrl(storagePath);
+    if (cachedBlob) {
+      setThumbUrl(cachedBlob);
+      return;
+    }
+
+    const cachedSignedUrl = getCachedSignedUrl(storagePath);
+    if (cachedSignedUrl) {
+      setThumbUrl(cachedSignedUrl);
+      preloadAndCacheFile(cachedSignedUrl, storagePath).then((blobUrl) => {
+        setThumbUrl(blobUrl);
+      });
+      return;
+    }
+
+    let isMounted = true;
+
+    (async () => {
+      const { data, error } = await supabase.storage
+        .from('obra-documents')
+        .createSignedUrl(storagePath, 3600);
+      if (!isMounted || error || !data?.signedUrl) return;
+      setCachedSignedUrl(storagePath, data.signedUrl);
+      setThumbUrl(data.signedUrl);
+      const blobUrl = await preloadAndCacheFile(data.signedUrl, storagePath);
+      if (isMounted) {
+        setThumbUrl(blobUrl);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item.mimetype, storagePath, supabase]);
+
+  if (thumbUrl) {
+    return (
+      <div className="relative w-full h-full">
+        <img
+          src={thumbUrl}
+          alt={item.name}
+          className="w-full h-full object-cover rounded-none"
+          loading="lazy"
+        />
+        <span className="text-sm text-center truncate w-full text-stone-700 absolute bottom-0 left-0 right-0 px-2 py-1 bg-stone-200/50 backdrop-blur-sm" title={item.name}>
+          {item.name}
+        </span>
+      </div>
+    );
+  }
+
+  return <>{getFileIcon(item.mimetype)}</>;
+});
+
 export function FileManager({
   obraId,
   materialOrders = [],
@@ -189,78 +264,6 @@ export function FileManager({
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [usageInfo, setUsageInfo] = useState<TenantUsageInfo | null>(null);
   const usageInfoRef = useRef<TenantUsageInfo | null>(null);
-  const FileThumbnail = ({ item }: { item: FileSystemItem }) => {
-    const storagePath = item.storagePath;
-    // Check blob cache first, then signed URL cache
-    const initialUrl = storagePath
-      ? (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath))
-      : null;
-    const [thumbUrl, setThumbUrl] = useState<string | null>(initialUrl);
-
-    useEffect(() => {
-      if (!storagePath || !item.mimetype?.startsWith('image/')) {
-        setThumbUrl(null);
-        return;
-      }
-
-      // Check blob cache first (instant, no network)
-      const cachedBlob = getCachedBlobUrl(storagePath);
-      if (cachedBlob) {
-        setThumbUrl(cachedBlob);
-        return;
-      }
-
-      // Check signed URL cache
-      const cachedSignedUrl = getCachedSignedUrl(storagePath);
-      if (cachedSignedUrl) {
-        setThumbUrl(cachedSignedUrl);
-        // Preload to blob cache in background
-        preloadAndCacheFile(cachedSignedUrl, storagePath).then((blobUrl) => {
-          setThumbUrl(blobUrl);
-        });
-        return;
-      }
-
-      let isMounted = true;
-
-      (async () => {
-        const { data, error } = await supabase.storage
-          .from('obra-documents')
-          .createSignedUrl(storagePath, 3600); // 1 hour
-        if (!isMounted || error || !data?.signedUrl) return;
-        setCachedSignedUrl(storagePath, data.signedUrl);
-        // Set signed URL first for immediate display
-        setThumbUrl(data.signedUrl);
-        // Then preload to blob cache
-        const blobUrl = await preloadAndCacheFile(data.signedUrl, storagePath);
-        if (isMounted) {
-          setThumbUrl(blobUrl);
-        }
-      })();
-
-      return () => {
-        isMounted = false;
-      };
-    }, [item.mimetype, storagePath, supabase]);
-
-    if (thumbUrl) {
-      return (
-        <div className="relative w-full h-full">
-          <img
-            src={thumbUrl}
-            alt={item.name}
-            className="w-full h-full object-cover rounded-none"
-            loading="lazy"
-          />
-          <span className="text-sm text-center truncate w-full text-stone-700 absolute bottom-0 left-0 right-0 px-2 py-1 bg-stone-200/50 backdrop-blur-sm" title={item.name}>
-            {item.name}
-          </span>
-        </div>
-      );
-    }
-
-    return <>{getFileIcon(item.mimetype)}</>;
-  };
   const mapUsagePayload = useCallback((payload: any): TenantUsageInfo | null => {
     if (!payload?.plan || !payload?.usage) {
       return null;
@@ -3144,7 +3147,7 @@ export function FileManager({
                       )
                     ) : (
                       <div className="absolute inset-0 top-0 flex items-center justify-center">
-                        <FileThumbnail item={item} />
+                        <FileThumbnail item={item} supabase={supabase} getFileIcon={getFileIcon} />
                       </div>
                     )}
                     <span className="text-sm text-center truncate w-full text-stone-700" title={item.name}>
@@ -3748,7 +3751,7 @@ type OcrDocumentSourceCellProps = {
   supabase: ReturnType<typeof createSupabaseBrowserClient>;
 };
 
-function OcrDocumentSourceCell({
+const OcrDocumentSourceCell = React.memo(function OcrDocumentSourceCell({
   row,
   obraId,
   documentsByStoragePath,
@@ -3888,4 +3891,4 @@ function OcrDocumentSourceCell({
       </HoverCardContent>
     </HoverCard>
   );
-}
+});

@@ -1,5 +1,6 @@
 "use client";
 
+import React, { memo } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Download, RefreshCw, Loader2 } from "lucide-react";
@@ -17,7 +18,7 @@ type DocumentSheetProps = {
 	retryingOcr?: boolean;
 };
 
-export function DocumentSheet({
+export const DocumentSheet = memo(function DocumentSheet({
 	isOpen,
 	onOpenChange,
 	document,
@@ -72,4 +73,4 @@ export function DocumentSheet({
 			)}
 		</Sheet>
 	);
-}
+});
