@@ -21,6 +21,7 @@ type DefaultFolder = {
 		fieldKey: string;
 		label: string;
 		dataType: string;
+		required?: boolean;
 		ocrScope?: string;
 		description?: string | null;
 	}>;
@@ -130,21 +131,23 @@ export async function GET() {
 			}
 		}
 
-		// Fetch columns for OCR tablas
-		const tablaIds = (tablas ?? []).map(t => t.id);
-		let columnsMap = new Map<string, Array<{
-			fieldKey: string;
-			label: string;
-			dataType: string;
-			ocrScope?: string;
-			description?: string | null;
-		}>>();
+			// Fetch columns for OCR tablas
+			const tablaIds = (tablas ?? []).map(t => t.id);
+			let columnsMap = new Map<string, Array<{
+				fieldKey: string;
+				label: string;
+				dataType: string;
+				required?: boolean;
+				ocrScope?: string;
+				description?: string | null;
+			}>>();
 
 		if (tablaIds.length > 0) {
 			const { data: columns } = await supabase
 				.from("obra_default_tabla_columns")
-				.select("default_tabla_id, field_key, label, data_type, config")
-				.in("default_tabla_id", tablaIds);
+				.select("default_tabla_id, field_key, label, data_type, required, config")
+				.in("default_tabla_id", tablaIds)
+				.order("position", { ascending: true });
 
 			if (columns) {
 				columns.forEach(col => {
@@ -153,6 +156,7 @@ export async function GET() {
 						fieldKey: col.field_key,
 						label: col.label,
 						dataType: col.data_type,
+						required: Boolean(col.required),
 						ocrScope: (col.config as any)?.ocrScope,
 						description: (col.config as any)?.ocrDescription ?? null,
 					});
@@ -400,7 +404,9 @@ export async function POST(request: Request) {
 				fieldKey: string;
 				label: string;
 				dataType: string;
+				required?: boolean;
 				ocrScope?: string;
+				description?: string | null;
 			}> = [];
 
 			console.log("[obra-defaults:post] Creating columns for default tabla:", {
@@ -428,23 +434,24 @@ export async function POST(request: Request) {
 				const { data: columns, error: columnsError } = await supabase
 					.from("obra_default_tabla_columns")
 					.insert(columnsPayload)
-					.select("field_key, label, data_type, config");
+					.select("field_key, label, data_type, required, config");
 
-				if (columnsError) {
-					console.error("[obra-defaults:post] columns error:", columnsError);
-				} else if (columns) {
-					console.log("[obra-defaults:post] Successfully created", columns.length, "columns for default tabla", tabla.id);
-					insertedColumns = columns.map(col => ({
-						fieldKey: col.field_key,
-						label: col.label,
-						dataType: col.data_type,
-						ocrScope: (col.config as any)?.ocrScope,
-						description: (col.config as any)?.ocrDescription ?? null,
-					}));
+					if (columnsError) {
+						console.error("[obra-defaults:post] columns error:", columnsError);
+					} else if (columns) {
+						console.log("[obra-defaults:post] Successfully created", columns.length, "columns for default tabla", tabla.id);
+						insertedColumns = columns.map(col => ({
+							fieldKey: col.field_key,
+							label: col.label,
+							dataType: col.data_type,
+							required: Boolean(col.required),
+							ocrScope: (col.config as any)?.ocrScope,
+							description: (col.config as any)?.ocrDescription ?? null,
+						}));
+					}
+				} else {
+					console.warn("[obra-defaults:post] No columns provided for OCR folder - this will cause issues!");
 				}
-			} else {
-				console.warn("[obra-defaults:post] No columns provided for OCR folder - this will cause issues!");
-			}
 
 			// Get template name if applicable
 			let ocrTemplateName: string | null = null;
@@ -457,14 +464,15 @@ export async function POST(request: Request) {
 				ocrTemplateName = template?.name ?? null;
 			}
 
-			const enrichedFolder: DefaultFolder = {
-				...folder,
-				isOcr: true,
-				ocrTemplateId,
-				ocrTemplateName,
-				hasNestedData,
-				columns: insertedColumns,
-			};
+				const enrichedFolder: DefaultFolder = {
+					...folder,
+					isOcr: true,
+					dataInputMethod,
+					ocrTemplateId,
+					ocrTemplateName,
+					hasNestedData,
+					columns: insertedColumns,
+				};
 
 			const { data: job, error: jobError } = await supabase
 				.from("background_jobs")
@@ -538,6 +546,302 @@ export async function POST(request: Request) {
 		console.error("[obra-defaults:post]", error);
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "Error creating default" },
+			{ status: 500 }
+		);
+	}
+}
+
+export async function PUT(request: Request) {
+	const { supabase, user, tenantId } = await getAuthContext();
+
+	if (!user) {
+		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	}
+
+	if (!tenantId) {
+		return NextResponse.json(
+			{ error: "No tenant found for user" },
+			{ status: 400 }
+		);
+	}
+
+	try {
+		const body = await request.json().catch(() => ({}));
+		const type = body.type as "folder" | "quick-action";
+		if (type !== "folder") {
+			return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+		}
+
+		const id = typeof body.id === "string" ? body.id : "";
+		if (!id) {
+			return NextResponse.json({ error: "Folder ID required" }, { status: 400 });
+		}
+
+		const rawName = typeof body.name === "string" ? body.name.trim() : "";
+		if (!rawName) {
+			return NextResponse.json({ error: "Folder name required" }, { status: 400 });
+		}
+
+		const path = normalizeFolderName(rawName);
+		if (!path) {
+			return NextResponse.json({ error: "Invalid folder name" }, { status: 400 });
+		}
+
+		const { data: existingFolder, error: existingFolderError } = await supabase
+			.from("obra_default_folders")
+			.select("id, path, position")
+			.eq("id", id)
+			.eq("tenant_id", tenantId)
+			.maybeSingle();
+
+		if (existingFolderError) {
+			throw existingFolderError;
+		}
+
+		if (!existingFolder) {
+			return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+		}
+
+		const { data: updatedFolder, error: updateFolderError } = await supabase
+			.from("obra_default_folders")
+			.update({
+				name: rawName,
+				path,
+			})
+			.eq("id", id)
+			.eq("tenant_id", tenantId)
+			.select("id, name, path, position")
+			.single();
+
+		if (updateFolderError) throw updateFolderError;
+
+		const isOcr = body.isOcr === true;
+
+		if (!isOcr) {
+			const linkedPaths = Array.from(new Set([existingFolder.path, path].filter(Boolean)));
+			if (linkedPaths.length > 0) {
+				await supabase
+					.from("obra_default_tablas")
+					.delete()
+					.eq("tenant_id", tenantId)
+					.in("linked_folder_path", linkedPaths);
+			}
+
+			const { error: jobError } = await supabase.from("background_jobs").insert({
+				tenant_id: tenantId,
+				type: "apply_default_folder",
+				payload: { folderId: updatedFolder.id, forceSync: true, previousPath: existingFolder.path },
+			});
+			if (jobError) {
+				console.error("[obra-defaults:put] job enqueue error:", jobError);
+			}
+
+			return NextResponse.json({ folder: updatedFolder });
+		}
+
+		const ocrTemplateId = typeof body.ocrTemplateId === "string" && body.ocrTemplateId.trim()
+			? body.ocrTemplateId.trim()
+			: null;
+		const hasNestedData = body.hasNestedData === true;
+		const rawColumns: Array<{
+			label: string;
+			fieldKey?: string;
+			dataType?: string;
+			required?: boolean;
+			ocrScope?: string;
+			description?: string | null;
+			position?: number;
+		}> = Array.isArray(body.columns) ? body.columns : [];
+
+		let resolvedColumns = rawColumns;
+		if (resolvedColumns.length === 0 && ocrTemplateId) {
+			const { data: template, error: templateError } = await supabase
+				.from("ocr_templates")
+				.select("columns")
+				.eq("id", ocrTemplateId)
+				.maybeSingle();
+
+			if (templateError) {
+				console.error("[obra-defaults:put] template columns error:", templateError);
+			} else {
+				const templateColumns = Array.isArray((template as any)?.columns)
+					? ((template as any).columns as Array<{
+							label?: string;
+							fieldKey?: string;
+							dataType?: string;
+							ocrScope?: string;
+							description?: string;
+					  }>)
+					: [];
+
+				if (templateColumns.length > 0) {
+					resolvedColumns = templateColumns.map((col, index) => ({
+						label: col.label ?? `Columna ${index + 1}`,
+						fieldKey: col.fieldKey,
+						dataType: col.dataType ?? "text",
+						required: false,
+						ocrScope: col.ocrScope,
+						description: col.description ?? null,
+						position: index,
+					}));
+				}
+			}
+		}
+
+		const rawDataInputMethod = typeof body.dataInputMethod === "string" ? body.dataInputMethod : "both";
+		const dataInputMethod = ["ocr", "manual", "both"].includes(rawDataInputMethod)
+			? rawDataInputMethod
+			: "both";
+
+		const settings: Record<string, unknown> = {
+			ocrFolder: path,
+			hasNestedData,
+			dataInputMethod,
+		};
+		if (ocrTemplateId) {
+			settings.ocrTemplateId = ocrTemplateId;
+		}
+
+		const linkedPaths = Array.from(new Set([existingFolder.path, path].filter(Boolean)));
+		const { data: existingTabla, error: existingTablaError } = await supabase
+			.from("obra_default_tablas")
+			.select("id, position")
+			.eq("tenant_id", tenantId)
+			.eq("source_type", "ocr")
+			.in("linked_folder_path", linkedPaths)
+			.order("position", { ascending: true })
+			.limit(1)
+			.maybeSingle();
+
+		if (existingTablaError) throw existingTablaError;
+
+		let tablaId = existingTabla?.id ?? null;
+		if (tablaId) {
+			const { error: updateTablaError } = await supabase
+				.from("obra_default_tablas")
+				.update({
+					name: rawName,
+					description: null,
+					source_type: "ocr",
+					linked_folder_path: path,
+					settings,
+					ocr_template_id: ocrTemplateId,
+				})
+				.eq("id", tablaId)
+				.eq("tenant_id", tenantId);
+
+			if (updateTablaError) throw updateTablaError;
+
+			await supabase
+				.from("obra_default_tabla_columns")
+				.delete()
+				.eq("default_tabla_id", tablaId);
+		} else {
+			const { data: existingTablas } = await supabase
+				.from("obra_default_tablas")
+				.select("position")
+				.eq("tenant_id", tenantId)
+				.order("position", { ascending: false })
+				.limit(1);
+			const nextTablaPosition = (existingTablas?.[0]?.position ?? -1) + 1;
+
+			const { data: tabla, error: tablaError } = await supabase
+				.from("obra_default_tablas")
+				.insert({
+					tenant_id: tenantId,
+					name: rawName,
+					description: null,
+					source_type: "ocr",
+					linked_folder_path: path,
+					settings,
+					position: nextTablaPosition,
+					ocr_template_id: ocrTemplateId,
+				})
+				.select("id")
+				.single();
+
+			if (tablaError || !tabla) throw tablaError ?? new Error("Failed to create default tabla");
+			tablaId = tabla.id;
+		}
+
+		let insertedColumns: Array<{
+			fieldKey: string;
+			label: string;
+			dataType: string;
+			required?: boolean;
+			ocrScope?: string;
+			description?: string | null;
+		}> = [];
+
+		if (tablaId && resolvedColumns.length > 0) {
+			const columnsPayload = resolvedColumns.map((col, index) => ({
+				default_tabla_id: tablaId,
+				field_key: normalizeFieldKey(col.fieldKey || col.label),
+				label: col.label,
+				data_type: ensureTablaDataType(col.dataType),
+				position: col.position ?? index,
+				required: Boolean(col.required),
+				config:
+					hasNestedData && col.ocrScope
+						? { ocrScope: col.ocrScope, ocrDescription: col.description ?? null }
+						: col.description
+							? { ocrDescription: col.description }
+							: {},
+			}));
+
+			const { data: columns, error: columnsError } = await supabase
+				.from("obra_default_tabla_columns")
+				.insert(columnsPayload)
+				.select("field_key, label, data_type, required, config");
+
+			if (columnsError) {
+				console.error("[obra-defaults:put] columns error:", columnsError);
+			} else {
+				insertedColumns = (columns ?? []).map((col) => ({
+					fieldKey: col.field_key,
+					label: col.label,
+					dataType: col.data_type,
+					required: Boolean(col.required),
+					ocrScope: (col.config as any)?.ocrScope,
+					description: (col.config as any)?.ocrDescription ?? null,
+				}));
+			}
+		}
+
+		let ocrTemplateName: string | null = null;
+		if (ocrTemplateId) {
+			const { data: template } = await supabase
+				.from("ocr_templates")
+				.select("name")
+				.eq("id", ocrTemplateId)
+				.maybeSingle();
+			ocrTemplateName = template?.name ?? null;
+		}
+
+		const enrichedFolder: DefaultFolder = {
+			...updatedFolder,
+			isOcr: true,
+			dataInputMethod,
+			ocrTemplateId,
+			ocrTemplateName,
+			hasNestedData,
+			columns: insertedColumns,
+		};
+
+		const { error: jobError } = await supabase.from("background_jobs").insert({
+			tenant_id: tenantId,
+			type: "apply_default_folder",
+			payload: { folderId: updatedFolder.id, forceSync: true, previousPath: existingFolder.path },
+		});
+		if (jobError) {
+			console.error("[obra-defaults:put] job enqueue error:", jobError);
+		}
+
+		return NextResponse.json({ folder: enrichedFolder });
+	} catch (error) {
+		console.error("[obra-defaults:put]", error);
+		return NextResponse.json(
+			{ error: error instanceof Error ? error.message : "Error updating default" },
 			{ status: 500 }
 		);
 	}

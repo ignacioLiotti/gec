@@ -182,35 +182,35 @@ function TableCellInner<Row extends FormTableRow>({
 
 	return (
 		<FieldComponent name={fieldPath} validators={validators}>
-				{(field: any) => (
-					<CellContent
-						field={field}
-						column={column}
-						row={row}
-						highlightQuery={highlightQuery}
-						isRowDirty={isRowDirty}
-						isCellDirty={isCellDirty}
-						hasInitialSnapshot={hasInitialSnapshot}
-						editable={editable}
-						onCopyCell={onCopyCell}
-						onCopyColumn={onCopyColumn}
-						onCopyRow={onCopyRow}
-						onClearValue={onClearValue}
-						onRestoreValue={onRestoreValue}
-						customMenuItems={customMenuItems}
-					/>
-				)}
-			</FieldComponent>
-		);
-	}
+			{(field: any) => (
+				<CellContent
+					field={field}
+					column={column}
+					row={row}
+					highlightQuery={highlightQuery}
+					isRowDirty={isRowDirty}
+					isCellDirty={isCellDirty}
+					hasInitialSnapshot={hasInitialSnapshot}
+					editable={editable}
+					onCopyCell={onCopyCell}
+					onCopyColumn={onCopyColumn}
+					onCopyRow={onCopyRow}
+					onClearValue={onClearValue}
+					onRestoreValue={onRestoreValue}
+					customMenuItems={customMenuItems}
+				/>
+			)}
+		</FieldComponent>
+	);
+}
 
-	export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => {
-		return (
-			prevProps.rowId === nextProps.rowId &&
-			prevProps.column.id === nextProps.column.id &&
-			prevProps.highlightQuery === nextProps.highlightQuery &&
-			prevProps.isRowDirty === nextProps.isRowDirty &&
-			prevProps.isCellDirty === nextProps.isCellDirty &&
-			prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot
-		);
-	}) as typeof TableCellInner;
+export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => {
+	return (
+		prevProps.rowId === nextProps.rowId &&
+		prevProps.column.id === nextProps.column.id &&
+		prevProps.highlightQuery === nextProps.highlightQuery &&
+		prevProps.isRowDirty === nextProps.isRowDirty &&
+		prevProps.isCellDirty === nextProps.isCellDirty &&
+		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot
+	);
+}) as typeof TableCellInner;

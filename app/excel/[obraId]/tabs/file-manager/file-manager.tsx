@@ -2465,7 +2465,7 @@ export function FileManager({
         case 'currency':
           return 'currency';
         case 'boolean':
-          return 'toggle';
+          return 'checkbox';
         case 'date':
           return 'date';
         default:

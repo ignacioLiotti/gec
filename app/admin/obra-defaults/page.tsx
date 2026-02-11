@@ -7,6 +7,7 @@ import {
   FolderPlus,
   TableProperties,
   Trash2,
+  Pencil,
   Loader2,
   ScanLine,
   Plus,
@@ -55,7 +56,7 @@ import {
 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-import { normalizeFieldKey } from "@/lib/tablas";
+import { ensureTablaDataType, normalizeFieldKey } from "@/lib/tablas";
 
 type DataInputMethod = 'ocr' | 'manual' | 'both';
 
@@ -133,10 +134,12 @@ function getDataTypeIcon(dataType: string) {
 function FolderRow({
   folder,
   onDelete,
+  onEdit,
   index,
 }: {
   folder: DefaultFolder;
   onDelete: () => void;
+  onEdit: () => void;
   index: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -165,6 +168,14 @@ function FolderRow({
           <p className="text-xs text-muted-foreground font-mono">/{folder.path}</p>
         </div>
 
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onEdit}
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -208,6 +219,17 @@ function FolderRow({
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -475,7 +497,18 @@ function OcrTemplateCard({
   );
 }
 
-const DATA_TYPES = ["texto", "numero", "moneda", "fecha", "si/no"] as const;
+type DataTypeOption = {
+  value: string;
+  label: string;
+};
+
+const DATA_TYPE_OPTIONS: DataTypeOption[] = [
+  { value: "text", label: "texto" },
+  { value: "number", label: "numero" },
+  { value: "currency", label: "moneda" },
+  { value: "date", label: "fecha" },
+  { value: "boolean", label: "si/no" },
+];
 
 export default function ObraDefaultsPage() {
   const [folders, setFolders] = useState<DefaultFolder[]>([]);
@@ -484,6 +517,7 @@ export default function ObraDefaultsPage() {
 
   // Folder dialog state
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [folderMode, setFolderMode] = useState<"normal" | "data">("normal");
   const [newFolderName, setNewFolderName] = useState("");
   const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
@@ -506,6 +540,7 @@ export default function ObraDefaultsPage() {
   const [isOcrConfigOpen, setIsOcrConfigOpen] = useState(false);
 
   const resetFolderForm = useCallback(() => {
+    setEditingFolderId(null);
     setNewFolderName("");
     setFolderMode("normal");
     setNewFolderDataInputMethod("both");
@@ -565,11 +600,11 @@ export default function ObraDefaultsPage() {
     const template = ocrTemplates.find(t => t.id === templateId);
     if (!template) return;
 
-    const mappedColumns: OcrColumn[] = template.columns.map((col, index) => ({
+    const mappedColumns: OcrColumn[] = template.columns.map((col) => ({
       id: crypto.randomUUID(),
       label: col.label,
       fieldKey: col.fieldKey || normalizeFieldKey(col.label),
-      dataType: DATA_TYPES.includes(col.dataType as typeof DATA_TYPES[number]) ? col.dataType : "text",
+      dataType: ensureTablaDataType(col.dataType),
       required: false,
       scope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
       description: col.description,
@@ -612,7 +647,28 @@ export default function ObraDefaultsPage() {
     setOcrTemplates((prev) => [...prev, template]);
   };
 
-  const handleAddFolder = async () => {
+  const handleEditFolder = useCallback((folder: DefaultFolder) => {
+    setEditingFolderId(folder.id);
+    setNewFolderName(folder.name);
+    setFolderMode(folder.isOcr ? "data" : "normal");
+    setNewFolderDataInputMethod(folder.dataInputMethod ?? "both");
+    setNewFolderOcrTemplateId(folder.ocrTemplateId ?? "");
+    setNewFolderHasNested(Boolean(folder.hasNestedData));
+    setNewFolderColumns(
+      (folder.columns ?? []).map((col) => ({
+        id: crypto.randomUUID(),
+        label: col.label,
+        fieldKey: col.fieldKey,
+        dataType: ensureTablaDataType(col.dataType),
+        required: Boolean(col.required),
+        scope: col.ocrScope === "parent" ? "parent" : "item",
+        description: col.description ?? "",
+      })),
+    );
+    setIsAddFolderOpen(true);
+  }, []);
+
+  const handleSaveFolder = async () => {
     if (!newFolderName.trim()) return;
 
     const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
@@ -633,6 +689,7 @@ export default function ObraDefaultsPage() {
 
       const payload: Record<string, unknown> = {
         type: "folder",
+        ...(editingFolderId ? { id: editingFolderId } : {}),
         name: newFolderName.trim(),
       };
 
@@ -653,7 +710,7 @@ export default function ObraDefaultsPage() {
       }
 
       const res = await fetch("/api/obra-defaults", {
-        method: "POST",
+        method: editingFolderId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -664,13 +721,23 @@ export default function ObraDefaultsPage() {
       }
 
       const { folder } = await res.json();
-      setFolders((prev) => [...prev, folder]);
+      if (editingFolderId) {
+        setFolders((prev) => prev.map((item) => (item.id === folder.id ? folder : item)));
+      } else {
+        setFolders((prev) => [...prev, folder]);
+      }
       resetFolderForm();
       setIsAddFolderOpen(false);
-      toast.success(folderMode === "data" ? "Carpeta de datos agregada" : "Carpeta agregada");
+      toast.success(
+        editingFolderId
+          ? "Carpeta actualizada"
+          : folderMode === "data"
+            ? "Carpeta de datos agregada"
+            : "Carpeta agregada",
+      );
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Error agregando carpeta");
+      toast.error(error instanceof Error ? error.message : "Error guardando carpeta");
     } finally {
       setIsSubmittingFolder(false);
     }
@@ -843,7 +910,10 @@ export default function ObraDefaultsPage() {
               </div>
             </div>
             <Button
-              onClick={() => setIsAddFolderOpen(true)}
+              onClick={() => {
+                resetFolderForm();
+                setIsAddFolderOpen(true);
+              }}
               className="bg-amber-500 hover:bg-amber-600 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -865,6 +935,7 @@ export default function ObraDefaultsPage() {
                     key={folder.id}
                     folder={folder}
                     index={index}
+                    onEdit={() => handleEditFolder(folder)}
                     onDelete={() => handleDeleteFolder(folder.id)}
                   />
                 ))}
@@ -1108,13 +1179,19 @@ export default function ObraDefaultsPage() {
                 ? "bg-amber-100 dark:bg-amber-900/30"
                 : "bg-amber-100 dark:bg-amber-900/30"
                 }`}>
-                {folderMode === "data" ? (
+	                {folderMode === "data" ? (
                   <Table2 className="h-4 w-4 text-amber-600" />
                 ) : (
                   <FolderPlus className="h-4 w-4 text-amber-600" />
                 )}
               </div>
-              {folderMode === "data" ? "Nueva carpeta de datos" : "Nueva carpeta"}
+              {editingFolderId
+                ? folderMode === "data"
+                  ? "Editar carpeta de datos"
+                  : "Editar carpeta"
+                : folderMode === "data"
+                  ? "Nueva carpeta de datos"
+                  : "Nueva carpeta"}
             </DialogTitle>
             <DialogDescription>
               {folderMode === "data"
@@ -1140,6 +1217,7 @@ export default function ObraDefaultsPage() {
                 size="sm"
                 onClick={() => setFolderMode("normal")}
                 className="flex-1"
+                disabled={Boolean(editingFolderId)}
               >
                 <Folder className="h-4 w-4 mr-2" />
                 Carpeta normal
@@ -1150,6 +1228,7 @@ export default function ObraDefaultsPage() {
                 size="sm"
                 onClick={() => setFolderMode("data")}
                 className="flex-1"
+                disabled={Boolean(editingFolderId)}
               >
                 <Table2 className="h-4 w-4 mr-2" />
                 Carpeta de datos
@@ -1285,9 +1364,9 @@ export default function ObraDefaultsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {DATA_TYPES.map((type) => (
-                                <SelectItem key={type} value={type}>
-                                  {type}
+                              {DATA_TYPE_OPTIONS.map((type) => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1341,7 +1420,7 @@ export default function ObraDefaultsPage() {
               Cancelar
             </Button>
             <Button
-              onClick={() => void handleAddFolder()}
+              onClick={() => void handleSaveFolder()}
               disabled={isSubmittingFolder || isCreateFolderDisabled}
               className="bg-amber-500 hover:bg-amber-600"
             >
@@ -1352,7 +1431,11 @@ export default function ObraDefaultsPage() {
               ) : (
                 <FolderPlus className="h-4 w-4 mr-2" />
               )}
-              {folderMode === "data" ? "Crear carpeta de datos" : "Crear carpeta"}
+              {editingFolderId
+                ? "Guardar cambios"
+                : folderMode === "data"
+                  ? "Crear carpeta de datos"
+                  : "Crear carpeta"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -56,12 +56,19 @@ export async function POST(request: Request) {
 		switch (job.type) {
 			case "apply_default_folder": {
 				const folderId = (job.payload as any)?.folderId as string | undefined;
+				const forceSync = (job.payload as any)?.forceSync === true;
+				const previousPath =
+					typeof (job.payload as any)?.previousPath === "string"
+						? (job.payload as any).previousPath
+						: undefined;
 				if (!folderId) {
 					throw new Error("folderId missing in payload");
 				}
 				await applyDefaultFolderToExistingObras(admin, {
 					tenantId: job.tenant_id,
 					folderId,
+					forceSync,
+					previousPath,
 				});
 				break;
 			}

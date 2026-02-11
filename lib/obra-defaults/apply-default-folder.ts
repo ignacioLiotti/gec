@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type ApplyDefaultFolderParams = {
 	tenantId: string;
 	folderId: string;
+	forceSync?: boolean;
+	previousPath?: string;
 };
 
 type DefaultFolderBundle = {
@@ -151,6 +153,12 @@ export async function applyDefaultFolderToExistingObras(
 
 	if (obrasError) throw obrasError;
 
+	const shouldForceSync = params.forceSync === true;
+	const previousPath =
+		typeof params.previousPath === "string" && params.previousPath.trim()
+			? params.previousPath.trim()
+			: null;
+
 	for (const obra of obras ?? []) {
 		const obraId = obra.id as string;
 		try {
@@ -169,24 +177,51 @@ export async function applyDefaultFolderToExistingObras(
 			);
 		}
 
-		if (!bundle.isOcr || !bundle.tablaName || !bundle.settings) {
+		const { data: obraOcrTablas, error: obraOcrTablasError } = await supabase
+			.from("obra_tablas")
+			.select("id, name, settings")
+			.eq("obra_id", obraId)
+			.eq("source_type", "ocr");
+
+		if (obraOcrTablasError) {
+			console.error(
+				"[apply-default-folder] Error loading existing obra tablas",
+				obraOcrTablasError,
+			);
 			continue;
 		}
 
-		const { data: existingTabla } = await supabase
-			.from("obra_tablas")
-			.select("id")
-			.eq("obra_id", obraId)
-			.eq("name", bundle.tablaName)
-			.maybeSingle();
+		const matchingTabla = (obraOcrTablas ?? []).find((tabla) => {
+			const settings = (tabla.settings as Record<string, unknown>) ?? {};
+			const tablaFolder = typeof settings.ocrFolder === "string" ? settings.ocrFolder : null;
+			if (tablaFolder === bundle.path) return true;
+			if (previousPath && tablaFolder === previousPath) return true;
+			return bundle.tablaName ? tabla.name === bundle.tablaName : false;
+		});
 
-		if (existingTabla) {
-			const { data: existingColumns, error: existingColumnsError } =
-				await supabase
-					.from("obra_tabla_columns")
-					.select("id")
-					.eq("tabla_id", existingTabla.id)
-					.limit(1);
+		if (!bundle.isOcr || !bundle.tablaName || !bundle.settings) {
+			if (matchingTabla) {
+				const { error: deleteTablaError } = await supabase
+					.from("obra_tablas")
+					.delete()
+					.eq("id", matchingTabla.id);
+				if (deleteTablaError) {
+					console.error(
+						"[apply-default-folder] Error deleting existing tabla on non-data folder",
+						deleteTablaError,
+					);
+				}
+			}
+			continue;
+		}
+
+		let tablaId = matchingTabla?.id ?? null;
+		if (tablaId && !shouldForceSync) {
+			const { data: existingColumns, error: existingColumnsError } = await supabase
+				.from("obra_tabla_columns")
+				.select("id")
+				.eq("tabla_id", tablaId)
+				.limit(1);
 
 			if (existingColumnsError) {
 				console.error(
@@ -201,8 +236,37 @@ export async function applyDefaultFolderToExistingObras(
 			}
 		}
 
-		let tablaId = existingTabla?.id ?? null;
-		if (!tablaId) {
+		if (tablaId) {
+			const { error: updateTablaError } = await supabase
+				.from("obra_tablas")
+				.update({
+					name: bundle.tablaName,
+					description: bundle.tablaDescription ?? null,
+					source_type: "ocr",
+					settings: bundle.settings,
+				})
+				.eq("id", tablaId);
+
+			if (updateTablaError) {
+				console.error(
+					"[apply-default-folder] Error updating existing tabla",
+					updateTablaError,
+				);
+				continue;
+			}
+
+			const { error: deleteColumnsError } = await supabase
+				.from("obra_tabla_columns")
+				.delete()
+				.eq("tabla_id", tablaId);
+			if (deleteColumnsError) {
+				console.error(
+					"[apply-default-folder] Error deleting previous columns",
+					deleteColumnsError,
+				);
+				continue;
+			}
+		} else {
 			const { data: tabla, error: tablaError } = await supabase
 				.from("obra_tablas")
 				.insert({

@@ -22,6 +22,20 @@ import { escapeRegExp, formatDateSafe } from "./table-utils";
 
 export type EditableCellValue = string | number | readonly string[] | null | undefined;
 
+function normalizeDateInputValue(value: EditableCellValue): string {
+	if (value == null) return "";
+	if (typeof value === "string") {
+		const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+		if (match) return match[1];
+	}
+	const parsed = new Date(String(value));
+	if (Number.isNaN(parsed.getTime())) return "";
+	const year = parsed.getFullYear();
+	const month = String(parsed.getMonth() + 1).padStart(2, "0");
+	const day = String(parsed.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+}
+
 /**
  * LocalInput: A buffered input that manages local state during typing
  * and only syncs to the form on blur. This prevents cascading re-renders
@@ -40,7 +54,12 @@ function LocalInput({
 	transformOnBlur?: (value: string) => unknown;
 }) {
 	// Convert external value to string for the input
-	const normalizedExternal = externalValue == null ? "" : String(externalValue);
+	const normalizedExternal =
+		props.type === "date"
+			? normalizeDateInputValue(externalValue)
+			: externalValue == null
+				? ""
+				: String(externalValue);
 	const [localValue, setLocalValue] = useState(() => normalizedExternal);
 	const isTypingRef = useRef(false);
 
@@ -386,7 +405,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 			);
 		case "toggle":
 			return (
-				<div className="flex items-center gap-2 children-input-shown">
+				<div className="flex items-center gap-2 children-input-shown justify-center h-full">
 					<Switch
 						checked={Boolean(value)}
 						onCheckedChange={(checked) => {
