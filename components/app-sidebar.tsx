@@ -130,6 +130,11 @@ const adminItems: NavItem[] = [
 		href: "/admin/obra-defaults",
 		icon: Settings2,
 	},
+	{
+		title: "Tabla Principal",
+		href: "/admin/main-table-config",
+		icon: Columns3Cog,
+	},
 
 	{
 		title: "Auditoría",

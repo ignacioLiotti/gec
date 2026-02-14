@@ -22,6 +22,7 @@ export type ObraFilters = {
 	supMin: string;
 	supMax: string;
 	entidades: string[];
+	entidadContains: string;
 	porcentajeMin: string;
 	porcentajeMax: string;
 	estado: "all" | "en-proceso" | "completadas";
@@ -169,6 +170,12 @@ export const obrasReportConfig: ReportConfig<ObraRow, ObraFilters> = {
 			placeholder: "Max",
 		},
 		{
+			id: "entidadContains",
+			label: "Entidad contiene",
+			type: "text",
+			placeholder: "Nombre de entidad",
+		},
+		{
 			id: "porcentajeMin",
 			label: "Avance mínimo (%)",
 			type: "number",
@@ -195,6 +202,7 @@ export const obrasReportConfig: ReportConfig<ObraRow, ObraFilters> = {
 		supMin: "",
 		supMax: "",
 		entidades: [],
+		entidadContains: "",
 		porcentajeMin: "",
 		porcentajeMax: "",
 		estado: "all",
@@ -234,6 +242,16 @@ export const obrasReportConfig: ReportConfig<ObraRow, ObraFilters> = {
 				if ((obra.porcentaje ?? 0) >= 100) return false;
 			} else if (filters.estado === "completadas") {
 				if ((obra.porcentaje ?? 0) < 100) return false;
+			}
+			if (filters.entidadContains?.trim()) {
+				const entity = (obra.entidadContratante ?? "").toLowerCase();
+				if (!entity.includes(filters.entidadContains.trim().toLowerCase())) {
+					return false;
+				}
+			}
+			if (filters.entidades.length > 0) {
+				const entity = (obra.entidadContratante ?? "").trim();
+				if (!filters.entidades.includes(entity)) return false;
 			}
 
 			return true;

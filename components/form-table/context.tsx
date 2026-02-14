@@ -90,6 +90,7 @@ export type FormTableMetaState = {
 	serverError: string | null;
 	variant: "page" | "embedded";
 	isEmbedded: boolean;
+	externalRefreshVersion: number;
 };
 
 export type FormTableRowState<Row extends FormTableRow> = {

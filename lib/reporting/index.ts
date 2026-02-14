@@ -69,6 +69,20 @@ function parseDate(value: unknown): Date | null {
 	return null;
 }
 
+function normalizeText(value: string): string {
+	return value
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.trim();
+}
+
+function toPeriodKey(value: Date): string {
+	const year = value.getUTCFullYear();
+	const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+	return `${year}-${month}`;
+}
+
 function monthsDiff(startPeriod: string, currentPeriod: string): number | null {
 	const start = startPeriod.match(/^(\d{4})-(\d{2})$/);
 	const curr = currentPeriod.match(/^(\d{4})-(\d{2})$/);
@@ -161,9 +175,42 @@ export async function getRuleConfig(obraId: string) {
 		.eq("obra_id", obraId)
 		.maybeSingle();
 
+	const stored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
 	return {
 		...DEFAULT_RULE_CONFIG,
-		...(data?.config_json ?? {}),
+		...stored,
+		enabledPacks: {
+			...DEFAULT_RULE_CONFIG.enabledPacks,
+			...(stored.enabledPacks ?? {}),
+		},
+		mappings: {
+			...DEFAULT_RULE_CONFIG.mappings,
+			...(stored.mappings ?? {}),
+		},
+		thresholds: {
+			...DEFAULT_RULE_CONFIG.thresholds,
+			...(stored.thresholds ?? {}),
+			curve: {
+				...DEFAULT_RULE_CONFIG.thresholds.curve,
+				...(stored.thresholds?.curve ?? {}),
+			},
+			unpaidCerts: {
+				...DEFAULT_RULE_CONFIG.thresholds.unpaidCerts,
+				...(stored.thresholds?.unpaidCerts ?? {}),
+			},
+			inactivity: {
+				...DEFAULT_RULE_CONFIG.thresholds.inactivity,
+				...(stored.thresholds?.inactivity ?? {}),
+			},
+			monthlyMissingCert: {
+				...DEFAULT_RULE_CONFIG.thresholds.monthlyMissingCert,
+				...(stored.thresholds?.monthlyMissingCert ?? {}),
+			},
+			stageStalled: {
+				...DEFAULT_RULE_CONFIG.thresholds.stageStalled,
+				...(stored.thresholds?.stageStalled ?? {}),
+			},
+		},
 	} as RuleConfig;
 }
 
@@ -189,17 +236,23 @@ async function fetchRows(
 	supabase: SupabaseClient,
 	tablaId: string,
 ): Promise<
-	Array<{ id: string; data: Record<string, any>; created_at: string }>
+	Array<{
+		id: string;
+		data: Record<string, any>;
+		created_at: string;
+		updated_at: string;
+	}>
 > {
 	const { data } = await supabase
 		.from("obra_tabla_rows")
-		.select("id,data,created_at")
+		.select("id,data,created_at,updated_at")
 		.eq("tabla_id", tablaId);
 
 	return (data ?? []) as Array<{
 		id: string;
 		data: Record<string, any>;
 		created_at: string;
+		updated_at: string;
 	}>;
 }
 
@@ -224,6 +277,7 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 		inputs_json: any;
 		outputs_json: any;
 	}> = [];
+	const currentPeriodKey = periodKey ?? toPeriodKey(new Date());
 
 	// Curve pack
 	if (config.enabledPacks.curve) {
@@ -375,6 +429,149 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 					signal_key: "cert.oldest_unpaid_days",
 					inputs_json: { thresholdDays },
 					outputs_json: { oldestDays },
+				},
+			);
+		}
+	}
+
+	// Missing monthly certificate (historical continuity check)
+	if (config.enabledPacks.monthlyMissingCert) {
+		const mapping = config.mappings.monthlyMissingCert ?? {};
+		const certTableId =
+			mapping.certTableId ??
+			config.mappings.unpaidCerts?.certTableId ??
+			config.mappings.inactivity?.certTableId;
+		const certIssuedAtColumnKey =
+			mapping.certIssuedAtColumnKey ??
+			config.mappings.unpaidCerts?.issuedAtColumnKey ??
+			config.mappings.inactivity?.certIssuedAtColumnKey;
+
+		if (certTableId && certIssuedAtColumnKey) {
+			const rows = await fetchRows(supabase, certTableId);
+			const monthlyCounts = new Map<string, number>();
+
+			for (const row of rows) {
+				const issuedAt = parseDate(row.data?.[certIssuedAtColumnKey]);
+				if (!issuedAt) continue;
+				const key = toPeriodKey(issuedAt);
+				monthlyCounts.set(key, (monthlyCounts.get(key) ?? 0) + 1);
+			}
+
+			const currentMonthCount = monthlyCounts.get(currentPeriodKey) ?? 0;
+			const historicalMonthsCount = Array.from(monthlyCounts.keys()).filter(
+				(monthKey) => monthKey < currentPeriodKey,
+			).length;
+			const missingCurrentMonth =
+				historicalMonthsCount > 0 && currentMonthCount === 0;
+
+			signals.push(
+				{
+					signal_key: "cert.current_month_count",
+					value_num: currentMonthCount,
+					value_bool: null,
+					value_json: null,
+				},
+				{
+					signal_key: "cert.historical_months_count",
+					value_num: historicalMonthsCount,
+					value_bool: null,
+					value_json: null,
+				},
+				{
+					signal_key: "cert.missing_current_month",
+					value_num: null,
+					value_bool: missingCurrentMonth,
+					value_json: { periodKey: currentPeriodKey },
+				},
+			);
+			logs.push(
+				{
+					signal_key: "cert.current_month_count",
+					inputs_json: { certTableId, certIssuedAtColumnKey, periodKey: currentPeriodKey },
+					outputs_json: { currentMonthCount },
+				},
+				{
+					signal_key: "cert.historical_months_count",
+					inputs_json: { periodKey: currentPeriodKey },
+					outputs_json: { historicalMonthsCount },
+				},
+				{
+					signal_key: "cert.missing_current_month",
+					inputs_json: { currentPeriodKey, historicalMonthsCount, currentMonthCount },
+					outputs_json: { missingCurrentMonth },
+				},
+			);
+		}
+	}
+
+	// Stalled stage by location keyword (e.g. Tesoreria)
+	if (config.enabledPacks.stageStalled) {
+		const stalled = config.mappings.stageStalled;
+		if (stalled?.stageTableId && stalled.locationColumnKey) {
+			const rows = await fetchRows(supabase, stalled.stageTableId);
+			const keyword = normalizeText(stalled.keyword ?? "tesoreria");
+			const thresholdWeeks = stalled.weeks ?? 2;
+			const thresholdDays = thresholdWeeks * 7;
+			const now = new Date();
+
+			let stalledCount = 0;
+			let oldestStalledDays: number | null = null;
+
+			for (const row of rows) {
+				const rawLocation = row.data?.[stalled.locationColumnKey];
+				if (typeof rawLocation !== "string") continue;
+				if (!normalizeText(rawLocation).includes(keyword)) continue;
+
+				const since =
+					parseDate(
+						stalled.stageSinceColumnKey
+							? row.data?.[stalled.stageSinceColumnKey]
+							: null,
+					) ??
+					parseDate(row.updated_at) ??
+					parseDate(row.created_at);
+				if (!since) continue;
+
+				const days = Math.floor(
+					(now.getTime() - since.getTime()) / (1000 * 60 * 60 * 24),
+				);
+				if (days < thresholdDays) continue;
+
+				stalledCount += 1;
+				oldestStalledDays =
+					oldestStalledDays == null ? days : Math.max(oldestStalledDays, days);
+			}
+
+			signals.push(
+				{
+					signal_key: "stage.stalled_count",
+					value_num: stalledCount,
+					value_bool: null,
+					value_json: { keyword: stalled.keyword ?? "tesorería", thresholdWeeks },
+				},
+				{
+					signal_key: "stage.stalled_oldest_days",
+					value_num: oldestStalledDays,
+					value_bool: null,
+					value_json: null,
+				},
+			);
+			logs.push(
+				{
+					signal_key: "stage.stalled_count",
+					inputs_json: {
+						tableId: stalled.stageTableId,
+						locationColumnKey: stalled.locationColumnKey,
+						stageSinceColumnKey: stalled.stageSinceColumnKey ?? null,
+						keyword: stalled.keyword ?? "tesorería",
+						thresholdWeeks,
+					},
+					outputs_json: { stalledCount },
+				},
+				{
+					signal_key: "stage.stalled_oldest_days",
+					inputs_json: { thresholdWeeks },
+					outputs_json: { oldestStalledDays },
 				},
 			);
 		}
@@ -598,9 +795,27 @@ export async function evaluateFindings(obraId: string, periodKey?: string) {
 			findings.push({
 				rule_key: "cert.unpaid_over_days",
 				severity: config.thresholds.unpaidCerts.severity,
-				title: "Certificados impagos",
-				message: `Hay ${count} certificados impagos por más de ${config.mappings.unpaidCerts?.days ?? 90} días.`,
+				title: "Certificado facturado no cobrado",
+				message: `Hay ${count} certificados facturados no cobrados por más de ${config.mappings.unpaidCerts?.days ?? 90} días.`,
 				evidence_json: { count },
+			});
+		}
+	}
+
+	if (config.enabledPacks.monthlyMissingCert) {
+		const missingCurrentMonth =
+			signalMap.get("cert.missing_current_month")?.value_bool ?? false;
+		const period =
+			(signalMap.get("cert.missing_current_month")?.value_json as any)?.periodKey ??
+			periodKey ??
+			toPeriodKey(new Date());
+		if (missingCurrentMonth) {
+			findings.push({
+				rule_key: "cert.missing_current_month",
+				severity: config.thresholds.monthlyMissingCert.severity,
+				title: "Falta certificado del mes actual",
+				message: `Se detectaron certificados en meses anteriores pero falta el certificado del período ${period}.`,
+				evidence_json: { period },
 			});
 		}
 	}
@@ -608,7 +823,11 @@ export async function evaluateFindings(obraId: string, periodKey?: string) {
 	if (config.enabledPacks.inactivity) {
 		const inactiveDays =
 			signalMap.get("activity.inactive_days")?.value_num ?? null;
-		const threshold = config.mappings.inactivity?.days ?? 90;
+		const threshold =
+			config.mappings.inactivity?.days ??
+			(config.mappings.inactivity?.months != null
+				? config.mappings.inactivity.months * 30
+				: 90);
 		if (inactiveDays != null && inactiveDays > threshold) {
 			findings.push({
 				rule_key: "activity.inactive",
@@ -616,6 +835,20 @@ export async function evaluateFindings(obraId: string, periodKey?: string) {
 				title: "Obra inactiva",
 				message: `No se registró actividad en ${inactiveDays} días.`,
 				evidence_json: { inactiveDays },
+			});
+		}
+	}
+
+	if (config.enabledPacks.stageStalled) {
+		const stalledCount = signalMap.get("stage.stalled_count")?.value_num ?? 0;
+		if (stalledCount > 0) {
+			const details = signalMap.get("stage.stalled_count")?.value_json as any;
+			findings.push({
+				rule_key: "stage.stalled",
+				severity: config.thresholds.stageStalled.severity,
+				title: "Expediente detenido en etapa",
+				message: `${stalledCount} registros permanecen en "${details?.keyword ?? "tesorería"}" por más de ${details?.thresholdWeeks ?? 2} semanas.`,
+				evidence_json: { stalledCount, ...details },
 			});
 		}
 	}

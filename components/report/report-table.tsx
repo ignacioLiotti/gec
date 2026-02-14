@@ -24,6 +24,7 @@ type ReportTableProps<Row> = {
 	showMiniCharts?: boolean;
 	summaryChartType?: "bar" | "line";
 	getRowId: (row: Row) => string;
+	getRowClassName?: (row: Row, index: number) => string | undefined;
 	currencyLocale?: string;
 	currencyCode?: string;
 };
@@ -339,6 +340,7 @@ function ReportTableInner<Row>({
 	showMiniCharts = true,
 	summaryChartType = "bar",
 	getRowId,
+	getRowClassName,
 	currencyLocale = "es-AR",
 	currencyCode = "ARS",
 }: ReportTableProps<Row>) {
@@ -472,7 +474,8 @@ function ReportTableInner<Row>({
 								key={getRowId(row)}
 								className={cn(
 									"report-tr",
-									idx % 2 === 1 && "report-tr-alt"
+									idx % 2 === 1 && "report-tr-alt",
+									getRowClassName?.(row, idx)
 								)}
 							>
 								{visibleColumns.map((col) => {
@@ -488,7 +491,8 @@ function ReportTableInner<Row>({
 												"report-td",
 												col.align === "right" && "text-right",
 												col.align === "center" && "text-center",
-												col.type === "currency" && "font-mono"
+												col.type === "currency" && "font-mono",
+												col.getCellClassName?.(value, row)
 											)}
 										>
 											{displayValue}

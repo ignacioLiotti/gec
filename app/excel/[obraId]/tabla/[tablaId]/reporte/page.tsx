@@ -69,12 +69,14 @@ function OcrReportePageContent() {
 						label: string;
 						dataType: string;
 						required: boolean;
+						config?: Record<string, unknown>;
 					}) => ({
 						id: col.id,
 						fieldKey: col.fieldKey,
 						label: col.label,
 						dataType: col.dataType,
 						required: col.required,
+						config: col.config ?? {},
 					})
 				);
 

@@ -20,6 +20,8 @@ export type ReportColumn<Row> = {
 	groupable?: boolean;
 	/** Width hint (e.g., "150px", "20%") */
 	width?: string;
+	/** Optional conditional style class resolver for cell-level highlighting. */
+	getCellClassName?: (value: unknown, row: Row) => string | undefined;
 };
 
 export type ReportGroupByOption<Row> = {
@@ -32,7 +34,7 @@ export type ReportGroupByOption<Row> = {
 export type ReportFilterField<Filters> = {
 	id: keyof Filters;
 	label: string;
-	type: "text" | "number" | "date" | "select" | "boolean-toggle";
+	type: "text" | "number" | "date" | "select" | "boolean-toggle" | "multi-select";
 	placeholder?: string;
 	options?: { value: string; label: string }[];
 };
@@ -56,6 +58,8 @@ export type ReportConfig<Row, Filters = Record<string, unknown>> = {
 	fetchData: (filters: Filters) => Promise<Row[]>;
 	/** Function to get unique ID from a row */
 	getRowId: (row: Row) => string;
+	/** Optional conditional style resolver for row-level highlighting. */
+	getRowClassName?: (row: Row, index: number) => string | undefined;
 	/** Currency locale for currency columns */
 	currencyLocale?: string;
 	/** Currency code for currency columns */

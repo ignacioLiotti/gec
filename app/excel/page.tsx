@@ -11,7 +11,11 @@ import {
 	FormTableTabs,
 	FormTableToolbar,
 } from "@/components/form-table/form-table";
-import { obrasDetalleConfig } from "@/components/form-table/configs/obras-detalle";
+import {
+	createObrasDetalleConfig,
+	obrasDetalleConfig,
+	type MainTableColumnConfig,
+} from "@/components/form-table/configs/obras-detalle";
 import { Button } from "@/components/ui/button";
 import {
 	Sheet,
@@ -112,6 +116,9 @@ export default function ExcelPage() {
 	const isMobile = useIsMobile();
 	const [isImporting, setIsImporting] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
+	const [mainTableColumnsConfig, setMainTableColumnsConfig] = useState<
+		MainTableColumnConfig[] | null
+	>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 	const [previewRows, setPreviewRows] = useState<CsvPreviewRow[]>([]);
@@ -119,6 +126,35 @@ export default function ExcelPage() {
 	const [pendingFileName, setPendingFileName] = useState<string>("");
 	const [mobileObras, setMobileObras] = useState<ObraListItem[]>([]);
 	const [isLoadingMobile, setIsLoadingMobile] = useState(false);
+	const tableConfig = useMemo(
+		() =>
+			mainTableColumnsConfig == null
+				? obrasDetalleConfig
+				: createObrasDetalleConfig(mainTableColumnsConfig),
+		[mainTableColumnsConfig]
+	);
+
+	useEffect(() => {
+		let cancelled = false;
+		const loadMainTableConfig = async () => {
+			try {
+				const response = await fetch("/api/main-table-config", { cache: "no-store" });
+				if (!response.ok) return;
+				const payload = (await response.json()) as { columns?: MainTableColumnConfig[] };
+				if (cancelled) return;
+				setMainTableColumnsConfig(
+					Array.isArray(payload.columns) ? payload.columns : []
+				);
+				setRefreshKey((prev) => prev + 1);
+			} catch {
+				// fallback to default config
+			}
+		};
+		void loadMainTableConfig();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const headerAliases = useMemo(
 		() => ({
@@ -480,7 +516,7 @@ export default function ExcelPage() {
 				</SheetContent>
 			</Sheet>
 
-			<FormTable key={refreshKey} config={obrasDetalleConfig}>
+			<FormTable key={refreshKey} config={tableConfig}>
 				<div className="space-y-1 relative">
 					{/* <p className="text-sm uppercase tracking-wide text-orange-800/80 -mb-1">
 

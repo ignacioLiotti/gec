@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient } from "@/utils/supabase/server";
-import { ensureTablaDataType, normalizeFolderName } from "@/lib/tablas";
+import { ensureTablaDataType, normalizeFolderName, normalizeFolderPath } from "@/lib/tablas";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -182,93 +182,133 @@ export async function GET(request: Request, context: RouteContext) {
 
     const ocrFolderMap = new Map<string, any>();
     for (const link of ocrLinks as any[]) {
-      ocrFolderMap.set(link.folderName, link);
-      ocrFolderMap.set(normalizeFolderName(link.folderName), link);
+      const normalizedPath = normalizeFolderPath(link.folderName);
+      if (normalizedPath) {
+        ocrFolderMap.set(normalizedPath, link);
+      }
+      const normalizedFlat = normalizeFolderName(link.folderName);
+      if (normalizedFlat) {
+        ocrFolderMap.set(normalizedFlat, link);
+      }
     }
 
-    // Build file tree from storage
-    const { data: rootItems, error: rootError } = await supabase.storage
-      .from("obra-documents")
-      .list(obraId, { limit: 1000 });
-    if (rootError) throw rootError;
+    const getNormalizedPath = (value: string) => normalizeFolderPath(value);
 
     const root: any = {
       id: "root",
       name: "Documentos",
       type: "folder",
       children: [],
+      storagePath: obraId,
     };
 
-    const folderMap = new Map<string, any>();
-    folderMap.set("root", root);
-    const foldersToLoad: string[] = [];
+    const folderNodeByPath = new Map<string, any>();
+    folderNodeByPath.set("", root);
 
-    for (const item of rootItems ?? []) {
-      if (item.name === ".emptyFolderPlaceholder") continue;
-      const isFolder = !item.metadata;
-      if (!isFolder) continue;
-      const folderName = item.name.replace(/\/$/, "");
-      const normalizedFolderName = normalizeFolderName(folderName);
-      foldersToLoad.push(folderName);
+    const buildFolderNode = (relativeFolderPath: string) => {
+      const normalizedRelative = getNormalizedPath(relativeFolderPath);
       const linkedTabla =
-        ocrFolderMap.get(folderName) || ocrFolderMap.get(normalizedFolderName);
-
-      const folderId = `folder-${folderName}`;
-      const folder: any = {
-        id: folderId,
-        name: folderName,
+        ocrFolderMap.get(normalizedRelative) ||
+        ocrFolderMap.get(normalizeFolderName(relativeFolderPath));
+      return {
+        id: `folder-${normalizedRelative || "root"}`,
+        name: relativeFolderPath.split("/").pop() ?? relativeFolderPath,
         type: "folder",
         children: [],
+        storagePath: `${obraId}/${relativeFolderPath}`,
+        relativePath: relativeFolderPath,
         ocrEnabled: Boolean(linkedTabla),
         ocrTablaId: linkedTabla?.tablaId,
         ocrTablaName: linkedTabla?.tablaName,
-        ocrFolderName: linkedTabla?.folderName ?? normalizedFolderName,
+        ocrFolderName: linkedTabla?.folderName ?? normalizedRelative,
         ocrTablaColumns: linkedTabla?.columns,
         ocrTablaRows: linkedTabla?.rows,
         extractedData: linkedTabla?.orders,
         dataInputMethod: linkedTabla?.dataInputMethod,
       };
-      folderMap.set(folderId, folder);
-      root.children.push(folder);
+    };
+
+    const ensureFolderPath = (relativeFolderPath: string) => {
+      const normalizedRelative = getNormalizedPath(relativeFolderPath);
+      if (!normalizedRelative) return root;
+      if (folderNodeByPath.has(normalizedRelative)) {
+        return folderNodeByPath.get(normalizedRelative);
+      }
+      const segments = normalizedRelative.split("/");
+      const ownName = segments.pop()!;
+      const parentPath = segments.join("/");
+      const parentNode = ensureFolderPath(parentPath);
+      const folderNode = buildFolderNode(normalizedRelative);
+      folderNode.name = ownName;
+      if (!parentNode.children.some((child: any) => child.id === folderNode.id)) {
+        parentNode.children.push(folderNode);
+      }
+      folderNodeByPath.set(normalizedRelative, folderNode);
+      return folderNode;
+    };
+
+    const docsByPath = new Map<string, any>();
+    for (const link of ocrLinks as any[]) {
+      for (const doc of link?.documents ?? []) {
+        if (doc?.source_path) {
+          docsByPath.set(doc.source_path, doc);
+        }
+      }
     }
 
-    for (const folderName of foldersToLoad) {
-      const normalizedFolderName = normalizeFolderName(folderName);
-      const folder = folderMap.get(`folder-${folderName}`);
-      if (!folder) continue;
+    // Build full tree recursively by traversing each storage folder.
+    const queue: string[] = [""];
+    const seen = new Set<string>([""]);
+    while (queue.length > 0) {
+      const currentRelative = queue.shift() ?? "";
+      const storagePrefix = currentRelative ? `${obraId}/${currentRelative}` : obraId;
+      const parentNode = ensureFolderPath(currentRelative);
       const { data: folderContents, error: folderError } = await supabase.storage
         .from("obra-documents")
-        .list(`${obraId}/${folderName}`, {
+        .list(storagePrefix, {
           limit: 1000,
           sortBy: { column: "name", order: "asc" },
         });
-      if (folderError) continue;
-      if (folderContents) {
-        const folderLink =
-          ocrFolderMap.get(folderName) || ocrFolderMap.get(normalizedFolderName);
-        const docsByPath = new Map<string, any>();
-        (folderLink?.documents ?? []).forEach((doc: any) => {
-          if (doc?.source_path) {
-            docsByPath.set(doc.source_path, doc);
+      if (folderError) {
+        continue;
+      }
+
+      for (const item of folderContents ?? []) {
+        if (item.name === ".emptyFolderPlaceholder") continue;
+        const isFolder = !item.metadata;
+        if (isFolder) {
+          const childRelative = currentRelative
+            ? `${currentRelative}/${item.name.replace(/\/$/, "")}`
+            : item.name.replace(/\/$/, "");
+          const normalizedChild = getNormalizedPath(childRelative);
+          ensureFolderPath(normalizedChild);
+          if (!seen.has(normalizedChild)) {
+            seen.add(normalizedChild);
+            queue.push(normalizedChild);
           }
-        });
-        for (const file of folderContents) {
-          const storagePath = `${obraId}/${folderName}/${file.name}`;
-          const docStatus = docsByPath.get(storagePath);
-          const fileItem: any = {
-            id: `file-${folderName}-${file.name}`,
-            name: file.name,
-            type: "file",
-            storagePath,
-            size: file.metadata?.size,
-            mimetype: file.metadata?.mimetype,
-            ocrDocumentStatus: docStatus ? docStatus.status : folder?.ocrEnabled ? "unprocessed" : undefined,
-            ocrDocumentId: docStatus?.id,
-            ocrDocumentError: docStatus?.error_message ?? null,
-            ocrRowsExtracted: docStatus?.rows_extracted ?? null,
-          };
-          folder.children?.push(fileItem);
+          continue;
         }
+        const storagePath = currentRelative
+          ? `${obraId}/${currentRelative}/${item.name}`
+          : `${obraId}/${item.name}`;
+        const docStatus = docsByPath.get(storagePath);
+        const fileItem: any = {
+          id: `file-${storagePath}`,
+          name: item.name,
+          type: "file",
+          storagePath,
+          size: item.metadata?.size,
+          mimetype: item.metadata?.mimetype,
+          ocrDocumentStatus: docStatus
+            ? docStatus.status
+            : parentNode?.ocrEnabled
+              ? "unprocessed"
+              : undefined,
+          ocrDocumentId: docStatus?.id,
+          ocrDocumentError: docStatus?.error_message ?? null,
+          ocrRowsExtracted: docStatus?.rows_extracted ?? null,
+        };
+        parentNode.children?.push(fileItem);
       }
     }
 

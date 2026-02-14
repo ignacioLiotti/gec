@@ -37,6 +37,27 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 }: ReportPageProps<Row, Filters>) {
 	const router = useRouter();
 	const reportContentRef = useRef<HTMLDivElement>(null);
+	const localStorageKey = `report:last:${config.id}`;
+
+	const readLocalSnapshot = () => {
+		if (typeof window === "undefined") return null as null | {
+			filters?: Partial<Filters>;
+			reportState?: Partial<ReportState>;
+			compareEnabled?: boolean;
+		};
+		try {
+			const raw = window.localStorage.getItem(localStorageKey);
+			if (!raw) return null;
+			return JSON.parse(raw) as {
+				filters?: Partial<Filters>;
+				reportState?: Partial<ReportState>;
+				compareEnabled?: boolean;
+			};
+		} catch {
+			return null;
+		}
+	};
+	const localSnapshot = readLocalSnapshot();
 
 	// Stabilize config reference
 	const configRef = useRef(config);
@@ -56,17 +77,29 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
 	const [shareUrl, setShareUrl] = useState<string | null>(null);
 	const [shareExpiryDays, setShareExpiryDays] = useState<string>("7");
-	const [isCompareEnabled, setIsCompareEnabled] = useState(Boolean(initialCompareEnabled));
+	const [isCompareEnabled, setIsCompareEnabled] = useState(
+		typeof localSnapshot?.compareEnabled === "boolean"
+			? localSnapshot.compareEnabled
+			: Boolean(initialCompareEnabled)
+	);
 	const [, startFetchTransition] = useTransition();
 
 	// Filters state
 	const [filters, setFilters] = useState<Filters>(() => {
 		const defaults = config.defaultFilters?.() ?? ({} as Filters);
-		return { ...defaults, ...initialFilters };
+		return {
+			...defaults,
+			...(localSnapshot?.filters ?? {}),
+			...initialFilters,
+		};
 	});
 	const [draftFilters, setDraftFilters] = useState<Filters>(() => {
 		const defaults = config.defaultFilters?.() ?? ({} as Filters);
-		return { ...defaults, ...initialFilters };
+		return {
+			...defaults,
+			...(localSnapshot?.filters ?? {}),
+			...initialFilters,
+		};
 	});
 
 	// Report display state
@@ -90,8 +123,28 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 			showMiniCharts: true,
 			summaryChartType: "bar",
 		};
-		return { ...baseState, ...(initialReportState ?? {}) };
+		return {
+			...baseState,
+			...(localSnapshot?.reportState ?? {}),
+			...(initialReportState ?? {}),
+		};
 	});
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		try {
+			window.localStorage.setItem(
+				localStorageKey,
+				JSON.stringify({
+					filters,
+					reportState,
+					compareEnabled: isCompareEnabled,
+				})
+			);
+		} catch {
+			// ignore persistence failures
+		}
+	}, [filters, isCompareEnabled, localStorageKey, reportState]);
 
 	// Fetch data
 	const fetchData = useCallback(async () => {
@@ -666,6 +719,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												showMiniCharts={reportState.showMiniCharts}
 												summaryChartType={reportState.summaryChartType}
 												getRowId={configRef.current.getRowId}
+												getRowClassName={configRef.current.getRowClassName}
 												currencyLocale={config.currencyLocale}
 												currencyCode={config.currencyCode}
 											/>
@@ -957,6 +1011,42 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														</option>
 													))}
 												</select>
+											)}
+											{field.type === "multi-select" && field.options && (
+												<div className="space-y-2 rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 px-2.5 py-2">
+													{field.options.map((opt) => {
+														const current = Array.isArray(draftFilters[field.id])
+															? (draftFilters[field.id] as string[])
+															: [];
+														const checked = current.includes(opt.value);
+														return (
+															<label
+																key={opt.value}
+																className="flex items-center gap-2 text-xs text-[#2b2f36] dark:text-zinc-200"
+															>
+																<Checkbox
+																	checked={checked}
+																	onCheckedChange={(nextChecked) =>
+																		setDraftFilters((prev) => {
+																			const prevValues = Array.isArray(prev[field.id])
+																				? ([...(prev[field.id] as string[])] as string[])
+																				: [];
+																			const nextValues = nextChecked
+																				? Array.from(new Set([...prevValues, opt.value]))
+																				: prevValues.filter((value) => value !== opt.value);
+																			return {
+																				...prev,
+																				[field.id]: nextValues,
+																			};
+																		})
+																	}
+																	disabled={readOnly}
+																/>
+																<span>{opt.label}</span>
+															</label>
+														);
+													})}
+												</div>
 											)}
 											{field.type === "boolean-toggle" && (
 												<div className="flex gap-1.5">

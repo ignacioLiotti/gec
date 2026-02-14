@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from "react";
-import { memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
 	FormTableConfig,
 	ColumnDef,
@@ -15,6 +15,12 @@ import { FilterSection, RangeInputGroup } from "@/components/form-table/filter-c
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import type { Obra } from "@/app/excel/schema";
 import {
 	ExternalLink,
@@ -152,6 +158,1036 @@ const clampPercentage = (value: unknown): number => {
 	return Math.max(0, Math.min(100, pct));
 };
 
+const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+const computeCertificado = (row: ObrasDetalleRow) => {
+	const contrato = toNumber(row.contratoMasAmpliaciones);
+	const avance = clampPercentage(row.porcentaje);
+	return roundCurrency(contrato * (avance / 100));
+};
+
+const computeSaldo = (row: ObrasDetalleRow) => {
+	const contrato = toNumber(row.contratoMasAmpliaciones);
+	return roundCurrency(contrato - computeCertificado(row));
+};
+
+type RuleFieldType = "number" | "date";
+type RuleCalculation = "raw" | "delta" | "ratio_pct" | "days_from_today" | "days_between";
+type RuleOperator = "gte" | "lte" | "between" | "eq" | "neq" | "before" | "after";
+
+type RowRuleCondition = {
+	id: string;
+	field: keyof ObrasDetalleRow;
+	fieldType: RuleFieldType;
+	calculation: RuleCalculation;
+	referenceField?: keyof ObrasDetalleRow | null;
+	op: RuleOperator;
+	threshold?: number | null;
+	thresholdMax?: number | null;
+	dateValue?: string | null;
+	dateValueMax?: string | null;
+};
+
+type RowColorRule = {
+	id: string;
+	logic: "all" | "any";
+	color: "amber" | "red" | "green" | "blue";
+	conditions: RowRuleCondition[];
+};
+
+type CompiledRowRuleCondition = RowRuleCondition & {
+	parsedDateValue: number | null;
+	parsedDateValueMax: number | null;
+};
+
+type CompiledRowColorRule = Omit<RowColorRule, "conditions"> & {
+	conditions: CompiledRowRuleCondition[];
+};
+
+type LegacyRowColorRule = {
+	id?: string;
+	field?: keyof ObrasDetalleRow;
+	calculation?: "raw" | "delta" | "ratio_pct";
+	referenceField?: keyof ObrasDetalleRow | null;
+	op?: "gte" | "lte" | "between";
+	threshold?: number;
+	thresholdMax?: number | null;
+	color?: "amber" | "red" | "green" | "blue";
+};
+
+const ROW_COLOR_RULES_KEY = "obras-detalle:row-color-rules";
+const ROW_COLOR_EVENT = "form-table:refresh";
+let inMemoryRowColorRules: RowColorRule[] = [];
+let inMemoryCompiledRowColorRules: CompiledRowColorRule[] = [];
+let rowColorRulesLoaded = false;
+let previewedRowColorRuleId: string | null = null;
+
+const ROW_RULE_FIELD_OPTIONS: Array<{
+	field: keyof ObrasDetalleRow;
+	label: string;
+	type: RuleFieldType;
+}> = [
+	{ field: "supDeObraM2", label: "Sup. de Obra (m²)", type: "number" },
+	{ field: "contratoMasAmpliaciones", label: "Contrato + Ampliaciones", type: "number" },
+	{ field: "certificadoALaFecha", label: "Certificado a la Fecha", type: "number" },
+	{ field: "saldoACertificar", label: "Saldo a Certificar", type: "number" },
+	{ field: "segunContrato", label: "Según Contrato", type: "number" },
+	{ field: "prorrogasAcordadas", label: "Prórrogas Acordadas", type: "number" },
+	{ field: "plazoTotal", label: "Plazo Total", type: "number" },
+	{ field: "plazoTransc", label: "Plazo Transcurrido", type: "number" },
+	{ field: "porcentaje", label: "% Avance", type: "number" },
+	{ field: "mesBasicoDeContrato", label: "Mes Básico de Contrato", type: "date" },
+	{ field: "iniciacion", label: "Iniciación", type: "date" },
+	{ field: "onFinishSecondSendAt", label: "2° envío finalización", type: "date" },
+];
+
+const getFieldOption = (field: keyof ObrasDetalleRow) =>
+	ROW_RULE_FIELD_OPTIONS.find((option) => option.field === field);
+
+const parseDateMs = (value: unknown): number | null => {
+	if (!value) return null;
+	if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getTime();
+	const raw = String(value).trim();
+	if (!raw) return null;
+	const native = Date.parse(raw);
+	if (!Number.isNaN(native)) return native;
+	const match = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})(?:\s+.*)?$/);
+	if (!match) return null;
+	const day = Number(match[1]);
+	const month = Number(match[2]) - 1;
+	const year = Number(match[3]);
+	const date = new Date(year, month, day);
+	const ts = date.getTime();
+	return Number.isNaN(ts) ? null : ts;
+};
+
+const getFieldNumericValue = (row: ObrasDetalleRow, field: keyof ObrasDetalleRow) => {
+	if (field === "certificadoALaFecha") return computeCertificado(row);
+	if (field === "saldoACertificar") return computeSaldo(row);
+	return toNumber(row[field]);
+};
+
+const getFieldDateMs = (row: ObrasDetalleRow, field: keyof ObrasDetalleRow) => {
+	return parseDateMs(row[field]);
+};
+
+const parseStoredRules = (): RowColorRule[] => {
+	if (typeof window === "undefined") return inMemoryRowColorRules;
+	try {
+		const raw = window.localStorage.getItem(ROW_COLOR_RULES_KEY);
+		const parsed = raw ? JSON.parse(raw) : [];
+		if (!Array.isArray(parsed)) return [];
+		const next: RowColorRule[] = [];
+		for (const candidate of parsed as Array<Partial<RowColorRule> & LegacyRowColorRule>) {
+			if (Array.isArray(candidate.conditions)) {
+				const conditions = candidate.conditions
+					.filter((c) => c && typeof c.field === "string")
+					.map((c) => {
+						const field = c.field as keyof ObrasDetalleRow;
+						const option = getFieldOption(field);
+						return {
+							id:
+								typeof c.id === "string" && c.id
+									? c.id
+									: `${String(field)}-${Math.random().toString(36).slice(2, 7)}`,
+							field,
+							fieldType: option?.type ?? "number",
+							calculation:
+								c.calculation === "delta" ||
+								c.calculation === "ratio_pct" ||
+								c.calculation === "days_from_today" ||
+								c.calculation === "days_between"
+									? c.calculation
+									: "raw",
+							referenceField:
+								typeof c.referenceField === "string"
+									? (c.referenceField as keyof ObrasDetalleRow)
+									: null,
+							op:
+								c.op === "lte" ||
+								c.op === "between" ||
+								c.op === "eq" ||
+								c.op === "neq" ||
+								c.op === "before" ||
+								c.op === "after"
+									? c.op
+									: "gte",
+							threshold:
+								typeof c.threshold === "number" && Number.isFinite(c.threshold)
+									? c.threshold
+									: null,
+							thresholdMax:
+								typeof c.thresholdMax === "number" && Number.isFinite(c.thresholdMax)
+									? c.thresholdMax
+									: null,
+							dateValue: typeof c.dateValue === "string" ? c.dateValue : null,
+							dateValueMax: typeof c.dateValueMax === "string" ? c.dateValueMax : null,
+						} satisfies RowRuleCondition;
+					});
+				if (conditions.length === 0) continue;
+				next.push({
+					id:
+						typeof candidate.id === "string" && candidate.id
+							? candidate.id
+							: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+					logic: candidate.logic === "any" ? "any" : "all",
+					color:
+						candidate.color === "red" ||
+						candidate.color === "green" ||
+						candidate.color === "blue" ||
+						candidate.color === "amber"
+							? candidate.color
+							: "amber",
+					conditions,
+				});
+				continue;
+			}
+			// Legacy one-condition support
+			if (typeof candidate.field !== "string") continue;
+			const field = candidate.field as keyof ObrasDetalleRow;
+			const option = getFieldOption(field);
+			next.push({
+				id:
+					typeof candidate.id === "string" && candidate.id
+						? candidate.id
+						: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+				logic: "all",
+				color:
+					candidate.color === "red" ||
+					candidate.color === "green" ||
+					candidate.color === "blue" ||
+					candidate.color === "amber"
+						? candidate.color
+						: "amber",
+				conditions: [
+					{
+						id: `cond-${Math.random().toString(36).slice(2, 7)}`,
+						field,
+						fieldType: option?.type ?? "number",
+						calculation:
+							candidate.calculation === "delta" || candidate.calculation === "ratio_pct"
+								? candidate.calculation
+								: "raw",
+						referenceField:
+							typeof candidate.referenceField === "string"
+								? candidate.referenceField
+								: null,
+						op:
+							candidate.op === "lte" || candidate.op === "between"
+								? candidate.op
+								: "gte",
+						threshold:
+							typeof candidate.threshold === "number" && Number.isFinite(candidate.threshold)
+								? candidate.threshold
+								: 0,
+						thresholdMax:
+							typeof candidate.thresholdMax === "number" &&
+							Number.isFinite(candidate.thresholdMax)
+								? candidate.thresholdMax
+								: null,
+						dateValue: null,
+						dateValueMax: null,
+					},
+				],
+			});
+		}
+		return next;
+	} catch {
+		return inMemoryRowColorRules;
+	}
+};
+
+const compileRowColorRules = (rules: RowColorRule[]): CompiledRowColorRule[] =>
+	rules.map((rule) => ({
+		...rule,
+		conditions: rule.conditions.map((condition) => ({
+			...condition,
+			parsedDateValue: parseDateMs(condition.dateValue),
+			parsedDateValueMax: parseDateMs(condition.dateValueMax),
+		})),
+	}));
+
+const ensureRowColorRulesLoaded = () => {
+	if (rowColorRulesLoaded) return;
+	inMemoryRowColorRules = parseStoredRules();
+	inMemoryCompiledRowColorRules = compileRowColorRules(inMemoryRowColorRules);
+	rowColorRulesLoaded = true;
+};
+
+const readRowColorRules = (): RowColorRule[] => {
+	ensureRowColorRulesLoaded();
+	return inMemoryRowColorRules;
+};
+
+const writeRowColorRules = (rules: RowColorRule[]) => {
+	inMemoryRowColorRules = rules;
+	inMemoryCompiledRowColorRules = compileRowColorRules(rules);
+	rowColorRulesLoaded = true;
+	if (typeof window !== "undefined") {
+		try {
+			window.localStorage.setItem(ROW_COLOR_RULES_KEY, JSON.stringify(rules));
+		} catch {
+			// in-memory fallback only
+		}
+		try {
+			window.dispatchEvent(
+				new CustomEvent(ROW_COLOR_EVENT, {
+					detail: { tableId: "form-table-obras-detalle" },
+				})
+			);
+		} catch {
+			// ignore
+		}
+	}
+};
+
+const setPreviewedRowColorRule = (ruleId: string | null) => {
+	previewedRowColorRuleId = ruleId;
+	if (typeof window !== "undefined") {
+		try {
+			window.dispatchEvent(
+				new CustomEvent(ROW_COLOR_EVENT, {
+					detail: { tableId: "form-table-obras-detalle" },
+				})
+			);
+		} catch {
+			// ignore
+		}
+	}
+};
+
+const removeRowColorRule = (ruleId: string) => {
+	const existing = readRowColorRules();
+	writeRowColorRules(existing.filter((rule) => rule.id !== ruleId));
+};
+
+const clearRowColorRulesForField = (field: keyof ObrasDetalleRow) => {
+	const existing = readRowColorRules();
+	writeRowColorRules(
+		existing.filter(
+			(rule) => !rule.conditions.some((condition) => condition.field === field)
+		)
+	);
+};
+
+const evaluateNumericCondition = (value: number, condition: RowRuleCondition) => {
+	const threshold = condition.threshold ?? 0;
+	const thresholdMax = condition.thresholdMax ?? threshold;
+	if (condition.op === "gte") return value >= threshold;
+	if (condition.op === "lte") return value <= threshold;
+	if (condition.op === "eq") return value === threshold;
+	if (condition.op === "neq") return value !== threshold;
+	return value >= Math.min(threshold, thresholdMax) && value <= Math.max(threshold, thresholdMax);
+};
+
+const evaluateCondition = (row: ObrasDetalleRow, condition: CompiledRowRuleCondition) => {
+	if (condition.fieldType === "date") {
+		if (condition.calculation === "days_from_today") {
+			const dateMs = getFieldDateMs(row, condition.field);
+			if (dateMs == null) return false;
+			const now = Date.now();
+			const days = Math.floor((now - dateMs) / (1000 * 60 * 60 * 24));
+			return evaluateNumericCondition(days, condition);
+		}
+		if (condition.calculation === "days_between") {
+			const base = getFieldDateMs(row, condition.field);
+			const ref = condition.referenceField ? getFieldDateMs(row, condition.referenceField) : null;
+			if (base == null || ref == null) return false;
+			const days = Math.floor((base - ref) / (1000 * 60 * 60 * 24));
+			return evaluateNumericCondition(days, condition);
+		}
+		const baseDate = getFieldDateMs(row, condition.field);
+		if (baseDate == null) return false;
+		const targetDate = condition.parsedDateValue;
+		const targetDateMax = condition.parsedDateValueMax;
+		if (condition.op === "before") return targetDate != null ? baseDate < targetDate : false;
+		if (condition.op === "after") return targetDate != null ? baseDate > targetDate : false;
+		if (condition.op === "eq") return targetDate != null ? baseDate === targetDate : false;
+		if (condition.op === "neq") return targetDate != null ? baseDate !== targetDate : false;
+		if (condition.op === "between") {
+			if (targetDate == null || targetDateMax == null) return false;
+			return (
+				baseDate >= Math.min(targetDate, targetDateMax) &&
+				baseDate <= Math.max(targetDate, targetDateMax)
+			);
+		}
+		return false;
+	}
+	const base = getFieldNumericValue(row, condition.field);
+	let metric = base;
+	if (condition.calculation === "delta") {
+		const ref = condition.referenceField ? getFieldNumericValue(row, condition.referenceField) : 0;
+		metric = base - ref;
+	} else if (condition.calculation === "ratio_pct") {
+		const ref = condition.referenceField ? getFieldNumericValue(row, condition.referenceField) : 0;
+		metric = ref === 0 ? 0 : (base / ref) * 100;
+	}
+	return evaluateNumericCondition(metric, condition);
+};
+
+const getMatchedRulesForRow = (row: ObrasDetalleRow) => {
+	ensureRowColorRulesLoaded();
+	return inMemoryCompiledRowColorRules.filter((rule) =>
+		rule.logic === "any"
+			? rule.conditions.some((condition) => evaluateCondition(row, condition))
+			: rule.conditions.every((condition) => evaluateCondition(row, condition))
+	);
+};
+
+const rowColorClassFromRules = (row: ObrasDetalleRow) => {
+	const matched = getMatchedRulesForRow(row);
+	const first = matched[0];
+	let colorClass: string | undefined;
+	if (first?.color === "red") colorClass = "bg-red-50";
+	else if (first?.color === "amber") colorClass = "bg-amber-50";
+	else if (first?.color === "green") colorClass = "bg-emerald-50";
+	else if (first?.color === "blue") colorClass = "bg-blue-50";
+	const previewedMatch =
+		previewedRowColorRuleId != null &&
+		matched.some((rule) => rule.id === previewedRowColorRuleId);
+	if (previewedMatch) {
+		return [colorClass, "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]"].filter(Boolean).join(" ");
+	}
+	return colorClass;
+};
+
+const rowOverlayBadgesFromRules = (row: ObrasDetalleRow) => {
+	const matched = getMatchedRulesForRow(row);
+	if (matched.length <= 1) return [];
+	const extras = matched.slice(1);
+	const colorLabel: Record<RowColorRule["color"], string> = {
+		amber: "ambar",
+		red: "roja",
+		green: "verde",
+		blue: "azul",
+	};
+	return extras.map((rule, index) => ({
+		id: rule.id,
+		label: `+${index + 1} ${colorLabel[rule.color]}`,
+		tone: rule.color,
+	}));
+};
+
+const buildRowColorMenuItems = (
+	field: keyof ObrasDetalleRow,
+	label: string
+): NonNullable<ColumnDef<ObrasDetalleRow>["cellMenuItems"]> => [
+	{
+		id: `${String(field)}-row-gte`,
+		label: `Color fila si ${label} >= esta celda`,
+		onSelect: (row) => {
+			const threshold = getFieldNumericValue(row, field);
+			const existing = readRowColorRules();
+			writeRowColorRules([
+				...existing,
+				{
+					id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+					logic: "all",
+					color: "amber",
+					conditions: [
+						{
+							id: `cond-${Math.random().toString(36).slice(2, 7)}`,
+							field,
+							fieldType: getFieldOption(field)?.type ?? "number",
+							calculation: "raw",
+							referenceField: null,
+							op: "gte",
+							threshold,
+							thresholdMax: null,
+							dateValue: null,
+							dateValueMax: null,
+						},
+					],
+				},
+			]);
+		},
+	},
+	{
+		id: `${String(field)}-row-lte`,
+		label: `Color fila si ${label} <= esta celda`,
+		onSelect: (row) => {
+			const threshold = getFieldNumericValue(row, field);
+			const existing = readRowColorRules();
+			writeRowColorRules([
+				...existing,
+				{
+					id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+					logic: "all",
+					color: "red",
+					conditions: [
+						{
+							id: `cond-${Math.random().toString(36).slice(2, 7)}`,
+							field,
+							fieldType: getFieldOption(field)?.type ?? "number",
+							calculation: "raw",
+							referenceField: null,
+							op: "lte",
+							threshold,
+							thresholdMax: null,
+							dateValue: null,
+							dateValueMax: null,
+						},
+					],
+				},
+			]);
+		},
+	},
+	{
+		id: `${String(field)}-row-clear`,
+		label: `Quitar color por ${label}`,
+		onSelect: () => clearRowColorRulesForField(field),
+	},
+];
+
+type RuleConditionDraft = {
+	id: string;
+	field: keyof ObrasDetalleRow;
+	fieldType: RuleFieldType;
+	calculation: RuleCalculation;
+	referenceField: keyof ObrasDetalleRow | null;
+	op: RuleOperator;
+	threshold: string;
+	thresholdMax: string;
+	dateValue: string;
+	dateValueMax: string;
+};
+
+const createConditionDraft = (): RuleConditionDraft => ({
+	id: `cond-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+	field: "contratoMasAmpliaciones",
+	fieldType: "number",
+	calculation: "raw",
+	referenceField: "porcentaje",
+	op: "gte",
+	threshold: "0",
+	thresholdMax: "100",
+	dateValue: "",
+	dateValueMax: "",
+});
+
+const colorLabelEs: Record<RowColorRule["color"], string> = {
+	amber: "ambar",
+	red: "rojo",
+	green: "verde",
+	blue: "azul",
+};
+
+const logicLabelEs: Record<RowColorRule["logic"], string> = {
+	all: "todas",
+	any: "cualquiera",
+};
+
+const valueOrPlaceholder = (value: string, placeholder: string) =>
+	value.trim() ? value.trim() : placeholder;
+
+const dateOrPlaceholder = (value: string) => {
+	if (!value.trim()) return "[fecha]";
+	const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+	if (!match) return value;
+	return `${match[3]}/${match[2]}/${match[1]}`;
+};
+
+const fieldLabelEs = (field: keyof ObrasDetalleRow) =>
+	getFieldOption(field)?.label ?? String(field);
+
+const draftMetricSentence = (condition: RuleConditionDraft) => {
+	const field = fieldLabelEs(condition.field);
+	if (condition.calculation === "raw") return `el valor de "${field}"`;
+	if (condition.calculation === "delta") {
+		const ref = fieldLabelEs(condition.referenceField ?? condition.field);
+		return `la diferencia entre "${field}" y "${ref}"`;
+	}
+	if (condition.calculation === "ratio_pct") {
+		const ref = fieldLabelEs(condition.referenceField ?? condition.field);
+		return `el porcentaje de "${field}" sobre "${ref}"`;
+	}
+	if (condition.calculation === "days_from_today") {
+		return `los dias desde "${field}" hasta hoy`;
+	}
+	const ref = fieldLabelEs(condition.referenceField ?? condition.field);
+	return `los dias entre "${field}" y "${ref}"`;
+};
+
+const draftConditionSentence = (condition: RuleConditionDraft) => {
+	const metric = draftMetricSentence(condition);
+	const isDateField = condition.fieldType === "date";
+	const usesDateCompare =
+		isDateField &&
+		(condition.op === "before" ||
+			condition.op === "after" ||
+			condition.op === "between" ||
+			condition.op === "eq" ||
+			condition.op === "neq");
+	if (usesDateCompare) {
+		if (condition.op === "before") {
+			return `${metric} es anterior a ${dateOrPlaceholder(condition.dateValue)}.`;
+		}
+		if (condition.op === "after") {
+			return `${metric} es posterior a ${dateOrPlaceholder(condition.dateValue)}.`;
+		}
+		if (condition.op === "eq") {
+			return `${metric} es igual a ${dateOrPlaceholder(condition.dateValue)}.`;
+		}
+		if (condition.op === "neq") {
+			return `${metric} es distinta de ${dateOrPlaceholder(condition.dateValue)}.`;
+		}
+		return `${metric} esta entre ${dateOrPlaceholder(condition.dateValue)} y ${dateOrPlaceholder(condition.dateValueMax)}.`;
+	}
+	if (condition.op === "gte") {
+		return `${metric} es mayor o igual a ${valueOrPlaceholder(condition.threshold, "[valor]")}.`;
+	}
+	if (condition.op === "lte") {
+		return `${metric} es menor o igual a ${valueOrPlaceholder(condition.threshold, "[valor]")}.`;
+	}
+	if (condition.op === "eq") {
+		return `${metric} es igual a ${valueOrPlaceholder(condition.threshold, "[valor]")}.`;
+	}
+	if (condition.op === "neq") {
+		return `${metric} es distinto de ${valueOrPlaceholder(condition.threshold, "[valor]")}.`;
+	}
+	return `${metric} esta entre ${valueOrPlaceholder(condition.threshold, "[min]")} y ${valueOrPlaceholder(condition.thresholdMax, "[max]")}.`;
+};
+
+function RowRulesDialogTrigger() {
+	const [open, setOpen] = useState(false);
+	const [refreshTick, setRefreshTick] = useState(0);
+	const [activeTab, setActiveTab] = useState<"creator" | "active">("creator");
+	const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+	const [hoveredRuleId, setHoveredRuleId] = useState<string | null>(null);
+	const [logic, setLogic] = useState<"all" | "any">("all");
+	const [color, setColor] = useState<RowColorRule["color"]>("amber");
+	const [conditions, setConditions] = useState<RuleConditionDraft[]>([createConditionDraft()]);
+	const rules = useMemo(() => readRowColorRules(), [refreshTick]);
+	const selectedRule = rules.find((rule) => rule.id === selectedRuleId) ?? null;
+	const draftRuleSentence = useMemo(() => {
+		if (conditions.length === 0) {
+			return "La regla se aplicara cuando se cumplan las condiciones definidas.";
+		}
+		const separator = logic === "all" ? " y " : " o ";
+		const body = conditions.map((condition) => draftConditionSentence(condition)).join(separator);
+		return `Pintar la fila de color ${colorLabelEs[color]} cuando se cumpla ${logicLabelEs[logic]} de estas condiciones: ${body}`;
+	}, [conditions, logic, color]);
+
+	useEffect(() => {
+		setPreviewedRowColorRule(hoveredRuleId ?? selectedRuleId);
+	}, [hoveredRuleId, selectedRuleId]);
+
+	useEffect(() => {
+		if (!open) {
+			setHoveredRuleId(null);
+			setSelectedRuleId(null);
+			setPreviewedRowColorRule(null);
+		}
+	}, [open]);
+
+	const addRule = () => {
+		const existingRules = readRowColorRules();
+		const mappedConditions: RowRuleCondition[] = [];
+		for (const condition of conditions) {
+			const threshold = Number(condition.threshold);
+			const thresholdMax = Number(condition.thresholdMax);
+			const isDateField = condition.fieldType === "date";
+			const usesDateCompare =
+				isDateField && (condition.op === "before" || condition.op === "after" || condition.op === "between" || condition.op === "eq" || condition.op === "neq");
+			if (!usesDateCompare && !Number.isFinite(threshold)) {
+				toast.error("Completá un threshold numérico válido.");
+				return;
+			}
+			if (condition.op === "between" && !usesDateCompare && !Number.isFinite(thresholdMax)) {
+				toast.error("Completá el threshold máximo para la condición entre valores.");
+				return;
+			}
+			if (usesDateCompare && !condition.dateValue) {
+				toast.error("Completá la fecha de la condición.");
+				return;
+			}
+			if (usesDateCompare && condition.op === "between" && !condition.dateValueMax) {
+				toast.error("Completá la fecha máxima para la condición entre fechas.");
+				return;
+			}
+			mappedConditions.push({
+				id: condition.id,
+				field: condition.field,
+				fieldType: condition.fieldType,
+				calculation: condition.calculation,
+				referenceField:
+					condition.calculation === "raw" || condition.calculation === "days_from_today"
+						? null
+						: condition.referenceField,
+				op: condition.op,
+				threshold: usesDateCompare ? null : threshold,
+				thresholdMax:
+					condition.op === "between" && !usesDateCompare ? thresholdMax : null,
+				dateValue: usesDateCompare ? condition.dateValue : null,
+				dateValueMax:
+					usesDateCompare && condition.op === "between" ? condition.dateValueMax : null,
+			});
+		}
+		const nextRuleId = `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+		writeRowColorRules([
+			...existingRules,
+			{
+				id: nextRuleId,
+				logic,
+				color,
+				conditions: mappedConditions,
+			},
+		]);
+		setActiveTab("active");
+		setSelectedRuleId(nextRuleId);
+		setRefreshTick((prev) => prev + 1);
+	};
+
+	return (
+		<>
+			<Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+				Reglas de color de filas
+			</Button>
+			<Dialog
+				open={open}
+				onOpenChange={(nextOpen) => {
+					setOpen(nextOpen);
+					if (!nextOpen) {
+						setHoveredRuleId(null);
+						setSelectedRuleId(null);
+						setPreviewedRowColorRule(null);
+					}
+				}}
+			>
+				<DialogContent className="max-w-3xl">
+					<DialogHeader>
+						<DialogTitle>Reglas de color por columna</DialogTitle>
+					</DialogHeader>
+					<Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "creator" | "active")}>
+						<TabsList className="grid w-full grid-cols-2">
+							<TabsTrigger value="creator">Crear regla</TabsTrigger>
+							<TabsTrigger value="active">Reglas activas ({rules.length})</TabsTrigger>
+						</TabsList>
+						<TabsContent value="creator" className="space-y-4 mt-4">
+							<div className="grid grid-cols-2 gap-3">
+								<div className="space-y-1">
+									<Label>Encadenado</Label>
+									<Select value={logic} onValueChange={(value) => setLogic(value as "all" | "any")}>
+										<SelectTrigger>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="all">Todas las condiciones</SelectItem>
+											<SelectItem value="any">Cualquiera de las condiciones</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+								<div className="space-y-1">
+									<Label>Color de fila</Label>
+									<Select value={color} onValueChange={(value) => setColor(value as RowColorRule["color"])}>
+										<SelectTrigger>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="amber">Ambar</SelectItem>
+											<SelectItem value="red">Rojo</SelectItem>
+											<SelectItem value="green">Verde</SelectItem>
+											<SelectItem value="blue">Azul</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
+							<div className="rounded border bg-muted/40 p-3">
+								<p className="text-xs font-medium">Vista previa de la regla</p>
+								<p className="mt-1 text-xs text-muted-foreground">{draftRuleSentence}</p>
+							</div>
+							<div className="space-y-3 max-h-[340px] overflow-auto pr-1">
+								{conditions.map((condition, index) => {
+								const isDateField = condition.fieldType === "date";
+								const usesDateCompare =
+									isDateField &&
+									(condition.op === "before" ||
+										condition.op === "after" ||
+										condition.op === "between" ||
+										condition.op === "eq" ||
+										condition.op === "neq");
+									return (
+										<div key={condition.id} className="rounded border p-3 space-y-3">
+										<div className="flex items-center justify-between">
+											<p className="text-xs font-medium">Condición {index + 1}</p>
+											<Button
+												type="button"
+												size="sm"
+												variant="ghost"
+												onClick={() =>
+													setConditions((prev) =>
+														prev.length === 1
+															? prev
+															: prev.filter((item) => item.id !== condition.id)
+													)
+												}
+											>
+												Quitar
+											</Button>
+										</div>
+										<div className="grid grid-cols-2 gap-2">
+											<div className="space-y-1">
+												<Label>Columna</Label>
+												<Select
+													value={String(condition.field)}
+													onValueChange={(value) =>
+														setConditions((prev) =>
+															prev.map((item) => {
+																if (item.id !== condition.id) return item;
+																const option = getFieldOption(value as keyof ObrasDetalleRow);
+																return {
+																	...item,
+																	field: value as keyof ObrasDetalleRow,
+																	fieldType: option?.type ?? "number",
+																	calculation: option?.type === "date" ? "raw" : "raw",
+																	op: option?.type === "date" ? "after" : "gte",
+																};
+															})
+														)
+													}
+												>
+													<SelectTrigger>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														{ROW_RULE_FIELD_OPTIONS.map((option) => (
+															<SelectItem key={String(option.field)} value={String(option.field)}>
+																{option.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
+											<div className="space-y-1">
+												<Label>Cálculo</Label>
+												<Select
+													value={condition.calculation}
+													onValueChange={(value) =>
+														setConditions((prev) =>
+															prev.map((item) =>
+																item.id === condition.id
+																	? { ...item, calculation: value as RuleCalculation }
+																	: item
+															)
+														)
+													}
+												>
+													<SelectTrigger>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="raw">Valor de columna</SelectItem>
+														{condition.fieldType === "number" && (
+															<>
+																<SelectItem value="delta">Diferencia (columna - referencia)</SelectItem>
+																<SelectItem value="ratio_pct">Porcentaje (columna / referencia * 100)</SelectItem>
+															</>
+														)}
+														{condition.fieldType === "date" && (
+															<>
+																<SelectItem value="days_from_today">Días desde hoy</SelectItem>
+																<SelectItem value="days_between">Días entre columnas</SelectItem>
+															</>
+														)}
+													</SelectContent>
+												</Select>
+											</div>
+										</div>
+										{condition.calculation !== "raw" &&
+											condition.calculation !== "days_from_today" && (
+												<div className="space-y-1">
+													<Label>Columna de referencia</Label>
+													<Select
+														value={String(condition.referenceField ?? "")}
+														onValueChange={(value) =>
+															setConditions((prev) =>
+																prev.map((item) =>
+																	item.id === condition.id
+																		? { ...item, referenceField: value as keyof ObrasDetalleRow }
+																		: item
+																)
+															)
+														}
+													>
+														<SelectTrigger>
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															{ROW_RULE_FIELD_OPTIONS.filter(
+																(option) => option.type === condition.fieldType
+															).map((option) => (
+																<SelectItem key={`ref-${String(option.field)}`} value={String(option.field)}>
+																	{option.label}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+											)}
+										<div className="grid grid-cols-2 gap-2">
+											<div className="space-y-1">
+												<Label>Operador</Label>
+												<Select
+													value={condition.op}
+													onValueChange={(value) =>
+														setConditions((prev) =>
+															prev.map((item) =>
+																item.id === condition.id
+																	? { ...item, op: value as RuleOperator }
+																	: item
+															)
+														)
+													}
+												>
+													<SelectTrigger>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														{condition.fieldType === "date" ? (
+															<>
+																<SelectItem value="before">Antes de</SelectItem>
+																<SelectItem value="after">Después de</SelectItem>
+																<SelectItem value="between">Entre fechas</SelectItem>
+																<SelectItem value="eq">Igual a</SelectItem>
+																<SelectItem value="neq">Distinto de</SelectItem>
+																<SelectItem value="gte">Mayor o igual (numérico)</SelectItem>
+																<SelectItem value="lte">Menor o igual (numérico)</SelectItem>
+															</>
+														) : (
+															<>
+																<SelectItem value="gte">Mayor o igual</SelectItem>
+																<SelectItem value="lte">Menor o igual</SelectItem>
+																<SelectItem value="between">Entre valores</SelectItem>
+																<SelectItem value="eq">Igual a</SelectItem>
+																<SelectItem value="neq">Distinto de</SelectItem>
+															</>
+														)}
+													</SelectContent>
+												</Select>
+											</div>
+											<div className="space-y-1">
+												<Label>{usesDateCompare ? "Fecha" : "Valor de comparación"}</Label>
+												<Input
+													type={usesDateCompare ? "date" : "number"}
+													value={usesDateCompare ? condition.dateValue : condition.threshold}
+													onChange={(e) =>
+														setConditions((prev) =>
+															prev.map((item) =>
+																item.id === condition.id
+																	? usesDateCompare
+																		? { ...item, dateValue: e.target.value }
+																		: { ...item, threshold: e.target.value }
+																	: item
+															)
+														)
+													}
+												/>
+											</div>
+										</div>
+										{condition.op === "between" && (
+											<div className="space-y-1">
+												<Label>{usesDateCompare ? "Fecha máxima" : "Valor máximo"}</Label>
+												<Input
+													type={usesDateCompare ? "date" : "number"}
+													value={usesDateCompare ? condition.dateValueMax : condition.thresholdMax}
+													onChange={(e) =>
+														setConditions((prev) =>
+															prev.map((item) =>
+																item.id === condition.id
+																	? usesDateCompare
+																		? { ...item, dateValueMax: e.target.value }
+																		: { ...item, thresholdMax: e.target.value }
+																	: item
+															)
+														)
+													}
+												/>
+											</div>
+										)}
+										</div>
+									);
+								})}
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => setConditions((prev) => [...prev, createConditionDraft()])}
+							>
+								Agregar condición
+							</Button>
+						</TabsContent>
+						<TabsContent value="active" className="space-y-3 mt-4">
+							<p className="text-xs text-muted-foreground">
+								Seleccioná una regla para resaltar en la tabla las filas afectadas.
+							</p>
+							<div className="space-y-2 max-h-56 overflow-auto border rounded-md p-2">
+							{rules.length === 0 && (
+								<p className="text-sm text-muted-foreground">Sin reglas definidas.</p>
+							)}
+							{rules.map((rule) => (
+								<div
+									key={rule.id}
+									className={cn(
+										"flex items-center justify-between rounded border px-2 py-1 text-xs cursor-pointer transition-colors",
+										selectedRuleId === rule.id && "border-primary bg-primary/5"
+									)}
+									onClick={() => setSelectedRuleId(rule.id)}
+									onMouseEnter={() => setHoveredRuleId(rule.id)}
+									onMouseLeave={() => setHoveredRuleId(null)}
+								>
+									<span>
+										{rule.logic === "all" ? "Todas" : "Cualquiera"} · {rule.conditions.length} condición(es) · {colorLabelEs[rule.color]}
+									</span>
+									<Button
+										type="button"
+										size="sm"
+										variant="ghost"
+										onClick={(event) => {
+											event.stopPropagation();
+											if (selectedRuleId === rule.id) {
+												setSelectedRuleId(null);
+											}
+											removeRowColorRule(rule.id);
+											setRefreshTick((prev) => prev + 1);
+										}}
+									>
+										Quitar
+									</Button>
+								</div>
+							))}
+							</div>
+							{selectedRule && (
+								<div className="rounded border bg-muted/40 p-2 text-xs">
+									Regla seleccionada: {selectedRule.logic === "all" ? "Todas" : "Cualquiera"} ·{" "}
+									{selectedRule.conditions.length} condición(es) · {colorLabelEs[selectedRule.color]}
+								</div>
+							)}
+						</TabsContent>
+					</Tabs>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => {
+								setHoveredRuleId(null);
+								setSelectedRuleId(null);
+								setPreviewedRowColorRule(null);
+								writeRowColorRules([]);
+								setRefreshTick((prev) => prev + 1);
+							}}
+						>
+							Limpiar reglas
+						</Button>
+						<Button type="button" onClick={addRule} disabled={activeTab !== "creator"}>
+							Agregar regla
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		</>
+	);
+}
+
 const sanitizeText = (value?: string | null) => (value ?? "").trim();
 
 const updateSequentialSeedFromRows = (rows: ObrasDetalleRow[]) => {
@@ -190,6 +1226,8 @@ const mapDetailRowToPayload = (row: ObrasDetalleRow, index: number): Obra => {
 	const parsedN = toNumber(row.n);
 	const normalizedN =
 		Number.isFinite(parsedN) && parsedN >= 1 ? Math.trunc(parsedN) : index + 1;
+	const certificadoALaFecha = computeCertificado(row);
+	const saldoACertificar = computeSaldo(row);
 	return {
 		id: typeof row.id === "string" ? row.id : undefined,
 		n: normalizedN,
@@ -199,8 +1237,8 @@ const mapDetailRowToPayload = (row: ObrasDetalleRow, index: number): Obra => {
 		mesBasicoDeContrato: sanitizeText(row.mesBasicoDeContrato),
 		iniciacion: sanitizeText(row.iniciacion),
 		contratoMasAmpliaciones: toNumber(row.contratoMasAmpliaciones),
-		certificadoALaFecha: toNumber(row.certificadoALaFecha),
-		saldoACertificar: toNumber(row.saldoACertificar),
+		certificadoALaFecha,
+		saldoACertificar,
 		segunContrato: toNumber(row.segunContrato),
 		prorrogasAcordadas: toNumber(row.prorrogasAcordadas),
 		plazoTotal: toNumber(row.plazoTotal),
@@ -340,6 +1378,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		sortFn: (a, b) => toNumber(a.contratoMasAmpliaciones) - toNumber(b.contratoMasAmpliaciones),
 		searchFn: (row, query) => String(row.contratoMasAmpliaciones ?? "").includes(query),
 		defaultValue: null,
+		cellMenuItems: buildRowColorMenuItems("contratoMasAmpliaciones", "Contrato + Ampliaciones"),
 	},
 	{
 		id: "certificadoALaFecha",
@@ -347,14 +1386,17 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		field: "certificadoALaFecha",
 		enableHide: true,
 		enablePin: false,
+		editable: false,
 		cellType: "currency",
 		cellConfig: {
 			currencyCode: "ARS",
 			currencyLocale: "es-AR",
+			renderReadOnly: ({ row }) => formatCurrency(computeCertificado(row)),
 		},
-		sortFn: (a, b) => toNumber(a.certificadoALaFecha) - toNumber(b.certificadoALaFecha),
-		searchFn: (row, query) => String(row.certificadoALaFecha ?? "").includes(query),
+		sortFn: (a, b) => computeCertificado(a) - computeCertificado(b),
+		searchFn: (row, query) => String(computeCertificado(row)).includes(query),
 		defaultValue: null,
+		cellMenuItems: buildRowColorMenuItems("certificadoALaFecha", "Certificado a la Fecha"),
 	},
 	{
 		id: "saldoACertificar",
@@ -362,14 +1404,17 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		field: "saldoACertificar",
 		enableHide: true,
 		enablePin: false,
+		editable: false,
 		cellType: "currency",
 		cellConfig: {
 			currencyCode: "ARS",
 			currencyLocale: "es-AR",
+			renderReadOnly: ({ row }) => formatCurrency(computeSaldo(row)),
 		},
-		sortFn: (a, b) => toNumber(a.saldoACertificar) - toNumber(b.saldoACertificar),
-		searchFn: (row, query) => String(row.saldoACertificar ?? "").includes(query),
+		sortFn: (a, b) => computeSaldo(a) - computeSaldo(b),
+		searchFn: (row, query) => String(computeSaldo(row)).includes(query),
 		defaultValue: null,
+		cellMenuItems: buildRowColorMenuItems("saldoACertificar", "Saldo a Certificar"),
 	},
 	{
 		id: "segunContrato",
@@ -425,8 +1470,176 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		sortFn: (a, b) => toNumber(a.porcentaje) - toNumber(b.porcentaje),
 		searchFn: (row, query) => String(row.porcentaje ?? "").includes(query),
 		defaultValue: null,
+		cellMenuItems: buildRowColorMenuItems("porcentaje", "% Avance"),
 	},
 ];
+
+export type MainTableColumnKind = "base" | "formula";
+export type MainTableFormulaFormat = "number" | "currency";
+
+export type MainTableColumnConfig = {
+	id: string;
+	kind: MainTableColumnKind;
+	label: string;
+	enabled: boolean;
+	width?: number;
+	baseColumnId?: string;
+	formula?: string;
+	formulaFormat?: MainTableFormulaFormat;
+	cellType?: ColumnDef<ObrasDetalleRow>["cellType"];
+	required?: boolean;
+	editable?: boolean;
+	enableHide?: boolean;
+	enablePin?: boolean;
+	enableSort?: boolean;
+	enableResize?: boolean;
+};
+
+export const MAIN_TABLE_BASE_COLUMN_OPTIONS = columns.map((column) => ({
+	id: column.id,
+	label: column.label,
+	defaultWidth: column.width,
+}));
+
+export const DEFAULT_MAIN_TABLE_COLUMN_CONFIG: MainTableColumnConfig[] = columns.map((column) => {
+	const isContrato = column.id === "contratoMasAmpliaciones";
+	const isCertificado = column.id === "certificadoALaFecha";
+	const isSaldo = column.id === "saldoACertificar";
+	const isCalculatedDefault = isContrato || isCertificado || isSaldo;
+	const formula =
+		isContrato
+			? "[contratoMasAmpliaciones]"
+			: isCertificado
+				? "[contratoMasAmpliaciones] * ([porcentaje] / 100)"
+				: isSaldo
+					? "[contratoMasAmpliaciones] - [certificadoALaFecha]"
+					: undefined;
+	return {
+		id: column.id,
+		kind: isCalculatedDefault ? ("formula" as const) : ("base" as const),
+		label: column.label,
+		enabled: true,
+		width: column.width,
+		baseColumnId: column.id,
+		formula,
+		formulaFormat: column.cellType === "currency" ? "currency" : "number",
+		cellType: column.cellType,
+		required: column.required,
+		editable: column.editable,
+		enableHide: column.enableHide,
+		enablePin: column.enablePin,
+		enableSort: column.enableSort,
+		enableResize: column.enableResize,
+	};
+});
+
+const BASE_COLUMNS_BY_ID = new Map(columns.map((column) => [column.id, column]));
+const FORMULA_REF_PATTERN = /\[([a-zA-Z0-9_]+)\]/g;
+
+const evaluateFormulaValue = (row: ObrasDetalleRow, formula: string): number => {
+	if (!formula.trim()) return 0;
+	const numericExpression = formula.replace(FORMULA_REF_PATTERN, (_full, fieldName) => {
+		const field = fieldName as keyof ObrasDetalleRow;
+		if (field === "certificadoALaFecha") return String(computeCertificado(row));
+		if (field === "saldoACertificar") return String(computeSaldo(row));
+		return String(toNumber(row[field]));
+	});
+	if (!/^[0-9+\-*/().\s]+$/.test(numericExpression)) return 0;
+	try {
+		const result = Function(`"use strict"; return (${numericExpression});`)();
+		return Number.isFinite(result) ? Number(result) : 0;
+	} catch {
+		return 0;
+	}
+};
+
+const buildFormulaColumn = (
+	config: MainTableColumnConfig
+): ColumnDef<ObrasDetalleRow> => {
+	const formula = config.formula ?? "";
+	const format = config.formulaFormat ?? "number";
+	const forcedCellType = config.cellType;
+	const resolvedCellType =
+		forcedCellType ??
+		(format === "currency" ? "currency" : ("text" as ColumnDef<ObrasDetalleRow>["cellType"]));
+	const getValue = (row: ObrasDetalleRow) => evaluateFormulaValue(row, formula);
+
+	return {
+		id: config.id,
+		label: config.label || config.id,
+		field: config.id as any,
+		enableHide: true,
+		enablePin: false,
+		editable: false,
+		cellType: resolvedCellType,
+		cellConfig:
+			resolvedCellType === "currency"
+				? {
+						currencyCode: "ARS",
+						currencyLocale: "es-AR",
+						renderReadOnly: ({ row }) => formatCurrency(getValue(row)),
+				  }
+				: {
+						renderReadOnly: ({ row }) => getValue(row).toLocaleString("es-AR"),
+				  },
+		sortFn: (a, b) => getValue(a) - getValue(b),
+		searchFn: (row, query) => String(getValue(row)).includes(query),
+		defaultValue: null,
+		width: config.width,
+		enableSort: config.enableSort ?? true,
+		enableResize: config.enableResize ?? true,
+		required: config.required ?? false,
+	};
+};
+
+const resolveColumnsFromConfig = (
+	columnConfig?: MainTableColumnConfig[] | null
+): ColumnDef<ObrasDetalleRow>[] => {
+	if (!Array.isArray(columnConfig) || columnConfig.length === 0) {
+		return columns;
+	}
+
+	const resolved: ColumnDef<ObrasDetalleRow>[] = [];
+	for (const item of columnConfig) {
+		if (item.enabled === false) continue;
+		if (item.kind === "formula") {
+			if (!item.formula || !item.id) continue;
+			resolved.push(buildFormulaColumn(item));
+			continue;
+		}
+		const baseId = item.baseColumnId ?? item.id;
+		const baseColumn = BASE_COLUMNS_BY_ID.get(baseId);
+		if (!baseColumn) continue;
+		resolved.push({
+			...baseColumn,
+			id: item.id || baseColumn.id,
+			label: item.label || baseColumn.label,
+			width: typeof item.width === "number" ? item.width : baseColumn.width,
+			cellType: item.cellType ?? baseColumn.cellType,
+			required: item.required ?? baseColumn.required,
+			editable: item.editable ?? baseColumn.editable,
+			enableHide: item.enableHide ?? baseColumn.enableHide,
+			enablePin: item.enablePin ?? baseColumn.enablePin,
+			enableSort: item.enableSort ?? baseColumn.enableSort,
+			enableResize: item.enableResize ?? baseColumn.enableResize,
+		});
+	}
+
+	if (resolved.length === 0) return columns;
+	return resolved;
+};
+
+const resolveHeaderGroupsFromColumns = (
+	resolvedColumns: ColumnDef<ObrasDetalleRow>[]
+): HeaderGroup[] => {
+	const visibleIds = new Set(resolvedColumns.map((column) => column.id));
+	return headerGroups
+		.map((group) => ({
+			...group,
+			columns: group.columns.filter((columnId) => visibleIds.has(columnId)),
+		}))
+		.filter((group) => group.columns.length > 0);
+};
 
 // fechas 
 const headerGroups: HeaderGroup[] = [
@@ -690,8 +1903,8 @@ const applyFilters = (row: ObrasDetalleRow, filters: DetailAdvancedFilters) => {
 
 	if (!matchesRange(row.supDeObraM2, filters.supMin, filters.supMax)) return false;
 	if (!matchesRange(row.contratoMasAmpliaciones, filters.cmaMin, filters.cmaMax)) return false;
-	if (!matchesRange(row.certificadoALaFecha, filters.cafMin, filters.cafMax)) return false;
-	if (!matchesRange(row.saldoACertificar, filters.sacMin, filters.sacMax)) return false;
+	if (!matchesRange(computeCertificado(row), filters.cafMin, filters.cafMax)) return false;
+	if (!matchesRange(computeSaldo(row), filters.sacMin, filters.sacMax)) return false;
 	if (!matchesRange(row.segunContrato, filters.scMin, filters.scMax)) return false;
 	if (!matchesRange(row.prorrogasAcordadas, filters.paMin, filters.paMax)) return false;
 	if (!matchesRange(row.plazoTotal, filters.ptMin, filters.ptMax)) return false;
@@ -785,7 +1998,7 @@ type ObrasDetalleApiRow = {
 };
 
 function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
-	return {
+	const row: ObrasDetalleRow = {
 		id: obra.id,
 		n: obra.n ?? null,
 		designacionYUbicacion: obra.designacionYUbicacion ?? "",
@@ -805,6 +2018,9 @@ function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 		onFinishSecondMessage: obra.onFinishSecondMessage ?? null,
 		onFinishSecondSendAt: obra.onFinishSecondSendAt ?? null,
 	};
+	row.certificadoALaFecha = computeCertificado(row);
+	row.saldoACertificar = computeSaldo(row);
+	return row;
 }
 
 const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["fetchRows"] =
@@ -858,14 +2074,16 @@ const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>[
 		}
 	};
 
-export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters> = {
+const obrasDetalleBaseConfig: Omit<
+	FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>,
+	"columns" | "headerGroups"
+> = {
 	tableId: "form-table-obras-detalle",
 	title: "Obras detalle",
 	description: "Gestione el dataset de obras con filtros avanzados y edición en línea.",
-	columns,
-	headerGroups,
 	tabFilters,
 	searchPlaceholder: "Buscar en columnas de obras",
+	toolbarActions: <RowRulesDialogTrigger />,
 	defaultPageSize: 10,
 	showActionsColumn: false,
 	enableColumnResizing: true,
@@ -873,6 +2091,8 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	renderFilters,
 	applyFilters,
 	countActiveFilters,
+	rowClassName: (row) => rowColorClassFromRules(row),
+	rowOverlayBadges: (row) => rowOverlayBadgesFromRules(row),
 	fetchRows: fetchObrasDetalle,
 	onSave: saveObrasDetalle,
 	createRow: createNewRow,
@@ -945,3 +2165,17 @@ export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvanced
 	// 	},
 	// },
 };
+
+export const createObrasDetalleConfig = (
+	columnConfig?: MainTableColumnConfig[] | null
+): FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters> => {
+	const resolvedColumns = resolveColumnsFromConfig(columnConfig);
+	return {
+		...obrasDetalleBaseConfig,
+		columns: resolvedColumns,
+		headerGroups: resolveHeaderGroupsFromColumns(resolvedColumns),
+	};
+};
+
+export const obrasDetalleConfig: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters> =
+	createObrasDetalleConfig();

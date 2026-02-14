@@ -23,6 +23,7 @@ export type FileSystemItem = {
 	mimetype?: string;
 	dataId?: string;
 	storagePath?: string;
+	relativePath?: string;
 	apsUrn?: string;
 	ocrDocumentStatus?: "pending" | "processing" | "completed" | "failed" | "unprocessed";
 	ocrDocumentId?: string;
@@ -91,6 +92,7 @@ export type OcrTablaColumn = {
 	label: string;
 	dataType: TablaColumnDataType;
 	required: boolean;
+	config?: Record<string, unknown>;
 };
 
 export type TablaDataRow = {

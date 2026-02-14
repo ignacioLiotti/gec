@@ -17,6 +17,7 @@ function ReportePageContent() {
 		supMin: searchParams.get("supMin") || "",
 		supMax: searchParams.get("supMax") || "",
 		entidades: searchParams.getAll("entidad"),
+		entidadContains: searchParams.get("entidadContains") || "",
 		porcentajeMin: searchParams.get("porcentajeMin") || "",
 		porcentajeMax: searchParams.get("porcentajeMax") || "",
 		estado: (searchParams.get("estado") as ObraFilters["estado"]) || "all",

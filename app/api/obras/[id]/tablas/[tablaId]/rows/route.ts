@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { coerceValueForType, ensureTablaDataType } from "@/lib/tablas";
+import {
+	coerceValueForType,
+	ensureTablaDataType,
+	evaluateTablaFormula,
+} from "@/lib/tablas";
 
 async function fetchColumnMetas(
 	supabase: Awaited<ReturnType<typeof createClient>>,
@@ -20,6 +24,7 @@ async function fetchColumnMetas(
 		dataType: ensureTablaDataType(column.data_type as string | undefined),
 		required: Boolean(column.required),
 		position: column.position ?? 0,
+		config: (column.config as Record<string, unknown>) ?? {},
 	}));
 }
 type RowsContext = { params: Promise<{ id: string; tablaId: string }> };
@@ -125,6 +130,18 @@ export async function POST(request: Request, context: RowsContext) {
 						data[column.fieldKey] = coerceValueForType(
 							column.dataType,
 							(row as any)[column.fieldKey]
+						);
+					}
+					for (const column of columns) {
+						const formula =
+							typeof column.config?.formula === "string"
+								? column.config.formula.trim()
+								: "";
+						if (!formula) continue;
+						const computed = evaluateTablaFormula(formula, data);
+						data[column.fieldKey] = coerceValueForType(
+							column.dataType,
+							computed
 						);
 					}
 					// Preserve document linkage metadata if present on the row payload.

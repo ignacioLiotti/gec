@@ -8,6 +8,7 @@ import {
 } from "@/lib/tenant-selection";
 
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 
 export type PermissionLevel = "read" | "edit" | "admin";
 
@@ -103,10 +104,12 @@ export async function getUserRoles(): Promise<{
 					.in("id", fetchedRoleIds)
 					.eq("tenant_id", tenantId);
 
-				if (roleDetailsError) {
-					console.error("Error fetching role details:", roleDetailsError);
-				} else if (roleDetails) {
-					console.log("[getUserRoles] Found roles:", roleDetails);
+					if (roleDetailsError) {
+						console.error("Error fetching role details:", roleDetailsError);
+					} else if (roleDetails) {
+						if (DEBUG_AUTH) {
+							console.log("[getUserRoles] Found roles:", roleDetails);
+						}
 
 					for (const role of roleDetails as unknown as {
 						id: string;
@@ -122,27 +125,30 @@ export async function getUserRoles(): Promise<{
 						}
 					}
 				}
-			} else {
-				console.log("[getUserRoles] No user roles found for user:", user.id);
+				} else {
+					if (DEBUG_AUTH) {
+						console.log("[getUserRoles] No user roles found for user:", user.id);
+					}
+				}
+			} catch (error) {
+				console.error("Exception fetching user roles:", error);
 			}
-		} catch (error) {
-			console.error("Exception fetching user roles:", error);
 		}
-	}
 
-	// Debug logging (remove in production if needed)
-	console.log(
-		"[getUserRoles] User:",
-		user.id,
-		"Roles:",
-		roles,
-		"isAdmin:",
-		isAdmin,
-		"isSuperAdmin:",
-		isSuperAdmin,
-		"tenantId:",
-		tenantId
-	);
+		if (DEBUG_AUTH) {
+			console.log(
+				"[getUserRoles] User:",
+				user.id,
+				"Roles:",
+				roles,
+				"isAdmin:",
+				isAdmin,
+				"isSuperAdmin:",
+				isSuperAdmin,
+				"tenantId:",
+				tenantId
+			);
+		}
 
 	return {
 		roles,

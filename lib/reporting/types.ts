@@ -16,6 +16,8 @@ export type RuleConfig = {
     curve: boolean;
     unpaidCerts: boolean;
     inactivity: boolean;
+    monthlyMissingCert: boolean;
+    stageStalled: boolean;
   };
   mappings: {
     curve?: {
@@ -36,12 +38,26 @@ export type RuleConfig = {
       certTableId?: string;
       certIssuedAtColumnKey?: string;
       days?: number;
+      months?: number;
+    };
+    monthlyMissingCert?: {
+      certTableId?: string;
+      certIssuedAtColumnKey?: string;
+    };
+    stageStalled?: {
+      stageTableId?: string;
+      locationColumnKey?: string;
+      stageSinceColumnKey?: string;
+      keyword?: string;
+      weeks?: number;
     };
   };
   thresholds: {
     curve: { warnBelow: number; criticalBelow: number };
     unpaidCerts: { severity: "warn" | "critical" };
     inactivity: { severity: "warn" | "critical" };
+    monthlyMissingCert: { severity: "warn" | "critical" };
+    stageStalled: { severity: "warn" | "critical" };
   };
 };
 

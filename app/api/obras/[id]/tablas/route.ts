@@ -4,6 +4,7 @@ import {
 	ensureTablaDataType,
 	normalizeFieldKey,
 	normalizeFolderName,
+	normalizeFolderPath,
 } from "@/lib/tablas";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -163,6 +164,8 @@ export async function POST(request: Request, context: RouteContext) {
 					: "manual";
 		const rawOcrFolderName =
 			typeof body.ocrFolderName === "string" ? body.ocrFolderName : "";
+		const rawOcrFolderPath =
+			typeof body.ocrFolderPath === "string" ? body.ocrFolderPath : "";
 		const rawOcrDocType =
 			typeof body.ocrDocType === "string" ? body.ocrDocType.trim() : "";
 	const rawOcrInstructions =
@@ -171,9 +174,14 @@ export async function POST(request: Request, context: RouteContext) {
 				: "";
 		const rawOcrTemplateId =
 			typeof body.ocrTemplateId === "string" ? body.ocrTemplateId : null;
-		const normalizedOcrFolderName = normalizeFolderName(rawOcrFolderName);
+		const normalizedOcrFolderPath = normalizeFolderPath(
+			rawOcrFolderPath || rawOcrFolderName
+		);
+		const normalizedOcrFolderName = normalizeFolderName(
+			normalizedOcrFolderPath.split("/").pop() ?? rawOcrFolderName
+		);
 		const needsOcrFolder = sourceType === "ocr";
-		if (needsOcrFolder && !normalizedOcrFolderName) {
+		if (needsOcrFolder && !normalizedOcrFolderPath) {
 			return NextResponse.json(
 				{ error: "Debes definir un nombre de carpeta OCR válido" },
 				{ status: 400 }
@@ -197,7 +205,7 @@ export async function POST(request: Request, context: RouteContext) {
 				: "both";
 			settings = {
 				...settings,
-				ocrFolder: normalizedOcrFolderName,
+				ocrFolder: normalizedOcrFolderPath,
 				ocrFolderLabel: rawOcrFolderName.trim() || normalizedOcrFolderName,
 				ocrNested: hasNestedData,
 				ocrDocType: rawOcrDocType || null,
@@ -258,7 +266,7 @@ export async function POST(request: Request, context: RouteContext) {
 
 		const supabase = await createClient();
 
-		if (needsOcrFolder && normalizedOcrFolderName) {
+		if (needsOcrFolder && normalizedOcrFolderPath) {
 			const { data: existingOcr, error: existingOcrError } = await supabase
 				.from("obra_tablas")
 				.select("id, settings")
@@ -270,7 +278,8 @@ export async function POST(request: Request, context: RouteContext) {
 				const folderValueRaw = tablaSettings["ocrFolder"];
 				const folderValue =
 					typeof folderValueRaw === "string" ? folderValueRaw : "";
-				return folderValue === normalizedOcrFolderName;
+				const normalizedExisting = normalizeFolderPath(folderValue);
+				return normalizedExisting === normalizedOcrFolderPath;
 			});
 			if (folderTaken) {
 				return NextResponse.json(
@@ -312,8 +321,8 @@ export async function POST(request: Request, context: RouteContext) {
 			throw columnsError;
 		}
 
-		if (needsOcrFolder && normalizedOcrFolderName) {
-			const folderKey = `${obraId}/${normalizedOcrFolderName}/.keep`;
+		if (needsOcrFolder && normalizedOcrFolderPath) {
+			const folderKey = `${obraId}/${normalizedOcrFolderPath}/.keep`;
 			try {
 				const { error: folderError } = await supabase.storage
 					.from("obra-documents")

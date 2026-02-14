@@ -89,6 +89,7 @@ export type ColumnDef<Row extends FormTableRow> = {
 	width?: number;
 	enableResize?: boolean;
 	enableSort?: boolean;
+	cellClassName?: string | ((row: Row) => string | undefined);
 };
 
 export type HeaderGroup = {
@@ -174,9 +175,14 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	showActionsColumn?: boolean;
 	/** Controls whether the default toolbar should show the "Agregar fila" button. Defaults to true. */
 	allowAddRows?: boolean;
+	/** Optional row class resolver to support conditional row coloring. */
+	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
+	/** Optional badges rendered on each row (for overlapping rule indicators, etc.). */
+	rowOverlayBadges?: (
+		row: Row,
+		rowIndex: number
+	) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>;
 };
-
-
 
 
 

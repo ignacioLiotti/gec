@@ -35,6 +35,13 @@ type QuickAction = {
 	position: number;
 };
 
+function isMissingQuickActionsTableError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const maybe = error as { code?: string; message?: string };
+	if (maybe.code !== "PGRST205") return false;
+	return (maybe.message ?? "").includes("obra_default_quick_actions");
+}
+
 async function getAuthContext() {
 	const supabase = await createClient();
 	const {
@@ -201,16 +208,25 @@ export async function GET() {
 			};
 		});
 
-		const { data: quickActions, error: quickActionsError } = await supabase
-			.from("obra_default_quick_actions")
-			.select("id, name, description, folder_paths, position")
-			.eq("tenant_id", tenantId)
-			.order("position", { ascending: true });
+			const { data: quickActions, error: quickActionsError } = await supabase
+				.from("obra_default_quick_actions")
+				.select("id, name, description, folder_paths, position")
+				.eq("tenant_id", tenantId)
+				.order("position", { ascending: true });
 
-		if (quickActionsError) {
-			console.error("[obra-defaults:get] quick actions error:", quickActionsError);
-			throw quickActionsError;
-		}
+			if (quickActionsError) {
+				if (isMissingQuickActionsTableError(quickActionsError)) {
+					console.warn(
+						"[obra-defaults:get] quick actions table missing (migration not applied), returning empty list"
+					);
+					return NextResponse.json({
+						folders: enrichedFolders,
+						quickActions: [],
+					});
+				}
+				console.error("[obra-defaults:get] quick actions error:", quickActionsError);
+				throw quickActionsError;
+			}
 
 		return NextResponse.json({
 			folders: enrichedFolders,
@@ -507,28 +523,45 @@ export async function POST(request: Request) {
 
 			const description = typeof body.description === "string" ? body.description.trim() : null;
 
-			const { data: existingActions } = await supabase
-				.from("obra_default_quick_actions")
-				.select("position")
-				.eq("tenant_id", tenantId)
-				.order("position", { ascending: false })
-				.limit(1);
+				const { data: existingActions, error: existingActionsError } = await supabase
+					.from("obra_default_quick_actions")
+					.select("position")
+					.eq("tenant_id", tenantId)
+					.order("position", { ascending: false })
+					.limit(1);
+				if (existingActionsError) {
+					if (isMissingQuickActionsTableError(existingActionsError)) {
+						return NextResponse.json(
+							{ error: "Quick actions unavailable: missing database migration 0070_obra_quick_actions.sql" },
+							{ status: 503 }
+						);
+					}
+					throw existingActionsError;
+				}
 
 			const nextPosition = (existingActions?.[0]?.position ?? -1) + 1;
 
-			const { data: quickAction, error: quickActionError } = await supabase
-				.from("obra_default_quick_actions")
-				.insert({
+				const { data: quickAction, error: quickActionError } = await supabase
+					.from("obra_default_quick_actions")
+					.insert({
 					tenant_id: tenantId,
 					name: rawName,
 					description,
 					folder_paths: folderPaths,
 					position: nextPosition,
 				})
-				.select("id, name, description, folder_paths, position")
-				.single();
+					.select("id, name, description, folder_paths, position")
+					.single();
 
-			if (quickActionError) throw quickActionError;
+				if (quickActionError) {
+					if (isMissingQuickActionsTableError(quickActionError)) {
+						return NextResponse.json(
+							{ error: "Quick actions unavailable: missing database migration 0070_obra_quick_actions.sql" },
+							{ status: 503 }
+						);
+					}
+					throw quickActionError;
+				}
 
 			return NextResponse.json({
 				quickAction: {
@@ -893,15 +926,23 @@ export async function DELETE(request: Request) {
 				.eq("tenant_id", tenantId);
 
 			if (error) throw error;
-		} else if (type === "quick-action") {
-			const { error } = await supabase
-				.from("obra_default_quick_actions")
-				.delete()
-				.eq("id", id)
-				.eq("tenant_id", tenantId);
+			} else if (type === "quick-action") {
+				const { error } = await supabase
+					.from("obra_default_quick_actions")
+					.delete()
+					.eq("id", id)
+					.eq("tenant_id", tenantId);
 
-			if (error) throw error;
-		} else {
+				if (error) {
+					if (isMissingQuickActionsTableError(error)) {
+						return NextResponse.json(
+							{ error: "Quick actions unavailable: missing database migration 0070_obra_quick_actions.sql" },
+							{ status: 503 }
+						);
+					}
+					throw error;
+				}
+			} else {
 			return NextResponse.json({ error: "Invalid type" }, { status: 400 });
 		}
 

@@ -36,7 +36,9 @@ export function ReportClient({ obraId }: { obraId: string }) {
   const [recomputeLogs, setRecomputeLogs] = useState<any[]>([]);
   const [jsonDraft, setJsonDraft] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [builderPack, setBuilderPack] = useState<"curve" | "unpaidCerts" | "inactivity">("curve");
+  const [builderPack, setBuilderPack] = useState<
+    "curve" | "unpaidCerts" | "inactivity" | "monthlyMissingCert" | "stageStalled"
+  >("curve");
   const [showJson, setShowJson] = useState(false);
   const [periodKey, setPeriodKey] = useState(() => {
     const now = new Date();
@@ -67,7 +69,7 @@ export function ReportClient({ obraId }: { obraId: string }) {
   }, [config]);
 
   const tableOptions = useMemo(
-    () => tables.filter((t) => t.sourceType !== "macro"),
+    () => tables.filter((t) => t.sourceType !== "default"),
     [tables]
   );
 
@@ -98,7 +100,15 @@ export function ReportClient({ obraId }: { obraId: string }) {
           ? config.mappings.inactivity?.measurementTableId
             ? columnsByTable.get(config.mappings.inactivity.measurementTableId) ?? []
             : []
-          : [];
+          : builderPack === "monthlyMissingCert"
+            ? config.mappings.monthlyMissingCert?.certTableId
+              ? columnsByTable.get(config.mappings.monthlyMissingCert.certTableId) ?? []
+              : []
+            : builderPack === "stageStalled"
+              ? config.mappings.stageStalled?.stageTableId
+                ? columnsByTable.get(config.mappings.stageStalled.stageTableId) ?? []
+                : []
+              : [];
 
   const handleSave = async () => {
     if (!resolvedObraId) return;
@@ -242,6 +252,8 @@ export function ReportClient({ obraId }: { obraId: string }) {
                   <SelectItem value="curve">Curva</SelectItem>
                   <SelectItem value="unpaidCerts">Certificados impagos</SelectItem>
                   <SelectItem value="inactivity">Inactividad</SelectItem>
+                  <SelectItem value="monthlyMissingCert">Falta mensual certificado</SelectItem>
+                  <SelectItem value="stageStalled">Etapa detenida</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -440,6 +452,136 @@ export function ReportClient({ obraId }: { obraId: string }) {
                 </div>
               </>
             )}
+
+            {builderPack === "monthlyMissingCert" && (
+              <>
+                <div className="grid gap-1">
+                  <Label>Tabla certificados</Label>
+                  <Select
+                    value={config.mappings.monthlyMissingCert?.certTableId ?? ""}
+                    onValueChange={(value) =>
+                      setConfig({
+                        ...config,
+                        enabledPacks: { ...config.enabledPacks, monthlyMissingCert: true },
+                        mappings: {
+                          ...config.mappings,
+                          monthlyMissingCert: {
+                            ...config.mappings.monthlyMissingCert,
+                            certTableId: value,
+                          },
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar tabla" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {builderTableOptions.map((table) => (
+                        <SelectItem key={table.id} value={table.id}>
+                          {table.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label>Fecha certificado</Label>
+                  <Select
+                    value={config.mappings.monthlyMissingCert?.certIssuedAtColumnKey ?? ""}
+                    onValueChange={(value) =>
+                      setConfig({
+                        ...config,
+                        enabledPacks: { ...config.enabledPacks, monthlyMissingCert: true },
+                        mappings: {
+                          ...config.mappings,
+                          monthlyMissingCert: {
+                            ...config.mappings.monthlyMissingCert,
+                            certIssuedAtColumnKey: value,
+                          },
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {builderColumns.map((col) => (
+                        <SelectItem key={col.key} value={col.key}>
+                          {col.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
+            {builderPack === "stageStalled" && (
+              <>
+                <div className="grid gap-1">
+                  <Label>Tabla de etapas</Label>
+                  <Select
+                    value={config.mappings.stageStalled?.stageTableId ?? ""}
+                    onValueChange={(value) =>
+                      setConfig({
+                        ...config,
+                        enabledPacks: { ...config.enabledPacks, stageStalled: true },
+                        mappings: {
+                          ...config.mappings,
+                          stageStalled: {
+                            ...config.mappings.stageStalled,
+                            stageTableId: value,
+                          },
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar tabla" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {builderTableOptions.map((table) => (
+                        <SelectItem key={table.id} value={table.id}>
+                          {table.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label>Columna ubicación/etapa</Label>
+                  <Select
+                    value={config.mappings.stageStalled?.locationColumnKey ?? ""}
+                    onValueChange={(value) =>
+                      setConfig({
+                        ...config,
+                        enabledPacks: { ...config.enabledPacks, stageStalled: true },
+                        mappings: {
+                          ...config.mappings,
+                          stageStalled: {
+                            ...config.mappings.stageStalled,
+                            locationColumnKey: value,
+                          },
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar columna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {builderColumns.map((col) => (
+                        <SelectItem key={col.key} value={col.key}>
+                          {col.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
         </Card>
 
@@ -457,6 +599,18 @@ export function ReportClient({ obraId }: { obraId: string }) {
             columnsByTable={columnsByTable}
           />
           <PackInactivity
+            config={config}
+            setConfig={setConfig}
+            tables={tableOptions}
+            columnsByTable={columnsByTable}
+          />
+          <PackMonthlyMissingCert
+            config={config}
+            setConfig={setConfig}
+            tables={tableOptions}
+            columnsByTable={columnsByTable}
+          />
+          <PackStageStalled
             config={config}
             setConfig={setConfig}
             tables={tableOptions}
@@ -1030,6 +1184,260 @@ function PackInactivity({
                 mappings: {
                   ...config.mappings,
                   inactivity: { ...inactivity, days: Number(e.target.value || 0) },
+                },
+              })
+            }
+          />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function PackMonthlyMissingCert({
+  config,
+  setConfig,
+  tables,
+  columnsByTable,
+}: {
+  config: RuleConfig;
+  setConfig: (config: RuleConfig) => void;
+  tables: ReportTable[];
+  columnsByTable: Map<string, ReportTable["columns"]>;
+}) {
+  const missing = config.mappings.monthlyMissingCert ?? {};
+  const selectedColumns = missing.certTableId
+    ? columnsByTable.get(missing.certTableId) ?? []
+    : [];
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Pack Falta mensual certificado</div>
+          <p className="text-sm text-muted-foreground">
+            Alerta si hubo certificados antes y falta el del período actual.
+          </p>
+        </div>
+        <Switch
+          checked={config.enabledPacks.monthlyMissingCert}
+          onCheckedChange={(checked) =>
+            setConfig({
+              ...config,
+              enabledPacks: { ...config.enabledPacks, monthlyMissingCert: checked },
+            })
+          }
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-1">
+          <Label>Tabla certificados</Label>
+          <Select
+            value={missing.certTableId ?? ""}
+            onValueChange={(value) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  monthlyMissingCert: { ...missing, certTableId: value },
+                },
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar tabla" />
+            </SelectTrigger>
+            <SelectContent>
+              {tables.map((table) => (
+                <SelectItem key={table.id} value={table.id}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Fecha certificado</Label>
+          <Select
+            value={missing.certIssuedAtColumnKey ?? ""}
+            onValueChange={(value) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  monthlyMissingCert: {
+                    ...missing,
+                    certIssuedAtColumnKey: value,
+                  },
+                },
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar columna" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectedColumns.map((col) => (
+                <SelectItem key={col.key} value={col.key}>
+                  {col.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function PackStageStalled({
+  config,
+  setConfig,
+  tables,
+  columnsByTable,
+}: {
+  config: RuleConfig;
+  setConfig: (config: RuleConfig) => void;
+  tables: ReportTable[];
+  columnsByTable: Map<string, ReportTable["columns"]>;
+}) {
+  const stalled = config.mappings.stageStalled ?? {};
+  const selectedColumns = stalled.stageTableId
+    ? columnsByTable.get(stalled.stageTableId) ?? []
+    : [];
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Pack Etapa detenida</div>
+          <p className="text-sm text-muted-foreground">
+            Alerta si permanece en una etapa (ej. Tesorería) más de X semanas.
+          </p>
+        </div>
+        <Switch
+          checked={config.enabledPacks.stageStalled}
+          onCheckedChange={(checked) =>
+            setConfig({
+              ...config,
+              enabledPacks: { ...config.enabledPacks, stageStalled: checked },
+            })
+          }
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-1">
+          <Label>Tabla de etapas</Label>
+          <Select
+            value={stalled.stageTableId ?? ""}
+            onValueChange={(value) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  stageStalled: { ...stalled, stageTableId: value },
+                },
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar tabla" />
+            </SelectTrigger>
+            <SelectContent>
+              {tables.map((table) => (
+                <SelectItem key={table.id} value={table.id}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Columna ubicación/etapa</Label>
+          <Select
+            value={stalled.locationColumnKey ?? ""}
+            onValueChange={(value) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  stageStalled: { ...stalled, locationColumnKey: value },
+                },
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar columna" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectedColumns.map((col) => (
+                <SelectItem key={col.key} value={col.key}>
+                  {col.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Fecha inicio etapa (opcional)</Label>
+          <Select
+            value={stalled.stageSinceColumnKey ?? ""}
+            onValueChange={(value) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  stageStalled: { ...stalled, stageSinceColumnKey: value },
+                },
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Usar updated_at/created_at" />
+            </SelectTrigger>
+            <SelectContent>
+              {selectedColumns.map((col) => (
+                <SelectItem key={col.key} value={col.key}>
+                  {col.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Texto etapa</Label>
+          <Input
+            value={stalled.keyword ?? "Tesorería"}
+            onChange={(e) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  stageStalled: { ...stalled, keyword: e.target.value },
+                },
+              })
+            }
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Semanas</Label>
+          <Input
+            type="number"
+            min={1}
+            value={stalled.weeks ?? 2}
+            onChange={(e) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  stageStalled: { ...stalled, weeks: Number(e.target.value || 0) },
                 },
               })
             }

@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -65,7 +66,17 @@ import { FileTreeSidebar } from './components/file-tree-sidebar';
 import { AddRowDialog } from './components/add-row-dialog';
 import { useDocumentsStore, needsRefetch, markDocumentsFetched, setDocumentsLoading } from './hooks/useDocumentsStore';
 import { OcrTemplateConfigurator } from '@/app/admin/obra-defaults/_components/OcrTemplateConfigurator';
-import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType, TABLA_DATA_TYPES, type TablaColumnDataType } from '@/lib/tablas';
+import {
+  normalizeFolderName,
+  normalizeFolderPath,
+  getParentFolderPath,
+  normalizeFieldKey,
+  ensureTablaDataType,
+  TABLA_DATA_TYPES,
+  evaluateTablaFormula,
+  toNumericValue,
+  type TablaColumnDataType
+} from '@/lib/tablas';
 import { cn } from '@/lib/utils';
 import { formatReadableBytes } from '@/lib/tenant-expenses';
 import type { UsageDelta } from '@/lib/tenant-usage';
@@ -164,6 +175,42 @@ type OcrTemplateOption = {
     description?: string;
   }>;
 };
+
+type TablaSchemaDraftColumn = {
+  localId: string;
+  id?: string;
+  label: string;
+  fieldKey: string;
+  dataType: TablaColumnDataType;
+  required: boolean;
+  formula: string;
+  warnBelow: string;
+  warnAbove: string;
+  criticalBelow: string;
+  criticalAbove: string;
+};
+
+function getConditionalClass(
+  value: unknown,
+  config?: Record<string, unknown>
+): string | undefined {
+  const conditional =
+    config?.conditional && typeof config.conditional === 'object'
+      ? (config.conditional as Record<string, unknown>)
+      : null;
+  if (!conditional) return undefined;
+  const numeric = toNumericValue(value);
+  if (numeric == null) return undefined;
+  const criticalBelow = toNumericValue(conditional.criticalBelow);
+  const criticalAbove = toNumericValue(conditional.criticalAbove);
+  const warnBelow = toNumericValue(conditional.warnBelow);
+  const warnAbove = toNumericValue(conditional.warnAbove);
+  if (criticalBelow != null && numeric <= criticalBelow) return 'bg-red-100 text-red-800';
+  if (criticalAbove != null && numeric >= criticalAbove) return 'bg-red-100 text-red-800';
+  if (warnBelow != null && numeric <= warnBelow) return 'bg-amber-100 text-amber-800';
+  if (warnAbove != null && numeric >= warnAbove) return 'bg-amber-100 text-amber-800';
+  return undefined;
+}
 
 type FileManagerProps = {
   obraId: string;
@@ -473,6 +520,7 @@ export function FileManager({
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [isAddRowDialogOpen, setIsAddRowDialogOpen] = useState(false);
   const [createFolderParent, setCreateFolderParent] = useState<FileSystemItem | null>(null);
+  const [convertFolderTarget, setConvertFolderTarget] = useState<FileSystemItem | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [createFolderMode, setCreateFolderMode] = useState<'normal' | 'data' | null>(null);
@@ -492,6 +540,9 @@ export function FileManager({
       scope: 'item',
     },
   ]);
+  const [isSchemaDialogOpen, setIsSchemaDialogOpen] = useState(false);
+  const [isSavingSchema, setIsSavingSchema] = useState(false);
+  const [schemaDraftColumns, setSchemaDraftColumns] = useState<TablaSchemaDraftColumn[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FileSystemItem } | null>(null);
@@ -514,7 +565,16 @@ export function FileManager({
 
   const ocrFolderMap = useMemo(() => {
     const map = new Map<string, OcrFolderLink>();
-    ocrFolderLinks.forEach((link) => map.set(link.folderName, link));
+    ocrFolderLinks.forEach((link) => {
+      const normalizedPath = normalizeFolderPath(link.folderName);
+      if (normalizedPath) {
+        map.set(normalizedPath, link);
+      }
+      const normalizedFlat = normalizeFolderName(link.folderName);
+      if (normalizedFlat) {
+        map.set(normalizedFlat, link);
+      }
+    });
     return map;
   }, [ocrFolderLinks]);
 
@@ -528,21 +588,20 @@ export function FileManager({
     (doc: FileSystemItem | null) => {
       if (!doc?.storagePath) return null;
       if (doc.ocrFolderName) {
-        const normalized = normalizeFolderName(doc.ocrFolderName);
-        const direct = ocrFolderMap.get(doc.ocrFolderName);
+        const normalized = normalizeFolderPath(doc.ocrFolderName);
+        const direct = ocrFolderMap.get(normalized);
         if (direct) return direct;
-        const normalizedLink = ocrFolderMap.get(normalized);
-        if (normalizedLink) return normalizedLink;
       }
       const segments = doc.storagePath.split('/').filter(Boolean);
-      if (segments.length < 2) return null;
-      const folderSegment = segments[segments.length - 2];
-      const normalizedFolder = normalizeFolderName(folderSegment);
-      return (
-        ocrFolderMap.get(folderSegment) ||
-        ocrFolderMap.get(normalizedFolder) ||
-        null
-      );
+      if (segments.length < 3) return null;
+      const relativePath = normalizeFolderPath(segments.slice(1, -1).join('/'));
+      let cursor = relativePath;
+      while (cursor) {
+        const link = ocrFolderMap.get(cursor);
+        if (link) return link;
+        cursor = getParentFolderPath(cursor);
+      }
+      return null;
     },
     [ocrFolderMap]
   );
@@ -577,6 +636,7 @@ export function FileManager({
     ]);
     setCreateFolderMode(null);
     setCreateFolderParent(null);
+    setConvertFolderTarget(null);
   }, []);
 
   const previewRequestIdRef = useRef(0);
@@ -618,16 +678,15 @@ export function FileManager({
     while (stack.length > 0) {
       const node = stack.pop();
       if (!node || node.type !== 'folder') continue;
-      const folderKey = node.ocrFolderName ?? node.name;
-      const normalizedKey = normalizeFolderName(folderKey);
+      const folderKey = normalizeFolderPath((node.relativePath as string | undefined) ?? node.ocrFolderName ?? node.name);
       const link =
         ocrFolderMap.get(folderKey) ||
-        ocrFolderMap.get(normalizedKey);
+        ocrFolderMap.get(normalizeFolderName(folderKey));
       if (link) {
         node.ocrEnabled = true;
         node.ocrTablaId = link.tablaId;
         node.ocrTablaName = link.tablaName;
-        node.ocrFolderName = link.folderName ?? normalizedKey;
+        node.ocrFolderName = link.folderName ?? folderKey;
         node.ocrTablaColumns = link.columns;
         node.ocrTablaRows = link.rows;
         node.extractedData = link.orders;
@@ -661,6 +720,15 @@ export function FileManager({
       current = parentMapRef.current.get(current.id) ?? null;
     }
     return segments.reverse();
+  }, []);
+
+  const hasOcrAncestor = useCallback((item: FileSystemItem | null | undefined) => {
+    let current: FileSystemItem | null | undefined = item;
+    while (current) {
+      if (current.ocrEnabled) return true;
+      current = parentMapRef.current.get(current.id) ?? null;
+    }
+    return false;
   }, []);
 
   const containsFiles = (dataTransfer?: DataTransfer | null) => {
@@ -921,6 +989,19 @@ export function FileManager({
     return current;
   }, []);
 
+  const collectExpandableFolderIds = useCallback((tree: FileSystemItem | null) => {
+    const ids = new Set<string>();
+    const walk = (node: FileSystemItem | null) => {
+      if (!node) return;
+      if (node.type === 'folder') {
+        ids.add(node.id);
+      }
+      node.children?.forEach((child) => walk(child));
+    };
+    walk(tree);
+    return ids;
+  }, []);
+
   const refreshOcrFolderLinks = useCallback(async (options: { skipCache?: boolean } = {}) => {
     if (!obraId) return;
     if (Date.now() < rateLimitUntilRef.current) return;
@@ -993,12 +1074,7 @@ export function FileManager({
         if (!selectedFolder) {
           setSelectedFolder(cachedTree);
         }
-        const foldersToExpand = ['root'];
-        const foldersWithContent = cachedTree.children
-          ?.filter(c => c.type === 'folder' && c.children && c.children.length > 0)
-          .map(c => c.id) || [];
-        foldersToExpand.push(...foldersWithContent);
-        setExpandedFolderIds(new Set(foldersToExpand));
+        setExpandedFolderIds(collectExpandableFolderIds(cachedTree));
         markDocumentsFetched();
         return;
       }
@@ -1038,12 +1114,7 @@ export function FileManager({
             if (sheetDocument) setSheetDocument(updatedDoc);
           }
         }
-        const foldersToExpand = ['root'];
-        const foldersWithContent = tree.children
-          ?.filter((c: FileSystemItem) => c.type === 'folder' && c.children && c.children.length > 0)
-          .map((c: FileSystemItem) => c.id) || [];
-        foldersToExpand.push(...foldersWithContent);
-        setExpandedFolderIds(new Set(foldersToExpand));
+        setExpandedFolderIds(collectExpandableFolderIds(tree));
       }
       setCachedOcrLinks(obraId, links);
       setOcrFolderLinks(links);
@@ -1057,7 +1128,7 @@ export function FileManager({
     } finally {
       markDocumentsFetched();
     }
-  }, [findDocumentInTreeByStoragePath, findFolderInTreeBySegments, getPathSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
+  }, [collectExpandableFolderIds, findDocumentInTreeByStoragePath, findFolderInTreeBySegments, getPathSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
 
   useEffect(() => {
     if (!obraId) return;
@@ -1256,9 +1327,8 @@ export function FileManager({
 
     let parentLink: OcrFolderLink | null = null;
     if (resolvedParent?.ocrEnabled) {
-      const folderKey = resolvedParent.ocrFolderName ?? resolvedParent.name;
-      const normalizedKey = normalizeFolderName(folderKey);
-      parentLink = ocrFolderMap.get(folderKey) || ocrFolderMap.get(normalizedKey) || null;
+      const folderKey = normalizeFolderPath((resolvedParent.relativePath ?? resolvedParent.ocrFolderName ?? resolvedParent.name));
+      parentLink = ocrFolderMap.get(folderKey) || ocrFolderMap.get(normalizeFolderName(folderKey)) || null;
     }
     const isOcrTableView =
       resolvedParent?.ocrEnabled &&
@@ -1488,6 +1558,11 @@ export function FileManager({
     return getPathSegments(createFolderParent).join('/');
   }, [createFolderParent, getPathSegments]);
 
+  const convertFolderPath = useMemo(() => {
+    if (!convertFolderTarget) return '';
+    return getPathSegments(convertFolderTarget).join('/');
+  }, [convertFolderTarget, getPathSegments]);
+
   const resolveParentSegments = useCallback((parent: FileSystemItem | null) => {
     if (!parent || parent.id === 'root') return [] as string[];
     return getPathSegments(parent);
@@ -1505,6 +1580,10 @@ export function FileManager({
       return;
     }
     const parentTarget = createFolderParent ?? fileTree;
+    if (createFolderParent && hasOcrAncestor(createFolderParent)) {
+      setCreateFolderError('No podés crear carpetas dentro de una carpeta de datos.');
+      return;
+    }
     const existingFolder = parentTarget?.children?.some(
       (child) =>
         child.type === 'folder' && normalizeFolderName(child.name) === normalizedFolder
@@ -1540,10 +1619,13 @@ export function FileManager({
       console.error('Error creating folder:', error);
       toast.error('Error creando carpeta');
     }
-  }, [buildFileTree, createFolderParent, fileTree, newFolderName, obraId, ocrFolderLinks, resetNewFolderForm, resolveParentSegments, supabase]);
+  }, [buildFileTree, createFolderParent, fileTree, hasOcrAncestor, newFolderName, obraId, ocrFolderLinks, resetNewFolderForm, resolveParentSegments, supabase]);
 
   const createDataFolder = useCallback(async () => {
-    const rawFolderName = newFolderName.trim();
+    const convertingExistingFolder = Boolean(convertFolderTarget);
+    const rawFolderName = convertingExistingFolder
+      ? convertFolderTarget?.name?.trim() ?? ''
+      : newFolderName.trim();
     if (!rawFolderName) {
       toast.error('Ingresá un nombre de carpeta válido');
       return;
@@ -1554,15 +1636,28 @@ export function FileManager({
       return;
     }
     const parentTarget = createFolderParent ?? fileTree;
-    const existingFolder = parentTarget?.children?.some(
-      (child) =>
-        child.type === 'folder' && normalizeFolderName(child.name) === normalizedFolder
-    );
-    if (existingFolder) {
+    if (createFolderParent && hasOcrAncestor(createFolderParent)) {
+      setCreateFolderError('No podés crear carpetas dentro de una carpeta de datos.');
+      return;
+    }
+    const folderRelativePath = convertingExistingFolder
+      ? normalizeFolderPath(getPathSegments(convertFolderTarget).join('/'))
+      : normalizeFolderPath([...resolveParentSegments(createFolderParent), normalizedFolder].join('/'));
+    if (!folderRelativePath) {
+      toast.error('No se pudo resolver la carpeta de datos');
+      return;
+    }
+    if (
+      !convertingExistingFolder &&
+      parentTarget?.children?.some(
+        (child) =>
+          child.type === 'folder' && normalizeFolderName(child.name) === normalizedFolder
+      )
+    ) {
       setCreateFolderError('Ya existe una carpeta con ese nombre. Elegí otro nombre.');
       return;
     }
-    if (!createFolderParent && ocrFolderLinks.some((link) => normalizeFolderName(link.folderName) === normalizedFolder)) {
+    if (ocrFolderLinks.some((link) => normalizeFolderPath(link.folderName) === folderRelativePath)) {
       setCreateFolderError('Ya existe una carpeta de datos con ese nombre. Elegí otro nombre.');
       return;
     }
@@ -1587,16 +1682,14 @@ export function FileManager({
         return;
       }
     }
-    const parentSegments = resolveParentSegments(createFolderParent);
-    const basePath = parentSegments.length ? `${obraId}/${parentSegments.join('/')}` : obraId;
-
     try {
       const payload = {
-        name: normalizedFolder,
+        name: rawFolderName,
         description: newFolderDescription.trim() || undefined,
         sourceType: 'ocr' as const, // Keep 'ocr' for backward compatibility with API
         dataInputMethod: newFolderDataInputMethod,
         ocrFolderName: normalizedFolder,
+        ocrFolderPath: folderRelativePath,
         hasNestedData: newFolderHasNested,
         ocrTemplateId: needsOcrTemplate ? newFolderOcrTemplateId : undefined,
         columns: newFolderColumns.map((column, index) => ({
@@ -1632,15 +1725,47 @@ export function FileManager({
         throw new Error(errorMessage);
       }
 
-      try {
-        await supabase.storage
-          .from('obra-documents')
-          .upload(`${basePath}/${normalizedFolder}/.keep`, new Blob([''], { type: 'text/plain' }), { upsert: true });
-      } catch (keepError) {
-        console.error('No se pudo crear la carpeta en almacenamiento', keepError);
+      if (!convertingExistingFolder) {
+        const basePath = createFolderParentPath
+          ? `${obraId}/${createFolderParentPath}`
+          : obraId;
+        try {
+          await supabase.storage
+            .from('obra-documents')
+            .upload(`${basePath}/${normalizedFolder}/.keep`, new Blob([''], { type: 'text/plain' }), { upsert: true });
+        } catch (keepError) {
+          console.error('No se pudo crear la carpeta en almacenamiento', keepError);
+        }
       }
 
-      toast.success('Carpeta de datos creada');
+      const created = await res.json().catch(() => ({}));
+      const createdTablaId = created?.tabla?.id as string | undefined;
+
+      if (convertingExistingFolder && createdTablaId && newFolderDataInputMethod !== 'manual') {
+        const filesToReprocess = (convertFolderTarget?.children ?? [])
+          .filter((child) => child.type === 'file' && child.storagePath)
+          .map((child) => child as FileSystemItem);
+        if (filesToReprocess.length > 0) {
+          await Promise.all(
+            filesToReprocess.map(async (file) => {
+              const form = new FormData();
+              form.append('existingBucket', 'obra-documents');
+              form.append('existingPath', file.storagePath!);
+              form.append('existingFileName', file.name);
+              await fetch(`/api/obras/${obraId}/tablas/${createdTablaId}/import/ocr?skipStorage=1`, {
+                method: 'POST',
+                body: form,
+              });
+            })
+          );
+        }
+      }
+
+      toast.success(
+        convertingExistingFolder
+          ? 'Carpeta convertida a extracción'
+          : 'Carpeta de datos creada'
+      );
       setIsCreateFolderOpen(false);
       resetNewFolderForm();
       await refreshOcrFolderLinks({ skipCache: true });
@@ -1662,7 +1787,11 @@ export function FileManager({
   }, [
     buildFileTree,
     createFolderParent,
+    createFolderParentPath,
+    convertFolderTarget,
+    hasOcrAncestor,
     fileTree,
+    getPathSegments,
     newFolderColumns,
     newFolderDataInputMethod,
     newFolderDescription,
@@ -1753,7 +1882,7 @@ export function FileManager({
       folderForUpload?.ocrTablaId
         ? ocrTablaMap.get(folderForUpload.ocrTablaId)
         : folderForUpload?.ocrFolderName
-          ? ocrFolderMap.get(folderForUpload.ocrFolderName)
+          ? ocrFolderMap.get(normalizeFolderPath(folderForUpload.ocrFolderName))
           : null;
     const isOcrFolder = Boolean(linkedTabla);
     let importedTablaData = false;
@@ -2000,12 +2129,13 @@ export function FileManager({
   }, [uploadFilesToFolder]);
 
   const openCreateFolderDialog = useCallback((mode: 'normal' | 'data', parent?: FileSystemItem | null) => {
-    if (parent && parent.ocrEnabled) {
+    if (parent && hasOcrAncestor(parent)) {
       toast.error('No podés crear carpetas dentro de una carpeta de datos');
       return;
     }
     setCreateFolderMode(mode);
     setCreateFolderParent(parent ?? fileTree ?? null);
+    setConvertFolderTarget(null);
     setNewFolderName('');
     setNewFolderHasNested(false);
     setIsCreateFolderOpen(true);
@@ -2024,7 +2154,35 @@ export function FileManager({
         },
       ]);
     }
-  }, [fileTree]);
+  }, [fileTree, hasOcrAncestor]);
+
+  const openConvertFolderDialog = useCallback((folder: FileSystemItem) => {
+    if (folder.type !== 'folder') return;
+    if (folder.ocrEnabled) {
+      toast.error('La carpeta ya es de extracción');
+      return;
+    }
+    const hasNestedFolders = (folder.children ?? []).some((child) => child.type === 'folder');
+    if (hasNestedFolders) {
+      toast.error('No podés convertir carpetas que tengan subcarpetas');
+      return;
+    }
+    if (hasOcrAncestor(folder)) {
+      toast.error('No podés convertir subcarpetas dentro de una carpeta de extracción');
+      return;
+    }
+    const parent = parentMapRef.current.get(folder.id) ?? fileTree ?? null;
+    setCreateFolderMode('data');
+    setCreateFolderParent(parent);
+    setConvertFolderTarget(folder);
+    setNewFolderName(folder.name);
+    setNewFolderDataInputMethod('both');
+    setNewFolderDescription('');
+    setNewFolderOcrTemplateId('');
+    setNewFolderHasNested(false);
+    setCreateFolderError(null);
+    setIsCreateFolderOpen(true);
+  }, [fileTree, hasOcrAncestor]);
 
   const handleDelete = async (item: FileSystemItem) => {
     try {
@@ -2042,25 +2200,32 @@ export function FileManager({
           toast.success('File deleted successfully');
         }
       } else {
-        const folderPath = item.id === 'root' ? obraId : `${obraId}/${item.name}`;
-
-        const { data: files, error: listError } = await supabase.storage
-          .from('obra-documents')
-          .list(folderPath, { limit: 1000 });
-
-        if (listError) throw listError;
-
-        if (files && files.length > 0) {
-          const filePaths = files.map(file => {
-            const fullPath = `${folderPath}/${file.name}`;
+        const folderStoragePath = item.storagePath ?? (item.id === 'root' ? obraId : `${obraId}/${getPathSegments(item).join('/')}`);
+        const foldersToScan = [folderStoragePath];
+        const filesToDelete: string[] = [];
+        while (foldersToScan.length > 0) {
+          const currentFolder = foldersToScan.shift()!;
+          const { data: entries, error: listError } = await supabase.storage
+            .from('obra-documents')
+            .list(currentFolder, { limit: 1000 });
+          if (listError) throw listError;
+          for (const entry of entries ?? []) {
+            const isFolder = !entry.metadata;
+            const fullPath = `${currentFolder}/${entry.name}`;
+            if (isFolder) {
+              foldersToScan.push(fullPath);
+              continue;
+            }
             deletedPaths.push(fullPath);
-            bytesFreed += file.metadata?.size ?? 0;
-            return fullPath;
-          });
+            bytesFreed += entry.metadata?.size ?? 0;
+            filesToDelete.push(fullPath);
+          }
+        }
+
+        if (filesToDelete.length > 0) {
           const { error: deleteError } = await supabase.storage
             .from('obra-documents')
-            .remove(filePaths);
-
+            .remove(filesToDelete);
           if (deleteError) throw deleteError;
         }
 
@@ -2133,14 +2298,15 @@ export function FileManager({
     if (item.type === 'file' && item.name === '.keep') {
       return null;
     }
-    const isExpanded = item.id === 'root';
     const isFolder = item.type === 'folder';
     const isOCR = item.ocrEnabled;
+    const isExpanded = item.id === 'root' || isOCR || expandedFolders.has(item.id);
     const isFolderSelected = selectedFolder?.id === item.id;
     const isDocumentSelected = selectedDocument?.id === item.id;
     const isDragTarget = draggedFolderId === item.id;
     const hasChildren = item.children && item.children.length > 0;
-    const folderLink = isFolder && item.ocrEnabled ? (ocrFolderMap.get(item.ocrFolderName ?? item.name) || ocrFolderMap.get(normalizeFolderName(item.ocrFolderName ?? item.name)) || null) : null;
+    const folderLookupKey = normalizeFolderPath((item.relativePath ?? item.ocrFolderName ?? item.name));
+    const folderLink = isFolder && item.ocrEnabled ? (ocrFolderMap.get(folderLookupKey) || ocrFolderMap.get(normalizeFolderName(folderLookupKey)) || null) : null;
     const isManualOnly = Boolean(folderLink && folderLink.dataInputMethod === 'manual');
     const rowCount = isManualOnly ? (folderLink?.rows?.length ?? 0) : 0;
     const fileCount = isFolder ? getFolderFileCount(item) : 0;
@@ -2186,7 +2352,25 @@ export function FileManager({
           `}
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
-          <span className="w-4" />
+          {isFolder && !isOCR ? (
+            <button
+              type="button"
+              className="w-4 h-4 inline-flex items-center justify-center text-stone-400 hover:text-stone-700"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleFolder(item.id);
+              }}
+              aria-label={isExpanded ? 'Contraer carpeta' : 'Expandir carpeta'}
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+            </button>
+          ) : (
+            <span className="w-4" />
+          )}
 
           {isFolder ? (
             <FolderIcon className={cn("w-4 h-4 text-stone-400 ", getFolderIconColor(item.dataInputMethod))} />
@@ -2272,7 +2456,7 @@ export function FileManager({
           )} */}
         </button>
 
-        {item.name === 'Documentos' && isExpanded && item.children && (
+        {isFolder && !isOCR && isExpanded && item.children && (
           <div className="animate-in slide-in-from-top-1 duration-200">
             {item.children.map(child => renderTreeItem(child, level + 1, item))}
           </div>
@@ -2282,6 +2466,7 @@ export function FileManager({
   }, [
     confirmDelete,
     draggedFolderId,
+    expandedFolders,
     getFolderFileCount,
     getFolderIconColor,
     getTreeFileIcon,
@@ -2296,6 +2481,7 @@ export function FileManager({
     renderOcrStatusBadge,
     selectedDocument?.id,
     selectedFolder?.id,
+    toggleFolder,
   ]);
 
   const toggleOrderExpanded = (orderId: string) => {
@@ -2590,9 +2776,8 @@ export function FileManager({
 
   const activeFolderLink = useMemo(() => {
     if (!selectedFolder?.ocrEnabled) return null;
-    const folderKey = selectedFolder.ocrFolderName ?? selectedFolder.name;
-    const normalizedKey = normalizeFolderName(folderKey);
-    return ocrFolderMap.get(folderKey) || ocrFolderMap.get(normalizedKey) || null;
+    const folderKey = normalizeFolderPath((selectedFolder.relativePath ?? selectedFolder.ocrFolderName ?? selectedFolder.name));
+    return ocrFolderMap.get(folderKey) || ocrFolderMap.get(normalizeFolderName(folderKey)) || null;
   }, [ocrFolderMap, selectedFolder]);
 
 
@@ -2618,6 +2803,106 @@ export function FileManager({
     await refreshOcrFolderLinks({ skipCache: true });
   }, [refreshOcrFolderLinks]);
 
+  const handleOpenSchemaEditor = useCallback(() => {
+    const currentColumns = activeFolderLink?.columns ?? [];
+    if (!selectedFolder?.ocrTablaId || currentColumns.length === 0) {
+      toast.error('No hay columnas para editar en esta tabla.');
+      return;
+    }
+    const draft = currentColumns.map((column) => {
+      const config =
+        column.config && typeof column.config === 'object'
+          ? (column.config as Record<string, unknown>)
+          : {};
+      const conditional =
+        config.conditional && typeof config.conditional === 'object'
+          ? (config.conditional as Record<string, unknown>)
+          : {};
+      return {
+        localId: crypto.randomUUID(),
+        id: column.id,
+        label: column.label,
+        fieldKey: column.fieldKey,
+        dataType: ensureTablaDataType(column.dataType),
+        required: column.required,
+        formula: typeof config.formula === 'string' ? config.formula : '',
+        warnBelow: typeof conditional.warnBelow === 'number' ? String(conditional.warnBelow) : '',
+        warnAbove: typeof conditional.warnAbove === 'number' ? String(conditional.warnAbove) : '',
+        criticalBelow:
+          typeof conditional.criticalBelow === 'number'
+            ? String(conditional.criticalBelow)
+            : '',
+        criticalAbove:
+          typeof conditional.criticalAbove === 'number'
+            ? String(conditional.criticalAbove)
+            : '',
+      } satisfies TablaSchemaDraftColumn;
+    });
+    setSchemaDraftColumns(draft);
+    setIsSchemaDialogOpen(true);
+  }, [activeFolderLink?.columns, selectedFolder?.ocrTablaId]);
+
+  const handleSaveSchema = useCallback(async () => {
+    const tablaId = selectedFolder?.ocrTablaId;
+    if (!tablaId) {
+      toast.error('No encontramos la tabla para guardar la estructura.');
+      return;
+    }
+    if (schemaDraftColumns.length === 0) {
+      toast.error('La tabla debe tener al menos una columna.');
+      return;
+    }
+    try {
+      const usedKeys = new Set<string>();
+      const payloadColumns = schemaDraftColumns.map((column, index) => {
+        const label = column.label.trim() || `Columna ${index + 1}`;
+        const fieldKey = normalizeFieldKey(column.fieldKey.trim() || label);
+        if (usedKeys.has(fieldKey)) {
+          throw new Error(`Field key repetido: ${fieldKey}`);
+        }
+        usedKeys.add(fieldKey);
+        const conditional: Record<string, number> = {};
+        const warnBelow = toNumericValue(column.warnBelow);
+        const warnAbove = toNumericValue(column.warnAbove);
+        const criticalBelow = toNumericValue(column.criticalBelow);
+        const criticalAbove = toNumericValue(column.criticalAbove);
+        if (warnBelow != null) conditional.warnBelow = warnBelow;
+        if (warnAbove != null) conditional.warnAbove = warnAbove;
+        if (criticalBelow != null) conditional.criticalBelow = criticalBelow;
+        if (criticalAbove != null) conditional.criticalAbove = criticalAbove;
+        const config: Record<string, unknown> = {};
+        if (column.formula.trim()) config.formula = column.formula.trim();
+        if (Object.keys(conditional).length > 0) config.conditional = conditional;
+        return {
+          id: column.id,
+          label,
+          fieldKey,
+          dataType: ensureTablaDataType(column.dataType),
+          required: column.required,
+          config,
+        };
+      });
+      setIsSavingSchema(true);
+      const res = await fetch(`/api/obras/${obraId}/tablas/${tablaId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columns: payloadColumns }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(payload?.error ?? 'No se pudo actualizar el esquema');
+      }
+      await refreshOcrFolderLinks({ skipCache: true });
+      setIsSchemaDialogOpen(false);
+      toast.success('Esquema de tabla actualizado.');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo guardar el esquema');
+    } finally {
+      setIsSavingSchema(false);
+    }
+  }, [obraId, refreshOcrFolderLinks, schemaDraftColumns, selectedFolder?.ocrTablaId]);
+
   const folderOrders = useMemo<MaterialOrder[]>(() => {
     if (!selectedFolder?.ocrEnabled) return [];
     return (activeFolderLink?.orders ?? (selectedFolder.extractedData || [])) as MaterialOrder[];
@@ -2633,6 +2918,15 @@ export function FileManager({
       const mapped: OcrDocumentTableRow = { id: row.id };
       columns.forEach((column) => {
         mapped[column.fieldKey] = data[column.fieldKey];
+      });
+      columns.forEach((column) => {
+        const formula =
+          column.config && typeof column.config.formula === 'string'
+            ? column.config.formula.trim()
+            : '';
+        if (!formula) return;
+        const computed = evaluateTablaFormula(formula, mapped);
+        mapped[column.fieldKey] = computed;
       });
       if (typeof data.__docPath === 'string') {
         mapped.__docPath = data.__docPath;
@@ -2705,9 +2999,16 @@ export function FileManager({
       id: column.id,
       label: column.label,
       field: column.fieldKey as ColumnField<OcrDocumentTableRow>,
-      editable: canEditTabla,
+      editable:
+        canEditTabla &&
+        !(
+          column.config &&
+          typeof column.config.formula === 'string' &&
+          column.config.formula.trim().length > 0
+        ),
       cellType: mapDataTypeToCellType(column.dataType),
       required: column.required,
+      cellClassName: (row) => getConditionalClass(row[column.fieldKey], column.config),
     }));
     const docSourceColumn: ColumnDef<OcrDocumentTableRow> = {
       id: 'doc-source',
@@ -3038,6 +3339,14 @@ export function FileManager({
       defaultRows: ocrTableRows,
       emptyStateMessage: 'Sin datos disponibles para esta tabla.',
       showInlineSearch: true,
+      rowClassName: (row) => {
+        for (const col of tablaColumns) {
+          const style = getConditionalClass(row[col.fieldKey], col.config);
+          if (style?.includes('bg-red-100')) return 'bg-red-50/70';
+          if (style?.includes('bg-amber-100')) return 'bg-amber-50/70';
+        }
+        return undefined;
+      },
       onSave: canEditTabla ? handleSaveTablaRows : undefined,
       footerActions: activeFolderLink ? (
         <div className="flex items-center gap-2">
@@ -3066,19 +3375,31 @@ export function FileManager({
         </div>
       ) : null,
       toolbarActions: selectedFolder?.ocrTablaId ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => router.push(`/excel/${obraId}/tabla/${selectedFolder.ocrTablaId}/reporte`)}
-          className="gap-1.5"
-        >
-          <ClipboardList className="w-3.5 h-3.5" />
-          Generar reporte
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleOpenSchemaEditor}
+            className="gap-1.5"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            Editar columnas
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/excel/${obraId}/tabla/${selectedFolder.ocrTablaId}/reporte`)}
+            className="gap-1.5"
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            Generar reporte
+          </Button>
+        </div>
       ) : null,
     };
-  }, [activeFolderLink, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleAddManualRow, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, router, selectedFolder?.id, selectedFolder?.ocrTablaId, supabase]);
+  }, [activeFolderLink, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleAddManualRow, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleOpenSchemaEditor, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, router, selectedFolder?.id, selectedFolder?.ocrTablaId, supabase]);
 
   const handleRetryDocumentOcr = useCallback(
     async (doc: FileSystemItem | null) => {
@@ -3221,13 +3542,6 @@ export function FileManager({
     const items = selectedFolder.children || [];
     const folders = items.filter(item => item.type === 'folder');
     const files = items.filter(item => item.type === 'file' && item.name !== '.keep');
-    const sortedItems = [...folders, ...files];
-    const totalPages = Math.max(1, Math.ceil(sortedItems.length / ITEMS_PER_PAGE));
-    const currentPage = Math.min(folderPage, totalPages);
-    const pagedItems = sortedItems.slice(
-      (currentPage - 1) * ITEMS_PER_PAGE,
-      currentPage * ITEMS_PER_PAGE
-    );
 
     // Unified folder header (tab style) for both OCR and normal folders
     const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
@@ -3408,7 +3722,7 @@ export function FileManager({
     }
 
     const folderBody = (() => {
-      if (sortedItems.length === 0) {
+      if (folders.length === 0 && files.length === 0) {
         return (
           <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center rounded-lg bg-white">
             <Folder className="w-10 h-10 mb-3 text-stone-300" />
@@ -3428,41 +3742,65 @@ export function FileManager({
       }
 
       return (
-        <>
+        <div className="h-full min-h-0 flex flex-col">
+          {folders.length > 0 && (
+            <div className="px-4 pt-4 pb-3 border-b border-stone-100">
+              <div className="overflow-x-auto overflow-y-hidden">
+                <div className="flex items-start gap-4 w-max pr-2">
+                  {folders.map((item) => {
+                    const isDragTarget = draggedFolderId === item.id;
+                    return (
+                      <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2 shrink-0">
+                        <div
+                          className={`flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-2' : ''}`}
+                          onClick={() => handleFolderClick(item)}
+                          onDragEnter={(event) => handleFolderDragEnter(event, item)}
+                          onDragOver={(event) => handleFolderDragOver(event, item)}
+                          onDragLeave={(event) => handleFolderDragLeave(event, item)}
+                          onDrop={(event) => handleFolderDrop(event, item)}
+                        >
+                          <div className="pt-15 flex flex-col items-center justify-center w-full">
+                            {item.ocrEnabled ? (
+                              <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
+                            ) : (
+                              <Folder className="w-10 h-10 text-stone-500 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                            )}
+                            <span className="text-sm text-center truncate w-full text-stone-700" title={item.name}>
+                              {item.name}
+                            </span>
+                          </div>
+                          <FolderFront className="w-[110px] h-[80px] absolute -bottom-1 -left-1 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div
-            className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg transition-colors mt-12 ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''
-              }`}
+            className={`flex-1 min-h-0 overflow-y-auto p-4 transition-colors ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''}`}
             onDragEnter={handleDocumentAreaDragEnter}
             onDragOver={handleDocumentAreaDragOver}
             onDragLeave={handleDocumentAreaDragLeave}
             onDrop={handleDocumentAreaDrop}
           >
-            {pagedItems.map(item => {
-              const isDragTarget = draggedFolderId === item.id;
-              return (
-                <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
-                  <div
-                    className={`flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative ${item.type === 'folder' && isDragTarget ? 'ring-2 ring-amber-500 ring-offset-2' : ''}`}
-                    onClick={() => {
-                      if (item.type === 'folder') {
-                        handleFolderClick(item);
-                      } else {
-                        handleDocumentClick(item, selectedFolder, { preserveFilter: true });
-                      }
-                    }}
-                    onDragEnter={item.type === 'folder' ? (event) => handleFolderDragEnter(event, item) : undefined}
-                    onDragOver={item.type === 'folder' ? (event) => handleFolderDragOver(event, item) : undefined}
-                    onDragLeave={item.type === 'folder' ? (event) => handleFolderDragLeave(event, item) : undefined}
-                    onDrop={item.type === 'folder' ? (event) => handleFolderDrop(event, item) : undefined}
-                  >
-                    <div className="pt-15 flex flex-col items-center justify-center w-full">
-                      {item.type === 'folder' ? (
-                        item.ocrEnabled ? (
-                          <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
-                        ) : (
-                          <Folder className="w-10 h-10 text-stone-500 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
-                        )
-                      ) : (
+            {files.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center rounded-lg bg-white">
+                <File className="w-10 h-10 mb-3 text-stone-300" />
+                <p>No hay archivos en esta carpeta.</p>
+                <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg">
+                {files.map((item) => (
+                  <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
+                    <div
+                      className="flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative"
+                      onClick={() => handleDocumentClick(item, selectedFolder, { preserveFilter: true })}
+                    >
+                      <div className="pt-15 flex flex-col items-center justify-center w-full">
                         <div className="absolute inset-0 top-0 flex items-center justify-center">
                           <FileThumbnail
                             item={item}
@@ -3471,51 +3809,25 @@ export function FileManager({
                             renderOcrStatusBadge={renderOcrStatusBadge}
                           />
                         </div>
-                      )}
-                      <span className="text-sm text-center truncate w-full text-stone-700" title={item.name}>
-                        {item.name}
-                      </span>
-                      {item.type === 'file' && item.size && (
-                        <span className="text-xs text-stone-500">
-                          {(item.size / 1024).toFixed(1)} KB
+                        <span className="text-sm text-center truncate w-full text-stone-700" title={item.name}>
+                          {item.name}
                         </span>
-                      )}
-                    </div>
-                    {item.type === 'folder' ? (<FolderFront className="w-[110px] h-[80px] absolute -bottom-1 -left-1 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />) : null}
-                    <div className="absolute top-2 right-2">
-                      {renderOcrStatusBadge(item)}
+                        {item.size && (
+                          <span className="text-xs text-stone-500">
+                            {(item.size / 1024).toFixed(1)} KB
+                          </span>
+                        )}
+                      </div>
+                      <div className="absolute top-2 right-2">
+                        {renderOcrStatusBadge(item)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-          {sortedItems.length > ITEMS_PER_PAGE && (
-            <div className="mt-6 flex items-center justify-between px-2 text-sm text-stone-500">
-              <span>
-                Página {currentPage} de {totalPages} · {sortedItems.length} items
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFolderPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage <= 1}
-                >
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFolderPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage >= totalPages}
-                >
-                  Siguiente
-                </Button>
+                ))}
               </div>
-            </div>
-          )}
-        </>
+            )}
+          </div>
+        </div>
       );
 
     })();
@@ -3728,11 +4040,15 @@ export function FileManager({
         <DialogContent className="px-4 py-6 max-w-3xl">
           <DialogHeader className="space-y-1">
             <DialogTitle>
-              {createFolderMode === 'data' ? 'Nueva carpeta de datos' : 'Nueva carpeta'}
+              {createFolderMode === 'data'
+                ? (convertFolderTarget ? 'Convertir carpeta a extracción' : 'Nueva carpeta de datos')
+                : 'Nueva carpeta'}
             </DialogTitle>
             <DialogDescription>
               {createFolderMode === 'data'
-                ? 'Asociá esta carpeta a una tabla de datos y elegí cómo cargar la información.'
+                ? (convertFolderTarget
+                  ? 'Esta carpeta quedará asociada a una tabla de extracción y se reprocesarán sus archivos existentes.'
+                  : 'Asociá esta carpeta a una tabla de datos y elegí cómo cargar la información.')
                 : 'Creá una carpeta estándar para organizar tus documentos.'}
             </DialogDescription>
           </DialogHeader>
@@ -3774,12 +4090,15 @@ export function FileManager({
                     if (createFolderError) setCreateFolderError(null);
                   }}
                   placeholder="Ej. Ordenes de compra"
+                  disabled={Boolean(convertFolderTarget)}
                 />
                 {createFolderError && (
                   <p className="text-xs text-red-600">{createFolderError}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Ruta: Documentos/{createFolderParentPath ? `${createFolderParentPath}/` : ''}{normalizeFolderName(newFolderName) || 'mi-carpeta'}
+                  Ruta: Documentos/{convertFolderTarget
+                    ? convertFolderPath
+                    : `${createFolderParentPath ? `${createFolderParentPath}/` : ''}${normalizeFolderName(newFolderName) || 'mi-carpeta'}`}
                 </p>
               </div>
               <div className="space-y-3">
@@ -4012,6 +4331,209 @@ export function FileManager({
         />
       )}
 
+      <Dialog open={isSchemaDialogOpen} onOpenChange={setIsSchemaDialogOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Editar columnas de la tabla</DialogTitle>
+            <DialogDescription>
+              Agregá, eliminá o modificá columnas. Las fórmulas usan formato <code>[campo_a] - [campo_b]</code>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[65vh] overflow-auto space-y-3 pr-2">
+            {schemaDraftColumns.map((column, index) => (
+              <div key={column.localId} className="rounded-md border p-3 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+                  <div className="md:col-span-2">
+                    <Label className="text-xs">Etiqueta</Label>
+                    <Input
+                      value={column.label}
+                      onChange={(e) =>
+                        setSchemaDraftColumns((prev) =>
+                          prev.map((it) =>
+                            it.localId === column.localId ? { ...it, label: e.target.value } : it
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Field key</Label>
+                    <Input
+                      value={column.fieldKey}
+                      onChange={(e) =>
+                        setSchemaDraftColumns((prev) =>
+                          prev.map((it) =>
+                            it.localId === column.localId ? { ...it, fieldKey: e.target.value } : it
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Tipo</Label>
+                    <Select
+                      value={column.dataType}
+                      onValueChange={(value) =>
+                        setSchemaDraftColumns((prev) =>
+                          prev.map((it) =>
+                            it.localId === column.localId
+                              ? { ...it, dataType: ensureTablaDataType(value) }
+                              : it
+                          )
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TABLA_DATA_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {DATA_TYPE_LABELS[type]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={column.required}
+                        onCheckedChange={(checked: boolean | "indeterminate") =>
+                          setSchemaDraftColumns((prev) =>
+                            prev.map((it) =>
+                              it.localId === column.localId ? { ...it, required: Boolean(checked) } : it
+                            )
+                          )
+                        }
+                      />
+                      Requerida
+                    </label>
+                  </div>
+                  <div className="flex items-end justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setSchemaDraftColumns((prev) =>
+                          prev.filter((it) => it.localId !== column.localId)
+                        )
+                      }
+                    >
+                      Eliminar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Fórmula intrafila (opcional)</Label>
+                    <Input
+                      value={column.formula}
+                      placeholder="[monto_total] - [monto_certificado]"
+                      onChange={(e) =>
+                        setSchemaDraftColumns((prev) =>
+                          prev.map((it) =>
+                            it.localId === column.localId ? { ...it, formula: e.target.value } : it
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Warn ≤</Label>
+                      <Input
+                        value={column.warnBelow}
+                        onChange={(e) =>
+                          setSchemaDraftColumns((prev) =>
+                            prev.map((it) =>
+                              it.localId === column.localId ? { ...it, warnBelow: e.target.value } : it
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Warn ≥</Label>
+                      <Input
+                        value={column.warnAbove}
+                        onChange={(e) =>
+                          setSchemaDraftColumns((prev) =>
+                            prev.map((it) =>
+                              it.localId === column.localId ? { ...it, warnAbove: e.target.value } : it
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Crítico ≤</Label>
+                      <Input
+                        value={column.criticalBelow}
+                        onChange={(e) =>
+                          setSchemaDraftColumns((prev) =>
+                            prev.map((it) =>
+                              it.localId === column.localId
+                                ? { ...it, criticalBelow: e.target.value }
+                                : it
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Crítico ≥</Label>
+                      <Input
+                        value={column.criticalAbove}
+                        onChange={(e) =>
+                          setSchemaDraftColumns((prev) =>
+                            prev.map((it) =>
+                              it.localId === column.localId
+                                ? { ...it, criticalAbove: e.target.value }
+                                : it
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setSchemaDraftColumns((prev) => [
+                  ...prev,
+                  {
+                    localId: crypto.randomUUID(),
+                    label: `Columna ${prev.length + 1}`,
+                    fieldKey: normalizeFieldKey(`columna_${prev.length + 1}`),
+                    dataType: 'text',
+                    required: false,
+                    formula: '',
+                    warnBelow: '',
+                    warnAbove: '',
+                    criticalBelow: '',
+                    criticalAbove: '',
+                  },
+                ])
+              }
+            >
+              Agregar columna
+            </Button>
+            <Button type="button" onClick={handleSaveSchema} disabled={isSavingSchema}>
+              {isSavingSchema ? 'Guardando...' : 'Guardar cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
@@ -4053,7 +4575,7 @@ export function FileManager({
       {contextMenu && (
         (() => {
           const parentFolder = contextMenu.item.type === 'folder' ? contextMenu.item : null;
-          const canCreateHere = parentFolder && !parentFolder.ocrEnabled;
+          const canCreateHere = parentFolder && !hasOcrAncestor(parentFolder);
           return (
             <div
               className="fixed z-50 bg-white border border-stone-200 rounded-lg shadow-lg py-1 min-w-[200px]"
@@ -4101,6 +4623,18 @@ export function FileManager({
                 >
                   <Table2 className="w-4 h-4" />
                   Ver tabla de datos
+                </button>
+              )}
+              {contextMenu.item.type === 'folder' && contextMenu.item.id !== 'root' && !contextMenu.item.ocrEnabled && (
+                <button
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-stone-700"
+                  onClick={() => {
+                    openConvertFolderDialog(contextMenu.item);
+                    setContextMenu(null);
+                  }}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Convertir a carpeta de extracción
                 </button>
               )}
               {contextMenu.item.id !== 'root' && (

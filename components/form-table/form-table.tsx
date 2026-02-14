@@ -257,6 +257,16 @@ export function FormTableContent({ className }: { className?: string }) {
 		pagination,
 		sorting,
 	} = useFormTable<FormTableRow, unknown>();
+	const { externalRefreshVersion } = meta;
+	const rowClassName = config.rowClassName as
+		| ((row: FormTableRow, rowIndex: number) => string | undefined)
+		| undefined;
+	const rowOverlayBadges = config.rowOverlayBadges as
+		| ((
+				row: FormTableRow,
+				rowIndex: number
+		  ) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>)
+		| undefined;
 
 	const columnDefs = columns.list;
 	const { tableRef, colRefs, colWidths, isColumnHidden, getStickyProps, columnIndexMap, columnsById, groupedColumnLookup, enableResizing, hiddenIds } = columns;
@@ -544,28 +554,31 @@ export function FormTableContent({ className }: { className?: string }) {
 										const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
 										// Create a stable string key of dirty cell IDs for memoization
 										const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
-									return (
-										<MemoizedTableRow
-											key={rowId}
-											row={row}
-											rowIndex={virtualRow.index}
-											columnsById={columnsById}
-											FieldComponent={FieldComponent}
-											highlightQuery={highlightQuery}
-											hasInitialSnapshot={hasInitialRow(rowId)}
-											hasAccordionRows={hasAccordionRows}
-											accordionRowConfig={accordionRowConfig}
-											accordionAlwaysOpen={accordionAlwaysOpen}
-											isExpanded={isRowExpanded(rowId)}
-											isRowDirty={rowIsDirty}
-											dirtyCellIds={dirtyCellIds}
-											hiddenColumnIdsKey={hiddenColumnIdsKey}
-											showActionsColumn={showActionsColumn}
-											isColumnHidden={isColumnHidden}
-											isCellDirty={isCellDirty}
-											getStickyProps={getStickyProps}
-											onToggleAccordion={toggleAccordionRow}
-											onDelete={handleDelete}
+										return (
+											<MemoizedTableRow
+												key={rowId}
+												row={row}
+												rowIndex={virtualRow.index}
+												externalRefreshVersion={externalRefreshVersion}
+												columnsById={columnsById}
+												rowClassName={rowClassName}
+												rowOverlayBadges={rowOverlayBadges}
+												FieldComponent={FieldComponent}
+												highlightQuery={highlightQuery}
+												hasInitialSnapshot={hasInitialRow(rowId)}
+												hasAccordionRows={hasAccordionRows}
+												accordionRowConfig={accordionRowConfig}
+												accordionAlwaysOpen={accordionAlwaysOpen}
+												isExpanded={isRowExpanded(rowId)}
+												isRowDirty={rowIsDirty}
+												dirtyCellIds={dirtyCellIds}
+												hiddenColumnIdsKey={hiddenColumnIdsKey}
+												showActionsColumn={showActionsColumn}
+												isColumnHidden={isColumnHidden}
+												isCellDirty={isCellDirty}
+												getStickyProps={getStickyProps}
+												onToggleAccordion={toggleAccordionRow}
+												onDelete={handleDelete}
 												onClearCell={handleClearCell}
 												onRestoreCell={handleRestoreCell}
 												onCopyCell={handleCopyCell}
@@ -595,7 +608,10 @@ export function FormTableContent({ className }: { className?: string }) {
 											key={rowId}
 											row={row}
 											rowIndex={rowIndex}
+											externalRefreshVersion={externalRefreshVersion}
 											columnsById={columnsById}
+											rowClassName={rowClassName}
+											rowOverlayBadges={rowOverlayBadges}
 											FieldComponent={FieldComponent}
 											highlightQuery={highlightQuery}
 											hasInitialSnapshot={hasInitialRow(rowId)}
@@ -793,6 +809,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	children,
 }: FormTableProps<Row, Filters>) {
 	const TABLE_ID = config.tableId;
+	const [externalRefreshVersion, setExternalRefreshVersion] = useState(0);
 	const enableColumnResizing = config.enableColumnResizing ?? false;
 	const fetchRowsFn = config.fetchRows ?? null;
 	const isEmbedded = variant === "embedded";
@@ -910,6 +927,19 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const columns = config.columns;
 	const headerGroups = config.headerGroups ?? [];
 	const defaultRows = config.defaultRows;
+
+	useEffect(() => {
+		const handleExternalRefresh = (event: Event) => {
+			const detail = (event as CustomEvent<{ tableId?: string }>).detail;
+			if (detail?.tableId && detail.tableId !== TABLE_ID) return;
+			setExternalRefreshVersion((prev) => prev + 1);
+		};
+		if (typeof window === "undefined") return;
+		window.addEventListener("form-table:refresh", handleExternalRefresh);
+		return () => {
+			window.removeEventListener("form-table:refresh", handleExternalRefresh);
+		};
+	}, [TABLE_ID]);
 
 	useEffect(() => {
 		setIsServerPaging(Boolean(fetchRowsFn));
@@ -1733,6 +1763,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			serverError,
 			variant,
 			isEmbedded,
+			externalRefreshVersion,
 		},
 		rows: {
 			table,

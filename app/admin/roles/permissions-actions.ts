@@ -771,6 +771,11 @@ const NAVIGATION_ITEMS = [
 				permission: "admin:roles",
 			},
 			{
+				path: "/admin/main-table-config",
+				label: "Tabla Principal",
+				permission: "admin:roles",
+			},
+			{
 				path: "/admin/audit-log",
 				label: "Auditoria",
 				permission: "admin:audit",

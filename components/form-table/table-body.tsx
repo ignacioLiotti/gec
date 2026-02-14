@@ -21,7 +21,13 @@ import { MemoizedTableCell } from "./table-cell";
 type TableRowProps<Row extends FormTableRow> = {
 	row: TanStackRow<Row>;
 	rowIndex: number;
+	externalRefreshVersion: number;
 	columnsById: Record<string, ColumnDef<Row>>;
+	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
+	rowOverlayBadges?: (
+		row: Row,
+		rowIndex: number
+	) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>;
 	FieldComponent: FormFieldComponent<Row>;
 	highlightQuery: string;
 	hasInitialSnapshot: boolean;
@@ -51,7 +57,10 @@ type TableRowProps<Row extends FormTableRow> = {
 function TableRowInner<Row extends FormTableRow>({
 	row,
 	rowIndex,
+	externalRefreshVersion,
 	columnsById,
+	rowClassName,
+	rowOverlayBadges,
 	FieldComponent,
 	highlightQuery,
 	hasInitialSnapshot,
@@ -74,6 +83,7 @@ function TableRowInner<Row extends FormTableRow>({
 	onCopyColumn,
 	onCopyRow,
 }: TableRowProps<Row>) {
+	void externalRefreshVersion;
 	// dirtyCellIds is used for memoization comparison (see MemoizedTableRow below)
 	void dirtyCellIds;
 	void hiddenColumnIdsKey;
@@ -82,6 +92,8 @@ function TableRowInner<Row extends FormTableRow>({
 	const visibleLeafCount = filteredCells.length;
 	const accordionLabel = accordionRowConfig?.triggerLabel ?? "detalles";
 	const rowData = row.original;
+	const resolvedRowClassName = rowClassName?.(rowData, rowIndex);
+	const overlayBadges = rowOverlayBadges?.(rowData, rowIndex) ?? [];
 
 	return (
 		<Fragment>
@@ -90,22 +102,46 @@ function TableRowInner<Row extends FormTableRow>({
 				className={cn(
 					"border-b group relative",
 					rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
-					isRowDirty ? "bg-amber-50/60 group/row-dirty" : ""
+					isRowDirty ? "bg-amber-50/60 group/row-dirty" : "",
+					resolvedRowClassName
 				)}
 			>
-				{filteredCells.map((cell) => {
+				{filteredCells.map((cell, cellIndex) => {
 					const columnId = cell.column.id;
 					const columnMeta = columnsById[columnId];
 					if (!columnMeta) return null;
 
 					const baseClassName = cn(
 						"outline outline-border border-border relative px-4 py-4 group-hover:bg-[hsl(50,17%,95%)]",
-						rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]"
+						rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
+						resolvedRowClassName,
+						typeof columnMeta.cellClassName === "function"
+							? columnMeta.cellClassName(rowData)
+							: columnMeta.cellClassName
 					);
 					const cellDirty = isCellDirty(rowData.id, columnMeta);
 
 					return (
 						<td key={cell.id} {...getStickyProps(columnId, baseClassName)}>
+							{!showActionsColumn && cellIndex === filteredCells.length - 1 && overlayBadges.length > 0 && (
+								<div className="pointer-events-none absolute right-2 top-1 z-20 flex flex-wrap justify-end gap-1">
+									{overlayBadges.map((badge) => (
+										<span
+											key={badge.id}
+											className={cn(
+												"rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm",
+												badge.tone === "red" && "bg-red-500",
+												badge.tone === "amber" && "bg-amber-500",
+												badge.tone === "green" && "bg-emerald-500",
+												badge.tone === "blue" && "bg-blue-500",
+												!badge.tone && "bg-slate-500"
+											)}
+										>
+											{badge.label}
+										</span>
+									))}
+								</div>
+							)}
 							<MemoizedTableCell
 								column={columnMeta}
 								row={rowData}
@@ -133,9 +169,29 @@ function TableRowInner<Row extends FormTableRow>({
 					<td
 						className={cn(
 							"px-4 py-3 text-right outline outline-border border-border group-hover:bg-[hsl(50,17%,95%)] space-y-2",
-							rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]"
+							rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
+							resolvedRowClassName
 						)}
 					>
+						{overlayBadges.length > 0 && (
+							<div className="pointer-events-none absolute right-2 top-1 z-20 flex flex-wrap justify-end gap-1">
+								{overlayBadges.map((badge) => (
+									<span
+										key={badge.id}
+										className={cn(
+											"rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm",
+											badge.tone === "red" && "bg-red-500",
+											badge.tone === "amber" && "bg-amber-500",
+											badge.tone === "green" && "bg-emerald-500",
+											badge.tone === "blue" && "bg-blue-500",
+											!badge.tone && "bg-slate-500"
+										)}
+									>
+										{badge.label}
+									</span>
+								))}
+							</div>
+						)}
 						{isRowDirty && (
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -214,6 +270,7 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 	return (
 		prevProps.row.original.id === nextProps.row.original.id &&
 		prevProps.rowIndex === nextProps.rowIndex &&
+		prevProps.externalRefreshVersion === nextProps.externalRefreshVersion &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&
 		prevProps.isExpanded === nextProps.isExpanded &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&

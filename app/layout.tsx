@@ -21,6 +21,8 @@ import { getUserRoles } from "@/lib/route-guard";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 
+const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -49,16 +51,22 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  console.log("[LAYOUT] RootLayout rendering...");
+  if (DEBUG_AUTH) {
+    console.log("[LAYOUT] RootLayout rendering...");
+  }
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  console.log("[LAYOUT] getUser result:", { hasUser: !!user, email: user?.email });
+  if (DEBUG_AUTH) {
+    console.log("[LAYOUT] getUser result:", { hasUser: !!user, email: user?.email });
+  }
 
   // Get user roles for sidebar filtering
   const userRoles = user ? await getUserRoles() : null;
-  console.log("[LAYOUT] userRoles:", userRoles);
+  if (DEBUG_AUTH) {
+    console.log("[LAYOUT] userRoles:", userRoles);
+  }
 
   // Check if user should see all organizations
   const showAllOrgs = userRoles?.isSuperAdmin || user?.email === "ignacioliotti@gmail.com";
@@ -76,7 +84,9 @@ export default async function RootLayout({
         id: t.id,
         name: t.name ?? "Organización",
       }));
-      console.log("[LAYOUT] allTenants", allTenants);
+      if (DEBUG_AUTH) {
+        console.log("[LAYOUT] allTenants", allTenants);
+      }
     } else {
       // Regular users only see their memberships
       type TenantRow = {
