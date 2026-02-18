@@ -2972,12 +2972,12 @@ export function FileManager({
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => handleDownload(sourceFileModal)}
               >
                 <Download className="w-4 h-4 mr-2" />
-                Download
+                Descargar
               </Button>
               <button
                 onClick={() => setSourceFileModal(null)}
@@ -3584,7 +3584,7 @@ export function FileManager({
 
     return {
       tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${activeOcrTablaId ?? 'none'}`,
-      title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
+      // title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns: allColumns,
       allowAddRows: false,
@@ -3864,7 +3864,7 @@ export function FileManager({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="secondary"
             onClick={handleAddManualRow}
             disabled={activeFolderLink.dataInputMethod === 'ocr'}
             className="gap-2"
@@ -3875,7 +3875,7 @@ export function FileManager({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="secondary"
             onClick={handleQuickUploadClick}
             disabled={activeFolderLink.dataInputMethod === 'manual'}
             className="gap-2"
@@ -3906,7 +3906,7 @@ export function FileManager({
           )}
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={handleOpenSchemaEditor}
             className="gap-1.5"
@@ -3916,7 +3916,7 @@ export function FileManager({
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => router.push(`/excel/${obraId}/tabla/${activeOcrTablaId}/reporte`)}
             className="gap-1.5"
@@ -4156,7 +4156,7 @@ export function FileManager({
               </div>
             )}
 
-            <Button type="button" variant="outline" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
+            <Button type="button" variant="secondary" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
               <Upload className="w-3.5 h-3.5" />
               Subir archivos
             </Button>
@@ -4201,7 +4201,7 @@ export function FileManager({
                     <p>Esta tabla no tiene filas todavía.</p>
                     <p className="text-xs text-stone-400 mt-1">Agregá filas manualmente usando el botón de abajo.</p>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={handleAddManualRow}
                       className="mt-4 gap-2"
@@ -4215,7 +4215,7 @@ export function FileManager({
                     <p>No hay filas extraídas para esta tabla.</p>
                     <p className="text-xs text-stone-400 mt-1">Subí documentos para extraer datos automáticamente.</p>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => document.getElementById('file-upload')?.click()}
                       className="mt-4 gap-2"
@@ -4230,7 +4230,7 @@ export function FileManager({
                     <p className="text-xs text-stone-400 mt-1">Agregá filas manualmente o subí documentos para extraer datos.</p>
                     <div className="flex gap-2 mt-4">
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         onClick={handleAddManualRow}
                         className="gap-2"
@@ -4239,7 +4239,7 @@ export function FileManager({
                         Agregar fila
                       </Button>
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         onClick={() => document.getElementById('file-upload')?.click()}
                         className="gap-2"
@@ -4269,7 +4269,7 @@ export function FileManager({
             <p>Esta carpeta está vacía.</p>
             <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={() => document.getElementById('file-upload')?.click()}
               className="mt-4 gap-2"
@@ -4624,10 +4624,10 @@ export function FileManager({
                           {availableSheets
                             .filter((sheet) => sheet.name.trim().length > 0)
                             .map((sheet) => (
-                            <SelectItem key={sheet.name} value={sheet.name}>
-                              {sheet.name} ({sheet.rowCount})
-                            </SelectItem>
-                          ))}
+                              <SelectItem key={sheet.name} value={sheet.name}>
+                                {sheet.name} ({sheet.rowCount})
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -4703,28 +4703,28 @@ export function FileManager({
                               (key) => !key.startsWith('__doc')
                             );
                             return (
-                          <table className="w-full text-xs">
-                            <thead className="bg-muted/50 sticky top-0">
-                              <tr>
-                                {visiblePreviewColumns.map((key) => (
-                                  <th key={`${table.tablaId}-head-${key}`} className="text-left px-2 py-1 border-b">
-                                    {key}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {previewRows.slice(0, 20).map((row, idx) => (
-                                <tr key={`${table.tablaId}-row-${idx}`} className="border-b">
-                                  {visiblePreviewColumns.map((key) => (
-                                    <td key={`${table.tablaId}-cell-${idx}-${key}`} className="px-2 py-1 align-top">
-                                      {String(row[key] ?? '')}
-                                    </td>
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/50 sticky top-0">
+                                  <tr>
+                                    {visiblePreviewColumns.map((key) => (
+                                      <th key={`${table.tablaId}-head-${key}`} className="text-left px-2 py-1 border-b">
+                                        {key}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {previewRows.slice(0, 20).map((row, idx) => (
+                                    <tr key={`${table.tablaId}-row-${idx}`} className="border-b">
+                                      {visiblePreviewColumns.map((key) => (
+                                        <td key={`${table.tablaId}-cell-${idx}-${key}`} className="px-2 py-1 align-top">
+                                          {String(row[key] ?? '')}
+                                        </td>
+                                      ))}
+                                    </tr>
                                   ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                                </tbody>
+                              </table>
                             );
                           })()
                         )}
@@ -4737,7 +4737,7 @@ export function FileManager({
           </div>
           <DialogFooter>
             <Button
-              variant="outline"
+              variant="secondary"
               onClick={() => closeSpreadsheetPreview(false)}
               disabled={isApplyingSpreadsheetPreview}
             >
@@ -4892,7 +4892,7 @@ export function FileManager({
                     </div>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => setIsTemplateConfiguratorOpen(true)}
                       className="gap-2"
@@ -4939,7 +4939,7 @@ export function FileManager({
                     </div>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => {
                         setNewFolderColumns(prev => [...prev, {
@@ -5052,7 +5052,7 @@ export function FileManager({
           {createFolderMode && (
             <DialogFooter>
               <Button
-                variant="outline"
+                variant="secondary"
                 onClick={() => {
                   setIsCreateFolderOpen(false);
                   resetNewFolderForm();
@@ -5167,7 +5167,7 @@ export function FileManager({
                   <div className="flex items-end justify-end">
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() =>
                         setSchemaDraftColumns((prev) =>
@@ -5260,7 +5260,7 @@ export function FileManager({
           <DialogFooter>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               onClick={() =>
                 setSchemaDraftColumns((prev) => [
                   ...prev,
@@ -5306,7 +5306,7 @@ export function FileManager({
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+            <Button variant="secondary" onClick={() => setIsDeleteDialogOpen(false)}>
               Cancelar
             </Button>
             <Button

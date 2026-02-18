@@ -475,25 +475,49 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-base sm:text-sm outline-hidden ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
-  {
-    variants: {
-      variant: {
-        default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        outline:
-          "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
-      },
-      size: {
-        default: "h-9 sm:h-8",
-        sm: "h-8 text-sm sm:h-7 sm:text-xs",
-        lg: "h-12 text-base sm:text-sm group-data-[collapsible=icon]:p-0!",
-      },
+  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 text-left text-sm outline-none transition-all duration-150 leading-normal cursor-pointer " +
+  "border border-transparent " +
+  "[background-origin:border-box] [background-clip:padding-box,border-box] " +
+  "[background-image:linear-gradient(180deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.01)_100%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_100%)] " +
+  // "shadow-[0px_1px_2px_rgba(0,0,0,0.05)] " +
+  "text-muted-foreground " +
+
+  // Hover (soft lift, not color flash)
+  "hover:shadow-[0px_4px_8px_rgba(0,0,0,0.08)] " +
+  "hover:text-foreground hover:shadow-[0px_4px_10px_rgba(0,0,0,0.12),0px_0px_0px_1px_#44444454] " +
+  "hover:[background-image:linear-gradient(180deg,rgba(255,255,255,0.05)_0%,rgba(255,255,255,0.02)_100%),linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.06)_100%)] " +
+
+  // Active (selected page)
+  "data-[active=true]:text-foreground " +
+  "data-[active=true]:shadow-[0px_4px_10px_rgba(0,0,0,0.12),0px_0px_0px_1px_#44444454] " +
+  "data-[active=true]:[background-image:linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_100%),linear-gradient(180deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] " +
+
+  // Press
+  "active:translate-y-[1px] " +
+
+  // Disabled
+  "disabled:pointer-events-none disabled:opacity-50 " +
+  "aria-disabled:pointer-events-none aria-disabled:opacity-50 " +
+
+  "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! " +
+  "[&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0", {
+  variants: {
+    variant: {
+      default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+      outline:
+        "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
+    size: {
+      default: "h-9 sm:h-8",
+      sm: "h-8 text-sm sm:h-7 sm:text-xs",
+      lg: "h-12 text-base sm:text-sm group-data-[collapsible=icon]:p-0!",
     },
-  }
+  },
+  defaultVariants: {
+    variant: "default",
+    size: "default",
+  },
+}
 )
 
 function SidebarMenuButton({
@@ -509,7 +533,7 @@ function SidebarMenuButton({
   isActive?: boolean
   tooltip?: string | React.ComponentProps<typeof TooltipContent>
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
-  const Comp = asChild ? Slot : "button"
+  const Comp = asChild ? Slot : Button
   const { isMobile, state } = useSidebar()
 
   const button = (
@@ -570,7 +594,7 @@ function SidebarMenuAction({
         "peer-data-[size=lg]/menu-button:top-2.5",
         "group-data-[collapsible=icon]:hidden",
         showOnHover &&
-          "peer-data-[active=true]/menu-button:text-sidebar-accent-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 md:opacity-0",
+        "peer-data-[active=true]/menu-button:text-sidebar-accent-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 md:opacity-0",
         className
       )}
       {...props}

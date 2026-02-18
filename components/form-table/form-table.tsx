@@ -101,9 +101,10 @@ export function FormTableToolbar() {
 		<div className="flex flex-wrap items-center justify-between gap-3">
 			<div className="flex flex-wrap items-center gap-2">
 				{search.showInline && (
-					<div className="relative">
+					<div className="relative ml-0.5">
 						<SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
 						<Input
+							type="search"
 							className="w-64 pl-8"
 							value={search.value}
 							onChange={(event) => search.onChange(event.target.value)}
@@ -116,7 +117,7 @@ export function FormTableToolbar() {
 						<SheetTrigger asChild>
 							<Button
 								type="button"
-								variant={filters.activeCount > 0 ? "default" : "outline"}
+								variant={filters.activeCount > 0 ? "default" : "secondary"}
 								size="sm"
 								className={cn(
 									"gap-2 transition-all",
@@ -705,7 +706,7 @@ export function FormTablePagination() {
 				<div className="flex items-center gap-2">
 					{config.footerActions}
 					{allowAddRows && (
-						<Button type="button" variant="outline" size="sm" onClick={actions.addRow}>
+						<Button type="button" variant="secondary" size="sm" onClick={actions.addRow}>
 							Agregar fila vacía
 						</Button>
 					)}

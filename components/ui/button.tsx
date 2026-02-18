@@ -5,11 +5,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  "inline-flex items-center justify-center cursor-pointer gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default:
+          "relative border border-transparent leading-[normal] " +
+          "[background-origin:border-box] [background-clip:padding-box,border-box] " +
+          "[background-image:linear-gradient(180deg,#201E25_0%,#323137_100%),linear-gradient(180deg,#4B4951_0%,#313036_70%)] " +
+          "hover:[background-image:linear-gradient(180deg,#26232D_100%,#3A3840_0%),linear-gradient(180deg,#5A5861_100%,#3B3941_0%)] " +
+          "text-gray-200 " +
+          "shadow-[0px_2px_4px_rgba(0,0,0,0.10),0px_0px_0px_1px_#0D0D0D] " +
+          "transition-[box-shadow,transform,background-image] duration-150 " +
+          "hover:shadow-[0px_4px_8px_rgba(0,0,0,0.15),0px_0px_0px_1px_#0D0D0D] ",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         destructiveSecondary:
@@ -17,7 +25,15 @@ const buttonVariants = cva(
         outline:
           "border bg-background shadow-xs hover:bg-accent text-foreground hover:shadow-md hover:outline-2 hover:outline-stone-400/60 hover:outline-solid dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "relative border border-transparent leading-[normal]  " +
+          "[background-origin:border-box] " +
+          "[background-clip:padding-box,border-box] " +
+          "[background-image:linear-gradient(180deg,rgba(227,227,227,0.4)_0%,rgba(227,227,227,0.2)_100%),linear-gradient(180deg,#FDFDFD_0%,rgba(241,241,241,0)_100%)] " +
+          "shadow-[0px_2px_4px_rgba(0,0,0,0.10),0px_0px_0px_1px_rgba(0,0,0,0.16)] " +
+          "text-[#2A2A2A] " +
+          "transition-[box-shadow,transform,background-image] duration-150 " +
+          "hover:[background-image:linear-gradient(180deg,rgba(227,227,227,0.6)_0%,rgba(227,227,227,0.3)_100%),linear-gradient(180deg,#FFFFFF_0%,rgba(241,241,241,0)_100%)] " +
+          "hover:shadow-[0px_4px_8px_rgba(0,0,0,0.12),0px_0px_0px_1px_rgba(0,0,0,0.18)] ",
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",

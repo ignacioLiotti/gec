@@ -868,7 +868,7 @@ function RowRulesDialogTrigger() {
 
 	return (
 		<>
-			<Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+			<Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
 				Reglas de color de filas
 			</Button>
 			<Dialog open={open} onOpenChange={handleOpenChange}>
@@ -2193,7 +2193,7 @@ const obrasDetalleBaseConfig: Omit<
 	description: "Gestione el dataset de obras con filtros avanzados y edición en línea.",
 	tabFilters,
 	searchPlaceholder: "Buscar en columnas de obras",
-	toolbarActions: <RowRulesDialogTrigger />,
+	// toolbarActions: <RowRulesDialogTrigger />,
 	defaultPageSize: 10,
 	showActionsColumn: false,
 	enableColumnResizing: true,

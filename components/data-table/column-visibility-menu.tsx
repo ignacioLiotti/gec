@@ -42,7 +42,7 @@ export function ColumnVisibilityMenu({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="outline" size="sm" className="gap-2" disabled={disabled}>
+				<Button variant="secondary" size="sm" className="gap-2" disabled={disabled}>
 					<Columns3 className="h-4 w-4" />
 					Columnas
 				</Button>
@@ -118,9 +118,8 @@ export function ColumnVisibilityMenu({
 										if (pinDisabled) return;
 										togglePin(col.id);
 									}}
-									className={`rounded p-1 transition-colors ${
-										isPinned ? "text-primary" : "text-muted-foreground"
-									}`}
+									className={`rounded p-1 transition-colors ${isPinned ? "text-primary" : "text-muted-foreground"
+										}`}
 									title={isPinned ? "Desfijar" : "Fijar"}
 									disabled={pinDisabled}
 								>

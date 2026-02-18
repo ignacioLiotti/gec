@@ -351,7 +351,7 @@ export function AppSidebar({
 											</button>
 										) : (
 											<button
-												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium"
+												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium "
 												type="button"
 											>
 												<div className="min-w-0">

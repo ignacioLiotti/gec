@@ -1,17 +1,36 @@
 import * as React from "react"
-
 import { cn } from "@/lib/utils"
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+  const isSearch = type === "search"
+
   return (
     <input
       type={type}
       data-slot="input"
       className={cn(
-        "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 h-9 w-full min-w-0 rounded-md border-2 bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow,border-color] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        "border-orange-primary/40 hover:border-orange-primary/60",
-        "focus-visible:border-orange-primary focus-visible:ring-orange-primary/30 focus-visible:ring-[3px]",
-        "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+        // Shared layout
+        "h-9 w-full min-w-0 px-4 text-sm transition-all outline-none border disabled:pointer-events-none disabled:opacity-50 cursor-text",
+
+        isSearch
+          ? [
+            // 🔎 SEARCH STYLE (secondary surface style)
+            "rounded-md border-transparent",
+            "[background-origin:border-box]",
+            "[background-clip:padding-box,border-box]",
+            "bg-[linear-gradient(180deg,rgba(227,227,227,0.1)_0%,rgba(227,227,227,0)_100%),linear-gradient(180deg,#FDFDFD_0%,rgba(241,241,241,0)_100%)]",
+            "shadow-[0px_2px_4px_rgba(0,0,0,0.10),0px_0px_0px_1px_rgba(0,0,0,0.16)]",
+            "text-[#2A2A2A] placeholder:text-[#6B6B6B]",
+            "focus-visible:shadow-[0px_2px_4px_rgba(0,0,0,0.10),0px_0px_0px_1px_theme(colors.orange-primary),0px_0px_0px_4px_theme(colors.orange-primary/0.25)]",
+          ]
+          : [
+            // ✏️ DEFAULT INPUT STYLE (your previous standard style)
+            "rounded-md bg-transparent border-2",
+            "border-orange-primary/40 hover:border-orange-primary/60",
+            "focus-visible:border-orange-primary focus-visible:ring-orange-primary/30 focus-visible:ring-[3px]",
+            "text-base md:text-sm",
+          ],
+
         className
       )}
       {...props}

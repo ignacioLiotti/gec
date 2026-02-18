@@ -26,7 +26,7 @@ export function ExcelPageTabs() {
           <TabsTrigger
             key={tab.value}
             value={tab.value}
-            className="gap-1.5 text-xs sm:text-sm"
+            className="gap-1.5 text-xs sm:text-sm cursor-pointer"
           >
             <Icon className="sm:h-4 sm:w-4 h-5 w-5" />
             <span className="inline text-base md:text-sm">{tab.label}</span>

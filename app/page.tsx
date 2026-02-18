@@ -596,7 +596,7 @@ export default function Home() {
                   </div>
                 )}
               />
-              <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+              <Button asChild variant="secondary" size="sm" className="w-full sm:w-auto">
                 <Link href="/excel">
                   Ver Todas
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />

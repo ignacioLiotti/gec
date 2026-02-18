@@ -567,7 +567,7 @@ export default function ExcelPage() {
 					{/* <p className="text-sm uppercase tracking-wide text-orange-800/80 -mb-1">
 
 					</p> */}
-					<div className="w-full flex items-end justify-between gap-3 mb-2">
+					<div className="w-full flex items-end justify-between gap-3 mb-1">
 						<h1 className="text-5xl my-2 font-bold text-primary">
 							Panel de obras
 						</h1>
@@ -609,7 +609,7 @@ export default function ExcelPage() {
 							</Button>
 						</div>
 					</div>
-					<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] " />
+					<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-2" />
 					<FormTablePagination />
 				</div>
 			</FormTable>

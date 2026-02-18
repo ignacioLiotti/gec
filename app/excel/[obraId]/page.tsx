@@ -499,9 +499,9 @@ function buildCurvePoints(
 		const label = periodKey ? periodLabel(periodKey) : parsed.label;
 		const order = periodKey
 			? (() => {
-					const [y, m] = periodKey.split("-");
-					return Number.parseInt(y, 10) * 12 + (Number.parseInt(m, 10) - 1);
-			  })()
+				const [y, m] = periodKey.split("-");
+				return Number.parseInt(y, 10) * 12 + (Number.parseInt(m, 10) - 1);
+			})()
 			: parsed.order;
 		const key = periodKey ?? (normalizeText(label) || `plan-${index}`);
 		const current = points.get(key);
@@ -525,9 +525,9 @@ function buildCurvePoints(
 		const label = periodKey ? periodLabel(periodKey) : parsed.label;
 		const order = periodKey
 			? (() => {
-					const [y, m] = periodKey.split("-");
-					return Number.parseInt(y, 10) * 12 + (Number.parseInt(m, 10) - 1);
-			  })()
+				const [y, m] = periodKey.split("-");
+				return Number.parseInt(y, 10) * 12 + (Number.parseInt(m, 10) - 1);
+			})()
 			: parsed.order;
 		const key = periodKey ?? (normalizeText(label) || `real-${index}`);
 		const current = points.get(key);
@@ -2088,7 +2088,7 @@ export default function ObraDetailPage() {
 											animate={{ opacity: 1 }}
 											className="flex justify-end"
 										>
-											<div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-0.5">
+											<div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-1">
 												<Button
 													type="button"
 													variant={!isGeneralTabEditMode ? "default" : "ghost"}
@@ -2115,7 +2115,7 @@ export default function ObraDetailPage() {
 										</motion.div>
 										<Button
 											type="button"
-											variant={isMemoriaOpen ? "default" : "outline"}
+											variant={isMemoriaOpen ? "default" : "secondary"}
 											size="sm"
 											onClick={() => setIsMemoriaOpen((open) => !open)}
 											className="gap-2"
