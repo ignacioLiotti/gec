@@ -117,7 +117,7 @@ function DateCellEditor({
 					setValue(parsed ? toIsoDateOnly(parsed) : nextRaw);
 					handleBlur();
 				}}
-				className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 focus-visible:ring-offset-1"
+				className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 focus-visible:ring-offset-1 pr-0 pl-1"
 			/>
 			<Popover open={open} onOpenChange={setOpen}>
 				<PopoverTrigger asChild>
@@ -125,7 +125,7 @@ function DateCellEditor({
 						type="button"
 						variant="ghost"
 						className={cn(
-							"h-full rounded-none border-none px-2 py-1 font-normal shrink-0"
+							"h-full rounded-none border-none px-0 has-[>svg]:px-1 py-1 font-normal shrink-0"
 						)}
 					>
 						<CalendarDays className="h-4 w-4 shrink-0 opacity-70" />

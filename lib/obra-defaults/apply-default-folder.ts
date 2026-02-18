@@ -174,7 +174,7 @@ export async function applyDefaultFolderToExistingObras(
 				bundle.path,
 				obraId,
 				error,
-			);
+				);
 		}
 
 		const { data: obraOcrTablas, error: obraOcrTablasError } = await supabase

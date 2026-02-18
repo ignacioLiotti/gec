@@ -56,7 +56,7 @@ import {
 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-import { ensureTablaDataType, normalizeFieldKey } from "@/lib/tablas";
+import { ensureTablaDataType, normalizeFieldKey, normalizeFolderName } from "@/lib/tablas";
 
 type DataInputMethod = 'ocr' | 'manual' | 'both';
 
@@ -78,6 +78,7 @@ type DefaultFolder = {
   // Data folder fields
   isOcr?: boolean; // Kept for backward compatibility, means it's a data folder
   dataInputMethod?: DataInputMethod;
+  spreadsheetTemplate?: "auto" | "certificado" | null;
   ocrTemplateId?: string | null;
   ocrTemplateName?: string | null;
   hasNestedData?: boolean;
@@ -520,10 +521,12 @@ export default function ObraDefaultsPage() {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [folderMode, setFolderMode] = useState<"normal" | "data">("normal");
   const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderParentPath, setNewFolderParentPath] = useState("");
   const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
 
   // Data folder state
   const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>("both");
+  const [newFolderSpreadsheetTemplate, setNewFolderSpreadsheetTemplate] = useState<"" | "auto" | "certificado">("");
   const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState("");
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
   const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
@@ -542,8 +545,10 @@ export default function ObraDefaultsPage() {
   const resetFolderForm = useCallback(() => {
     setEditingFolderId(null);
     setNewFolderName("");
+    setNewFolderParentPath("");
     setFolderMode("normal");
     setNewFolderDataInputMethod("both");
+    setNewFolderSpreadsheetTemplate("");
     setNewFolderOcrTemplateId("");
     setNewFolderHasNested(false);
     setNewFolderColumns([]);
@@ -648,10 +653,14 @@ export default function ObraDefaultsPage() {
   };
 
   const handleEditFolder = useCallback((folder: DefaultFolder) => {
+    const pathSegments = folder.path.split("/").filter(Boolean);
+    const parentPath = pathSegments.length > 1 ? pathSegments.slice(0, -1).join("/") : "";
     setEditingFolderId(folder.id);
     setNewFolderName(folder.name);
+    setNewFolderParentPath(parentPath);
     setFolderMode(folder.isOcr ? "data" : "normal");
     setNewFolderDataInputMethod(folder.dataInputMethod ?? "both");
+    setNewFolderSpreadsheetTemplate(folder.spreadsheetTemplate ?? "");
     setNewFolderOcrTemplateId(folder.ocrTemplateId ?? "");
     setNewFolderHasNested(Boolean(folder.hasNestedData));
     setNewFolderColumns(
@@ -672,10 +681,11 @@ export default function ObraDefaultsPage() {
     if (!newFolderName.trim()) return;
 
     const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
+    const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
 
     if (folderMode === "data") {
-      if (needsOcrTemplate && !newFolderOcrTemplateId) {
-        toast.error("Seleccioná una plantilla de extracción");
+      if (needsOcrTemplate && !hasAnyTemplateSelected) {
+        toast.error("Seleccioná una plantilla OCR o una plantilla XLSX/CSV");
         return;
       }
       if (newFolderColumns.length === 0) {
@@ -691,11 +701,13 @@ export default function ObraDefaultsPage() {
         type: "folder",
         ...(editingFolderId ? { id: editingFolderId } : {}),
         name: newFolderName.trim(),
+        parentPath: newFolderParentPath || null,
       };
 
       if (folderMode === "data") {
         payload.isOcr = true; // Kept for backward compatibility
         payload.dataInputMethod = newFolderDataInputMethod;
+        payload.spreadsheetTemplate = newFolderSpreadsheetTemplate || null;
         payload.ocrTemplateId = needsOcrTemplate ? newFolderOcrTemplateId : null;
         payload.hasNestedData = needsOcrTemplate ? newFolderHasNested : false;
         payload.columns = newFolderColumns.map((col, index) => ({
@@ -862,16 +874,21 @@ export default function ObraDefaultsPage() {
   };
 
   const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
+  const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
     (folderMode === "data" && newFolderColumns.length === 0) ||
-    (folderMode === "data" && needsOcrTemplate && !newFolderOcrTemplateId);
+    (folderMode === "data" && needsOcrTemplate && !hasAnyTemplateSelected);
   const isCreateQuickActionDisabled =
     !newQuickActionName.trim() || newQuickActionFolders.length === 0;
 
   const folderNameByPath = useMemo(() => {
     return new Map(folders.map((folder) => [folder.path, folder.name]));
   }, [folders]);
+  const parentFolderOptions = useMemo(
+    () => folders.filter((folder) => folder.id !== editingFolderId),
+    [folders, editingFolderId]
+  );
 
   if (isLoading) {
     return (
@@ -1237,12 +1254,36 @@ export default function ObraDefaultsPage() {
 
             {/* Folder Name */}
             <div className="space-y-2">
+              <Label>Carpeta padre (opcional)</Label>
+              <Select
+                value={newFolderParentPath || "__root__"}
+                onValueChange={(value) => setNewFolderParentPath(value === "__root__" ? "" : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Raíz" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__root__">Raíz</SelectItem>
+                  {parentFolderOptions.map((folder) => (
+                    <SelectItem key={folder.id} value={folder.path}>
+                      {folder.name} (/{folder.path})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Folder Name */}
+            <div className="space-y-2">
               <Label>Nombre de la carpeta</Label>
               <Input
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder={folderMode === "data" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
               />
+              <p className="text-xs text-muted-foreground">
+                Ruta final: /{newFolderParentPath ? `${newFolderParentPath}/` : ""}{normalizeFolderName(newFolderName || "carpeta")}
+              </p>
             </div>
 
             {/* Data Folder Specific Fields */}
@@ -1275,6 +1316,25 @@ export default function ObraDefaultsPage() {
                     {newFolderDataInputMethod === 'both' && 'Podés cargar datos manualmente o extraerlos de documentos.'}
                   </p>
                 </div>
+
+                {/* Spreadsheet Template Selection - when manual input is allowed */}
+                {newFolderDataInputMethod !== 'ocr' && (
+                  <div className="space-y-2">
+                    <Label>Plantilla de extracción XLSX/CSV</Label>
+                    <Select
+                      value={newFolderSpreadsheetTemplate || undefined}
+                      onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as "auto" | "certificado")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar plantilla XLSX..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto (detectar por columnas)</SelectItem>
+                        <SelectItem value="certificado">Certificado (certexampleplayground)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Template Selection - Only when OCR is needed */}
                 {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (

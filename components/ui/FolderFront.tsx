@@ -16,8 +16,8 @@ export default function FolderFront({ className, borderDashed, firstStopColor, s
           <stop offset="1" stopColor="#EBEBEB" />
         </linearGradient>
         <linearGradient id="paint0_linear_119_4" x1="2.00816" y1="14.7645" x2="2.00816" y2="143" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#7A7A7A" />
-          <stop offset="1" stopColor="#676767" />
+          <stop stopColor="#79716b" />
+          <stop offset="1" stopColor="#57534d" />
         </linearGradient>
       </defs>
     </svg>

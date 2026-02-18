@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { normalizeFolderName, normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
+import { normalizeFolderName, normalizeFolderPath, normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 type DataInputMethod = 'ocr' | 'manual' | 'both';
@@ -14,6 +14,7 @@ type DefaultFolder = {
 	// Data folder fields
 	isOcr?: boolean;
 	dataInputMethod?: DataInputMethod;
+	spreadsheetTemplate?: "auto" | "certificado" | null;
 	ocrTemplateId?: string | null;
 	ocrTemplateName?: string | null;
 	hasNestedData?: boolean;
@@ -213,6 +214,12 @@ export async function GET(request: Request) {
 				...folder,
 				isOcr: true,
 				dataInputMethod,
+				spreadsheetTemplate:
+					typeof settings.spreadsheetTemplate === "string"
+						? ((settings.spreadsheetTemplate === "certificado" ? "certificado" : "auto") as
+								| "auto"
+								| "certificado")
+						: null,
 				ocrTemplateId: linkedTabla.ocr_template_id,
 				ocrTemplateName: linkedTabla.ocr_template_id
 					? templatesMap.get(linkedTabla.ocr_template_id)
@@ -302,9 +309,13 @@ export async function POST(request: Request) {
 			if (!rawName) {
 				return NextResponse.json({ error: "Folder name required" }, { status: 400 });
 			}
+			const rawParentPath =
+				typeof body.parentPath === "string" ? body.parentPath.trim() : "";
+			const parentPath = normalizeFolderPath(rawParentPath);
 
-			const path = normalizeFolderName(rawName);
-			if (!path) {
+			const normalizedName = normalizeFolderName(rawName);
+			const path = parentPath ? `${parentPath}/${normalizedName}` : normalizedName;
+			if (!normalizedName || !path) {
 				return NextResponse.json({ error: "Invalid folder name" }, { status: 400 });
 			}
 
@@ -404,12 +415,18 @@ export async function POST(request: Request) {
 			// Parse dataInputMethod
 			const rawDataInputMethod = typeof body.dataInputMethod === "string" ? body.dataInputMethod : "both";
 			const dataInputMethod = ["ocr", "manual", "both"].includes(rawDataInputMethod) ? rawDataInputMethod : "both";
+			const rawSpreadsheetTemplate =
+				typeof body.spreadsheetTemplate === "string"
+					? body.spreadsheetTemplate.trim()
+					: "";
+			const spreadsheetTemplate = rawSpreadsheetTemplate === "certificado" ? "certificado" : "auto";
 
 			// Build settings
 			const settings: Record<string, unknown> = {
 				ocrFolder: path,
 				hasNestedData,
 				dataInputMethod,
+				spreadsheetTemplate,
 			};
 			if (ocrTemplateId) {
 				settings.ocrTemplateId = ocrTemplateId;
@@ -516,6 +533,7 @@ export async function POST(request: Request) {
 					...folder,
 					isOcr: true,
 					dataInputMethod,
+					spreadsheetTemplate,
 					ocrTemplateId,
 					ocrTemplateName,
 					hasNestedData,
@@ -702,9 +720,13 @@ export async function PUT(request: Request) {
 		if (!rawName) {
 			return NextResponse.json({ error: "Folder name required" }, { status: 400 });
 		}
+		const rawParentPath =
+			typeof body.parentPath === "string" ? body.parentPath.trim() : "";
+		const parentPath = normalizeFolderPath(rawParentPath);
 
-		const path = normalizeFolderName(rawName);
-		if (!path) {
+		const normalizedName = normalizeFolderName(rawName);
+		const path = parentPath ? `${parentPath}/${normalizedName}` : normalizedName;
+		if (!normalizedName || !path) {
 			return NextResponse.json({ error: "Invalid folder name" }, { status: 400 });
 		}
 
@@ -813,11 +835,17 @@ export async function PUT(request: Request) {
 		const dataInputMethod = ["ocr", "manual", "both"].includes(rawDataInputMethod)
 			? rawDataInputMethod
 			: "both";
+		const rawSpreadsheetTemplate =
+			typeof body.spreadsheetTemplate === "string"
+				? body.spreadsheetTemplate.trim()
+				: "";
+		const spreadsheetTemplate = rawSpreadsheetTemplate === "certificado" ? "certificado" : "auto";
 
 		const settings: Record<string, unknown> = {
 			ocrFolder: path,
 			hasNestedData,
 			dataInputMethod,
+			spreadsheetTemplate,
 		};
 		if (ocrTemplateId) {
 			settings.ocrTemplateId = ocrTemplateId;
@@ -943,6 +971,7 @@ export async function PUT(request: Request) {
 			...updatedFolder,
 			isOcr: true,
 			dataInputMethod,
+			spreadsheetTemplate,
 			ocrTemplateId,
 			ocrTemplateName,
 			hasNestedData,

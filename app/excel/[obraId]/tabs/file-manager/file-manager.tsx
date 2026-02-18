@@ -421,7 +421,7 @@ const FileThumbnail = memo(function FileThumbnail({
   }
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full text-primary p-2">
       {getFileIcon(item.mimetype)}
       <div className="absolute top-2 right-2">
         {renderOcrStatusBadge(item)}
@@ -2478,17 +2478,21 @@ export function FileManager({
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
+    if (draggedFolderId) {
+      return;
+    }
     if (!isGlobalFileDragActive) {
       setIsGlobalFileDragActive(true);
     }
     event.dataTransfer.dropEffect = 'copy';
-  }, [isGlobalFileDragActive]);
+  }, [draggedFolderId, isGlobalFileDragActive]);
 
   const handleDocumentAreaDragEnter = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
+    if (draggedFolderId) return;
     setIsGlobalFileDragActive(true);
-  }, []);
+  }, [draggedFolderId]);
 
   const handleDocumentAreaDragLeave = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
@@ -2527,6 +2531,7 @@ export function FileManager({
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
+    setIsGlobalFileDragActive(false);
     setDraggedFolderId(folder.id);
   }, []);
 
@@ -2535,6 +2540,7 @@ export function FileManager({
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'copy';
+    setIsGlobalFileDragActive(false);
     setDraggedFolderId(prev => (prev === folder.id ? prev : folder.id));
   }, []);
 
@@ -2552,6 +2558,7 @@ export function FileManager({
     event.stopPropagation();
     const files = Array.from(event.dataTransfer.files || []);
     setDraggedFolderId(null);
+    setIsGlobalFileDragActive(false);
     event.dataTransfer.clearData();
     if (files.length) {
       void uploadFilesToFolder(files, folder);
@@ -4264,7 +4271,7 @@ export function FileManager({
     const folderBody = (() => {
       if (folders.length === 0 && files.length === 0) {
         return (
-          <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center rounded-lg bg-white">
+          <div className="flex h-full flex-col items-center justify-start pt-40 text-sm text-stone-500 p-6 text-center rounded-lg bg-white">
             <Folder className="w-10 h-10 mb-3 text-stone-300" />
             <p>Esta carpeta está vacía.</p>
             <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
@@ -4286,13 +4293,22 @@ export function FileManager({
           {folders.length > 0 && (
             <div className="px-4 pt-4 pb-3 border-b border-stone-100">
               <div className="overflow-x-auto overflow-y-hidden">
-                <div className="flex items-start gap-4 w-max pr-2">
+                <div className="flex items-start gap-4 w-max px-2 pb-1 ">
                   {folders.map((item) => {
                     const isDragTarget = draggedFolderId === item.id;
+                    const folderLookupKey = normalizeFolderPath((item.relativePath ?? item.ocrFolderName ?? item.name));
+                    const folderLink = item.ocrEnabled
+                      ? (ocrFolderMap.get(folderLookupKey) || ocrFolderMap.get(normalizeFolderName(folderLookupKey)) || null)
+                      : null;
+                    const isManualOnly = Boolean(folderLink && folderLink.dataInputMethod === 'manual');
+                    const rowCount = isManualOnly ? (folderLink?.rows?.length ?? 0) : 0;
+                    const fileCount = getFolderFileCount(item);
+                    const countValue = isManualOnly ? rowCount : fileCount;
+                    const countLabel = isManualOnly ? 'filas' : 'archivos';
                     return (
-                      <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2 shrink-0">
+                      <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center justify-end gap-2 shrink-0 h-[105px]">
                         <div
-                          className={`flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-2' : ''}`}
+                          className={`flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-500 to-stone-700 relative ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-6' : ''}`}
                           onClick={() => handleFolderClick(item)}
                           onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, item }); }}
                           onDragEnter={(event) => handleFolderDragEnter(event, item)}
@@ -4300,17 +4316,25 @@ export function FileManager({
                           onDragLeave={(event) => handleFolderDragLeave(event, item)}
                           onDrop={(event) => handleFolderDrop(event, item)}
                         >
-                          <div className="pt-15 flex flex-col items-center justify-center w-full">
-                            {item.ocrEnabled ? (
+                          <div className="flex flex-col items-center justify-end w-full h-full">
+                            {countValue > 0 && (
+                              <span className={cn("bg-stone-100 bg-linear-to-b from-stone-100 to-stone-200 border  w-[100px] h-[80px] group-hover:-top-4 -top-2 absolute left-1/2 -translate-x-1/2 transition-all ease-in-out duration-[200ms]", isDragTarget ? 'border-2 border-amber-500 -top-4' : '')} />
+                            )}
+                            <FolderFront className={cn("w-[140px] h-[80px] absolute -bottom-1 -left-3 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300", isDragTarget ? 'transform-[perspective(800px)_rotateX(-40deg)]' : '')} />
+                            {/* {item.ocrEnabled ? (
                               <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
                             ) : (
-                              <Folder className="w-10 h-10 text-stone-500 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
-                            )}
-                            <span className="text-sm text-center truncate w-full text-stone-700" title={item.name}>
+                              <Folder className="w-10 h-10 text-red-500 mt-2 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                            )} */}
+                            <span className="text-sm text-center truncate w-full text-white z-10" title={item.name}>
                               {item.name}
                             </span>
+                            {/* {countValue > 0 && (
+                              <span className="text-[10px] text-center w-full text-stone-200 z-10">
+                                {countValue} {countLabel}
+                              </span>
+                            )} */}
                           </div>
-                          <FolderFront className="w-[110px] h-[80px] absolute -bottom-1 -left-1 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
                         </div>
                       </div>
                     );
@@ -4321,7 +4345,7 @@ export function FileManager({
           )}
 
           <div
-            className={`flex-1 min-h-0 overflow-y-auto p-4 transition-colors ${isGlobalFileDragActive ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''}`}
+            className={`flex-1 min-h-0 overflow-y-auto p-4 transition-colors ${isGlobalFileDragActive && !draggedFolderId ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''}`}
             onDragEnter={handleDocumentAreaDragEnter}
             onDragOver={handleDocumentAreaDragOver}
             onDragLeave={handleDocumentAreaDragLeave}
@@ -4334,15 +4358,17 @@ export function FileManager({
                 <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 rounded-lg">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-10 gap-4 rounded-lg">
                 {files.map((item) => (
                   <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
                     <div
-                      className="flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative"
+                      className="flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none transition-colors bg-stone-100 relative"
                       onClick={() => handleDocumentClick(item, selectedFolder, { preserveFilter: true })}
                       onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, item }); }}
                     >
-                      <div className="pt-15 flex flex-col items-center justify-center w-full">
+                      <div className="flex flex-col items-center justify-end w-full h-full">
+                        <span className="bg-stone-100 border-stone-300 border-8 absolute top-0 right-0 z-10" />
+                        <span className="bg-stone-200 border-white border-l-transparent border-b-transparent border-8 absolute top-[-1px] right-[-1px] z-10" />
                         <div className="absolute inset-0 top-0 flex items-center justify-center">
                           <FileThumbnail
                             item={item}
@@ -4376,7 +4402,7 @@ export function FileManager({
 
     const folderContent = (
       <div
-        className={`h-full flex flex-col transition-colors ${isGlobalFileDragActive ? 'ring-2 ring-amber-500 ring-offset-2 bg-amber-50/40' : ''}`}
+        className={`h-full flex flex-col transition-colors ${isGlobalFileDragActive && !draggedFolderId ? 'ring-2 ring-amber-500 ring-offset-2 bg-amber-50/40' : ''}`}
         onDragEnter={handleDocumentAreaDragEnter}
         onDragOver={handleDocumentAreaDragOver}
         onDragLeave={handleDocumentAreaDragLeave}
