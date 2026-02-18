@@ -3584,7 +3584,7 @@ export function FileManager({
 
     return {
       tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${activeOcrTablaId ?? 'none'}`,
-      // title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
+      title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns: allColumns,
       allowAddRows: false,
