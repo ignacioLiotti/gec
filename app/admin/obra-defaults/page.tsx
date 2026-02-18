@@ -115,6 +115,47 @@ type OcrTemplate = {
   is_active: boolean;
 };
 
+const CERTIFICADO_XLSX_DEFAULT_COLUMNS: Array<{
+  label: string;
+  fieldKey: string;
+  dataType: string;
+}> = [
+    { label: "Período", fieldKey: "periodo", dataType: "text" },
+    { label: "N° Certificado", fieldKey: "nro_certificado", dataType: "text" },
+    { label: "Fecha Certificación", fieldKey: "fecha_certificacion", dataType: "text" },
+    { label: "Monto Certificado", fieldKey: "monto_certificado", dataType: "currency" },
+    { label: "Avance Físico Acum. %", fieldKey: "avance_fisico_acumulado_pct", dataType: "number" },
+    { label: "Monto Acumulado", fieldKey: "monto_acumulado", dataType: "currency" },
+  ];
+
+const AUTO_XLSX_DEFAULT_COLUMNS: Array<{
+  label: string;
+  fieldKey: string;
+  dataType: string;
+}> = [
+    { label: "Descripción", fieldKey: "descripcion", dataType: "text" },
+    { label: "Cantidad", fieldKey: "cantidad", dataType: "number" },
+    { label: "Monto", fieldKey: "monto", dataType: "currency" },
+  ];
+
+const buildSpreadsheetDefaultColumns = (
+  template: "" | "auto" | "certificado",
+): OcrColumn[] => {
+  const source =
+    template === "certificado"
+      ? CERTIFICADO_XLSX_DEFAULT_COLUMNS
+      : AUTO_XLSX_DEFAULT_COLUMNS;
+  return source.map((col) => ({
+    id: crypto.randomUUID(),
+    label: col.label,
+    fieldKey: col.fieldKey,
+    dataType: col.dataType,
+    required: false,
+    scope: "item",
+    description: "",
+  }));
+};
+
 // Get icon for data type
 function getDataTypeIcon(dataType: string) {
   switch (dataType) {
@@ -682,13 +723,20 @@ export default function ObraDefaultsPage() {
 
     const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
     const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
+    const hasSpreadsheetTemplateOnly = Boolean(newFolderSpreadsheetTemplate) && !newFolderOcrTemplateId;
+    let effectiveColumns = newFolderColumns;
+
+    if (folderMode === "data" && effectiveColumns.length === 0 && hasSpreadsheetTemplateOnly) {
+      effectiveColumns = buildSpreadsheetDefaultColumns(newFolderSpreadsheetTemplate);
+      setNewFolderColumns(effectiveColumns);
+    }
 
     if (folderMode === "data") {
       if (needsOcrTemplate && !hasAnyTemplateSelected) {
         toast.error("Seleccioná una plantilla OCR o una plantilla XLSX/CSV");
         return;
       }
-      if (newFolderColumns.length === 0) {
+      if (effectiveColumns.length === 0) {
         toast.error("Agregá al menos una columna");
         return;
       }
@@ -710,7 +758,7 @@ export default function ObraDefaultsPage() {
         payload.spreadsheetTemplate = newFolderSpreadsheetTemplate || null;
         payload.ocrTemplateId = needsOcrTemplate ? newFolderOcrTemplateId : null;
         payload.hasNestedData = needsOcrTemplate ? newFolderHasNested : false;
-        payload.columns = newFolderColumns.map((col, index) => ({
+        payload.columns = effectiveColumns.map((col, index) => ({
           label: col.label,
           fieldKey: col.fieldKey || normalizeFieldKey(col.label),
           dataType: col.dataType,
@@ -877,7 +925,7 @@ export default function ObraDefaultsPage() {
   const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
-    (folderMode === "data" && newFolderColumns.length === 0) ||
+    (folderMode === "data" && newFolderColumns.length === 0 && !hasAnyTemplateSelected) ||
     (folderMode === "data" && needsOcrTemplate && !hasAnyTemplateSelected);
   const isCreateQuickActionDisabled =
     !newQuickActionName.trim() || newQuickActionFolders.length === 0;
