@@ -53,6 +53,7 @@ import {
 	Loader2,
 	ChevronLeft,
 	ChevronRight,
+	Download,
 } from "lucide-react";
 import type {
 	ColumnField,
@@ -82,7 +83,7 @@ import { MemoizedTableRow } from "./table-body";
 export const useFormTable = useFormTableContext;
 
 export function FormTableToolbar() {
-	const { config, search, filters, columns, sorting } = useFormTable<FormTableRow, unknown>();
+	const { config, search, filters, columns, sorting, actions } = useFormTable<FormTableRow, unknown>();
 	const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
 	const renderFiltersContent =
@@ -207,6 +208,10 @@ export function FormTableToolbar() {
 				{config.toolbarActions}
 			</div>
 			<div className="flex flex-wrap items-center gap-2">
+				<Button type="button" variant="secondary" size="sm" className="gap-2" onClick={() => void actions.exportCsv()}>
+					<Download className="h-4 w-4" />
+					Exportar tabla
+				</Button>
 				{sorting.state.columnId && (
 					<Button type="button" variant="ghost" size="sm" className="gap-1" onClick={sorting.clear}>
 						<Minus className="h-4 w-4" />
@@ -1152,7 +1157,14 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	);
 
 	const hasUnsavedChanges = useMemo(
-		() => hasUnsavedChangesUtil(rowOrder, rowsById, columns, initialValuesRef.current.rowsById),
+		() =>
+			hasUnsavedChangesUtil(
+				rowOrder,
+				initialValuesRef.current.rowOrder,
+				rowsById,
+				columns,
+				initialValuesRef.current.rowsById
+			),
 		[rowOrder, rowsById, columns]
 	);
 
@@ -1648,8 +1660,33 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			delete next[id];
 			return next;
 		});
-		toast.success("Fila eliminada");
+		// toast.success("Fila eliminada");
 	}, [setFormFieldValue]);
+
+	const handleExportCsv = useCallback(async () => {
+		const exportColumns = columns.filter((column) => !isColumnHidden(column.id));
+		if (exportColumns.length === 0) {
+			toast.error("No hay columnas visibles para exportar");
+			return;
+		}
+		if (sortedRows.length === 0) {
+			toast.error("No hay filas para exportar");
+			return;
+		}
+		const header = exportColumns.map((column) => `"${column.label.replace(/"/g, '""')}"`).join(",");
+		const body = sortedRows.map((row) => tableRowToCsv(row, exportColumns)).join("\n");
+		const csv = `${header}\n${body}`;
+		const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = `${TABLE_ID}.csv`;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+		toast.success("Tabla exportada");
+	}, [TABLE_ID, columns, isColumnHidden, sortedRows]);
 
 	const handleSave = useCallback(async () => {
 		if (!hasUnsavedChanges) return;
@@ -1794,6 +1831,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			save: handleSave,
 			discard: handleDiscardChanges,
 			addRow: handleAddRow,
+			exportCsv: handleExportCsv,
 		},
 	};
 

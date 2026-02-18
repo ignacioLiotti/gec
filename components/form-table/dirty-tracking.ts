@@ -53,10 +53,15 @@ export function computeRowDirty<Row extends FormTableRow>(
 
 export function hasUnsavedChanges<Row extends FormTableRow>(
 	rowOrder: string[],
+	initialRowOrder: string[],
 	rowsById: Record<string, Row>,
 	columns: ColumnDef<Row>[],
 	initialRowsById: Record<string, Row>
 ) {
+	if (rowOrder.length !== initialRowOrder.length) return true;
+	for (let i = 0; i < rowOrder.length; i += 1) {
+		if (rowOrder[i] !== initialRowOrder[i]) return true;
+	}
 	return rowOrder.some((rowId) => computeRowDirty(rowId, rowsById, columns, initialRowsById).dirty);
 }
 

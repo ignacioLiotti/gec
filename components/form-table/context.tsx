@@ -117,6 +117,7 @@ export type FormTableActions = {
 	save: () => Promise<void>;
 	discard: () => void;
 	addRow: () => void;
+	exportCsv: () => Promise<void>;
 };
 
 export type FormTableContextValue<Row extends FormTableRow, Filters> = {

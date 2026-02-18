@@ -3923,7 +3923,7 @@ export function FileManager({
               </SelectContent>
             </Select>
           )}
-          <Button
+          {/* <Button
             type="button"
             variant="secondary"
             size="sm"
@@ -3932,7 +3932,7 @@ export function FileManager({
           >
             <Layers className="w-3.5 h-3.5" />
             Editar columnas
-          </Button>
+          </Button> */}
           <Button
             type="button"
             variant="secondary"
@@ -4598,6 +4598,7 @@ export function FileManager({
         onOpenChange={(open) => setIsDocumentDataSheetOpen(open)}
         document={activeDocument}
         tableConfig={documentDataTableConfig}
+        dataTableSelector={activeDocumentTableSelector}
       />
 
       <DocumentSheet
@@ -4613,7 +4614,6 @@ export function FileManager({
         onToggleDataSheet={toggleDocumentDataSheet}
         showDataToggle={hasAnyActiveDocumentData}
         isDataSheetOpen={isDocumentDataSheetOpen}
-        dataTableSelector={activeDocumentTableSelector}
       />
 
       <Dialog
