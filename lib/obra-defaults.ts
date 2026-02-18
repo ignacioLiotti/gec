@@ -33,6 +33,199 @@ type DefaultColumn = {
 	config: Record<string, unknown> | null;
 };
 
+type SpreadsheetPreset = {
+	key: string;
+	name: string;
+	description: string;
+	columns: Array<{
+		field_key: string;
+		label: string;
+		data_type: "text" | "number" | "currency";
+		position: number;
+		required: boolean;
+		config?: Record<string, unknown>;
+	}>;
+};
+
+const CERTIFICADO_SPREADSHEET_PRESETS: SpreadsheetPreset[] = [
+	{
+		key: "pmc_resumen",
+		name: "PMC Resumen",
+		description:
+			"Resumen mensual del certificado: período, monto, avance acumulado.",
+		columns: [
+			{
+				field_key: "periodo",
+				label: "Período",
+				data_type: "text",
+				position: 0,
+				required: false,
+				config: { excelKeywords: ["periodo", "mes", "month", "correspondiente"] },
+			},
+			{
+				field_key: "nro_certificado",
+				label: "N° Certificado",
+				data_type: "text",
+				position: 1,
+				required: false,
+				config: { excelKeywords: ["nro", "numero", "certificado", "cert", "n°"] },
+			},
+			{
+				field_key: "fecha_certificacion",
+				label: "Fecha Certificación",
+				data_type: "text",
+				position: 2,
+				required: false,
+				config: { excelKeywords: ["fecha", "certificacion", "date"] },
+			},
+			{
+				field_key: "monto_certificado",
+				label: "Monto Certificado",
+				data_type: "currency",
+				position: 3,
+				required: false,
+				config: { excelKeywords: ["monto", "importe", "certificado"] },
+			},
+			{
+				field_key: "avance_fisico_acumulado_pct",
+				label: "Avance Físico Acum. %",
+				data_type: "number",
+				position: 4,
+				required: false,
+				config: { excelKeywords: ["avance", "fisico", "acumulado", "%"] },
+			},
+			{
+				field_key: "monto_acumulado",
+				label: "Monto Acumulado",
+				data_type: "currency",
+				position: 5,
+				required: false,
+				config: { excelKeywords: ["monto", "acumulado", "total"] },
+			},
+		],
+	},
+	{
+		key: "pmc_items",
+		name: "PMC Items",
+		description:
+			"Desglose por rubro/item del certificado con avances e importes.",
+		columns: [
+			{
+				field_key: "item_code",
+				label: "Código Item",
+				data_type: "text",
+				position: 0,
+				required: false,
+				config: { excelKeywords: ["item", "codigo", "cod", "rubro"] },
+			},
+			{
+				field_key: "descripcion",
+				label: "Descripción",
+				data_type: "text",
+				position: 1,
+				required: false,
+				config: { excelKeywords: ["descripcion", "rubro", "concepto", "detalle"] },
+			},
+			{
+				field_key: "incidencia_pct",
+				label: "Incidencia %",
+				data_type: "number",
+				position: 2,
+				required: false,
+				config: { excelKeywords: ["incidencia", "%"] },
+			},
+			{
+				field_key: "monto_rubro",
+				label: "Monto Rubro",
+				data_type: "currency",
+				position: 3,
+				required: false,
+				config: { excelKeywords: ["total", "rubro", "monto"] },
+			},
+			{
+				field_key: "avance_anterior_pct",
+				label: "Avance Anterior %",
+				data_type: "number",
+				position: 4,
+				required: false,
+				config: { excelKeywords: ["anterior", "avance", "%"] },
+			},
+			{
+				field_key: "avance_periodo_pct",
+				label: "Avance Período %",
+				data_type: "number",
+				position: 5,
+				required: false,
+				config: { excelKeywords: ["presente", "periodo", "avance", "%"] },
+			},
+			{
+				field_key: "avance_acumulado_pct",
+				label: "Avance Acumulado %",
+				data_type: "number",
+				position: 6,
+				required: false,
+				config: { excelKeywords: ["acumulado", "avance", "%"] },
+			},
+			{
+				field_key: "monto_anterior",
+				label: "Monto Anterior $",
+				data_type: "currency",
+				position: 7,
+				required: false,
+				config: { excelKeywords: ["anterior", "cert", "importe"] },
+			},
+			{
+				field_key: "monto_presente",
+				label: "Monto Presente $",
+				data_type: "currency",
+				position: 8,
+				required: false,
+				config: { excelKeywords: ["presente", "cert", "importe"] },
+			},
+			{
+				field_key: "monto_acumulado",
+				label: "Monto Acumulado $",
+				data_type: "currency",
+				position: 9,
+				required: false,
+				config: { excelKeywords: ["total", "acumulado", "cert", "importe"] },
+			},
+		],
+	},
+	{
+		key: "curva_plan",
+		name: "Curva Plan",
+		description:
+			"Curva de inversiones con avance mensual y acumulado.",
+		columns: [
+			{
+				field_key: "periodo",
+				label: "Período",
+				data_type: "text",
+				position: 0,
+				required: false,
+				config: { excelKeywords: ["mes", "periodo", "month"] },
+			},
+			{
+				field_key: "avance_mensual_pct",
+				label: "Avance Mensual %",
+				data_type: "number",
+				position: 1,
+				required: false,
+				config: { excelKeywords: ["avance", "mensual", "%"] },
+			},
+			{
+				field_key: "avance_acumulado_pct",
+				label: "Avance Acumulado %",
+				data_type: "number",
+				position: 2,
+				required: false,
+				config: { excelKeywords: ["acumulado", "financiero", "%"] },
+			},
+		],
+	},
+];
+
 export type ApplyDefaultsResult = {
 	success: boolean;
 	foldersApplied: number;
@@ -143,6 +336,78 @@ export async function applyObraDefaults(
 			const defaultTabla = tablaByFolderPath.get(rawPath);
 			if (!defaultTabla) continue;
 
+			const defaultSettings = (defaultTabla.settings as Record<string, unknown>) ?? {};
+			const spreadsheetTemplate =
+				typeof defaultSettings.spreadsheetTemplate === "string"
+					? defaultSettings.spreadsheetTemplate
+					: "auto";
+			const isCertificadoSpreadsheet = spreadsheetTemplate === "certificado";
+
+			if (isCertificadoSpreadsheet) {
+				for (const preset of CERTIFICADO_SPREADSHEET_PRESETS) {
+					const presetName = `${folder.name} · ${preset.name}`;
+					const { data: existingPresetTabla } = await supabase
+						.from("obra_tablas")
+						.select("id")
+						.eq("obra_id", obraId)
+						.eq("name", presetName)
+						.maybeSingle();
+
+					if (existingPresetTabla) continue;
+
+					const presetSettings: Record<string, unknown> = {
+						...defaultSettings,
+						ocrFolder: rawPath,
+						spreadsheetTemplate: "certificado",
+						spreadsheetPresetKey: preset.key,
+					};
+					if (defaultTabla.ocr_template_id) {
+						presetSettings.ocrTemplateId = defaultTabla.ocr_template_id;
+					}
+
+					const { data: createdPresetTabla, error: presetTablaError } = await supabase
+						.from("obra_tablas")
+						.insert({
+							obra_id: obraId,
+							name: presetName,
+							description: preset.description,
+							source_type: defaultTabla.source_type,
+							settings: presetSettings,
+						})
+						.select("id")
+						.single();
+
+					if (presetTablaError || !createdPresetTabla) {
+						console.error(
+							"[apply-obra-defaults] Error creating certificado preset tabla:",
+							presetTablaError,
+						);
+						continue;
+					}
+
+					tablasCreated++;
+					const columnsPayload = preset.columns.map((column) => ({
+						tabla_id: createdPresetTabla.id,
+						field_key: column.field_key,
+						label: column.label,
+						data_type: column.data_type,
+						position: column.position,
+						required: column.required,
+						config: column.config ?? {},
+					}));
+					const { error: presetColumnsError } = await supabase
+						.from("obra_tabla_columns")
+						.insert(columnsPayload);
+					if (presetColumnsError) {
+						console.error(
+							"[apply-obra-defaults] Error creating certificado preset columns:",
+							presetColumnsError,
+						);
+					}
+				}
+				continue;
+			}
+
 			// Skip if a tabla with same name already exists for obra
 			const { data: existingTabla } = await supabase
 				.from("obra_tablas")
@@ -155,7 +420,6 @@ export async function applyObraDefaults(
 				continue;
 			}
 
-			const defaultSettings = (defaultTabla.settings as Record<string, unknown>) ?? {};
 			const settings: Record<string, unknown> = {
 				...defaultSettings,
 				ocrFolder: rawPath,
