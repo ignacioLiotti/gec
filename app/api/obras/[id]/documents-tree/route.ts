@@ -70,6 +70,16 @@ function mapTablaRowsToOrders(rows: any[], tablaId: string) {
   return Array.from(groups.values());
 }
 
+function humanizeFolderSegment(segment: string): string {
+  if (!segment) return segment;
+  return segment
+    .replace(/[-_]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const { id: obraId } = await context.params;
   if (!obraId) {
@@ -172,6 +182,10 @@ export async function GET(request: Request, context: RouteContext) {
         const settings = (tabla.settings as Record<string, unknown>) ?? {};
         const folderName = typeof settings.ocrFolder === "string" ? settings.ocrFolder : "";
         if (!folderName) return null;
+        const folderLabel =
+          typeof settings.ocrFolderLabel === "string" && settings.ocrFolderLabel.trim().length > 0
+            ? settings.ocrFolderLabel.trim()
+            : null;
         const dataInputMethod = normalizeDataInputMethod(settings.dataInputMethod);
         const tablaId = tabla.id as string;
         const rows = rowsByTabla.get(tablaId) ?? [];
@@ -179,6 +193,7 @@ export async function GET(request: Request, context: RouteContext) {
           tablaId,
           tablaName: tabla.name as string,
           folderName,
+          folderLabel,
           columns: columnsByTabla.get(tablaId) ?? [],
           rows,
           orders: mapTablaRowsToOrders(rows, tablaId),
@@ -201,6 +216,18 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const getNormalizedPath = (value: string) => normalizeFolderPath(value);
+    const displayNameByPath = new Map<string, string>();
+    for (const link of ocrLinks as any[]) {
+      const normalizedPath = normalizeFolderPath(link.folderName ?? "");
+      if (!normalizedPath) continue;
+      const label =
+        typeof link.folderLabel === "string" && link.folderLabel.trim().length > 0
+          ? link.folderLabel.trim()
+          : null;
+      if (label) {
+        displayNameByPath.set(normalizedPath, label);
+      }
+    }
 
     const root: any = {
       id: "root",
@@ -218,9 +245,12 @@ export async function GET(request: Request, context: RouteContext) {
       const linkedTabla =
         ocrFolderMap.get(normalizedRelative) ||
         ocrFolderMap.get(normalizeFolderName(relativeFolderPath));
+      const fallbackSegmentName = relativeFolderPath.split("/").pop() ?? relativeFolderPath;
+      const displayName =
+        displayNameByPath.get(normalizedRelative) ?? humanizeFolderSegment(fallbackSegmentName);
       return {
         id: `folder-${normalizedRelative || "root"}`,
-        name: relativeFolderPath.split("/").pop() ?? relativeFolderPath,
+        name: displayName,
         type: "folder",
         children: [],
         storagePath: `${obraId}/${relativeFolderPath}`,
@@ -247,7 +277,8 @@ export async function GET(request: Request, context: RouteContext) {
       const parentPath = segments.join("/");
       const parentNode = ensureFolderPath(parentPath);
       const folderNode = buildFolderNode(normalizedRelative);
-      folderNode.name = ownName;
+      folderNode.name =
+        displayNameByPath.get(normalizedRelative) ?? humanizeFolderSegment(ownName);
       if (!parentNode.children.some((child: any) => child.id === folderNode.id)) {
         parentNode.children.push(folderNode);
       }

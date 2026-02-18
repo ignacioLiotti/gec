@@ -850,7 +850,16 @@ export function FileManager({
     const segments: string[] = [];
     let current: FileSystemItem | null | undefined = item;
     while (current && current.id !== 'root') {
-      segments.push(current.name);
+      if (current.type === 'folder') {
+        if (typeof current.relativePath === 'string' && current.relativePath.trim().length > 0) {
+          const segmentFromPath = current.relativePath.split('/').filter(Boolean).pop() ?? '';
+          segments.push(segmentFromPath);
+        } else {
+          segments.push(normalizeFolderName(current.name));
+        }
+      } else {
+        segments.push(current.name);
+      }
       current = parentMapRef.current.get(current.id) ?? null;
     }
     return segments.reverse();
@@ -2728,16 +2737,18 @@ export function FileManager({
 
   // Get folder icon color based on data input method
   const getFolderIconColor = useCallback((dataInputMethod?: DataInputMethod) => {
-    switch (dataInputMethod) {
-      case 'manual':
-        return 'text-green-600';
-      case 'ocr':
-        return 'text-amber-600';
-      case 'both':
-        return 'text-purple-600';
-      default:
-        return 'text-stone-500';
-    }
+    // switch (dataInputMethod) {
+    //   case 'manual':
+    //     return 'text-green-600';
+    //   case 'ocr':
+    //     return 'text-amber-600';
+    //   case 'both':
+    //     return 'text-purple-600';
+    //   default:
+    //     return 'text-stone-500';
+    // }
+    if (dataInputMethod === 'manual' || dataInputMethod === 'both' || dataInputMethod === 'ocr') return 'text-amber-600';
+    return 'text-stone-500';
   }, []);
 
   const getFolderFileCount = useCallback((folder: FileSystemItem) => {
@@ -2793,10 +2804,11 @@ export function FileManager({
             transition-all duration-150
             ${isFolderSelected && isFolder
               ? isOCR
-                ? item.dataInputMethod === 'manual' ? 'bg-green-100 text-green-900'
-                  : item.dataInputMethod === 'both' ? 'bg-purple-100 text-purple-900'
-                    : 'bg-amber-100 text-amber-900'
-                : 'bg-stone-100 text-stone-900'
+                // ? item.dataInputMethod === 'manual' ? 'bg-green-100 text-green-900'
+                //   : item.dataInputMethod === 'both' ? 'bg-purple-100 text-purple-900'
+                //     : 'bg-amber-100 text-amber-900'
+                // : 'bg-stone-100 text-stone-900'
+                ? "bg-amber-100 text-amber-900" : "bg-stone-100 text-stone-900"
               : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
             }
             ${isDocumentSelected && !isFolder ? 'bg-amber-50 ring-2 ring-amber-400' : ''}
@@ -4305,10 +4317,14 @@ export function FileManager({
                     const fileCount = getFolderFileCount(item);
                     const countValue = isManualOnly ? rowCount : fileCount;
                     const countLabel = isManualOnly ? 'filas' : 'archivos';
+                    const isOcrEnabled = item.ocrEnabled;
                     return (
                       <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center justify-end gap-2 shrink-0 h-[105px]">
                         <div
-                          className={`flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-500 to-stone-700 relative ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-6' : ''}`}
+                          className={` flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors relative 
+                            ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-6' : ''}
+                            ${isOcrEnabled ? "bg-linear-to-b from-amber-500 to-amber-700" : "bg-linear-to-b from-stone-500 to-stone-700"}
+                            `}
                           onClick={() => handleFolderClick(item)}
                           onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, item }); }}
                           onDragEnter={(event) => handleFolderDragEnter(event, item)}
@@ -4320,7 +4336,10 @@ export function FileManager({
                             {countValue > 0 && (
                               <span className={cn("bg-stone-100 bg-linear-to-b from-stone-100 to-stone-200 border  w-[100px] h-[80px] group-hover:-top-4 -top-2 absolute left-1/2 -translate-x-1/2 transition-all ease-in-out duration-[200ms]", isDragTarget ? 'border-2 border-amber-500 -top-4' : '')} />
                             )}
-                            <FolderFront className={cn("w-[140px] h-[80px] absolute -bottom-1 -left-3 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300", isDragTarget ? 'transform-[perspective(800px)_rotateX(-40deg)]' : '')} />
+                            <FolderFront
+                              firstStopColor={isOcrEnabled ? "#fe9a00" : "#79716b"}
+                              secondStopColor={isOcrEnabled ? "#fb8634" : "#57534d"}
+                              className={cn("w-[140px] h-[80px] absolute -bottom-1 -left-3 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300", isDragTarget ? 'transform-[perspective(800px)_rotateX(-40deg)]' : '')} />
                             {/* {item.ocrEnabled ? (
                               <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
                             ) : (
