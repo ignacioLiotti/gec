@@ -10,6 +10,8 @@ import { cookies } from "next/headers";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 export const BASE_COLUMNS =
+	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, custom_data";
+export const LEGACY_BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
 export const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
 
@@ -29,6 +31,7 @@ export type DbObraRow = {
 	plazo_total: number | string;
 	plazo_transc: number | string;
 	porcentaje: number | string;
+	custom_data?: Record<string, unknown> | null;
 	on_finish_first_message?: string | null;
 	on_finish_second_message?: string | null;
 	on_finish_second_send_at?: string | null;
@@ -51,10 +54,70 @@ export function mapDbRowToObra(row: DbObraRow) {
 		plazoTotal: Number(row.plazo_total) || 0,
 		plazoTransc: Number(row.plazo_transc) || 0,
 		porcentaje: Number(row.porcentaje) || 0,
+		customData:
+			row.custom_data && typeof row.custom_data === "object" && !Array.isArray(row.custom_data)
+				? row.custom_data
+				: {},
 		onFinishFirstMessage: row.on_finish_first_message ?? null,
 		onFinishSecondMessage: row.on_finish_second_message ?? null,
 		onFinishSecondSendAt: row.on_finish_second_send_at ?? null,
 	};
+}
+
+function toPlainObject(value: unknown): Record<string, unknown> {
+	if (typeof value !== "object" || value == null || Array.isArray(value)) return {};
+	return value as Record<string, unknown>;
+}
+
+export async function loadTenantMainTableCustomColumnIds(
+	supabase: any,
+	tenantId: string
+): Promise<Set<string> | null> {
+	try {
+		const { data, error } = await supabase
+			.from("tenant_main_table_configs")
+			.select("columns")
+			.eq("tenant_id", tenantId)
+			.maybeSingle();
+		if (error) {
+			// Keep compatibility for environments where this table may not exist yet.
+			if (error.code !== "42P01") {
+				console.warn("[obras] failed to load tenant main table config", error);
+			}
+			return null;
+		}
+		const raw = (data as { columns?: unknown } | null)?.columns;
+		if (!Array.isArray(raw)) return new Set<string>();
+		const ids = new Set<string>();
+		for (const item of raw) {
+			if (!item || typeof item !== "object") continue;
+			const row = item as Record<string, unknown>;
+			const id = typeof row.id === "string" ? row.id.trim() : "";
+			const kind = row.kind;
+			const enabled = row.enabled !== false;
+			if (!id || !enabled || kind !== "custom") continue;
+			ids.add(id);
+		}
+		return ids;
+	} catch (error) {
+		console.warn("[obras] unexpected error loading custom column IDs", error);
+		return null;
+	}
+}
+
+export function sanitizeCustomData(
+	value: unknown,
+	allowedCustomColumnIds: Set<string> | null
+): Record<string, unknown> {
+	const input = toPlainObject(value);
+	if (!allowedCustomColumnIds) return input;
+	if (allowedCustomColumnIds.size === 0) return {};
+	const next: Record<string, unknown> = {};
+	for (const [key, raw] of Object.entries(input)) {
+		if (!allowedCustomColumnIds.has(key)) continue;
+		next[key] = raw;
+	}
+	return next;
 }
 
 export async function getAuthContext() {
@@ -230,139 +293,157 @@ export async function executeFlujoActions(
 						{ actionId: action.id, obraId }
 					);
 				} else {
-					for (const recipientId of recipients) {
-						const end = new Date(executeAt.getTime() + 60 * 60 * 1000);
-						const { error: calErr } = await adminSupabase
-							.from("calendar_events")
-							.insert({
-								tenant_id: tenantId,
-								created_by: currentUserId,
-								obra_id: obraId,
-								flujo_action_id: action.id,
-								title: action.title,
-								description: action.message || "",
-								start_at: executeAt.toISOString(),
-								end_at: end.toISOString(),
-								all_day: false,
-								audience_type: "user",
-								target_user_id: recipientId,
-								deleted_at: null,
-								deleted_by: null,
-							});
-						if (calErr) {
-							console.error(
-								"Failed to insert calendar_event from flujo action",
-								{
-									actionId: action.id,
-									obraId,
-									recipientId,
-									error: calErr,
-								}
-							);
-							await supabase.from("obra_flujo_executions").insert({
-								...executionBase,
-								recipient_user_id: recipientId,
-								status: "failed",
-								executed_at: new Date().toISOString(),
-								error_message:
-									calErr instanceof Error ? calErr.message : String(calErr),
-							});
-						} else {
-							console.info("Inserted calendar_event from flujo action", {
+					// Batch insert all calendar events for recipients
+					const end = new Date(executeAt.getTime() + 60 * 60 * 1000);
+					const calendarEventPayloads = recipients.map((recipientId: string) => ({
+						tenant_id: tenantId,
+						created_by: currentUserId,
+						obra_id: obraId,
+						flujo_action_id: action.id,
+						title: action.title,
+						description: action.message || "",
+						start_at: executeAt.toISOString(),
+						end_at: end.toISOString(),
+						all_day: false,
+						audience_type: "user",
+						target_user_id: recipientId,
+						deleted_at: null,
+						deleted_by: null,
+					}));
+
+					const { error: calErr } = await adminSupabase
+						.from("calendar_events")
+						.insert(calendarEventPayloads);
+
+					const executedAt = new Date().toISOString();
+					if (calErr) {
+						console.error(
+							"Failed to batch insert calendar_events from flujo action",
+							{
 								actionId: action.id,
 								obraId,
-								recipientId,
-								start_at: executeAt.toISOString(),
-							});
-							await adminSupabase.from("obra_flujo_executions").insert({
-								...executionBase,
-								recipient_user_id: recipientId,
-								status: "completed",
-								executed_at: new Date().toISOString(),
-							});
-						}
+								recipientCount: recipients.length,
+								error: calErr,
+							}
+						);
+						// Batch insert failed executions
+						const failedExecutions = recipients.map((recipientId: string) => ({
+							...executionBase,
+							recipient_user_id: recipientId,
+							status: "failed",
+							executed_at: executedAt,
+							error_message:
+								calErr instanceof Error ? calErr.message : String(calErr),
+						}));
+						await supabase.from("obra_flujo_executions").insert(failedExecutions);
+					} else {
+						console.info("Batch inserted calendar_events from flujo action", {
+							actionId: action.id,
+							obraId,
+							recipientCount: recipients.length,
+							start_at: executeAt.toISOString(),
+						});
+						// Batch insert successful executions
+						const successExecutions = recipients.map((recipientId: string) => ({
+							...executionBase,
+							recipient_user_id: recipientId,
+							status: "completed",
+							executed_at: executedAt,
+						}));
+						await adminSupabase.from("obra_flujo_executions").insert(successExecutions);
 					}
 				}
 			}
 
 			if (shouldSendNotifications) {
-				for (const recipientId of recipients) {
-					const { data: executionRow, error: executionError } = await adminSupabase
-						.from("obra_flujo_executions")
-						.insert({
-							...executionBase,
-							recipient_user_id: recipientId,
-							status: "pending",
-						})
-						.select("id")
-						.single();
+				// Batch insert all pending executions and get IDs in one query
+				const pendingExecutions = recipients.map((recipientId: string) => ({
+					...executionBase,
+					recipient_user_id: recipientId,
+					status: "pending",
+				}));
 
-					if (executionError) {
-						console.error("Failed to record flujo execution", {
-							actionId: action.id,
-							recipientId,
-							error: executionError,
-						});
-						continue;
-					}
+				const { data: executionRows, error: executionError } = await adminSupabase
+					.from("obra_flujo_executions")
+					.insert(pendingExecutions)
+					.select("id, recipient_user_id");
 
-					const executionId = executionRow?.id ?? null;
+				if (executionError) {
+					console.error("Failed to batch insert flujo executions", {
+						actionId: action.id,
+						recipientCount: recipients.length,
+						error: executionError,
+					});
+				} else if (executionRows && executionRows.length > 0) {
+					// Map recipient IDs to execution IDs
+					const executionMap = new Map(
+						executionRows.map((row) => [row.recipient_user_id, row.id])
+					);
 
-					try {
-						console.info("Scheduling flujo notification workflow", {
-							actionId: action.id,
-							recipientId,
-							executionId,
-							notificationTypes,
-							executeAt: scheduledAtIso,
-						});
-						const result = await emitEvent("flujo.action.triggered", {
-							tenantId,
-							actorId: currentUserId,
-							recipientId,
-							obraId,
-							actionId: action.id,
-							title: action.title,
-							message: action.message,
-							executeAt: scheduledAtIso,
-							notificationTypes,
-							executionId,
-						});
+					// Process each recipient's workflow (events must be emitted individually)
+					const workflowPromises = recipients.map(async (recipientId: string) => {
+						const executionId = executionMap.get(recipientId) ?? null;
+						if (!executionId) return;
 
-						// Store the workflow run ID for future cancellation
-						if (result?.runId && executionId) {
-							await adminSupabase
-								.from("obra_flujo_executions")
-								.update({ workflow_run_id: result.runId })
-								.eq("id", executionId);
+						try {
+							console.info("Scheduling flujo notification workflow", {
+								actionId: action.id,
+								recipientId,
+								executionId,
+								notificationTypes,
+								executeAt: scheduledAtIso,
+							});
+							const result = await emitEvent("flujo.action.triggered", {
+								tenantId,
+								actorId: currentUserId,
+								recipientId,
+								obraId,
+								actionId: action.id,
+								title: action.title,
+								message: action.message,
+								executeAt: scheduledAtIso,
+								notificationTypes,
+								executionId,
+							});
+
+							// Store the workflow run ID for future cancellation
+							if (result?.runId && executionId) {
+								await adminSupabase
+									.from("obra_flujo_executions")
+									.update({ workflow_run_id: result.runId })
+									.eq("id", executionId);
+							}
+
+							console.info("Flujo workflow emitted", {
+								actionId: action.id,
+								recipientId,
+								executionId,
+								runId: result?.runId,
+							});
+						} catch (eventError) {
+							console.error("Failed to schedule flujo workflow", {
+								actionId: action.id,
+								recipientId,
+								error: eventError,
+							});
+							if (executionId) {
+								await adminSupabase
+									.from("obra_flujo_executions")
+									.update({
+										status: "failed",
+										executed_at: new Date().toISOString(),
+										error_message:
+											eventError instanceof Error
+												? eventError.message
+												: String(eventError),
+									})
+									.eq("id", executionId);
+							}
 						}
+					});
 
-						console.info("Flujo workflow emitted", {
-							actionId: action.id,
-							recipientId,
-							executionId,
-							runId: result?.runId,
-						});
-					} catch (eventError) {
-						console.error("Failed to schedule flujo workflow", {
-							actionId: action.id,
-							recipientId,
-							error: eventError,
-						});
-						if (executionId) {
-							await adminSupabase
-								.from("obra_flujo_executions")
-								.update({
-									status: "failed",
-									executed_at: new Date().toISOString(),
-									error_message:
-										eventError instanceof Error
-											? eventError.message
-											: String(eventError),
-								})
-								.eq("id", executionId);
-						}
-					}
+					// Execute all workflows in parallel
+					await Promise.all(workflowPromises);
 				}
 			}
 
@@ -526,6 +607,11 @@ export async function GET(request: Request) {
 		const iniContains = searchParams.get("iniContains");
 		if (iniContains && iniContains.trim())
 			query.ilike("iniciacion", `%${iniContains.trim()}%`);
+		const entidadContains = searchParams.get("entidadContains");
+		if (entidadContains && entidadContains.trim()) {
+			query.ilike("entidad_contratante", `%${entidadContains.trim()}%`);
+		}
+		numRange("porcentajeMin", "porcentajeMax", "porcentaje");
 
 		if (hasPagination) {
 			query.range(from, to);
@@ -538,14 +624,18 @@ export async function GET(request: Request) {
 	count = initialCount;
 
 	if (error && error.code === "42703") {
-		console.warn(
-			"Obras GET: on_finish_* columns missing, falling back to base columns"
-		);
+		console.warn("Obras GET: modern columns missing, falling back");
 		supportsConfigColumns = false;
-		const fallback = await buildSelect(BASE_COLUMNS);
-		data = fallback.data;
-		error = fallback.error;
-		count = fallback.count ?? count;
+		const fallbackBase = await buildSelect(BASE_COLUMNS);
+		data = fallbackBase.data;
+		error = fallbackBase.error;
+		count = fallbackBase.count ?? count;
+		if (error && error.code === "42703") {
+			const fallbackLegacy = await buildSelect(LEGACY_BASE_COLUMNS);
+			data = fallbackLegacy.data;
+			error = fallbackLegacy.error;
+			count = fallbackLegacy.count ?? count;
+		}
 	}
 
 	if (error) {
@@ -694,7 +784,16 @@ export async function PUT(request: Request) {
 		])
 	);
 
-	const upsertPayload = payload.map((obra) => {
+	const allowedCustomColumnIds = await loadTenantMainTableCustomColumnIds(
+		supabase,
+		tenantId
+	);
+
+	const buildUpsertPayload = (
+		includeConfigColumns: boolean,
+		includeCustomData: boolean
+	) =>
+		payload.map((obra) => {
 		const base = {
 			tenant_id: tenantId,
 			n: obra.n,
@@ -715,7 +814,13 @@ export async function PUT(request: Request) {
 			deleted_by: null,
 		};
 
-		if (supportsConfigColumns) {
+		if (includeCustomData) {
+			Object.assign(base, {
+				custom_data: sanitizeCustomData(obra.customData, allowedCustomColumnIds),
+			});
+		}
+
+		if (includeConfigColumns) {
 			Object.assign(base, {
 				on_finish_first_message: obra.onFinishFirstMessage ?? null,
 				on_finish_second_message: obra.onFinishSecondMessage ?? null,
@@ -726,9 +831,28 @@ export async function PUT(request: Request) {
 		return base;
 	});
 
-	const { error: upsertError } = await supabase
+	let { error: upsertError } = await supabase
 		.from("obras")
-		.upsert(upsertPayload, { onConflict: "tenant_id,n" });
+		.upsert(buildUpsertPayload(supportsConfigColumns, true), {
+			onConflict: "tenant_id,n",
+		});
+
+	if (upsertError && upsertError.code === "42703") {
+		// Retry without finish config columns.
+		supportsConfigColumns = false;
+		const fallbackNoConfig = await supabase
+			.from("obras")
+			.upsert(buildUpsertPayload(false, true), { onConflict: "tenant_id,n" });
+		upsertError = fallbackNoConfig.error;
+	}
+
+	if (upsertError && upsertError.code === "42703") {
+		// Final compatibility retry without custom_data column.
+		const fallbackLegacy = await supabase
+			.from("obras")
+			.upsert(buildUpsertPayload(false, false), { onConflict: "tenant_id,n" });
+		upsertError = fallbackLegacy.error;
+	}
 
 	if (upsertError) {
 		console.error("Error saving obras", upsertError);
@@ -838,61 +962,86 @@ export async function PUT(request: Request) {
 	}> = [];
 
 	if (newlyCompleted.length > 0) {
-		const query = supabase
-			.from("obras")
-			.select(
-				"id, n, designacion_y_ubicacion, porcentaje, on_finish_first_message, on_finish_second_message, on_finish_second_send_at"
-			)
-			.eq("tenant_id", tenantId)
-			.is("deleted_at", null)
-			.in(
-				"n",
-				newlyCompleted.map((obra) => obra.n)
-			);
+		// Optimization: Use data from existingMap when available (avoids redundant DB query)
+		// Only fetch from DB for obras that were newly created in this request
+		const completedFromExisting: typeof completedRows = [];
+		const newlyCreatedCompletedNs: number[] = [];
 
-		let fetchedCompleted;
-		let fetchCompletedError;
-		({ data: fetchedCompleted, error: fetchCompletedError } = await query);
-
-		if (fetchCompletedError) {
-			if (fetchCompletedError.code === "42703") {
-				supportsConfigColumns = false;
-				console.warn(
-					"Obras PUT: on_finish_* columns missing when fetching completed obras, falling back"
-				);
-				const fallback = await supabase
-					.from("obras")
-					.select("id, n, designacion_y_ubicacion, porcentaje")
-					.eq("tenant_id", tenantId)
-					.is("deleted_at", null)
-					.in(
-						"n",
-						newlyCompleted.map((obra) => obra.n)
-					);
-				fetchedCompleted = fallback.data;
-				fetchCompletedError = fallback.error;
+		for (const obra of newlyCompleted) {
+			const existing = existingMap.get(obra.n);
+			if (existing) {
+				// Use cached data from existingMap - already fetched at start of request
+				completedFromExisting.push({
+					id: existing.id,
+					n: obra.n,
+					designacion_y_ubicacion: existing.name,
+					porcentaje: obra.porcentaje, // Use payload porcentaje (updated value)
+					on_finish_first_message: existing.onFinishFirstMessage,
+					on_finish_second_message: existing.onFinishSecondMessage,
+					on_finish_second_send_at: existing.onFinishSecondSendAt,
+				});
+			} else {
+				// Obra was created and completed in same request - need to fetch from DB
+				newlyCreatedCompletedNs.push(obra.n);
 			}
 		}
 
-		if (fetchCompletedError) {
-			console.error(
-				"Obras PUT: failed to fetch completed obras data",
-				fetchCompletedError
-			);
-		} else {
-			const baseRows = (fetchedCompleted ?? []) as any[];
-			completedRows = baseRows.map((row) => ({
-				id: row.id,
-				n: row.n,
-				designacion_y_ubicacion: row.designacion_y_ubicacion,
-				porcentaje: row.porcentaje,
-				on_finish_first_message:
-					(row as DbObraRow).on_finish_first_message ?? null,
-				on_finish_second_message:
-					(row as DbObraRow).on_finish_second_message ?? null,
-				on_finish_second_send_at:
-					(row as DbObraRow).on_finish_second_send_at ?? null,
-			}));
+		completedRows = completedFromExisting;
+
+		// Only query DB for newly created completed obras (rare case)
+		if (newlyCreatedCompletedNs.length > 0) {
+			const query = supabase
+				.from("obras")
+				.select(
+					"id, n, designacion_y_ubicacion, porcentaje, on_finish_first_message, on_finish_second_message, on_finish_second_send_at"
+				)
+				.eq("tenant_id", tenantId)
+				.is("deleted_at", null)
+				.in("n", newlyCreatedCompletedNs);
+
+			let fetchedCompleted;
+			let fetchCompletedError;
+			({ data: fetchedCompleted, error: fetchCompletedError } = await query);
+
+			if (fetchCompletedError) {
+				if (fetchCompletedError.code === "42703") {
+					supportsConfigColumns = false;
+					console.warn(
+						"Obras PUT: on_finish_* columns missing when fetching completed obras, falling back"
+					);
+					const fallback = await supabase
+						.from("obras")
+						.select("id, n, designacion_y_ubicacion, porcentaje")
+						.eq("tenant_id", tenantId)
+						.is("deleted_at", null)
+						.in("n", newlyCreatedCompletedNs);
+					fetchedCompleted = fallback.data;
+					fetchCompletedError = fallback.error;
+				}
+			}
+
+			if (fetchCompletedError) {
+				console.error(
+					"Obras PUT: failed to fetch newly created completed obras data",
+					fetchCompletedError
+				);
+			} else {
+				const baseRows = (fetchedCompleted ?? []) as any[];
+				completedRows = completedRows.concat(
+					baseRows.map((row) => ({
+						id: row.id,
+						n: row.n,
+						designacion_y_ubicacion: row.designacion_y_ubicacion,
+						porcentaje: row.porcentaje,
+						on_finish_first_message:
+							(row as DbObraRow).on_finish_first_message ?? null,
+						on_finish_second_message:
+							(row as DbObraRow).on_finish_second_message ?? null,
+						on_finish_second_send_at:
+							(row as DbObraRow).on_finish_second_send_at ?? null,
+					}))
+				);
+			}
 		}
 	}
 
@@ -970,19 +1119,29 @@ export async function PUT(request: Request) {
 				if (ctx.obra.id) {
 					const { data: pendRows, error: pendError } = await supabase
 						.from("obra_pendientes")
-						.select("name, offset_days")
+						.select("id, name, offset_days")
 						.eq("obra_id", ctx.obra.id)
 						.eq("due_mode", "after_completion");
 					if (pendError) throw pendError;
 
+					// Build all schedule rows in memory, then batch upsert
+					const allScheduleRows: Array<{
+						pendiente_id: string;
+						user_id: string;
+						tenant_id: string;
+						stage: string;
+						run_at: string;
+					}> = [];
+
 					for (const row of pendRows ?? []) {
+						const pendienteId = (row as any).id;
+						if (!pendienteId) continue;
+
 						const offsetDays = Number((row as any).offset_days ?? 0);
 						const dueDate = new Date(
 							Date.now() + Math.max(0, offsetDays) * 24 * 60 * 60 * 1000
 						);
 
-						// Upsert schedules for this pendiente
-						const stages: { stage: string; run_at: Date }[] = [];
 						const mk = (days: number, label: string) => {
 							const d = new Date(
 								dueDate.getTime() - days * 24 * 60 * 60 * 1000
@@ -990,21 +1149,31 @@ export async function PUT(request: Request) {
 							if (label !== "due_today") d.setHours(9, 0, 0, 0);
 							return d;
 						};
-						stages.push({ stage: "due_7d", run_at: mk(7, "due_7d") });
-						stages.push({ stage: "due_3d", run_at: mk(3, "due_3d") });
-						stages.push({ stage: "due_1d", run_at: mk(1, "due_1d") });
-						stages.push({ stage: "due_today", run_at: new Date(dueDate) });
 
-						for (const s of stages) {
-							await supabase.from("pendiente_schedules").upsert(
-								{
-									pendiente_id: (row as any).id,
-									user_id: user.id,
-									tenant_id: tenantId,
-									stage: s.stage,
-									run_at: s.run_at.toISOString(),
-								},
-								{ onConflict: "pendiente_id,stage" }
+						for (const s of [
+							{ stage: "due_7d", run_at: mk(7, "due_7d") },
+							{ stage: "due_3d", run_at: mk(3, "due_3d") },
+							{ stage: "due_1d", run_at: mk(1, "due_1d") },
+							{ stage: "due_today", run_at: new Date(dueDate) },
+						]) {
+							allScheduleRows.push({
+								pendiente_id: pendienteId,
+								user_id: user.id,
+								tenant_id: tenantId,
+								stage: s.stage,
+								run_at: s.run_at.toISOString(),
+							});
+						}
+					}
+
+					if (allScheduleRows.length > 0) {
+						const { error: schedUpsertErr } = await supabase
+							.from("pendiente_schedules")
+							.upsert(allScheduleRows, { onConflict: "pendiente_id,stage" });
+						if (schedUpsertErr) {
+							console.error(
+								"Obras PUT: failed to upsert pendiente schedules",
+								{ obraId: ctx.obra.id, error: schedUpsertErr }
 							);
 						}
 					}

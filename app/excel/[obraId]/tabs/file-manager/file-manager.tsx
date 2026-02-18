@@ -125,6 +125,61 @@ const DATA_TYPE_LABELS: Record<TablaColumnDataType, string> = {
   date: 'Fecha',
 };
 
+type DataFolderColumnPayload = {
+  label: string;
+  fieldKey: string;
+  dataType: TablaColumnDataType;
+  required: boolean;
+  position: number;
+  config?: Record<string, unknown>;
+};
+
+type DataFolderTablePreset = {
+  name: string;
+  description: string;
+  columns: DataFolderColumnPayload[];
+};
+
+const CERTIFICADO_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] = [
+  {
+    name: 'PMC Resumen',
+    description: 'Resumen mensual del certificado: período, monto, avance acumulado.',
+    columns: [
+      { label: 'Período', fieldKey: 'periodo', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['periodo', 'mes', 'month', 'correspondiente'] } },
+      { label: 'N° Certificado', fieldKey: 'nro_certificado', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['nro', 'numero', 'certificado', 'cert', 'n°'] } },
+      { label: 'Fecha Certificación', fieldKey: 'fecha_certificacion', dataType: 'text', required: false, position: 2, config: { excelKeywords: ['fecha', 'certificacion', 'date'] } },
+      { label: 'Monto Certificado', fieldKey: 'monto_certificado', dataType: 'currency', required: false, position: 3, config: { excelKeywords: ['monto', 'importe', 'certificado'] } },
+      { label: 'Avance Físico Acum. %', fieldKey: 'avance_fisico_acumulado_pct', dataType: 'number', required: false, position: 4, config: { excelKeywords: ['avance', 'fisico', 'acumulado', '%'] } },
+      { label: 'Monto Acumulado', fieldKey: 'monto_acumulado', dataType: 'currency', required: false, position: 5, config: { excelKeywords: ['monto', 'acumulado', 'total'] } },
+    ],
+  },
+  {
+    name: 'PMC Items',
+    description: 'Desglose por rubro/item del certificado con avances e importes.',
+    columns: [
+      { label: 'Código Item', fieldKey: 'item_code', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['item', 'codigo', 'cod', 'rubro'] } },
+      { label: 'Descripción', fieldKey: 'descripcion', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['descripcion', 'rubro', 'concepto', 'detalle'] } },
+      { label: 'Incidencia %', fieldKey: 'incidencia_pct', dataType: 'number', required: false, position: 2, config: { excelKeywords: ['incidencia', '%'] } },
+      { label: 'Monto Rubro', fieldKey: 'monto_rubro', dataType: 'currency', required: false, position: 3, config: { excelKeywords: ['total', 'rubro', 'monto'] } },
+      { label: 'Avance Anterior %', fieldKey: 'avance_anterior_pct', dataType: 'number', required: false, position: 4, config: { excelKeywords: ['anterior', 'avance', '%'] } },
+      { label: 'Avance Período %', fieldKey: 'avance_periodo_pct', dataType: 'number', required: false, position: 5, config: { excelKeywords: ['presente', 'periodo', 'avance', '%'] } },
+      { label: 'Avance Acumulado %', fieldKey: 'avance_acumulado_pct', dataType: 'number', required: false, position: 6, config: { excelKeywords: ['acumulado', 'avance', '%'] } },
+      { label: 'Monto Anterior $', fieldKey: 'monto_anterior', dataType: 'currency', required: false, position: 7, config: { excelKeywords: ['anterior', 'cert', 'importe'] } },
+      { label: 'Monto Presente $', fieldKey: 'monto_presente', dataType: 'currency', required: false, position: 8, config: { excelKeywords: ['presente', 'cert', 'importe'] } },
+      { label: 'Monto Acumulado $', fieldKey: 'monto_acumulado', dataType: 'currency', required: false, position: 9, config: { excelKeywords: ['total', 'acumulado', 'cert', 'importe'] } },
+    ],
+  },
+  {
+    name: 'Curva Plan',
+    description: 'Curva de inversiones con avance mensual y acumulado.',
+    columns: [
+      { label: 'Período', fieldKey: 'periodo', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['mes', 'periodo', 'month'] } },
+      { label: 'Avance Mensual %', fieldKey: 'avance_mensual_pct', dataType: 'number', required: false, position: 1, config: { excelKeywords: ['avance', 'mensual', '%'] } },
+      { label: 'Avance Acumulado %', fieldKey: 'avance_acumulado_pct', dataType: 'number', required: false, position: 2, config: { excelKeywords: ['acumulado', 'financiero', '%'] } },
+    ],
+  },
+];
+
 // Utility function to check if a file is a 3D model
 const is3DModelFile = (fileName: string): boolean => {
   const ext = fileName.toLowerCase().split('.').pop();
@@ -188,6 +243,41 @@ type TablaSchemaDraftColumn = {
   warnAbove: string;
   criticalBelow: string;
   criticalAbove: string;
+};
+
+type SpreadsheetPreviewMapping = {
+  dbColumn: string;
+  label: string;
+  excelHeader: string | null;
+  confidence: number;
+  manualValue?: string;
+};
+
+type SpreadsheetPreviewSheet = {
+  name: string;
+  headers: string[];
+  rowCount: number;
+};
+
+type SpreadsheetPreviewTable = {
+  tablaId: string;
+  tablaName: string;
+  inserted: number;
+  sheetName: string | null;
+  mappings?: SpreadsheetPreviewMapping[];
+  previewRows?: Record<string, unknown>[];
+  availableSheets?: SpreadsheetPreviewSheet[];
+};
+
+type SpreadsheetPreviewPayload = {
+  perTable: SpreadsheetPreviewTable[];
+  sheetAssignments: Record<string, string | null>;
+  columnMappings: Record<string, Record<string, string | null>>;
+  manualValues: Record<string, Record<string, string>>;
+  existingBucket: string;
+  existingPath: string;
+  existingFileName: string;
+  tablaIds: string[];
 };
 
 function getConditionalClass(
@@ -526,6 +616,7 @@ export function FileManager({
   const [createFolderMode, setCreateFolderMode] = useState<'normal' | 'data' | null>(null);
   const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>('both');
   const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState<string>('');
+  const [newFolderSpreadsheetTemplate, setNewFolderSpreadsheetTemplate] = useState<'' | 'auto' | 'certificado'>('');
   const [newFolderDescription, setNewFolderDescription] = useState('');
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
   const [ocrTemplates, setOcrTemplates] = useState<OcrTemplateOption[]>([]);
@@ -556,6 +647,11 @@ export function FileManager({
   const [isGlobalFileDragActive, setIsGlobalFileDragActive] = useState(false);
   const [isTemplateConfiguratorOpen, setIsTemplateConfiguratorOpen] = useState(false);
   const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
+  const [isSpreadsheetPreviewOpen, setIsSpreadsheetPreviewOpen] = useState(false);
+  const [isLoadingSpreadsheetPreview, setIsLoadingSpreadsheetPreview] = useState(false);
+  const [isApplyingSpreadsheetPreview, setIsApplyingSpreadsheetPreview] = useState(false);
+  const [spreadsheetPreviewPayload, setSpreadsheetPreviewPayload] = useState<SpreadsheetPreviewPayload | null>(null);
+  const spreadsheetPreviewResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const rateLimitUntilRef = useRef<number>(0);
 
   useEffect(() => {
@@ -563,20 +659,34 @@ export function FileManager({
     resetDocumentsStore(obraId);
   }, [obraId, resetDocumentsStore]);
 
-  const ocrFolderMap = useMemo(() => {
-    const map = new Map<string, OcrFolderLink>();
+  const ocrFolderLinksMap = useMemo(() => {
+    const map = new Map<string, OcrFolderLink[]>();
     ocrFolderLinks.forEach((link) => {
       const normalizedPath = normalizeFolderPath(link.folderName);
       if (normalizedPath) {
-        map.set(normalizedPath, link);
+        const existing = map.get(normalizedPath) ?? [];
+        existing.push(link);
+        map.set(normalizedPath, existing);
       }
       const normalizedFlat = normalizeFolderName(link.folderName);
-      if (normalizedFlat) {
-        map.set(normalizedFlat, link);
+      if (normalizedFlat && normalizedFlat !== normalizedPath) {
+        const existing = map.get(normalizedFlat) ?? [];
+        existing.push(link);
+        map.set(normalizedFlat, existing);
       }
     });
     return map;
   }, [ocrFolderLinks]);
+
+  const ocrFolderMap = useMemo(() => {
+    const map = new Map<string, OcrFolderLink>();
+    ocrFolderLinksMap.forEach((links, key) => {
+      if (links.length > 0) {
+        map.set(key, links[0]);
+      }
+    });
+    return map;
+  }, [ocrFolderLinksMap]);
 
   const ocrTablaMap = useMemo(() => {
     const map = new Map<string, OcrFolderLink>();
@@ -584,26 +694,26 @@ export function FileManager({
     return map;
   }, [ocrFolderLinks]);
 
-  const resolveOcrLinkForDocument = useCallback(
+  const resolveOcrLinksForDocument = useCallback(
     (doc: FileSystemItem | null) => {
-      if (!doc?.storagePath) return null;
+      if (!doc?.storagePath) return [] as OcrFolderLink[];
       if (doc.ocrFolderName) {
         const normalized = normalizeFolderPath(doc.ocrFolderName);
-        const direct = ocrFolderMap.get(normalized);
-        if (direct) return direct;
+        const direct = ocrFolderLinksMap.get(normalized) ?? ocrFolderLinksMap.get(normalizeFolderName(normalized));
+        if (direct && direct.length > 0) return direct;
       }
       const segments = doc.storagePath.split('/').filter(Boolean);
-      if (segments.length < 3) return null;
+      if (segments.length < 3) return [] as OcrFolderLink[];
       const relativePath = normalizeFolderPath(segments.slice(1, -1).join('/'));
       let cursor = relativePath;
       while (cursor) {
-        const link = ocrFolderMap.get(cursor);
-        if (link) return link;
+        const links = ocrFolderLinksMap.get(cursor) ?? ocrFolderLinksMap.get(normalizeFolderName(cursor));
+        if (links && links.length > 0) return links;
         cursor = getParentFolderPath(cursor);
       }
-      return null;
+      return [] as OcrFolderLink[];
     },
-    [ocrFolderMap]
+    [ocrFolderLinksMap]
   );
 
   // Table search state for OCR folders
@@ -614,6 +724,8 @@ export function FileManager({
   const [ocrDocumentFilterName, setOcrDocumentFilterName] = useState<string | null>(null);
   const [ocrDataViewMode, setOcrDataViewMode] = useState<'cards' | 'table'>('cards');
   const [ocrViewMode, setOcrViewMode] = useState<'table' | 'documents'>('table');
+  const [activeOcrTablaIdOverride, setActiveOcrTablaIdOverride] = useState<string | null>(null);
+  const [activeDocumentTablaIdOverride, setActiveDocumentTablaIdOverride] = useState<string | null>(null);
   const ITEMS_PER_PAGE = 24;
   const [folderPage, setFolderPage] = useState(1);
 
@@ -622,6 +734,7 @@ export function FileManager({
     setCreateFolderError(null);
     setNewFolderDataInputMethod('both');
     setNewFolderOcrTemplateId('');
+    setNewFolderSpreadsheetTemplate('');
     setNewFolderDescription('');
     setNewFolderHasNested(false);
     setNewFolderColumns([
@@ -654,6 +767,27 @@ export function FileManager({
       .split('/')
       .map(segment => segment.trim())
       .filter(Boolean);
+  }, []);
+
+  const sanitizeStorageFileName = useCallback((name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return `archivo-${Date.now()}`;
+    const dotIndex = trimmed.lastIndexOf('.');
+    const base = dotIndex > 0 ? trimmed.slice(0, dotIndex) : trimmed;
+    const ext = dotIndex > 0 ? trimmed.slice(dotIndex + 1) : '';
+    const safeBase = base
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const fallbackBase = safeBase || `archivo-${Date.now()}`;
+    const safeExt = ext
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase();
+    return safeExt ? `${fallbackBase}.${safeExt}` : fallbackBase;
   }, []);
 
   const folderPathSegments = useMemo(() => sanitizePath(selectedFolderPath), [selectedFolderPath, sanitizePath]);
@@ -1147,12 +1281,8 @@ export function FileManager({
 
     const bootstrap = async () => {
       try {
-        // Fetch OCR links if missing, to hydrate tags quickly
-        if (shouldRefetchOcr) {
-          await refreshOcrFolderLinks({ skipCache: true });
-        }
-        // Only rebuild the tree if it’s stale or missing
-        if (shouldRefetchTree) {
+        // Build once: this endpoint already returns tree + OCR links.
+        if (shouldRefetchTree || shouldRefetchOcr) {
           await buildFileTree({ skipCache: true });
         }
       } catch (error) {
@@ -1162,7 +1292,7 @@ export function FileManager({
 
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [obraId, fileTree, ocrFolderLinks.length, buildFileTree, refreshOcrFolderLinks]);
+  }, [obraId, fileTree, ocrFolderLinks.length, buildFileTree]);
 
   // OCR links are now fetched alongside the tree; no separate re-hydration loop needed.
 
@@ -1181,6 +1311,10 @@ export function FileManager({
       lastOcrFolderIdRef.current = selectedFolder.id;
     }
   }, [selectedFolder]);
+
+  useEffect(() => {
+    setActiveOcrTablaIdOverride(null);
+  }, [selectedFolder?.id]);
 
   useEffect(() => {
     if (ocrViewMode === 'documents') {
@@ -1657,13 +1791,11 @@ export function FileManager({
       setCreateFolderError('Ya existe una carpeta con ese nombre. Elegí otro nombre.');
       return;
     }
-    if (ocrFolderLinks.some((link) => normalizeFolderPath(link.folderName) === folderRelativePath)) {
-      setCreateFolderError('Ya existe una carpeta de datos con ese nombre. Elegí otro nombre.');
-      return;
-    }
+    // Allow multiple OCR tables targeting the same folder path (fan-out extraction).
     const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
-    if (needsOcrTemplate && !newFolderOcrTemplateId) {
-      toast.error('Elegí o creá una plantilla de extracción');
+    const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
+    if (!hasAnyTemplateSelected) {
+      toast.error('Seleccioná una plantilla OCR o una plantilla XLSX/CSV');
       return;
     }
     if (newFolderColumns.length === 0) {
@@ -1683,46 +1815,70 @@ export function FileManager({
       }
     }
     try {
-      const payload = {
-        name: rawFolderName,
-        description: newFolderDescription.trim() || undefined,
+      const basePayload = {
         sourceType: 'ocr' as const, // Keep 'ocr' for backward compatibility with API
         dataInputMethod: newFolderDataInputMethod,
         ocrFolderName: normalizedFolder,
         ocrFolderPath: folderRelativePath,
         hasNestedData: newFolderHasNested,
         ocrTemplateId: needsOcrTemplate ? newFolderOcrTemplateId : undefined,
-        columns: newFolderColumns.map((column, index) => ({
-          label: column.label.trim() || `Columna ${index + 1}`,
-          fieldKey: normalizeFieldKey(column.fieldKey),
-          dataType: column.dataType,
-          required: column.required,
-          position: index,
-          config: newFolderHasNested
-            ? { ocrScope: column.scope ?? 'item', ocrDescription: column.description ?? null }
-            : column.description
-              ? { ocrDescription: column.description }
-              : undefined,
-        })),
+        spreadsheetTemplate: newFolderSpreadsheetTemplate || undefined,
       };
 
-      const res = await fetch(`/api/obras/${obraId}/tablas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const defaultColumns = newFolderColumns.map((column, index) => ({
+        label: column.label.trim() || `Columna ${index + 1}`,
+        fieldKey: normalizeFieldKey(column.fieldKey),
+        dataType: column.dataType,
+        required: column.required,
+        position: index,
+        config: newFolderHasNested
+          ? { ocrScope: column.scope ?? 'item', ocrDescription: column.description ?? null }
+          : column.description
+            ? { ocrDescription: column.description }
+            : undefined,
+      }));
 
-      if (!res.ok) {
-        let errorMessage = 'No se pudo crear la carpeta de datos';
-        try {
-          const json = await res.json();
-          errorMessage = json.error || errorMessage;
-        } catch {
-          // If not JSON, try text
-          const text = await res.text();
-          errorMessage = text || errorMessage;
+      const tablesToCreate =
+        newFolderSpreadsheetTemplate === 'certificado'
+          ? CERTIFICADO_SPREADSHEET_TABLE_PRESETS.map((preset) => ({
+            name: `${rawFolderName} · ${preset.name}`,
+            description: preset.description,
+            columns: preset.columns,
+          }))
+          : [{
+            name: rawFolderName,
+            description: newFolderDescription.trim() || undefined,
+            columns: defaultColumns,
+          }];
+
+      const createdTablaIds: string[] = [];
+      for (const tableDef of tablesToCreate) {
+        const res = await fetch(`/api/obras/${obraId}/tablas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...basePayload,
+            name: tableDef.name,
+            description: tableDef.description,
+            columns: tableDef.columns,
+          }),
+        });
+        if (!res.ok) {
+          let errorMessage = 'No se pudo crear la carpeta de datos';
+          try {
+            const json = await res.json();
+            errorMessage = json.error || errorMessage;
+          } catch {
+            const text = await res.text();
+            errorMessage = text || errorMessage;
+          }
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
+        const created = await res.json().catch(() => ({}));
+        const createdTablaId = created?.tabla?.id as string | undefined;
+        if (createdTablaId) {
+          createdTablaIds.push(createdTablaId);
+        }
       }
 
       if (!convertingExistingFolder) {
@@ -1738,10 +1894,7 @@ export function FileManager({
         }
       }
 
-      const created = await res.json().catch(() => ({}));
-      const createdTablaId = created?.tabla?.id as string | undefined;
-
-      if (convertingExistingFolder && createdTablaId && newFolderDataInputMethod !== 'manual') {
+      if (convertingExistingFolder && createdTablaIds.length > 0 && newFolderDataInputMethod !== 'manual') {
         const filesToReprocess = (convertFolderTarget?.children ?? [])
           .filter((child) => child.type === 'file' && child.storagePath)
           .map((child) => child as FileSystemItem);
@@ -1752,7 +1905,8 @@ export function FileManager({
               form.append('existingBucket', 'obra-documents');
               form.append('existingPath', file.storagePath!);
               form.append('existingFileName', file.name);
-              await fetch(`/api/obras/${obraId}/tablas/${createdTablaId}/import/ocr?skipStorage=1`, {
+              form.append('tablaIds', JSON.stringify(createdTablaIds));
+              await fetch(`/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`, {
                 method: 'POST',
                 body: form,
               });
@@ -1768,7 +1922,6 @@ export function FileManager({
       );
       setIsCreateFolderOpen(false);
       resetNewFolderForm();
-      await refreshOcrFolderLinks({ skipCache: true });
       await buildFileTree({ skipCache: true });
     } catch (error) {
       console.error('Error creating data folder:', error);
@@ -1798,9 +1951,9 @@ export function FileManager({
     newFolderHasNested,
     newFolderName,
     newFolderOcrTemplateId,
+    newFolderSpreadsheetTemplate,
     obraId,
     ocrFolderLinks,
-    refreshOcrFolderLinks,
     resetNewFolderForm,
     resolveParentSegments,
     supabase,
@@ -1820,7 +1973,6 @@ export function FileManager({
     setIsRefreshing(true);
     try {
       // Force refresh by skipping cache
-      await refreshOcrFolderLinks({ skipCache: true });
       await buildFileTree({ skipCache: true });
       toast.success('Documentos sincronizados');
     } catch (error) {
@@ -1829,20 +1981,19 @@ export function FileManager({
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing, refreshOcrFolderLinks, buildFileTree]);
+  }, [isRefreshing, buildFileTree]);
 
   const refreshDocumentsSilent = useCallback(async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
-      await refreshOcrFolderLinks({ skipCache: true });
       await buildFileTree({ skipCache: true });
     } catch (error) {
       console.error('Error refreshing documents:', error);
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing, refreshOcrFolderLinks, buildFileTree]);
+  }, [isRefreshing, buildFileTree]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1854,6 +2005,252 @@ export function FileManager({
     window.addEventListener('obra:documents-refresh', handler);
     return () => window.removeEventListener('obra:documents-refresh', handler);
   }, [obraId, refreshDocumentsSilent]);
+
+  const fetchSpreadsheetPreview = useCallback(
+    async ({
+      existingPath,
+      existingFileName,
+      tablaIds,
+      sheetAssignments,
+      columnMappings,
+      manualValues,
+    }: {
+      existingPath: string;
+      existingFileName: string;
+      tablaIds: string[];
+      sheetAssignments?: Record<string, string | null>;
+      columnMappings?: Record<string, Record<string, string | null>>;
+      manualValues?: Record<string, Record<string, string>>;
+    }) => {
+      const formData = new FormData();
+      formData.append('existingBucket', 'obra-documents');
+      formData.append('existingPath', existingPath);
+      formData.append('existingFileName', existingFileName);
+      const uniqueTablaIds = [...new Set(tablaIds)];
+      formData.append('tablaIds', JSON.stringify(uniqueTablaIds));
+      if (sheetAssignments) {
+        formData.append('sheetAssignments', JSON.stringify(sheetAssignments));
+      }
+      if (columnMappings) {
+        formData.append('columnMappings', JSON.stringify(columnMappings));
+      }
+      if (manualValues) {
+        formData.append('manualValues', JSON.stringify(manualValues));
+      }
+      const response = await fetch(
+        `/api/obras/${obraId}/tablas/import/spreadsheet-multi?preview=1&skipStorage=1`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      const payload = await response.json().catch(() => ({} as any));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload?.error === 'string'
+            ? payload.error
+            : 'No se pudo generar la vista previa de planilla.'
+        );
+      }
+      const previewTables = Array.isArray(payload?.perTable) ? payload.perTable : [];
+      const nextSheetAssignments: Record<string, string | null> = {};
+      const nextColumnMappings: Record<string, Record<string, string | null>> = {};
+      const nextManualValues: Record<string, Record<string, string>> = {};
+      previewTables.forEach((table: SpreadsheetPreviewTable) => {
+        nextSheetAssignments[table.tablaId] = table.sheetName ?? null;
+        const perTableMapping: Record<string, string | null> = {};
+        const perTableManualValues: Record<string, string> = {};
+        (table.mappings ?? []).forEach((mapping) => {
+          perTableMapping[mapping.dbColumn] = mapping.excelHeader ?? null;
+          perTableManualValues[mapping.dbColumn] = mapping.manualValue ?? '';
+        });
+        nextColumnMappings[table.tablaId] = perTableMapping;
+        nextManualValues[table.tablaId] = perTableManualValues;
+      });
+      return {
+        perTable: previewTables as SpreadsheetPreviewTable[],
+        sheetAssignments: sheetAssignments ?? nextSheetAssignments,
+        columnMappings: columnMappings ?? nextColumnMappings,
+        manualValues: manualValues ?? nextManualValues,
+        existingBucket: 'obra-documents',
+        existingPath,
+        existingFileName,
+        tablaIds: uniqueTablaIds,
+      } satisfies SpreadsheetPreviewPayload;
+    },
+    [obraId]
+  );
+
+  const openSpreadsheetPreview = useCallback(
+    (payload: SpreadsheetPreviewPayload) =>
+      new Promise<boolean>((resolve) => {
+        spreadsheetPreviewResolverRef.current = resolve;
+        setSpreadsheetPreviewPayload(payload);
+        setIsSpreadsheetPreviewOpen(true);
+      }),
+    []
+  );
+
+  const closeSpreadsheetPreview = useCallback((confirmed: boolean) => {
+    setIsSpreadsheetPreviewOpen(false);
+    const resolver = spreadsheetPreviewResolverRef.current;
+    spreadsheetPreviewResolverRef.current = null;
+    resolver?.(confirmed);
+  }, []);
+
+  const refreshSpreadsheetPreviewWithOverrides = useCallback(
+    async (nextSheetAssignments: Record<string, string | null>, nextColumnMappings: Record<string, Record<string, string | null>>) => {
+      if (!spreadsheetPreviewPayload) return;
+      try {
+        setIsLoadingSpreadsheetPreview(true);
+        const nextPayload = await fetchSpreadsheetPreview({
+          existingPath: spreadsheetPreviewPayload.existingPath,
+          existingFileName: spreadsheetPreviewPayload.existingFileName,
+          tablaIds: spreadsheetPreviewPayload.tablaIds,
+          sheetAssignments: nextSheetAssignments,
+          columnMappings: nextColumnMappings,
+          manualValues: spreadsheetPreviewPayload.manualValues,
+        });
+        setSpreadsheetPreviewPayload(nextPayload);
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la vista previa.');
+      } finally {
+        setIsLoadingSpreadsheetPreview(false);
+      }
+    },
+    [fetchSpreadsheetPreview, spreadsheetPreviewPayload]
+  );
+
+  const handleSpreadsheetPreviewSheetChange = useCallback(
+    async (tablaId: string, sheetName: string | null) => {
+      if (!spreadsheetPreviewPayload) return;
+      const nextSheetAssignments = {
+        ...spreadsheetPreviewPayload.sheetAssignments,
+        [tablaId]: sheetName,
+      };
+      const nextColumnMappings = { ...spreadsheetPreviewPayload.columnMappings };
+      delete nextColumnMappings[tablaId];
+      const nextManualValues = { ...spreadsheetPreviewPayload.manualValues };
+      delete nextManualValues[tablaId];
+      try {
+        setIsLoadingSpreadsheetPreview(true);
+        const nextPayload = await fetchSpreadsheetPreview({
+          existingPath: spreadsheetPreviewPayload.existingPath,
+          existingFileName: spreadsheetPreviewPayload.existingFileName,
+          tablaIds: spreadsheetPreviewPayload.tablaIds,
+          sheetAssignments: nextSheetAssignments,
+          columnMappings: nextColumnMappings,
+          manualValues: nextManualValues,
+        });
+        setSpreadsheetPreviewPayload(nextPayload);
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la vista previa.');
+      } finally {
+        setIsLoadingSpreadsheetPreview(false);
+      }
+    },
+    [fetchSpreadsheetPreview, spreadsheetPreviewPayload]
+  );
+
+  const handleSpreadsheetPreviewMappingChange = useCallback(
+    async (tablaId: string, dbColumn: string, excelHeader: string | null) => {
+      if (!spreadsheetPreviewPayload) return;
+      const nextColumnMappings = {
+        ...spreadsheetPreviewPayload.columnMappings,
+        [tablaId]: {
+          ...(spreadsheetPreviewPayload.columnMappings[tablaId] ?? {}),
+          [dbColumn]: excelHeader,
+        },
+      };
+      await refreshSpreadsheetPreviewWithOverrides(
+        spreadsheetPreviewPayload.sheetAssignments,
+        nextColumnMappings
+      );
+    },
+    [refreshSpreadsheetPreviewWithOverrides, spreadsheetPreviewPayload]
+  );
+
+  const handleSpreadsheetPreviewManualValueChange = useCallback(
+    async (tablaId: string, dbColumn: string, manualValue: string) => {
+      if (!spreadsheetPreviewPayload) return;
+      const nextManualValues = {
+        ...spreadsheetPreviewPayload.manualValues,
+        [tablaId]: {
+          ...(spreadsheetPreviewPayload.manualValues[tablaId] ?? {}),
+          [dbColumn]: manualValue,
+        },
+      };
+      try {
+        setIsLoadingSpreadsheetPreview(true);
+        const nextPayload = await fetchSpreadsheetPreview({
+          existingPath: spreadsheetPreviewPayload.existingPath,
+          existingFileName: spreadsheetPreviewPayload.existingFileName,
+          tablaIds: spreadsheetPreviewPayload.tablaIds,
+          sheetAssignments: spreadsheetPreviewPayload.sheetAssignments,
+          columnMappings: spreadsheetPreviewPayload.columnMappings,
+          manualValues: nextManualValues,
+        });
+        setSpreadsheetPreviewPayload(nextPayload);
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el valor manual.');
+      } finally {
+        setIsLoadingSpreadsheetPreview(false);
+      }
+    },
+    [fetchSpreadsheetPreview, spreadsheetPreviewPayload]
+  );
+
+  const applySpreadsheetPreviewImport = useCallback(async () => {
+    if (!spreadsheetPreviewPayload) return false;
+    try {
+      setIsApplyingSpreadsheetPreview(true);
+      const formData = new FormData();
+      formData.append('existingBucket', spreadsheetPreviewPayload.existingBucket);
+      formData.append('existingPath', spreadsheetPreviewPayload.existingPath);
+      formData.append('existingFileName', spreadsheetPreviewPayload.existingFileName);
+      formData.append('tablaIds', JSON.stringify(spreadsheetPreviewPayload.tablaIds));
+      formData.append('sheetAssignments', JSON.stringify(spreadsheetPreviewPayload.sheetAssignments));
+      formData.append('columnMappings', JSON.stringify(spreadsheetPreviewPayload.columnMappings));
+      formData.append('manualValues', JSON.stringify(spreadsheetPreviewPayload.manualValues));
+      const response = await fetch(
+        `/api/obras/${obraId}/tablas/import/spreadsheet-multi?skipStorage=1`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      const payload = await response.json().catch(() => ({} as any));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload?.error === 'string'
+            ? payload.error
+            : 'No se pudo aplicar la importación de planilla.'
+        );
+      }
+      const perTableResults = Array.isArray(payload?.perTable) ? payload.perTable : [];
+      if (perTableResults.length > 0) {
+        perTableResults.forEach((result: { tablaName?: string; inserted?: number }) => {
+          if ((result?.inserted ?? 0) > 0) {
+            toast.success(`Se importaron ${result.inserted} filas en ${result?.tablaName ?? 'tabla'}`);
+          } else {
+            toast.warning(`No se detectaron filas para ${result?.tablaName ?? 'tabla'}`);
+          }
+        });
+      } else {
+        toast.success('Planilla procesada');
+      }
+      return true;
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo importar la planilla.');
+      return false;
+    } finally {
+      setIsApplyingSpreadsheetPreview(false);
+    }
+  }, [obraId, spreadsheetPreviewPayload]);
 
   const uploadFilesToFolder = useCallback(async (inputFiles: FileList | File[], targetFolder?: FileSystemItem | null) => {
     const filesArray = Array.isArray(inputFiles) ? inputFiles : Array.from(inputFiles);
@@ -1878,14 +2275,22 @@ export function FileManager({
     };
 
     const folderPath = resolveFolderPath(folderForUpload ?? null);
-    const linkedTabla =
-      folderForUpload?.ocrTablaId
-        ? ocrTablaMap.get(folderForUpload.ocrTablaId)
-        : folderForUpload?.ocrFolderName
-          ? ocrFolderMap.get(normalizeFolderPath(folderForUpload.ocrFolderName))
-          : null;
-    const isOcrFolder = Boolean(linkedTabla);
-    let importedTablaData = false;
+    const linkedTablas = (() => {
+      if (!folderForUpload) return [] as OcrFolderLink[];
+      const folderKey = normalizeFolderPath(
+        folderForUpload.relativePath ?? folderForUpload.ocrFolderName ?? folderForUpload.name
+      );
+      const linksByPath =
+        ocrFolderLinksMap.get(folderKey) ??
+        ocrFolderLinksMap.get(normalizeFolderName(folderKey)) ??
+        [];
+      if (linksByPath.length > 0) return linksByPath;
+      if (folderForUpload.ocrTablaId) {
+        return [ocrTablaMap.get(folderForUpload.ocrTablaId)].filter(Boolean) as OcrFolderLink[];
+      }
+      return [] as OcrFolderLink[];
+    })();
+    const isOcrFolder = linkedTablas.length > 0;
 
     setUploadingFiles(true);
     setCurrentUploadFolder(folderForUpload ?? fileTree ?? null);
@@ -1894,7 +2299,8 @@ export function FileManager({
 
     try {
       for (const file of filesArray) {
-        const filePath = `${folderPath}/${file.name}`;
+        const storageFileName = sanitizeStorageFileName(file.name);
+        const filePath = `${folderPath}/${storageFileName}`;
 
         const { error } = await supabase.storage
           .from('obra-documents')
@@ -1949,6 +2355,29 @@ export function FileManager({
 
         if (isOcrFolder) {
           try {
+            const ext = file.name.toLowerCase().split('.').pop() ?? '';
+            const isSpreadsheet = ext === 'csv' || ext === 'xlsx' || ext === 'xls';
+            if (isSpreadsheet) {
+              let previewPayload: SpreadsheetPreviewPayload;
+              try {
+                setIsLoadingSpreadsheetPreview(true);
+                const uniqueTablaIds = [...new Set(linkedTablas.map((tabla) => tabla.tablaId))];
+                previewPayload = await fetchSpreadsheetPreview({
+                  existingPath: filePath,
+                  existingFileName: file.name,
+                  tablaIds: uniqueTablaIds,
+                });
+              } finally {
+                setIsLoadingSpreadsheetPreview(false);
+              }
+              const confirmed = await openSpreadsheetPreview(previewPayload);
+              if (!confirmed) {
+                toast.info(`Importación cancelada para ${file.name}`);
+                continue;
+              }
+              continue;
+            }
+
             const fd = new FormData();
 
             if (file.type.includes('pdf')) {
@@ -1980,38 +2409,41 @@ export function FileManager({
             fd.append('existingBucket', 'obra-documents');
             fd.append('existingPath', filePath);
             fd.append('existingFileName', file.name);
-
-            if (linkedTabla) {
-              const importRes = await fetch(
-                `/api/obras/${obraId}/tablas/${linkedTabla.tablaId}/import/ocr?skipStorage=1`,
-                {
-                  method: 'POST',
-                  body: fd,
-                }
-              );
-
-              if (!importRes.ok) {
-                const out = await importRes.json().catch(() => ({} as any));
-                console.error('Tabla OCR import failed', out);
-                const limitMessage =
-                  typeof out?.error === 'string'
-                    ? out.error
-                    : 'Superaste el límite de tokens de IA de tu plan.';
-                if (importRes.status === 402) {
-                  toast.warning(limitMessage);
-                } else {
-                  toast.error(`No se pudieron extraer datos para ${linkedTabla.tablaName}`);
-                }
-                continue;
+            fd.append('tablaIds', JSON.stringify([...new Set(linkedTablas.map((tabla) => tabla.tablaId))]));
+            const importRes = await fetch(
+              `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
+              {
+                method: 'POST',
+                body: fd,
               }
+            );
 
-              const out = await importRes.json().catch(() => ({} as any));
-              toast.success(
-                out?.inserted
-                  ? `Se importaron ${out.inserted} filas en ${linkedTabla.tablaName}`
-                  : `Archivo procesado en ${linkedTabla.tablaName}`
-              );
-              importedTablaData = true;
+            const out = await importRes.json().catch(() => ({} as any));
+            if (!importRes.ok) {
+              console.error('Tabla OCR import failed', out);
+              const limitMessage =
+                typeof out?.error === 'string'
+                  ? out.error
+                  : 'Superaste el límite de tokens de IA de tu plan.';
+              if (importRes.status === 402) {
+                toast.warning(limitMessage);
+              } else {
+                toast.error('No se pudieron extraer datos para las tablas OCR');
+              }
+              continue;
+            }
+
+            const perTableResults = Array.isArray(out?.perTable) ? out.perTable : [];
+            if (perTableResults.length > 0) {
+              perTableResults.forEach((result: { tablaName?: string; inserted?: number }) => {
+                toast.success(
+                  result?.inserted
+                    ? `Se importaron ${result.inserted} filas en ${result?.tablaName ?? 'tabla OCR'}`
+                    : `Archivo procesado en ${result?.tablaName ?? 'tabla OCR'}`
+                );
+              });
+            } else {
+              toast.success('Archivo procesado en tablas OCR');
             }
           } catch (ocrError) {
             console.error('Error extracting materials', ocrError);
@@ -2033,11 +2465,7 @@ export function FileManager({
         pendingUsageBytes = 0;
       }
 
-      if (importedTablaData) {
-        await refreshOcrFolderLinks({ skipCache: true });
-      }
-
-      buildFileTree({ skipCache: true });
+      await buildFileTree({ skipCache: true });
     } catch (error) {
       console.error('Error uploading files:', error);
       toast.error('Error uploading files');
@@ -2045,7 +2473,7 @@ export function FileManager({
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
     }
-  }, [applyUsageDelta, buildFileTree, ensureStorageCapacity, fileTree, getPathSegments, obraId, ocrTablaMap, onRefreshMaterials, refreshOcrFolderLinks, selectedFolder, supabase]);
+  }, [applyUsageDelta, buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, sanitizeStorageFileName, selectedFolder, supabase]);
 
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
@@ -2081,10 +2509,12 @@ export function FileManager({
   }, [uploadFilesToFolder]);
 
   const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
+  const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
     (createFolderMode === 'data' && newFolderColumns.length === 0) ||
-    (createFolderMode === 'data' && needsOcrTemplate && !newFolderOcrTemplateId);
+    (createFolderMode === 'data' && !hasAnyTemplateSelected) ||
+    (createFolderMode === 'data' && needsOcrTemplate && !newFolderOcrTemplateId && !newFolderSpreadsheetTemplate);
 
   const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -2183,6 +2613,21 @@ export function FileManager({
     setCreateFolderError(null);
     setIsCreateFolderOpen(true);
   }, [fileTree, hasOcrAncestor]);
+
+  const openAddOcrTableToFolderDialog = useCallback((folder: FileSystemItem) => {
+    if (folder.type !== 'folder') return;
+    const parent = parentMapRef.current.get(folder.id) ?? fileTree ?? null;
+    setCreateFolderMode('data');
+    setCreateFolderParent(parent);
+    setConvertFolderTarget(folder);
+    setNewFolderName(folder.name);
+    setNewFolderDataInputMethod('both');
+    setNewFolderDescription('');
+    setNewFolderOcrTemplateId('');
+    setNewFolderHasNested(false);
+    setCreateFolderError(null);
+    setIsCreateFolderOpen(true);
+  }, [fileTree]);
 
   const handleDelete = async (item: FileSystemItem) => {
     try {
@@ -2568,51 +3013,76 @@ export function FileManager({
 
   const activeDocument = sheetDocument ?? displayedDocumentRef.current ?? null;
 
-  const activeDocumentOcrLink = useMemo(
-    () => (activeDocument ? resolveOcrLinkForDocument(activeDocument) : null),
-    [activeDocument, resolveOcrLinkForDocument]
+  const activeDocumentOcrLinks = useMemo(
+    () => (activeDocument ? resolveOcrLinksForDocument(activeDocument) : [] as OcrFolderLink[]),
+    [activeDocument, resolveOcrLinksForDocument]
   );
+
+  const activeDocumentRowsByTablaId = useMemo(() => {
+    const map = new Map<string, OcrDocumentTableRow[]>();
+    if (!activeDocument?.storagePath) return map;
+    activeDocumentOcrLinks.forEach((link) => {
+      if (!Array.isArray(link.rows) || !Array.isArray(link.columns) || link.columns.length === 0) {
+        map.set(link.tablaId, []);
+        return;
+      }
+      const rows = (link.rows as TablaDataRow[])
+        .filter((row) => {
+          const data = (row?.data as Record<string, unknown>) ?? {};
+          return data.__docPath === activeDocument.storagePath;
+        })
+        .map((row) => {
+          const data = (row?.data as Record<string, unknown>) ?? {};
+          const mapped: OcrDocumentTableRow = { id: row.id };
+          link.columns.forEach((column) => {
+            mapped[column.fieldKey] = data[column.fieldKey];
+          });
+          return mapped;
+        });
+      map.set(link.tablaId, rows);
+    });
+    return map;
+  }, [activeDocument, activeDocumentOcrLinks]);
+
+  const activeDocumentOcrLink = useMemo(() => {
+    if (activeDocumentOcrLinks.length === 0) return null;
+    if (activeDocumentTablaIdOverride) {
+      const selected = activeDocumentOcrLinks.find((link) => link.tablaId === activeDocumentTablaIdOverride);
+      if (selected) return selected;
+    }
+    const firstWithRows = activeDocumentOcrLinks.find((link) => {
+      const rows = activeDocumentRowsByTablaId.get(link.tablaId) ?? [];
+      return rows.length > 0;
+    });
+    return firstWithRows ?? activeDocumentOcrLinks[0] ?? null;
+  }, [activeDocumentOcrLinks, activeDocumentRowsByTablaId, activeDocumentTablaIdOverride]);
 
   const activeDocumentOcrColumns = useMemo(() => {
     return activeDocumentOcrLink?.columns ?? [];
   }, [activeDocumentOcrLink]);
 
   const activeDocumentOcrRows = useMemo(() => {
-    if (!activeDocument?.storagePath) return [];
-    const link = activeDocumentOcrLink;
-    if (!link?.rows || !Array.isArray(link.rows) || !link.columns?.length) return [];
-    return (link.rows as TablaDataRow[])
-      .filter((row) => {
-        const data = (row?.data as Record<string, unknown>) ?? {};
-        return data.__docPath === activeDocument.storagePath;
-      })
-      .map((row) => {
-        const data = (row?.data as Record<string, unknown>) ?? {};
-        const mapped: OcrDocumentTableRow = { id: row.id };
-        link.columns.forEach((column) => {
-          mapped[column.fieldKey] = data[column.fieldKey];
-        });
-        return mapped;
-      });
-  }, [activeDocument, activeDocumentOcrLink]);
+    if (!activeDocumentOcrLink) return [];
+    return activeDocumentRowsByTablaId.get(activeDocumentOcrLink.tablaId) ?? [];
+  }, [activeDocumentOcrLink, activeDocumentRowsByTablaId]);
 
   const canRetryActiveDocument = useMemo(
-    () => Boolean(resolveOcrLinkForDocument(activeDocument)),
-    [activeDocument, resolveOcrLinkForDocument]
+    () => activeDocumentOcrLinks.length > 0,
+    [activeDocumentOcrLinks]
   );
 
   const [isDocumentDataSheetOpen, setIsDocumentDataSheetOpen] = useState(false);
 
-  const hasActiveDocumentData = useMemo(
-    () => activeDocumentOcrRows.length > 0,
-    [activeDocumentOcrRows]
+  const hasAnyActiveDocumentData = useMemo(
+    () => Array.from(activeDocumentRowsByTablaId.values()).some((rows) => rows.length > 0),
+    [activeDocumentRowsByTablaId]
   );
 
 
   const toggleDocumentDataSheet = useCallback(() => {
-    if (!hasActiveDocumentData) return;
+    if (!hasAnyActiveDocumentData) return;
     setIsDocumentDataSheetOpen((prev) => !prev);
-  }, [hasActiveDocumentData]);
+  }, [hasAnyActiveDocumentData]);
 
   useEffect(() => {
     if (!isDocumentSheetOpen) {
@@ -2626,6 +3096,10 @@ export function FileManager({
 
   useEffect(() => {
     setIsDocumentDataSheetOpen(false);
+  }, [activeDocument?.storagePath]);
+
+  useEffect(() => {
+    setActiveDocumentTablaIdOverride(null);
   }, [activeDocument?.storagePath]);
 
   const documentBreadcrumb = useMemo(() => {
@@ -2691,8 +3165,8 @@ export function FileManager({
     });
 
     return {
-      tableId: `ocr-doc-${obraId}-${activeDocument.id}`,
-      title: `Datos de ${activeDocument.name}`,
+      tableId: `ocr-doc-${obraId}-${activeDocument.id}-${activeDocumentOcrLink.tablaId}`,
+      title: `Datos de ${activeDocument.name}${activeDocumentOcrLink?.tablaName ? ` · ${activeDocumentOcrLink.tablaName}` : ''}`,
       columns: tablaColumnDefs,
       defaultRows: activeDocumentOcrRows,
       createRow,
@@ -2717,7 +3191,6 @@ export function FileManager({
             throw new Error(text || 'No se pudieron guardar los cambios');
           }
           toast.success('Datos actualizados');
-          await refreshOcrFolderLinks({ skipCache: true });
           await buildFileTree({ skipCache: true });
         } catch (error) {
           console.error(error);
@@ -2736,8 +3209,54 @@ export function FileManager({
     buildFileTree,
     mapDataTypeToCellType,
     obraId,
-    refreshOcrFolderLinks,
   ]);
+
+  const activeDocumentTableSelector = useMemo(() => {
+    if (activeDocumentOcrLinks.length <= 1 || !activeDocumentOcrLink) return null;
+    return (
+      <Select
+        value={activeDocumentOcrLink.tablaId}
+        onValueChange={(value) => setActiveDocumentTablaIdOverride(value)}
+      >
+        <SelectTrigger className="h-8 w-[260px]">
+          <SelectValue placeholder="Tabla de extracción" />
+        </SelectTrigger>
+        <SelectContent>
+          {activeDocumentOcrLinks.map((link) => {
+            const rowsCount = activeDocumentRowsByTablaId.get(link.tablaId)?.length ?? 0;
+            return (
+              <SelectItem key={link.tablaId} value={link.tablaId}>
+                {`${link.tablaName} (${rowsCount})`}
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+    );
+  }, [activeDocumentOcrLink, activeDocumentOcrLinks, activeDocumentRowsByTablaId]);
+
+  const activeFolderLinks = useMemo(() => {
+    if (!selectedFolder?.ocrEnabled) return [] as OcrFolderLink[];
+    const folderKey = normalizeFolderPath(
+      selectedFolder.relativePath ?? selectedFolder.ocrFolderName ?? selectedFolder.name
+    );
+    return (
+      ocrFolderLinksMap.get(folderKey) ||
+      ocrFolderLinksMap.get(normalizeFolderName(folderKey)) ||
+      []
+    );
+  }, [ocrFolderLinksMap, selectedFolder]);
+
+  const activeFolderLink = useMemo(() => {
+    if (activeFolderLinks.length === 0) return null;
+    if (activeOcrTablaIdOverride) {
+      const selectedLink = activeFolderLinks.find((link) => link.tablaId === activeOcrTablaIdOverride);
+      if (selectedLink) return selectedLink;
+    }
+    return activeFolderLinks[0] ?? null;
+  }, [activeFolderLinks, activeOcrTablaIdOverride]);
+
+  const activeOcrTablaId = activeFolderLink?.tablaId ?? null;
 
   const handleSaveTablaRows = useCallback(
     async ({
@@ -2749,10 +3268,10 @@ export function FileManager({
       dirtyRows: OcrDocumentTableRow[];
       deletedRowIds: string[];
     }) => {
-      if (!obraId || !selectedFolder?.ocrTablaId) return;
+      if (!obraId || !activeOcrTablaId) return;
       try {
         const res = await fetch(
-          `/api/obras/${obraId}/tablas/${selectedFolder.ocrTablaId}/rows`,
+          `/api/obras/${obraId}/tablas/${activeOcrTablaId}/rows`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2764,25 +3283,17 @@ export function FileManager({
           throw new Error(text || 'No se pudieron guardar los cambios');
         }
         toast.success('Tabla actualizada');
-        await refreshOcrFolderLinks({ skipCache: true });
         await buildFileTree({ skipCache: true });
       } catch (error) {
         console.error(error);
         toast.error(error instanceof Error ? error.message : 'No se pudo guardar la tabla');
       }
     },
-    [buildFileTree, obraId, refreshOcrFolderLinks, selectedFolder?.ocrTablaId]
+    [activeOcrTablaId, buildFileTree, obraId]
   );
 
-  const activeFolderLink = useMemo(() => {
-    if (!selectedFolder?.ocrEnabled) return null;
-    const folderKey = normalizeFolderPath((selectedFolder.relativePath ?? selectedFolder.ocrFolderName ?? selectedFolder.name));
-    return ocrFolderMap.get(folderKey) || ocrFolderMap.get(normalizeFolderName(folderKey)) || null;
-  }, [ocrFolderMap, selectedFolder]);
-
-
   const handleAddManualRow = useCallback(() => {
-    const tablaId = selectedFolder?.ocrTablaId;
+    const tablaId = activeOcrTablaId;
     if (!tablaId) {
       toast.error('No se encontró la tabla asociada');
       return;
@@ -2792,7 +3303,7 @@ export function FileManager({
       return;
     }
     setIsAddRowDialogOpen(true);
-  }, [activeFolderLink?.columns, selectedFolder?.ocrTablaId]);
+  }, [activeFolderLink?.columns, activeOcrTablaId]);
 
   const handleQuickUploadClick = useCallback(() => {
     const input = document.getElementById('file-upload') as HTMLInputElement | null;
@@ -2805,7 +3316,7 @@ export function FileManager({
 
   const handleOpenSchemaEditor = useCallback(() => {
     const currentColumns = activeFolderLink?.columns ?? [];
-    if (!selectedFolder?.ocrTablaId || currentColumns.length === 0) {
+    if (!activeOcrTablaId || currentColumns.length === 0) {
       toast.error('No hay columnas para editar en esta tabla.');
       return;
     }
@@ -2840,10 +3351,10 @@ export function FileManager({
     });
     setSchemaDraftColumns(draft);
     setIsSchemaDialogOpen(true);
-  }, [activeFolderLink?.columns, selectedFolder?.ocrTablaId]);
+  }, [activeFolderLink?.columns, activeOcrTablaId]);
 
   const handleSaveSchema = useCallback(async () => {
-    const tablaId = selectedFolder?.ocrTablaId;
+    const tablaId = activeOcrTablaId;
     if (!tablaId) {
       toast.error('No encontramos la tabla para guardar la estructura.');
       return;
@@ -2901,7 +3412,7 @@ export function FileManager({
     } finally {
       setIsSavingSchema(false);
     }
-  }, [obraId, refreshOcrFolderLinks, schemaDraftColumns, selectedFolder?.ocrTablaId]);
+  }, [activeOcrTablaId, obraId, refreshOcrFolderLinks, schemaDraftColumns]);
 
   const folderOrders = useMemo<MaterialOrder[]>(() => {
     if (!selectedFolder?.ocrEnabled) return [];
@@ -2994,7 +3505,7 @@ export function FileManager({
 
   const ocrFormTableConfig = useMemo<FormTableConfig<OcrDocumentTableRow, OcrDocumentTableFilters>>(() => {
     const tablaColumns = activeFolderLink?.columns ?? [];
-    const canEditTabla = Boolean(tablaColumns.length > 0 && selectedFolder?.ocrTablaId);
+    const canEditTabla = Boolean(tablaColumns.length > 0 && activeOcrTablaId);
     const tablaColumnDefs: ColumnDef<OcrDocumentTableRow>[] = tablaColumns.map((column) => ({
       id: column.id,
       label: column.label,
@@ -3072,8 +3583,8 @@ export function FileManager({
     };
 
     return {
-      tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}`,
-      title: selectedFolder?.name ?? 'Tabla OCR',
+      tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${activeOcrTablaId ?? 'none'}`,
+      title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns: allColumns,
       allowAddRows: false,
@@ -3374,8 +3885,25 @@ export function FileManager({
           </Button>
         </div>
       ) : null,
-      toolbarActions: selectedFolder?.ocrTablaId ? (
+      toolbarActions: activeOcrTablaId ? (
         <div className="flex items-center gap-2">
+          {activeFolderLinks.length > 1 && (
+            <Select
+              value={activeOcrTablaId}
+              onValueChange={(value) => setActiveOcrTablaIdOverride(value)}
+            >
+              <SelectTrigger className="h-8 w-[280px]">
+                <SelectValue placeholder="Seleccionar tabla" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeFolderLinks.map((link) => (
+                  <SelectItem key={link.tablaId} value={link.tablaId}>
+                    {link.tablaName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -3390,7 +3918,7 @@ export function FileManager({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/excel/${obraId}/tabla/${selectedFolder.ocrTablaId}/reporte`)}
+            onClick={() => router.push(`/excel/${obraId}/tabla/${activeOcrTablaId}/reporte`)}
             className="gap-1.5"
           >
             <ClipboardList className="w-3.5 h-3.5" />
@@ -3399,7 +3927,7 @@ export function FileManager({
         </div>
       ) : null,
     };
-  }, [activeFolderLink, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleAddManualRow, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleOpenSchemaEditor, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, router, selectedFolder?.id, selectedFolder?.ocrTablaId, supabase]);
+  }, [activeFolderLink, activeFolderLinks, activeOcrTablaId, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleAddManualRow, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleOpenSchemaEditor, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, router, selectedFolder?.id, supabase]);
 
   const handleRetryDocumentOcr = useCallback(
     async (doc: FileSystemItem | null) => {
@@ -3407,8 +3935,8 @@ export function FileManager({
         toast.error('Seleccioná un documento válido para reprocesar.');
         return;
       }
-      const link = resolveOcrLinkForDocument(doc);
-      if (!link) {
+      const links = resolveOcrLinksForDocument(doc);
+      if (links.length === 0) {
         toast.error('Este documento no está vinculado a una tabla OCR.');
         return;
       }
@@ -3418,9 +3946,13 @@ export function FileManager({
         formData.append('existingBucket', 'obra-documents');
         formData.append('existingPath', doc.storagePath);
         formData.append('existingFileName', doc.name);
-
+        formData.append('tablaIds', JSON.stringify([...new Set(links.map((link) => link.tablaId))]));
+        const ext = doc.name.toLowerCase().split('.').pop() ?? '';
+        const isSpreadsheet = ext === 'csv' || ext === 'xlsx' || ext === 'xls';
         const response = await fetch(
-          `/api/obras/${obraId}/tablas/${link.tablaId}/import/ocr?skipStorage=1`,
+          isSpreadsheet
+            ? `/api/obras/${obraId}/tablas/import/spreadsheet-multi?skipStorage=1`
+            : `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
           {
             method: 'POST',
             body: formData,
@@ -3431,20 +3963,28 @@ export function FileManager({
           const limitMessage =
             typeof payload?.error === 'string'
               ? payload.error
-              : 'Superaste el límite de tokens de IA de tu plan.';
-          if (response.status === 402) {
+              : isSpreadsheet
+                ? 'No se pudo reprocesar la planilla.'
+                : 'Superaste el límite de tokens de IA de tu plan.';
+          if (!isSpreadsheet && response.status === 402) {
             toast.warning(limitMessage);
           } else {
-            toast.error(`No se pudo reprocesar ${link.tablaName}.`);
+            toast.error(limitMessage);
           }
           return;
         }
-        toast.success(
-          payload?.inserted
-            ? `Se importaron ${payload.inserted} filas en ${link.tablaName}`
-            : `Documento reprocesado en ${link.tablaName}`
-        );
-        await refreshOcrFolderLinks({ skipCache: true });
+        const perTableResults = Array.isArray(payload?.perTable) ? payload.perTable : [];
+        if (perTableResults.length > 0) {
+          perTableResults.forEach((result: { tablaName?: string; inserted?: number }) => {
+            if ((result?.inserted ?? 0) > 0) {
+              toast.success(`${result?.tablaName ?? 'Tabla'}: ${result.inserted} filas actualizadas.`);
+            } else {
+              toast.warning(`${result?.tablaName ?? 'Tabla'}: sin filas detectadas.`);
+            }
+          });
+        } else {
+          toast.success('Documento reprocesado en tablas OCR.');
+        }
         await buildFileTree({ skipCache: true });
       } catch (error) {
         console.error('Error retrying OCR document', error);
@@ -3453,7 +3993,7 @@ export function FileManager({
         setRetryingDocumentId(null);
       }
     },
-    [buildFileTree, obraId, refreshOcrFolderLinks, resolveOcrLinkForDocument]
+    [buildFileTree, obraId, resolveOcrLinksForDocument]
   );
 
   const ocrOrderItemsTableConfig = useMemo<FormTableConfig<OcrOrderItemRow, OcrOrderItemFilters>>(() => {
@@ -3713,7 +4253,7 @@ export function FileManager({
               </div>
             ) : (
               <div className="flex flex-col h-full">
-                <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} className="max-h-[50vh]" />
+                <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} className="max-h-[50vh] " />
               </div>
             )}
           </div>
@@ -3754,6 +4294,7 @@ export function FileManager({
                         <div
                           className={`flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-2' : ''}`}
                           onClick={() => handleFolderClick(item)}
+                          onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, item }); }}
                           onDragEnter={(event) => handleFolderDragEnter(event, item)}
                           onDragOver={(event) => handleFolderDragOver(event, item)}
                           onDragLeave={(event) => handleFolderDragLeave(event, item)}
@@ -3799,6 +4340,7 @@ export function FileManager({
                     <div
                       className="flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none hover:bg-stone-100 transition-colors bg-linear-to-b from-stone-200 to-stone-300 relative"
                       onClick={() => handleDocumentClick(item, selectedFolder, { preserveFilter: true })}
+                      onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, item }); }}
                     >
                       <div className="pt-15 flex flex-col items-center justify-center w-full">
                         <div className="absolute inset-0 top-0 flex items-center justify-center">
@@ -3914,7 +4456,7 @@ export function FileManager({
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-lg font-semibold text-stone-800">Procesando carpeta OCR</p>
+                <p className="text-lg font-semibold text-stone-800">Procesando extracción de datos</p>
                 <p className="text-sm text-stone-500">
                   Subiendo archivos a la carpeta {currentUploadFolder?.name || 'OCR'} y extrayendo datos.
                 </p>
@@ -4006,7 +4548,7 @@ export function FileManager({
         isOpen={
           isDocumentDataSheetOpen &&
           Boolean(activeDocument) &&
-          hasActiveDocumentData
+          hasAnyActiveDocumentData
         }
         onOpenChange={(open) => setIsDocumentDataSheetOpen(open)}
         document={activeDocument}
@@ -4024,9 +4566,197 @@ export function FileManager({
         onRetryOcr={canRetryActiveDocument ? handleRetryDocumentOcr : undefined}
         retryingOcr={Boolean(activeDocument && retryingDocumentId === activeDocument.id)}
         onToggleDataSheet={toggleDocumentDataSheet}
-        showDataToggle={hasActiveDocumentData}
+        showDataToggle={hasAnyActiveDocumentData}
         isDataSheetOpen={isDocumentDataSheetOpen}
+        dataTableSelector={activeDocumentTableSelector}
       />
+
+      <Dialog
+        open={isSpreadsheetPreviewOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeSpreadsheetPreview(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Vista previa de extracción Excel/CSV</DialogTitle>
+            <DialogDescription>
+              Elegí hoja y mapeo por tabla antes de guardar filas en la base.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto space-y-4 pr-2">
+            {isLoadingSpreadsheetPreview && (
+              <div className="text-sm text-muted-foreground">Actualizando vista previa...</div>
+            )}
+            {(spreadsheetPreviewPayload?.perTable ?? []).map((table) => {
+              const availableSheets = table.availableSheets ?? [];
+              const selectedSheet = table.sheetName ?? '';
+              const previewRows = table.previewRows ?? [];
+              const mappings = table.mappings ?? [];
+              return (
+                <div key={table.tablaId} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{table.tablaName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Filas detectadas: {table.inserted}
+                      </p>
+                    </div>
+                    <div className="w-[320px]">
+                      <Label className="text-xs">Hoja origen</Label>
+                      <Select
+                        value={selectedSheet || '__none__'}
+                        onValueChange={(value) =>
+                          void handleSpreadsheetPreviewSheetChange(
+                            table.tablaId,
+                            value === '__none__' ? null : value
+                          )
+                        }
+                        disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Seleccionar hoja" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sin hoja</SelectItem>
+                          {availableSheets
+                            .filter((sheet) => sheet.name.trim().length > 0)
+                            .map((sheet) => (
+                            <SelectItem key={sheet.name} value={sheet.name}>
+                              {sheet.name} ({sheet.rowCount})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Mapeo de columnas
+                      </p>
+                      <div className="max-h-64 overflow-auto space-y-2 pr-1">
+                        {mappings.map((mapping) => {
+                          const headersForSheet =
+                            availableSheets.find((sheet) => sheet.name === selectedSheet)?.headers ?? [];
+                          return (
+                            <div key={`${table.tablaId}-${mapping.dbColumn}`} className="grid grid-cols-[1fr_1fr] gap-2 items-center">
+                              <div className="text-xs">
+                                <p className="font-medium">{mapping.label}</p>
+                                <p className="text-muted-foreground">{mapping.dbColumn}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <Select
+                                  value={mapping.excelHeader ?? '__none__'}
+                                  onValueChange={(value) =>
+                                    void handleSpreadsheetPreviewMappingChange(
+                                      table.tablaId,
+                                      mapping.dbColumn,
+                                      value === '__none__' ? null : value
+                                    )
+                                  }
+                                  disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue placeholder="Sin mapear" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Sin mapear</SelectItem>
+                                    {headersForSheet.filter((header) => header.trim().length > 0).map((header) => (
+                                      <SelectItem key={`${table.tablaId}-${mapping.dbColumn}-${header}`} value={header}>
+                                        {header}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Input
+                                  className="h-8 text-xs"
+                                  placeholder="Valor manual (si no se detecta)"
+                                  value={mapping.manualValue ?? ''}
+                                  onChange={(event) =>
+                                    void handleSpreadsheetPreviewManualValueChange(
+                                      table.tablaId,
+                                      mapping.dbColumn,
+                                      event.target.value
+                                    )
+                                  }
+                                  disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Vista previa
+                      </p>
+                      <div className="max-h-64 overflow-auto border rounded-md">
+                        {previewRows.length === 0 ? (
+                          <div className="p-3 text-xs text-muted-foreground">Sin filas detectadas con el mapeo actual.</div>
+                        ) : (
+                          (() => {
+                            const visiblePreviewColumns = Object.keys(previewRows[0] ?? {}).filter(
+                              (key) => !key.startsWith('__doc')
+                            );
+                            return (
+                          <table className="w-full text-xs">
+                            <thead className="bg-muted/50 sticky top-0">
+                              <tr>
+                                {visiblePreviewColumns.map((key) => (
+                                  <th key={`${table.tablaId}-head-${key}`} className="text-left px-2 py-1 border-b">
+                                    {key}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {previewRows.slice(0, 20).map((row, idx) => (
+                                <tr key={`${table.tablaId}-row-${idx}`} className="border-b">
+                                  {visiblePreviewColumns.map((key) => (
+                                    <td key={`${table.tablaId}-cell-${idx}-${key}`} className="px-2 py-1 align-top">
+                                      {String(row[key] ?? '')}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                            );
+                          })()
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => closeSpreadsheetPreview(false)}
+              disabled={isApplyingSpreadsheetPreview}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                const ok = await applySpreadsheetPreviewImport();
+                if (ok) {
+                  closeSpreadsheetPreview(true);
+                }
+              }}
+              disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+            >
+              {isApplyingSpreadsheetPreview ? 'Importando...' : 'Confirmar e importar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Folder Dialog */}
       <Dialog
@@ -4041,14 +4771,16 @@ export function FileManager({
           <DialogHeader className="space-y-1">
             <DialogTitle>
               {createFolderMode === 'data'
-                ? (convertFolderTarget ? 'Convertir carpeta a extracción' : 'Nueva carpeta de datos')
+                ? (convertFolderTarget?.ocrEnabled ? 'Agregar tabla de extracción a carpeta existente' : convertFolderTarget ? 'Convertir carpeta a extracción' : 'Nueva carpeta de datos')
                 : 'Nueva carpeta'}
             </DialogTitle>
             <DialogDescription>
               {createFolderMode === 'data'
-                ? (convertFolderTarget
-                  ? 'Esta carpeta quedará asociada a una tabla de extracción y se reprocesarán sus archivos existentes.'
-                  : 'Asociá esta carpeta a una tabla de datos y elegí cómo cargar la información.')
+                ? (convertFolderTarget?.ocrEnabled
+                  ? 'Se creará una nueva tabla OCR vinculada a esta misma carpeta y se reprocesarán sus archivos actuales.'
+                  : convertFolderTarget
+                    ? 'Esta carpeta quedará asociada a una tabla de extracción y se reprocesarán sus archivos existentes.'
+                    : 'Asociá esta carpeta a una tabla de datos y elegí cómo cargar la información.')
                 : 'Creá una carpeta estándar para organizar tus documentos.'}
             </DialogDescription>
           </DialogHeader>
@@ -4127,6 +4859,28 @@ export function FileManager({
                   {newFolderDataInputMethod === 'both' && 'Podés cargar datos manualmente o extraerlos de documentos.'}
                 </p>
               </div>
+              {newFolderDataInputMethod !== 'ocr' && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900">Plantilla de extracción XLSX/CSV</p>
+                    <p className="text-xs text-blue-700">
+                      Define cómo se interpreta la planilla al importar.
+                    </p>
+                  </div>
+                  <Select
+                    value={newFolderSpreadsheetTemplate || undefined}
+                    onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as 'auto' | 'certificado')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccioná una plantilla XLSX" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto (detectar por columnas)</SelectItem>
+                      <SelectItem value="certificado">Certificado (certexampleplayground)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
                 <div className="rounded-lg border border-purple-200 bg-purple-50/60 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -4320,12 +5074,12 @@ export function FileManager({
         onTemplateCreated={handleTemplateConfiguratorCreated}
       />
 
-      {selectedFolder?.ocrTablaId && activeFolderLink?.columns && (
+      {activeOcrTablaId && activeFolderLink?.columns && (
         <AddRowDialog
           open={isAddRowDialogOpen}
           onOpenChange={setIsAddRowDialogOpen}
           columns={activeFolderLink.columns}
-          tablaId={selectedFolder.ocrTablaId}
+          tablaId={activeOcrTablaId}
           obraId={obraId}
           onRowAdded={handleRowAdded}
         />
@@ -4614,16 +5368,28 @@ export function FileManager({
                 </>
               )}
               {contextMenu.item.ocrEnabled && contextMenu.item.ocrTablaId && (
-                <button
-                  className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-stone-700"
-                  onClick={() => {
-                    handleNavigateToTabla(contextMenu.item.ocrTablaId);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Table2 className="w-4 h-4" />
-                  Ver tabla de datos
-                </button>
+                <>
+                  <button
+                    className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-stone-700"
+                    onClick={() => {
+                      handleNavigateToTabla(contextMenu.item.ocrTablaId);
+                      setContextMenu(null);
+                    }}
+                  >
+                    <Table2 className="w-4 h-4" />
+                    Ver tabla de datos
+                  </button>
+                  <button
+                    className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-stone-700"
+                    onClick={() => {
+                      openAddOcrTableToFolderDialog(contextMenu.item);
+                      setContextMenu(null);
+                    }}
+                  >
+                    <Table2 className="w-4 h-4" />
+                    Agregar tabla de extracción en esta carpeta
+                  </button>
+                </>
               )}
               {contextMenu.item.type === 'folder' && contextMenu.item.id !== 'root' && !contextMenu.item.ocrEnabled && (
                 <button

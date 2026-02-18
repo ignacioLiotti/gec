@@ -60,7 +60,10 @@ function sanitizeColumns(raw: unknown): MainTableColumnConfig[] {
 		const id = typeof row.id === "string" ? row.id.trim() : "";
 		const label = typeof row.label === "string" ? row.label.trim() : "";
 		if (!id || !label) continue;
-		const kind = row.kind === "formula" ? "formula" : "base";
+		const kind =
+			row.kind === "formula" || row.kind === "custom"
+				? row.kind
+				: "base";
 		next.push({
 			id,
 			kind,

@@ -4,6 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -11,7 +14,7 @@ import {
 	ContextMenuTrigger,
 	ContextMenuSeparator,
 } from "@/components/ui/context-menu";
-import { ExternalLink } from "lucide-react";
+import { CalendarDays, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
 	ColumnDef,
@@ -22,18 +25,150 @@ import { escapeRegExp, formatDateSafe } from "./table-utils";
 
 export type EditableCellValue = string | number | readonly string[] | null | undefined;
 
+function toIsoDateOnly(date: Date): string {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+}
+
+function parseDateValue(value: unknown): Date | null {
+	if (!value) return null;
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime()) ? null : value;
+	}
+	const raw = String(value).trim();
+	if (!raw) return null;
+	const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	if (isoMatch) {
+		const y = Number(isoMatch[1]);
+		const m = Number(isoMatch[2]) - 1;
+		const d = Number(isoMatch[3]);
+		const date = new Date(y, m, d);
+		return Number.isNaN(date.getTime()) ? null : date;
+	}
+	const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+	if (slashMatch) {
+		const d = Number(slashMatch[1]);
+		const m = Number(slashMatch[2]) - 1;
+		const y = Number(slashMatch[3]);
+		const date = new Date(y, m, d);
+		return Number.isNaN(date.getTime()) ? null : date;
+	}
+	const parsed = new Date(raw);
+	return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function normalizeDateInputValue(value: EditableCellValue): string {
 	if (value == null) return "";
-	if (typeof value === "string") {
-		const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
-		if (match) return match[1];
-	}
-	const parsed = new Date(String(value));
-	if (Number.isNaN(parsed.getTime())) return "";
-	const year = parsed.getFullYear();
-	const month = String(parsed.getMonth() + 1).padStart(2, "0");
-	const day = String(parsed.getDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
+	const parsed = parseDateValue(value);
+	if (!parsed) return "";
+	return toIsoDateOnly(parsed);
+}
+
+function DateCellEditor({
+	value,
+	setValue,
+	handleBlur,
+	required,
+}: {
+	value: EditableCellValue;
+	setValue: (value: unknown) => void;
+	handleBlur: () => void;
+	required?: boolean;
+}) {
+	const [open, setOpen] = useState(false);
+	const selectedDate = parseDateValue(value ?? null);
+	const [typedValue, setTypedValue] = useState(() => {
+		if (!value) return "";
+		return selectedDate ? selectedDate.toLocaleDateString("es-AR") : String(value);
+	});
+
+	useEffect(() => {
+		if (!value) {
+			setTypedValue("");
+			return;
+		}
+		if (selectedDate) {
+			setTypedValue(selectedDate.toLocaleDateString("es-AR"));
+			return;
+		}
+		setTypedValue(String(value));
+	}, [value, selectedDate]);
+
+	return (
+		<div className="w-full h-full absolute top-0 left-0 flex items-center gap-1 px-2 children-input-hidden">
+			<Input
+				type="text"
+				inputMode="numeric"
+				placeholder="dd/mm/aaaa"
+				value={typedValue}
+				onChange={(event) => setTypedValue(event.target.value)}
+				onBlur={() => {
+					const nextRaw = typedValue.trim();
+					if (!nextRaw) {
+						if (!required) {
+							setValue(null);
+						}
+						handleBlur();
+						return;
+					}
+					const parsed = parseDateValue(nextRaw);
+					setValue(parsed ? toIsoDateOnly(parsed) : nextRaw);
+					handleBlur();
+				}}
+				className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 focus-visible:ring-offset-1"
+			/>
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger asChild>
+					<Button
+						type="button"
+						variant="ghost"
+						className={cn(
+							"h-full rounded-none border-none px-2 py-1 font-normal shrink-0"
+						)}
+					>
+						<CalendarDays className="h-4 w-4 shrink-0 opacity-70" />
+					</Button>
+				</PopoverTrigger>
+				<PopoverContent className="w-auto p-0" align="start">
+					<Calendar
+						mode="single"
+						selected={selectedDate ?? undefined}
+						defaultMonth={selectedDate ?? new Date()}
+						onSelect={(date) => {
+							if (!date) return;
+							setValue(toIsoDateOnly(date));
+							setTypedValue(date.toLocaleDateString("es-AR"));
+							handleBlur();
+							setOpen(false);
+						}}
+						captionLayout="dropdown"
+					/>
+					<div className="flex items-center justify-between border-t px-3 py-2">
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => {
+								if (!required) {
+									setValue(null);
+									handleBlur();
+								}
+								setOpen(false);
+							}}
+							disabled={required}
+						>
+							Limpiar
+						</Button>
+						<Button type="button" size="sm" onClick={() => setOpen(false)}>
+							Cerrar
+						</Button>
+					</div>
+				</PopoverContent>
+			</Popover>
+		</div>
+	);
 }
 
 /**
@@ -191,8 +326,8 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		}
 		case "date": {
 			if (!value) return <span>-</span>;
-			const date = new Date(String(value));
-			if (Number.isNaN(date.getTime())) return <span>-</span>;
+			const date = parseDateValue(value);
+			if (!date) return <span>-</span>;
 			if (config.dateFormat === "custom" && config.customDateFormat) {
 				return <span>{formatDateSafe(date, config.customDateFormat)}</span>;
 			}
@@ -378,12 +513,10 @@ export function renderEditableContent<Row extends FormTableRow>({
 			);
 		case "date":
 			return (
-				<LocalInput
-					type="date"
-					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
+				<DateCellEditor
 					value={value ?? ""}
-					onChange={setValue}
-					onBlur={handleBlur}
+					setValue={setValue}
+					handleBlur={handleBlur}
 					required={column.required}
 				/>
 			);

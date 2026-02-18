@@ -148,8 +148,10 @@ function buildAutoInstructions({
 				`- ${label} (campo "${column.fieldKey}", tipo ${column.dataType})${description ? ` - ${description}` : ""}`
 			);
 		});
+		lines.push('Incluí "items" si ves filas claras; si no, devolvé una lista vacía.');
+	} else {
+		lines.push("Esta tabla es de nivel documento: no repitas filas.");
 	}
-	lines.push('Incluí "items" si ves filas claras; si no, devolvé una lista vacía.');
 	lines.push("No inventes valores; deja campos vacíos si no se pueden leer.");
 	return lines.join("\n");
 }
@@ -777,7 +779,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		if (!Array.isArray((extraction as any).items)) {
 			(extraction as any).items = [];
 		}
-		if ((extraction as any).items.length === 0) {
+		if (itemColumns.length === 0) {
+			(extraction as any).items = [{}];
+		} else if ((extraction as any).items.length === 0) {
 			const emptyItem = buildEmptyExtraction(parentColumns, itemColumns).items;
 			(extraction as any).items = emptyItem;
 		}

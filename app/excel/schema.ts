@@ -16,6 +16,7 @@ export const obraSchema = z.object({
 	plazoTotal: z.number().min(0, "Los meses deben ser positivos"),
 	plazoTransc: z.number().min(0, "Los meses deben ser positivos"),
 	porcentaje: z.number().min(0).max(100, "El porcentaje debe estar entre 0 y 100"),
+	customData: z.record(z.string(), z.unknown()).optional(),
 	onFinishFirstMessage: z.string().nullable().optional(),
 	onFinishSecondMessage: z.string().nullable().optional(),
 	onFinishSecondSendAt: z.string().nullable().optional(),

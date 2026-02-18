@@ -15,8 +15,17 @@ import type {
 	ColumnDef,
 	FormFieldComponent,
 	FormTableRow,
+	RowColorInfo,
+	RowColorTone,
 } from "./types";
 import { MemoizedTableCell } from "./table-cell";
+
+const TONE_CELL_CLASSES: Record<RowColorTone, string> = {
+	red: "bg-red-50 border-red-500 outline-red-600/50 z-100",
+	amber: "bg-amber-50 border-amber-500 outline-amber-600/50 z-100",
+	green: "bg-emerald-50 outline-emerald-600/50 z-100",
+	blue: "bg-blue-50 border-blue-500 outline-blue-600/50 z-100",
+};
 
 type TableRowProps<Row extends FormTableRow> = {
 	row: TanStackRow<Row>;
@@ -24,6 +33,7 @@ type TableRowProps<Row extends FormTableRow> = {
 	externalRefreshVersion: number;
 	columnsById: Record<string, ColumnDef<Row>>;
 	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
+	rowColorInfo?: (row: Row, rowIndex: number) => RowColorInfo | undefined;
 	rowOverlayBadges?: (
 		row: Row,
 		rowIndex: number
@@ -60,6 +70,7 @@ function TableRowInner<Row extends FormTableRow>({
 	externalRefreshVersion,
 	columnsById,
 	rowClassName,
+	rowColorInfo,
 	rowOverlayBadges,
 	FieldComponent,
 	highlightQuery,
@@ -93,6 +104,7 @@ function TableRowInner<Row extends FormTableRow>({
 	const accordionLabel = accordionRowConfig?.triggerLabel ?? "detalles";
 	const rowData = row.original;
 	const resolvedRowClassName = rowClassName?.(rowData, rowIndex);
+	const colorInfo = rowColorInfo?.(rowData, rowIndex);
 	const overlayBadges = rowOverlayBadges?.(rowData, rowIndex) ?? [];
 
 	return (
@@ -102,8 +114,10 @@ function TableRowInner<Row extends FormTableRow>({
 				className={cn(
 					"border-b group relative",
 					rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
-					isRowDirty ? "bg-amber-50/60 group/row-dirty" : "",
-					resolvedRowClassName
+					isRowDirty
+						? "group/row-dirty shadow-[inset_0_0_0_2px_rgba(217,119,6,0.85)] border border-amber-500 z-100"
+						: "",
+					colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 				)}
 			>
 				{filteredCells.map((cell, cellIndex) => {
@@ -114,7 +128,8 @@ function TableRowInner<Row extends FormTableRow>({
 					const baseClassName = cn(
 						"outline outline-border border-border relative px-4 py-4 group-hover:bg-[hsl(50,17%,95%)]",
 						rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
-						resolvedRowClassName,
+						colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
+						colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
 						typeof columnMeta.cellClassName === "function"
 							? columnMeta.cellClassName(rowData)
 							: columnMeta.cellClassName
@@ -170,6 +185,8 @@ function TableRowInner<Row extends FormTableRow>({
 						className={cn(
 							"px-4 py-3 text-right outline outline-border border-border group-hover:bg-[hsl(50,17%,95%)] space-y-2",
 							rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
+							colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
+							colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
 							resolvedRowClassName
 						)}
 					>

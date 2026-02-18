@@ -355,6 +355,41 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		[loadPresets, selectedPresetId]
 	);
 
+	const handleResetFilters = useCallback(() => {
+		const defaults = config.defaultFilters?.() ?? ({} as Filters);
+		setDraftFilters(defaults);
+		setFilters(defaults);
+		toast.success("Filtros reiniciados");
+	}, [config]);
+
+	const handleSaveFiltersOnly = useCallback(async () => {
+		if (readOnly) return;
+		const suggested = `Filtros ${new Date().toLocaleDateString("es-AR")}`;
+		const name = window.prompt("Nombre para guardar este filtro", suggested)?.trim();
+		if (!name) return;
+		try {
+			const res = await fetch("/api/reports/presets", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					reportKey: config.id,
+					name,
+					filters,
+					reportState: {},
+				}),
+			});
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				throw new Error(payload.error || "No se pudo guardar el filtro");
+			}
+			await loadPresets();
+			toast.success("Filtro guardado");
+		} catch (err) {
+			console.error(err);
+			toast.error(err instanceof Error ? err.message : "No se pudo guardar el filtro");
+		}
+	}, [config.id, filters, loadPresets, readOnly]);
+
 	const handleCreateShareLink = useCallback(async () => {
 		try {
 			setIsSharing(true);
@@ -539,52 +574,51 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		return templates;
 	}, [columns, config.templateCategory]);
 
+	// Shared grouping helper using Map for O(n) grouping (avoids Object.entries + sort overhead)
+	const groupRows = useCallback(
+		(rows: Row[]): Array<{ key: string; data: Row[] }> => {
+			if (reportState.viewMode === "full") {
+				return [{ key: config.title, data: rows }];
+			}
+
+			const groupOption = groupByOptions?.find(
+				(opt) => opt.id === reportState.viewMode
+			);
+			if (!groupOption) {
+				return [{ key: config.title, data: rows }];
+			}
+
+			// Use Map for insertion-order and O(1) lookup
+			const groups = new Map<string, Row[]>();
+			for (const row of rows) {
+				const key = groupOption.groupBy(row) || "Sin asignar";
+				const existing = groups.get(key);
+				if (existing) {
+					existing.push(row);
+				} else {
+					groups.set(key, [row]);
+				}
+			}
+
+			// Sort group keys only (not the full entries)
+			const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
+				a.localeCompare(b)
+			);
+			return sortedKeys.map((key) => ({ key, data: groups.get(key)! }));
+		},
+		[reportState.viewMode, groupByOptions, config.title]
+	);
+
 	// Group data
-	const groupedData = useMemo(() => {
-		if (reportState.viewMode === "full") {
-			return [{ key: config.title, data }];
-		}
+	const groupedData = useMemo(
+		() => groupRows(data),
+		[data, groupRows]
+	);
 
-		const groupOption = groupByOptions?.find(
-			(opt) => opt.id === reportState.viewMode
-		);
-		if (!groupOption) {
-			return [{ key: config.title, data }];
-		}
-
-		const groups: Record<string, Row[]> = {};
-		for (const row of data) {
-			const key = groupOption.groupBy(row) || "Sin asignar";
-			if (!groups[key]) groups[key] = [];
-			groups[key].push(row);
-		}
-
-		return Object.entries(groups)
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([key, rows]) => ({ key, data: rows }));
-	}, [data, reportState.viewMode, groupByOptions, config.title]);
-
-	const compareGroupedData = useMemo(() => {
-		if (!compareData) return null;
-		if (reportState.viewMode === "full") {
-			return [{ key: config.title, data: compareData }];
-		}
-		const groupOption = groupByOptions?.find(
-			(opt) => opt.id === reportState.viewMode
-		);
-		if (!groupOption) {
-			return [{ key: config.title, data: compareData }];
-		}
-		const groups: Record<string, Row[]> = {};
-		for (const row of compareData) {
-			const key = groupOption.groupBy(row) || "Sin asignar";
-			if (!groups[key]) groups[key] = [];
-			groups[key].push(row);
-		}
-		return Object.entries(groups)
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([key, rows]) => ({ key, data: rows }));
-	}, [compareData, reportState.viewMode, groupByOptions, config.title]);
+	const compareGroupedData = useMemo(
+		() => (compareData ? groupRows(compareData) : null),
+		[compareData, groupRows]
+	);
 
 	const compareLookup = useMemo(() => {
 		if (!compareGroupedData) return new Map<string, Row[]>();
@@ -737,7 +771,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 				{/* Right Sidebar - Filters & Settings */}
 				<div className="w-80 border-l border-[#d5d8df] dark:border-zinc-700 bg-[#f0f2f5] dark:bg-zinc-800 flex flex-col shrink-0">
 					<Tabs defaultValue="settings" className="flex-1 flex flex-col">
-						<div className="px-4 pt-4 pb-3 border-b border-[#d5d8df] dark:border-zinc-700">
+						<div className="px-4 pt-4 pb-3 border-b border-[#d5d8df] dark:border-zinc-700 ">
 							<TabsList className="flex w-full flex-wrap gap-1 bg-[#e2e5eb] dark:bg-zinc-700">
 								<TabsTrigger value="settings" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
 									<Settings className="h-3.5 w-3.5" />
@@ -747,12 +781,12 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									<Filter className="h-3.5 w-3.5" />
 									Filtros
 								</TabsTrigger>
-								<TabsTrigger value="visual" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
+								{/* <TabsTrigger value="visual" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
 									Vista
 								</TabsTrigger>
 								<TabsTrigger value="presets" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
 									Presets
-								</TabsTrigger>
+								</TabsTrigger> */}
 							</TabsList>
 						</div>
 
@@ -844,7 +878,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												</Button>
 											)}
 										</div>
-										<div className="space-y-2.5">
+										<div className="space-y-2.5 max-h-[calc(90vh-22rem)] overflow-y-auto">
 											{columns.map((col) => {
 												const isVisible = !reportState.hiddenColumnIds.includes(col.id);
 												const groupOption =
@@ -947,149 +981,208 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 						<TabsContent value="filters" className="flex-1 p-0 m-0 overflow-hidden">
 							<ScrollArea className="h-full">
 								<div className="p-4 space-y-5">
-									{filterFields?.map((field) => (
-										<div key={String(field.id)} className="space-y-1.5">
-											<Label className="text-xs text-[#5f6670] dark:text-zinc-400">{field.label}</Label>
-											{field.type === "text" && (
-												<Input
-													placeholder={field.placeholder}
-													value={String(draftFilters[field.id] || "")}
-													onChange={(e) =>
-														setDraftFilters((prev) => ({
+									{!readOnly && (
+										<div className="space-y-2 rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 p-2.5">
+											<Label className="text-xs text-[#5f6670] dark:text-zinc-400">
+												Filtros guardados
+											</Label>
+											<div className="flex gap-2">
+												<Select
+													value={selectedPresetId ?? "__none__"}
+													onValueChange={(value) => {
+														if (value === "__none__") return;
+														const preset = presets.find((p) => p.id === value);
+														if (!preset) return;
+														const nextFilters = (prev: Filters) => ({
 															...prev,
-															[field.id]: e.target.value,
-														}))
-													}
-													className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
-													disabled={readOnly}
-												/>
-											)}
-											{field.type === "number" && (
-												<Input
-													type="number"
-													placeholder={field.placeholder}
-													value={String(draftFilters[field.id] || "")}
-													onChange={(e) =>
-														setDraftFilters((prev) => ({
-															...prev,
-															[field.id]: e.target.value,
-														}))
-													}
-													className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
-													disabled={readOnly}
-												/>
-											)}
-											{field.type === "date" && (
-												<Input
-													type="date"
-													value={String(draftFilters[field.id] || "")}
-													onChange={(e) =>
-														setDraftFilters((prev) => ({
-															...prev,
-															[field.id]: e.target.value,
-														}))
-													}
-													className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
-													disabled={readOnly}
-												/>
-											)}
-											{field.type === "select" && field.options && (
-												<select
-													className="w-full rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 px-2.5 py-1.5 text-xs text-[#2b2f36] dark:text-zinc-200"
-													value={String(draftFilters[field.id] || "")}
-													onChange={(e) =>
-														setDraftFilters((prev) => ({
-															...prev,
-															[field.id]: e.target.value,
-														}))
-													}
-													disabled={readOnly}
+															...(preset.filters ?? {}),
+														});
+														setFilters(nextFilters);
+														setDraftFilters(nextFilters);
+														setSelectedPresetId(preset.id);
+														toast.success("Filtro aplicado");
+													}}
 												>
-													{field.options.map((opt) => (
-														<option key={opt.value} value={opt.value}>
-															{opt.label}
-														</option>
-													))}
-												</select>
-											)}
-											{field.type === "multi-select" && field.options && (
-												<div className="space-y-2 rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 px-2.5 py-2">
-													{field.options.map((opt) => {
-														const current = Array.isArray(draftFilters[field.id])
-															? (draftFilters[field.id] as string[])
-															: [];
-														const checked = current.includes(opt.value);
-														return (
-															<label
-																key={opt.value}
-																className="flex items-center gap-2 text-xs text-[#2b2f36] dark:text-zinc-200"
-															>
-																<Checkbox
-																	checked={checked}
-																	onCheckedChange={(nextChecked) =>
-																		setDraftFilters((prev) => {
-																			const prevValues = Array.isArray(prev[field.id])
-																				? ([...(prev[field.id] as string[])] as string[])
-																				: [];
-																			const nextValues = nextChecked
-																				? Array.from(new Set([...prevValues, opt.value]))
-																				: prevValues.filter((value) => value !== opt.value);
-																			return {
-																				...prev,
-																				[field.id]: nextValues,
-																			};
-																		})
-																	}
-																	disabled={readOnly}
-																/>
-																<span>{opt.label}</span>
-															</label>
-														);
-													})}
-												</div>
-											)}
-											{field.type === "boolean-toggle" && (
-												<div className="flex gap-1.5">
-													{[
-														{ value: "all", label: "Todos" },
-														{ value: "si", label: "Si" },
-														{ value: "no", label: "No" },
-													].map((opt) => (
-														<Button
-															key={opt.value}
-															variant={
-																draftFilters[field.id] === opt.value ? "default" : "outline"
-															}
-															size="sm"
-															className={`flex-1 text-xs h-7 ${draftFilters[field.id] === opt.value
-																? "bg-[#2b2f36] text-[#f7f7f8]"
-																: "border-[#d5d8df] text-[#3a3f45] bg-transparent"
-																}`}
-															onClick={() =>
-																setDraftFilters((prev) => ({
-																	...prev,
-																	[field.id]: opt.value,
-																}))
-															}
-															disabled={readOnly}
-														>
-															{opt.label}
-														</Button>
-													))}
-												</div>
-											)}
+													<SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-800">
+														<SelectValue placeholder="Seleccionar filtro guardado" />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="__none__">Seleccionar...</SelectItem>
+														{presets.map((preset) => (
+															<SelectItem key={preset.id} value={preset.id}>
+																{preset.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												<Button
+													size="sm"
+													variant="outline"
+													className="h-8 text-xs"
+													onClick={handleSaveFiltersOnly}
+												>
+													Guardar
+												</Button>
+											</div>
 										</div>
-									))}
+									)}
+									<div className="flex flex-col gap-2 max-h-[calc(100vh-20rem)] overflow-y-auto">
+
+										{filterFields?.map((field) => (
+											<div key={String(field.id)} className="space-y-1.5">
+												<Label className="text-xs text-[#5f6670] dark:text-zinc-400">{field.label}</Label>
+												{field.type === "text" && (
+													<Input
+														placeholder={field.placeholder}
+														value={String(draftFilters[field.id] || "")}
+														onChange={(e) =>
+															setDraftFilters((prev) => ({
+																...prev,
+																[field.id]: e.target.value,
+															}))
+														}
+														className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
+														disabled={readOnly}
+													/>
+												)}
+												{field.type === "number" && (
+													<Input
+														type="number"
+														placeholder={field.placeholder}
+														value={String(draftFilters[field.id] || "")}
+														onChange={(e) =>
+															setDraftFilters((prev) => ({
+																...prev,
+																[field.id]: e.target.value,
+															}))
+														}
+														className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
+														disabled={readOnly}
+													/>
+												)}
+												{field.type === "date" && (
+													<Input
+														type="date"
+														value={String(draftFilters[field.id] || "")}
+														onChange={(e) =>
+															setDraftFilters((prev) => ({
+																...prev,
+																[field.id]: e.target.value,
+															}))
+														}
+														className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
+														disabled={readOnly}
+													/>
+												)}
+												{field.type === "select" && field.options && (
+													<select
+														className="w-full rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 px-2.5 py-1.5 text-xs text-[#2b2f36] dark:text-zinc-200"
+														value={String(draftFilters[field.id] || "")}
+														onChange={(e) =>
+															setDraftFilters((prev) => ({
+																...prev,
+																[field.id]: e.target.value,
+															}))
+														}
+														disabled={readOnly}
+													>
+														{field.options.map((opt) => (
+															<option key={opt.value} value={opt.value}>
+																{opt.label}
+															</option>
+														))}
+													</select>
+												)}
+												{field.type === "multi-select" && field.options && (
+													<div className="space-y-2 rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 px-2.5 py-2">
+														{field.options.map((opt) => {
+															const current = Array.isArray(draftFilters[field.id])
+																? (draftFilters[field.id] as string[])
+																: [];
+															const checked = current.includes(opt.value);
+															return (
+																<label
+																	key={opt.value}
+																	className="flex items-center gap-2 text-xs text-[#2b2f36] dark:text-zinc-200"
+																>
+																	<Checkbox
+																		checked={checked}
+																		onCheckedChange={(nextChecked) =>
+																			setDraftFilters((prev) => {
+																				const prevValues = Array.isArray(prev[field.id])
+																					? ([...(prev[field.id] as string[])] as string[])
+																					: [];
+																				const nextValues = nextChecked
+																					? Array.from(new Set([...prevValues, opt.value]))
+																					: prevValues.filter((value) => value !== opt.value);
+																				return {
+																					...prev,
+																					[field.id]: nextValues,
+																				};
+																			})
+																		}
+																		disabled={readOnly}
+																	/>
+																	<span>{opt.label}</span>
+																</label>
+															);
+														})}
+													</div>
+												)}
+												{field.type === "boolean-toggle" && (
+													<div className="flex gap-1.5">
+														{[
+															{ value: "all", label: "Todos" },
+															{ value: "si", label: "Si" },
+															{ value: "no", label: "No" },
+														].map((opt) => (
+															<Button
+																key={opt.value}
+																variant={
+																	draftFilters[field.id] === opt.value ? "default" : "outline"
+																}
+																size="sm"
+																className={`flex-1 text-xs h-7 ${draftFilters[field.id] === opt.value
+																	? "bg-[#2b2f36] text-[#f7f7f8]"
+																	: "border-[#d5d8df] text-[#3a3f45] bg-transparent"
+																	}`}
+																onClick={() =>
+																	setDraftFilters((prev) => ({
+																		...prev,
+																		[field.id]: opt.value,
+																	}))
+																}
+																disabled={readOnly}
+															>
+																{opt.label}
+															</Button>
+														))}
+													</div>
+												)}
+											</div>
+										))}
+									</div>
 
 									<div className="pt-3">
-										<Button
-											size="sm"
-											className="w-full bg-[#2b2f36] hover:bg-[#1f2328] text-[#f7f7f8] text-xs"
-											onClick={() => setFilters(draftFilters)}
-											disabled={readOnly}
-										>
-											Aplicar Filtros
-										</Button>
+										<div className="flex gap-2">
+											<Button
+												size="sm"
+												className="flex-1 bg-[#2b2f36] hover:bg-[#1f2328] text-[#f7f7f8] text-xs"
+												onClick={() => setFilters(draftFilters)}
+												disabled={readOnly}
+											>
+												Aplicar filtros
+											</Button>
+											<Button
+												size="sm"
+												variant="outline"
+												className="text-xs"
+												onClick={handleResetFilters}
+												disabled={readOnly}
+											>
+												Reiniciar
+											</Button>
+										</div>
 									</div>
 								</div>
 							</ScrollArea>

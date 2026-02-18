@@ -2,7 +2,7 @@
 
 import type { FormApi } from "@tanstack/react-form";
 import { motion } from "framer-motion";
-import { AlertCircle, Building2, Calendar, DollarSign, FileText, MapPin, Percent, TrendingUp } from "lucide-react";
+import { AlertCircle, AlertTriangle, Building2, Calendar, DollarSign, FileText, LineChart, MapPin, Percent, TrendingUp } from "lucide-react";
 
 import type { Obra } from "@/app/excel/schema";
 import type { OcrTablaColumn } from "./file-manager/types";
@@ -37,6 +37,31 @@ type GeneralTabQuickActions = {
 	customStepRenderers?: Record<string, any>;
 };
 
+type ReportFinding = {
+	id: string;
+	rule_key: string;
+	severity: "info" | "warn" | "critical";
+	title: string;
+	message: string | null;
+	created_at: string;
+};
+
+type ReportCurvePoint = {
+	label: string;
+	planPct: number | null;
+	realPct: number | null;
+	sortOrder: number;
+};
+
+type GeneralTabReportsData = {
+	findings: ReportFinding[];
+	curve: {
+		points: ReportCurvePoint[];
+		planTableName: string;
+		resumenTableName: string;
+	} | null;
+};
+
 type GeneralTabProps = {
 	form: any; // FormApi type requires 11-12 type arguments, using any for simplicity
 	isGeneralTabEditMode: boolean;
@@ -46,6 +71,7 @@ type GeneralTabProps = {
 	initialFormValues: Obra;
 	getErrorMessage: (errors: unknown) => string;
 	quickActionsAllData?: GeneralTabQuickActions;
+	reportsData?: GeneralTabReportsData;
 };
 
 const CircularProgress = ({ value }: { value: number }) => {
@@ -98,6 +124,148 @@ const CircularProgress = ({ value }: { value: number }) => {
 	);
 };
 
+function buildSvgPath(
+	points: ReportCurvePoint[],
+	valueKey: "planPct" | "realPct",
+	xForIndex: (index: number) => number,
+	yForValue: (value: number) => number
+) {
+	let path = "";
+	let started = false;
+	points.forEach((point, index) => {
+		const value = point[valueKey];
+		if (value == null || !Number.isFinite(value)) {
+			started = false;
+			return;
+		}
+		const x = xForIndex(index);
+		const y = yForValue(value);
+		if (!started) {
+			path += `M ${x} ${y}`;
+			started = true;
+		} else {
+			path += ` L ${x} ${y}`;
+		}
+	});
+	return path;
+}
+
+const AdvanceCurveChart = ({ points }: { points: ReportCurvePoint[] }) => {
+	if (points.length === 0) {
+		return (
+			<div className="rounded border border-dashed p-4 text-xs text-muted-foreground">
+				No hay puntos de curva para graficar todavía.
+			</div>
+		);
+	}
+
+	const toPct100 = (value: number | null): number | null => {
+		if (value == null || !Number.isFinite(value)) return null;
+		return Math.abs(value) <= 1 ? value * 100 : value;
+	};
+
+	const normalizedPoints = points.map((point) => ({
+		...point,
+		planPct: toPct100(point.planPct),
+		realPct: toPct100(point.realPct),
+	}));
+
+	// Hold-last-value to keep continuous execution curve when a month has no value.
+	const filledPoints = normalizedPoints.reduce<ReportCurvePoint[]>((acc, point, index) => {
+		const prev = acc[index - 1];
+		acc.push({
+			...point,
+			planPct: point.planPct ?? prev?.planPct ?? 0,
+			realPct: point.realPct ?? prev?.realPct ?? 0,
+		});
+		return acc;
+	}, []);
+
+	const chartWidth = 880;
+	const chartHeight = 300;
+	const margin = { top: 16, right: 16, bottom: 56, left: 44 };
+	const plotWidth = chartWidth - margin.left - margin.right;
+	const plotHeight = chartHeight - margin.top - margin.bottom;
+
+	const yMax = Math.max(
+		100,
+		...filledPoints.flatMap((point) => [point.planPct ?? 0, point.realPct ?? 0])
+	);
+	const xForIndex = (index: number) =>
+		margin.left + (filledPoints.length <= 1 ? 0 : (index / (filledPoints.length - 1)) * plotWidth);
+	const yForValue = (value: number) =>
+		margin.top + plotHeight - (Math.max(0, value) / yMax) * plotHeight;
+
+	const planPath = buildSvgPath(filledPoints, "planPct", xForIndex, yForValue);
+	const realPath = buildSvgPath(filledPoints, "realPct", xForIndex, yForValue);
+
+	const yTicks = [0, 25, 50, 75, 100].filter((tick) => tick <= yMax || tick === 100);
+	const labelStep = filledPoints.length > 12 ? Math.ceil(filledPoints.length / 12) : 1;
+
+	return (
+		<div className="space-y-2 pt-4">
+
+			<div className="overflow-x-auto rounded-md border">
+				<svg
+					viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+					className="min-w-[760px] w-full h-[320px] bg-white"
+					role="img"
+					aria-label="Comparación de curva de avance"
+				>
+					{yTicks.map((tick) => {
+						const y = yForValue(tick);
+						return (
+							<g key={`y-${tick}`}>
+								<line x1={margin.left} y1={y} x2={margin.left + plotWidth} y2={y} stroke="currentColor" className="text-muted/40" />
+								<text x={margin.left - 8} y={y + 4} textAnchor="end" className="fill-muted-foreground text-[11px]">
+									{tick}%
+								</text>
+							</g>
+						);
+					})}
+
+					{planPath ? <path d={planPath} fill="none" stroke="#0ea5e9" strokeWidth={2.5} /> : null}
+					{realPath ? <path d={realPath} fill="none" stroke="#8b1e1e" strokeWidth={2.5} /> : null}
+
+					{filledPoints.map((point, index) => {
+						const x = xForIndex(index);
+						return (
+							<g key={`${point.label}-${index}`}>
+								{point.planPct != null ? (
+									<circle cx={x} cy={yForValue(point.planPct)} r={3} fill="#0ea5e9" />
+								) : null}
+								{point.realPct != null ? (
+									<circle cx={x} cy={yForValue(point.realPct)} r={3} fill="#8b1e1e" />
+								) : null}
+								{index % labelStep === 0 || index === filledPoints.length - 1 ? (
+									<text
+										x={x}
+										y={chartHeight - 18}
+										textAnchor="middle"
+										className="fill-muted-foreground text-[10px]"
+									>
+										{point.label}
+									</text>
+								) : null}
+							</g>
+						);
+					})}
+				</svg>
+			</div>
+			<div className="flex flex-wrap items-center gap-4 text-xs">
+				<div className="flex items-center gap-2">
+					<span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+					<span className="text-muted-foreground">Curva Plan (avance acumulado)</span>
+				</div>
+				<div className="flex items-center gap-2">
+					<span className="h-2.5 w-2.5 rounded-full bg-[#8b1e1e]" />
+					<span className="text-muted-foreground">PMC Resumen (avance físico acumulado)</span>
+				</div>
+			</div>
+		</div>
+	);
+};
+
 export function ObraGeneralTab({
 	form,
 	isGeneralTabEditMode,
@@ -107,6 +275,7 @@ export function ObraGeneralTab({
 	initialFormValues,
 	getErrorMessage,
 	quickActionsAllData,
+	reportsData,
 }: GeneralTabProps) {
 	return (
 		<TabsContent value="general" className="space-y-6 pt-0">
@@ -133,7 +302,7 @@ export function ObraGeneralTab({
 								<form.Field name="porcentaje">
 									{(field: any) => (
 										<>
-											<div className="flex items-center justify-between gap-2 text-muted-foreground mb-4">
+											<div className="flex items-center justify-between gap-2 text-muted-foreground mb-4 ">
 												<div className="flex items-center gap-2">
 													<Percent className="h-4 w-4" />
 													<span className="text-sm font-medium">Avance</span>
@@ -321,6 +490,7 @@ export function ObraGeneralTab({
 								</div>
 							</motion.section>
 						</div>
+
 
 						<motion.section
 							initial={{ opacity: 0, y: 20 }}
@@ -542,14 +712,14 @@ export function ObraGeneralTab({
 									animate={{ opacity: 1, scale: 1 }}
 									transition={{ delay: 0.1 }}
 									className={cn(
-										"rounded-lg border bg-card p-4 sm:p-5 shadow-sm flex flex-col col-span-1 row-span-1 transition-colors",
+										"rounded-lg border bg-card p-4  sm:p-5 sm:pt-0 shadow-sm flex flex-col col-span-1 row-span-1 transition-colors",
 										isFieldDirty("porcentaje") && "bg-orange-primary/5 border-orange-primary/40 border-2"
 									)}
 								>
-									<div className="flex items-center justify-between gap-2 text-muted-foreground mb-4">
+									<div className="flex items-center justify-between gap-2 text-muted-foreground bg-muted/50 h-full -mx-5 p-5 pb-4">
 										<div className="flex items-center gap-2">
 											<Percent className="h-4 w-4" />
-											<span className="text-sm font-medium">Avance</span>
+											<span className="text-base sm:text-lg font-semibold text-foreground">Avance</span>
 										</div>
 										{isFieldDirty("porcentaje") ? (
 											<span className="text-xs text-orange-primary font-semibold">
@@ -564,6 +734,40 @@ export function ObraGeneralTab({
 									<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
 										<CircularProgress value={form.state.values.porcentaje ?? 0} />
 									</div>
+									<div>
+										<p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+											Alertas detectadas
+										</p>
+										{(reportsData?.findings?.length ?? 0) === 0 ? (
+											<p className="text-sm text-muted-foreground">
+												No hay alertas abiertas para esta obra.
+											</p>
+										) : (
+											<div className="space-y-2">
+												{reportsData?.findings.slice(0, 6).map((finding) => {
+													const tone =
+														finding.severity === "critical"
+															? "border-red-200 bg-red-50 text-red-700"
+															: finding.severity === "warn"
+																? "border-amber-200 bg-amber-50 text-amber-700"
+																: "border-sky-200 bg-sky-50 text-sky-700";
+													return (
+														<div key={finding.id} className={cn("rounded-md border px-3 py-2", tone)}>
+															<div className="flex items-start gap-2">
+																<AlertTriangle className="h-4 w-4 mt-0.5" />
+																<div>
+																	<p className="text-sm font-semibold">{finding.title}</p>
+																	{finding.message ? (
+																		<p className="text-xs mt-0.5">{finding.message}</p>
+																	) : null}
+																</div>
+															</div>
+														</div>
+													);
+												})}
+											</div>
+										)}
+									</div>
 								</motion.div>
 
 								<motion.section
@@ -574,263 +778,215 @@ export function ObraGeneralTab({
 								>
 									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
 										<div className="flex items-center gap-2">
+											<div className="flex flex-wrap items-center justify-between gap-2 w-full">
+												<div className="flex items-center gap-2">
+
+													<LineChart className="h-5 w-5 text-primary" />
+													<h2 className="text-base sm:text-lg font-semibold">Curva de avance</h2>
+												</div>
+												{reportsData?.curve ? (
+													<p className="text-xs text-muted-foreground">
+														{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
+													</p>
+												) : null}
+											</div>
+										</div>
+									</div>
+									<div className="p-4 sm:pt-2 sm:p-6 space-y-5">
+										<div className="space-y-2">
+											{reportsData?.curve ? (
+												<AdvanceCurveChart points={reportsData.curve.points} />
+											) : (
+												<div className="rounded border border-dashed p-4 text-sm text-muted-foreground">
+													No se detectaron tablas Curva Plan + PMC Resumen con datos suficientes.
+												</div>
+											)}
+										</div>
+									</div>
+								</motion.section>
+							</div>
+
+							<div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+								<motion.section
+									initial={{ opacity: 0, y: 20 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{ delay: 0.28 }}
+									className="rounded-lg border bg-card shadow-sm overflow-hidden"
+								>
+									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
+										<div className="flex items-center gap-2">
 											<Building2 className="h-5 w-5 text-primary" />
 											<h2 className="text-base sm:text-lg font-semibold">Información General</h2>
 										</div>
 									</div>
-									<div className="p-4 sm:p-6 space-y-1 sm:space-y-6">
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("designacionYUbicacion") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-												<MapPin className="h-4 w-4" />
-												Designación y ubicación
-												{isFieldDirty("designacionYUbicacion") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+									<div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+										<div className="rounded border p-3">
+											<p className="text-xs text-muted-foreground mb-1">Designación y ubicación</p>
+											<p className="text-sm">{form.state.values.designacionYUbicacion || "No especificado"}</p>
+										</div>
+										<div className="rounded border p-3">
+											<p className="text-xs text-muted-foreground mb-1">Entidad contratante</p>
+											<p className="text-sm">{form.state.values.entidadContratante || "No especificado"}</p>
+										</div>
+										<div className="rounded border p-3">
+											<p className="text-xs text-muted-foreground mb-1">Mes básico</p>
+											<p className="text-sm">{form.state.values.mesBasicoDeContrato || "No especificado"}</p>
+										</div>
+										<div className="rounded border p-3">
+											<p className="text-xs text-muted-foreground mb-1">Iniciación</p>
+											<p className="text-sm">{form.state.values.iniciacion || "No especificado"}</p>
+										</div>
+										<div className="rounded border p-3">
+											<p className="text-xs text-muted-foreground mb-1">N° de obra</p>
+											<p className="text-sm">#{form.state.values.n}</p>
+										</div>
+										<div className="rounded border p-3">
+											<p className="text-xs text-muted-foreground mb-1">Superficie</p>
+											<p className="text-sm">{form.state.values.supDeObraM2.toLocaleString("es-AR")} m²</p>
+										</div>
+									</div>
+								</motion.section>
+
+								<motion.section
+									initial={{ opacity: 0, y: 20 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{ delay: 0.3 }}
+									className="rounded-lg border bg-card shadow-sm overflow-hidden"
+								>
+									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
+										<div className="flex items-center gap-2">
+											<DollarSign className="h-5 w-5 text-primary" />
+											<h2 className="text-base sm:text-lg font-semibold">Datos Financieros</h2>
+										</div>
+									</div>
+									<div className="p-4 sm:p-6 space-y-4">
+										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+											<div
+												className={cn(
+													"px-3 lg:p-3  rounded-md transition-colors",
+													isFieldDirty("contratoMasAmpliaciones") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
-											</label>
-											<p className="text-sm ">
-												{form.state.values.designacionYUbicacion || "No especificado"}
-											</p>
+											>
+												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+													Contrato más ampliaciones
+													{isFieldDirty("contratoMasAmpliaciones") && (
+														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+													)}
+												</label>
+												<p className="text-sm font-mono">
+													$ {form.state.values.contratoMasAmpliaciones.toLocaleString("es-AR")}
+												</p>
+											</div>
+
+											<div
+												className={cn(
+													"px-3 lg:p-3  rounded-md transition-colors",
+													isFieldDirty("certificadoALaFecha") && "bg-orange-primary/5 border-2 border-orange-primary/40"
+												)}
+											>
+												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+													Certificado a la fecha
+													{isFieldDirty("certificadoALaFecha") && (
+														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+													)}
+												</label>
+												<p className="text-sm font-mono">
+													$ {form.state.values.certificadoALaFecha.toLocaleString("es-AR")}
+												</p>
+											</div>
+
+											<div
+												className={cn(
+													"px-3 lg:p-3  rounded-md transition-colors",
+													isFieldDirty("saldoACertificar") && "bg-orange-primary/5 border-2 border-orange-primary/40"
+												)}
+											>
+												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+													Saldo a certificar
+													{isFieldDirty("saldoACertificar") && (
+														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
+													)}
+												</label>
+												<p className="text-sm font-mono">
+													$ {form.state.values.saldoACertificar.toLocaleString("es-AR")}
+												</p>
+											</div>
 										</div>
 
-										<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+										<Separator />
+
+										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 											<div
 												className={cn(
 													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("entidadContratante") && "bg-orange-primary/5 border-2 border-orange-primary/40"
+													isFieldDirty("segunContrato") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
-												<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-													<Building2 className="h-4 w-4" />
-													Entidad contratante
-													{isFieldDirty("entidadContratante") && (
+												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+													Según contrato
+													{isFieldDirty("segunContrato") && (
 														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
 													)}
 												</label>
 												<p className="text-sm">
-													{form.state.values.entidadContratante || "No especificado"}
+													{form.state.values.segunContrato} meses
 												</p>
 											</div>
 
 											<div
 												className={cn(
 													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("mesBasicoDeContrato") && "bg-orange-primary/5 border-2 border-orange-primary/40"
+													isFieldDirty("prorrogasAcordadas") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
-												<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-													<Calendar className="h-4 w-4" />
-													Mes básico de contrato
-													{isFieldDirty("mesBasicoDeContrato") && (
+												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+													Prórrogas acordadas
+													{isFieldDirty("prorrogasAcordadas") && (
 														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
 													)}
 												</label>
 												<p className="text-sm">
-													{form.state.values.mesBasicoDeContrato || "No especificado"}
+													{form.state.values.prorrogasAcordadas} meses
 												</p>
 											</div>
 
 											<div
 												className={cn(
 													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("iniciacion") && "bg-orange-primary/5 border-2 border-orange-primary/40"
+													isFieldDirty("plazoTotal") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
-												<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-													<Calendar className="h-4 w-4" />
-													Fecha de iniciación
-													{isFieldDirty("iniciacion") && (
+												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+													Plazo total
+													{isFieldDirty("plazoTotal") && (
 														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
 													)}
 												</label>
 												<p className="text-sm">
-													{form.state.values.iniciacion || "No especificado"}
+													{form.state.values.plazoTotal} meses
 												</p>
 											</div>
 
 											<div
 												className={cn(
 													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("n") && "bg-orange-primary/5 border-2 border-orange-primary/40"
+													isFieldDirty("plazoTransc") && "bg-orange-primary/5 border-2 border-orange-primary/40"
 												)}
 											>
-												<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-													<FileText className="h-4 w-4" />
-													N° de Obra
-													{isFieldDirty("n") && (
+												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
+													Transcurrido
+													{isFieldDirty("plazoTransc") && (
 														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
 													)}
 												</label>
 												<p className="text-sm">
-													#{form.state.values.n}
-												</p>
-											</div>
-
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("supDeObraM2") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium mb-2 text-muted-foreground">
-													<TrendingUp className="h-4 w-4" />
-													Superficie
-													{isFieldDirty("supDeObraM2") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm">
-													{form.state.values.supDeObraM2.toLocaleString("es-AR")} m²
+													{form.state.values.plazoTransc} meses
 												</p>
 											</div>
 										</div>
 									</div>
 								</motion.section>
 							</div>
-
-							<motion.section
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ delay: 0.3 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden"
-							>
-								<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
-									<div className="flex items-center gap-2">
-										<DollarSign className="h-5 w-5 text-primary" />
-										<h2 className="text-base sm:text-lg font-semibold">Datos Financieros</h2>
-									</div>
-								</div>
-								<div className="p-4 sm:p-6 space-y-4">
-									<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("contratoMasAmpliaciones") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-												Contrato más ampliaciones
-												{isFieldDirty("contratoMasAmpliaciones") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-												)}
-											</label>
-											<p className="text-sm font-mono">
-												$ {form.state.values.contratoMasAmpliaciones.toLocaleString("es-AR")}
-											</p>
-										</div>
-
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("certificadoALaFecha") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-												Certificado a la fecha
-												{isFieldDirty("certificadoALaFecha") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-												)}
-											</label>
-											<p className="text-sm font-mono">
-												$ {form.state.values.certificadoALaFecha.toLocaleString("es-AR")}
-											</p>
-										</div>
-
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("saldoACertificar") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-												Saldo a certificar
-												{isFieldDirty("saldoACertificar") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-												)}
-											</label>
-											<p className="text-sm font-mono">
-												$ {form.state.values.saldoACertificar.toLocaleString("es-AR")}
-											</p>
-										</div>
-									</div>
-
-									<Separator />
-
-									<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("segunContrato") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-												Según contrato
-												{isFieldDirty("segunContrato") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-												)}
-											</label>
-											<p className="text-sm">
-												{form.state.values.segunContrato} meses
-											</p>
-										</div>
-
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("prorrogasAcordadas") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-												Prórrogas acordadas
-												{isFieldDirty("prorrogasAcordadas") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-												)}
-											</label>
-											<p className="text-sm">
-												{form.state.values.prorrogasAcordadas} meses
-											</p>
-										</div>
-
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("plazoTotal") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-												Plazo total
-												{isFieldDirty("plazoTotal") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-												)}
-											</label>
-											<p className="text-sm">
-												{form.state.values.plazoTotal} meses
-											</p>
-										</div>
-
-										<div
-											className={cn(
-												"px-3 lg:p-3  rounded-md transition-colors",
-												isFieldDirty("plazoTransc") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-											)}
-										>
-											<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-												Transcurrido
-												{isFieldDirty("plazoTransc") && (
-													<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-												)}
-											</label>
-											<p className="text-sm">
-												{form.state.values.plazoTransc} meses
-											</p>
-										</div>
-									</div>
-								</div>
-							</motion.section>
 
 							{hasUnsavedChanges() && (
 								<motion.div
@@ -884,7 +1040,7 @@ export function ObraGeneralTab({
 							)}
 						</div>
 
-						{quickActionsAllData && quickActionsAllData.quickActions.length > 0 && (
+						{quickActionsAllData && (
 							<QuickActionsPanel
 								obraId={quickActionsAllData.obraId}
 								actions={quickActionsAllData.quickActions}

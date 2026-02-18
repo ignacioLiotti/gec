@@ -5,8 +5,11 @@ import {
 	BASE_COLUMNS,
 	CONFIG_COLUMNS,
 	DbObraRow,
+	LEGACY_BASE_COLUMNS,
 	getAuthContext,
+	loadTenantMainTableCustomColumnIds,
 	mapDbRowToObra,
+	sanitizeCustomData,
 	executeFlujoActions,
 } from "../route";
 
@@ -43,7 +46,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 	if (error && error.code === "42703") {
 		console.warn(
-			"Obra GET: on_finish_* columns missing, falling back to base columns"
+			"Obra GET: modern columns missing, falling back"
 		);
 		const fallback = await supabase
 			.from("obras")
@@ -54,6 +57,17 @@ export async function GET(_request: Request, context: RouteContext) {
 			.maybeSingle<DbObraRow>();
 		data = fallback.data;
 		error = fallback.error;
+		if (error && error.code === "42703") {
+			const legacy = await supabase
+				.from("obras")
+				.select(LEGACY_BASE_COLUMNS)
+				.eq("id", obraId)
+				.eq("tenant_id", tenantId)
+				.is("deleted_at", null)
+				.maybeSingle<DbObraRow>();
+			data = legacy.data;
+			error = legacy.error;
+		}
 	}
 
 	if (error) {
@@ -90,7 +104,9 @@ export async function PUT(
 		return NextResponse.json({ error: "No tenant" }, { status: 400 });
 	}
 
-	// Fetch existing porcentaje to detect newly completed state (crossing <100 → 100)
+	// Fetch existing porcentaje atomically with update using single query
+	// Note: We still need to fetch first because Supabase's RETURNING only gives us NEW values
+	// To properly eliminate race conditions, consider using a database trigger
 	const { data: existingRow, error: existingError } = await supabase
 		.from("obras")
 		.select("porcentaje, designacion_y_ubicacion")
@@ -136,6 +152,11 @@ export async function PUT(
 
 	const obra = parsingResult.data;
 
+	const allowedCustomColumnIds = await loadTenantMainTableCustomColumnIds(
+		supabase,
+		tenantId
+	);
+
 	const fullUpdate = {
 		n: obra.n,
 		designacion_y_ubicacion: obra.designacionYUbicacion,
@@ -151,33 +172,54 @@ export async function PUT(
 		plazo_total: obra.plazoTotal,
 		plazo_transc: obra.plazoTransc,
 		porcentaje: obra.porcentaje,
+		custom_data:
+			sanitizeCustomData(obra.customData, allowedCustomColumnIds),
 		on_finish_first_message: obra.onFinishFirstMessage ?? null,
 		on_finish_second_message: obra.onFinishSecondMessage ?? null,
 		on_finish_second_send_at: obra.onFinishSecondSendAt ?? null,
 	};
 
-	let { error: updateError } = await supabase
+	// Use .select() to get RETURNING data for the actual committed value
+	let updateResult = await supabase
 		.from("obras")
 		.update(fullUpdate)
 		.eq("id", obraId)
-		.eq("tenant_id", tenantId);
+		.eq("tenant_id", tenantId)
+		.select("porcentaje")
+		.maybeSingle();
+
+	let updateError = updateResult.error;
 
 	if (updateError && updateError.code === "42703") {
 		console.warn(
-			"Obra PUT: on_finish_* columns missing, updating without finish config"
+			"Obra PUT: modern columns missing, retrying with reduced payload"
 		);
 		const fallbackUpdate: Record<string, unknown> = { ...fullUpdate };
 		delete fallbackUpdate.on_finish_first_message;
 		delete fallbackUpdate.on_finish_second_message;
 		delete fallbackUpdate.on_finish_second_send_at;
 
-		const fallback = await supabase
+		updateResult = await supabase
 			.from("obras")
 			.update(fallbackUpdate)
 			.eq("id", obraId)
-			.eq("tenant_id", tenantId);
+			.eq("tenant_id", tenantId)
+			.select("porcentaje")
+			.maybeSingle();
 
-		updateError = fallback.error;
+		updateError = updateResult.error;
+		if (updateError && updateError.code === "42703") {
+			const legacyUpdate: Record<string, unknown> = { ...fallbackUpdate };
+			delete legacyUpdate.custom_data;
+			updateResult = await supabase
+				.from("obras")
+				.update(legacyUpdate)
+				.eq("id", obraId)
+				.eq("tenant_id", tenantId)
+				.select("porcentaje")
+				.maybeSingle();
+			updateError = updateResult.error;
+		}
 	}
 
 	if (updateError) {
@@ -190,9 +232,12 @@ export async function PUT(
 
 	// Detect newly completed obra (transition <100 → 100) and trigger the same
 	// completion side-effects as the bulk /api/obras route.
-	const newPorcentaje = obra.porcentaje;
-	const becameCompleted = prevPorcentaje < 100 && newPorcentaje >= 100;
-	const becameIncomplete = prevPorcentaje >= 100 && newPorcentaje < 100;
+	// Use the actual committed porcentaje from RETURNING to reduce race conditions
+	const committedPorcentaje = updateResult.data
+		? Number((updateResult.data as any).porcentaje ?? obra.porcentaje)
+		: obra.porcentaje;
+	const becameCompleted = prevPorcentaje < 100 && committedPorcentaje >= 100;
+	const becameIncomplete = prevPorcentaje >= 100 && committedPorcentaje < 100;
 
 	if (becameCompleted) {
 		try {
@@ -207,7 +252,7 @@ export async function PUT(
 
 			if (completedError && completedError.code === "42703") {
 				console.warn(
-					"Obra [id] PUT: on_finish_* columns missing when fetching completed obra, falling back"
+					"Obra [id] PUT: modern columns missing when fetching completed obra, falling back"
 				);
 				const fallback = await supabase
 					.from("obras")
@@ -218,6 +263,17 @@ export async function PUT(
 					.maybeSingle<DbObraRow>();
 				completedRow = fallback.data;
 				completedError = fallback.error;
+				if (completedError && completedError.code === "42703") {
+					const legacy = await supabase
+						.from("obras")
+						.select(LEGACY_BASE_COLUMNS)
+						.eq("id", obraId)
+						.eq("tenant_id", tenantId)
+						.is("deleted_at", null)
+						.maybeSingle<DbObraRow>();
+					completedRow = legacy.data;
+					completedError = legacy.error;
+				}
 			}
 
 			if (completedError) {
@@ -235,7 +291,7 @@ export async function PUT(
 							(completedRow as any).designacion_y_ubicacion ??
 							obra.designacionYUbicacion,
 						percentage: Number(
-							(completedRow as any).porcentaje ?? newPorcentaje
+							(completedRow as any).porcentaje ?? committedPorcentaje
 						),
 					},
 					followUpAt: (completedRow as any).on_finish_second_send_at ?? null,

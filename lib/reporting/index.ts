@@ -56,12 +56,18 @@ function parseDate(value: unknown): Date | null {
 			const a = Number(slashMatch[1]);
 			const b = Number(slashMatch[2]);
 			const year = Number(slashMatch[3]);
-			const mmFirst = new Date(Date.UTC(year, a - 1, b));
-			if (!Number.isNaN(mmFirst.getTime()) && a >= 1 && a <= 12) {
-				return mmFirst;
+			// Prefer LATAM/AR format (dd/mm/yyyy). Only fall back to mm/dd when dd/mm is impossible.
+			const ddFirstValid = a >= 1 && a <= 31 && b >= 1 && b <= 12;
+			const mmFirstValid = a >= 1 && a <= 12 && b >= 1 && b <= 31;
+			if (ddFirstValid) {
+				const ddFirst = new Date(Date.UTC(year, b - 1, a));
+				if (!Number.isNaN(ddFirst.getTime())) return ddFirst;
 			}
-			const ddFirst = new Date(Date.UTC(year, b - 1, a));
-			return Number.isNaN(ddFirst.getTime()) ? null : ddFirst;
+			if (mmFirstValid) {
+				const mmFirst = new Date(Date.UTC(year, a - 1, b));
+				if (!Number.isNaN(mmFirst.getTime())) return mmFirst;
+			}
+			return null;
 		}
 		const parsed = new Date(trimmed);
 		return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -94,6 +100,49 @@ function monthsDiff(startPeriod: string, currentPeriod: string): number | null {
 	return (currYear - startYear) * 12 + (currMonth - startMonth);
 }
 
+function addMonthsToPeriodKey(
+	startPeriod: string,
+	offset: number,
+): string | null {
+	const start = startPeriod.match(/^(\d{4})-(\d{2})$/);
+	if (!start) return null;
+	const year = Number(start[1]);
+	const month = Number(start[2]) - 1;
+	if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+	const date = new Date(Date.UTC(year, month + offset, 1));
+	return Number.isNaN(date.getTime()) ? null : toPeriodKey(date);
+}
+
+function periodKeyFromCurveRow(
+	rowData: Record<string, any> | null | undefined,
+	startPeriod?: string,
+): string | null {
+	const rawPeriodo =
+		rowData?.periodo ?? rowData?.periodo_key ?? rowData?.period ?? rowData?.mes;
+	if (typeof rawPeriodo === "string") {
+		const normalized = normalizeText(rawPeriodo);
+		const mesN = normalized.match(/mes\s*(\d{1,3})/);
+		if (mesN && startPeriod) {
+			const offset = Number(mesN[1]);
+			if (Number.isFinite(offset)) {
+				const period = addMonthsToPeriodKey(startPeriod, offset);
+				if (period) return period;
+			}
+		}
+		const dateFromPeriodo = parseDate(rawPeriodo);
+		if (dateFromPeriodo) return toPeriodKey(dateFromPeriodo);
+	}
+
+	const rawFecha =
+		rowData?.fecha_certificacion ??
+		rowData?.fecha ??
+		rowData?.issued_at ??
+		rowData?.date;
+	const dateFromFecha = parseDate(rawFecha);
+	if (dateFromFecha) return toPeriodKey(dateFromFecha);
+	return null;
+}
+
 async function resolveTenantId(
 	supabase: SupabaseClient,
 	userId: string,
@@ -115,6 +164,92 @@ async function resolveTenantId(
 		.maybeSingle();
 
 	return membership?.tenant_id ?? null;
+}
+
+async function loadRuleConfigForTenant(
+	supabase: SupabaseClient,
+	tenantId: string,
+	obraId: string,
+): Promise<RuleConfig> {
+	const { data } = await supabase
+		.from("obra_rule_config")
+		.select("config_json")
+		.eq("tenant_id", tenantId)
+		.eq("obra_id", obraId)
+		.maybeSingle();
+
+	const stored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
+	return {
+		...DEFAULT_RULE_CONFIG,
+		...stored,
+		enabledPacks: {
+			...DEFAULT_RULE_CONFIG.enabledPacks,
+			...(stored.enabledPacks ?? {}),
+		},
+		mappings: {
+			...DEFAULT_RULE_CONFIG.mappings,
+			...(stored.mappings ?? {}),
+		},
+		thresholds: {
+			...DEFAULT_RULE_CONFIG.thresholds,
+			...(stored.thresholds ?? {}),
+			curve: {
+				...DEFAULT_RULE_CONFIG.thresholds.curve,
+				...(stored.thresholds?.curve ?? {}),
+			},
+			unpaidCerts: {
+				...DEFAULT_RULE_CONFIG.thresholds.unpaidCerts,
+				...(stored.thresholds?.unpaidCerts ?? {}),
+			},
+			inactivity: {
+				...DEFAULT_RULE_CONFIG.thresholds.inactivity,
+				...(stored.thresholds?.inactivity ?? {}),
+			},
+			monthlyMissingCert: {
+				...DEFAULT_RULE_CONFIG.thresholds.monthlyMissingCert,
+				...(stored.thresholds?.monthlyMissingCert ?? {}),
+			},
+			stageStalled: {
+				...DEFAULT_RULE_CONFIG.thresholds.stageStalled,
+				...(stored.thresholds?.stageStalled ?? {}),
+			},
+		},
+	} as RuleConfig;
+}
+
+async function loadSignalsSnapshotForTenant(
+	supabase: SupabaseClient,
+	tenantId: string,
+	obraId: string,
+	periodKey?: string,
+): Promise<SignalRow[]> {
+	const { data } = await supabase
+		.from("obra_signals")
+		.select("signal_key,value_num,value_bool,value_json,computed_at")
+		.eq("tenant_id", tenantId)
+		.eq("obra_id", obraId)
+		.eq("period_key", periodKey ?? null);
+
+	return (data ?? []) as SignalRow[];
+}
+
+async function loadFindingsForTenant(
+	supabase: SupabaseClient,
+	tenantId: string,
+	obraId: string,
+	periodKey?: string,
+): Promise<FindingRow[]> {
+	const { data } = await supabase
+		.from("obra_findings")
+		.select(
+			"id,rule_key,severity,title,message,evidence_json,status,created_at",
+		)
+		.eq("tenant_id", tenantId)
+		.eq("obra_id", obraId)
+		.eq("period_key", periodKey ?? null)
+		.order("created_at", { ascending: false });
+
+	return (data ?? []) as FindingRow[];
 }
 
 export async function getObraTables(obraId: string) {
@@ -167,51 +302,7 @@ export async function getRuleConfig(obraId: string) {
 
 	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
 	if (!tenantId) return DEFAULT_RULE_CONFIG;
-
-	const { data } = await supabase
-		.from("obra_rule_config")
-		.select("config_json")
-		.eq("tenant_id", tenantId)
-		.eq("obra_id", obraId)
-		.maybeSingle();
-
-	const stored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
-	return {
-		...DEFAULT_RULE_CONFIG,
-		...stored,
-		enabledPacks: {
-			...DEFAULT_RULE_CONFIG.enabledPacks,
-			...(stored.enabledPacks ?? {}),
-		},
-		mappings: {
-			...DEFAULT_RULE_CONFIG.mappings,
-			...(stored.mappings ?? {}),
-		},
-		thresholds: {
-			...DEFAULT_RULE_CONFIG.thresholds,
-			...(stored.thresholds ?? {}),
-			curve: {
-				...DEFAULT_RULE_CONFIG.thresholds.curve,
-				...(stored.thresholds?.curve ?? {}),
-			},
-			unpaidCerts: {
-				...DEFAULT_RULE_CONFIG.thresholds.unpaidCerts,
-				...(stored.thresholds?.unpaidCerts ?? {}),
-			},
-			inactivity: {
-				...DEFAULT_RULE_CONFIG.thresholds.inactivity,
-				...(stored.thresholds?.inactivity ?? {}),
-			},
-			monthlyMissingCert: {
-				...DEFAULT_RULE_CONFIG.thresholds.monthlyMissingCert,
-				...(stored.thresholds?.monthlyMissingCert ?? {}),
-			},
-			stageStalled: {
-				...DEFAULT_RULE_CONFIG.thresholds.stageStalled,
-				...(stored.thresholds?.stageStalled ?? {}),
-			},
-		},
-	} as RuleConfig;
+	return loadRuleConfigForTenant(supabase, tenantId, obraId);
 }
 
 export async function saveRuleConfig(obraId: string, config: RuleConfig) {
@@ -264,7 +355,26 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
 	if (!tenantId) throw new Error("No tenant");
 
-	const config = await getRuleConfig(obraId);
+	const config = await loadRuleConfigForTenant(supabase, tenantId, obraId);
+	const rowsByTabla = new Map<
+		string,
+		Promise<
+			Array<{
+				id: string;
+				data: Record<string, any>;
+				created_at: string;
+				updated_at: string;
+			}>
+		>
+	>();
+	const getRows = (tablaId: string) => {
+		let promise = rowsByTabla.get(tablaId);
+		if (!promise) {
+			promise = fetchRows(supabase, tablaId);
+			rowsByTabla.set(tablaId, promise);
+		}
+		return promise;
+	};
 
 	const signals: Array<{
 		signal_key: string;
@@ -283,25 +393,84 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 	if (config.enabledPacks.curve) {
 		const curve = config.mappings.curve;
 		if (curve?.measurementTableId && curve.actualPctColumnKey) {
-			const rows = await fetchRows(supabase, curve.measurementTableId);
-			const lastRow = rows
+			const rows = await getRows(curve.measurementTableId);
+			const normalizedRows = rows
 				.map((row) => ({
 					row,
-					value: parseNumber(row.data?.[curve.actualPctColumnKey ?? ""]),
+					value: (() => {
+						const parsed = parseNumber(row.data?.[curve.actualPctColumnKey ?? ""]);
+						if (parsed == null) return null;
+						return Math.abs(parsed) <= 1 ? parsed * 100 : parsed;
+					})(),
+					period: periodKeyFromCurveRow(
+						(row.data as Record<string, any>) ?? null,
+						curve.plan?.startPeriod,
+					),
 				}))
-				.filter((r) => r.value != null)
-				.sort(
+				.filter((r) => r.value != null);
+
+			let actualPct: number | null = null;
+			let actualSource: "period_match" | "max_value" | "latest_created" | "none" =
+				"none";
+			let actualPeriodUsed: string | null = null;
+			let actualRowId: string | null = null;
+
+			const withPeriod = normalizedRows.filter(
+				(r): r is typeof r & { period: string } => typeof r.period === "string",
+			);
+			if (withPeriod.length > 0) {
+				const ranked = withPeriod
+					.map((r) => ({
+						...r,
+						diff: periodKey
+							? monthsDiff(r.period, periodKey)
+							: monthsDiff(r.period, currentPeriodKey),
+					}))
+					.filter((r) => r.diff != null && r.diff >= 0)
+					.sort((a, b) => (a.diff as number) - (b.diff as number));
+				if (ranked.length > 0) {
+					actualPct = ranked[0].value;
+					actualSource = "period_match";
+					actualPeriodUsed = ranked[0].period;
+					actualRowId = ranked[0].row.id;
+				}
+			}
+
+			if (actualPct == null && normalizedRows.length > 0) {
+				const maxValueRow = normalizedRows.reduce((best, current) => {
+					if (!best) return current;
+					return (current.value as number) > (best.value as number)
+						? current
+						: best;
+				}, null as (typeof normalizedRows)[number] | null);
+				if (maxValueRow) {
+					actualPct = maxValueRow.value;
+					actualSource = "max_value";
+					actualPeriodUsed = maxValueRow.period ?? null;
+					actualRowId = maxValueRow.row.id;
+				}
+			}
+
+			if (actualPct == null && normalizedRows.length > 0) {
+				const latestCreated = [...normalizedRows].sort(
 					(a, b) =>
 						new Date(b.row.created_at).getTime() -
 						new Date(a.row.created_at).getTime(),
 				)[0];
-			const actualPct = lastRow?.value ?? null;
+				actualPct = latestCreated?.value ?? null;
+				if (actualPct != null) {
+					actualSource = "latest_created";
+					actualPeriodUsed = latestCreated?.period ?? null;
+					actualRowId = latestCreated?.row.id ?? null;
+				}
+			}
 
 			let planPct: number | null = null;
 			if (curve.plan?.mode === "linear" && curve.plan.months) {
-				if (periodKey) {
-					const startPeriod = curve.plan.startPeriod ?? periodKey;
-					const diff = monthsDiff(startPeriod, periodKey);
+				if (periodKey || currentPeriodKey) {
+					const targetPeriod = periodKey ?? currentPeriodKey;
+					const startPeriod = curve.plan.startPeriod ?? targetPeriod;
+					const diff = monthsDiff(startPeriod, targetPeriod);
 					const monthIndex = diff != null ? diff + 1 : 1;
 					planPct = Math.min(100, (monthIndex / curve.plan.months) * 100);
 				}
@@ -310,13 +479,17 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 			const delta =
 				actualPct != null && planPct != null ? actualPct - planPct : null;
 
-			signals.push(
-				{
-					signal_key: "progress.actual_pct",
-					value_num: actualPct,
-					value_bool: null,
-					value_json: null,
-				},
+				signals.push(
+					{
+						signal_key: "progress.actual_pct",
+						value_num: actualPct,
+						value_bool: null,
+						value_json: {
+							source: actualSource,
+							periodKey: actualPeriodUsed,
+							rowId: actualRowId,
+						},
+					},
 				{
 					signal_key: "progress.plan_pct",
 					value_num: planPct,
@@ -331,14 +504,18 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 				},
 			);
 			logs.push(
-				{
-					signal_key: "progress.actual_pct",
-					inputs_json: {
-						tableId: curve.measurementTableId,
-						columnKey: curve.actualPctColumnKey,
+					{
+						signal_key: "progress.actual_pct",
+						inputs_json: {
+							tableId: curve.measurementTableId,
+							columnKey: curve.actualPctColumnKey,
+						},
+						outputs_json: {
+							actualPct,
+							source: actualSource,
+							rowsConsidered: normalizedRows.length,
+						},
 					},
-					outputs_json: { actualPct },
-				},
 				{
 					signal_key: "progress.plan_pct",
 					inputs_json: { plan: curve.plan, periodKey },
@@ -361,7 +538,7 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 			unpaid.issuedAtColumnKey &&
 			unpaid.paidBoolColumnKey
 		) {
-			const rows = await fetchRows(supabase, unpaid.certTableId);
+			const rows = await getRows(unpaid.certTableId);
 			const thresholdDays = unpaid.days ?? 90;
 			const now = new Date();
 			let count = 0;
@@ -447,7 +624,7 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 			config.mappings.inactivity?.certIssuedAtColumnKey;
 
 		if (certTableId && certIssuedAtColumnKey) {
-			const rows = await fetchRows(supabase, certTableId);
+			const rows = await getRows(certTableId);
 			const monthlyCounts = new Map<string, number>();
 
 			for (const row of rows) {
@@ -508,7 +685,7 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 	if (config.enabledPacks.stageStalled) {
 		const stalled = config.mappings.stageStalled;
 		if (stalled?.stageTableId && stalled.locationColumnKey) {
-			const rows = await fetchRows(supabase, stalled.stageTableId);
+			const rows = await getRows(stalled.stageTableId);
 			const keyword = normalizeText(stalled.keyword ?? "tesoreria");
 			const thresholdWeeks = stalled.weeks ?? 2;
 			const thresholdDays = thresholdWeeks * 7;
@@ -579,25 +756,41 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 
 	// Inactivity
 	if (config.enabledPacks.inactivity) {
-		const inactive = config.mappings.inactivity;
+		const inactive = config.mappings.inactivity ?? {};
+		const inactivityMeasurementTableId =
+			inactive.measurementTableId ?? config.mappings.curve?.measurementTableId;
+		const inactivityMeasurementDateColumnKey =
+			inactive.measurementDateColumnKey ??
+			(config.mappings.curve?.actualPctColumnKey
+				? "fecha_certificacion"
+				: undefined);
+		const inactivityCertTableId =
+			inactive.certTableId ??
+			config.mappings.monthlyMissingCert?.certTableId ??
+			config.mappings.unpaidCerts?.certTableId;
+		const inactivityCertIssuedAtColumnKey =
+			inactive.certIssuedAtColumnKey ??
+			config.mappings.monthlyMissingCert?.certIssuedAtColumnKey ??
+			config.mappings.unpaidCerts?.issuedAtColumnKey ??
+			"fecha_certificacion";
 		const now = new Date();
 
 		let lastMeasurement: Date | null = null;
 		let lastCertificate: Date | null = null;
 
-		if (inactive?.measurementTableId && inactive.measurementDateColumnKey) {
-			const rows = await fetchRows(supabase, inactive.measurementTableId);
+		if (inactivityMeasurementTableId && inactivityMeasurementDateColumnKey) {
+			const rows = await getRows(inactivityMeasurementTableId);
 			for (const row of rows) {
-				const dt = parseDate(row.data?.[inactive.measurementDateColumnKey]);
+				const dt = parseDate(row.data?.[inactivityMeasurementDateColumnKey]);
 				if (!dt) continue;
 				if (!lastMeasurement || dt > lastMeasurement) lastMeasurement = dt;
 			}
 		}
 
-		if (inactive?.certTableId && inactive.certIssuedAtColumnKey) {
-			const rows = await fetchRows(supabase, inactive.certTableId);
+		if (inactivityCertTableId && inactivityCertIssuedAtColumnKey) {
+			const rows = await getRows(inactivityCertTableId);
 			for (const row of rows) {
-				const dt = parseDate(row.data?.[inactive.certIssuedAtColumnKey]);
+				const dt = parseDate(row.data?.[inactivityCertIssuedAtColumnKey]);
 				if (!dt) continue;
 				if (!lastCertificate || dt > lastCertificate) lastCertificate = dt;
 			}
@@ -651,14 +844,14 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 				},
 				outputs_json: { lastMeasurement: lastMeasurement?.toISOString() ?? null },
 			},
-			{
-				signal_key: "activity.last_certificate_at",
-				inputs_json: {
-					tableId: inactive?.certTableId,
-					columnKey: inactive?.certIssuedAtColumnKey,
-				},
-				outputs_json: { lastCertificate: lastCertificate?.toISOString() ?? null },
-			},
+					{
+						signal_key: "activity.last_certificate_at",
+						inputs_json: {
+							tableId: inactivityCertTableId ?? null,
+							columnKey: inactivityCertIssuedAtColumnKey ?? null,
+						},
+						outputs_json: { lastCertificate: lastCertificate?.toISOString() ?? null },
+					},
 			{
 				signal_key: "activity.last_activity_at",
 				inputs_json: {
@@ -724,7 +917,12 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 		if (logError) throw logError;
 	}
 
-	const snapshot = await getSignalsSnapshot(obraId, periodKey);
+	const snapshot = await loadSignalsSnapshotForTenant(
+		supabase,
+		tenantId,
+		obraId,
+		periodKey,
+	);
 	return { snapshot, runId, logs };
 }
 
@@ -735,15 +933,7 @@ export async function getSignalsSnapshot(obraId: string, periodKey?: string) {
 
 	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
 	if (!tenantId) return [] as SignalRow[];
-
-	const { data } = await supabase
-		.from("obra_signals")
-		.select("signal_key,value_num,value_bool,value_json,computed_at")
-		.eq("tenant_id", tenantId)
-		.eq("obra_id", obraId)
-		.eq("period_key", periodKey ?? null);
-
-	return (data ?? []) as SignalRow[];
+	return loadSignalsSnapshotForTenant(supabase, tenantId, obraId, periodKey);
 }
 
 export async function evaluateFindings(obraId: string, periodKey?: string) {
@@ -754,8 +944,13 @@ export async function evaluateFindings(obraId: string, periodKey?: string) {
 	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
 	if (!tenantId) throw new Error("No tenant");
 
-	const config = await getRuleConfig(obraId);
-	const signals = await getSignalsSnapshot(obraId, periodKey);
+	const config = await loadRuleConfigForTenant(supabase, tenantId, obraId);
+	const signals = await loadSignalsSnapshotForTenant(
+		supabase,
+		tenantId,
+		obraId,
+		periodKey,
+	);
 	const signalMap = new Map(signals.map((s) => [s.signal_key, s]));
 
 	const findings: Array<{
@@ -879,7 +1074,7 @@ export async function evaluateFindings(obraId: string, periodKey?: string) {
 		if (error) throw error;
 	}
 
-	return listFindings(obraId, periodKey);
+	return loadFindingsForTenant(supabase, tenantId, obraId, periodKey);
 }
 
 export async function listFindings(obraId: string, periodKey?: string) {
@@ -889,18 +1084,7 @@ export async function listFindings(obraId: string, periodKey?: string) {
 
 	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
 	if (!tenantId) return [] as FindingRow[];
-
-	const { data } = await supabase
-		.from("obra_findings")
-		.select(
-			"id,rule_key,severity,title,message,evidence_json,status,created_at",
-		)
-		.eq("tenant_id", tenantId)
-		.eq("obra_id", obraId)
-		.eq("period_key", periodKey ?? null)
-		.order("created_at", { ascending: false });
-
-	return (data ?? []) as FindingRow[];
+	return loadFindingsForTenant(supabase, tenantId, obraId, periodKey);
 }
 
 export { getDefaultRuleConfig };

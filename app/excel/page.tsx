@@ -90,6 +90,52 @@ const clampPercentage = (value: unknown) => {
 	return Math.max(0, Math.min(100, pct));
 };
 
+const CSV_IMPORT_DEFAULT_YEAR = 2025;
+const CSV_MONTH_MAP: Record<string, string> = {
+	ene: "01",
+	feb: "02",
+	mar: "03",
+	abr: "04",
+	may: "05",
+	jun: "06",
+	jul: "07",
+	ago: "08",
+	sep: "09",
+	set: "09",
+	oct: "10",
+	nov: "11",
+	dic: "12",
+};
+
+const normalizeCsvDateValue = (value: unknown): string => {
+	const raw = toText(value);
+	if (!raw) return "";
+
+	// Keep already-complete date values (e.g. 15/09/2022)
+	const fullDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+	if (fullDate) {
+		const day = fullDate[1].padStart(2, "0");
+		const month = fullDate[2].padStart(2, "0");
+		return `${day}/${month}/${fullDate[3]}`;
+	}
+
+	// Support formats like "JUN.-16", "ENE-17", "feb. - 22"
+	const monthDay = raw
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.match(/^([a-z]{3})\.?\s*-\s*(\d{1,2})$/);
+	if (monthDay) {
+		const month = CSV_MONTH_MAP[monthDay[1]];
+		if (month) {
+			const day = monthDay[2].padStart(2, "0");
+			return `${day}/${month}/${CSV_IMPORT_DEFAULT_YEAR}`;
+		}
+	}
+
+	return raw;
+};
+
 const combineHeaderCells = (rows: CsvRow[], colIndex: number) =>
 	rows
 		.map((row) => toText(row[colIndex]))
@@ -290,8 +336,8 @@ export default function ExcelPage() {
 								designacionYUbicacion: toText(row.designacionYUbicacion),
 								supDeObraM2: toNumber(row.supDeObraM2),
 								entidadContratante: toText(row.entidadContratante),
-								mesBasicoDeContrato: toText(row.mesBasicoDeContrato),
-								iniciacion: toText(row.iniciacion),
+								mesBasicoDeContrato: normalizeCsvDateValue(row.mesBasicoDeContrato),
+								iniciacion: normalizeCsvDateValue(row.iniciacion),
 								contratoMasAmpliaciones: toNumber(row.contratoMasAmpliaciones),
 								certificadoALaFecha: toNumber(row.certificadoALaFecha),
 								saldoACertificar: toNumber(row.saldoACertificar),
@@ -522,7 +568,7 @@ export default function ExcelPage() {
 
 					</p> */}
 					<div className="w-full flex items-end justify-between gap-3 mb-2">
-						<h1 className="text-5xl my-2 font-bold text-foreground">
+						<h1 className="text-5xl my-2 font-bold text-primary">
 							Panel de obras
 						</h1>
 						<FormTableTabs className="justify-start" />

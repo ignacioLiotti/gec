@@ -33,6 +33,10 @@ import { prefetchDocuments } from "./tabs/file-manager/hooks/useDocumentsStore";
 import type { OcrTablaColumn } from "./tabs/file-manager/types";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
+	DEFAULT_MAIN_TABLE_COLUMN_CONFIG,
+	type MainTableColumnConfig,
+} from "@/components/form-table/configs/obras-detalle";
+import {
 	Sheet,
 	SheetContent,
 } from "@/components/ui/sheet";
@@ -78,6 +82,7 @@ const emptyObra: Obra = {
 	plazoTotal: 0,
 	plazoTransc: 0,
 	porcentaje: 0,
+	customData: {},
 	onFinishFirstMessage: null,
 	onFinishSecondMessage: null,
 	onFinishSecondSendAt: null,
@@ -110,27 +115,50 @@ async function fetchMemoriaNotes(obraId: string): Promise<MemoriaNote[]> {
 	}));
 }
 
+// Normalize string for search (remove diacritics, lowercase) - used once at load time
+const normalizeForSearch = (v: string): string =>
+	v.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
 async function fetchMaterialOrders(obraId: string): Promise<MaterialOrder[]> {
 	const res = await fetch(`/api/obras/${obraId}/materials`);
 	if (!res.ok) return [];
 	const data = await res.json();
 	const orders = (data?.orders || []) as Array<any>;
-	return orders.map((o: any) => ({
-		id: String(o.id),
-		nroOrden: String(o.nroOrden || o.id),
-		solicitante: String(o.solicitante || ""),
-		gestor: String(o.gestor || ""),
-		proveedor: String(o.proveedor || ""),
-		docPath: o.docPath,
-		docBucket: o.docBucket,
-		items: (o.items || []).map((it: any, idx: number) => ({
-			id: `${o.id}-i-${idx}`,
-			cantidad: Number(it.cantidad || 0),
-			unidad: String(it.unidad || ""),
-			material: String(it.material || ""),
-			precioUnitario: Number(it.precioUnitario || 0),
-		})),
-	}));
+	// Pre-normalize searchable fields at load time to avoid normalize() on every keystroke
+	return orders.map((o: any) => {
+		const nroOrden = String(o.nroOrden || o.id);
+		const solicitante = String(o.solicitante || "");
+		const gestor = String(o.gestor || "");
+		const proveedor = String(o.proveedor || "");
+		return {
+			id: String(o.id),
+			nroOrden,
+			solicitante,
+			gestor,
+			proveedor,
+			docPath: o.docPath,
+			docBucket: o.docBucket,
+			// Pre-normalized for efficient filtering
+			_nroOrdenNorm: normalizeForSearch(nroOrden),
+			_solicitanteNorm: normalizeForSearch(solicitante),
+			_gestorNorm: normalizeForSearch(gestor),
+			_proveedorNorm: normalizeForSearch(proveedor),
+			items: (o.items || []).map((it: any, idx: number) => {
+				const unidad = String(it.unidad || "");
+				const material = String(it.material || "");
+				return {
+					id: `${o.id}-i-${idx}`,
+					cantidad: Number(it.cantidad || 0),
+					unidad,
+					material,
+					precioUnitario: Number(it.precioUnitario || 0),
+					// Pre-normalized for efficient filtering
+					_unidadNorm: normalizeForSearch(unidad),
+					_materialNorm: normalizeForSearch(material),
+				};
+			}),
+		};
+	});
 }
 
 async function fetchCertificates(obraId: string): Promise<{ certificates: Certificate[]; total: number }> {
@@ -193,6 +221,47 @@ type PendingDoc = {
 	done: boolean
 };
 
+type ReportFinding = {
+	id: string;
+	rule_key: string;
+	severity: "info" | "warn" | "critical";
+	title: string;
+	message: string | null;
+	created_at: string;
+};
+
+type TablaRowRecord = {
+	id: string;
+	data: Record<string, unknown>;
+	created_at?: string;
+};
+
+type GeneralReportCurvePoint = {
+	label: string;
+	planPct: number | null;
+	realPct: number | null;
+	sortOrder: number;
+};
+
+type GeneralTabReportsData = {
+	findings: ReportFinding[];
+	curve: {
+		points: GeneralReportCurvePoint[];
+		planTableName: string;
+		resumenTableName: string;
+	} | null;
+};
+
+type CurveRuleConfig = {
+	mappings?: {
+		curve?: {
+			plan?: {
+				startPeriod?: string;
+			};
+		};
+	};
+};
+
 type DefaultFolder = {
 	id: string;
 	name: string;
@@ -206,6 +275,7 @@ type QuickAction = {
 	name: string;
 	description?: string | null;
 	folderPaths: string[];
+	obraId?: string | null;
 };
 
 type ObraTabla = {
@@ -233,6 +303,388 @@ const toIsoDateTime = (value: string | null) => {
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return null;
 	return date.toISOString();
+};
+
+async function fetchFindings(obraId: string, periodKey?: string): Promise<ReportFinding[]> {
+	const query = periodKey ? `?period=${encodeURIComponent(periodKey)}` : "";
+	const response = await fetch(`/api/obras/${obraId}/findings${query}`);
+	if (!response.ok) return [];
+	const data = await response.json().catch(() => ({}));
+	return Array.isArray(data?.findings) ? (data.findings as ReportFinding[]) : [];
+}
+
+async function fetchTablaRowsAll(
+	obraId: string,
+	tablaId: string,
+	maxPages = 20
+): Promise<TablaRowRecord[]> {
+	const allRows: TablaRowRecord[] = [];
+	for (let page = 1; page <= maxPages; page++) {
+		const response = await fetch(
+			`/api/obras/${obraId}/tablas/${tablaId}/rows?page=${page}&limit=200`
+		);
+		if (!response.ok) break;
+		const payload = await response.json().catch(() => ({}));
+		const rows = Array.isArray(payload?.rows) ? (payload.rows as TablaRowRecord[]) : [];
+		allRows.push(...rows);
+		const hasNext = Boolean(payload?.pagination?.hasNextPage);
+		if (!hasNext) break;
+	}
+	return allRows;
+}
+
+async function fetchRulesConfig(obraId: string): Promise<CurveRuleConfig | null> {
+	const response = await fetch(`/api/obras/${obraId}/rules`);
+	if (!response.ok) return null;
+	const payload = await response.json().catch(() => ({}));
+	if (!payload || typeof payload !== "object") return null;
+	return (payload as { config?: CurveRuleConfig }).config ?? null;
+}
+
+function normalizeText(value: string): string {
+	return value
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase()
+		.trim();
+}
+
+function parsePercent(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	const raw = String(value ?? "").trim();
+	if (!raw) return null;
+	const stripped = raw.replace(/[%\s$]/g, "");
+	const lastDot = stripped.lastIndexOf(".");
+	const lastComma = stripped.lastIndexOf(",");
+	let normalized = stripped;
+	if (lastComma > lastDot) {
+		normalized = stripped.replace(/\./g, "").replace(",", ".");
+	} else if (lastDot > lastComma) {
+		normalized = stripped.replace(/,/g, "");
+	}
+	const parsed = Number.parseFloat(normalized);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+const MONTH_INDEX: Record<string, number> = {
+	ene: 0,
+	enero: 0,
+	feb: 1,
+	febrero: 1,
+	mar: 2,
+	marzo: 2,
+	abr: 3,
+	abril: 3,
+	may: 4,
+	mayo: 4,
+	jun: 5,
+	junio: 5,
+	jul: 6,
+	julio: 6,
+	ago: 7,
+	agosto: 7,
+	sep: 8,
+	sept: 8,
+	septiembre: 8,
+	oct: 9,
+	octubre: 9,
+	nov: 10,
+	noviembre: 10,
+	dic: 11,
+	diciembre: 11,
+	jan: 0,
+	apr: 3,
+	aug: 7,
+	dec: 11,
+};
+
+function parseMonthOrder(rawValue: unknown, fallback: number): { label: string; order: number } {
+	const raw = String(rawValue ?? "").trim();
+	if (!raw) return { label: `Mes ${fallback + 1}`, order: fallback };
+
+	const norm = normalizeText(raw).replace(/\./g, "");
+	const mesN = norm.match(/mes\s*(\d{1,3})/);
+	if (mesN) {
+		const n = Number.parseInt(mesN[1], 10);
+		return { label: `Mes ${n}`, order: n };
+	}
+
+	const dmy = norm.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+	if (dmy) {
+		const month = Number.parseInt(dmy[2], 10) - 1;
+		const yearRaw = Number.parseInt(dmy[3], 10);
+		const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+		return { label: raw, order: year * 12 + Math.max(0, Math.min(11, month)) };
+	}
+
+	const monYear = norm.match(/([a-z]{3})[-\s_/]*(\d{2,4})/);
+	if (monYear) {
+		const month = MONTH_INDEX[monYear[1]];
+		if (month != null) {
+			const yearRaw = Number.parseInt(monYear[2], 10);
+			const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+			return { label: raw, order: year * 12 + month };
+		}
+	}
+
+	const fullMonthYear = norm.match(
+		/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|sept|octubre|noviembre|diciembre)[\s\-_./]*(\d{2,4})/
+	);
+	if (fullMonthYear) {
+		const month = MONTH_INDEX[fullMonthYear[1]];
+		if (month != null) {
+			const yearRaw = Number.parseInt(fullMonthYear[2], 10);
+			const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+			return { label: raw, order: year * 12 + month };
+		}
+	}
+
+	const mesDePattern = norm.match(
+		/mes\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|sept|octubre|noviembre|diciembre)\s+(\d{2,4})/
+	);
+	if (mesDePattern) {
+		const month = MONTH_INDEX[mesDePattern[1]];
+		if (month != null) {
+			const yearRaw = Number.parseInt(mesDePattern[2], 10);
+			const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+			return { label: raw, order: year * 12 + month };
+		}
+	}
+
+	return { label: raw, order: fallback };
+}
+
+function addMonths(periodKey: string, offset: number): string | null {
+	const match = periodKey.match(/^(\d{4})-(\d{2})$/);
+	if (!match) return null;
+	const year = Number.parseInt(match[1], 10);
+	const month = Number.parseInt(match[2], 10) - 1;
+	const date = new Date(Date.UTC(year, month + offset, 1));
+	if (!Number.isFinite(date.getTime())) return null;
+	return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function periodLabel(periodKey: string): string {
+	const match = periodKey.match(/^(\d{4})-(\d{2})$/);
+	if (!match) return periodKey;
+	const year = Number.parseInt(match[1], 10);
+	const month = Number.parseInt(match[2], 10) - 1;
+	const date = new Date(Date.UTC(year, month, 1));
+	return date.toLocaleDateString("es-AR", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+function buildCurvePoints(
+	curvaRows: TablaRowRecord[],
+	resumenRows: TablaRowRecord[],
+	options?: { curveStartPeriod?: string | null }
+): GeneralReportCurvePoint[] {
+	const points = new Map<string, GeneralReportCurvePoint>();
+	const curveStartPeriod =
+		typeof options?.curveStartPeriod === "string" && /^\d{4}-\d{2}$/.test(options.curveStartPeriod)
+			? options.curveStartPeriod
+			: null;
+
+	curvaRows.forEach((row, index) => {
+		const periodo = row.data?.periodo;
+		const avance = parsePercent(row.data?.avance_acumulado_pct);
+		if (!periodo || avance == null) return;
+		const raw = String(periodo ?? "").trim();
+		const mesN = normalizeText(raw).match(/mes\s*(\d{1,3})/);
+		const periodFromMesN =
+			mesN && curveStartPeriod
+				? addMonths(curveStartPeriod, Number.parseInt(mesN[1], 10))
+				: null;
+		const parsed = parseMonthOrder(periodo, index);
+		const periodKey = periodFromMesN ?? (parsed.order >= 1000 ? `${Math.floor(parsed.order / 12)}-${String((parsed.order % 12) + 1).padStart(2, "0")}` : null);
+		const label = periodKey ? periodLabel(periodKey) : parsed.label;
+		const order = periodKey
+			? (() => {
+					const [y, m] = periodKey.split("-");
+					return Number.parseInt(y, 10) * 12 + (Number.parseInt(m, 10) - 1);
+			  })()
+			: parsed.order;
+		const key = periodKey ?? (normalizeText(label) || `plan-${index}`);
+		const current = points.get(key);
+		if (current) {
+			current.planPct = avance;
+			current.sortOrder = Math.min(current.sortOrder, order);
+		} else {
+			points.set(key, { label, planPct: avance, realPct: null, sortOrder: order });
+		}
+	});
+
+	resumenRows.forEach((row, index) => {
+		// Prefer explicit certification date to avoid wrong ordering from long period text.
+		const periodSource = row.data?.fecha_certificacion ?? row.data?.periodo;
+		const avance = parsePercent(row.data?.avance_fisico_acumulado_pct);
+		if (!periodSource || avance == null) return;
+		const parsed = parseMonthOrder(periodSource, index);
+		const periodKey = parsed.order >= 1000
+			? `${Math.floor(parsed.order / 12)}-${String((parsed.order % 12) + 1).padStart(2, "0")}`
+			: null;
+		const label = periodKey ? periodLabel(periodKey) : parsed.label;
+		const order = periodKey
+			? (() => {
+					const [y, m] = periodKey.split("-");
+					return Number.parseInt(y, 10) * 12 + (Number.parseInt(m, 10) - 1);
+			  })()
+			: parsed.order;
+		const key = periodKey ?? (normalizeText(label) || `real-${index}`);
+		const current = points.get(key);
+		if (current) {
+			current.realPct = avance;
+			current.sortOrder = Math.min(current.sortOrder, order);
+		} else {
+			points.set(key, { label, planPct: null, realPct: avance, sortOrder: order });
+		}
+	});
+
+	if (curveStartPeriod) {
+		const [y, m] = curveStartPeriod.split("-");
+		const startOrder = Number.parseInt(y, 10) * 12 + (Number.parseInt(m, 10) - 1);
+		const existing = points.get(curveStartPeriod);
+		if (existing) {
+			if (existing.realPct == null) {
+				existing.realPct = 0;
+			}
+			existing.sortOrder = Math.min(existing.sortOrder, startOrder);
+		} else {
+			points.set(curveStartPeriod, {
+				label: periodLabel(curveStartPeriod),
+				planPct: null,
+				realPct: 0,
+				sortOrder: startOrder,
+			});
+		}
+	}
+
+	return [...points.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+const MAIN_FORMULA_REF_PATTERN = /\[([a-zA-Z0-9_]+)\]/g;
+
+const toNumericValue = (value: unknown): number => {
+	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+	if (typeof value === "string") {
+		const parsed = Number(value.replace(",", "."));
+		return Number.isFinite(parsed) ? parsed : 0;
+	}
+	return 0;
+};
+
+// Formula compiler cache - compiles formula once, reuses the evaluator function
+const formulaCache = new Map<string, { fieldNames: string[]; evaluate: (values: number[]) => number | null }>();
+
+const compileFormula = (formula: string): { fieldNames: string[]; evaluate: (values: number[]) => number | null } | null => {
+	const trimmed = formula.trim();
+	if (!trimmed) return null;
+
+	const cached = formulaCache.get(trimmed);
+	if (cached) return cached;
+
+	// Extract field names in order of appearance
+	const fieldNames: string[] = [];
+	const seen = new Set<string>();
+	let match: RegExpExecArray | null;
+	const pattern = new RegExp(MAIN_FORMULA_REF_PATTERN.source, 'g');
+	while ((match = pattern.exec(trimmed)) !== null) {
+		const fieldName = match[1];
+		if (!seen.has(fieldName)) {
+			seen.add(fieldName);
+			fieldNames.push(fieldName);
+		}
+	}
+
+	// Build expression template with indexed placeholders
+	let placeholderIndex = 0;
+	const fieldIndexMap = new Map<string, number>();
+	const expressionTemplate = trimmed.replace(MAIN_FORMULA_REF_PATTERN, (_full, fieldName) => {
+		if (!fieldIndexMap.has(fieldName)) {
+			fieldIndexMap.set(fieldName, placeholderIndex++);
+		}
+		return `__v${fieldIndexMap.get(fieldName)}__`;
+	});
+
+	// Validate expression structure (only allow safe math operations)
+	const testExpression = expressionTemplate.replace(/__v\d+__/g, '0');
+	if (!/^[0-9+\-*/().\s]+$/.test(testExpression)) {
+		return null;
+	}
+
+	// Compile the evaluator function once
+	try {
+		const argNames = fieldNames.map((_, i) => `__v${i}__`);
+		const fnBody = `"use strict"; return (${expressionTemplate});`;
+		const evaluatorFn = new Function(...argNames, fnBody) as (...args: number[]) => number;
+
+		const compiled = {
+			fieldNames,
+			evaluate: (values: number[]): number | null => {
+				try {
+					const result = evaluatorFn(...values);
+					return Number.isFinite(result) ? Number(result) : null;
+				} catch {
+					return null;
+				}
+			}
+		};
+
+		formulaCache.set(trimmed, compiled);
+		return compiled;
+	} catch {
+		return null;
+	}
+};
+
+const evaluateMainFormula = (
+	formula: string,
+	source: Record<string, unknown>
+): number | null => {
+	const compiled = compileFormula(formula);
+	if (!compiled) return null;
+
+	const values = compiled.fieldNames.map(fieldName => toNumericValue(source[fieldName]));
+	return compiled.evaluate(values);
+};
+
+const formatMainColumnValue = (
+	value: unknown,
+	cellType: MainTableColumnConfig["cellType"]
+) => {
+	if (value == null || value === "") return "—";
+	if (cellType === "currency") {
+		const amount = toNumericValue(value);
+		return new Intl.NumberFormat("es-AR", {
+			style: "currency",
+			currency: "ARS",
+		}).format(amount);
+	}
+	if (cellType === "number") {
+		return toNumericValue(value).toLocaleString("es-AR");
+	}
+	if (cellType === "boolean" || cellType === "checkbox" || cellType === "toggle") {
+		return Boolean(value) ? "Sí" : "No";
+	}
+	return String(value);
+};
+
+const coerceMainColumnInputValue = (
+	rawValue: string,
+	cellType: MainTableColumnConfig["cellType"]
+): unknown => {
+	const normalized = rawValue.trim();
+	if (!normalized) return null;
+	if (cellType === "number" || cellType === "currency") {
+		const parsed = Number(normalized.replace(",", "."));
+		return Number.isFinite(parsed) ? parsed : null;
+	}
+	if (cellType === "boolean" || cellType === "checkbox" || cellType === "toggle") {
+		if (normalized === "unset") return null;
+		if (normalized === "true") return true;
+		if (normalized === "false") return false;
+		return null;
+	}
+	return rawValue;
 };
 
 export default function ObraDetailPage() {
@@ -335,11 +787,106 @@ export default function ObraDetailPage() {
 		staleTime: 5 * 60 * 1000,
 	});
 
+	const certificadoTableRefs = useMemo(() => {
+		const tablas: ObraTabla[] = Array.isArray(tablasQuery.data) ? tablasQuery.data : [];
+		let curvaPlanId: string | null = null;
+		let curvaPlanName = "Curva Plan";
+		let pmcResumenId: string | null = null;
+		let pmcResumenName = "PMC Resumen";
+
+		tablas.forEach((tabla) => {
+			const keySet = new Set((tabla.columns ?? []).map((column) => column.fieldKey));
+			const normalizedName = normalizeText(tabla.name ?? "");
+			const isCurvaByColumns =
+				keySet.has("periodo") &&
+				keySet.has("avance_mensual_pct") &&
+				keySet.has("avance_acumulado_pct");
+			const isResumenByColumns =
+				keySet.has("avance_fisico_acumulado_pct") &&
+				(keySet.has("periodo") || keySet.has("fecha_certificacion"));
+
+			if (isCurvaByColumns || normalizedName.includes("curva plan")) {
+				if (!curvaPlanId || normalizedName.includes("curva plan")) {
+					curvaPlanId = tabla.id;
+					curvaPlanName = tabla.name;
+				}
+			}
+			if (isResumenByColumns || normalizedName.includes("pmc resumen")) {
+				if (!pmcResumenId || normalizedName.includes("resumen")) {
+					pmcResumenId = tabla.id;
+					pmcResumenName = tabla.name;
+				}
+			}
+		});
+
+		return {
+			curvaPlanId,
+			curvaPlanName,
+			pmcResumenId,
+			pmcResumenName,
+		};
+	}, [tablasQuery.data]);
+	const currentPeriodKey = useMemo(() => {
+		const now = new Date();
+		return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+	}, []);
+
+	const generalReportsQuery = useQuery({
+		queryKey: [
+			"obra",
+			obraId,
+			"general-reports",
+			currentPeriodKey,
+			certificadoTableRefs.curvaPlanId ?? "none",
+			certificadoTableRefs.pmcResumenId ?? "none",
+		],
+		enabled: isValidObraId,
+		queryFn: async () => {
+			const findingsPromise = (async () => {
+				const withPeriod = await fetchFindings(obraId!, currentPeriodKey);
+				if (withPeriod.length > 0) return withPeriod;
+				return fetchFindings(obraId!);
+			})();
+			const rulesPromise = fetchRulesConfig(obraId!);
+			const curvaPromise = certificadoTableRefs.curvaPlanId
+				? fetchTablaRowsAll(obraId!, certificadoTableRefs.curvaPlanId)
+				: Promise.resolve([] as TablaRowRecord[]);
+			const resumenPromise = certificadoTableRefs.pmcResumenId
+				? fetchTablaRowsAll(obraId!, certificadoTableRefs.pmcResumenId)
+				: Promise.resolve([] as TablaRowRecord[]);
+
+			const [findings, rulesConfig, curvaRows, resumenRows] = await Promise.all([
+				findingsPromise,
+				rulesPromise,
+				curvaPromise,
+				resumenPromise,
+			]);
+
+			const points = buildCurvePoints(curvaRows, resumenRows, {
+				curveStartPeriod: rulesConfig?.mappings?.curve?.plan?.startPeriod ?? null,
+			});
+			return {
+				findings,
+				curve:
+					points.length > 0
+						? {
+							points,
+							planTableName: certificadoTableRefs.curvaPlanName,
+							resumenTableName: certificadoTableRefs.pmcResumenName,
+						}
+						: null,
+			} satisfies GeneralTabReportsData;
+		},
+		staleTime: 60 * 1000,
+	});
+
 	const defaultsQuery = useQuery({
 		queryKey: ["obra-defaults", obraId],
 		enabled: isValidObraId,
 		queryFn: async () => {
-			const res = await fetch("/api/obra-defaults");
+			const res = await fetch(
+				`/api/obra-defaults?obraId=${encodeURIComponent(String(obraId))}`
+			);
 			if (!res.ok) {
 				const out = await res.json().catch(() => ({}));
 				throw new Error(out?.error || "No se pudieron cargar los defaults");
@@ -364,6 +911,7 @@ export default function ObraDetailPage() {
 	const flujoActions = flujoActionsQuery.data ?? [];
 	const isLoadingFlujoActions = flujoActionsQuery.isLoading;
 	const obraData = obraQuery.data;
+	const generalReportsData = generalReportsQuery.data ?? { findings: [], curve: null };
 	const obraTimeProgress =
 		obraData && obraData.plazoTotal > 0
 			? (obraData.plazoTransc / obraData.plazoTotal) * 100
@@ -379,10 +927,36 @@ export default function ObraDetailPage() {
 
 	const customQuickActionSteps = useMemo(() => ({}), []);
 	const quickActionsAllData = useMemo(() => {
+		const defaultFolders = defaultsQuery.data?.folders ?? [];
+		const mergedFolders = [...defaultFolders];
+		const seenPaths = new Set(defaultFolders.map((folder) => folder.path));
+		for (const tabla of tablasQuery.data ?? []) {
+			const settings = (tabla.settings ?? {}) as Record<string, unknown>;
+			const folderPathCandidate =
+				typeof settings.ocrFolder === "string"
+					? settings.ocrFolder.trim()
+					: typeof settings.linkedFolderPath === "string"
+						? settings.linkedFolderPath.trim()
+						: "";
+			if (!folderPathCandidate || seenPaths.has(folderPathCandidate)) continue;
+			seenPaths.add(folderPathCandidate);
+			const rawMode = settings.dataInputMethod;
+			const dataInputMethod =
+				rawMode === "ocr" || rawMode === "manual" || rawMode === "both"
+					? rawMode
+					: "both";
+			mergedFolders.push({
+				id: `tabla-folder-${tabla.id}`,
+				name: tabla.name,
+				path: folderPathCandidate,
+				isOcr: true,
+				dataInputMethod,
+			});
+		}
 		return {
 			obraId: String(obraId),
 			quickActions: defaultsQuery.data?.quickActions ?? [],
-			folders: defaultsQuery.data?.folders ?? [],
+			folders: mergedFolders,
 			tablas: tablasQuery.data ?? [],
 			customStepRenderers: customQuickActionSteps,
 		};
@@ -399,6 +973,9 @@ export default function ObraDetailPage() {
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
 	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
+	const [mainTableColumnsConfig, setMainTableColumnsConfig] = useState<
+		MainTableColumnConfig[] | null
+	>(null);
 
 	const [isMemoriaOpen, setIsMemoriaOpen] = useState(false);
 	const [memoriaDraft, setMemoriaDraft] = useState("");
@@ -437,6 +1014,28 @@ export default function ObraDetailPage() {
 	// Use local state for immediate tab switching, sync to URL in background
 	const initialTab = searchParams?.get("tab") || "general";
 	const [activeTab, setActiveTab] = useState(initialTab);
+
+	useEffect(() => {
+		let cancelled = false;
+		const loadMainTableConfig = async () => {
+			try {
+				const response = await fetch("/api/main-table-config", { cache: "no-store" });
+				if (!response.ok) return;
+				const payload = (await response.json()) as { columns?: MainTableColumnConfig[] };
+				if (!cancelled) {
+					setMainTableColumnsConfig(
+						Array.isArray(payload.columns) ? payload.columns : []
+					);
+				}
+			} catch {
+				if (!cancelled) setMainTableColumnsConfig(null);
+			}
+		};
+		void loadMainTableConfig();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	// Sync URL when tab changes (low priority, non-blocking)
 	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {
@@ -630,21 +1229,38 @@ export default function ObraDetailPage() {
 		const orderId = `ord-${Date.now()}`;
 		const normalizedItems: MaterialItem[] = newOrder.items
 			.filter((it) => (it.material?.trim() ?? "").length > 0 && Number(it.cantidad) > 0)
-			.map((it, idx) => ({
-				id: `${orderId}-i-${idx}`,
-				cantidad: Number(it.cantidad) || 0,
-				unidad: it.unidad.trim(),
-				material: it.material.trim(),
-				precioUnitario: Number(it.precioUnitario) || 0,
-			}));
+			.map((it, idx) => {
+				const unidad = it.unidad.trim();
+				const material = it.material.trim();
+				return {
+					id: `${orderId}-i-${idx}`,
+					cantidad: Number(it.cantidad) || 0,
+					unidad,
+					material,
+					precioUnitario: Number(it.precioUnitario) || 0,
+					// Pre-normalize for filtering
+					_unidadNorm: normalizeForSearch(unidad),
+					_materialNorm: normalizeForSearch(material),
+				};
+			});
+
+		const nroOrden = newOrder.nroOrden.trim() || orderId;
+		const solicitante = newOrder.solicitante.trim();
+		const gestor = newOrder.gestor.trim();
+		const proveedor = newOrder.proveedor.trim();
 
 		const order: MaterialOrder = {
 			id: orderId,
-			nroOrden: newOrder.nroOrden.trim() || orderId,
-			solicitante: newOrder.solicitante.trim(),
-			gestor: newOrder.gestor.trim(),
-			proveedor: newOrder.proveedor.trim(),
+			nroOrden,
+			solicitante,
+			gestor,
+			proveedor,
 			items: normalizedItems,
+			// Pre-normalize for filtering
+			_nroOrdenNorm: normalizeForSearch(nroOrden),
+			_solicitanteNorm: normalizeForSearch(solicitante),
+			_gestorNorm: normalizeForSearch(gestor),
+			_proveedorNorm: normalizeForSearch(proveedor),
 		};
 
 		queryClient.setQueryData<MaterialOrder[]>(
@@ -673,37 +1289,39 @@ export default function ObraDetailPage() {
 		setOrderFilters((prev) => ({ ...prev, [orderId]: value }));
 	}, []);
 
-	// Memoize normalize function to avoid recreation on every render
-	const normalize = useCallback((v: string) => v.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase(), []);
-
+	// Use pre-normalized fields from data load for efficient filtering
 	const filteredOrders = useMemo(() => {
 		if (!globalMaterialsFilter.trim()) return materialOrders;
-		const q = normalize(globalMaterialsFilter);
+		// Only normalize the query string once per filter change
+		const q = normalizeForSearch(globalMaterialsFilter);
 		return materialOrders
 			.map((order) => ({
 				...order,
 				items: order.items.filter((it) =>
-					normalize(it.material).includes(q) ||
-					normalize(it.unidad).includes(q)
+					// Use pre-normalized fields (computed at data load time)
+					(it._materialNorm ?? "").includes(q) ||
+					(it._unidadNorm ?? "").includes(q)
 				),
 			}))
 			.filter((order) =>
-				normalize(order.nroOrden).includes(q) ||
-				normalize(order.solicitante).includes(q) ||
-				normalize(order.gestor).includes(q) ||
-				normalize(order.proveedor).includes(q) ||
+				// Use pre-normalized fields (computed at data load time)
+				(order._nroOrdenNorm ?? "").includes(q) ||
+				(order._solicitanteNorm ?? "").includes(q) ||
+				(order._gestorNorm ?? "").includes(q) ||
+				(order._proveedorNorm ?? "").includes(q) ||
 				order.items.length > 0
 			);
-	}, [materialOrders, globalMaterialsFilter, normalize]);
+	}, [materialOrders, globalMaterialsFilter]);
 
 	const getOrderItemsFiltered = useCallback((order: MaterialOrder): MaterialItem[] => {
 		const of = orderFilters[order.id]?.trim() ?? "";
 		if (!of) return order.items;
-		const q = normalize(of);
+		const q = normalizeForSearch(of);
 		return order.items.filter((it) =>
-			normalize(it.material).includes(q) || normalize(it.unidad).includes(q)
+			// Use pre-normalized fields
+			(it._materialNorm ?? "").includes(q) || (it._unidadNorm ?? "").includes(q)
 		);
-	}, [orderFilters, normalize]);
+	}, [orderFilters]);
 
 	const getOrderTotal = useCallback((items: MaterialItem[]) => {
 		return items.reduce((acc, it) => acc + it.cantidad * it.precioUnitario, 0);
@@ -758,6 +1376,51 @@ export default function ObraDetailPage() {
 			}
 		},
 	});
+
+	const activeMainTableColumns = useMemo(
+		() =>
+			(mainTableColumnsConfig ?? DEFAULT_MAIN_TABLE_COLUMN_CONFIG).filter(
+				(column) => column.enabled !== false
+			),
+		[mainTableColumnsConfig]
+	);
+
+	const mainTableColumnValues = useMemo(() => {
+		const customData =
+			(form.state.values.customData as Record<string, unknown> | null) ?? {};
+		const source = {
+			...(form.state.values as Record<string, unknown>),
+			...customData,
+		};
+		const values: Record<string, unknown> = {};
+		for (const column of activeMainTableColumns) {
+			values[column.id] =
+				column.kind === "formula"
+					? evaluateMainFormula(column.formula ?? "", source)
+					: column.kind === "custom"
+						? customData[column.id]
+						: source[column.baseColumnId ?? column.id];
+		}
+		return values;
+	}, [activeMainTableColumns, form.state.values]);
+
+	// Only depend on form (stable hook reference) - read current customData at call time
+	// to avoid stale closure and excessive callback recreation
+	const setCustomMainColumnValue = useCallback(
+		(columnId: string, value: unknown) => {
+			// Read current value at call time, not capture time
+			const previous =
+				(form.state.values.customData as Record<string, unknown> | null) ?? {};
+			const next = { ...previous };
+			if (value == null || value === "") {
+				delete next[columnId];
+			} else {
+				next[columnId] = value;
+			}
+			form.setFieldValue("customData", next);
+		},
+		[form]
+	);
 
 	// Helper to check if a field has unsaved changes
 	const isFieldDirty = useCallback((fieldName: keyof Obra) => {
@@ -1474,7 +2137,94 @@ export default function ObraDetailPage() {
 								initialFormValues={initialFormValues}
 								getErrorMessage={getErrorMessage}
 								quickActionsAllData={quickActionsAllData}
+								reportsData={generalReportsData}
 							/>
+							{/* {activeTab === "general" && (
+								<section className="rounded-lg border bg-card shadow-sm overflow-hidden">
+									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
+										<h2 className="text-base sm:text-lg font-semibold">
+											Campos de tabla principal
+										</h2>
+										<p className="text-xs text-muted-foreground">
+											Se muestran todas las columnas configuradas para esta organización.
+										</p>
+									</div>
+									<div className="p-4 sm:p-6 space-y-3">
+										{activeMainTableColumns.map((column) => {
+												const rawValue = mainTableColumnValues[column.id];
+												const isBooleanType =
+													column.cellType === "boolean" ||
+													column.cellType === "checkbox" ||
+													column.cellType === "toggle";
+
+												if (isGeneralTabEditMode && column.kind === "custom") {
+													const inputType =
+														column.cellType === "number" || column.cellType === "currency"
+															? "number"
+															: column.cellType === "date"
+																? "date"
+																: "text";
+													const selectValue =
+														rawValue === true ? "true" : rawValue === false ? "false" : "unset";
+													return (
+														<div
+															key={column.id}
+															className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-2 items-center"
+														>
+															<p className="text-sm text-muted-foreground">{column.label}</p>
+															{isBooleanType ? (
+																<Select
+																	value={selectValue}
+																	onValueChange={(value) => {
+																		setCustomMainColumnValue(
+																			column.id,
+																			coerceMainColumnInputValue(value, column.cellType)
+																		);
+																	}}
+																>
+																	<SelectTrigger>
+																		<SelectValue placeholder="Sin definir" />
+																	</SelectTrigger>
+																	<SelectContent>
+																		<SelectItem value="unset">Sin definir</SelectItem>
+																		<SelectItem value="true">Sí</SelectItem>
+																		<SelectItem value="false">No</SelectItem>
+																	</SelectContent>
+																</Select>
+															) : (
+																<Input
+																	type={inputType}
+																	value={String(rawValue ?? "")}
+																	onChange={(event) => {
+																		setCustomMainColumnValue(
+																			column.id,
+																			coerceMainColumnInputValue(
+																				event.target.value,
+																				column.cellType
+																			)
+																		);
+																	}}
+																/>
+															)}
+														</div>
+													);
+												}
+
+												return (
+													<div
+														key={column.id}
+														className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-2"
+													>
+														<p className="text-sm text-muted-foreground">{column.label}</p>
+														<p className="text-sm">
+															{formatMainColumnValue(rawValue, column.cellType)}
+														</p>
+													</div>
+												);
+											})}
+									</div>
+								</section>
+							)} */}
 
 							<ObraFlujoTab
 								isAddingFlujoAction={isAddingFlujoAction}

@@ -97,10 +97,10 @@ function CellContent<Row extends FormTableRow>({
 	const body = (
 		<div
 			className={cn(
-				"absolute top-0 left-0 w-full h-full",
-				isRowDirty ? "outline outline-amber-500/50 bg-amber-50/60 shadow-sm" : "",
+				"absolute top-0 left-0 w-full h-full flex items-center justify-start pl-2",
+				isRowDirty ? "outline outline-amber-500/60 shadow-sm border-b border-amber-500" : "",
 				isCellDirty
-					? "outline outline-amber-600/50 bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--color-amber-200)_5px,var(--color-amber-200)_6px,transparent_6px)] bg-repeat"
+					? "bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--color-amber-200)_5px,var(--color-amber-200)_6px,transparent_6px)] bg-repeat border-2 border-l-1 border-t-0 border-amber-600/50"
 					: ""
 			)}
 		>
@@ -205,12 +205,15 @@ function TableCellInner<Row extends FormTableRow>({
 }
 
 export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => {
+	// Compare row reference to detect data changes
+	// Row contains the actual data used by cell renderers
 	return (
 		prevProps.rowId === nextProps.rowId &&
 		prevProps.column.id === nextProps.column.id &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&
 		prevProps.isRowDirty === nextProps.isRowDirty &&
 		prevProps.isCellDirty === nextProps.isCellDirty &&
-		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot
+		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
+		prevProps.row === nextProps.row
 	);
 }) as typeof TableCellInner;

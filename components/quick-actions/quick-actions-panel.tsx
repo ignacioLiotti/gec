@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ReactNode, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type DragEvent } from "react";
 import { Check, ChevronRight, FileText, Loader2, Upload, X, Zap, FolderOpen } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
@@ -10,6 +10,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
@@ -20,6 +22,7 @@ type QuickAction = {
   name: string;
   description?: string | null;
   folderPaths: string[];
+  obraId?: string | null;
 };
 
 type DefaultFolder = {
@@ -87,6 +90,12 @@ export function QuickActionsPanel({
   customStepRenderers = {},
 }: QuickActionsPanelProps) {
   const isMobile = useIsMobile();
+  const [localActions, setLocalActions] = useState<QuickAction[]>(actions);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newActionName, setNewActionName] = useState("");
+  const [newActionDescription, setNewActionDescription] = useState("");
+  const [newActionFolderPaths, setNewActionFolderPaths] = useState<string[]>([]);
+  const [isCreatingAction, setIsCreatingAction] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
@@ -96,11 +105,45 @@ export function QuickActionsPanel({
   const [manualValues, setManualValues] = useState<Record<string, Record<string, unknown>>>({});
   const [isSubmittingStep, setIsSubmittingStep] = useState(false);
 
-  const tablaByFolderPath = useMemo(() => {
-    const map = new Map<string, ObraTabla>();
+  useEffect(() => {
+    setLocalActions(actions);
+  }, [actions]);
+
+  const allActionFolders = useMemo(() => {
+    const merged = [...folders];
+    const seenPaths = new Set(folders.map((folder) => folder.path));
+    for (const tabla of tablas) {
+      const settings = (tabla.settings ?? {}) as Record<string, unknown>;
+      const rawPath =
+        typeof settings.ocrFolder === "string"
+          ? settings.ocrFolder.trim()
+          : typeof settings.linkedFolderPath === "string"
+            ? settings.linkedFolderPath.trim()
+            : "";
+      if (!rawPath || seenPaths.has(rawPath)) continue;
+      seenPaths.add(rawPath);
+      const rawMode = settings.dataInputMethod;
+      const dataInputMethod =
+        rawMode === "ocr" || rawMode === "manual" || rawMode === "both" ? rawMode : "both";
+      merged.push({
+        id: `tabla-folder-${tabla.id}`,
+        name: tabla.name,
+        path: rawPath,
+        isOcr: true,
+        dataInputMethod,
+      });
+    }
+    return merged;
+  }, [folders, tablas]);
+
+  const tablasByFolderPath = useMemo(() => {
+    const map = new Map<string, ObraTabla[]>();
     for (const tabla of tablas) {
       const folderPath = typeof tabla.settings?.ocrFolder === "string" ? (tabla.settings.ocrFolder as string) : null;
-      if (folderPath) map.set(folderPath, tabla);
+      if (!folderPath) continue;
+      const existing = map.get(folderPath) ?? [];
+      existing.push(tabla);
+      map.set(folderPath, existing);
     }
     return map;
   }, [tablas]);
@@ -109,13 +152,79 @@ export function QuickActionsPanel({
     if (!activeAction) return [];
     return activeAction.folderPaths
       .map((path) => {
-        const folder = folders.find((f) => f.path === path);
+        const folder = allActionFolders.find((f) => f.path === path);
         if (!folder) return null;
-        const tabla = folder.isOcr ? tablaByFolderPath.get(path) ?? null : null;
-        return { id: path, folder, tabla };
+        const tablasForFolder = folder.isOcr ? tablasByFolderPath.get(path) ?? [] : [];
+        return { id: path, folder, tabla: tablasForFolder[0] ?? null, tablas: tablasForFolder };
       })
-      .filter(Boolean) as Array<{ id: string; folder: DefaultFolder; tabla: ObraTabla | null }>;
-  }, [activeAction, folders, tablaByFolderPath]);
+      .filter(Boolean) as Array<{ id: string; folder: DefaultFolder; tabla: ObraTabla | null; tablas: ObraTabla[] }>;
+  }, [activeAction, allActionFolders, tablasByFolderPath]);
+
+  const resetCreateActionForm = useCallback(() => {
+    setNewActionName("");
+    setNewActionDescription("");
+    setNewActionFolderPaths([]);
+  }, []);
+
+  const toggleCreateActionFolderPath = useCallback((path: string, checked: boolean) => {
+    setNewActionFolderPaths((prev) => {
+      if (checked) {
+        if (prev.includes(path)) return prev;
+        return [...prev, path];
+      }
+      return prev.filter((item) => item !== path);
+    });
+  }, []);
+
+  const createObraQuickAction = useCallback(async () => {
+    const name = newActionName.trim();
+    if (!name) {
+      toast.error("Ingresá un nombre para la acción rápida.");
+      return;
+    }
+    if (newActionFolderPaths.length === 0) {
+      toast.error("Seleccioná al menos una carpeta/paso.");
+      return;
+    }
+
+    setIsCreatingAction(true);
+    try {
+      const response = await fetch("/api/obra-defaults", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "quick-action",
+          obraId,
+          name,
+          description: newActionDescription.trim() || null,
+          folderPaths: newActionFolderPaths,
+        }),
+      });
+      const payload = await response.json().catch(() => ({} as any));
+      if (!response.ok) {
+        throw new Error(payload?.error || "No se pudo crear la acción rápida");
+      }
+
+      const created = payload?.quickAction as QuickAction | undefined;
+      if (created) {
+        setLocalActions((prev) => [...prev, created]);
+      }
+      toast.success("Acción rápida creada para esta obra.");
+      setIsCreateDialogOpen(false);
+      resetCreateActionForm();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "No se pudo crear la acción rápida");
+    } finally {
+      setIsCreatingAction(false);
+    }
+  }, [
+    newActionDescription,
+    newActionFolderPaths,
+    newActionName,
+    obraId,
+    resetCreateActionForm,
+  ]);
 
   const openAction = useCallback((action: QuickAction) => {
     setActiveAction(action);
@@ -172,7 +281,7 @@ export function QuickActionsPanel({
   const submitStep = useCallback(async (stepId: string) => {
     const step = steps.find((item) => item.id === stepId);
     if (!step) return;
-    const { folder, tabla } = step;
+    const { folder, tabla, tablas: tablasForStep } = step;
     const mode = stepModes[stepId] ?? (folder.isOcr ? (folder.dataInputMethod === "manual" ? "manual" : "ocr") : "files");
 
     if (folder.isOcr && !tabla) {
@@ -208,17 +317,26 @@ export function QuickActionsPanel({
           toast.error("Seleccioná un archivo");
           return;
         }
-        const form = new FormData();
-        form.append("file", file);
-        const res = await fetch(`/api/obras/${obraId}/tablas/${tabla!.id}/import/ocr`, {
-          method: "POST",
-          body: form,
-        });
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}));
-          throw new Error(json.error || "No se pudo procesar el OCR");
+        if (!tablasForStep.length) {
+          throw new Error("No hay tablas OCR asociadas a esta carpeta");
         }
-        toast.success("Documento enviado a OCR");
+        for (const targetTabla of tablasForStep) {
+          const form = new FormData();
+          form.append("file", file);
+          const res = await fetch(`/api/obras/${obraId}/tablas/${targetTabla.id}/import/ocr`, {
+            method: "POST",
+            body: form,
+          });
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            throw new Error(json.error || `No se pudo procesar el OCR en ${targetTabla.name}`);
+          }
+        }
+        toast.success(
+          tablasForStep.length > 1
+            ? `Documento enviado a OCR en ${tablasForStep.length} tablas`
+            : "Documento enviado a OCR"
+        );
         markStepComplete(stepId);
         notifyDocumentsRefresh();
         advanceToNextStep();
@@ -275,8 +393,6 @@ export function QuickActionsPanel({
     }
   }, [advanceToNextStep, fileByStep, manualValues, markStepComplete, notifyDocumentsRefresh, obraId, stepModes, steps]);
 
-  if (actions.length === 0) return null;
-
   // Derive current step info for the dialog
   const currentStep = steps[activeStepIndex] ?? null;
   const currentStepId = currentStep?.id ?? "";
@@ -293,7 +409,7 @@ export function QuickActionsPanel({
 
   const panelList = (
     <div className="space-y-1">
-      {actions.map((action, i) => (
+      {localActions.map((action, i) => (
         <motion.button
           key={action.id}
           {...listItemMotion}
@@ -322,6 +438,11 @@ export function QuickActionsPanel({
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
         </motion.button>
       ))}
+      {localActions.length === 0 && (
+        <p className="rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground">
+          No hay acciones rápidas todavía. Creá una para esta obra desde el botón "Crear".
+        </p>
+      )}
     </div>
   );
 
@@ -332,11 +453,16 @@ export function QuickActionsPanel({
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="w-full lg:w-80 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4 h-full"
+          className="w-full lg:w-68 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4 h-auto"
         >
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold">Acciones rápidas</h2>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Acciones rápidas</h2>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
+              Crear
+            </Button>
           </div>
           {panelList}
         </motion.aside>
@@ -356,10 +482,15 @@ export function QuickActionsPanel({
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetContent side="bottom" className="bg-card p-0">
               <SheetHeader className="px-4 pt-4 pb-2">
-                <SheetTitle className="flex items-center gap-2 text-base">
-                  <Zap className="h-4 w-4 text-primary" />
-                  Acciones rápidas
-                </SheetTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <SheetTitle className="flex items-center gap-2 text-base">
+                    <Zap className="h-4 w-4 text-primary" />
+                    Acciones rápidasasdasdad
+                  </SheetTitle>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
+                    Crear
+                  </Button>
+                </div>
               </SheetHeader>
               <div className="max-h-[70vh] overflow-y-auto px-3 pb-5">
                 <div className="rounded-lg border bg-background p-3">
@@ -688,6 +819,84 @@ export function QuickActionsPanel({
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
+
+      <Dialog
+        open={isCreateDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setIsCreateDialogOpen(nextOpen);
+          if (!nextOpen) resetCreateActionForm();
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Nueva acción rápida para esta obra</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 px-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Nombre</label>
+              <Input
+                value={newActionName}
+                onChange={(event) => setNewActionName(event.target.value)}
+                placeholder="Ej: Cargar documentación inicial"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Descripción (opcional)</label>
+              <Input
+                value={newActionDescription}
+                onChange={(event) => setNewActionDescription(event.target.value)}
+                placeholder="Pasos para completar la carga"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                Seleccioná carpetas/tablas para los pasos
+              </p>
+              <div className="max-h-56 overflow-y-auto rounded-md border p-2 space-y-1">
+                {allActionFolders.map((folder) => {
+                  const linkedTablas = folder.isOcr ? tablasByFolderPath.get(folder.path) ?? [] : [];
+                  const linkedTabla = linkedTablas[0] ?? null;
+                  const checked = newActionFolderPaths.includes(folder.path);
+                  return (
+                    <label
+                      key={folder.path}
+                      className="flex items-start gap-2 rounded px-2 py-1.5 hover:bg-muted/50 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => toggleCreateActionFolderPath(folder.path, value === true)}
+                      />
+                      <span className="flex-1 text-sm">
+                        <span className="font-medium">{folder.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">/{folder.path}</span>
+                        {linkedTabla && (
+                          <span className="ml-2 text-[11px] text-primary">
+                            Tabla{linkedTablas.length > 1 ? "s" : ""}: {linkedTabla.name}
+                            {linkedTablas.length > 1 ? ` (+${linkedTablas.length - 1})` : ""}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+                {allActionFolders.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-2 py-1">
+                    No hay carpetas disponibles en esta obra.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreatingAction}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={createObraQuickAction} disabled={isCreatingAction}>
+              {isCreatingAction ? "Creando..." : "Crear acción"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

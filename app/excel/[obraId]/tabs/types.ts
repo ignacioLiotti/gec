@@ -49,6 +49,9 @@ export type MaterialItem = {
 	unidad: string;
 	material: string;
 	precioUnitario: number;
+	// Pre-normalized fields for efficient filtering (avoids normalize() on every keystroke)
+	_materialNorm?: string;
+	_unidadNorm?: string;
 };
 
 export type MaterialOrder = {
@@ -61,6 +64,11 @@ export type MaterialOrder = {
 	docUrl?: string;
 	docPath?: string;
 	docBucket?: string;
+	// Pre-normalized fields for efficient filtering
+	_nroOrdenNorm?: string;
+	_solicitanteNorm?: string;
+	_gestorNorm?: string;
+	_proveedorNorm?: string;
 };
 
 export type TablaColumnDataType =

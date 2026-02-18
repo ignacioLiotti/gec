@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
 	FormTableConfig,
 	ColumnDef,
@@ -9,6 +9,7 @@ import {
 	HeaderGroup,
 	FormTableRow,
 	SaveRowsArgs,
+	RowColorInfo,
 } from "@/components/form-table/types";
 import { requiredValidator } from "@/components/form-table/form-table";
 import { FilterSection, RangeInputGroup } from "@/components/form-table/filter-components";
@@ -118,6 +119,7 @@ export type ObrasDetalleRow = FormTableRow & {
 	plazoTotal?: number | string | null;
 	plazoTransc?: number | string | null;
 	porcentaje?: number | string | null;
+	customData?: Record<string, unknown> | null;
 	onFinishFirstMessage?: string | null;
 	onFinishSecondMessage?: string | null;
 	onFinishSecondSendAt?: string | null;
@@ -217,29 +219,43 @@ type LegacyRowColorRule = {
 
 const ROW_COLOR_RULES_KEY = "obras-detalle:row-color-rules";
 const ROW_COLOR_EVENT = "form-table:refresh";
+const ROW_COLOR_TABLE_ID = "form-table-obras-detalle";
 let inMemoryRowColorRules: RowColorRule[] = [];
 let inMemoryCompiledRowColorRules: CompiledRowColorRule[] = [];
 let rowColorRulesLoaded = false;
 let previewedRowColorRuleId: string | null = null;
+
+const emitRowColorRefresh = () => {
+	if (typeof window === "undefined") return;
+	try {
+		window.dispatchEvent(
+			new CustomEvent(ROW_COLOR_EVENT, {
+				detail: { tableId: ROW_COLOR_TABLE_ID },
+			})
+		);
+	} catch {
+		// ignore
+	}
+};
 
 const ROW_RULE_FIELD_OPTIONS: Array<{
 	field: keyof ObrasDetalleRow;
 	label: string;
 	type: RuleFieldType;
 }> = [
-	{ field: "supDeObraM2", label: "Sup. de Obra (m²)", type: "number" },
-	{ field: "contratoMasAmpliaciones", label: "Contrato + Ampliaciones", type: "number" },
-	{ field: "certificadoALaFecha", label: "Certificado a la Fecha", type: "number" },
-	{ field: "saldoACertificar", label: "Saldo a Certificar", type: "number" },
-	{ field: "segunContrato", label: "Según Contrato", type: "number" },
-	{ field: "prorrogasAcordadas", label: "Prórrogas Acordadas", type: "number" },
-	{ field: "plazoTotal", label: "Plazo Total", type: "number" },
-	{ field: "plazoTransc", label: "Plazo Transcurrido", type: "number" },
-	{ field: "porcentaje", label: "% Avance", type: "number" },
-	{ field: "mesBasicoDeContrato", label: "Mes Básico de Contrato", type: "date" },
-	{ field: "iniciacion", label: "Iniciación", type: "date" },
-	{ field: "onFinishSecondSendAt", label: "2° envío finalización", type: "date" },
-];
+		{ field: "supDeObraM2", label: "Sup. de Obra (m²)", type: "number" },
+		{ field: "contratoMasAmpliaciones", label: "Contrato + Ampliaciones", type: "number" },
+		{ field: "certificadoALaFecha", label: "Certificado a la Fecha", type: "number" },
+		{ field: "saldoACertificar", label: "Saldo a Certificar", type: "number" },
+		{ field: "segunContrato", label: "Según Contrato", type: "number" },
+		{ field: "prorrogasAcordadas", label: "Prórrogas Acordadas", type: "number" },
+		{ field: "plazoTotal", label: "Plazo Total", type: "number" },
+		{ field: "plazoTransc", label: "Plazo Transcurrido", type: "number" },
+		{ field: "porcentaje", label: "% Avance", type: "number" },
+		{ field: "mesBasicoDeContrato", label: "Mes Básico de Contrato", type: "date" },
+		{ field: "iniciacion", label: "Iniciación", type: "date" },
+		{ field: "onFinishSecondSendAt", label: "2° envío finalización", type: "date" },
+	];
 
 const getFieldOption = (field: keyof ObrasDetalleRow) =>
 	ROW_RULE_FIELD_OPTIONS.find((option) => option.field === field);
@@ -294,9 +310,9 @@ const parseStoredRules = (): RowColorRule[] => {
 							fieldType: option?.type ?? "number",
 							calculation:
 								c.calculation === "delta" ||
-								c.calculation === "ratio_pct" ||
-								c.calculation === "days_from_today" ||
-								c.calculation === "days_between"
+									c.calculation === "ratio_pct" ||
+									c.calculation === "days_from_today" ||
+									c.calculation === "days_between"
 									? c.calculation
 									: "raw",
 							referenceField:
@@ -305,11 +321,11 @@ const parseStoredRules = (): RowColorRule[] => {
 									: null,
 							op:
 								c.op === "lte" ||
-								c.op === "between" ||
-								c.op === "eq" ||
-								c.op === "neq" ||
-								c.op === "before" ||
-								c.op === "after"
+									c.op === "between" ||
+									c.op === "eq" ||
+									c.op === "neq" ||
+									c.op === "before" ||
+									c.op === "after"
 									? c.op
 									: "gte",
 							threshold:
@@ -333,9 +349,9 @@ const parseStoredRules = (): RowColorRule[] => {
 					logic: candidate.logic === "any" ? "any" : "all",
 					color:
 						candidate.color === "red" ||
-						candidate.color === "green" ||
-						candidate.color === "blue" ||
-						candidate.color === "amber"
+							candidate.color === "green" ||
+							candidate.color === "blue" ||
+							candidate.color === "amber"
 							? candidate.color
 							: "amber",
 					conditions,
@@ -354,9 +370,9 @@ const parseStoredRules = (): RowColorRule[] => {
 				logic: "all",
 				color:
 					candidate.color === "red" ||
-					candidate.color === "green" ||
-					candidate.color === "blue" ||
-					candidate.color === "amber"
+						candidate.color === "green" ||
+						candidate.color === "blue" ||
+						candidate.color === "amber"
 						? candidate.color
 						: "amber",
 				conditions: [
@@ -382,7 +398,7 @@ const parseStoredRules = (): RowColorRule[] => {
 								: 0,
 						thresholdMax:
 							typeof candidate.thresholdMax === "number" &&
-							Number.isFinite(candidate.thresholdMax)
+								Number.isFinite(candidate.thresholdMax)
 								? candidate.thresholdMax
 								: null,
 						dateValue: null,
@@ -429,31 +445,13 @@ const writeRowColorRules = (rules: RowColorRule[]) => {
 		} catch {
 			// in-memory fallback only
 		}
-		try {
-			window.dispatchEvent(
-				new CustomEvent(ROW_COLOR_EVENT, {
-					detail: { tableId: "form-table-obras-detalle" },
-				})
-			);
-		} catch {
-			// ignore
-		}
+		emitRowColorRefresh();
 	}
 };
 
 const setPreviewedRowColorRule = (ruleId: string | null) => {
 	previewedRowColorRuleId = ruleId;
-	if (typeof window !== "undefined") {
-		try {
-			window.dispatchEvent(
-				new CustomEvent(ROW_COLOR_EVENT, {
-					detail: { tableId: "form-table-obras-detalle" },
-				})
-			);
-		} catch {
-			// ignore
-		}
-	}
+	emitRowColorRefresh();
 };
 
 const removeRowColorRule = (ruleId: string) => {
@@ -534,21 +532,14 @@ const getMatchedRulesForRow = (row: ObrasDetalleRow) => {
 	);
 };
 
-const rowColorClassFromRules = (row: ObrasDetalleRow) => {
+const getRowColorInfo = (row: ObrasDetalleRow): RowColorInfo | undefined => {
 	const matched = getMatchedRulesForRow(row);
 	const first = matched[0];
-	let colorClass: string | undefined;
-	if (first?.color === "red") colorClass = "bg-red-50";
-	else if (first?.color === "amber") colorClass = "bg-amber-50";
-	else if (first?.color === "green") colorClass = "bg-emerald-50";
-	else if (first?.color === "blue") colorClass = "bg-blue-50";
-	const previewedMatch =
+	if (!first) return undefined;
+	const previewing =
 		previewedRowColorRuleId != null &&
 		matched.some((rule) => rule.id === previewedRowColorRuleId);
-	if (previewedMatch) {
-		return [colorClass, "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]"].filter(Boolean).join(" ");
-	}
-	return colorClass;
+	return { tone: first.color, previewing };
 };
 
 const rowOverlayBadgesFromRules = (row: ObrasDetalleRow) => {
@@ -572,72 +563,72 @@ const buildRowColorMenuItems = (
 	field: keyof ObrasDetalleRow,
 	label: string
 ): NonNullable<ColumnDef<ObrasDetalleRow>["cellMenuItems"]> => [
-	{
-		id: `${String(field)}-row-gte`,
-		label: `Color fila si ${label} >= esta celda`,
-		onSelect: (row) => {
-			const threshold = getFieldNumericValue(row, field);
-			const existing = readRowColorRules();
-			writeRowColorRules([
-				...existing,
-				{
-					id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-					logic: "all",
-					color: "amber",
-					conditions: [
-						{
-							id: `cond-${Math.random().toString(36).slice(2, 7)}`,
-							field,
-							fieldType: getFieldOption(field)?.type ?? "number",
-							calculation: "raw",
-							referenceField: null,
-							op: "gte",
-							threshold,
-							thresholdMax: null,
-							dateValue: null,
-							dateValueMax: null,
-						},
-					],
-				},
-			]);
+		{
+			id: `${String(field)}-row-gte`,
+			label: `Color fila si ${label} >= esta celda`,
+			onSelect: (row) => {
+				const threshold = getFieldNumericValue(row, field);
+				const existing = readRowColorRules();
+				writeRowColorRules([
+					...existing,
+					{
+						id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+						logic: "all",
+						color: "amber",
+						conditions: [
+							{
+								id: `cond-${Math.random().toString(36).slice(2, 7)}`,
+								field,
+								fieldType: getFieldOption(field)?.type ?? "number",
+								calculation: "raw",
+								referenceField: null,
+								op: "gte",
+								threshold,
+								thresholdMax: null,
+								dateValue: null,
+								dateValueMax: null,
+							},
+						],
+					},
+				]);
+			},
 		},
-	},
-	{
-		id: `${String(field)}-row-lte`,
-		label: `Color fila si ${label} <= esta celda`,
-		onSelect: (row) => {
-			const threshold = getFieldNumericValue(row, field);
-			const existing = readRowColorRules();
-			writeRowColorRules([
-				...existing,
-				{
-					id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-					logic: "all",
-					color: "red",
-					conditions: [
-						{
-							id: `cond-${Math.random().toString(36).slice(2, 7)}`,
-							field,
-							fieldType: getFieldOption(field)?.type ?? "number",
-							calculation: "raw",
-							referenceField: null,
-							op: "lte",
-							threshold,
-							thresholdMax: null,
-							dateValue: null,
-							dateValueMax: null,
-						},
-					],
-				},
-			]);
+		{
+			id: `${String(field)}-row-lte`,
+			label: `Color fila si ${label} <= esta celda`,
+			onSelect: (row) => {
+				const threshold = getFieldNumericValue(row, field);
+				const existing = readRowColorRules();
+				writeRowColorRules([
+					...existing,
+					{
+						id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+						logic: "all",
+						color: "red",
+						conditions: [
+							{
+								id: `cond-${Math.random().toString(36).slice(2, 7)}`,
+								field,
+								fieldType: getFieldOption(field)?.type ?? "number",
+								calculation: "raw",
+								referenceField: null,
+								op: "lte",
+								threshold,
+								thresholdMax: null,
+								dateValue: null,
+								dateValueMax: null,
+							},
+						],
+					},
+				]);
+			},
 		},
-	},
-	{
-		id: `${String(field)}-row-clear`,
-		label: `Quitar color por ${label}`,
-		onSelect: () => clearRowColorRulesForField(field),
-	},
-];
+		{
+			id: `${String(field)}-row-clear`,
+			label: `Quitar color por ${label}`,
+			onSelect: () => clearRowColorRulesForField(field),
+		},
+	];
 
 type RuleConditionDraft = {
 	id: string;
@@ -768,17 +759,51 @@ function RowRulesDialogTrigger() {
 		return `Pintar la fila de color ${colorLabelEs[color]} cuando se cumpla ${logicLabelEs[logic]} de estas condiciones: ${body}`;
 	}, [conditions, logic, color]);
 
-	useEffect(() => {
-		setPreviewedRowColorRule(hoveredRuleId ?? selectedRuleId);
-	}, [hoveredRuleId, selectedRuleId]);
-
-	useEffect(() => {
-		if (!open) {
+	// Reset form state when dialog opens
+	const handleOpenChange = (nextOpen: boolean) => {
+		setOpen(nextOpen);
+		if (nextOpen) {
+			// Reset creator form on open
+			setConditions([createConditionDraft()]);
+			setLogic("all");
+			setColor("amber");
+			setActiveTab("creator");
+			// Refresh rules list from in-memory state
+			setRefreshTick((prev) => prev + 1);
+		} else {
+			// Cleanup on close
 			setHoveredRuleId(null);
 			setSelectedRuleId(null);
 			setPreviewedRowColorRule(null);
 		}
-	}, [open]);
+	};
+
+	// Direct preview handlers - no useEffect delay
+	const handleSelectRule = (ruleId: string) => {
+		const nextId = selectedRuleId === ruleId ? null : ruleId; // Toggle
+		setSelectedRuleId(nextId);
+		setPreviewedRowColorRule(hoveredRuleId ?? nextId);
+	};
+
+	const handleHoverRule = (ruleId: string) => {
+		setHoveredRuleId(ruleId);
+		setPreviewedRowColorRule(ruleId);
+	};
+
+	const handleUnhoverRule = () => {
+		setHoveredRuleId(null);
+		setPreviewedRowColorRule(selectedRuleId);
+	};
+
+	const handleTabChange = (value: string) => {
+		setActiveTab(value as "creator" | "active");
+		if (value === "creator") {
+			// Clear preview when switching to creator tab
+			setSelectedRuleId(null);
+			setHoveredRuleId(null);
+			setPreviewedRowColorRule(null);
+		}
+	};
 
 	const addRule = () => {
 		const existingRules = readRowColorRules();
@@ -833,8 +858,11 @@ function RowRulesDialogTrigger() {
 				conditions: mappedConditions,
 			},
 		]);
+		// Reset creator form for next rule
+		setConditions([createConditionDraft()]);
 		setActiveTab("active");
 		setSelectedRuleId(nextRuleId);
+		setPreviewedRowColorRule(nextRuleId);
 		setRefreshTick((prev) => prev + 1);
 	};
 
@@ -843,22 +871,12 @@ function RowRulesDialogTrigger() {
 			<Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
 				Reglas de color de filas
 			</Button>
-			<Dialog
-				open={open}
-				onOpenChange={(nextOpen) => {
-					setOpen(nextOpen);
-					if (!nextOpen) {
-						setHoveredRuleId(null);
-						setSelectedRuleId(null);
-						setPreviewedRowColorRule(null);
-					}
-				}}
-			>
+			<Dialog open={open} onOpenChange={handleOpenChange}>
 				<DialogContent className="max-w-3xl">
 					<DialogHeader>
 						<DialogTitle>Reglas de color por columna</DialogTitle>
 					</DialogHeader>
-					<Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "creator" | "active")}>
+					<Tabs value={activeTab} onValueChange={handleTabChange}>
 						<TabsList className="grid w-full grid-cols-2">
 							<TabsTrigger value="creator">Crear regla</TabsTrigger>
 							<TabsTrigger value="active">Reglas activas ({rules.length})</TabsTrigger>
@@ -898,112 +916,75 @@ function RowRulesDialogTrigger() {
 							</div>
 							<div className="space-y-3 max-h-[340px] overflow-auto pr-1">
 								{conditions.map((condition, index) => {
-								const isDateField = condition.fieldType === "date";
-								const usesDateCompare =
-									isDateField &&
-									(condition.op === "before" ||
-										condition.op === "after" ||
-										condition.op === "between" ||
-										condition.op === "eq" ||
-										condition.op === "neq");
+									const isDateField = condition.fieldType === "date";
+									const usesDateCompare =
+										isDateField &&
+										(condition.op === "before" ||
+											condition.op === "after" ||
+											condition.op === "between" ||
+											condition.op === "eq" ||
+											condition.op === "neq");
 									return (
 										<div key={condition.id} className="rounded border p-3 space-y-3">
-										<div className="flex items-center justify-between">
-											<p className="text-xs font-medium">Condición {index + 1}</p>
-											<Button
-												type="button"
-												size="sm"
-												variant="ghost"
-												onClick={() =>
-													setConditions((prev) =>
-														prev.length === 1
-															? prev
-															: prev.filter((item) => item.id !== condition.id)
-													)
-												}
-											>
-												Quitar
-											</Button>
-										</div>
-										<div className="grid grid-cols-2 gap-2">
-											<div className="space-y-1">
-												<Label>Columna</Label>
-												<Select
-													value={String(condition.field)}
-													onValueChange={(value) =>
+											<div className="flex items-center justify-between">
+												<p className="text-xs font-medium">Condición {index + 1}</p>
+												<Button
+													type="button"
+													size="sm"
+													variant="ghost"
+													onClick={() =>
 														setConditions((prev) =>
-															prev.map((item) => {
-																if (item.id !== condition.id) return item;
-																const option = getFieldOption(value as keyof ObrasDetalleRow);
-																return {
-																	...item,
-																	field: value as keyof ObrasDetalleRow,
-																	fieldType: option?.type ?? "number",
-																	calculation: option?.type === "date" ? "raw" : "raw",
-																	op: option?.type === "date" ? "after" : "gte",
-																};
-															})
+															prev.length === 1
+																? prev
+																: prev.filter((item) => item.id !== condition.id)
 														)
 													}
 												>
-													<SelectTrigger>
-														<SelectValue />
-													</SelectTrigger>
-													<SelectContent>
-														{ROW_RULE_FIELD_OPTIONS.map((option) => (
-															<SelectItem key={String(option.field)} value={String(option.field)}>
-																{option.label}
-															</SelectItem>
-														))}
-													</SelectContent>
-												</Select>
+													Quitar
+												</Button>
 											</div>
-											<div className="space-y-1">
-												<Label>Cálculo</Label>
-												<Select
-													value={condition.calculation}
-													onValueChange={(value) =>
-														setConditions((prev) =>
-															prev.map((item) =>
-																item.id === condition.id
-																	? { ...item, calculation: value as RuleCalculation }
-																	: item
-															)
-														)
-													}
-												>
-													<SelectTrigger>
-														<SelectValue />
-													</SelectTrigger>
-													<SelectContent>
-														<SelectItem value="raw">Valor de columna</SelectItem>
-														{condition.fieldType === "number" && (
-															<>
-																<SelectItem value="delta">Diferencia (columna - referencia)</SelectItem>
-																<SelectItem value="ratio_pct">Porcentaje (columna / referencia * 100)</SelectItem>
-															</>
-														)}
-														{condition.fieldType === "date" && (
-															<>
-																<SelectItem value="days_from_today">Días desde hoy</SelectItem>
-																<SelectItem value="days_between">Días entre columnas</SelectItem>
-															</>
-														)}
-													</SelectContent>
-												</Select>
-											</div>
-										</div>
-										{condition.calculation !== "raw" &&
-											condition.calculation !== "days_from_today" && (
+											<div className="grid grid-cols-2 gap-2">
 												<div className="space-y-1">
-													<Label>Columna de referencia</Label>
+													<Label>Columna</Label>
 													<Select
-														value={String(condition.referenceField ?? "")}
+														value={String(condition.field)}
+														onValueChange={(value) =>
+															setConditions((prev) =>
+																prev.map((item) => {
+																	if (item.id !== condition.id) return item;
+																	const option = getFieldOption(value as keyof ObrasDetalleRow);
+																	return {
+																		...item,
+																		field: value as keyof ObrasDetalleRow,
+																		fieldType: option?.type ?? "number",
+																		calculation: option?.type === "date" ? "raw" : "raw",
+																		op: option?.type === "date" ? "after" : "gte",
+																	};
+																})
+															)
+														}
+													>
+														<SelectTrigger>
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															{ROW_RULE_FIELD_OPTIONS.map((option) => (
+																<SelectItem key={String(option.field)} value={String(option.field)}>
+																	{option.label}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+												<div className="space-y-1">
+													<Label>Cálculo</Label>
+													<Select
+														value={condition.calculation}
 														onValueChange={(value) =>
 															setConditions((prev) =>
 																prev.map((item) =>
 																	item.id === condition.id
-																		? { ...item, referenceField: value as keyof ObrasDetalleRow }
+																		? { ...item, calculation: value as RuleCalculation }
 																		: item
 																)
 															)
@@ -1013,97 +994,134 @@ function RowRulesDialogTrigger() {
 															<SelectValue />
 														</SelectTrigger>
 														<SelectContent>
-															{ROW_RULE_FIELD_OPTIONS.filter(
-																(option) => option.type === condition.fieldType
-															).map((option) => (
-																<SelectItem key={`ref-${String(option.field)}`} value={String(option.field)}>
-																	{option.label}
-																</SelectItem>
-															))}
+															<SelectItem value="raw">Valor de columna</SelectItem>
+															{condition.fieldType === "number" && (
+																<>
+																	<SelectItem value="delta">Diferencia (columna - referencia)</SelectItem>
+																	<SelectItem value="ratio_pct">Porcentaje (columna / referencia * 100)</SelectItem>
+																</>
+															)}
+															{condition.fieldType === "date" && (
+																<>
+																	<SelectItem value="days_from_today">Días desde hoy</SelectItem>
+																	<SelectItem value="days_between">Días entre columnas</SelectItem>
+																</>
+															)}
 														</SelectContent>
 													</Select>
 												</div>
+											</div>
+											{condition.calculation !== "raw" &&
+												condition.calculation !== "days_from_today" && (
+													<div className="space-y-1">
+														<Label>Columna de referencia</Label>
+														<Select
+															value={String(condition.referenceField ?? "")}
+															onValueChange={(value) =>
+																setConditions((prev) =>
+																	prev.map((item) =>
+																		item.id === condition.id
+																			? { ...item, referenceField: value as keyof ObrasDetalleRow }
+																			: item
+																	)
+																)
+															}
+														>
+															<SelectTrigger>
+																<SelectValue />
+															</SelectTrigger>
+															<SelectContent>
+																{ROW_RULE_FIELD_OPTIONS.filter(
+																	(option) => option.type === condition.fieldType
+																).map((option) => (
+																	<SelectItem key={`ref-${String(option.field)}`} value={String(option.field)}>
+																		{option.label}
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													</div>
+												)}
+											<div className="grid grid-cols-2 gap-2">
+												<div className="space-y-1">
+													<Label>Operador</Label>
+													<Select
+														value={condition.op}
+														onValueChange={(value) =>
+															setConditions((prev) =>
+																prev.map((item) =>
+																	item.id === condition.id
+																		? { ...item, op: value as RuleOperator }
+																		: item
+																)
+															)
+														}
+													>
+														<SelectTrigger>
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															{condition.fieldType === "date" ? (
+																<>
+																	<SelectItem value="before">Antes de</SelectItem>
+																	<SelectItem value="after">Después de</SelectItem>
+																	<SelectItem value="between">Entre fechas</SelectItem>
+																	<SelectItem value="eq">Igual a</SelectItem>
+																	<SelectItem value="neq">Distinto de</SelectItem>
+																	<SelectItem value="gte">Mayor o igual (numérico)</SelectItem>
+																	<SelectItem value="lte">Menor o igual (numérico)</SelectItem>
+																</>
+															) : (
+																<>
+																	<SelectItem value="gte">Mayor o igual</SelectItem>
+																	<SelectItem value="lte">Menor o igual</SelectItem>
+																	<SelectItem value="between">Entre valores</SelectItem>
+																	<SelectItem value="eq">Igual a</SelectItem>
+																	<SelectItem value="neq">Distinto de</SelectItem>
+																</>
+															)}
+														</SelectContent>
+													</Select>
+												</div>
+												<div className="space-y-1">
+													<Label>{usesDateCompare ? "Fecha" : "Valor de comparación"}</Label>
+													<Input
+														type={usesDateCompare ? "date" : "number"}
+														value={usesDateCompare ? condition.dateValue : condition.threshold}
+														onChange={(e) =>
+															setConditions((prev) =>
+																prev.map((item) =>
+																	item.id === condition.id
+																		? usesDateCompare
+																			? { ...item, dateValue: e.target.value }
+																			: { ...item, threshold: e.target.value }
+																		: item
+																)
+															)
+														}
+													/>
+												</div>
+											</div>
+											{condition.op === "between" && (
+												<div className="space-y-1">
+													<Label>{usesDateCompare ? "Fecha máxima" : "Valor máximo"}</Label>
+													<Input
+														type={usesDateCompare ? "date" : "number"}
+														value={usesDateCompare ? condition.dateValueMax : condition.thresholdMax}
+														onChange={(e) =>
+															setConditions((prev) =>
+																prev.map((item) =>
+																	item.id === condition.id
+																		? usesDateCompare
+																			? { ...item, dateValueMax: e.target.value }
+																			: { ...item, thresholdMax: e.target.value }
+																		: item
+																)
+															)
+														}
+													/>
+												</div>
 											)}
-										<div className="grid grid-cols-2 gap-2">
-											<div className="space-y-1">
-												<Label>Operador</Label>
-												<Select
-													value={condition.op}
-													onValueChange={(value) =>
-														setConditions((prev) =>
-															prev.map((item) =>
-																item.id === condition.id
-																	? { ...item, op: value as RuleOperator }
-																	: item
-															)
-														)
-													}
-												>
-													<SelectTrigger>
-														<SelectValue />
-													</SelectTrigger>
-													<SelectContent>
-														{condition.fieldType === "date" ? (
-															<>
-																<SelectItem value="before">Antes de</SelectItem>
-																<SelectItem value="after">Después de</SelectItem>
-																<SelectItem value="between">Entre fechas</SelectItem>
-																<SelectItem value="eq">Igual a</SelectItem>
-																<SelectItem value="neq">Distinto de</SelectItem>
-																<SelectItem value="gte">Mayor o igual (numérico)</SelectItem>
-																<SelectItem value="lte">Menor o igual (numérico)</SelectItem>
-															</>
-														) : (
-															<>
-																<SelectItem value="gte">Mayor o igual</SelectItem>
-																<SelectItem value="lte">Menor o igual</SelectItem>
-																<SelectItem value="between">Entre valores</SelectItem>
-																<SelectItem value="eq">Igual a</SelectItem>
-																<SelectItem value="neq">Distinto de</SelectItem>
-															</>
-														)}
-													</SelectContent>
-												</Select>
-											</div>
-											<div className="space-y-1">
-												<Label>{usesDateCompare ? "Fecha" : "Valor de comparación"}</Label>
-												<Input
-													type={usesDateCompare ? "date" : "number"}
-													value={usesDateCompare ? condition.dateValue : condition.threshold}
-													onChange={(e) =>
-														setConditions((prev) =>
-															prev.map((item) =>
-																item.id === condition.id
-																	? usesDateCompare
-																		? { ...item, dateValue: e.target.value }
-																		: { ...item, threshold: e.target.value }
-																	: item
-															)
-														)
-													}
-												/>
-											</div>
-										</div>
-										{condition.op === "between" && (
-											<div className="space-y-1">
-												<Label>{usesDateCompare ? "Fecha máxima" : "Valor máximo"}</Label>
-												<Input
-													type={usesDateCompare ? "date" : "number"}
-													value={usesDateCompare ? condition.dateValueMax : condition.thresholdMax}
-													onChange={(e) =>
-														setConditions((prev) =>
-															prev.map((item) =>
-																item.id === condition.id
-																	? usesDateCompare
-																		? { ...item, dateValueMax: e.target.value }
-																		: { ...item, thresholdMax: e.target.value }
-																	: item
-															)
-														)
-													}
-												/>
-											</div>
-										)}
 										</div>
 									);
 								})}
@@ -1121,40 +1139,42 @@ function RowRulesDialogTrigger() {
 								Seleccioná una regla para resaltar en la tabla las filas afectadas.
 							</p>
 							<div className="space-y-2 max-h-56 overflow-auto border rounded-md p-2">
-							{rules.length === 0 && (
-								<p className="text-sm text-muted-foreground">Sin reglas definidas.</p>
-							)}
-							{rules.map((rule) => (
-								<div
-									key={rule.id}
-									className={cn(
-										"flex items-center justify-between rounded border px-2 py-1 text-xs cursor-pointer transition-colors",
-										selectedRuleId === rule.id && "border-primary bg-primary/5"
-									)}
-									onClick={() => setSelectedRuleId(rule.id)}
-									onMouseEnter={() => setHoveredRuleId(rule.id)}
-									onMouseLeave={() => setHoveredRuleId(null)}
-								>
-									<span>
-										{rule.logic === "all" ? "Todas" : "Cualquiera"} · {rule.conditions.length} condición(es) · {colorLabelEs[rule.color]}
-									</span>
-									<Button
-										type="button"
-										size="sm"
-										variant="ghost"
-										onClick={(event) => {
-											event.stopPropagation();
-											if (selectedRuleId === rule.id) {
-												setSelectedRuleId(null);
-											}
-											removeRowColorRule(rule.id);
-											setRefreshTick((prev) => prev + 1);
-										}}
+								{rules.length === 0 && (
+									<p className="text-sm text-muted-foreground">Sin reglas definidas.</p>
+								)}
+								{rules.map((rule) => (
+									<div
+										key={rule.id}
+										className={cn(
+											"flex items-center justify-between rounded border px-2 py-1 text-xs cursor-pointer transition-colors",
+											selectedRuleId === rule.id && "border-primary bg-primary/5"
+										)}
+										onClick={() => handleSelectRule(rule.id)}
+										onMouseEnter={() => handleHoverRule(rule.id)}
+										onMouseLeave={handleUnhoverRule}
 									>
-										Quitar
-									</Button>
-								</div>
-							))}
+										<span>
+											{rule.logic === "all" ? "Todas" : "Cualquiera"} · {rule.conditions.length} condición(es) · {colorLabelEs[rule.color]}
+										</span>
+										<Button
+											type="button"
+											size="sm"
+											variant="ghost"
+											onClick={(event) => {
+												event.stopPropagation();
+												const wasSelected = selectedRuleId === rule.id;
+												removeRowColorRule(rule.id);
+												if (wasSelected) {
+													setSelectedRuleId(null);
+													setPreviewedRowColorRule(null);
+												}
+												setRefreshTick((prev) => prev + 1);
+											}}
+										>
+											Quitar
+										</Button>
+									</div>
+								))}
 							</div>
 							{selectedRule && (
 								<div className="rounded border bg-muted/40 p-2 text-xs">
@@ -1172,7 +1192,7 @@ function RowRulesDialogTrigger() {
 								setHoveredRuleId(null);
 								setSelectedRuleId(null);
 								setPreviewedRowColorRule(null);
-								writeRowColorRules([]);
+								writeRowColorRules([]); // triggers emitRowColorRefresh
 								setRefreshTick((prev) => prev + 1);
 							}}
 						>
@@ -1216,11 +1236,37 @@ const createNewRow = (): ObrasDetalleRow => {
 		plazoTotal: 0,
 		plazoTransc: 0,
 		porcentaje: 0,
+		customData: {},
 		onFinishFirstMessage: null,
 		onFinishSecondMessage: null,
 		onFinishSecondSendAt: null,
 	};
 };
+
+const FIXED_OBRA_FIELDS = new Set([
+	"id",
+	"n",
+	"designacionYUbicacion",
+	"supDeObraM2",
+	"entidadContratante",
+	"mesBasicoDeContrato",
+	"iniciacion",
+	"contratoMasAmpliaciones",
+	"certificadoALaFecha",
+	"saldoACertificar",
+	"segunContrato",
+	"prorrogasAcordadas",
+	"plazoTotal",
+	"plazoTransc",
+	"porcentaje",
+	"onFinishFirstMessage",
+	"onFinishSecondMessage",
+	"onFinishSecondSendAt",
+	"customData",
+]);
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
 
 const mapDetailRowToPayload = (row: ObrasDetalleRow, index: number): Obra => {
 	const parsedN = toNumber(row.n);
@@ -1228,6 +1274,13 @@ const mapDetailRowToPayload = (row: ObrasDetalleRow, index: number): Obra => {
 		Number.isFinite(parsedN) && parsedN >= 1 ? Math.trunc(parsedN) : index + 1;
 	const certificadoALaFecha = computeCertificado(row);
 	const saldoACertificar = computeSaldo(row);
+	const customData: Record<string, unknown> = {
+		...(isPlainObject(row.customData) ? row.customData : {}),
+	};
+	for (const [key, value] of Object.entries(row)) {
+		if (FIXED_OBRA_FIELDS.has(key)) continue;
+		customData[key] = value ?? null;
+	}
 	return {
 		id: typeof row.id === "string" ? row.id : undefined,
 		n: normalizedN,
@@ -1244,6 +1297,7 @@ const mapDetailRowToPayload = (row: ObrasDetalleRow, index: number): Obra => {
 		plazoTotal: toNumber(row.plazoTotal),
 		plazoTransc: toNumber(row.plazoTransc),
 		porcentaje: clampPercentage(row.porcentaje),
+		customData,
 		onFinishFirstMessage: row.onFinishFirstMessage ?? null,
 		onFinishSecondMessage: row.onFinishSecondMessage ?? null,
 		onFinishSecondSendAt: row.onFinishSecondSendAt ?? null,
@@ -1260,7 +1314,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enablePin: true,
 		editable: false,
 		cellType: "text",
-		width: 50,
+		width: 25,
 		enableResize: false,
 		enableSort: false,
 		// sortFn: (a, b) => toNumber(a.n) - toNumber(b.n),
@@ -1474,7 +1528,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 	},
 ];
 
-export type MainTableColumnKind = "base" | "formula";
+export type MainTableColumnKind = "base" | "formula" | "custom";
 export type MainTableFormulaFormat = "number" | "currency";
 
 export type MainTableColumnConfig = {
@@ -1575,13 +1629,13 @@ const buildFormulaColumn = (
 		cellConfig:
 			resolvedCellType === "currency"
 				? {
-						currencyCode: "ARS",
-						currencyLocale: "es-AR",
-						renderReadOnly: ({ row }) => formatCurrency(getValue(row)),
-				  }
+					currencyCode: "ARS",
+					currencyLocale: "es-AR",
+					renderReadOnly: ({ row }) => formatCurrency(getValue(row)),
+				}
 				: {
-						renderReadOnly: ({ row }) => getValue(row).toLocaleString("es-AR"),
-				  },
+					renderReadOnly: ({ row }) => getValue(row).toLocaleString("es-AR"),
+				},
 		sortFn: (a, b) => getValue(a) - getValue(b),
 		searchFn: (row, query) => String(getValue(row)).includes(query),
 		defaultValue: null,
@@ -1589,6 +1643,46 @@ const buildFormulaColumn = (
 		enableSort: config.enableSort ?? true,
 		enableResize: config.enableResize ?? true,
 		required: config.required ?? false,
+	};
+};
+
+const buildCustomColumn = (
+	config: MainTableColumnConfig
+): ColumnDef<ObrasDetalleRow> => {
+	const cellType = config.cellType ?? "text";
+	const readValue = (row: ObrasDetalleRow) => row[config.id];
+	return {
+		id: config.id,
+		label: config.label || config.id,
+		field: config.id as any,
+		enableHide: config.enableHide ?? true,
+		enablePin: config.enablePin ?? false,
+		editable: config.editable ?? true,
+		cellType,
+		defaultValue:
+			cellType === "number" || cellType === "currency"
+				? 0
+				: cellType === "boolean"
+					? false
+					: "",
+		width: config.width,
+		enableSort: config.enableSort ?? true,
+		enableResize: config.enableResize ?? true,
+		required: config.required ?? false,
+		sortFn: (a, b) => {
+			const left = readValue(a);
+			const right = readValue(b);
+			if (cellType === "number" || cellType === "currency") {
+				return toNumber(left) - toNumber(right);
+			}
+			return String(left ?? "").localeCompare(String(right ?? ""), "es", {
+				sensitivity: "base",
+			});
+		},
+		searchFn: (row, query) =>
+			String(readValue(row) ?? "")
+				.toLowerCase()
+				.includes(query.toLowerCase()),
 	};
 };
 
@@ -1605,6 +1699,11 @@ const resolveColumnsFromConfig = (
 		if (item.kind === "formula") {
 			if (!item.formula || !item.id) continue;
 			resolved.push(buildFormulaColumn(item));
+			continue;
+		}
+		if (item.kind === "custom") {
+			if (!item.id) continue;
+			resolved.push(buildCustomColumn(item));
 			continue;
 		}
 		const baseId = item.baseColumnId ?? item.id;
@@ -1992,12 +2091,17 @@ type ObrasDetalleApiRow = {
 	plazoTotal?: number | null;
 	plazoTransc?: number | null;
 	porcentaje?: number | null;
+	customData?: Record<string, unknown> | null;
 	onFinishFirstMessage?: string | null;
 	onFinishSecondMessage?: string | null;
 	onFinishSecondSendAt?: string | null;
 };
 
 function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
+	const customData =
+		obra.customData && typeof obra.customData === "object" && !Array.isArray(obra.customData)
+			? obra.customData
+			: {};
 	const row: ObrasDetalleRow = {
 		id: obra.id,
 		n: obra.n ?? null,
@@ -2014,10 +2118,16 @@ function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 		plazoTotal: obra.plazoTotal ?? null,
 		plazoTransc: obra.plazoTransc ?? null,
 		porcentaje: obra.porcentaje ?? null,
+		customData,
 		onFinishFirstMessage: obra.onFinishFirstMessage ?? null,
 		onFinishSecondMessage: obra.onFinishSecondMessage ?? null,
 		onFinishSecondSendAt: obra.onFinishSecondSendAt ?? null,
 	};
+	for (const [key, value] of Object.entries(customData)) {
+		if (row[key] === undefined) {
+			row[key] = value;
+		}
+	}
 	row.certificadoALaFecha = computeCertificado(row);
 	row.saldoACertificar = computeSaldo(row);
 	return row;
@@ -2078,7 +2188,7 @@ const obrasDetalleBaseConfig: Omit<
 	FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>,
 	"columns" | "headerGroups"
 > = {
-	tableId: "form-table-obras-detalle",
+	tableId: ROW_COLOR_TABLE_ID,
 	title: "Obras detalle",
 	description: "Gestione el dataset de obras con filtros avanzados y edición en línea.",
 	tabFilters,
@@ -2091,7 +2201,7 @@ const obrasDetalleBaseConfig: Omit<
 	renderFilters,
 	applyFilters,
 	countActiveFilters,
-	rowClassName: (row) => rowColorClassFromRules(row),
+	rowColorInfo: (row) => getRowColorInfo(row),
 	rowOverlayBadges: (row) => rowOverlayBadgesFromRules(row),
 	fetchRows: fetchObrasDetalle,
 	onSave: saveObrasDetalle,

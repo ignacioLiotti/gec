@@ -261,11 +261,14 @@ export function FormTableContent({ className }: { className?: string }) {
 	const rowClassName = config.rowClassName as
 		| ((row: FormTableRow, rowIndex: number) => string | undefined)
 		| undefined;
+	const rowColorInfo = config.rowColorInfo as
+		| ((row: FormTableRow, rowIndex: number) => import("./types").RowColorInfo | undefined)
+		| undefined;
 	const rowOverlayBadges = config.rowOverlayBadges as
 		| ((
-				row: FormTableRow,
-				rowIndex: number
-		  ) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>)
+			row: FormTableRow,
+			rowIndex: number
+		) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>)
 		| undefined;
 
 	const columnDefs = columns.list;
@@ -327,7 +330,7 @@ export function FormTableContent({ className }: { className?: string }) {
 				)}
 				<div
 					ref={scrollParentRef}
-					className="max-h-[70vh] overflow-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
+					className="max-h-[70vh] bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
 					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
@@ -562,6 +565,7 @@ export function FormTableContent({ className }: { className?: string }) {
 												externalRefreshVersion={externalRefreshVersion}
 												columnsById={columnsById}
 												rowClassName={rowClassName}
+												rowColorInfo={rowColorInfo}
 												rowOverlayBadges={rowOverlayBadges}
 												FieldComponent={FieldComponent}
 												highlightQuery={highlightQuery}
@@ -611,6 +615,7 @@ export function FormTableContent({ className }: { className?: string }) {
 											externalRefreshVersion={externalRefreshVersion}
 											columnsById={columnsById}
 											rowClassName={rowClassName}
+											rowColorInfo={rowColorInfo}
 											rowOverlayBadges={rowOverlayBadges}
 											FieldComponent={FieldComponent}
 											highlightQuery={highlightQuery}
@@ -671,7 +676,7 @@ export function FormTablePagination() {
 	return (
 		<>
 			<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 text-foreground">
 					<span>Filas por página</span>
 					{pageSizeLocked ? (
 						<span className="font-medium text-foreground">{pageSize}</span>
@@ -729,7 +734,7 @@ export function FormTablePagination() {
 				<div className="flex items-center gap-2">
 					<Button
 						type="button"
-						variant="outline"
+						variant="default"
 						size="sm"
 						onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
 						disabled={!hasPreviousPage || isLoading}
@@ -743,7 +748,7 @@ export function FormTablePagination() {
 					</span>
 					<Button
 						type="button"
-						variant="outline"
+						variant="default"
 						size="sm"
 						onClick={() => startTransition(() => setPage((prev) => prev + 1))}
 						disabled={!hasNextPage || isLoading}

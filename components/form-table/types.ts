@@ -177,11 +177,20 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	allowAddRows?: boolean;
 	/** Optional row class resolver to support conditional row coloring. */
 	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
+	/** Structured row color info for rule-based coloring. Preferred over rowClassName. */
+	rowColorInfo?: (row: Row, rowIndex: number) => RowColorInfo | undefined;
 	/** Optional badges rendered on each row (for overlapping rule indicators, etc.). */
 	rowOverlayBadges?: (
 		row: Row,
 		rowIndex: number
 	) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>;
+};
+
+export type RowColorTone = "red" | "amber" | "green" | "blue";
+
+export type RowColorInfo = {
+	tone: RowColorTone;
+	previewing: boolean;
 };
 
 

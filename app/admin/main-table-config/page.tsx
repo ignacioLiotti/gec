@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -64,6 +64,244 @@ const normalizeColumnId = (value: string) =>
 		.replace(/[^a-z0-9_]+/g, "_")
 		.replace(/^_+|_+$/g, "");
 
+const isMainTableCellType = (
+	value: string
+): value is NonNullable<MainTableColumnConfig["cellType"]> =>
+	value === "text" ||
+	value === "number" ||
+	value === "currency" ||
+	value === "date" ||
+	value === "boolean" ||
+	value === "checkbox" ||
+	value === "toggle" ||
+	value === "tags" ||
+	value === "link" ||
+	value === "avatar" ||
+	value === "image" ||
+	value === "icon" ||
+	value === "text-icon" ||
+	value === "badge";
+
+// Memoized row component to avoid re-rendering all rows on any change
+type ConfigTableRowProps = {
+	column: MainTableColumnConfig;
+	index: number;
+	baseOptions: typeof MAIN_TABLE_BASE_COLUMN_OPTIONS;
+	onMoveUp: (index: number) => void;
+	onMoveDown: (index: number) => void;
+	onUpdateColumn: (index: number, updates: Partial<MainTableColumnConfig>) => void;
+	onDeleteColumn: (index: number) => void;
+};
+
+const ConfigTableRow = memo(function ConfigTableRow({
+	column,
+	index,
+	baseOptions,
+	onMoveUp,
+	onMoveDown,
+	onUpdateColumn,
+	onDeleteColumn,
+}: ConfigTableRowProps) {
+	const handleKindChange = (nextKind: MainTableColumnConfig["kind"]) => {
+		if (nextKind === column.kind) return;
+		if (nextKind === "formula") {
+			const defaultFormula =
+				column.formula?.trim() ||
+				`[${column.baseColumnId ?? column.id}]`;
+			onUpdateColumn(index, {
+				kind: "formula",
+				formula: defaultFormula,
+				formulaFormat:
+					column.formulaFormat ??
+					(column.cellType === "currency" ? "currency" : "number"),
+				editable: false,
+			});
+			return;
+		}
+
+		if (nextKind === "base") {
+			const fallbackBase = baseOptions.find(
+				(option) => option.id === (column.baseColumnId ?? column.id)
+			);
+			onUpdateColumn(index, {
+				kind: "base",
+				baseColumnId: fallbackBase?.id ?? baseOptions[0]?.id ?? column.id,
+				formula: undefined,
+				formulaFormat: undefined,
+				editable: true,
+			});
+			return;
+		}
+
+		onUpdateColumn(index, {
+			kind: "custom",
+			baseColumnId: undefined,
+			formula: undefined,
+			formulaFormat: undefined,
+			editable: true,
+		});
+	};
+
+	return (
+		<tr className="border-b last:border-b-0 align-top">
+			<td className="px-2 py-2">
+				<div className="flex items-center gap-1">
+					<Button type="button" variant="ghost" size="icon" onClick={() => onMoveUp(index)}>
+						<span className="sr-only">Mover columna hacia arriba</span>
+						<ArrowUp className="h-4 w-4" />
+					</Button>
+					<Button type="button" variant="ghost" size="icon" onClick={() => onMoveDown(index)}>
+						<span className="sr-only">Mover columna hacia abajo</span>
+						<ArrowDown className="h-4 w-4" />
+					</Button>
+				</div>
+			</td>
+			<td className="px-2 py-2">
+				<code className="text-xs">{column.id}</code>
+			</td>
+			<td className="px-2 py-2">
+				<Input
+					name={`column_label_${column.id}`}
+					autoComplete="off"
+					value={column.label}
+					onChange={(event) => onUpdateColumn(index, { label: event.target.value })}
+					className="h-8"
+				/>
+			</td>
+			<td className="px-2 py-2">
+				<Select value={column.kind} onValueChange={(value) => handleKindChange(value as MainTableColumnConfig["kind"])}>
+					<SelectTrigger className="h-8">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="base">Base</SelectItem>
+						<SelectItem value="formula">Calculada</SelectItem>
+						<SelectItem value="custom">Personalizada</SelectItem>
+					</SelectContent>
+				</Select>
+			</td>
+			<td className="px-2 py-2">
+				<Select
+					value={column.cellType ?? (column.kind === "formula" ? "number" : "text")}
+					onValueChange={(value) => onUpdateColumn(index, { cellType: value as any })}
+				>
+					<SelectTrigger className="h-8">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{CELL_TYPE_OPTIONS.map((option) => (
+							<SelectItem key={option.value} value={option.value}>
+								{option.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</td>
+			<td className="px-2 py-2">
+				<Input
+					type="number"
+					name={`column_width_${column.id}`}
+					autoComplete="off"
+					value={column.width ?? ""}
+					onChange={(event) =>
+						onUpdateColumn(index, {
+							width: event.target.value ? Number(event.target.value) : undefined,
+						})
+					}
+					className="h-8"
+				/>
+			</td>
+			<td className="px-2 py-2">
+				{column.kind === "formula" ? (
+					<div className="space-y-1">
+						<p className="text-[11px] text-muted-foreground">
+							{describeFormulaForUser(column.formula)}
+						</p>
+						<Input
+							name={`column_formula_${column.id}`}
+							autoComplete="off"
+							placeholder="[campo_a] + [campo_b]"
+							value={column.formula ?? ""}
+							onChange={(event) => onUpdateColumn(index, { formula: event.target.value })}
+							className="h-8 font-mono text-xs"
+						/>
+					</div>
+				) : column.kind === "custom" ? (
+					<span className="text-xs text-muted-foreground">
+						Valor editable por obra (tenant).
+					</span>
+				) : (
+					<div className="space-y-1">
+						<p className="text-[11px] text-muted-foreground">Campo fuente para esta columna base</p>
+						<Select
+							value={column.baseColumnId ?? column.id}
+							onValueChange={(value) => onUpdateColumn(index, { baseColumnId: value })}
+						>
+							<SelectTrigger className="h-8">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{baseOptions.map((option) => (
+									<SelectItem key={`base-source-${option.id}`} value={option.id}>
+										{option.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				)}
+			</td>
+			<td className="px-2 py-2">
+				<div className="grid grid-cols-4 gap-x-2 gap-y-1 text-xs">
+					<div className="flex items-center gap-1">
+						<Switch checked={column.enabled !== false} onCheckedChange={(checked) => onUpdateColumn(index, { enabled: checked })} />
+						<span>Act</span>
+					</div>
+					<div className="flex items-center gap-1">
+						<Switch checked={column.editable !== false} disabled={column.kind === "formula"} onCheckedChange={(checked) => onUpdateColumn(index, { editable: checked })} />
+						<span>Edit</span>
+					</div>
+					<div className="flex items-center gap-1">
+						<Switch checked={column.required === true} onCheckedChange={(checked) => onUpdateColumn(index, { required: checked })} />
+						<span>Req</span>
+					</div>
+					<div className="flex items-center gap-1">
+						<Switch checked={column.enableHide !== false} onCheckedChange={(checked) => onUpdateColumn(index, { enableHide: checked })} />
+						<span>Hide</span>
+					</div>
+					<div className="flex items-center gap-1">
+						<Switch checked={column.enablePin === true} onCheckedChange={(checked) => onUpdateColumn(index, { enablePin: checked })} />
+						<span>Pin</span>
+					</div>
+					<div className="flex items-center gap-1">
+						<Switch checked={column.enableSort !== false} onCheckedChange={(checked) => onUpdateColumn(index, { enableSort: checked })} />
+						<span>Sort</span>
+					</div>
+					<div className="flex items-center gap-1">
+						<Switch checked={column.enableResize !== false} onCheckedChange={(checked) => onUpdateColumn(index, { enableResize: checked })} />
+						<span>Resize</span>
+					</div>
+				</div>
+			</td>
+			<td className="px-2 py-2 text-right">
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon"
+					onClick={() => {
+						const confirmed = window.confirm("¿Eliminar esta columna de la configuración?");
+						if (!confirmed) return;
+						onDeleteColumn(index);
+					}}
+				>
+					<span className="sr-only">Eliminar columna</span>
+					<Trash2 className="h-4 w-4 text-destructive" />
+				</Button>
+			</td>
+		</tr>
+	);
+});
+
 export default function AdminMainTableConfigPage() {
 	const [columns, setColumns] = useState<MainTableColumnConfig[]>([]);
 	const [initialColumnsJson, setInitialColumnsJson] = useState("[]");
@@ -73,6 +311,9 @@ export default function AdminMainTableConfigPage() {
 	const [formulaLabel, setFormulaLabel] = useState("");
 	const [formulaExpr, setFormulaExpr] = useState("");
 	const [formulaFormat, setFormulaFormat] = useState<"number" | "currency">("number");
+	const [customLabel, setCustomLabel] = useState("");
+	const [customId, setCustomId] = useState("");
+	const [customType, setCustomType] = useState<NonNullable<MainTableColumnConfig["cellType"]>>("text");
 	const draftFormulaPreview = useMemo(
 		() => describeFormulaForUser(formulaExpr),
 		[formulaExpr]
@@ -145,6 +386,20 @@ export default function AdminMainTableConfigPage() {
 		});
 	};
 
+	// Stable callbacks for memoized row component
+	const handleMoveUp = useCallback((index: number) => moveColumn(index, -1), []);
+	const handleMoveDown = useCallback((index: number) => moveColumn(index, 1), []);
+
+	const handleUpdateColumn = useCallback((index: number, updates: Partial<MainTableColumnConfig>) => {
+		setColumns((prev) =>
+			prev.map((item, idx) => (idx === index ? { ...item, ...updates } : item))
+		);
+	}, []);
+
+	const handleDeleteColumn = useCallback((index: number) => {
+		setColumns((prev) => prev.filter((_, idx) => idx !== index));
+	}, []);
+
 	const addBaseColumn = () => {
 		const option = MAIN_TABLE_BASE_COLUMN_OPTIONS.find((item) => item.id === newBaseColumnId);
 		if (!option) return;
@@ -193,6 +448,41 @@ export default function AdminMainTableConfigPage() {
 		setFormulaLabel("");
 		setFormulaExpr("");
 		setFormulaFormat("number");
+	};
+
+	const addCustomColumn = () => {
+		const cleanLabel = customLabel.trim();
+		const nextId = normalizeColumnId(customId || cleanLabel);
+		if (!cleanLabel || !nextId) {
+			toast.error("Completá nombre e identificador para la columna personalizada.");
+			return;
+		}
+		if (columns.some((column) => column.id === nextId)) {
+			toast.error("Ya existe una columna con ese identificador.");
+			return;
+		}
+		if (!isMainTableCellType(customType)) {
+			toast.error("Seleccioná un tipo de celda válido.");
+			return;
+		}
+		setColumns((prev) => [
+			...prev,
+			{
+				id: nextId,
+				kind: "custom",
+				label: cleanLabel,
+				enabled: true,
+				cellType: customType,
+				width: 180,
+				editable: true,
+				enableHide: true,
+				enableSort: true,
+				enableResize: true,
+			},
+		]);
+		setCustomLabel("");
+		setCustomId("");
+		setCustomType("text");
 	};
 
 	const saveConfig = async () => {
@@ -298,6 +588,51 @@ export default function AdminMainTableConfigPage() {
 						Agregar calculada
 					</Button>
 				</div>
+				<div className="rounded-lg border p-4 space-y-3">
+					<h2 className="font-medium">Agregar Columna Personalizada</h2>
+					<p className="text-xs text-muted-foreground">
+						Esta columna se guarda por obra y por tenant en datos personalizados.
+					</p>
+					<div className="grid gap-2 md:grid-cols-5">
+						<Input
+							name="custom_label"
+							autoComplete="off"
+							placeholder="Nombre visible"
+							value={customLabel}
+							onChange={(event) => setCustomLabel(event.target.value)}
+							className="h-8 md:col-span-2"
+						/>
+						<Input
+							name="custom_id"
+							autoComplete="off"
+							placeholder="identificador_columna"
+							value={customId}
+							onChange={(event) => setCustomId(event.target.value)}
+							className="h-8 md:col-span-2 font-mono"
+						/>
+						<Select
+							value={customType}
+							onValueChange={(value) =>
+								setCustomType(value as NonNullable<MainTableColumnConfig["cellType"]>)
+							}
+						>
+							<SelectTrigger className="h-8">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{CELL_TYPE_OPTIONS.map((option) => (
+									<SelectItem key={option.value} value={option.value}>
+										{option.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<Button type="button" size="sm" onClick={addCustomColumn}>
+						<Plus className="h-4 w-4 mr-1" />
+						Agregar personalizada
+					</Button>
+				</div>
 			</section>
 
 			<section className="rounded-lg border p-4 space-y-3">
@@ -323,138 +658,16 @@ export default function AdminMainTableConfigPage() {
 							</thead>
 							<tbody>
 								{columns.map((column, index) => (
-									<tr key={column.id} className="border-b last:border-b-0 align-top">
-										<td className="px-2 py-2">
-											<div className="flex items-center gap-1">
-												<Button type="button" variant="ghost" size="icon" onClick={() => moveColumn(index, -1)}>
-													<span className="sr-only">Mover columna hacia arriba</span>
-													<ArrowUp className="h-4 w-4" />
-												</Button>
-												<Button type="button" variant="ghost" size="icon" onClick={() => moveColumn(index, 1)}>
-													<span className="sr-only">Mover columna hacia abajo</span>
-													<ArrowDown className="h-4 w-4" />
-												</Button>
-											</div>
-										</td>
-										<td className="px-2 py-2">
-											<code className="text-xs">{column.id}</code>
-										</td>
-										<td className="px-2 py-2">
-											<Input
-												name={`column_label_${column.id}`}
-												autoComplete="off"
-												value={column.label}
-												onChange={(event) =>
-													setColumns((prev) =>
-														prev.map((item, idx) =>
-															idx === index ? { ...item, label: event.target.value } : item
-														)
-													)
-												}
-												className="h-8"
-											/>
-										</td>
-										<td className="px-2 py-2">
-											{column.kind === "formula" ? "Calculada" : "Base"}
-										</td>
-										<td className="px-2 py-2">
-											<Select
-												value={column.cellType ?? (column.kind === "formula" ? "number" : "text")}
-												onValueChange={(value) =>
-													setColumns((prev) =>
-														prev.map((item, idx) =>
-															idx === index ? { ...item, cellType: value as any } : item
-														)
-													)
-												}
-											>
-												<SelectTrigger className="h-8">
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													{CELL_TYPE_OPTIONS.map((option) => (
-														<SelectItem key={option.value} value={option.value}>
-															{option.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										</td>
-										<td className="px-2 py-2">
-											<Input
-												type="number"
-												name={`column_width_${column.id}`}
-												autoComplete="off"
-												value={column.width ?? ""}
-												onChange={(event) =>
-													setColumns((prev) =>
-														prev.map((item, idx) =>
-															idx === index
-																? {
-																		...item,
-																		width: event.target.value ? Number(event.target.value) : undefined,
-																  }
-																: item
-														)
-													)
-												}
-												className="h-8"
-											/>
-										</td>
-										<td className="px-2 py-2">
-											{column.kind === "formula" ? (
-												<div className="space-y-1">
-													<p className="text-[11px] text-muted-foreground">
-														{describeFormulaForUser(column.formula)}
-													</p>
-													<Input
-														name={`column_formula_${column.id}`}
-														autoComplete="off"
-														placeholder="[campo_a] + [campo_b]"
-														value={column.formula ?? ""}
-														onChange={(event) =>
-															setColumns((prev) =>
-																prev.map((item, idx) =>
-																	idx === index ? { ...item, formula: event.target.value } : item
-																)
-															)
-														}
-														className="h-8 font-mono text-xs"
-													/>
-												</div>
-											) : (
-												<span className="text-xs text-muted-foreground">
-													Base: <code>{column.baseColumnId ?? column.id}</code>
-												</span>
-											)}
-										</td>
-										<td className="px-2 py-2">
-											<div className="grid grid-cols-4 gap-x-2 gap-y-1 text-xs">
-												<div className="flex items-center gap-1"><Switch checked={column.enabled !== false} onCheckedChange={(checked) => setColumns((prev) => prev.map((item, idx) => idx === index ? { ...item, enabled: checked } : item))} /><span>Act</span></div>
-												<div className="flex items-center gap-1"><Switch checked={column.editable !== false} disabled={column.kind === "formula"} onCheckedChange={(checked) => setColumns((prev) => prev.map((item, idx) => idx === index ? { ...item, editable: checked } : item))} /><span>Edit</span></div>
-												<div className="flex items-center gap-1"><Switch checked={column.required === true} onCheckedChange={(checked) => setColumns((prev) => prev.map((item, idx) => idx === index ? { ...item, required: checked } : item))} /><span>Req</span></div>
-												<div className="flex items-center gap-1"><Switch checked={column.enableHide !== false} onCheckedChange={(checked) => setColumns((prev) => prev.map((item, idx) => idx === index ? { ...item, enableHide: checked } : item))} /><span>Hide</span></div>
-												<div className="flex items-center gap-1"><Switch checked={column.enablePin === true} onCheckedChange={(checked) => setColumns((prev) => prev.map((item, idx) => idx === index ? { ...item, enablePin: checked } : item))} /><span>Pin</span></div>
-												<div className="flex items-center gap-1"><Switch checked={column.enableSort !== false} onCheckedChange={(checked) => setColumns((prev) => prev.map((item, idx) => idx === index ? { ...item, enableSort: checked } : item))} /><span>Sort</span></div>
-												<div className="flex items-center gap-1"><Switch checked={column.enableResize !== false} onCheckedChange={(checked) => setColumns((prev) => prev.map((item, idx) => idx === index ? { ...item, enableResize: checked } : item))} /><span>Resize</span></div>
-											</div>
-										</td>
-										<td className="px-2 py-2 text-right">
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon"
-												onClick={() => {
-													const confirmed = window.confirm("¿Eliminar esta columna de la configuración?");
-													if (!confirmed) return;
-													setColumns((prev) => prev.filter((_, idx) => idx !== index));
-												}}
-											>
-												<span className="sr-only">Eliminar columna</span>
-												<Trash2 className="h-4 w-4 text-destructive" />
-											</Button>
-										</td>
-									</tr>
+									<ConfigTableRow
+										key={column.id}
+										column={column}
+										index={index}
+										baseOptions={MAIN_TABLE_BASE_COLUMN_OPTIONS}
+										onMoveUp={handleMoveUp}
+										onMoveDown={handleMoveDown}
+										onUpdateColumn={handleUpdateColumn}
+										onDeleteColumn={handleDeleteColumn}
+									/>
 								))}
 							</tbody>
 						</table>

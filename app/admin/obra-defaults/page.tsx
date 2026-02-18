@@ -1179,7 +1179,7 @@ export default function ObraDefaultsPage() {
                 ? "bg-amber-100 dark:bg-amber-900/30"
                 : "bg-amber-100 dark:bg-amber-900/30"
                 }`}>
-	                {folderMode === "data" ? (
+                {folderMode === "data" ? (
                   <Table2 className="h-4 w-4 text-amber-600" />
                 ) : (
                   <FolderPlus className="h-4 w-4 text-amber-600" />

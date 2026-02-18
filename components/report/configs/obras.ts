@@ -21,8 +21,25 @@ export type ObraRow = {
 export type ObraFilters = {
 	supMin: string;
 	supMax: string;
-	entidades: string[];
 	entidadContains: string;
+	mesYear: string;
+	mesContains: string;
+	iniYear: string;
+	iniContains: string;
+	cmaMin: string;
+	cmaMax: string;
+	cafMin: string;
+	cafMax: string;
+	sacMin: string;
+	sacMax: string;
+	scMin: string;
+	scMax: string;
+	paMin: string;
+	paMax: string;
+	ptMin: string;
+	ptMax: string;
+	ptrMin: string;
+	ptrMax: string;
 	porcentajeMin: string;
 	porcentajeMax: string;
 	estado: "all" | "en-proceso" | "completadas";
@@ -171,9 +188,117 @@ export const obrasReportConfig: ReportConfig<ObraRow, ObraFilters> = {
 		},
 		{
 			id: "entidadContains",
-			label: "Entidad contiene",
+			label: "Entidad de obra contiene",
 			type: "text",
 			placeholder: "Nombre de entidad",
+		},
+		{
+			id: "mesYear",
+			label: "Mes básico: año",
+			type: "text",
+			placeholder: "Ej: 2026",
+		},
+		{
+			id: "mesContains",
+			label: "Mes básico contiene",
+			type: "text",
+			placeholder: "Ej: marzo",
+		},
+		{
+			id: "iniYear",
+			label: "Iniciación: año",
+			type: "text",
+			placeholder: "Ej: 2026",
+		},
+		{
+			id: "iniContains",
+			label: "Iniciación contiene",
+			type: "text",
+			placeholder: "Texto de fecha",
+		},
+		{
+			id: "cmaMin",
+			label: "Contrato+Ampliaciones mínimo",
+			type: "number",
+			placeholder: "Min",
+		},
+		{
+			id: "cmaMax",
+			label: "Contrato+Ampliaciones máximo",
+			type: "number",
+			placeholder: "Max",
+		},
+		{
+			id: "cafMin",
+			label: "Certificado a la fecha mínimo",
+			type: "number",
+			placeholder: "Min",
+		},
+		{
+			id: "cafMax",
+			label: "Certificado a la fecha máximo",
+			type: "number",
+			placeholder: "Max",
+		},
+		{
+			id: "sacMin",
+			label: "Saldo a certificar mínimo",
+			type: "number",
+			placeholder: "Min",
+		},
+		{
+			id: "sacMax",
+			label: "Saldo a certificar máximo",
+			type: "number",
+			placeholder: "Max",
+		},
+		{
+			id: "scMin",
+			label: "Según contrato mínimo",
+			type: "number",
+			placeholder: "Min",
+		},
+		{
+			id: "scMax",
+			label: "Según contrato máximo",
+			type: "number",
+			placeholder: "Max",
+		},
+		{
+			id: "paMin",
+			label: "Prórrogas mínimo",
+			type: "number",
+			placeholder: "Min",
+		},
+		{
+			id: "paMax",
+			label: "Prórrogas máximo",
+			type: "number",
+			placeholder: "Max",
+		},
+		{
+			id: "ptMin",
+			label: "Plazo total mínimo",
+			type: "number",
+			placeholder: "Min",
+		},
+		{
+			id: "ptMax",
+			label: "Plazo total máximo",
+			type: "number",
+			placeholder: "Max",
+		},
+		{
+			id: "ptrMin",
+			label: "Plazo transcurrido mínimo",
+			type: "number",
+			placeholder: "Min",
+		},
+		{
+			id: "ptrMax",
+			label: "Plazo transcurrido máximo",
+			type: "number",
+			placeholder: "Max",
 		},
 		{
 			id: "porcentajeMin",
@@ -201,61 +326,72 @@ export const obrasReportConfig: ReportConfig<ObraRow, ObraFilters> = {
 	defaultFilters: () => ({
 		supMin: "",
 		supMax: "",
-		entidades: [],
 		entidadContains: "",
+		mesYear: "",
+		mesContains: "",
+		iniYear: "",
+		iniContains: "",
+		cmaMin: "",
+		cmaMax: "",
+		cafMin: "",
+		cafMax: "",
+		sacMin: "",
+		sacMax: "",
+		scMin: "",
+		scMax: "",
+		paMin: "",
+		paMax: "",
+		ptMin: "",
+		ptMax: "",
+		ptrMin: "",
+		ptrMax: "",
 		porcentajeMin: "",
 		porcentajeMax: "",
 		estado: "all",
 	}),
 	fetchData: async (filters) => {
-		const response = await fetch("/api/obras", { cache: "no-store" });
+		const params = new URLSearchParams();
+		const add = (key: string, value: string) => {
+			const normalized = value.trim();
+			if (normalized) params.set(key, normalized);
+		};
+		add("supMin", filters.supMin);
+		add("supMax", filters.supMax);
+		add("entidadContains", filters.entidadContains);
+		add("mesYear", filters.mesYear);
+		add("mesContains", filters.mesContains);
+		add("iniYear", filters.iniYear);
+		add("iniContains", filters.iniContains);
+		add("cmaMin", filters.cmaMin);
+		add("cmaMax", filters.cmaMax);
+		add("cafMin", filters.cafMin);
+		add("cafMax", filters.cafMax);
+		add("sacMin", filters.sacMin);
+		add("sacMax", filters.sacMax);
+		add("scMin", filters.scMin);
+		add("scMax", filters.scMax);
+		add("paMin", filters.paMin);
+		add("paMax", filters.paMax);
+		add("ptMin", filters.ptMin);
+		add("ptMax", filters.ptMax);
+		add("ptrMin", filters.ptrMin);
+		add("ptrMax", filters.ptrMax);
+		add("porcentajeMin", filters.porcentajeMin);
+		add("porcentajeMax", filters.porcentajeMax);
+		if (filters.estado === "en-proceso") {
+			params.set("status", "in-process");
+		} else if (filters.estado === "completadas") {
+			params.set("status", "completed");
+		}
+
+		const query = params.toString();
+		const response = await fetch(`/api/obras${query ? `?${query}` : ""}`, { cache: "no-store" });
 		if (!response.ok) {
 			throw new Error("No se pudieron obtener las obras");
 		}
 		const payload = await response.json();
 		const obras = Array.isArray(payload.detalleObras) ? payload.detalleObras : [];
-
-		// Apply filters client-side
-		return obras.filter((obra: ObraRow) => {
-			// Surface filter
-			if (filters.supMin) {
-				const min = Number(filters.supMin);
-				if ((obra.supDeObraM2 ?? 0) < min) return false;
-			}
-			if (filters.supMax) {
-				const max = Number(filters.supMax);
-				if ((obra.supDeObraM2 ?? 0) > max) return false;
-			}
-
-			// Porcentaje filter
-			if (filters.porcentajeMin) {
-				const min = Number(filters.porcentajeMin);
-				if ((obra.porcentaje ?? 0) < min) return false;
-			}
-			if (filters.porcentajeMax) {
-				const max = Number(filters.porcentajeMax);
-				if ((obra.porcentaje ?? 0) > max) return false;
-			}
-
-			// Estado filter
-			if (filters.estado === "en-proceso") {
-				if ((obra.porcentaje ?? 0) >= 100) return false;
-			} else if (filters.estado === "completadas") {
-				if ((obra.porcentaje ?? 0) < 100) return false;
-			}
-			if (filters.entidadContains?.trim()) {
-				const entity = (obra.entidadContratante ?? "").toLowerCase();
-				if (!entity.includes(filters.entidadContains.trim().toLowerCase())) {
-					return false;
-				}
-			}
-			if (filters.entidades.length > 0) {
-				const entity = (obra.entidadContratante ?? "").trim();
-				if (!filters.entidades.includes(entity)) return false;
-			}
-
-			return true;
-		});
+		return obras as ObraRow[];
 	},
 	getRowId: (row) => row.id,
 	currencyLocale: "es-AR",

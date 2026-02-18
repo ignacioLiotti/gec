@@ -174,6 +174,10 @@ export async function POST(request: Request, context: RouteContext) {
 				: "";
 		const rawOcrTemplateId =
 			typeof body.ocrTemplateId === "string" ? body.ocrTemplateId : null;
+		const rawSpreadsheetTemplate =
+			typeof body.spreadsheetTemplate === "string"
+				? body.spreadsheetTemplate.trim()
+				: "";
 		const normalizedOcrFolderPath = normalizeFolderPath(
 			rawOcrFolderPath || rawOcrFolderName
 		);
@@ -211,6 +215,7 @@ export async function POST(request: Request, context: RouteContext) {
 				ocrDocType: rawOcrDocType || null,
 				ocrInstructions: rawOcrInstructions || null,
 				ocrTemplateId: rawOcrTemplateId,
+				spreadsheetTemplate: rawSpreadsheetTemplate || "auto",
 				dataInputMethod,
 			};
 		}
@@ -266,28 +271,7 @@ export async function POST(request: Request, context: RouteContext) {
 
 		const supabase = await createClient();
 
-		if (needsOcrFolder && normalizedOcrFolderPath) {
-			const { data: existingOcr, error: existingOcrError } = await supabase
-				.from("obra_tablas")
-				.select("id, settings")
-				.eq("obra_id", obraId)
-				.eq("source_type", "ocr");
-			if (existingOcrError) throw existingOcrError;
-			const folderTaken = (existingOcr ?? []).some((tabla) => {
-				const tablaSettings = (tabla.settings as Record<string, unknown>) ?? {};
-				const folderValueRaw = tablaSettings["ocrFolder"];
-				const folderValue =
-					typeof folderValueRaw === "string" ? folderValueRaw : "";
-				const normalizedExisting = normalizeFolderPath(folderValue);
-				return normalizedExisting === normalizedOcrFolderPath;
-			});
-			if (folderTaken) {
-				return NextResponse.json(
-					{ error: "Ya existe una tabla OCR asociada a esa carpeta" },
-					{ status: 400 }
-				);
-			}
-		}
+		// Allow N OCR tables per folder path. Extraction fan-out is handled in file-manager upload/retry.
 		const { data: tabla, error: tablaError } = await supabase
 			.from("obra_tablas")
 			.insert({

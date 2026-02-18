@@ -22,6 +22,7 @@ type DocumentSheetProps = {
 	onToggleDataSheet?: () => void;
 	showDataToggle?: boolean;
 	isDataSheetOpen?: boolean;
+	dataTableSelector?: ReactNode;
 };
 
 export const DocumentSheet = memo(function DocumentSheet({
@@ -37,6 +38,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 	onToggleDataSheet,
 	showDataToggle = false,
 	isDataSheetOpen = false,
+	dataTableSelector,
 }: DocumentSheetProps) {
 	if (!isOpen || !document) {
 		return null;
@@ -72,6 +74,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 							)}
 						</div>
 						<div className="flex items-center gap-2">
+							{dataTableSelector}
 							{showDataToggle && (
 								<Button
 									variant="secondary"

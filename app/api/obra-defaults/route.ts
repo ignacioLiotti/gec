@@ -33,6 +33,7 @@ type QuickAction = {
 	description: string | null;
 	folderPaths: string[];
 	position: number;
+	obraId?: string | null;
 };
 
 function isMissingQuickActionsTableError(error: unknown): boolean {
@@ -40,6 +41,12 @@ function isMissingQuickActionsTableError(error: unknown): boolean {
 	const maybe = error as { code?: string; message?: string };
 	if (maybe.code !== "PGRST205") return false;
 	return (maybe.message ?? "").includes("obra_default_quick_actions");
+}
+
+function isMissingQuickActionObraScopeColumn(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const maybe = error as { code?: string; message?: string };
+	return maybe.code === "42703" || (maybe.message ?? "").includes("obra_id");
 }
 
 async function getAuthContext() {
@@ -86,7 +93,7 @@ async function getAuthContext() {
 	return { supabase, user, tenantId: membership?.tenant_id ?? null };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
 	const { supabase, user, tenantId } = await getAuthContext();
 
 	if (!user) {
@@ -98,6 +105,13 @@ export async function GET() {
 	}
 
 	try {
+		const { searchParams } = new URL(request.url);
+		const obraIdParam = searchParams.get("obraId");
+		const obraId =
+			typeof obraIdParam === "string" && obraIdParam.trim()
+				? obraIdParam.trim()
+				: null;
+
 		// Fetch folders
 		const { data: folders, error: foldersError } = await supabase
 			.from("obra_default_folders")
@@ -208,11 +222,28 @@ export async function GET() {
 			};
 		});
 
-			const { data: quickActions, error: quickActionsError } = await supabase
+			const quickActionsQuery = supabase
 				.from("obra_default_quick_actions")
-				.select("id, name, description, folder_paths, position")
+				.select("id, name, description, folder_paths, position, obra_id")
 				.eq("tenant_id", tenantId)
 				.order("position", { ascending: true });
+			if (obraId) {
+				quickActionsQuery.or(`obra_id.is.null,obra_id.eq.${obraId}`);
+			} else {
+				quickActionsQuery.is("obra_id", null);
+			}
+			let { data: quickActions, error: quickActionsError } =
+				await quickActionsQuery;
+			if (quickActionsError && isMissingQuickActionObraScopeColumn(quickActionsError)) {
+				// Backward compatibility: environments without migration 0081 still have global quick actions.
+				const fallback = await supabase
+					.from("obra_default_quick_actions")
+					.select("id, name, description, folder_paths, position")
+					.eq("tenant_id", tenantId)
+					.order("position", { ascending: true });
+				quickActions = fallback.data as any;
+				quickActionsError = fallback.error as any;
+			}
 
 			if (quickActionsError) {
 				if (isMissingQuickActionsTableError(quickActionsError)) {
@@ -230,12 +261,13 @@ export async function GET() {
 
 		return NextResponse.json({
 			folders: enrichedFolders,
-			quickActions: (quickActions ?? []).map((action): QuickAction => ({
+				quickActions: (quickActions ?? []).map((action: any): QuickAction => ({
 				id: action.id,
 				name: action.name,
 				description: action.description,
 				folderPaths: action.folder_paths ?? [],
 				position: action.position ?? 0,
+				obraId: action.obra_id ?? null,
 			})),
 		});
 	} catch (error) {
@@ -522,13 +554,63 @@ export async function POST(request: Request) {
 			}
 
 			const description = typeof body.description === "string" ? body.description.trim() : null;
+			const obraId =
+				typeof body.obraId === "string" && body.obraId.trim()
+					? body.obraId.trim()
+					: null;
 
-				const { data: existingActions, error: existingActionsError } = await supabase
+			if (obraId) {
+				const { data: obra, error: obraError } = await supabase
+					.from("obras")
+					.select("id")
+					.eq("tenant_id", tenantId)
+					.eq("id", obraId)
+					.is("deleted_at", null)
+					.maybeSingle();
+				if (obraError) throw obraError;
+				if (!obra) {
+					return NextResponse.json(
+						{ error: "La obra indicada no existe o no pertenece al tenant activo." },
+						{ status: 400 }
+					);
+				}
+			}
+
+				const supportsObraScopeProbe = await supabase
+					.from("obra_default_quick_actions")
+					.select("obra_id")
+					.eq("tenant_id", tenantId)
+					.limit(1);
+				const supportsObraScope = !(
+					supportsObraScopeProbe.error &&
+					isMissingQuickActionObraScopeColumn(supportsObraScopeProbe.error)
+				);
+
+				if (obraId && !supportsObraScope) {
+					return NextResponse.json(
+						{
+							error:
+								"Quick actions por obra no disponibles aún: falta aplicar la migración 0081_obra_quick_actions_scope.sql",
+						},
+						{ status: 503 }
+					);
+				}
+
+				const existingActionsQuery = supabase
 					.from("obra_default_quick_actions")
 					.select("position")
 					.eq("tenant_id", tenantId)
 					.order("position", { ascending: false })
 					.limit(1);
+				if (obraId) {
+					existingActionsQuery.eq("obra_id", obraId);
+				} else {
+					if (supportsObraScope) {
+						existingActionsQuery.is("obra_id", null);
+					}
+				}
+				const { data: existingActions, error: existingActionsError } =
+					await existingActionsQuery;
 				if (existingActionsError) {
 					if (isMissingQuickActionsTableError(existingActionsError)) {
 						return NextResponse.json(
@@ -541,16 +623,21 @@ export async function POST(request: Request) {
 
 			const nextPosition = (existingActions?.[0]?.position ?? -1) + 1;
 
-				const { data: quickAction, error: quickActionError } = await supabase
-					.from("obra_default_quick_actions")
-					.insert({
+				const quickActionInsertPayload: Record<string, unknown> = {
 					tenant_id: tenantId,
 					name: rawName,
 					description,
 					folder_paths: folderPaths,
 					position: nextPosition,
-				})
-					.select("id, name, description, folder_paths, position")
+				};
+				if (supportsObraScope) {
+					quickActionInsertPayload.obra_id = obraId;
+				}
+
+				const { data: quickAction, error: quickActionError } = await supabase
+					.from("obra_default_quick_actions")
+					.insert(quickActionInsertPayload as any)
+					.select("id, name, description, folder_paths, position, obra_id")
 					.single();
 
 				if (quickActionError) {
@@ -570,6 +657,7 @@ export async function POST(request: Request) {
 					description: quickAction.description,
 					folderPaths: quickAction.folder_paths ?? [],
 					position: quickAction.position ?? 0,
+					obraId: quickAction.obra_id ?? null,
 				} as QuickAction,
 			});
 		}

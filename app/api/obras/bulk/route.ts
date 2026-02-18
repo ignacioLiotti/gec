@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { obraSchema } from "@/app/excel/schema";
-import { getAuthContext } from "../route";
+import {
+	getAuthContext,
+	loadTenantMainTableCustomColumnIds,
+	sanitizeCustomData,
+} from "../route";
 
 const updateSchema = obraSchema.refine(
 	(data) => data.id || (data.n && data.n > 0),
@@ -46,8 +50,12 @@ export async function PATCH(request: Request) {
 	}
 
 	const { updates } = parsed.data;
+	const allowedCustomColumnIds = await loadTenantMainTableCustomColumnIds(
+		supabase,
+		tenantId
+	);
 
-	const buildPayload = (supportsConfig: boolean) =>
+	const buildPayload = (supportsConfig: boolean, supportsCustomData: boolean) =>
 		updates.map((obra) => {
 			const base: Record<string, unknown> = {
 				tenant_id: tenantId,
@@ -68,6 +76,12 @@ export async function PATCH(request: Request) {
 				deleted_at: null,
 				deleted_by: null,
 			};
+			if (supportsCustomData) {
+				base.custom_data = sanitizeCustomData(
+					obra.customData,
+					allowedCustomColumnIds
+				);
+			}
 
 			if (obra.id) {
 				base.id = obra.id;
@@ -83,21 +97,40 @@ export async function PATCH(request: Request) {
 		});
 
 	let supportsConfigColumns = true;
+	let supportsCustomData = true;
 
 	let { error } = await supabase
 		.from("obras")
-		.upsert(buildPayload(supportsConfigColumns), {
+		.upsert(buildPayload(supportsConfigColumns, supportsCustomData), {
 			onConflict: "tenant_id,n",
 		});
 
 	if (error && error.code === "42703") {
+		console.warn(
+			"Obras PATCH bulk: on_finish_* columns missing, retrying without config columns",
+			{ message: error.message }
+		);
 		supportsConfigColumns = false;
 		const fallback = await supabase
 			.from("obras")
-			.upsert(buildPayload(supportsConfigColumns), {
+			.upsert(buildPayload(supportsConfigColumns, supportsCustomData), {
 				onConflict: "tenant_id,n",
 			});
 		error = fallback.error;
+	}
+
+	if (error && error.code === "42703") {
+		console.warn(
+			"Obras PATCH bulk: custom_data column missing, retrying without custom data",
+			{ message: error.message }
+		);
+		supportsCustomData = false;
+		const fallbackLegacy = await supabase
+			.from("obras")
+			.upsert(buildPayload(false, false), {
+				onConflict: "tenant_id,n",
+			});
+		error = fallbackLegacy.error;
 	}
 
 	if (error) {

@@ -85,22 +85,25 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const rowsByTabla = new Map<string, any[]>();
-    await Promise.all(
-      tablaIds.map(async (tablaId) => {
-        const { data: rows, error: rowsError } = await supabase
-          .from("obra_tabla_rows")
-          .select("id, tabla_id, data, source, created_at, updated_at")
-          .eq("tabla_id", tablaId)
-          .order("created_at", { ascending: false })
-          .limit(rowsLimit);
-        if (rowsError) {
-          console.error("[ocr-links:get] rows error:", rowsError);
-          rowsByTabla.set(tablaId, []);
-          return;
-        }
-        rowsByTabla.set(tablaId, rows ?? []);
-      })
-    );
+    for (const tablaId of tablaIds) rowsByTabla.set(tablaId, []);
+    const scanLimit = Math.min(100_000, Math.max(rowsLimit * tablaIds.length * 8, rowsLimit));
+    const { data: rows, error: rowsError } = await supabase
+      .from("obra_tabla_rows")
+      .select("id, tabla_id, data, source, created_at, updated_at")
+      .in("tabla_id", tablaIds)
+      .order("created_at", { ascending: false })
+      .limit(scanLimit);
+    if (rowsError) {
+      console.error("[ocr-links:get] rows error:", rowsError);
+    } else {
+      for (const row of rows ?? []) {
+        const tablaId = row.tabla_id as string;
+        const bucket = rowsByTabla.get(tablaId);
+        if (!bucket) continue;
+        if (bucket.length >= rowsLimit) continue;
+        bucket.push(row);
+      }
+    }
 
     const links = (tablas ?? [])
       .map((tabla) => {
