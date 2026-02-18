@@ -418,6 +418,12 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 			const withPeriod = normalizedRows.filter(
 				(r): r is typeof r & { period: string } => typeof r.period === "string",
 			);
+			const derivedStartPeriod =
+				withPeriod.length > 0
+					? [...withPeriod]
+						.map((r) => r.period)
+						.sort((a, b) => a.localeCompare(b))[0]
+					: null;
 			if (withPeriod.length > 0) {
 				const ranked = withPeriod
 					.map((r) => ({
@@ -469,7 +475,8 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 			if (curve.plan?.mode === "linear" && curve.plan.months) {
 				if (periodKey || currentPeriodKey) {
 					const targetPeriod = periodKey ?? currentPeriodKey;
-					const startPeriod = curve.plan.startPeriod ?? targetPeriod;
+					const startPeriod =
+						derivedStartPeriod ?? curve.plan.startPeriod ?? targetPeriod;
 					const diff = monthsDiff(startPeriod, targetPeriod);
 					const monthIndex = diff != null ? diff + 1 : 1;
 					planPct = Math.min(100, (monthIndex / curve.plan.months) * 100);
@@ -519,7 +526,16 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 				{
 					signal_key: "progress.plan_pct",
 					inputs_json: { plan: curve.plan, periodKey },
-					outputs_json: { planPct },
+					outputs_json: {
+						planPct,
+						startPeriodSource: derivedStartPeriod
+							? "derived_from_measurements"
+							: curve.plan?.startPeriod
+								? "configured"
+								: "target_fallback",
+						startPeriodUsed:
+							derivedStartPeriod ?? curve.plan?.startPeriod ?? (periodKey ?? currentPeriodKey),
+					},
 				},
 				{
 					signal_key: "progress.delta_pct",

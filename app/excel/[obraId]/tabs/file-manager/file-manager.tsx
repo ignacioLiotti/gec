@@ -3603,7 +3603,7 @@ export function FileManager({
 
     return {
       tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${activeOcrTablaId ?? 'none'}`,
-      title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
+      // title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns: allColumns,
       allowAddRows: false,
@@ -3923,7 +3923,7 @@ export function FileManager({
               </SelectContent>
             </Select>
           )}
-          {/* <Button
+          <Button
             type="button"
             variant="secondary"
             size="sm"
@@ -3932,7 +3932,7 @@ export function FileManager({
           >
             <Layers className="w-3.5 h-3.5" />
             Editar columnas
-          </Button> */}
+          </Button>
           <Button
             type="button"
             variant="secondary"
