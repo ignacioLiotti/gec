@@ -145,7 +145,7 @@ export type ServerPaginationMeta = {
 
 export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	tableId: string;
-	title: string;
+	title?: string;
 	description?: string;
 	columns: ColumnDef<Row>[];
 	toolbarActions?: ReactNode;
@@ -192,7 +192,6 @@ export type RowColorInfo = {
 	tone: RowColorTone;
 	previewing: boolean;
 };
-
 
 
 
