@@ -214,6 +214,22 @@ function sanitizeFileName(base: string) {
     .toLowerCase();
 }
 
+function inferMimeType(fileNameOrPath: string | null | undefined) {
+  const value = (fileNameOrPath ?? "").toLowerCase();
+  if (value.endsWith(".pdf")) return "application/pdf";
+  if (value.endsWith(".png")) return "image/png";
+  if (value.endsWith(".jpg") || value.endsWith(".jpeg")) return "image/jpeg";
+  if (value.endsWith(".webp")) return "image/webp";
+  if (value.endsWith(".gif")) return "image/gif";
+  if (value.endsWith(".bmp")) return "image/bmp";
+  if (value.endsWith(".tif") || value.endsWith(".tiff")) return "image/tiff";
+  return "application/octet-stream";
+}
+
+function isOcrSupportedMime(mime: string) {
+  return mime.startsWith("image/") || mime === "application/pdf";
+}
+
 function dataUrlToBuffer(imageDataUrl: string) {
   const match = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
   if (!match) {
@@ -232,11 +248,7 @@ function estimateBase64Size(dataUrl: string | null): number {
   return Math.floor((base64.length * 3) / 4);
 }
 
-function estimateOcrTokenUsage(file: File | null, dataUrl: string | null): number {
-  const baseBytes =
-    typeof file?.size === "number" && file.size > 0
-      ? file.size
-      : estimateBase64Size(dataUrl);
+function estimateOcrTokenUsage(baseBytes: number): number {
   if (!baseBytes) return DEFAULT_OCR_TOKEN_RESERVE;
   const approx = Math.round((baseBytes / 1024) * 40);
   return Math.min(MAX_OCR_TOKEN_RESERVE, Math.max(MIN_OCR_TOKEN_RESERVE, approx));
@@ -488,7 +500,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         : null;
     if (storageInfo) storageInfoForError = storageInfo;
 
-    let fetchedImageDataUrl: string | null = null;
+    let fetchedDocumentBytes: Uint8Array | null = null;
+    let fetchedDocumentMime: string | null = null;
     if (!file && typeof imageDataUrl !== "string" && storageInfo) {
       const { data: fileData, error: downloadError } = await supabase.storage
         .from(storageInfo.bucket)
@@ -501,24 +514,34 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
       if (fileData) {
         const arrayBuffer = await fileData.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const mime = fileData.type || "image/png";
-        if (!mime.startsWith("image/")) {
-          return NextResponse.json({ error: "El archivo existente no es una imagen" }, { status: 400 });
+        const mimeFromBlob = typeof fileData.type === "string" ? fileData.type.trim() : "";
+        const mime =
+          mimeFromBlob && mimeFromBlob !== "application/octet-stream"
+            ? mimeFromBlob
+            : inferMimeType(storageInfo.fileName || storageInfo.path);
+        if (!isOcrSupportedMime(mime)) {
+          return NextResponse.json({ error: "El archivo existente no es compatible (PDF o imagen)." }, { status: 400 });
         }
-        fetchedImageDataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
+        fetchedDocumentBytes = new Uint8Array(arrayBuffer);
+        fetchedDocumentMime = mime;
       }
     }
 
     const effectiveImageDataUrl =
-      typeof imageDataUrl === "string" ? imageDataUrl : fetchedImageDataUrl;
-    if (!file && !effectiveImageDataUrl) {
-      return NextResponse.json({ error: "Se requiere un archivo o imageDataUrl" }, { status: 400 });
+      typeof imageDataUrl === "string" ? imageDataUrl : null;
+    if (!file && !effectiveImageDataUrl && !fetchedDocumentBytes) {
+      return NextResponse.json({ error: "Se requiere un archivo, imageDataUrl o existingPath válido" }, { status: 400 });
     }
 
     const enforceAiLimit = typeof planLimits.aiTokens === "number" && planLimits.aiTokens > 0;
+    const estimatedInputBytes =
+      (typeof file?.size === "number" && file.size > 0
+        ? file.size
+        : estimateBase64Size(effectiveImageDataUrl)) ||
+      fetchedDocumentBytes?.byteLength ||
+      0;
     const tokenReservationTarget = enforceAiLimit
-      ? estimateOcrTokenUsage(file, effectiveImageDataUrl)
+      ? estimateOcrTokenUsage(estimatedInputBytes)
       : 0;
     if (enforceAiLimit && tokenReservationTarget > 0) {
       try {
@@ -614,16 +637,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
       extraction = parsed as Record<string, any>;
       rawExtractionResult = parsed;
     } else if (file) {
-      if (!file.type?.startsWith("image/")) {
-        if (file.type?.includes("pdf")) {
-          return NextResponse.json({ error: "Convierte el PDF a imagen antes de enviarlo" }, { status: 422 });
-        }
+      const mimeFromFile = typeof file.type === "string" ? file.type.trim() : "";
+      const fileMime =
+        mimeFromFile && mimeFromFile !== "application/octet-stream"
+          ? mimeFromFile
+          : inferMimeType(file.name);
+      if (!isOcrSupportedMime(fileMime)) {
         return NextResponse.json({ error: "Tipo de archivo no soportado (PDF o imagen)" }, { status: 400 });
       }
       const parsed = await runGenerateTextFallback(
         new Uint8Array(Buffer.from(await file.arrayBuffer())),
-        file.type || "image/png"
+        fileMime
       );
+      extraction = parsed as Record<string, any>;
+      rawExtractionResult = parsed;
+    } else if (fetchedDocumentBytes && fetchedDocumentMime) {
+      const parsed = await runGenerateTextFallback(fetchedDocumentBytes, fetchedDocumentMime);
       extraction = parsed as Record<string, any>;
       rawExtractionResult = parsed;
     }

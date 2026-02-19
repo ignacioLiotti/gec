@@ -446,42 +446,64 @@ export function AppSidebar({
 										<React.Fragment key={item.title}>
 											{/* Tablas dropdown - inserted before Notifications */}
 											{showTablasBeforeThis && (
-												<Collapsible defaultOpen className="group/collapsible">
+												state === "collapsed" ? (
 													<SidebarMenuItem>
-														<CollapsibleTrigger asChild>
-															<SidebarMenuButton tooltip="Tablas">
-																<Table2 className="size-4" />
-																<span>Tablas</span>
-																<ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-															</SidebarMenuButton>
-														</CollapsibleTrigger>
-														<CollapsibleContent>
-															<SidebarMenuSub>
+														<DropdownMenu>
+															<DropdownMenuTrigger asChild>
+																<SidebarMenuButton tooltip="Tablas">
+																	<Table2 className="size-4" />
+																</SidebarMenuButton>
+															</DropdownMenuTrigger>
+															<DropdownMenuContent side="right" align="start" className="w-72">
+																<DropdownMenuLabel>Tablas</DropdownMenuLabel>
+																<DropdownMenuSeparator />
 																{sidebarMacroTables.map((table) => {
 																	const isTableActive = pathname === `/macro/${table.id}`;
 																	return (
-																		<SidebarMenuSubItem key={table.id}>
-																			<SidebarMenuSubButton asChild isActive={isTableActive}>
-																				<Link href={`/macro/${table.id}`}>
-																					<Columns3 className="size-4" />
-																					{table.name}
-																				</Link>
-																			</SidebarMenuSubButton>
-																		</SidebarMenuSubItem>
+																		<DropdownMenuItem key={table.id} asChild>
+																			<Link
+																				href={`/macro/${table.id}`}
+																				className={isTableActive ? "font-semibold" : undefined}
+																			>
+																				<Columns3 className="size-4" />
+																				<span className="truncate">{table.name}</span>
+																			</Link>
+																		</DropdownMenuItem>
 																	);
 																})}
-																{/* <SidebarMenuSubItem>
-																	<SidebarMenuSubButton asChild>
-																		<Link href="/macro">
-																			<Columns3Cog className="size-4" />
-																			<span>Todas las Tablas</span>
-																		</Link>
-																	</SidebarMenuSubButton>
-																</SidebarMenuSubItem> */}
-															</SidebarMenuSub>
-														</CollapsibleContent>
+															</DropdownMenuContent>
+														</DropdownMenu>
 													</SidebarMenuItem>
-												</Collapsible>
+												) : (
+													<Collapsible defaultOpen className="group/collapsible">
+														<SidebarMenuItem>
+															<CollapsibleTrigger asChild>
+																<SidebarMenuButton tooltip="Tablas">
+																	<Table2 className="size-4" />
+																	<span>Tablas</span>
+																	<ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+																</SidebarMenuButton>
+															</CollapsibleTrigger>
+															<CollapsibleContent>
+																<SidebarMenuSub>
+																	{sidebarMacroTables.map((table) => {
+																		const isTableActive = pathname === `/macro/${table.id}`;
+																		return (
+																			<SidebarMenuSubItem key={table.id}>
+																				<SidebarMenuSubButton asChild isActive={isTableActive}>
+																					<Link href={`/macro/${table.id}`}>
+																						<Columns3 className="size-4" />
+																						{table.name}
+																					</Link>
+																				</SidebarMenuSubButton>
+																			</SidebarMenuSubItem>
+																		);
+																	})}
+																</SidebarMenuSub>
+															</CollapsibleContent>
+														</SidebarMenuItem>
+													</Collapsible>
+												)
 											)}
 											<SidebarMenuItem>
 												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>

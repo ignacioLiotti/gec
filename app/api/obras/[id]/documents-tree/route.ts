@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient } from "@/utils/supabase/server";
@@ -93,6 +94,9 @@ export async function GET(request: Request, context: RouteContext) {
     const rowsLimit = Math.min(500, Math.max(1, Number.isFinite(limitParam) ? limitParam : 500));
 
     const supabase = await createClient();
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
 
     // Ensure obra exists (RLS will enforce tenant access)
     const { data: obraRow, error: obraError } = await supabase
@@ -295,6 +299,30 @@ export async function GET(request: Request, context: RouteContext) {
       }
     }
 
+    const uploadTrackingByPath = new Map<
+      string,
+      { uploadedBy: string | null; uploadedAt: string | null }
+    >();
+    const { data: trackedUploads, error: trackedUploadsError } = await supabase
+      .from("obra_document_uploads")
+      .select("storage_path, uploaded_by, uploaded_at")
+      .eq("obra_id", obraId);
+    if (trackedUploadsError) {
+      console.error("[documents-tree:get] tracked uploads error:", trackedUploadsError);
+    } else {
+      for (const upload of trackedUploads ?? []) {
+        const storagePath =
+          typeof upload.storage_path === "string" ? upload.storage_path : null;
+        if (!storagePath) continue;
+        uploadTrackingByPath.set(storagePath, {
+          uploadedBy:
+            typeof upload.uploaded_by === "string" ? upload.uploaded_by : null,
+          uploadedAt:
+            typeof upload.uploaded_at === "string" ? upload.uploaded_at : null,
+        });
+      }
+    }
+
     // Build full tree recursively by traversing each storage folder.
     const queue: string[] = [""];
     const seen = new Set<string>([""]);
@@ -331,6 +359,23 @@ export async function GET(request: Request, context: RouteContext) {
           ? `${obraId}/${currentRelative}/${item.name}`
           : `${obraId}/${item.name}`;
         const docStatus = docsByPath.get(storagePath);
+        const trackedUpload = uploadTrackingByPath.get(storagePath);
+        const storageOwner =
+          typeof (item as any)?.owner === "string"
+            ? ((item as any).owner as string)
+            : typeof (item as any)?.owner_id === "string"
+              ? ((item as any).owner_id as string)
+              : typeof (item as any)?.user_id === "string"
+                ? ((item as any).user_id as string)
+                : null;
+        const storageCreatedAt =
+          typeof (item as any)?.created_at === "string"
+            ? ((item as any).created_at as string)
+            : typeof (item as any)?.updated_at === "string"
+              ? ((item as any).updated_at as string)
+              : typeof (item as any)?.last_accessed_at === "string"
+                ? ((item as any).last_accessed_at as string)
+                : null;
         const fileItem: any = {
           id: `file-${storagePath}`,
           name: item.name,
@@ -346,6 +391,14 @@ export async function GET(request: Request, context: RouteContext) {
           ocrDocumentId: docStatus?.id,
           ocrDocumentError: docStatus?.error_message ?? null,
           ocrRowsExtracted: docStatus?.rows_extracted ?? null,
+          uploadedAt: trackedUpload?.uploadedAt ?? storageCreatedAt,
+          uploadedByUserId: trackedUpload?.uploadedBy ?? storageOwner,
+          uploadedByLabel:
+            (trackedUpload?.uploadedBy ?? storageOwner) &&
+            currentUser?.id &&
+            (trackedUpload?.uploadedBy ?? storageOwner) === currentUser.id
+              ? "Vos"
+              : trackedUpload?.uploadedBy ?? storageOwner,
         };
         parentNode.children?.push(fileItem);
       }

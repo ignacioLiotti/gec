@@ -322,7 +322,7 @@ export function FormTableContent({ className }: { className?: string }) {
 
 	return (
 		<>
-			{isServerPaging && serverError && (
+			{serverError && (
 				<div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
 					{serverError}
 				</div>
@@ -351,16 +351,13 @@ export function FormTableContent({ className }: { className?: string }) {
 									}}
 								/>
 							))}
-							{showActionsColumn && (
-								<col
-									ref={(el) => {
-										colRefs.current[columnDefs.length] = el;
-									}}
-									style={{
-										width: `${colWidths[columnDefs.length] ?? 140}px`,
-									}}
-								/>
-							)}
+								{showActionsColumn && (
+									<col
+										style={{
+											width: `${colWidths[columnDefs.length] ?? 140}px`,
+										}}
+									/>
+								)}
 						</colgroup>
 						<thead className="sticky top-0 z-30 bg-sidebar">
 							<tr>
@@ -845,7 +842,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			rowsById: {},
 		},
 	});
-	const setFormFieldValue = form.setFieldValue as (path: string, updater: any) => void;
+		const setFormFieldValue = form.setFieldValue as (path: string, updater: unknown) => void;
 	type FormStateType = typeof form.store.state;
 
 	const rowOrderSelector = useCallback<(state: FormStateType) => string[]>(
@@ -1691,6 +1688,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const handleSave = useCallback(async () => {
 		if (!hasUnsavedChanges) return;
 		setIsSaving(true);
+		setServerError(null);
 		try {
 			if (config.onSave) {
 				const dirtyRows = rows.filter((row) =>
@@ -1706,8 +1704,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			initialValuesRef.current = snapshotValues(rowOrder, rowsById);
 			toast.success("Cambios guardados correctamente");
 		} catch (error) {
-			console.error("Error saving rows", error);
-			toast.error("No se pudieron guardar los cambios");
+			const errorMessage =
+				error instanceof Error && error.message
+					? error.message
+					: "No se pudieron guardar los cambios";
+			setServerError(errorMessage);
+			toast.error(errorMessage);
 		} finally {
 			setIsSaving(false);
 		}

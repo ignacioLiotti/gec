@@ -41,7 +41,7 @@ const securityHeaders: Record<string, string> = {
 		`font-src ${trustedSources.join(" ")}`,
 		`connect-src ${trustedSources
 			.concat(sentrySources)
-			.join(" ")} ${wsSources.join(" ")}`,
+			.join(" ")} ${wsSources.join(" ")} blob:`,
 		`media-src ${trustedSources.join(" ")} data: blob:`,
 		`worker-src ${trustedSources.join(" ")} blob:`,
 		"frame-ancestors 'none'",

@@ -96,6 +96,7 @@ export function EnhancedDocumentViewer({
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
+  const [pdfUseUrlFallback, setPdfUseUrlFallback] = useState<boolean>(false);
   const memoizedPdfFile = useMemo(() => (pdfData ? { data: pdfData } : undefined), [pdfData]);
 
   // UI state
@@ -130,22 +131,47 @@ export function EnhancedDocumentViewer({
     setPdfLoading(true);
     setPdfLoadError(null);
     setPdfData(null);
+    setPdfUseUrlFallback(false);
+
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     const fetchPdf = async () => {
       try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) {
-          throw new Error(`Failed to fetch PDF (status ${response.status})`);
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          if (controller.signal.aborted) return;
+          try {
+            const response = await fetch(url, {
+              signal: controller.signal,
+              cache: 'no-store',
+            });
+            if (!response.ok) {
+              throw new Error(`Failed to fetch PDF (status ${response.status})`);
+            }
+            const buffer = await response.arrayBuffer();
+            if (!controller.signal.aborted) {
+              setPdfData(new Uint8Array(buffer));
+              setPdfUseUrlFallback(false);
+            }
+            return;
+          } catch (error) {
+            if ((error as Error).name === 'AbortError') return;
+            lastError = error as Error;
+            if (attempt < 5) {
+              await wait(700);
+            }
+          }
         }
-        const buffer = await response.arrayBuffer();
-        if (!controller.signal.aborted) {
-          setPdfData(new Uint8Array(buffer));
-        }
+        throw lastError ?? new Error('Failed to fetch PDF');
       } catch (error) {
         if ((error as Error).name === 'AbortError') return;
-        console.error('Error fetching PDF data:', error);
+        // CSP or strict network policies may block fetch(url). In that case,
+        // fall back to passing the URL directly to react-pdf.
+        console.error('Error fetching PDF data, falling back to URL mode:', error);
         if (!controller.signal.aborted) {
-          setPdfLoadError('No se pudo cargar el PDF');
+          setPdfData(null);
+          setPdfUseUrlFallback(true);
+          setPdfLoadError(null);
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -446,7 +472,7 @@ export function EnhancedDocumentViewer({
           {/* Main PDF viewer */}
           <div className="flex-1 overflow-auto bg-muted/20 p-4">
             <div className="flex justify-center">
-              {pdfLoading && (
+              {pdfLoading && !pdfUseUrlFallback && (
                 <div className="flex items-center justify-center p-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
@@ -459,9 +485,9 @@ export function EnhancedDocumentViewer({
                 </div>
               )}
 
-              {!pdfLoading && !pdfLoadError && memoizedPdfFile && (
+              {!pdfLoading && !pdfLoadError && (memoizedPdfFile || pdfUseUrlFallback) && (
                 <PDFDocument
-                  file={memoizedPdfFile}
+                  file={memoizedPdfFile ?? url}
                   onLoadSuccess={onDocumentLoadSuccess}
                 >
                   <PDFPage

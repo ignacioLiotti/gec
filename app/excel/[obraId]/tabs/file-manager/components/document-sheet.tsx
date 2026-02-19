@@ -41,6 +41,18 @@ export const DocumentSheet = memo(function DocumentSheet({
 	if (!isOpen || !document) {
 		return null;
 	}
+
+	const uploadedAtLabel = (() => {
+		if (!document.uploadedAt) return null;
+		const parsed = new Date(document.uploadedAt);
+		if (Number.isNaN(parsed.getTime())) return document.uploadedAt;
+		return new Intl.DateTimeFormat("es-AR", {
+			dateStyle: "medium",
+			timeStyle: "short",
+		}).format(parsed);
+	})();
+	const uploadedByLabel = document.uploadedByLabel ?? document.uploadedByUserId ?? null;
+
 	return (
 		<Sheet open={isOpen} onOpenChange={onOpenChange} modal={false}>
 			<div className="z-30 bg-black/40 pointer-events-none fixed inset-0 backdrop-blur-xs" />
@@ -54,24 +66,34 @@ export const DocumentSheet = memo(function DocumentSheet({
 					event.preventDefault();
 				}}
 				className={cn(
-					"mx-auto flex h-[95vh] w-full max-w-3xl flex-col gap-0 p-0 z-50 mb-6 transition-transform duration-300",
-					isDataSheetOpen ? "-translate-x-72" : ""
+					"mx-auto flex h-[100dvh] sm:h-[95vh] w-full max-w-[100vw] sm:max-w-[700px] 2xl:max-w-[800px] flex-col gap-0 p-0 z-50 mb-0 sm:mb-6 transition-transform duration-300",
+					isDataSheetOpen ? "2xl:-translate-x-[22rem] xl:-translate-x-[18rem]" : ""
 				)}
 			>
-				<SheetHeader className="border-b bg-white px-6 py-4">
-					<div className="flex items-start justify-between gap-3 mr-10">
+				<SheetHeader className="border-b bg-white px-3 sm:px-6 py-3 sm:py-4">
+					<div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
 						<div className="min-w-0 flex-1">
 							<div className="flex items-center gap-2">
 								<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
 								{ocrStatusBadge}
 							</div>
-							{breadcrumb && (
-								<SheetDescription className="truncate text-xs uppercase tracking-wide text-stone-400">
-									{breadcrumb}
-								</SheetDescription>
-							)}
+							<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+
+								{breadcrumb && (
+									<SheetDescription className="truncate text-xs uppercase tracking-wide text-stone-400">
+										{breadcrumb}
+									</SheetDescription>
+								)}
+								{(uploadedAtLabel || uploadedByLabel) && (
+									<div className="mt-1 text-xs text-stone-500 break-words">
+										{uploadedByLabel && <span>Subido por: {uploadedByLabel}</span>}
+										{uploadedByLabel && uploadedAtLabel && <span className="mx-2">|</span>}
+										{uploadedAtLabel && <span>Fecha: {uploadedAtLabel}</span>}
+									</div>
+								)}
+							</div>
 						</div>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2 mr-10">
 							{showDataToggle && (
 								<Button
 									variant="secondary"
@@ -105,7 +127,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 						</div>
 					</div>
 				</SheetHeader>
-				<div className="flex-1 min-h-[60vh] overflow-hidden bg-white">
+				<div className="flex-1 min-h-[50dvh] sm:min-h-[60vh] overflow-hidden bg-white">
 					<DocumentPreview document={document} previewUrl={previewUrl} onDownload={onDownload} />
 				</div>
 			</SheetContent>

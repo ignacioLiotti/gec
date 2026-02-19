@@ -123,6 +123,7 @@ export type ObrasDetalleRow = FormTableRow & {
 	onFinishFirstMessage?: string | null;
 	onFinishSecondMessage?: string | null;
 	onFinishSecondSendAt?: string | null;
+	__pendingNavigation?: boolean;
 };
 
 const currencyFormatter = new Intl.NumberFormat("es-AR", {
@@ -544,7 +545,22 @@ const getRowColorInfo = (row: ObrasDetalleRow): RowColorInfo | undefined => {
 
 const rowOverlayBadgesFromRules = (row: ObrasDetalleRow) => {
 	const matched = getMatchedRulesForRow(row);
-	if (matched.length <= 1) return [];
+	const badges: Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }> = [];
+
+	const mesBasico = String(row.mesBasicoDeContrato ?? "").trim();
+	const iniciacion = String(row.iniciacion ?? "").trim();
+	if (!mesBasico || !iniciacion) {
+		const missing: string[] = [];
+		if (!mesBasico) missing.push("mes básico");
+		if (!iniciacion) missing.push("iniciación");
+		badges.push({
+			id: "obra-required-missing",
+			label: `Completar: ${missing.join(", ")}`,
+			tone: "red",
+		});
+	}
+
+	if (matched.length <= 1) return badges;
 	const extras = matched.slice(1);
 	const colorLabel: Record<RowColorRule["color"], string> = {
 		amber: "ambar",
@@ -552,11 +568,14 @@ const rowOverlayBadgesFromRules = (row: ObrasDetalleRow) => {
 		green: "verde",
 		blue: "azul",
 	};
-	return extras.map((rule, index) => ({
-		id: rule.id,
-		label: `+${index + 1} ${colorLabel[rule.color]}`,
-		tone: rule.color,
-	}));
+	extras.forEach((rule, index) => {
+		badges.push({
+			id: rule.id,
+			label: `+${index + 1} ${colorLabel[rule.color]}`,
+			tone: rule.color,
+		});
+	});
+	return badges;
 };
 
 const buildRowColorMenuItems = (
@@ -1209,6 +1228,10 @@ function RowRulesDialogTrigger() {
 }
 
 const sanitizeText = (value?: string | null) => (value ?? "").trim();
+const UUID_PATTERN =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isValidObraId = (value: unknown): value is string =>
+	typeof value === "string" && UUID_PATTERN.test(value.trim());
 
 const updateSequentialSeedFromRows = (rows: ObrasDetalleRow[]) => {
 	const max = rows.reduce((maxValue, row) => {
@@ -1222,6 +1245,7 @@ const createNewRow = (): ObrasDetalleRow => {
 	nextSequentialN += 1;
 	return {
 		id: generateRowId(),
+		__pendingNavigation: true,
 		n: nextSequentialN,
 		designacionYUbicacion: "",
 		supDeObraM2: 0,
@@ -1263,6 +1287,7 @@ const FIXED_OBRA_FIELDS = new Set([
 	"onFinishSecondMessage",
 	"onFinishSecondSendAt",
 	"customData",
+	"__pendingNavigation",
 ]);
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -1282,7 +1307,10 @@ const mapDetailRowToPayload = (row: ObrasDetalleRow, index: number): Obra => {
 		customData[key] = value ?? null;
 	}
 	return {
-		id: typeof row.id === "string" ? row.id : undefined,
+		id:
+			typeof row.id === "string" && !row.__pendingNavigation && isValidObraId(row.id)
+				? row.id
+				: undefined,
 		n: normalizedN,
 		designacionYUbicacion: sanitizeText(row.designacionYUbicacion),
 		supDeObraM2: toNumber(row.supDeObraM2),
@@ -1331,7 +1359,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		required: true,
 		enableHide: true,
 		enablePin: true,
-		editable: false,
+		editable: true,
 		cellType: "text",
 		sortFn: (a, b) =>
 			(a.designacionYUbicacion || "").localeCompare(b.designacionYUbicacion || "", "es", {
@@ -1347,7 +1375,17 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 				const text = String(value || "");
 				if (!text) return <span className="text-muted-foreground">-</span>;
 				const obraId = row.id;
-				if (!obraId) return <span className="font-semibold">{text}</span>;
+				const canNavigate = isValidObraId(obraId) && !row.__pendingNavigation;
+				if (!canNavigate) {
+					return (
+						<span
+							className="font-semibold cursor-not-allowed"
+							title="Recargá la página y volvé a intentar para abrir la obra recién creada."
+						>
+							{text}
+						</span>
+					);
+				}
 
 				return <ObraDetailLink obraId={obraId} text={text} />;
 			},
@@ -1359,7 +1397,11 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 				onSelect: (row) => {
 					if (typeof window === "undefined") return;
 					const targetId = row.id;
-					if (!targetId) return;
+					const canNavigate = isValidObraId(targetId) && !row.__pendingNavigation;
+					if (!canNavigate) {
+						toast.info("Recargá la página y volvé a intentar para abrir la obra recién creada.");
+						return;
+					}
 					window.location.href = `/excel/${targetId}`;
 				},
 			},
@@ -2104,6 +2146,7 @@ function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 			: {};
 	const row: ObrasDetalleRow = {
 		id: obra.id,
+		__pendingNavigation: false,
 		n: obra.n ?? null,
 		designacionYUbicacion: obra.designacionYUbicacion ?? "",
 		supDeObraM2: obra.supDeObraM2 ?? null,
@@ -2167,22 +2210,27 @@ const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>[
 		const payload = {
 			detalleObras: rows.map((row, index) => mapDetailRowToPayload(row, index)),
 		};
-		const response = await fetch("/api/obras", {
-			method: "PUT",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(payload),
-		});
-		if (!response.ok) {
-			const errorPayload = await response.json().catch(() => ({}));
-			const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
-			const detailsMessage = errorPayload?.details
-				? JSON.stringify(errorPayload.details)
-				: null;
-			throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
-		}
-	};
+	const response = await fetch("/api/obras", {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify(payload),
+	});
+	if (!response.ok) {
+		const errorPayload = await response.json().catch(() => ({}));
+		const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
+		const detailErrors = Array.isArray(errorPayload?.details?.fieldErrors?.detalleObras)
+			? (errorPayload.details.fieldErrors.detalleObras as string[])
+			: [];
+		const uniqueDetailErrors = Array.from(
+			new Set(detailErrors.map((msg) => String(msg).trim()).filter(Boolean))
+		);
+		const detailsMessage =
+			uniqueDetailErrors.length > 0 ? uniqueDetailErrors.join(" · ") : null;
+		throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
+	}
+};
 
 const obrasDetalleBaseConfig: Omit<
 	FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>,

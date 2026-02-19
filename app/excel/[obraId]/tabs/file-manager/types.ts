@@ -29,6 +29,9 @@ export type FileSystemItem = {
 	ocrDocumentId?: string;
 	ocrDocumentError?: string | null;
 	ocrRowsExtracted?: number | null;
+	uploadedAt?: string | null;
+	uploadedByUserId?: string | null;
+	uploadedByLabel?: string | null;
 };
 
 export type FileManagerSelectionChange = {

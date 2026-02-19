@@ -1,0 +1,1062 @@
+;
+; Archive created at 2026-02-19 12:58:33
+;     dbname: postgres
+;     TOC Entries: 1067
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 17.6
+;     Dumped by pg_dump version: 18.2
+;
+;
+; Selected TOC Entries:
+;
+37; 2615 16494 SCHEMA - auth supabase_admin
+1; 3079 127510 EXTENSION - pg_cron 
+5376; 0 0 COMMENT - EXTENSION pg_cron 
+19; 2615 16388 SCHEMA - extensions postgres
+30; 2615 16624 SCHEMA - graphql supabase_admin
+29; 2615 16613 SCHEMA - graphql_public supabase_admin
+3; 3079 127562 EXTENSION - pg_net 
+5377; 0 0 COMMENT - EXTENSION pg_net 
+12; 2615 16386 SCHEMA - pgbouncer pgbouncer
+13; 2615 16605 SCHEMA - realtime supabase_admin
+31; 2615 16542 SCHEMA - storage supabase_admin
+14; 2615 17452 SCHEMA - supabase_migrations postgres
+27; 2615 16653 SCHEMA - vault supabase_admin
+8; 3079 16689 EXTENSION - pg_graphql 
+5378; 0 0 COMMENT - EXTENSION pg_graphql 
+6; 3079 16389 EXTENSION - pg_stat_statements 
+5379; 0 0 COMMENT - EXTENSION pg_stat_statements 
+4; 3079 16443 EXTENSION - pgcrypto 
+5380; 0 0 COMMENT - EXTENSION pgcrypto 
+7; 3079 16654 EXTENSION - supabase_vault 
+5381; 0 0 COMMENT - EXTENSION supabase_vault 
+5; 3079 16432 EXTENSION - uuid-ossp 
+5382; 0 0 COMMENT - EXTENSION "uuid-ossp" 
+1211; 1247 16784 TYPE auth aal_level supabase_auth_admin
+1235; 1247 16925 TYPE auth code_challenge_method supabase_auth_admin
+1208; 1247 16778 TYPE auth factor_status supabase_auth_admin
+1205; 1247 16773 TYPE auth factor_type supabase_auth_admin
+1253; 1247 17028 TYPE auth oauth_authorization_status supabase_auth_admin
+1265; 1247 17101 TYPE auth oauth_client_type supabase_auth_admin
+1247; 1247 17006 TYPE auth oauth_registration_type supabase_auth_admin
+1256; 1247 17038 TYPE auth oauth_response_type supabase_auth_admin
+1241; 1247 16967 TYPE auth one_time_token_type supabase_auth_admin
+1319; 1247 17492 TYPE public membership_role postgres
+1358; 1247 28886 TYPE public pendiente_state postgres
+1292; 1247 17316 TYPE realtime action supabase_admin
+1283; 1247 17272 TYPE realtime equality_op supabase_admin
+1286; 1247 17287 TYPE realtime user_defined_filter supabase_admin
+1298; 1247 17359 TYPE realtime wal_column supabase_admin
+1295; 1247 17329 TYPE realtime wal_rls supabase_admin
+1277; 1247 17241 TYPE storage buckettype supabase_storage_admin
+451; 1255 16540 FUNCTION auth email() supabase_auth_admin
+5383; 0 0 COMMENT auth FUNCTION email() supabase_auth_admin
+470; 1255 16755 FUNCTION auth jwt() supabase_auth_admin
+450; 1255 16539 FUNCTION auth role() supabase_auth_admin
+5384; 0 0 COMMENT auth FUNCTION role() supabase_auth_admin
+449; 1255 16538 FUNCTION auth uid() supabase_auth_admin
+5385; 0 0 COMMENT auth FUNCTION uid() supabase_auth_admin
+452; 1255 16597 FUNCTION extensions grant_pg_cron_access() supabase_admin
+5386; 0 0 COMMENT extensions FUNCTION grant_pg_cron_access() supabase_admin
+456; 1255 16618 FUNCTION extensions grant_pg_graphql_access() supabase_admin
+5387; 0 0 COMMENT extensions FUNCTION grant_pg_graphql_access() supabase_admin
+453; 1255 16599 FUNCTION extensions grant_pg_net_access() supabase_admin
+5388; 0 0 COMMENT extensions FUNCTION grant_pg_net_access() supabase_admin
+454; 1255 16609 FUNCTION extensions pgrst_ddl_watch() supabase_admin
+455; 1255 16610 FUNCTION extensions pgrst_drop_watch() supabase_admin
+457; 1255 16620 FUNCTION extensions set_graphql_placeholder() supabase_admin
+5389; 0 0 COMMENT extensions FUNCTION set_graphql_placeholder() supabase_admin
+399; 1255 16387 FUNCTION pgbouncer get_auth(text) supabase_admin
+528; 1255 127361 FUNCTION public acquire_flow_lock(uuid, text, timestamp with time zone) postgres
+508; 1255 31352 FUNCTION public add_superadmin_to_new_tenant() postgres
+5390; 0 0 COMMENT public FUNCTION add_superadmin_to_new_tenant() postgres
+518; 1255 41749 FUNCTION public cleanup_orphan_records() postgres
+509; 1255 31355 FUNCTION public ensure_superadmin_membership() postgres
+510; 1255 31404 FUNCTION public expire_old_invitations() postgres
+5391; 0 0 COMMENT public FUNCTION expire_old_invitations() postgres
+515; 1255 41711 FUNCTION public get_active_tenant_secret(uuid, integer) postgres
+511; 1255 31405 FUNCTION public get_invitation_by_token(text) postgres
+5392; 0 0 COMMENT public FUNCTION get_invitation_by_token(invitation_token text) postgres
+522; 1255 86873 FUNCTION public get_user_sidebar_macro_tables(uuid, uuid) postgres
+502; 1255 17630 FUNCTION public handle_new_user() postgres
+521; 1255 86846 FUNCTION public has_macro_table_permission(uuid, text) postgres
+501; 1255 17617 FUNCTION public has_permission(uuid, text) postgres
+5393; 0 0 COMMENT public FUNCTION has_permission(tenant uuid, perm_key text) postgres
+357; 1259 127168 TABLE public tenant_api_expenses postgres
+5394; 0 0 COMMENT public TABLE tenant_api_expenses postgres
+527; 1255 127233 FUNCTION public increment_tenant_api_usage(uuid, bigint, bigint, bigint, bigint, bigint, bigint) postgres
+500; 1255 17616 FUNCTION public is_admin_of(uuid) postgres
+5395; 0 0 COMMENT public FUNCTION is_admin_of(tenant uuid) postgres
+512; 1255 31408 FUNCTION public is_email_member_of_tenant(uuid, text) postgres
+5396; 0 0 COMMENT public FUNCTION is_email_member_of_tenant(tenant_id_param uuid, email_param text) postgres
+499; 1255 17531 FUNCTION public is_member_of(uuid) postgres
+5397; 0 0 COMMENT public FUNCTION is_member_of(tenant uuid) postgres
+520; 1255 65729 FUNCTION public is_superadmin() postgres
+514; 1255 41617 FUNCTION public record_audit_log() postgres
+529; 1255 127362 FUNCTION public release_flow_lock(uuid, text) postgres
+340; 1259 41683 TABLE public tenant_api_secrets postgres
+516; 1255 41712 FUNCTION public rotate_tenant_api_secret(uuid, text, interval) postgres
+513; 1255 41585 FUNCTION public set_certificates_tenant_id() postgres
+507; 1255 28866 FUNCTION public set_obra_pendientes_updated_at() postgres
+503; 1255 17665 FUNCTION public set_obras_updated_at() postgres
+549; 1255 134376 FUNCTION public set_tenant_main_table_configs_updated_at() postgres
+517; 1255 41743 FUNCTION public soft_delete_row() postgres
+505; 1255 17701 FUNCTION public update_certificates_updated_at() postgres
+504; 1255 17676 FUNCTION public update_obras_updated_at() postgres
+506; 1255 28833 FUNCTION public update_timestamp() postgres
+519; 1255 49862 FUNCTION public workflow_insert_notification(jsonb) postgres
+492; 1255 17351 FUNCTION realtime apply_rls(jsonb, integer) supabase_admin
+498; 1255 17432 FUNCTION realtime broadcast_changes(text, text, text, text, text, record, record, text) supabase_admin
+494; 1255 17364 FUNCTION realtime build_prepared_statement_sql(text, regclass, realtime.wal_column[]) supabase_admin
+490; 1255 17309 FUNCTION realtime cast(text, regtype) supabase_admin
+489; 1255 17304 FUNCTION realtime check_equality_op(realtime.equality_op, regtype, text, text) supabase_admin
+493; 1255 17360 FUNCTION realtime is_visible_through_filters(realtime.wal_column[], realtime.user_defined_filter[]) supabase_admin
+495; 1255 17372 FUNCTION realtime list_changes(name, name, integer, integer) supabase_admin
+488; 1255 17303 FUNCTION realtime quote_wal2json(regclass) supabase_admin
+497; 1255 17431 FUNCTION realtime send(jsonb, text, text, boolean) supabase_admin
+487; 1255 17301 FUNCTION realtime subscription_check_filters() supabase_admin
+491; 1255 17340 FUNCTION realtime to_regrole(text) supabase_admin
+496; 1255 17425 FUNCTION realtime topic() supabase_realtime_admin
+476; 1255 17145 FUNCTION storage can_insert_object(text, text, uuid, jsonb) supabase_storage_admin
+486; 1255 17259 FUNCTION storage delete_leaf_prefixes(text[], text[]) supabase_storage_admin
+484; 1255 17238 FUNCTION storage enforce_bucket_name_length() supabase_storage_admin
+473; 1255 17119 FUNCTION storage extension(text) supabase_storage_admin
+472; 1255 17118 FUNCTION storage filename(text) supabase_storage_admin
+471; 1255 17117 FUNCTION storage foldername(text) supabase_storage_admin
+523; 1255 120455 FUNCTION storage get_common_prefix(text, text, text) supabase_storage_admin
+479; 1255 17201 FUNCTION storage get_level(text) supabase_storage_admin
+480; 1255 17217 FUNCTION storage get_prefix(text) supabase_storage_admin
+481; 1255 17218 FUNCTION storage get_prefixes(text) supabase_storage_admin
+483; 1255 17236 FUNCTION storage get_size_by_bucket() supabase_storage_admin
+477; 1255 17184 FUNCTION storage list_multipart_uploads_with_delimiter(text, text, text, integer, text, text) supabase_storage_admin
+524; 1255 120456 FUNCTION storage list_objects_with_delimiter(text, text, text, integer, text, text, text) supabase_storage_admin
+478; 1255 17200 FUNCTION storage operation() supabase_storage_admin
+526; 1255 120461 FUNCTION storage protect_delete() supabase_storage_admin
+474; 1255 17134 FUNCTION storage search(text, text, integer, integer, integer, text, text, text) supabase_storage_admin
+525; 1255 120459 FUNCTION storage search_by_timestamp(text, text, integer, integer, text, text, text, text) supabase_storage_admin
+482; 1255 17234 FUNCTION storage search_legacy_v1(text, text, integer, integer, integer, text, text, text) supabase_storage_admin
+485; 1255 17257 FUNCTION storage search_v2(text, text, integer, integer, text, text, text, text) supabase_storage_admin
+475; 1255 17135 FUNCTION storage update_updated_at_column() supabase_storage_admin
+281; 1259 16525 TABLE auth audit_log_entries supabase_auth_admin
+5398; 0 0 COMMENT auth TABLE audit_log_entries supabase_auth_admin
+298; 1259 16929 TABLE auth flow_state supabase_auth_admin
+5399; 0 0 COMMENT auth TABLE flow_state supabase_auth_admin
+289; 1259 16727 TABLE auth identities supabase_auth_admin
+5400; 0 0 COMMENT auth TABLE identities supabase_auth_admin
+5401; 0 0 COMMENT auth COLUMN identities.email supabase_auth_admin
+280; 1259 16518 TABLE auth instances supabase_auth_admin
+5402; 0 0 COMMENT auth TABLE instances supabase_auth_admin
+293; 1259 16816 TABLE auth mfa_amr_claims supabase_auth_admin
+5403; 0 0 COMMENT auth TABLE mfa_amr_claims supabase_auth_admin
+292; 1259 16804 TABLE auth mfa_challenges supabase_auth_admin
+5404; 0 0 COMMENT auth TABLE mfa_challenges supabase_auth_admin
+291; 1259 16791 TABLE auth mfa_factors supabase_auth_admin
+5405; 0 0 COMMENT auth TABLE mfa_factors supabase_auth_admin
+5406; 0 0 COMMENT auth COLUMN mfa_factors.last_webauthn_challenge_data supabase_auth_admin
+301; 1259 17041 TABLE auth oauth_authorizations supabase_auth_admin
+349; 1259 58965 TABLE auth oauth_client_states supabase_auth_admin
+5407; 0 0 COMMENT auth TABLE oauth_client_states supabase_auth_admin
+300; 1259 17011 TABLE auth oauth_clients supabase_auth_admin
+302; 1259 17074 TABLE auth oauth_consents supabase_auth_admin
+299; 1259 16979 TABLE auth one_time_tokens supabase_auth_admin
+279; 1259 16507 TABLE auth refresh_tokens supabase_auth_admin
+5408; 0 0 COMMENT auth TABLE refresh_tokens supabase_auth_admin
+278; 1259 16506 SEQUENCE auth refresh_tokens_id_seq supabase_auth_admin
+5409; 0 0 SEQUENCE OWNED BY auth refresh_tokens_id_seq supabase_auth_admin
+296; 1259 16858 TABLE auth saml_providers supabase_auth_admin
+5410; 0 0 COMMENT auth TABLE saml_providers supabase_auth_admin
+297; 1259 16876 TABLE auth saml_relay_states supabase_auth_admin
+5411; 0 0 COMMENT auth TABLE saml_relay_states supabase_auth_admin
+282; 1259 16533 TABLE auth schema_migrations supabase_auth_admin
+5412; 0 0 COMMENT auth TABLE schema_migrations supabase_auth_admin
+290; 1259 16757 TABLE auth sessions supabase_auth_admin
+5413; 0 0 COMMENT auth TABLE sessions supabase_auth_admin
+5414; 0 0 COMMENT auth COLUMN sessions.not_after supabase_auth_admin
+5415; 0 0 COMMENT auth COLUMN sessions.refresh_token_hmac_key supabase_auth_admin
+5416; 0 0 COMMENT auth COLUMN sessions.refresh_token_counter supabase_auth_admin
+295; 1259 16843 TABLE auth sso_domains supabase_auth_admin
+5417; 0 0 COMMENT auth TABLE sso_domains supabase_auth_admin
+294; 1259 16834 TABLE auth sso_providers supabase_auth_admin
+5418; 0 0 COMMENT auth TABLE sso_providers supabase_auth_admin
+5419; 0 0 COMMENT auth COLUMN sso_providers.resource_id supabase_auth_admin
+277; 1259 16495 TABLE auth users supabase_auth_admin
+5420; 0 0 COMMENT auth TABLE users supabase_auth_admin
+5421; 0 0 COMMENT auth COLUMN users.is_sso_user supabase_auth_admin
+331; 1259 28925 TABLE public aps_models postgres
+5422; 0 0 COMMENT public TABLE aps_models postgres
+339; 1259 41591 TABLE public audit_log postgres
+365; 1259 127364 TABLE public background_jobs postgres
+337; 1259 31439 TABLE public calendar_events postgres
+325; 1259 17679 TABLE public certificates postgres
+318; 1259 17516 TABLE public instruments postgres
+336; 1259 31363 TABLE public invitations postgres
+5423; 0 0 COMMENT public TABLE invitations postgres
+5424; 0 0 COMMENT public COLUMN invitations.invited_by postgres
+352; 1259 65665 TABLE public macro_table_columns postgres
+353; 1259 65685 TABLE public macro_table_custom_values postgres
+354; 1259 86798 TABLE public macro_table_permissions postgres
+351; 1259 65645 TABLE public macro_table_sources postgres
+350; 1259 65627 TABLE public macro_tables postgres
+328; 1259 28804 TABLE public material_order_items postgres
+327; 1259 28789 TABLE public material_orders postgres
+5425; 0 0 COMMENT public COLUMN material_orders.aps_urn postgres
+317; 1259 17499 TABLE public memberships postgres
+326; 1259 17703 TABLE public notifications postgres
+344; 1259 49653 TABLE public obra_default_folders postgres
+361; 1259 127253 TABLE public obra_default_quick_actions postgres
+346; 1259 49692 TABLE public obra_default_tabla_columns postgres
+345; 1259 49671 TABLE public obra_default_tablas postgres
+368; 1259 127430 TABLE public obra_findings postgres
+334; 1259 31278 TABLE public obra_flujo_actions postgres
+5426; 0 0 COMMENT public COLUMN obra_flujo_actions.notification_types postgres
+335; 1259 31315 TABLE public obra_flujo_executions postgres
+338; 1259 33730 TABLE public obra_memoria_notes postgres
+329; 1259 28841 TABLE public obra_pendientes postgres
+366; 1259 127389 TABLE public obra_rule_config postgres
+370; 1259 127478 TABLE public obra_signal_logs postgres
+369; 1259 127459 TABLE public obra_signal_runs postgres
+367; 1259 127408 TABLE public obra_signals postgres
+342; 1259 49600 TABLE public obra_tabla_columns postgres
+343; 1259 49621 TABLE public obra_tabla_rows postgres
+341; 1259 49580 TABLE public obra_tablas postgres
+324; 1259 17638 TABLE public obras postgres
+348; 1259 49748 TABLE public ocr_document_processing postgres
+347; 1259 49728 TABLE public ocr_templates postgres
+330; 1259 28903 TABLE public pendiente_schedules postgres
+319; 1259 17540 TABLE public permissions postgres
+316; 1259 17478 TABLE public profiles postgres
+5427; 0 0 COMMENT public COLUMN profiles.is_superadmin postgres
+362; 1259 127277 TABLE public report_presets postgres
+364; 1259 127322 TABLE public report_share_links postgres
+363; 1259 127302 TABLE public report_templates postgres
+321; 1259 17567 TABLE public role_permissions postgres
+355; 1259 86832 TABLE public role_templates postgres
+320; 1259 17551 TABLE public roles postgres
+5428; 0 0 COMMENT public COLUMN roles.key postgres
+356; 1259 86848 TABLE public sidebar_macro_tables postgres
+358; 1259 127198 TABLE public subscription_plans postgres
+386; 1259 134355 TABLE public tenant_main_table_configs postgres
+359; 1259 127207 TABLE public tenant_subscriptions postgres
+360; 1259 127234 TABLE public tenant_usage_events postgres
+315; 1259 17467 TABLE public tenants postgres
+323; 1259 17599 TABLE public user_permission_overrides postgres
+322; 1259 17583 TABLE public user_roles postgres
+312; 1259 17435 TABLE realtime messages supabase_realtime_admin
+380; 1259 132075 TABLE realtime messages_2026_02_16 supabase_admin
+381; 1259 132087 TABLE realtime messages_2026_02_17 supabase_admin
+382; 1259 132099 TABLE realtime messages_2026_02_18 supabase_admin
+383; 1259 132111 TABLE realtime messages_2026_02_19 supabase_admin
+384; 1259 134331 TABLE realtime messages_2026_02_20 supabase_admin
+385; 1259 134343 TABLE realtime messages_2026_02_21 supabase_admin
+387; 1259 135521 TABLE realtime messages_2026_02_22 supabase_admin
+303; 1259 17112 TABLE realtime schema_migrations supabase_admin
+309; 1259 17289 TABLE realtime subscription supabase_admin
+308; 1259 17288 SEQUENCE realtime subscription_id_seq supabase_admin
+283; 1259 16546 TABLE storage buckets supabase_storage_admin
+5429; 0 0 COMMENT storage COLUMN buckets.owner supabase_storage_admin
+306; 1259 17246 TABLE storage buckets_analytics supabase_storage_admin
+332; 1259 31227 TABLE storage buckets_vectors supabase_storage_admin
+285; 1259 16588 TABLE storage migrations supabase_storage_admin
+284; 1259 16561 TABLE storage objects supabase_storage_admin
+5430; 0 0 COMMENT storage COLUMN objects.owner supabase_storage_admin
+304; 1259 17149 TABLE storage s3_multipart_uploads supabase_storage_admin
+305; 1259 17163 TABLE storage s3_multipart_uploads_parts supabase_storage_admin
+333; 1259 31237 TABLE storage vector_indexes supabase_storage_admin
+313; 1259 17453 TABLE supabase_migrations schema_migrations postgres
+314; 1259 17460 TABLE supabase_migrations seed_files postgres
+3924; 0 0 TABLE ATTACH realtime messages_2026_02_16 supabase_admin
+3925; 0 0 TABLE ATTACH realtime messages_2026_02_17 supabase_admin
+3926; 0 0 TABLE ATTACH realtime messages_2026_02_18 supabase_admin
+3927; 0 0 TABLE ATTACH realtime messages_2026_02_19 supabase_admin
+3928; 0 0 TABLE ATTACH realtime messages_2026_02_20 supabase_admin
+3929; 0 0 TABLE ATTACH realtime messages_2026_02_21 supabase_admin
+3930; 0 0 TABLE ATTACH realtime messages_2026_02_22 supabase_admin
+3940; 2604 16510 DEFAULT auth refresh_tokens id supabase_auth_admin
+5277; 0 16525 TABLE DATA auth audit_log_entries supabase_auth_admin
+5291; 0 16929 TABLE DATA auth flow_state supabase_auth_admin
+5282; 0 16727 TABLE DATA auth identities supabase_auth_admin
+5276; 0 16518 TABLE DATA auth instances supabase_auth_admin
+5286; 0 16816 TABLE DATA auth mfa_amr_claims supabase_auth_admin
+5285; 0 16804 TABLE DATA auth mfa_challenges supabase_auth_admin
+5284; 0 16791 TABLE DATA auth mfa_factors supabase_auth_admin
+5294; 0 17041 TABLE DATA auth oauth_authorizations supabase_auth_admin
+5338; 0 58965 TABLE DATA auth oauth_client_states supabase_auth_admin
+5293; 0 17011 TABLE DATA auth oauth_clients supabase_auth_admin
+5295; 0 17074 TABLE DATA auth oauth_consents supabase_auth_admin
+5292; 0 16979 TABLE DATA auth one_time_tokens supabase_auth_admin
+5275; 0 16507 TABLE DATA auth refresh_tokens supabase_auth_admin
+5289; 0 16858 TABLE DATA auth saml_providers supabase_auth_admin
+5290; 0 16876 TABLE DATA auth saml_relay_states supabase_auth_admin
+5278; 0 16533 TABLE DATA auth schema_migrations supabase_auth_admin
+5283; 0 16757 TABLE DATA auth sessions supabase_auth_admin
+5288; 0 16843 TABLE DATA auth sso_domains supabase_auth_admin
+5287; 0 16834 TABLE DATA auth sso_providers supabase_auth_admin
+5273; 0 16495 TABLE DATA auth users supabase_auth_admin
+3919; 0 127513 TABLE DATA cron job supabase_admin
+3921; 0 127532 TABLE DATA cron job_run_details supabase_admin
+5320; 0 28925 TABLE DATA public aps_models postgres
+5328; 0 41591 TABLE DATA public audit_log postgres
+5354; 0 127364 TABLE DATA public background_jobs postgres
+5326; 0 31439 TABLE DATA public calendar_events postgres
+5314; 0 17679 TABLE DATA public certificates postgres
+5307; 0 17516 TABLE DATA public instruments postgres
+5325; 0 31363 TABLE DATA public invitations postgres
+5341; 0 65665 TABLE DATA public macro_table_columns postgres
+5342; 0 65685 TABLE DATA public macro_table_custom_values postgres
+5343; 0 86798 TABLE DATA public macro_table_permissions postgres
+5340; 0 65645 TABLE DATA public macro_table_sources postgres
+5339; 0 65627 TABLE DATA public macro_tables postgres
+5317; 0 28804 TABLE DATA public material_order_items postgres
+5316; 0 28789 TABLE DATA public material_orders postgres
+5306; 0 17499 TABLE DATA public memberships postgres
+5315; 0 17703 TABLE DATA public notifications postgres
+5333; 0 49653 TABLE DATA public obra_default_folders postgres
+5350; 0 127253 TABLE DATA public obra_default_quick_actions postgres
+5335; 0 49692 TABLE DATA public obra_default_tabla_columns postgres
+5334; 0 49671 TABLE DATA public obra_default_tablas postgres
+5357; 0 127430 TABLE DATA public obra_findings postgres
+5323; 0 31278 TABLE DATA public obra_flujo_actions postgres
+5324; 0 31315 TABLE DATA public obra_flujo_executions postgres
+5327; 0 33730 TABLE DATA public obra_memoria_notes postgres
+5318; 0 28841 TABLE DATA public obra_pendientes postgres
+5355; 0 127389 TABLE DATA public obra_rule_config postgres
+5359; 0 127478 TABLE DATA public obra_signal_logs postgres
+5358; 0 127459 TABLE DATA public obra_signal_runs postgres
+5356; 0 127408 TABLE DATA public obra_signals postgres
+5331; 0 49600 TABLE DATA public obra_tabla_columns postgres
+5332; 0 49621 TABLE DATA public obra_tabla_rows postgres
+5330; 0 49580 TABLE DATA public obra_tablas postgres
+5313; 0 17638 TABLE DATA public obras postgres
+5337; 0 49748 TABLE DATA public ocr_document_processing postgres
+5336; 0 49728 TABLE DATA public ocr_templates postgres
+5319; 0 28903 TABLE DATA public pendiente_schedules postgres
+5308; 0 17540 TABLE DATA public permissions postgres
+5305; 0 17478 TABLE DATA public profiles postgres
+5351; 0 127277 TABLE DATA public report_presets postgres
+5353; 0 127322 TABLE DATA public report_share_links postgres
+5352; 0 127302 TABLE DATA public report_templates postgres
+5310; 0 17567 TABLE DATA public role_permissions postgres
+5344; 0 86832 TABLE DATA public role_templates postgres
+5309; 0 17551 TABLE DATA public roles postgres
+5345; 0 86848 TABLE DATA public sidebar_macro_tables postgres
+5347; 0 127198 TABLE DATA public subscription_plans postgres
+5346; 0 127168 TABLE DATA public tenant_api_expenses postgres
+5329; 0 41683 TABLE DATA public tenant_api_secrets postgres
+5366; 0 134355 TABLE DATA public tenant_main_table_configs postgres
+5348; 0 127207 TABLE DATA public tenant_subscriptions postgres
+5349; 0 127234 TABLE DATA public tenant_usage_events postgres
+5304; 0 17467 TABLE DATA public tenants postgres
+5312; 0 17599 TABLE DATA public user_permission_overrides postgres
+5311; 0 17583 TABLE DATA public user_roles postgres
+5360; 0 132075 TABLE DATA realtime messages_2026_02_16 supabase_admin
+5361; 0 132087 TABLE DATA realtime messages_2026_02_17 supabase_admin
+5362; 0 132099 TABLE DATA realtime messages_2026_02_18 supabase_admin
+5363; 0 132111 TABLE DATA realtime messages_2026_02_19 supabase_admin
+5364; 0 134331 TABLE DATA realtime messages_2026_02_20 supabase_admin
+5365; 0 134343 TABLE DATA realtime messages_2026_02_21 supabase_admin
+5367; 0 135521 TABLE DATA realtime messages_2026_02_22 supabase_admin
+5296; 0 17112 TABLE DATA realtime schema_migrations supabase_admin
+5301; 0 17289 TABLE DATA realtime subscription supabase_admin
+5279; 0 16546 TABLE DATA storage buckets supabase_storage_admin
+5299; 0 17246 TABLE DATA storage buckets_analytics supabase_storage_admin
+5321; 0 31227 TABLE DATA storage buckets_vectors supabase_storage_admin
+5281; 0 16588 TABLE DATA storage migrations supabase_storage_admin
+5280; 0 16561 TABLE DATA storage objects supabase_storage_admin
+5297; 0 17149 TABLE DATA storage s3_multipart_uploads supabase_storage_admin
+5298; 0 17163 TABLE DATA storage s3_multipart_uploads_parts supabase_storage_admin
+5322; 0 31237 TABLE DATA storage vector_indexes supabase_storage_admin
+5302; 0 17453 TABLE DATA supabase_migrations schema_migrations postgres
+5303; 0 17460 TABLE DATA supabase_migrations seed_files postgres
+3923; 0 16658 TABLE DATA vault secrets supabase_admin
+5431; 0 0 SEQUENCE SET auth refresh_tokens_id_seq supabase_auth_admin
+5432; 0 0 SEQUENCE SET cron jobid_seq supabase_admin
+5433; 0 0 SEQUENCE SET cron runid_seq supabase_admin
+5434; 0 0 SEQUENCE SET realtime subscription_id_seq supabase_admin
+4375; 2606 16829 CONSTRAINT auth mfa_amr_claims amr_id_pk supabase_auth_admin
+4331; 2606 16531 CONSTRAINT auth audit_log_entries audit_log_entries_pkey supabase_auth_admin
+4398; 2606 16935 CONSTRAINT auth flow_state flow_state_pkey supabase_auth_admin
+4353; 2606 16953 CONSTRAINT auth identities identities_pkey supabase_auth_admin
+4355; 2606 16963 CONSTRAINT auth identities identities_provider_id_provider_unique supabase_auth_admin
+4329; 2606 16524 CONSTRAINT auth instances instances_pkey supabase_auth_admin
+4377; 2606 16822 CONSTRAINT auth mfa_amr_claims mfa_amr_claims_session_id_authentication_method_pkey supabase_auth_admin
+4373; 2606 16810 CONSTRAINT auth mfa_challenges mfa_challenges_pkey supabase_auth_admin
+4365; 2606 17003 CONSTRAINT auth mfa_factors mfa_factors_last_challenged_at_key supabase_auth_admin
+4367; 2606 16797 CONSTRAINT auth mfa_factors mfa_factors_pkey supabase_auth_admin
+4411; 2606 17062 CONSTRAINT auth oauth_authorizations oauth_authorizations_authorization_code_key supabase_auth_admin
+4413; 2606 17060 CONSTRAINT auth oauth_authorizations oauth_authorizations_authorization_id_key supabase_auth_admin
+4415; 2606 17058 CONSTRAINT auth oauth_authorizations oauth_authorizations_pkey supabase_auth_admin
+4597; 2606 58971 CONSTRAINT auth oauth_client_states oauth_client_states_pkey supabase_auth_admin
+4408; 2606 17022 CONSTRAINT auth oauth_clients oauth_clients_pkey supabase_auth_admin
+4419; 2606 17084 CONSTRAINT auth oauth_consents oauth_consents_pkey supabase_auth_admin
+4421; 2606 17086 CONSTRAINT auth oauth_consents oauth_consents_user_client_unique supabase_auth_admin
+4402; 2606 16988 CONSTRAINT auth one_time_tokens one_time_tokens_pkey supabase_auth_admin
+4323; 2606 16514 CONSTRAINT auth refresh_tokens refresh_tokens_pkey supabase_auth_admin
+4326; 2606 16740 CONSTRAINT auth refresh_tokens refresh_tokens_token_unique supabase_auth_admin
+4387; 2606 16869 CONSTRAINT auth saml_providers saml_providers_entity_id_key supabase_auth_admin
+4389; 2606 16867 CONSTRAINT auth saml_providers saml_providers_pkey supabase_auth_admin
+4394; 2606 16883 CONSTRAINT auth saml_relay_states saml_relay_states_pkey supabase_auth_admin
+4334; 2606 16537 CONSTRAINT auth schema_migrations schema_migrations_pkey supabase_auth_admin
+4360; 2606 16761 CONSTRAINT auth sessions sessions_pkey supabase_auth_admin
+4384; 2606 16850 CONSTRAINT auth sso_domains sso_domains_pkey supabase_auth_admin
+4379; 2606 16841 CONSTRAINT auth sso_providers sso_providers_pkey supabase_auth_admin
+4316; 2606 16923 CONSTRAINT auth users users_phone_key supabase_auth_admin
+4318; 2606 16501 CONSTRAINT auth users users_pkey supabase_auth_admin
+4510; 2606 28937 CONSTRAINT public aps_models aps_models_file_path_key postgres
+4513; 2606 28935 CONSTRAINT public aps_models aps_models_pkey postgres
+4550; 2606 41602 CONSTRAINT public audit_log audit_log_pkey postgres
+4668; 2606 127377 CONSTRAINT public background_jobs background_jobs_pkey postgres
+4544; 2606 31451 CONSTRAINT public calendar_events calendar_events_pkey postgres
+4480; 2606 17690 CONSTRAINT public certificates certificates_pkey postgres
+4453; 2606 17524 CONSTRAINT public instruments instruments_pkey postgres
+4538; 2606 31377 CONSTRAINT public invitations invitations_pkey postgres
+4540; 2606 31379 CONSTRAINT public invitations invitations_token_key postgres
+4611; 2606 65679 CONSTRAINT public macro_table_columns macro_table_columns_pkey postgres
+4614; 2606 65694 CONSTRAINT public macro_table_custom_values macro_table_custom_values_pkey postgres
+4617; 2606 65696 CONSTRAINT public macro_table_custom_values macro_table_custom_values_unique postgres
+4620; 2606 86808 CONSTRAINT public macro_table_permissions macro_table_permissions_pkey postgres
+4606; 2606 65652 CONSTRAINT public macro_table_sources macro_table_sources_pkey postgres
+4608; 2606 65654 CONSTRAINT public macro_table_sources macro_table_sources_unique postgres
+4599; 2606 65639 CONSTRAINT public macro_tables macro_tables_name_unique postgres
+4601; 2606 65637 CONSTRAINT public macro_tables macro_tables_pkey postgres
+4496; 2606 28817 CONSTRAINT public material_order_items material_order_items_pkey postgres
+4493; 2606 28798 CONSTRAINT public material_orders material_orders_pkey postgres
+4451; 2606 17505 CONSTRAINT public memberships memberships_pkey postgres
+4485; 2606 17713 CONSTRAINT public notifications notifications_pkey postgres
+4571; 2606 49663 CONSTRAINT public obra_default_folders obra_default_folders_pkey postgres
+4574; 2606 49665 CONSTRAINT public obra_default_folders obra_default_folders_unique postgres
+4647; 2606 127264 CONSTRAINT public obra_default_quick_actions obra_default_quick_actions_pkey postgres
+4581; 2606 49707 CONSTRAINT public obra_default_tabla_columns obra_default_tabla_columns_key_unique postgres
+4583; 2606 49705 CONSTRAINT public obra_default_tabla_columns obra_default_tabla_columns_pkey postgres
+4576; 2606 49686 CONSTRAINT public obra_default_tablas obra_default_tablas_name_unique postgres
+4578; 2606 49684 CONSTRAINT public obra_default_tablas obra_default_tablas_pkey postgres
+4680; 2606 127441 CONSTRAINT public obra_findings obra_findings_pkey postgres
+4524; 2606 31292 CONSTRAINT public obra_flujo_actions obra_flujo_actions_pkey postgres
+4532; 2606 31325 CONSTRAINT public obra_flujo_executions obra_flujo_executions_pkey postgres
+4547; 2606 33738 CONSTRAINT public obra_memoria_notes obra_memoria_notes_pkey postgres
+4500; 2606 28853 CONSTRAINT public obra_pendientes obra_pendientes_pkey postgres
+4672; 2606 127397 CONSTRAINT public obra_rule_config obra_rule_config_pkey postgres
+4685; 2606 127486 CONSTRAINT public obra_signal_logs obra_signal_logs_pkey postgres
+4682; 2606 127467 CONSTRAINT public obra_signal_runs obra_signal_runs_pkey postgres
+4675; 2606 127416 CONSTRAINT public obra_signals obra_signals_pkey postgres
+4677; 2606 127418 CONSTRAINT public obra_signals obra_signals_tenant_id_obra_id_period_key_signal_key_key postgres
+4563; 2606 49615 CONSTRAINT public obra_tabla_columns obra_tabla_columns_key_unique postgres
+4565; 2606 49613 CONSTRAINT public obra_tabla_columns obra_tabla_columns_pkey postgres
+4568; 2606 49632 CONSTRAINT public obra_tabla_rows obra_tabla_rows_pkey postgres
+4558; 2606 49594 CONSTRAINT public obra_tablas obra_tablas_name_unique postgres
+4561; 2606 49592 CONSTRAINT public obra_tablas obra_tablas_pkey postgres
+4470; 2606 17656 CONSTRAINT public obras obras_pkey postgres
+4590; 2606 49761 CONSTRAINT public ocr_document_processing ocr_document_processing_pkey postgres
+4594; 2606 49763 CONSTRAINT public ocr_document_processing ocr_document_processing_unique postgres
+4587; 2606 49740 CONSTRAINT public ocr_templates ocr_templates_pkey postgres
+4504; 2606 28913 CONSTRAINT public pendiente_schedules pendiente_schedules_pendiente_id_stage_key postgres
+4506; 2606 28911 CONSTRAINT public pendiente_schedules pendiente_schedules_pkey postgres
+4456; 2606 17550 CONSTRAINT public permissions permissions_key_key postgres
+4458; 2606 17548 CONSTRAINT public permissions permissions_pkey postgres
+4449; 2606 17485 CONSTRAINT public profiles profiles_pkey postgres
+4653; 2606 127290 CONSTRAINT public report_presets report_presets_name_unique postgres
+4655; 2606 127288 CONSTRAINT public report_presets report_presets_pkey postgres
+4663; 2606 127331 CONSTRAINT public report_share_links report_share_links_pkey postgres
+4666; 2606 127333 CONSTRAINT public report_share_links report_share_links_token_key postgres
+4658; 2606 127315 CONSTRAINT public report_templates report_templates_name_unique postgres
+4660; 2606 127313 CONSTRAINT public report_templates report_templates_pkey postgres
+4462; 2606 17572 CONSTRAINT public role_permissions role_permissions_pkey postgres
+4626; 2606 86844 CONSTRAINT public role_templates role_templates_key_key postgres
+4628; 2606 86842 CONSTRAINT public role_templates role_templates_pkey postgres
+4460; 2606 17559 CONSTRAINT public roles roles_pkey postgres
+4631; 2606 86855 CONSTRAINT public sidebar_macro_tables sidebar_macro_tables_pkey postgres
+4634; 2606 86857 CONSTRAINT public sidebar_macro_tables sidebar_macro_tables_unique postgres
+4640; 2606 127206 CONSTRAINT public subscription_plans subscription_plans_pkey postgres
+4637; 2606 127185 CONSTRAINT public tenant_api_expenses tenant_api_expenses_pkey postgres
+4554; 2606 41694 CONSTRAINT public tenant_api_secrets tenant_api_secrets_pkey postgres
+4711; 2606 134364 CONSTRAINT public tenant_main_table_configs tenant_main_table_configs_pkey postgres
+4642; 2606 127218 CONSTRAINT public tenant_subscriptions tenant_subscriptions_pkey postgres
+4644; 2606 127244 CONSTRAINT public tenant_usage_events tenant_usage_events_pkey postgres
+4445; 2606 17477 CONSTRAINT public tenants tenants_name_key postgres
+4447; 2606 17475 CONSTRAINT public tenants tenants_pkey postgres
+4474; 2606 17658 CONSTRAINT public obras unique_obra_per_tenant postgres
+4466; 2606 17605 CONSTRAINT public user_permission_overrides user_permission_overrides_pkey postgres
+4464; 2606 17588 CONSTRAINT public user_roles user_roles_pkey postgres
+4439; 2606 17449 CONSTRAINT realtime messages messages_pkey supabase_realtime_admin
+4694; 2606 132083 CONSTRAINT realtime messages_2026_02_16 messages_2026_02_16_pkey supabase_admin
+4697; 2606 132095 CONSTRAINT realtime messages_2026_02_17 messages_2026_02_17_pkey supabase_admin
+4700; 2606 132107 CONSTRAINT realtime messages_2026_02_18 messages_2026_02_18_pkey supabase_admin
+4703; 2606 132119 CONSTRAINT realtime messages_2026_02_19 messages_2026_02_19_pkey supabase_admin
+4706; 2606 134339 CONSTRAINT realtime messages_2026_02_20 messages_2026_02_20_pkey supabase_admin
+4709; 2606 134351 CONSTRAINT realtime messages_2026_02_21 messages_2026_02_21_pkey supabase_admin
+4715; 2606 135529 CONSTRAINT realtime messages_2026_02_22 messages_2026_02_22_pkey supabase_admin
+4435; 2606 17297 CONSTRAINT realtime subscription pk_subscription supabase_admin
+4424; 2606 17116 CONSTRAINT realtime schema_migrations schema_migrations_pkey supabase_admin
+4431; 2606 31260 CONSTRAINT storage buckets_analytics buckets_analytics_pkey supabase_storage_admin
+4337; 2606 16554 CONSTRAINT storage buckets buckets_pkey supabase_storage_admin
+4516; 2606 31236 CONSTRAINT storage buckets_vectors buckets_vectors_pkey supabase_storage_admin
+4345; 2606 16595 CONSTRAINT storage migrations migrations_name_key supabase_storage_admin
+4347; 2606 16593 CONSTRAINT storage migrations migrations_pkey supabase_storage_admin
+4343; 2606 16571 CONSTRAINT storage objects objects_pkey supabase_storage_admin
+4429; 2606 17172 CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_pkey supabase_storage_admin
+4427; 2606 17157 CONSTRAINT storage s3_multipart_uploads s3_multipart_uploads_pkey supabase_storage_admin
+4519; 2606 31246 CONSTRAINT storage vector_indexes vector_indexes_pkey supabase_storage_admin
+4441; 2606 17459 CONSTRAINT supabase_migrations schema_migrations schema_migrations_pkey postgres
+4443; 2606 17466 CONSTRAINT supabase_migrations seed_files seed_files_pkey postgres
+4332; 1259 16532 INDEX auth audit_logs_instance_id_idx supabase_auth_admin
+4306; 1259 16750 INDEX auth confirmation_token_idx supabase_auth_admin
+4307; 1259 16752 INDEX auth email_change_token_current_idx supabase_auth_admin
+4308; 1259 16753 INDEX auth email_change_token_new_idx supabase_auth_admin
+4363; 1259 16831 INDEX auth factor_id_created_at_idx supabase_auth_admin
+4396; 1259 16939 INDEX auth flow_state_created_at_idx supabase_auth_admin
+4351; 1259 16919 INDEX auth identities_email_idx supabase_auth_admin
+5435; 0 0 COMMENT auth INDEX identities_email_idx supabase_auth_admin
+4356; 1259 16747 INDEX auth identities_user_id_idx supabase_auth_admin
+4399; 1259 16936 INDEX auth idx_auth_code supabase_auth_admin
+4595; 1259 58972 INDEX auth idx_oauth_client_states_created_at supabase_auth_admin
+4400; 1259 16937 INDEX auth idx_user_id_auth_method supabase_auth_admin
+4371; 1259 16942 INDEX auth mfa_challenge_created_at_idx supabase_auth_admin
+4368; 1259 16803 INDEX auth mfa_factors_user_friendly_name_unique supabase_auth_admin
+4369; 1259 16948 INDEX auth mfa_factors_user_id_idx supabase_auth_admin
+4409; 1259 17073 INDEX auth oauth_auth_pending_exp_idx supabase_auth_admin
+4406; 1259 17026 INDEX auth oauth_clients_deleted_at_idx supabase_auth_admin
+4416; 1259 17099 INDEX auth oauth_consents_active_client_idx supabase_auth_admin
+4417; 1259 17097 INDEX auth oauth_consents_active_user_client_idx supabase_auth_admin
+4422; 1259 17098 INDEX auth oauth_consents_user_order_idx supabase_auth_admin
+4403; 1259 16995 INDEX auth one_time_tokens_relates_to_hash_idx supabase_auth_admin
+4404; 1259 16994 INDEX auth one_time_tokens_token_hash_hash_idx supabase_auth_admin
+4405; 1259 16996 INDEX auth one_time_tokens_user_id_token_type_key supabase_auth_admin
+4309; 1259 16754 INDEX auth reauthentication_token_idx supabase_auth_admin
+4310; 1259 16751 INDEX auth recovery_token_idx supabase_auth_admin
+4319; 1259 16515 INDEX auth refresh_tokens_instance_id_idx supabase_auth_admin
+4320; 1259 16516 INDEX auth refresh_tokens_instance_id_user_id_idx supabase_auth_admin
+4321; 1259 16746 INDEX auth refresh_tokens_parent_idx supabase_auth_admin
+4324; 1259 16833 INDEX auth refresh_tokens_session_id_revoked_idx supabase_auth_admin
+4327; 1259 16938 INDEX auth refresh_tokens_updated_at_idx supabase_auth_admin
+4390; 1259 16875 INDEX auth saml_providers_sso_provider_id_idx supabase_auth_admin
+4391; 1259 16940 INDEX auth saml_relay_states_created_at_idx supabase_auth_admin
+4392; 1259 16890 INDEX auth saml_relay_states_for_email_idx supabase_auth_admin
+4395; 1259 16889 INDEX auth saml_relay_states_sso_provider_id_idx supabase_auth_admin
+4357; 1259 16941 INDEX auth sessions_not_after_idx supabase_auth_admin
+4358; 1259 17111 INDEX auth sessions_oauth_client_id_idx supabase_auth_admin
+4361; 1259 16832 INDEX auth sessions_user_id_idx supabase_auth_admin
+4382; 1259 16857 INDEX auth sso_domains_domain_idx supabase_auth_admin
+4385; 1259 16856 INDEX auth sso_domains_sso_provider_id_idx supabase_auth_admin
+4380; 1259 16842 INDEX auth sso_providers_resource_id_idx supabase_auth_admin
+4381; 1259 17004 INDEX auth sso_providers_resource_id_pattern_idx supabase_auth_admin
+4370; 1259 17001 INDEX auth unique_phone_factor_per_user supabase_auth_admin
+4362; 1259 16830 INDEX auth user_id_created_at_idx supabase_auth_admin
+4311; 1259 16910 INDEX auth users_email_partial_key supabase_auth_admin
+5436; 0 0 COMMENT auth INDEX users_email_partial_key supabase_auth_admin
+4312; 1259 16748 INDEX auth users_instance_id_email_idx supabase_auth_admin
+4313; 1259 16505 INDEX auth users_instance_id_idx supabase_auth_admin
+4314; 1259 16965 INDEX auth users_is_anonymous_idx supabase_auth_admin
+4508; 1259 28944 INDEX public aps_models_file_path_idx postgres
+4511; 1259 28943 INDEX public aps_models_obra_id_idx postgres
+4514; 1259 28945 INDEX public aps_models_urn_idx postgres
+4551; 1259 41614 INDEX public audit_log_table_idx postgres
+4552; 1259 41613 INDEX public audit_log_tenant_created_idx postgres
+4669; 1259 127384 INDEX public background_jobs_status_idx postgres
+4670; 1259 127383 INDEX public background_jobs_tenant_idx postgres
+4542; 1259 41736 INDEX public calendar_events_active_idx postgres
+4475; 1259 41724 INDEX public certificates_active_idx postgres
+4476; 1259 28875 INDEX public certificates_cobrado_idx postgres
+4477; 1259 28874 INDEX public certificates_facturado_idx postgres
+4478; 1259 17696 INDEX public certificates_obra_id_idx postgres
+4481; 1259 41584 INDEX public certificates_tenant_id_idx postgres
+4482; 1259 28876 INDEX public certificates_vencimiento_idx postgres
+4533; 1259 31399 INDEX public idx_invitation_expires_at postgres
+4534; 1259 31398 INDEX public idx_invitation_status postgres
+4535; 1259 31397 INDEX public idx_invitation_tenant_email postgres
+4536; 1259 31395 INDEX public idx_invitation_token postgres
+4520; 1259 31310 INDEX public idx_obra_flujo_actions_enabled postgres
+4521; 1259 31308 INDEX public idx_obra_flujo_actions_obra_id postgres
+4522; 1259 31309 INDEX public idx_obra_flujo_actions_tenant_id postgres
+4525; 1259 31336 INDEX public idx_obra_flujo_executions_flujo_action_id postgres
+4526; 1259 31337 INDEX public idx_obra_flujo_executions_obra_id postgres
+4527; 1259 49802 INDEX public idx_obra_flujo_executions_recipient postgres
+4528; 1259 49803 INDEX public idx_obra_flujo_executions_scheduled postgres
+4529; 1259 31338 INDEX public idx_obra_flujo_executions_status postgres
+4530; 1259 54508 INDEX public idx_obra_flujo_executions_workflow_run postgres
+4454; 1259 17530 INDEX public instruments_tenant_id_idx postgres
+4609; 1259 65710 INDEX public macro_table_columns_macro_idx postgres
+4612; 1259 65711 INDEX public macro_table_custom_values_macro_idx postgres
+4615; 1259 65712 INDEX public macro_table_custom_values_row_idx postgres
+4618; 1259 86826 INDEX public macro_table_permissions_macro_idx postgres
+4621; 1259 86828 INDEX public macro_table_permissions_role_idx postgres
+4622; 1259 86825 INDEX public macro_table_permissions_role_unique postgres
+4623; 1259 86827 INDEX public macro_table_permissions_user_idx postgres
+4624; 1259 86824 INDEX public macro_table_permissions_user_unique postgres
+4603; 1259 65708 INDEX public macro_table_sources_macro_idx postgres
+4604; 1259 65709 INDEX public macro_table_sources_obra_tabla_idx postgres
+4602; 1259 65707 INDEX public macro_tables_tenant_idx postgres
+4494; 1259 28824 INDEX public material_order_items_order_id_idx postgres
+4489; 1259 28924 INDEX public material_orders_aps_urn_idx postgres
+4490; 1259 28840 INDEX public material_orders_doc_path_idx postgres
+4491; 1259 28823 INDEX public material_orders_obra_id_idx postgres
+4483; 1259 28883 INDEX public notifications_pendiente_stage_idx postgres
+4486; 1259 28884 INDEX public notifications_unique_task_stage postgres
+4487; 1259 17724 INDEX public notifications_user_id_created_at_idx postgres
+4488; 1259 17725 INDEX public notifications_user_id_unread_idx postgres
+4572; 1259 49713 INDEX public obra_default_folders_tenant_idx postgres
+4648; 1259 134388 INDEX public obra_default_quick_actions_tenant_default_name_unique postgres
+4649; 1259 127272 INDEX public obra_default_quick_actions_tenant_idx postgres
+4650; 1259 134390 INDEX public obra_default_quick_actions_tenant_obra_idx postgres
+4651; 1259 134389 INDEX public obra_default_quick_actions_tenant_obra_name_unique postgres
+4584; 1259 49715 INDEX public obra_default_tabla_columns_tabla_idx postgres
+4579; 1259 49714 INDEX public obra_default_tablas_tenant_idx postgres
+4678; 1259 127452 INDEX public obra_findings_lookup_idx postgres
+4545; 1259 33749 INDEX public obra_memoria_notes_obra_id_idx postgres
+4548; 1259 33750 INDEX public obra_memoria_notes_user_id_idx postgres
+4497; 1259 41730 INDEX public obra_pendientes_active_idx postgres
+4498; 1259 28865 INDEX public obra_pendientes_obra_idx postgres
+4501; 1259 28864 INDEX public obra_pendientes_tenant_idx postgres
+4683; 1259 127502 INDEX public obra_signal_logs_lookup_idx postgres
+4673; 1259 127429 INDEX public obra_signals_lookup_idx postgres
+4566; 1259 49639 INDEX public obra_tabla_columns_tabla_id_idx postgres
+4569; 1259 49640 INDEX public obra_tabla_rows_tabla_id_idx postgres
+4559; 1259 49638 INDEX public obra_tablas_obra_id_idx postgres
+4467; 1259 41718 INDEX public obras_active_idx postgres
+4468; 1259 17678 INDEX public obras_on_finish_second_send_at_idx postgres
+4471; 1259 17671 INDEX public obras_porcentaje_idx postgres
+4472; 1259 17664 INDEX public obras_tenant_id_idx postgres
+4591; 1259 49786 INDEX public ocr_document_processing_status_idx postgres
+4592; 1259 49785 INDEX public ocr_document_processing_tabla_idx postgres
+4585; 1259 127363 INDEX public ocr_templates_name_unique postgres
+4588; 1259 49784 INDEX public ocr_templates_tenant_idx postgres
+4502; 1259 41742 INDEX public pendiente_schedules_active_idx postgres
+4507; 1259 41755 INDEX public pendiente_schedules_tenant_run_at_idx postgres
+4656; 1259 127301 INDEX public report_presets_tenant_idx postgres
+4664; 1259 127349 INDEX public report_share_links_tenant_idx postgres
+4661; 1259 127321 INDEX public report_templates_tenant_idx postgres
+4629; 1259 86869 INDEX public sidebar_macro_tables_macro_idx postgres
+4632; 1259 86868 INDEX public sidebar_macro_tables_role_idx postgres
+4635; 1259 127191 INDEX public tenant_api_expenses_period_idx postgres
+4638; 1259 127192 INDEX public tenant_api_expenses_tenant_idx postgres
+4555; 1259 41706 INDEX public tenant_api_secrets_status_idx postgres
+4556; 1259 41705 INDEX public tenant_api_secrets_tenant_version_idx postgres
+4712; 1259 134375 INDEX public tenant_main_table_configs_updated_at_idx postgres
+4645; 1259 127250 INDEX public tenant_usage_events_tenant_idx postgres
+4541; 1259 31396 INDEX public unique_pending_invite postgres
+4433; 1259 17450 INDEX realtime ix_realtime_subscription_entity supabase_admin
+4437; 1259 17451 INDEX realtime messages_inserted_at_topic_index supabase_realtime_admin
+4692; 1259 132084 INDEX realtime messages_2026_02_16_inserted_at_topic_idx supabase_admin
+4695; 1259 132096 INDEX realtime messages_2026_02_17_inserted_at_topic_idx supabase_admin
+4698; 1259 132108 INDEX realtime messages_2026_02_18_inserted_at_topic_idx supabase_admin
+4701; 1259 132120 INDEX realtime messages_2026_02_19_inserted_at_topic_idx supabase_admin
+4704; 1259 134340 INDEX realtime messages_2026_02_20_inserted_at_topic_idx supabase_admin
+4707; 1259 134352 INDEX realtime messages_2026_02_21_inserted_at_topic_idx supabase_admin
+4713; 1259 135530 INDEX realtime messages_2026_02_22_inserted_at_topic_idx supabase_admin
+4436; 1259 118217 INDEX realtime subscription_subscription_id_entity_filters_action_filter_key supabase_admin
+4335; 1259 16560 INDEX storage bname supabase_storage_admin
+4338; 1259 16582 INDEX storage bucketid_objname supabase_storage_admin
+4432; 1259 31261 INDEX storage buckets_analytics_unique_name_idx supabase_storage_admin
+4425; 1259 17183 INDEX storage idx_multipart_uploads_list supabase_storage_admin
+4339; 1259 17148 INDEX storage idx_objects_bucket_id_name supabase_storage_admin
+4340; 1259 120460 INDEX storage idx_objects_bucket_id_name_lower supabase_storage_admin
+4341; 1259 16583 INDEX storage name_prefix_search supabase_storage_admin
+4517; 1259 31252 INDEX storage vector_indexes_name_bucket_id_idx supabase_storage_admin
+4716; 0 0 INDEX ATTACH realtime messages_2026_02_16_inserted_at_topic_idx supabase_realtime_admin
+4717; 0 0 INDEX ATTACH realtime messages_2026_02_16_pkey supabase_realtime_admin
+4718; 0 0 INDEX ATTACH realtime messages_2026_02_17_inserted_at_topic_idx supabase_realtime_admin
+4719; 0 0 INDEX ATTACH realtime messages_2026_02_17_pkey supabase_realtime_admin
+4720; 0 0 INDEX ATTACH realtime messages_2026_02_18_inserted_at_topic_idx supabase_realtime_admin
+4721; 0 0 INDEX ATTACH realtime messages_2026_02_18_pkey supabase_realtime_admin
+4722; 0 0 INDEX ATTACH realtime messages_2026_02_19_inserted_at_topic_idx supabase_realtime_admin
+4723; 0 0 INDEX ATTACH realtime messages_2026_02_19_pkey supabase_realtime_admin
+4724; 0 0 INDEX ATTACH realtime messages_2026_02_20_inserted_at_topic_idx supabase_realtime_admin
+4725; 0 0 INDEX ATTACH realtime messages_2026_02_20_pkey supabase_realtime_admin
+4726; 0 0 INDEX ATTACH realtime messages_2026_02_21_inserted_at_topic_idx supabase_realtime_admin
+4727; 0 0 INDEX ATTACH realtime messages_2026_02_21_pkey supabase_realtime_admin
+4728; 0 0 INDEX ATTACH realtime messages_2026_02_22_inserted_at_topic_idx supabase_realtime_admin
+4729; 0 0 INDEX ATTACH realtime messages_2026_02_22_pkey supabase_realtime_admin
+4849; 2620 17631 TRIGGER auth users on_auth_user_created supabase_auth_admin
+4855; 2620 31353 TRIGGER public tenants add_superadmin_to_tenant postgres
+4874; 2620 41622 TRIGGER public calendar_events audit_log_calendar_events postgres
+4861; 2620 41620 TRIGGER public certificates audit_log_certificates postgres
+4872; 2620 41619 TRIGGER public obra_flujo_actions audit_log_flujo_actions postgres
+4857; 2620 41618 TRIGGER public obras audit_log_obras postgres
+4870; 2620 41623 TRIGGER public pendiente_schedules audit_log_pendiente_schedules postgres
+4867; 2620 41621 TRIGGER public obra_pendientes audit_log_pendientes postgres
+4892; 2620 127388 TRIGGER public background_jobs background_jobs_updated_at postgres
+4875; 2620 41747 TRIGGER public calendar_events calendar_events_soft_delete postgres
+4862; 2620 41586 TRIGGER public certificates certificates_set_tenant_id postgres
+4863; 2620 41745 TRIGGER public certificates certificates_soft_delete postgres
+4856; 2620 31356 TRIGGER public memberships enforce_superadmin_role postgres
+4885; 2620 65726 TRIGGER public macro_table_columns macro_table_columns_updated_at postgres
+4886; 2620 65727 TRIGGER public macro_table_custom_values macro_table_custom_values_updated_at postgres
+4884; 2620 65725 TRIGGER public macro_tables macro_tables_updated_at postgres
+4866; 2620 28835 TRIGGER public material_order_items material_order_items_updated_at postgres
+4865; 2620 28834 TRIGGER public material_orders material_orders_updated_at postgres
+4879; 2620 49725 TRIGGER public obra_default_folders obra_default_folders_updated_at postgres
+4889; 2620 127276 TRIGGER public obra_default_quick_actions obra_default_quick_actions_updated_at postgres
+4881; 2620 49727 TRIGGER public obra_default_tabla_columns obra_default_tabla_columns_updated_at postgres
+4880; 2620 49726 TRIGGER public obra_default_tablas obra_default_tablas_updated_at postgres
+4873; 2620 49804 TRIGGER public obra_flujo_executions obra_flujo_executions_updated_at postgres
+4868; 2620 28867 TRIGGER public obra_pendientes obra_pendientes_set_updated_at postgres
+4869; 2620 41746 TRIGGER public obra_pendientes obra_pendientes_soft_delete postgres
+4877; 2620 49651 TRIGGER public obra_tabla_columns obra_tabla_columns_updated_at postgres
+4878; 2620 49652 TRIGGER public obra_tabla_rows obra_tabla_rows_updated_at postgres
+4876; 2620 49650 TRIGGER public obra_tablas obra_tablas_updated_at postgres
+4858; 2620 17666 TRIGGER public obras obras_set_updated_at postgres
+4859; 2620 41744 TRIGGER public obras obras_soft_delete postgres
+4883; 2620 49794 TRIGGER public ocr_document_processing ocr_document_processing_updated_at postgres
+4882; 2620 49793 TRIGGER public ocr_templates ocr_templates_updated_at postgres
+4871; 2620 41748 TRIGGER public pendiente_schedules pendiente_schedules_soft_delete postgres
+4890; 2620 127359 TRIGGER public report_presets report_presets_updated_at postgres
+4891; 2620 127360 TRIGGER public report_templates report_templates_updated_at postgres
+4887; 2620 127197 TRIGGER public tenant_api_expenses tenant_api_expenses_set_updated_at postgres
+4893; 2620 134377 TRIGGER public tenant_main_table_configs tenant_main_table_configs_set_updated_at postgres
+4888; 2620 127229 TRIGGER public tenant_subscriptions tenant_subscriptions_updated_at postgres
+4864; 2620 17702 TRIGGER public certificates update_certificates_updated_at_trigger postgres
+4860; 2620 17677 TRIGGER public obras update_obras_updated_at_trigger postgres
+4854; 2620 17302 TRIGGER realtime subscription tr_check_filters supabase_admin
+4850; 2620 17239 TRIGGER storage buckets enforce_bucket_name_length_trigger supabase_storage_admin
+4851; 2620 120462 TRIGGER storage buckets protect_buckets_delete supabase_storage_admin
+4852; 2620 120463 TRIGGER storage objects protect_objects_delete supabase_storage_admin
+4853; 2620 17136 TRIGGER storage objects update_objects_updated_at supabase_storage_admin
+4732; 2606 16734 FK CONSTRAINT auth identities identities_user_id_fkey supabase_auth_admin
+4737; 2606 16823 FK CONSTRAINT auth mfa_amr_claims mfa_amr_claims_session_id_fkey supabase_auth_admin
+4735; 2606 16798 FK CONSTRAINT auth mfa_factors mfa_factors_user_id_fkey supabase_auth_admin
+4743; 2606 17063 FK CONSTRAINT auth oauth_authorizations oauth_authorizations_client_id_fkey supabase_auth_admin
+4744; 2606 17068 FK CONSTRAINT auth oauth_authorizations oauth_authorizations_user_id_fkey supabase_auth_admin
+4745; 2606 17092 FK CONSTRAINT auth oauth_consents oauth_consents_client_id_fkey supabase_auth_admin
+4746; 2606 17087 FK CONSTRAINT auth oauth_consents oauth_consents_user_id_fkey supabase_auth_admin
+4742; 2606 16989 FK CONSTRAINT auth one_time_tokens one_time_tokens_user_id_fkey supabase_auth_admin
+4730; 2606 16767 FK CONSTRAINT auth refresh_tokens refresh_tokens_session_id_fkey supabase_auth_admin
+4739; 2606 16870 FK CONSTRAINT auth saml_providers saml_providers_sso_provider_id_fkey supabase_auth_admin
+4740; 2606 16943 FK CONSTRAINT auth saml_relay_states saml_relay_states_flow_state_id_fkey supabase_auth_admin
+4741; 2606 16884 FK CONSTRAINT auth saml_relay_states saml_relay_states_sso_provider_id_fkey supabase_auth_admin
+4733; 2606 17106 FK CONSTRAINT auth sessions sessions_oauth_client_id_fkey supabase_auth_admin
+4734; 2606 16762 FK CONSTRAINT auth sessions sessions_user_id_fkey supabase_auth_admin
+4738; 2606 16851 FK CONSTRAINT auth sso_domains sso_domains_sso_provider_id_fkey supabase_auth_admin
+4779; 2606 28938 FK CONSTRAINT public aps_models aps_models_obra_id_fkey postgres
+4798; 2606 41603 FK CONSTRAINT public audit_log audit_log_tenant_id_fkey postgres
+4835; 2606 127378 FK CONSTRAINT public background_jobs background_jobs_tenant_id_fkey postgres
+4790; 2606 41731 FK CONSTRAINT public calendar_events calendar_events_deleted_by_fkey postgres
+4791; 2606 31469 FK CONSTRAINT public calendar_events calendar_events_obra_id_fkey postgres
+4792; 2606 86874 FK CONSTRAINT public calendar_events calendar_events_target_role_id_fkey postgres
+4794; 2606 31452 FK CONSTRAINT public calendar_events calendar_events_tenant_id_fkey postgres
+4763; 2606 41719 FK CONSTRAINT public certificates certificates_deleted_by_fkey postgres
+4764; 2606 17691 FK CONSTRAINT public certificates certificates_obra_id_fkey postgres
+4765; 2606 41579 FK CONSTRAINT public certificates certificates_tenant_id_fkey postgres
+4753; 2606 17525 FK CONSTRAINT public instruments instruments_tenant_id_fkey postgres
+4787; 2606 31390 FK CONSTRAINT public invitations invitations_accepted_by_fkey postgres
+4788; 2606 31380 FK CONSTRAINT public invitations invitations_tenant_id_fkey postgres
+4815; 2606 65680 FK CONSTRAINT public macro_table_columns macro_table_columns_macro_table_id_fkey postgres
+4816; 2606 65702 FK CONSTRAINT public macro_table_custom_values macro_table_custom_values_column_id_fkey postgres
+4817; 2606 65697 FK CONSTRAINT public macro_table_custom_values macro_table_custom_values_macro_table_id_fkey postgres
+4818; 2606 86809 FK CONSTRAINT public macro_table_permissions macro_table_permissions_macro_table_id_fkey postgres
+4819; 2606 86819 FK CONSTRAINT public macro_table_permissions macro_table_permissions_role_id_fkey postgres
+4820; 2606 86814 FK CONSTRAINT public macro_table_permissions macro_table_permissions_user_id_fkey postgres
+4813; 2606 65655 FK CONSTRAINT public macro_table_sources macro_table_sources_macro_table_id_fkey postgres
+4814; 2606 65660 FK CONSTRAINT public macro_table_sources macro_table_sources_obra_tabla_id_fkey postgres
+4812; 2606 65640 FK CONSTRAINT public macro_tables macro_tables_tenant_id_fkey postgres
+4770; 2606 28818 FK CONSTRAINT public material_order_items material_order_items_order_id_fkey postgres
+4769; 2606 28799 FK CONSTRAINT public material_orders material_orders_obra_id_fkey postgres
+4751; 2606 17506 FK CONSTRAINT public memberships memberships_tenant_id_fkey postgres
+4766; 2606 28878 FK CONSTRAINT public notifications notifications_pendiente_id_fkey postgres
+4767; 2606 17719 FK CONSTRAINT public notifications notifications_tenant_id_fkey postgres
+4804; 2606 49666 FK CONSTRAINT public obra_default_folders obra_default_folders_tenant_id_fkey postgres
+4827; 2606 134383 FK CONSTRAINT public obra_default_quick_actions obra_default_quick_actions_obra_id_fkey postgres
+4828; 2606 127267 FK CONSTRAINT public obra_default_quick_actions obra_default_quick_actions_tenant_id_fkey postgres
+4807; 2606 49708 FK CONSTRAINT public obra_default_tabla_columns obra_default_tabla_columns_default_tabla_id_fkey postgres
+4805; 2606 49779 FK CONSTRAINT public obra_default_tablas obra_default_tablas_ocr_template_id_fkey postgres
+4806; 2606 49687 FK CONSTRAINT public obra_default_tablas obra_default_tablas_tenant_id_fkey postgres
+4840; 2606 127447 FK CONSTRAINT public obra_findings obra_findings_obra_id_fkey postgres
+4841; 2606 127442 FK CONSTRAINT public obra_findings obra_findings_tenant_id_fkey postgres
+4782; 2606 31298 FK CONSTRAINT public obra_flujo_actions obra_flujo_actions_obra_id_fkey postgres
+4783; 2606 31293 FK CONSTRAINT public obra_flujo_actions obra_flujo_actions_tenant_id_fkey postgres
+4784; 2606 31326 FK CONSTRAINT public obra_flujo_executions obra_flujo_executions_flujo_action_id_fkey postgres
+4785; 2606 31331 FK CONSTRAINT public obra_flujo_executions obra_flujo_executions_obra_id_fkey postgres
+4795; 2606 33739 FK CONSTRAINT public obra_memoria_notes obra_memoria_notes_obra_id_fkey postgres
+4771; 2606 28898 FK CONSTRAINT public obra_pendientes obra_pendientes_assigned_user_id_fkey postgres
+4772; 2606 41725 FK CONSTRAINT public obra_pendientes obra_pendientes_deleted_by_fkey postgres
+4773; 2606 28859 FK CONSTRAINT public obra_pendientes obra_pendientes_obra_id_fkey postgres
+4774; 2606 28854 FK CONSTRAINT public obra_pendientes obra_pendientes_tenant_id_fkey postgres
+4836; 2606 127403 FK CONSTRAINT public obra_rule_config obra_rule_config_obra_id_fkey postgres
+4837; 2606 127398 FK CONSTRAINT public obra_rule_config obra_rule_config_tenant_id_fkey postgres
+4844; 2606 127497 FK CONSTRAINT public obra_signal_logs obra_signal_logs_obra_id_fkey postgres
+4845; 2606 127487 FK CONSTRAINT public obra_signal_logs obra_signal_logs_run_id_fkey postgres
+4846; 2606 127492 FK CONSTRAINT public obra_signal_logs obra_signal_logs_tenant_id_fkey postgres
+4842; 2606 127473 FK CONSTRAINT public obra_signal_runs obra_signal_runs_obra_id_fkey postgres
+4843; 2606 127468 FK CONSTRAINT public obra_signal_runs obra_signal_runs_tenant_id_fkey postgres
+4838; 2606 127424 FK CONSTRAINT public obra_signals obra_signals_obra_id_fkey postgres
+4839; 2606 127419 FK CONSTRAINT public obra_signals obra_signals_tenant_id_fkey postgres
+4802; 2606 49616 FK CONSTRAINT public obra_tabla_columns obra_tabla_columns_tabla_id_fkey postgres
+4803; 2606 49633 FK CONSTRAINT public obra_tabla_rows obra_tabla_rows_tabla_id_fkey postgres
+4801; 2606 49595 FK CONSTRAINT public obra_tablas obra_tablas_obra_id_fkey postgres
+4761; 2606 41713 FK CONSTRAINT public obras obras_deleted_by_fkey postgres
+4762; 2606 17659 FK CONSTRAINT public obras obras_tenant_id_fkey postgres
+4809; 2606 49769 FK CONSTRAINT public ocr_document_processing ocr_document_processing_obra_id_fkey postgres
+4810; 2606 49764 FK CONSTRAINT public ocr_document_processing ocr_document_processing_tabla_id_fkey postgres
+4811; 2606 49774 FK CONSTRAINT public ocr_document_processing ocr_document_processing_template_id_fkey postgres
+4808; 2606 49743 FK CONSTRAINT public ocr_templates ocr_templates_tenant_id_fkey postgres
+4775; 2606 41737 FK CONSTRAINT public pendiente_schedules pendiente_schedules_deleted_by_fkey postgres
+4776; 2606 28914 FK CONSTRAINT public pendiente_schedules pendiente_schedules_pendiente_id_fkey postgres
+4777; 2606 41750 FK CONSTRAINT public pendiente_schedules pendiente_schedules_tenant_id_fkey postgres
+4778; 2606 28919 FK CONSTRAINT public pendiente_schedules pendiente_schedules_user_id_fkey postgres
+4829; 2606 127296 FK CONSTRAINT public report_presets report_presets_owner_user_id_fkey postgres
+4830; 2606 127291 FK CONSTRAINT public report_presets report_presets_tenant_id_fkey postgres
+4833; 2606 127339 FK CONSTRAINT public report_share_links report_share_links_preset_id_fkey postgres
+4834; 2606 127334 FK CONSTRAINT public report_share_links report_share_links_tenant_id_fkey postgres
+4831; 2606 127316 FK CONSTRAINT public report_templates report_templates_tenant_id_fkey postgres
+4755; 2606 17578 FK CONSTRAINT public role_permissions role_permissions_permission_id_fkey postgres
+4756; 2606 17573 FK CONSTRAINT public role_permissions role_permissions_role_id_fkey postgres
+4754; 2606 17562 FK CONSTRAINT public roles roles_tenant_id_fkey postgres
+4821; 2606 86863 FK CONSTRAINT public sidebar_macro_tables sidebar_macro_tables_macro_table_id_fkey postgres
+4822; 2606 86858 FK CONSTRAINT public sidebar_macro_tables sidebar_macro_tables_role_id_fkey postgres
+4823; 2606 127186 FK CONSTRAINT public tenant_api_expenses tenant_api_expenses_tenant_id_fkey postgres
+4800; 2606 41695 FK CONSTRAINT public tenant_api_secrets tenant_api_secrets_tenant_id_fkey postgres
+4847; 2606 134365 FK CONSTRAINT public tenant_main_table_configs tenant_main_table_configs_tenant_id_fkey postgres
+4824; 2606 127224 FK CONSTRAINT public tenant_subscriptions tenant_subscriptions_plan_key_fkey postgres
+4825; 2606 127219 FK CONSTRAINT public tenant_subscriptions tenant_subscriptions_tenant_id_fkey postgres
+4826; 2606 127245 FK CONSTRAINT public tenant_usage_events tenant_usage_events_tenant_id_fkey postgres
+4759; 2606 17611 FK CONSTRAINT public user_permission_overrides user_permission_overrides_permission_id_fkey postgres
+4760; 2606 17606 FK CONSTRAINT public user_permission_overrides user_permission_overrides_user_id_fkey postgres
+4757; 2606 17594 FK CONSTRAINT public user_roles user_roles_role_id_fkey postgres
+4731; 2606 16572 FK CONSTRAINT storage objects objects_bucketId_fkey supabase_storage_admin
+4747; 2606 17158 FK CONSTRAINT storage s3_multipart_uploads s3_multipart_uploads_bucket_id_fkey supabase_storage_admin
+4748; 2606 17178 FK CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_bucket_id_fkey supabase_storage_admin
+4749; 2606 17173 FK CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_upload_id_fkey supabase_storage_admin
+4780; 2606 31247 FK CONSTRAINT storage vector_indexes vector_indexes_bucket_id_fkey supabase_storage_admin
+5045; 0 16525 ROW SECURITY auth audit_log_entries supabase_auth_admin
+5059; 0 16929 ROW SECURITY auth flow_state supabase_auth_admin
+5050; 0 16727 ROW SECURITY auth identities supabase_auth_admin
+5044; 0 16518 ROW SECURITY auth instances supabase_auth_admin
+5054; 0 16816 ROW SECURITY auth mfa_amr_claims supabase_auth_admin
+5053; 0 16804 ROW SECURITY auth mfa_challenges supabase_auth_admin
+5052; 0 16791 ROW SECURITY auth mfa_factors supabase_auth_admin
+5060; 0 16979 ROW SECURITY auth one_time_tokens supabase_auth_admin
+5043; 0 16507 ROW SECURITY auth refresh_tokens supabase_auth_admin
+5057; 0 16858 ROW SECURITY auth saml_providers supabase_auth_admin
+5058; 0 16876 ROW SECURITY auth saml_relay_states supabase_auth_admin
+5046; 0 16533 ROW SECURITY auth schema_migrations supabase_auth_admin
+5051; 0 16757 ROW SECURITY auth sessions supabase_auth_admin
+5056; 0 16843 ROW SECURITY auth sso_domains supabase_auth_admin
+5055; 0 16834 ROW SECURITY auth sso_providers supabase_auth_admin
+5042; 0 16495 ROW SECURITY auth users supabase_auth_admin
+5247; 3256 86830 POLICY public macro_table_permissions Admins can manage macro table permissions postgres
+5254; 3256 127196 POLICY public tenant_api_expenses Admins delete tenant api expenses postgres
+5252; 3256 127194 POLICY public tenant_api_expenses Admins insert tenant api expenses postgres
+5251; 3256 127193 POLICY public tenant_api_expenses Admins read tenant api expenses postgres
+5253; 3256 127195 POLICY public tenant_api_expenses Admins update tenant api expenses postgres
+5248; 3256 86845 POLICY public role_templates Anyone can view role templates postgres
+5238; 3256 127252 POLICY public tenant_usage_events Members insert usage events postgres
+5225; 3256 127231 POLICY public tenant_subscriptions Members read tenant subscriptions postgres
+5232; 3256 127251 POLICY public tenant_usage_events Members read usage events postgres
+5224; 3256 127230 POLICY public subscription_plans Public read subscription plans postgres
+5226; 3256 127232 POLICY public tenant_subscriptions Superadmin manage tenant subscriptions postgres
+5162; 3256 31344 POLICY public obra_flujo_actions Users can create flujo actions in their tenant postgres
+5206; 3256 31438 POLICY public aps_models Users can delete APS models from their obras postgres
+5168; 3256 31346 POLICY public obra_flujo_actions Users can delete flujo actions in their tenant postgres
+5201; 3256 31433 POLICY public material_order_items Users can delete material items from their tenant's obras postgres
+5197; 3256 31426 POLICY public material_orders Users can delete material orders in their tenant's obras postgres
+5187; 3256 31418 POLICY public obras Users can delete obras in their tenant postgres
+5213; 3256 33754 POLICY public obra_memoria_notes Users can delete their own obra memoria notes postgres
+5204; 3256 31436 POLICY public aps_models Users can insert APS models for their obras postgres
+5199; 3256 31429 POLICY public material_order_items Users can insert material items from their tenant's obras postgres
+5195; 3256 31424 POLICY public material_orders Users can insert material orders in their tenant's obras postgres
+5211; 3256 33752 POLICY public obra_memoria_notes Users can insert obra memoria notes in their tenant's obras postgres
+5185; 3256 31416 POLICY public obras Users can insert obras in their tenant postgres
+5233; 3256 49791 POLICY public ocr_document_processing Users can manage OCR document processing for their tenant postgres
+5193; 3256 49788 POLICY public ocr_templates Users can manage OCR templates for their tenant postgres
+5266; 3256 127386 POLICY public background_jobs Users can manage background jobs for their tenant postgres
+5230; 3256 49717 POLICY public obra_default_folders Users can manage default folders for their tenant postgres
+5191; 3256 49723 POLICY public obra_default_tabla_columns Users can manage default tabla columns for their tenant postgres
+5188; 3256 49720 POLICY public obra_default_tablas Users can manage default tablas for their tenant postgres
+5240; 3256 65720 POLICY public macro_table_columns Users can manage macro table columns for their tenant postgres
+5242; 3256 65723 POLICY public macro_table_custom_values Users can manage macro table custom values for their tenant postgres
+5237; 3256 65717 POLICY public macro_table_sources Users can manage macro table sources for their tenant postgres
+5235; 3256 65714 POLICY public macro_tables Users can manage macro tables for their tenant postgres
+5256; 3256 127274 POLICY public obra_default_quick_actions Users can manage quick actions for their tenant postgres
+5258; 3256 127351 POLICY public report_presets Users can manage report presets for their tenant postgres
+5264; 3256 127357 POLICY public report_share_links Users can manage report share links for their tenant postgres
+5262; 3256 127354 POLICY public report_templates Users can manage report templates for their tenant postgres
+5250; 3256 86871 POLICY public sidebar_macro_tables Users can manage sidebar macro tables for their tenant roles postgres
+5223; 3256 49645 POLICY public obra_tabla_columns Users can manage tabla columns within their tenant postgres
+5228; 3256 49648 POLICY public obra_tabla_rows Users can manage tabla rows within their tenant postgres
+5221; 3256 49642 POLICY public obra_tablas Users can manage tablas from their tenant's obras postgres
+5205; 3256 31437 POLICY public aps_models Users can update APS models from their obras postgres
+5167; 3256 31345 POLICY public obra_flujo_actions Users can update flujo actions in their tenant postgres
+5200; 3256 31431 POLICY public material_order_items Users can update material items from their tenant's obras postgres
+5196; 3256 31425 POLICY public material_orders Users can update material orders in their tenant's obras postgres
+5186; 3256 31417 POLICY public obras Users can update obras in their tenant postgres
+5212; 3256 33753 POLICY public obra_memoria_notes Users can update their own obra memoria notes postgres
+5202; 3256 31435 POLICY public aps_models Users can view APS models from their obras postgres
+5194; 3256 49790 POLICY public ocr_document_processing Users can view OCR document processing for their tenant postgres
+5192; 3256 49787 POLICY public ocr_templates Users can view OCR templates for their tenant postgres
+5265; 3256 127385 POLICY public background_jobs Users can view background jobs for their tenant postgres
+5229; 3256 49716 POLICY public obra_default_folders Users can view default folders for their tenant postgres
+5189; 3256 49722 POLICY public obra_default_tabla_columns Users can view default tabla columns for their tenant postgres
+5231; 3256 49719 POLICY public obra_default_tablas Users can view default tablas for their tenant postgres
+5161; 3256 31343 POLICY public obra_flujo_actions Users can view flujo actions in their tenant postgres
+5169; 3256 31347 POLICY public obra_flujo_executions Users can view flujo executions in their tenant postgres
+5239; 3256 65719 POLICY public macro_table_columns Users can view macro table columns for their tenant postgres
+5241; 3256 65722 POLICY public macro_table_custom_values Users can view macro table custom values for their tenant postgres
+5246; 3256 86829 POLICY public macro_table_permissions Users can view macro table permissions for their tenant postgres
+5236; 3256 65716 POLICY public macro_table_sources Users can view macro table sources for their tenant postgres
+5234; 3256 65713 POLICY public macro_tables Users can view macro tables for their tenant postgres
+5198; 3256 31427 POLICY public material_order_items Users can view material items from their tenant's obras postgres
+5190; 3256 31423 POLICY public material_orders Users can view material orders from their tenant's obras postgres
+5209; 3256 33751 POLICY public obra_memoria_notes Users can view obra memoria notes in their tenant's obras postgres
+5184; 3256 31415 POLICY public obras Users can view obras from their tenant postgres
+5255; 3256 127273 POLICY public obra_default_quick_actions Users can view quick actions for their tenant postgres
+5257; 3256 127350 POLICY public report_presets Users can view report presets for their tenant postgres
+5263; 3256 127356 POLICY public report_share_links Users can view report share links for their tenant postgres
+5259; 3256 127353 POLICY public report_templates Users can view report templates for their tenant postgres
+5249; 3256 86870 POLICY public sidebar_macro_tables Users can view sidebar macro tables for their tenant roles postgres
+5222; 3256 49644 POLICY public obra_tabla_columns Users can view tabla columns within their tenant postgres
+5227; 3256 49647 POLICY public obra_tabla_rows Users can view tabla rows within their tenant postgres
+5220; 3256 49641 POLICY public obra_tablas Users can view tablas from their tenant's obras postgres
+5136; 3256 17632 POLICY public memberships admins read memberships in tenant postgres
+5171; 3256 31401 POLICY public invitations admins_create_invitations postgres
+5181; 3256 31412 POLICY public permissions admins_delete_permissions postgres
+5437; 0 0 COMMENT public POLICY admins_delete_permissions ON permissions postgres
+5179; 3256 31409 POLICY public permissions admins_insert_permissions postgres
+5438; 0 0 COMMENT public POLICY admins_insert_permissions ON permissions postgres
+5170; 3256 31400 POLICY public invitations admins_read_tenant_invitations postgres
+5152; 3256 31402 POLICY public invitations admins_update_invitations postgres
+5180; 3256 31410 POLICY public permissions admins_update_permissions postgres
+5439; 0 0 COMMENT public POLICY admins_update_permissions ON permissions postgres
+5080; 0 28925 ROW SECURITY public aps_models postgres
+5218; 3256 41615 POLICY public audit_log audit log insert postgres
+5219; 3256 41616 POLICY public audit_log audit log select postgres
+5088; 0 41591 ROW SECURITY public audit_log postgres
+5113; 0 127364 ROW SECURITY public background_jobs postgres
+5142; 3256 17636 POLICY public memberships bootstrap owner membership postgres
+5086; 0 31439 ROW SECURITY public calendar_events postgres
+5075; 0 17679 ROW SECURITY public certificates postgres
+5217; 3256 41590 POLICY public certificates certificates delete in tenant postgres
+5215; 3256 41588 POLICY public certificates certificates insert in tenant postgres
+5214; 3256 41587 POLICY public certificates certificates select in tenant postgres
+5216; 3256 41589 POLICY public certificates certificates update in tenant postgres
+5127; 3256 17539 POLICY public instruments delete instruments in tenant postgres
+5166; 3256 134381 POLICY public tenant_main_table_configs delete main table configs in tenant as admin postgres
+5146; 3256 17670 POLICY public obras delete obras in tenant postgres
+5151; 3256 17729 POLICY public notifications delete own notifications postgres
+5208; 3256 31468 POLICY public calendar_events insert calendar_events in tenant postgres
+5125; 3256 17537 POLICY public instruments insert instruments in tenant postgres
+5164; 3256 134379 POLICY public tenant_main_table_configs insert main table configs in tenant as admin postgres
+5144; 3256 17668 POLICY public obras insert obras in tenant postgres
+5147; 3256 17727 POLICY public notifications insert own notifications postgres
+5210; 3256 86793 POLICY public tenants insert tenants postgres
+5068; 0 17516 ROW SECURITY public instruments postgres
+5085; 0 31363 ROW SECURITY public invitations postgres
+5100; 0 65665 ROW SECURITY public macro_table_columns postgres
+5101; 0 65685 ROW SECURITY public macro_table_custom_values postgres
+5102; 0 86798 ROW SECURITY public macro_table_permissions postgres
+5099; 0 65645 ROW SECURITY public macro_table_sources postgres
+5098; 0 65627 ROW SECURITY public macro_tables postgres
+5135; 3256 17628 POLICY public user_permission_overrides manage overrides in tenant postgres
+5132; 3256 17622 POLICY public role_permissions manage role_permissions in tenant postgres
+5130; 3256 17620 POLICY public roles manage roles in tenant postgres
+5133; 3256 17625 POLICY public user_roles manage user_roles in tenant postgres
+5078; 0 28804 ROW SECURITY public material_order_items postgres
+5077; 0 28789 ROW SECURITY public material_orders postgres
+5067; 0 17499 ROW SECURITY public memberships postgres
+5076; 0 17703 ROW SECURITY public notifications postgres
+5093; 0 49653 ROW SECURITY public obra_default_folders postgres
+5109; 0 127253 ROW SECURITY public obra_default_quick_actions postgres
+5095; 0 49692 ROW SECURITY public obra_default_tabla_columns postgres
+5094; 0 49671 ROW SECURITY public obra_default_tablas postgres
+5116; 0 127430 ROW SECURITY public obra_findings postgres
+5138; 3256 127457 POLICY public obra_findings obra_findings read in tenant postgres
+5139; 3256 127458 POLICY public obra_findings obra_findings write in tenant postgres
+5083; 0 31278 ROW SECURITY public obra_flujo_actions postgres
+5084; 0 31315 ROW SECURITY public obra_flujo_executions postgres
+5087; 0 33730 ROW SECURITY public obra_memoria_notes postgres
+5079; 0 28841 ROW SECURITY public obra_pendientes postgres
+5160; 3256 28871 POLICY public obra_pendientes obra_pendientes delete in tenant postgres
+5158; 3256 28869 POLICY public obra_pendientes obra_pendientes insert in tenant postgres
+5157; 3256 28868 POLICY public obra_pendientes obra_pendientes read in tenant postgres
+5159; 3256 28870 POLICY public obra_pendientes obra_pendientes update in tenant postgres
+5114; 0 127389 ROW SECURITY public obra_rule_config postgres
+5267; 3256 127453 POLICY public obra_rule_config obra_rule_config read in tenant postgres
+5268; 3256 127454 POLICY public obra_rule_config obra_rule_config write in tenant postgres
+5118; 0 127478 ROW SECURITY public obra_signal_logs postgres
+5148; 3256 127505 POLICY public obra_signal_logs obra_signal_logs read in tenant postgres
+5149; 3256 127506 POLICY public obra_signal_logs obra_signal_logs write in tenant postgres
+5117; 0 127459 ROW SECURITY public obra_signal_runs postgres
+5140; 3256 127503 POLICY public obra_signal_runs obra_signal_runs read in tenant postgres
+5141; 3256 127504 POLICY public obra_signal_runs obra_signal_runs write in tenant postgres
+5115; 0 127408 ROW SECURITY public obra_signals postgres
+5260; 3256 127455 POLICY public obra_signals obra_signals read in tenant postgres
+5261; 3256 127456 POLICY public obra_signals obra_signals write in tenant postgres
+5091; 0 49600 ROW SECURITY public obra_tabla_columns postgres
+5092; 0 49621 ROW SECURITY public obra_tabla_rows postgres
+5090; 0 49580 ROW SECURITY public obra_tablas postgres
+5074; 0 17638 ROW SECURITY public obras postgres
+5097; 0 49748 ROW SECURITY public ocr_document_processing postgres
+5096; 0 49728 ROW SECURITY public ocr_templates postgres
+5069; 0 17540 ROW SECURITY public permissions postgres
+5066; 0 17478 ROW SECURITY public profiles postgres
+5207; 3256 31467 POLICY public calendar_events read calendar_events in tenant postgres
+5124; 3256 17536 POLICY public instruments read instruments in tenant postgres
+5163; 3256 134378 POLICY public tenant_main_table_configs read main table configs in tenant postgres
+5122; 3256 17534 POLICY public tenants read member tenants postgres
+5143; 3256 17667 POLICY public obras read obras in tenant postgres
+5134; 3256 17627 POLICY public user_permission_overrides read overrides postgres
+5123; 3256 17535 POLICY public memberships read own memberships postgres
+5137; 3256 17726 POLICY public notifications read own notifications postgres
+5120; 3256 17532 POLICY public profiles read own profile postgres
+5128; 3256 17618 POLICY public permissions read permissions postgres
+5131; 3256 17621 POLICY public role_permissions read role_permissions in tenant postgres
+5129; 3256 17619 POLICY public roles read roles in tenant postgres
+5110; 0 127277 ROW SECURITY public report_presets postgres
+5112; 0 127322 ROW SECURITY public report_share_links postgres
+5111; 0 127302 ROW SECURITY public report_templates postgres
+5071; 0 17567 ROW SECURITY public role_permissions postgres
+5103; 0 86832 ROW SECURITY public role_templates postgres
+5070; 0 17551 ROW SECURITY public roles postgres
+5243; 3256 65728 POLICY public memberships self join tenant as member postgres
+5104; 0 86848 ROW SECURITY public sidebar_macro_tables postgres
+5106; 0 127198 ROW SECURITY public subscription_plans postgres
+5203; 3256 65732 POLICY public invitations superadmin read invitations postgres
+5245; 3256 65731 POLICY public memberships superadmin read memberships postgres
+5244; 3256 65730 POLICY public tenants superadmin read tenants postgres
+5177; 3256 31406 POLICY public memberships superadmin_can_insert_memberships postgres
+5178; 3256 31407 POLICY public memberships superadmin_can_update_memberships postgres
+5183; 3256 31414 POLICY public user_roles superadmins_read_all_roles postgres
+5440; 0 0 COMMENT public POLICY superadmins_read_all_roles ON user_roles postgres
+5175; 3256 41710 POLICY public tenant_api_secrets tenant api secrets delete postgres
+5173; 3256 41708 POLICY public tenant_api_secrets tenant api secrets insert postgres
+5172; 3256 41707 POLICY public tenant_api_secrets tenant api secrets select postgres
+5174; 3256 41709 POLICY public tenant_api_secrets tenant api secrets update postgres
+5105; 0 127168 ROW SECURITY public tenant_api_expenses postgres
+5089; 0 41683 ROW SECURITY public tenant_api_secrets postgres
+5119; 0 134355 ROW SECURITY public tenant_main_table_configs postgres
+5107; 0 127207 ROW SECURITY public tenant_subscriptions postgres
+5108; 0 127234 ROW SECURITY public tenant_usage_events postgres
+5065; 0 17467 ROW SECURITY public tenants postgres
+5126; 3256 17538 POLICY public instruments update instruments in tenant postgres
+5165; 3256 134380 POLICY public tenant_main_table_configs update main table configs in tenant as admin postgres
+5145; 3256 17669 POLICY public obras update obras in tenant postgres
+5150; 3256 17728 POLICY public notifications update own notifications postgres
+5121; 3256 17533 POLICY public profiles update own profile postgres
+5073; 0 17599 ROW SECURITY public user_permission_overrides postgres
+5072; 0 17583 ROW SECURITY public user_roles postgres
+5176; 3256 31403 POLICY public invitations users_read_own_invitations postgres
+5182; 3256 31413 POLICY public user_roles users_read_own_roles postgres
+5441; 0 0 COMMENT public POLICY users_read_own_roles ON user_roles postgres
+5064; 0 17435 ROW SECURITY realtime messages supabase_realtime_admin
+5047; 0 16546 ROW SECURITY storage buckets supabase_storage_admin
+5063; 0 17246 ROW SECURITY storage buckets_analytics supabase_storage_admin
+5081; 0 31227 ROW SECURITY storage buckets_vectors supabase_storage_admin
+5049; 0 16588 ROW SECURITY storage migrations supabase_storage_admin
+5048; 0 16561 ROW SECURITY storage objects supabase_storage_admin
+5156; 3256 28839 POLICY storage objects obra-documents delete supabase_storage_admin
+5154; 3256 28837 POLICY storage objects obra-documents insert supabase_storage_admin
+5153; 3256 28836 POLICY storage objects obra-documents read supabase_storage_admin
+5155; 3256 28838 POLICY storage objects obra-documents update supabase_storage_admin
+5061; 0 17149 ROW SECURITY storage s3_multipart_uploads supabase_storage_admin
+5062; 0 17163 ROW SECURITY storage s3_multipart_uploads_parts supabase_storage_admin
+5082; 0 31237 ROW SECURITY storage vector_indexes supabase_storage_admin
+5269; 6104 16426 PUBLICATION - supabase_realtime postgres
+5270; 6104 31223 PUBLICATION - supabase_realtime_messages_publication supabase_admin
+5271; 6106 28877 PUBLICATION TABLE public supabase_realtime notifications postgres
+5272; 6106 31224 PUBLICATION TABLE realtime supabase_realtime_messages_publication messages supabase_admin
+3912; 3466 16621 EVENT TRIGGER - issue_graphql_placeholder supabase_admin
+3917; 3466 16700 EVENT TRIGGER - issue_pg_cron_access supabase_admin
+3911; 3466 16619 EVENT TRIGGER - issue_pg_graphql_access supabase_admin
+3918; 3466 16703 EVENT TRIGGER - issue_pg_net_access supabase_admin
+3913; 3466 16622 EVENT TRIGGER - pgrst_ddl_watch supabase_admin
+3914; 3466 16623 EVENT TRIGGER - pgrst_drop_watch supabase_admin

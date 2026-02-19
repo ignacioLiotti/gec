@@ -8,6 +8,8 @@ import {
   Layers,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   Loader2,
   Database,
   Columns3,
@@ -100,6 +102,33 @@ type DefaultTabla = {
   columnCount: number;
 };
 
+type MainTableColumnConfig = {
+  id: string;
+  kind: "base" | "formula" | "custom";
+  label: string;
+  enabled: boolean;
+  formulaFormat?: "number" | "currency";
+  cellType?: string;
+};
+
+type AvailableSourceColumn = {
+  key: string;
+  label: string;
+  dataType: MacroTableDataType;
+};
+
+type ObraApiItem = {
+  id: string;
+  designacionYUbicacion: string;
+};
+
+type ObraTablaApiItem = {
+  id: string;
+  name: string;
+  settings?: { defaultTablaId?: string | null } | null;
+  columns?: ObraTablaColumn[];
+};
+
 const normalizeTemplateName = (value: string) =>
   value
     .normalize("NFD")
@@ -160,6 +189,7 @@ export default function NewMacroTablePage() {
   // Available data
   const [obras, setObras] = useState<Obra[]>([]);
   const [expandedObras, setExpandedObras] = useState<Set<string>>(new Set());
+  const [obrasTableSourceColumns, setObrasTableSourceColumns] = useState<ObraTablaColumn[]>([]);
 
   // Templates
   const [templates, setTemplates] = useState<DefaultTabla[]>([]);
@@ -194,6 +224,25 @@ export default function NewMacroTablePage() {
     ? columns.find((c) => c.id === selectedColumnId) ?? null
     : null;
 
+  const mapMainColumnTypeToMacroType = useCallback(
+    (column: MainTableColumnConfig): MacroTableDataType => {
+      if (column.formulaFormat === "currency") return "currency";
+      if (column.formulaFormat === "number") return "number";
+      if (column.cellType === "currency") return "currency";
+      if (column.cellType === "number") return "number";
+      if (column.cellType === "date") return "date";
+      if (
+        column.cellType === "boolean" ||
+        column.cellType === "checkbox" ||
+        column.cellType === "toggle"
+      ) {
+        return "boolean";
+      }
+      return "text";
+    },
+    []
+  );
+
   // Fetch templates
   const fetchTemplates = useCallback(async () => {
     try {
@@ -214,20 +263,20 @@ export default function NewMacroTablePage() {
       // Fetch all obras
       const obrasRes = await fetch("/api/obras");
       if (!obrasRes.ok) throw new Error("Failed to load obras");
-      const obrasData = await obrasRes.json();
+      const obrasData = (await obrasRes.json()) as { detalleObras?: ObraApiItem[] };
       const obrasList = obrasData.detalleObras ?? [];
 
       // Fetch tablas for each obra
       const obrasWithTablas: Obra[] = await Promise.all(
-        obrasList.map(async (obra: any) => {
+        obrasList.map(async (obra) => {
           try {
             const tablasRes = await fetch(`/api/obras/${obra.id}/tablas`);
             if (!tablasRes.ok) return { ...obra, tablas: [] };
-            const tablasData = await tablasRes.json();
+            const tablasData = (await tablasRes.json()) as { tablas?: ObraTablaApiItem[] };
             return {
               id: obra.id,
               designacionYUbicacion: obra.designacionYUbicacion,
-              tablas: (tablasData.tablas ?? []).map((t: any) => ({
+              tablas: (tablasData.tablas ?? []).map((t) => ({
                 id: t.id,
                 obraId: obra.id,
                 name: t.name,
@@ -252,10 +301,31 @@ export default function NewMacroTablePage() {
     }
   }, []);
 
+  const fetchMainTableColumns = useCallback(async () => {
+    try {
+      const res = await fetch("/api/main-table-config", { cache: "no-store" });
+      if (!res.ok) return;
+      const payload = (await res.json()) as { columns?: MainTableColumnConfig[] };
+      const rawColumns = Array.isArray(payload.columns) ? payload.columns : [];
+      const mapped: ObraTablaColumn[] = rawColumns
+        .filter((column) => column && column.enabled !== false && typeof column.id === "string")
+        .map((column) => ({
+          id: `obra-${column.id}`,
+          fieldKey: `obra.${column.id}`,
+          label: `Obra · ${column.label || column.id}`,
+          dataType: mapMainColumnTypeToMacroType(column),
+        }));
+      setObrasTableSourceColumns(mapped);
+    } catch (error) {
+      console.error("Failed to load main table columns", error);
+    }
+  }, [mapMainColumnTypeToMacroType]);
+
   useEffect(() => {
     void fetchObrasWithTablas();
     void fetchTemplates();
-  }, [fetchObrasWithTablas, fetchTemplates]);
+    void fetchMainTableColumns();
+  }, [fetchMainTableColumns, fetchObrasWithTablas, fetchTemplates]);
 
   // Toggle obra expansion
   const toggleObraExpansion = (obraId: string) => {
@@ -397,24 +467,56 @@ export default function NewMacroTablePage() {
     return count;
   };
 
-  // Keep source columns in sync with selected sources (prevents stale columns
-  // when narrowing selection from many tables to only one/some table types).
-  useEffect(() => {
-    if (currentStep !== 2) return;
+  const selectedTableSourceColumns = useMemo(() => {
+    const byKey = new Map<string, AvailableSourceColumn>();
 
-    const fieldKeyMap = new Map<string, { label: string; dataType: MacroTableDataType }>();
     for (const source of selectedSources) {
       for (const col of source.columns) {
-        if (fieldKeyMap.has(col.fieldKey)) continue;
-        fieldKeyMap.set(col.fieldKey, {
-          label: col.label,
+        if (byKey.has(col.fieldKey)) continue;
+        byKey.set(col.fieldKey, {
+          key: col.fieldKey,
+          label: col.label || col.fieldKey,
           dataType: (DATA_TYPES.includes(col.dataType as MacroTableDataType)
             ? col.dataType
             : "text") as MacroTableDataType,
         });
       }
     }
-    const fieldEntries = Array.from(fieldKeyMap.entries());
+
+    return Array.from(byKey.values());
+  }, [selectedSources]);
+
+  const availableSourceColumns = useMemo(() => {
+    const byKey = new Map<string, AvailableSourceColumn>();
+
+    for (const sourceColumn of selectedTableSourceColumns) {
+      byKey.set(sourceColumn.key, sourceColumn);
+    }
+
+    for (const obraColumn of obrasTableSourceColumns) {
+      if (byKey.has(obraColumn.fieldKey)) continue;
+      byKey.set(obraColumn.fieldKey, {
+        key: obraColumn.fieldKey,
+        label: obraColumn.label || obraColumn.fieldKey,
+        dataType: (DATA_TYPES.includes(obraColumn.dataType as MacroTableDataType)
+          ? obraColumn.dataType
+          : "text") as MacroTableDataType,
+      });
+    }
+
+    return Array.from(byKey.values());
+  }, [obrasTableSourceColumns, selectedTableSourceColumns]);
+
+  // Keep source columns in sync with selected source tables (prefill only table columns),
+  // while preserving manually added source columns from other available origins (e.g. obra.*).
+  useEffect(() => {
+    if (currentStep !== 2) return;
+
+    const fieldEntries = selectedTableSourceColumns.map((sourceColumn) => [
+      sourceColumn.key,
+      { label: sourceColumn.label, dataType: sourceColumn.dataType },
+    ] as const);
+    const availableOptionsByKey = new Map(availableSourceColumns.map((column) => [column.key, column]));
 
     setColumns((prev) => {
       if (selectedSources.length === 0) {
@@ -444,7 +546,6 @@ export default function NewMacroTablePage() {
         return generated;
       }
 
-      const nonSourceColumns = prev.filter((column) => column.columnType !== "source");
       const sourceByFieldKey = new Map(
         prev
           .filter((column): column is ColumnConfig & { sourceFieldKey: string } =>
@@ -467,7 +568,40 @@ export default function NewMacroTablePage() {
         };
       });
 
-      const next = [...nonSourceColumns, ...syncedSourceColumns];
+      const syncedSourceByFieldKey = new Map(
+        syncedSourceColumns.map((column) => [column.sourceFieldKey as string, column])
+      );
+      const consumedSourceKeys = new Set<string>();
+      const next: ColumnConfig[] = [];
+
+      for (const column of prev) {
+        if (column.columnType !== "source") {
+          next.push(column);
+          continue;
+        }
+        if (typeof column.sourceFieldKey !== "string") {
+          continue;
+        }
+
+        const syncedColumn = syncedSourceByFieldKey.get(column.sourceFieldKey);
+        if (syncedColumn) {
+          next.push(syncedColumn);
+          consumedSourceKeys.add(column.sourceFieldKey);
+          continue;
+        }
+
+        const availableOption = availableOptionsByKey.get(column.sourceFieldKey);
+        if (availableOption) {
+          next.push({ ...column, dataType: availableOption.dataType });
+        }
+      }
+
+      for (const [fieldKey, syncedColumn] of syncedSourceByFieldKey) {
+        if (!consumedSourceKeys.has(fieldKey)) {
+          next.push(syncedColumn);
+        }
+      }
+
       const same =
         next.length === prev.length &&
         next.every((column, index) => {
@@ -483,7 +617,7 @@ export default function NewMacroTablePage() {
         });
       return same ? prev : next;
     });
-  }, [currentStep, selectedSources]);
+  }, [availableSourceColumns, currentStep, selectedSources.length, selectedTableSourceColumns]);
 
   // Add custom column
   const addCustomColumn = () => {
@@ -519,6 +653,18 @@ export default function NewMacroTablePage() {
 
   const handleSelectColumn = (columnId: string) => {
     setSelectedColumnId(columnId);
+  };
+
+  const moveColumn = (columnId: string, direction: "up" | "down") => {
+    setColumns((prev) => {
+      const currentIndex = prev.findIndex((column) => column.id === columnId);
+      if (currentIndex < 0) return prev;
+      const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const next = [...prev];
+      [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
+      return next;
+    });
   };
 
   const renderColumnOverlay = (column: ColumnConfig) => (
@@ -566,9 +712,11 @@ export default function NewMacroTablePage() {
     </div>
   );
 
-  // Get all available field keys from selected sources
-  const availableFieldKeys = Array.from(
-    new Set(selectedSources.flatMap((s) => s.columns.map((c) => c.fieldKey)))
+  // Get all available field keys from selected source tables + obras main table
+  const availableFieldKeys = availableSourceColumns.map((column) => column.key);
+  const availableFieldOptionsByKey = useMemo(
+    () => new Map(availableSourceColumns.map((column) => [column.key, column])),
+    [availableSourceColumns]
   );
 
   // Validation
@@ -875,7 +1023,7 @@ export default function NewMacroTablePage() {
 
                 <Separator />
                 <p className="text-xs text-muted-foreground">
-                  Expandí una obra para elegir tablas individuales, o usá los botones "Todas" y "Ninguna" por obra.
+                  Expandí una obra para elegir tablas individuales, o usá los botones &quot;Todas&quot; y &quot;Ninguna&quot; por obra.
                 </p>
 
                 {obras.length === 0 ? (
@@ -1280,17 +1428,35 @@ export default function NewMacroTablePage() {
                                   ? "Columna personalizada"
                                   : selectedColumn.columnType === "computed"
                                     ? "Columna calculada"
-                                    : "Columna fuente"}
+                                  : "Columna fuente"}
                               </Badge>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:bg-destructive/10"
-                                onClick={() => removeColumn(selectedColumn.id)}
-                                aria-label="Eliminar columna seleccionada"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => moveColumn(selectedColumn.id, "up")}
+                                  aria-label="Mover columna arriba"
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => moveColumn(selectedColumn.id, "down")}
+                                  aria-label="Mover columna abajo"
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:bg-destructive/10"
+                                  onClick={() => removeColumn(selectedColumn.id)}
+                                  aria-label="Eliminar columna seleccionada"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
 
                             <div className="space-y-2">
@@ -1319,7 +1485,7 @@ export default function NewMacroTablePage() {
                                   <SelectContent>
                                     {availableFieldKeys.map((key) => (
                                       <SelectItem key={key} value={key}>
-                                        {key}
+                                        {availableFieldOptionsByKey.get(key)?.label ?? key}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>

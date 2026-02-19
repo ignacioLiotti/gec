@@ -23,8 +23,10 @@ export const DocumentPreview = memo(function DocumentPreview({ document, preview
 		);
 	}
 
-	const isImage = document.mimetype?.startsWith("image/");
-	const isPdf = document.mimetype === "application/pdf";
+	const mimeType = (document.mimetype || "").toLowerCase();
+	const fileName = (document.name || "").toLowerCase();
+	const isImage = mimeType.startsWith("image/");
+	const isPdf = mimeType.includes("pdf") || fileName.endsWith(".pdf");
 	const has3DModel = Boolean(document.apsUrn);
 
 	return (

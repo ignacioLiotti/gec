@@ -1,6 +1,6 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { FormApi } from "@tanstack/react-form";
 import { motion } from "framer-motion";
 import { AlertCircle, AlertTriangle, Building2, Calendar, DollarSign, FileText, LineChart as LineChartIcon, MapPin, Percent, TrendingUp } from "lucide-react";
 import {
@@ -82,6 +82,17 @@ type GeneralTabProps = {
 	getErrorMessage: (errors: unknown) => string;
 	quickActionsAllData?: GeneralTabQuickActions;
 	reportsData?: GeneralTabReportsData;
+};
+
+const periodLabel = (period: string): string => {
+	const [year, month] = period.split("-");
+	const y = Number.parseInt(year, 10);
+	const m = Number.parseInt(month, 10);
+	if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return period;
+	return new Date(y, m - 1, 1).toLocaleDateString("es-AR", {
+		month: "short",
+		year: "numeric",
+	});
 };
 
 const CircularProgress = ({ value }: { value: number }) => {
@@ -184,14 +195,16 @@ const AdvanceCurveChart = ({
 	const currentMonthOrder = now.getFullYear() * 12 + now.getMonth();
 	const minX = Math.min(...chartData.map((d) => d.x));
 	const maxX = Math.max(...chartData.map((d) => d.x));
-	const totalMonths = Math.max(1, maxX - minX + 1);
-	const elapsedMonths = Math.max(1, Math.min(totalMonths, currentMonthOrder - minX + 1));
-	const timelinePctByCurve = (elapsedMonths / totalMonths) * 100;
-	const timelineLabel = `Hoy ${timelinePctByCurve.toFixed(1)}%`;
 	const markerX =
 		Number.isFinite(currentMonthOrder)
 			? Math.max(minX, Math.min(maxX, currentMonthOrder))
 			: null;
+	const timelineLabel = (() => {
+		if (markerX == null) return null;
+		const year = Math.floor(markerX / 12);
+		const month = (markerX % 12) + 1;
+		return `Hoy · ${periodLabel(`${year}-${String(month).padStart(2, "0")}`)}`;
+	})();
 
 	const yTicks = [0, 25, 50, 75, 100].filter((tick) => tick <= yMax || tick === 100);
 	const labelStep = chartData.length > 12 ? Math.ceil(chartData.length / 12) : 1;

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { resolveTenantMembership } from "@/lib/tenant-selection"
+import { MomentCell } from "./_components/moment-cell"
 
 const PAGE_SIZE = 50
 const TABLE_FILTERS: { label: string; value: string }[] = [
@@ -231,17 +232,7 @@ export default async function AuditLogPage({
           <tbody>
             {entries.map((entry) => (
               <tr key={entry.id} className="border-t align-top">
-                <td className="px-3 py-3 text-sm">
-                  <div className="font-medium">
-                    {new Date(entry.created_at).toLocaleString("es-AR", {
-                      dateStyle: "short",
-                      timeStyle: "medium",
-                    })}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {timeAgo(entry.created_at)}
-                  </div>
-                </td>
+                <MomentCell value={entry.created_at} />
                 <td className="px-3 py-3">
                   <code className="rounded bg-muted/60 px-1.5 py-0.5 text-xs">
                     {entry.table_name}
@@ -370,16 +361,6 @@ function PaginationLink({
   )
 }
 
-function timeAgo(value: string) {
-  const diffMs = Date.now() - new Date(value).getTime()
-  const diffMinutes = Math.floor(diffMs / (1000 * 60))
-  if (diffMinutes < 1) return "hace instantes"
-  if (diffMinutes < 60) return `hace ${diffMinutes} min`
-  const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return `hace ${diffHours} h`
-  const diffDays = Math.floor(diffHours / 24)
-  return `hace ${diffDays} d`
-}
 
 function formatPrimaryKey(rowPk: Record<string, string | null> | null) {
   if (!rowPk || Object.keys(rowPk).length === 0) return "—"

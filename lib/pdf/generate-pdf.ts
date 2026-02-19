@@ -82,7 +82,9 @@ export async function generatePdf(
 
 		if (!response.ok) {
 			const errorData = await response.json().catch(() => ({}));
-			throw new Error(errorData.error || `HTTP error: ${response.status}`);
+			const detail = typeof errorData.details === "string" ? errorData.details : "";
+			const message = typeof errorData.error === "string" ? errorData.error : `HTTP error: ${response.status}`;
+			throw new Error(detail ? `${message}: ${detail}` : message);
 		}
 
 		// Get the PDF blob

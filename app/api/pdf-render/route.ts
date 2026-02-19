@@ -3,6 +3,7 @@ import puppeteer, { type Browser, type LaunchOptions } from "puppeteer-core";
 
 export const maxDuration = 60; // Allow up to 60 seconds for PDF generation
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 type PdfRenderRequest = {
 	html: string;
@@ -74,17 +75,19 @@ function createFooterTemplate(): string {
  */
 async function getBrowserLaunchOptions(): Promise<LaunchOptions> {
 	const isDev = process.env.NODE_ENV === "development";
+	const fs = await import("fs");
+	const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+	// Honor explicit executable path in any environment (dev/prod).
+	if (envPath && fs.existsSync(envPath)) {
+		return {
+			executablePath: envPath,
+			headless: true,
+			args: ["--no-sandbox", "--disable-setuid-sandbox"],
+		};
+	}
 
 	if (isDev) {
-		const fs = await import("fs");
-		const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
-		if (envPath && fs.existsSync(envPath)) {
-			return {
-				executablePath: envPath,
-				headless: true,
-				args: ["--no-sandbox", "--disable-setuid-sandbox"],
-			};
-		}
 		// For local development, try to use puppeteer's bundled Chromium
 		try {
 			// Dynamic import puppeteer (full version with bundled Chromium)
@@ -181,10 +184,14 @@ export async function POST(request: NextRequest) {
 		browser = await puppeteer.launch(launchOptions);
 
 		const page = await browser.newPage();
+		page.setDefaultNavigationTimeout(45_000);
+		page.setDefaultTimeout(45_000);
 
-		// Set the HTML content
+		// Set HTML content without waiting for network idle, which can hang in serverless
+		// if fonts/assets never fully settle.
 		await page.setContent(body.html, {
-			waitUntil: "networkidle0",
+			waitUntil: "domcontentloaded",
+			timeout: 45_000,
 		});
 
 		// Generate PDF with proper configuration
@@ -220,7 +227,12 @@ export async function POST(request: NextRequest) {
 			},
 		});
 	} catch (error) {
-		console.error("PDF generation error:", error);
+		console.error("PDF generation error:", {
+			message: error instanceof Error ? error.message : "Unknown error",
+			stack: error instanceof Error ? error.stack : undefined,
+			nodeEnv: process.env.NODE_ENV,
+			runtime: "nodejs",
+		});
 
 		if (browser) {
 			await browser.close();

@@ -1,4 +1,6 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
@@ -100,6 +102,7 @@ import {
   getCachedSignedUrl,
   setCachedSignedUrl,
   getCachedBlobUrl,
+  setCachedBlobUrl,
   preloadAndCacheFile,
   clearCachesForObra,
   getCachedApsModels,
@@ -339,6 +342,8 @@ type FileThumbnailProps = {
   renderOcrStatusBadge: (item: FileSystemItem) => ReactNode;
 };
 
+const pdfThumbnailCache = new Map<string, string>();
+
 const FileThumbnail = memo(function FileThumbnail({
   item,
   supabase,
@@ -346,28 +351,46 @@ const FileThumbnail = memo(function FileThumbnail({
   renderOcrStatusBadge,
 }: FileThumbnailProps) {
   const storagePath = item.storagePath;
+  const fileExt = item.name.toLowerCase().split('.').pop() ?? '';
+  const isImageFile =
+    Boolean(item.mimetype?.startsWith('image/')) ||
+    ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'heic', 'heif'].includes(fileExt);
+  const isPdfFile = item.mimetype === 'application/pdf' || fileExt === 'pdf';
+  const isPreviewableFile = isImageFile || isPdfFile;
   // Check blob cache first, then signed URL cache
   const initialUrl = storagePath
-    ? (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath))
+    ? (isPdfFile
+      ? (pdfThumbnailCache.get(storagePath) ?? null)
+      : (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath)))
     : null;
   const [thumbUrl, setThumbUrl] = useState<string | null>(initialUrl);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    if (!storagePath || !item.mimetype?.startsWith('image/')) {
+    if (!storagePath || !isPreviewableFile) {
       setThumbUrl(null);
+      setRetryCount(0);
       return;
+    }
+
+    if (isPdfFile) {
+      const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
+      if (cachedPdfThumb) {
+        setThumbUrl(cachedPdfThumb);
+        return;
+      }
     }
 
     // Check blob cache first (instant, no network)
     const cachedBlob = getCachedBlobUrl(storagePath);
-    if (cachedBlob) {
+    if (cachedBlob && isImageFile) {
       setThumbUrl(cachedBlob);
       return;
     }
 
     // Check signed URL cache
     const cachedSignedUrl = getCachedSignedUrl(storagePath);
-    if (cachedSignedUrl) {
+    if (cachedSignedUrl && isImageFile) {
       setThumbUrl(cachedSignedUrl);
       // Preload to blob cache in background
       preloadAndCacheFile(cachedSignedUrl, storagePath).then((blobUrl) => {
@@ -379,15 +402,101 @@ const FileThumbnail = memo(function FileThumbnail({
     let isMounted = true;
 
     (async () => {
-      const { data, error } = await supabase.storage
-        .from('obra-documents')
-        .createSignedUrl(storagePath, 3600); // 1 hour
-      if (!isMounted || error || !data?.signedUrl) return;
-      setCachedSignedUrl(storagePath, data.signedUrl);
+      const getSignedUrl = async () => {
+        const { data, error } = await supabase.storage
+          .from('obra-documents')
+          .createSignedUrl(storagePath, 3600); // 1 hour
+        if (!isMounted || error || !data?.signedUrl) {
+          // Fresh uploads can take a short moment before signed URL is available.
+          if (isMounted && retryCount < 5) {
+            setTimeout(() => {
+              if (isMounted) setRetryCount((prev) => prev + 1);
+            }, 800);
+          }
+          return null;
+        }
+        setCachedSignedUrl(storagePath, data.signedUrl);
+        return data.signedUrl;
+      };
+
+      if (isPdfFile) {
+        try {
+          const sourceUrl = getCachedSignedUrl(storagePath) ?? (await getSignedUrl());
+          if (!isMounted || !sourceUrl) return;
+
+          let pdfBytes: Uint8Array | null = null;
+          try {
+            const response = await fetch(sourceUrl, { cache: 'no-store' });
+            if (response.ok) {
+              pdfBytes = new Uint8Array(await response.arrayBuffer());
+            }
+          } catch {
+            // Fallback below
+          }
+
+          if (!pdfBytes) {
+            const { data: fileBlob } = await supabase.storage
+              .from('obra-documents')
+              .download(storagePath);
+            if (fileBlob) {
+              pdfBytes = new Uint8Array(await fileBlob.arrayBuffer());
+            }
+          }
+
+          if (!pdfBytes) {
+            if (isMounted && retryCount < 5) {
+              setTimeout(() => {
+                if (isMounted) setRetryCount((prev) => prev + 1);
+              }, 800);
+            }
+            return;
+          }
+
+          // @ts-ignore - pdfjs types are not required for client-side rasterization
+          const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
+          if (pdfjs?.GlobalWorkerOptions) {
+            pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+              'pdfjs-dist/build/pdf.worker.min.mjs',
+              import.meta.url
+            ).toString();
+          }
+          const loadingTask = pdfjs.getDocument({ data: pdfBytes, disableWorker: true });
+          const pdf = await loadingTask.promise;
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale: 1 });
+          const maxWidth = 120;
+          const maxHeight = 145;
+          const scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height, 1);
+          const scaledViewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          canvas.width = Math.max(1, Math.floor(scaledViewport.width));
+          canvas.height = Math.max(1, Math.floor(scaledViewport.height));
+          await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+          const dataUrl = canvas.toDataURL('image/png');
+          pdfThumbnailCache.set(storagePath, dataUrl);
+          if (isMounted) {
+            setThumbUrl(dataUrl);
+          }
+          if (typeof pdf.destroy === 'function') {
+            pdf.destroy();
+          }
+        } catch (error) {
+          console.error('PDF thumbnail generation failed:', error);
+          if (isMounted) {
+            setThumbUrl(null);
+          }
+        }
+        return;
+      }
+
+      const signedUrl = await getSignedUrl();
+      if (!isMounted || !signedUrl) return;
       // Set signed URL first for immediate display
-      setThumbUrl(data.signedUrl);
+      setThumbUrl(signedUrl);
       // Then preload to blob cache
-      const blobUrl = await preloadAndCacheFile(data.signedUrl, storagePath);
+      const blobUrl = await preloadAndCacheFile(signedUrl, storagePath);
       if (isMounted) {
         setThumbUrl(blobUrl);
       }
@@ -396,7 +505,7 @@ const FileThumbnail = memo(function FileThumbnail({
     return () => {
       isMounted = false;
     };
-  }, [item.mimetype, storagePath, supabase]);
+  }, [isImageFile, isPdfFile, isPreviewableFile, retryCount, storagePath, supabase]);
 
   if (thumbUrl) {
     return (
@@ -865,6 +974,26 @@ export function FileManager({
     return segments.reverse();
   }, []);
 
+  const getSelectionFolderSegments = useCallback((folder: FileSystemItem | null | undefined) => {
+    if (!folder || folder.type !== 'folder' || folder.id === 'root') return [] as string[];
+
+    // Prefer stable storage-relative folder path so selection survives tree refreshes.
+    if (typeof folder.relativePath === 'string' && folder.relativePath.trim().length > 0) {
+      const normalizedRelative = normalizeFolderPath(folder.relativePath);
+      const withoutObraPrefix =
+        normalizedRelative === obraId
+          ? ''
+          : normalizedRelative.startsWith(`${obraId}/`)
+            ? normalizedRelative.slice(obraId.length + 1)
+            : normalizedRelative;
+      if (withoutObraPrefix) {
+        return withoutObraPrefix.split('/').filter(Boolean);
+      }
+    }
+
+    return getPathSegments(folder);
+  }, [getPathSegments, obraId]);
+
   const hasOcrAncestor = useCallback((item: FileSystemItem | null | undefined) => {
     let current: FileSystemItem | null | undefined = item;
     while (current) {
@@ -1125,25 +1254,66 @@ export function FileManager({
         (child) => child.type === 'folder' && child.name === segment
       );
       if (!nextFolder) {
-        return current;
+        return null;
       }
       current = nextFolder;
     }
     return current;
   }, []);
 
-  const collectExpandableFolderIds = useCallback((tree: FileSystemItem | null) => {
-    const ids = new Set<string>();
-    const walk = (node: FileSystemItem | null) => {
-      if (!node) return;
-      if (node.type === 'folder') {
-        ids.add(node.id);
+  const findFolderInTreeById = useCallback((tree: FileSystemItem | null, folderId: string | null | undefined) => {
+    if (!tree || !folderId) return null;
+    const stack: FileSystemItem[] = [tree];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (current.type === 'folder' && current.id === folderId) {
+        return current;
       }
-      node.children?.forEach((child) => walk(child));
-    };
-    walk(tree);
-    return ids;
+      if (current.children) {
+        stack.push(...current.children);
+      }
+    }
+    return null;
   }, []);
+
+  const getExpandedFoldersForTree = useCallback(
+    (
+      tree: FileSystemItem | null,
+      previousExpanded: Set<string>,
+      focusedFolderId?: string | null
+    ) => {
+      const existingFolderIds = new Set<string>();
+      const walk = (node: FileSystemItem | null) => {
+        if (!node) return;
+        if (node.type === 'folder') {
+          existingFolderIds.add(node.id);
+        }
+        node.children?.forEach((child) => walk(child));
+      };
+      walk(tree);
+
+      const next = new Set<string>(['root']);
+      previousExpanded.forEach((id) => {
+        if (existingFolderIds.has(id)) {
+          next.add(id);
+        }
+      });
+
+      if (focusedFolderId) {
+        const focusedFolder = findFolderInTreeById(tree, focusedFolderId);
+        let current: FileSystemItem | null | undefined = focusedFolder;
+        while (current) {
+          if (current.type === 'folder') {
+            next.add(current.id);
+          }
+          current = parentMapRef.current.get(current.id) ?? null;
+        }
+      }
+
+      return next;
+    },
+    [findFolderInTreeById]
+  );
 
   const refreshOcrFolderLinks = useCallback(async (options: { skipCache?: boolean } = {}) => {
     if (!obraId) return;
@@ -1184,10 +1354,15 @@ export function FileManager({
         setCachedFileTree(obraId, tree);
         setFileTree(tree);
         if (selectedFolder) {
-          const selectedSegments = getPathSegments(selectedFolder);
-          const resolvedFolder = findFolderInTreeBySegments(tree, selectedSegments);
-          if (resolvedFolder) {
-            setSelectedFolder(resolvedFolder);
+          const resolvedById = findFolderInTreeById(tree, selectedFolder.id);
+          if (resolvedById) {
+            setSelectedFolder(resolvedById);
+          } else {
+            const selectedSegments = getSelectionFolderSegments(selectedFolder);
+            const resolvedFolder = findFolderInTreeBySegments(tree, selectedSegments);
+            if (resolvedFolder) {
+              setSelectedFolder(resolvedFolder);
+            }
           }
         }
         const currentDocPath = (sheetDocument ?? selectedDocument)?.storagePath;
@@ -1204,7 +1379,7 @@ export function FileManager({
     } catch (error) {
       console.error('Error refreshing OCR folder links', error);
     }
-  }, [findDocumentInTreeByStoragePath, findFolderInTreeBySegments, getPathSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setSelectedFolder, sheetDocument]);
+  }, [findDocumentInTreeByStoragePath, findFolderInTreeBySegments, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setSelectedFolder, sheetDocument]);
 
   // Build file tree from storage
   const buildFileTree = useCallback(async (options: { skipCache?: boolean } = {}) => {
@@ -1217,7 +1392,9 @@ export function FileManager({
         if (!selectedFolder) {
           setSelectedFolder(cachedTree);
         }
-        setExpandedFolderIds(collectExpandableFolderIds(cachedTree));
+        setExpandedFolderIds(
+          getExpandedFoldersForTree(cachedTree, expandedFolderIds, selectedFolder?.id ?? cachedTree.id)
+        );
         markDocumentsFetched();
         return;
       }
@@ -1243,10 +1420,15 @@ export function FileManager({
           setSelectedFolder(tree);
         }
         if (selectedFolder) {
-          const selectedSegments = getPathSegments(selectedFolder);
-          const resolvedFolder = findFolderInTreeBySegments(tree, selectedSegments);
-          if (resolvedFolder) {
-            setSelectedFolder(resolvedFolder);
+          const resolvedById = findFolderInTreeById(tree, selectedFolder.id);
+          if (resolvedById) {
+            setSelectedFolder(resolvedById);
+          } else {
+            const selectedSegments = getSelectionFolderSegments(selectedFolder);
+            const resolvedFolder = findFolderInTreeBySegments(tree, selectedSegments);
+            if (resolvedFolder) {
+              setSelectedFolder(resolvedFolder);
+            }
           }
         }
         const currentDocPath = (sheetDocument ?? selectedDocument)?.storagePath;
@@ -1257,7 +1439,9 @@ export function FileManager({
             if (sheetDocument) setSheetDocument(updatedDoc);
           }
         }
-        setExpandedFolderIds(collectExpandableFolderIds(tree));
+        setExpandedFolderIds(
+          getExpandedFoldersForTree(tree, expandedFolderIds, selectedFolder?.id ?? tree.id)
+        );
       }
       setCachedOcrLinks(obraId, links);
       setOcrFolderLinks(links);
@@ -1271,7 +1455,7 @@ export function FileManager({
     } finally {
       markDocumentsFetched();
     }
-  }, [collectExpandableFolderIds, findDocumentInTreeByStoragePath, findFolderInTreeBySegments, getPathSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
+  }, [expandedFolderIds, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
 
   useEffect(() => {
     if (!obraId) return;
@@ -2278,8 +2462,24 @@ export function FileManager({
 
     const resolveFolderPath = (folder?: FileSystemItem | null) => {
       if (!folder || folder.id === 'root') return obraId;
+
+      // Prefer the explicit tree relativePath when available. OCR/data folders can
+      // have names that collide with nested paths, and getPathSegments can lose
+      // parent context in some linked-folder scenarios.
+      const rawRelativePath =
+        typeof folder.relativePath === 'string' ? normalizeFolderPath(folder.relativePath) : '';
+      if (rawRelativePath) {
+        const withoutObraPrefix =
+          rawRelativePath === obraId
+            ? ''
+            : rawRelativePath.startsWith(`${obraId}/`)
+              ? rawRelativePath.slice(obraId.length + 1)
+              : rawRelativePath;
+        return withoutObraPrefix ? `${obraId}/${withoutObraPrefix}` : obraId;
+      }
+
       const segments = getPathSegments(folder);
-      const relativePath = segments.join('/');
+      const relativePath = normalizeFolderPath(segments.join('/'));
       return relativePath ? `${obraId}/${relativePath}` : obraId;
     };
 
@@ -2305,19 +2505,92 @@ export function FileManager({
     setCurrentUploadFolder(folderForUpload ?? fileTree ?? null);
     let pendingUsageBytes = 0;
     const uploadedFiles: { path: string; name: string }[] = [];
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+    const reservedFileNames = new Set(
+      (folderForUpload?.children ?? [])
+        .filter((item) => item.type === 'file' && item.name !== '.keep')
+        .map((item) => item.name.toLowerCase())
+    );
+
+    const splitFileName = (name: string) => {
+      const dotIndex = name.lastIndexOf('.');
+      if (dotIndex <= 0) return { stem: name, ext: '' };
+      return { stem: name.slice(0, dotIndex), ext: name.slice(dotIndex) };
+    };
+
+    const withNumericSuffix = (name: string, attempt: number) => {
+      if (attempt <= 1) return name;
+      const { stem, ext } = splitFileName(name);
+      return `${stem} (${attempt})${ext}`;
+    };
 
     try {
       for (const file of filesArray) {
-        const storageFileName = sanitizeStorageFileName(file.name);
-        const filePath = `${folderPath}/${storageFileName}`;
+        const baseStorageFileName = sanitizeStorageFileName(file.name);
+        let storageFileName = baseStorageFileName;
+        let filePath = `${folderPath}/${storageFileName}`;
+        let uploadError: unknown = null;
 
-        const { error } = await supabase.storage
-          .from('obra-documents')
-          .upload(filePath, file, { upsert: true });
+        for (let attempt = 1; attempt <= 200; attempt += 1) {
+          storageFileName = withNumericSuffix(baseStorageFileName, attempt);
+          const lowerKey = storageFileName.toLowerCase();
+          if (reservedFileNames.has(lowerKey)) {
+            continue;
+          }
 
-        if (error) throw error;
+          filePath = `${folderPath}/${storageFileName}`;
+          const { error } = await supabase.storage
+            .from('obra-documents')
+            .upload(filePath, file, { upsert: false });
+
+          if (!error) {
+            reservedFileNames.add(lowerKey);
+            uploadError = null;
+            break;
+          }
+
+          uploadError = error;
+          const message = String((error as any)?.message ?? '').toLowerCase();
+          const statusCode = Number((error as any)?.statusCode ?? 0);
+          const isAlreadyExists =
+            statusCode === 409 ||
+            message.includes('already exists') ||
+            message.includes('duplicate') ||
+            message.includes('resource already exists');
+          if (!isAlreadyExists) {
+            break;
+          }
+        }
+
+        if (uploadError) throw uploadError;
+
+        if (currentUser?.id) {
+          const { error: trackingError } = await supabase
+            .from('obra_document_uploads')
+            .upsert({
+              obra_id: obraId,
+              storage_bucket: 'obra-documents',
+              storage_path: filePath,
+              file_name: storageFileName,
+              uploaded_by: currentUser.id,
+            }, { onConflict: 'storage_path' });
+          if (trackingError) {
+            console.error('Error tracking uploaded document:', trackingError);
+          }
+        }
+
         pendingUsageBytes += file.size ?? 0;
-        uploadedFiles.push({ path: filePath, name: file.name });
+        uploadedFiles.push({ path: filePath, name: storageFileName });
+        const ext = file.name.toLowerCase().split('.').pop() ?? '';
+        const isImageFile =
+          file.type.startsWith('image/') ||
+          ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'heic', 'heif'].includes(ext);
+        if (isImageFile) {
+          const localBlobUrl = URL.createObjectURL(file);
+          setCachedBlobUrl(filePath, localBlobUrl);
+        }
 
         if (is3DModelFile(file.name)) {
           try {
@@ -2373,7 +2646,7 @@ export function FileManager({
                 const uniqueTablaIds = [...new Set(linkedTablas.map((tabla) => tabla.tablaId))];
                 previewPayload = await fetchSpreadsheetPreview({
                   existingPath: filePath,
-                  existingFileName: file.name,
+                  existingFileName: storageFileName,
                   tablaIds: uniqueTablaIds,
                 });
               } finally {
@@ -2417,7 +2690,7 @@ export function FileManager({
             }
             fd.append('existingBucket', 'obra-documents');
             fd.append('existingPath', filePath);
-            fd.append('existingFileName', file.name);
+            fd.append('existingFileName', storageFileName);
             fd.append('tablaIds', JSON.stringify([...new Set(linkedTablas.map((tabla) => tabla.tablaId))]));
             const importRes = await fetch(
               `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
@@ -2461,7 +2734,7 @@ export function FileManager({
         }
       }
 
-      toast.success(`${filesArray.length} file(s) uploaded successfully`);
+      toast.success(`${filesArray.length} archivo(s) subido(s) correctamente`);
 
       if (pendingUsageBytes > 0) {
         await applyUsageDelta(
@@ -2477,7 +2750,7 @@ export function FileManager({
       await buildFileTree({ skipCache: true });
     } catch (error) {
       console.error('Error uploading files:', error);
-      toast.error('Error uploading files');
+      toast.error('Error al subir archivos');
     } finally {
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
@@ -2658,7 +2931,7 @@ export function FileManager({
             .remove([item.storagePath]);
 
           if (error) throw error;
-          toast.success('File deleted successfully');
+          toast.success('Archivo eliminado correctamente');
         }
       } else {
         const folderStoragePath = item.storagePath ?? (item.id === 'root' ? obraId : `${obraId}/${getPathSegments(item).join('/')}`);
@@ -2690,7 +2963,7 @@ export function FileManager({
           if (deleteError) throw deleteError;
         }
 
-        toast.success('Folder and contents deleted successfully');
+        toast.success('Carpeta y contenido eliminados correctamente');
       }
 
       if (selectedFolder?.id === item.id) {
@@ -2699,25 +2972,34 @@ export function FileManager({
         setSheetDocument(null);
         setPreviewUrl(null);
       }
-	      if (selectedDocument?.id === item.id) {
-	        setSelectedDocument(null);
-	        setSheetDocument(null);
-	        setPreviewUrl(null);
-	      }
+      if (selectedDocument?.id === item.id) {
+        setSelectedDocument(null);
+        setSheetDocument(null);
+        setPreviewUrl(null);
+      }
 
-	      if (deletedPaths.length > 0) {
-	        const cleanupRes = await fetch(`/api/obras/${obraId}/extracted-data/cleanup`, {
-	          method: 'POST',
-	          headers: { 'Content-Type': 'application/json' },
-	          body: JSON.stringify({ docPaths: deletedPaths }),
-	        });
-	        if (!cleanupRes.ok) {
-	          const out = await cleanupRes.json().catch(() => ({}));
-	          throw new Error(out?.error || 'No se pudieron limpiar los datos extraídos');
-	        }
-	      }
+      if (deletedPaths.length > 0) {
+        const { error: trackingDeleteError } = await supabase
+          .from('obra_document_uploads')
+          .delete()
+          .eq('obra_id', obraId)
+          .in('storage_path', deletedPaths);
+        if (trackingDeleteError) {
+          console.error('Error cleaning upload tracking rows:', trackingDeleteError);
+        }
 
-	      buildFileTree({ skipCache: true });
+        const cleanupRes = await fetch(`/api/obras/${obraId}/extracted-data/cleanup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ docPaths: deletedPaths }),
+        });
+        if (!cleanupRes.ok) {
+          const out = await cleanupRes.json().catch(() => ({}));
+          throw new Error(out?.error || 'No se pudieron limpiar los datos extraídos');
+        }
+      }
+
+      await buildFileTree({ skipCache: true });
 
       if (bytesFreed > 0) {
         await applyUsageDelta(
@@ -2730,7 +3012,7 @@ export function FileManager({
       }
     } catch (error) {
       console.error('Error deleting:', error);
-      toast.error('Error deleting item');
+      toast.error('Error al eliminar el elemento');
     }
   };
 
@@ -2775,7 +3057,7 @@ export function FileManager({
     }
     const isFolder = item.type === 'folder';
     const isOCR = item.ocrEnabled;
-    const isExpanded = item.id === 'root' || isOCR || expandedFolders.has(item.id);
+    const isExpanded = item.id === 'root' || expandedFolders.has(item.id);
     const isFolderSelected = selectedFolder?.id === item.id;
     const isDocumentSelected = selectedDocument?.id === item.id;
     const isDragTarget = draggedFolderId === item.id;
@@ -2986,8 +3268,10 @@ export function FileManager({
   const renderSourceFileModal = () => {
     if (!sourceFileModal) return null;
 
-    const isImage = sourceFileModal.mimetype?.startsWith('image/');
-    const isPdf = sourceFileModal.mimetype === 'application/pdf';
+    const sourceMime = (sourceFileModal.mimetype || '').toLowerCase();
+    const sourceName = (sourceFileModal.name || '').toLowerCase();
+    const isImage = sourceMime.startsWith('image/');
+    const isPdf = sourceMime.includes('pdf') || sourceName.endsWith('.pdf');
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -3192,7 +3476,7 @@ export function FileManager({
       ...row,
       __docPath: row.__docPath ?? activeDocument.storagePath ?? '',
       __docFileName: row.__docFileName ?? activeDocument.name ?? '',
-      source: (row as any).source ?? 'ocr',
+      source: (row as { source?: unknown }).source ?? 'ocr',
     });
 
     return {
@@ -3562,6 +3846,7 @@ export function FileManager({
       cellConfig: {
         renderReadOnly: ({ row }: { value: unknown; row: OcrDocumentTableRow; highlightQuery: string }) => (
           <OcrDocumentSourceCell
+            key={`${row.id}-${String((row as Record<string, unknown>).__docPath ?? '')}`}
             row={row}
             obraId={obraId}
             documentsByStoragePath={documentsByStoragePath}
@@ -3989,7 +4274,7 @@ export function FileManager({
             body: formData,
           }
         );
-        const payload = await response.json().catch(() => ({} as any));
+        const payload = await response.json().catch(() => ({} as { error?: string }));
         if (!response.ok) {
           const limitMessage =
             typeof payload?.error === 'string'
@@ -4117,6 +4402,7 @@ export function FileManager({
     // Unified folder header (tab style) for both OCR and normal folders
     const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
     const showArchivosTablaToggle = selectedFolder.ocrEnabled && hasTablaSchema && activeFolderLink?.dataInputMethod !== "manual";
+    const folderLabel = selectedFolder.id === 'root' ? 'Todos los documentos' : selectedFolder.name;
     const folderContentHeader = (
       <div className="mb-0">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -4138,7 +4424,9 @@ export function FileManager({
             ) : (
               <Folder className="w-5 h-5 text-stone-500" />
             )}
-            <h2 className="text-xl font-semibold text-stone-800">{selectedFolder.name}</h2>
+            <h2 className="text-xl font-semibold text-stone-800">
+              {folderLabel}
+            </h2>
             <span className="text-sm text-stone-500">
               {selectedFolder.ocrEnabled && documentViewMode === "table"
                 ? `(${ocrFilteredRowCount} filas)`
@@ -4295,7 +4583,13 @@ export function FileManager({
     const folderBody = (() => {
       if (folders.length === 0 && files.length === 0) {
         return (
-          <div className="flex h-full flex-col items-center justify-start pt-40 text-sm text-stone-500 p-6 text-center rounded-lg bg-white">
+          <div
+            className={`flex h-full flex-col items-center justify-start pt-40 text-sm text-stone-500 p-6 text-center rounded-lg bg-white transition-colors ${isGlobalFileDragActive && !draggedFolderId ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''}`}
+            onDragEnter={handleDocumentAreaDragEnter}
+            onDragOver={handleDocumentAreaDragOver}
+            onDragLeave={handleDocumentAreaDragLeave}
+            onDrop={handleDocumentAreaDrop}
+          >
             <Folder className="w-10 h-10 mb-3 text-stone-300" />
             <p>Esta carpeta está vacía.</p>
             <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
@@ -4313,7 +4607,7 @@ export function FileManager({
       }
 
       return (
-        <div className="h-full min-h-0 flex flex-col">
+        <div className="@container h-full min-h-0 flex flex-col">
           {folders.length > 0 && (
             <div className="px-4 pt-4 pb-3 border-b border-stone-100">
               <div className="overflow-x-auto overflow-y-hidden">
@@ -4383,13 +4677,19 @@ export function FileManager({
             onDrop={handleDocumentAreaDrop}
           >
             {files.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center rounded-lg bg-white">
+              <div
+                className={`flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center rounded-lg bg-white transition-colors ${isGlobalFileDragActive && !draggedFolderId ? 'border-2 border-dashed border-amber-500 bg-amber-50/60' : ''}`}
+                onDragEnter={handleDocumentAreaDragEnter}
+                onDragOver={handleDocumentAreaDragOver}
+                onDragLeave={handleDocumentAreaDragLeave}
+                onDrop={handleDocumentAreaDrop}
+              >
                 <File className="w-10 h-10 mb-3 text-stone-300" />
                 <p>No hay archivos en esta carpeta.</p>
                 <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-10 gap-4 rounded-lg">
+              <div className="grid grid-cols-3 @min-[40rem]:grid-cols-4 @min-[48rem]:grid-cols-5 @min-[64rem]:grid-cols-7 @min-[80rem]:grid-cols-10 gap-4 rounded-lg">
                 {files.map((item) => (
                   <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
                     <div
@@ -4573,9 +4873,9 @@ export function FileManager({
       />
 
       {/* Main Layout */}
-      <div className={`flex-1 min-h-0 transition-all duration-300 ease-in-out max-h-[calc(90vh-9rem)] ${!selectedDocument && !selectedFolder?.ocrEnabled && (!selectedFolder || selectedFolder.id === 'root')
-        ? ''
-        : 'grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4'
+      <div className={`flex-1 min-h-0 transition-all duration-300 ease-in-out lg:max-h-[calc(90vh-9rem)] ${selectedFolder || selectedDocument
+        ? 'grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4'
+        : ''
         }`}>
         {/* Tree View Sidebar */}
         <FileTreeSidebar
@@ -4594,8 +4894,8 @@ export function FileManager({
         />
 
         {/* Main Content */}
-        {(selectedDocument || selectedFolder?.ocrEnabled || (selectedFolder && selectedFolder.id !== 'root')) && (
-          <div className="overflow-auto transition-all duration-300 ease-in-out">
+        {(selectedFolder || selectedDocument) && (
+          <div className="overflow-auto overflow-x-auto transition-all duration-300 ease-in-out">
             {renderMainContent()}
           </div>
         )}
@@ -5512,17 +5812,6 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
   });
   const [hasRequestedPreview, setHasRequestedPreview] = useState<boolean>(() => Boolean(previewUrl));
   const [hoverOpen, setHoverOpen] = useState(false);
-
-  useEffect(() => {
-    if (!storagePath || !isImage) {
-      setPreviewUrl(null);
-      setHasRequestedPreview(false);
-      return;
-    }
-    const cached = getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath) ?? null;
-    setPreviewUrl(cached);
-    setHasRequestedPreview(Boolean(cached));
-  }, [isImage, storagePath]);
 
   useEffect(() => {
     if (!hasRequestedPreview || !storagePath || !isImage) return;

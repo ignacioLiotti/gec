@@ -6,6 +6,74 @@ import { mapColumnToResponse, type MacroTableRow } from "@/lib/macro-tables";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+type ObraRecord = {
+  id: string;
+  n: number | string | null;
+  designacion_y_ubicacion: string | null;
+  sup_de_obra_m2: number | string | null;
+  entidad_contratante: string | null;
+  mes_basico_de_contrato: string | null;
+  iniciacion: string | null;
+  contrato_mas_ampliaciones: number | string | null;
+  certificado_a_la_fecha: number | string | null;
+  saldo_a_certificar: number | string | null;
+  segun_contrato: number | string | null;
+  prorrogas_acordadas: number | string | null;
+  plazo_total: number | string | null;
+  plazo_transc: number | string | null;
+  porcentaje: number | string | null;
+  custom_data?: Record<string, unknown> | null;
+};
+
+const toNumber = (value: unknown): number => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const clampPercent = (value: unknown): number => Math.max(0, Math.min(100, toNumber(value)));
+
+function mapObraRecord(record: ObraRecord | null | undefined): Record<string, unknown> {
+  if (!record) return {};
+  const contratoMasAmpliaciones = toNumber(record.contrato_mas_ampliaciones);
+  const porcentaje = clampPercent(record.porcentaje);
+  const certificadoALaFecha = contratoMasAmpliaciones * (porcentaje / 100);
+  const saldoACertificar = contratoMasAmpliaciones - certificadoALaFecha;
+
+  return {
+    n: toNumber(record.n),
+    designacionYUbicacion: record.designacion_y_ubicacion ?? "",
+    supDeObraM2: toNumber(record.sup_de_obra_m2),
+    entidadContratante: record.entidad_contratante ?? "",
+    mesBasicoDeContrato: record.mes_basico_de_contrato ?? "",
+    iniciacion: record.iniciacion ?? "",
+    contratoMasAmpliaciones,
+    certificadoALaFecha: toNumber(record.certificado_a_la_fecha) || certificadoALaFecha,
+    saldoACertificar: toNumber(record.saldo_a_certificar) || saldoACertificar,
+    segunContrato: toNumber(record.segun_contrato),
+    prorrogasAcordadas: toNumber(record.prorrogas_acordadas),
+    plazoTotal: toNumber(record.plazo_total),
+    plazoTransc: toNumber(record.plazo_transc),
+    porcentaje,
+    customData:
+      record.custom_data && typeof record.custom_data === "object" && !Array.isArray(record.custom_data)
+        ? record.custom_data
+        : {},
+  };
+}
+
+function resolveObraSourceValue(obraValues: Record<string, unknown>, sourceFieldKey: string): unknown {
+  const obraFieldKey = sourceFieldKey.slice("obra.".length);
+  if (!obraFieldKey) return null;
+  if (Object.prototype.hasOwnProperty.call(obraValues, obraFieldKey)) {
+    return obraValues[obraFieldKey];
+  }
+  const customData = obraValues.customData;
+  if (customData && typeof customData === "object" && !Array.isArray(customData)) {
+    return (customData as Record<string, unknown>)[obraFieldKey] ?? null;
+  }
+  return null;
+}
+
 async function getAuthContext() {
   const supabase = await createClient();
   const {
@@ -93,7 +161,24 @@ export async function GET(request: Request, context: RouteContext) {
         id, macro_table_id, obra_tabla_id, position,
         obra_tablas!inner(
           id, name, obra_id,
-          obras!inner(id, designacion_y_ubicacion)
+          obras!inner(
+            id,
+            n,
+            designacion_y_ubicacion,
+            sup_de_obra_m2,
+            entidad_contratante,
+            mes_basico_de_contrato,
+            iniciacion,
+            contrato_mas_ampliaciones,
+            certificado_a_la_fecha,
+            saldo_a_certificar,
+            segun_contrato,
+            prorrogas_acordadas,
+            plazo_total,
+            plazo_transc,
+            porcentaje,
+            custom_data
+          )
         )
       `)
       .eq("macro_table_id", id)
@@ -120,15 +205,20 @@ export async function GET(request: Request, context: RouteContext) {
     const tablaIds = sources.map((s: any) => s.obra_tabla_id);
     
     // Build a map of tabla info
-    const tablaInfoMap = new Map<string, { name: string; obraId: string; obraName: string }>();
+    const tablaInfoMap = new Map<
+      string,
+      { name: string; obraId: string; obraName: string; obraValues: Record<string, unknown> }
+    >();
     for (const source of sources as any[]) {
       const tablaId = source.obra_tabla_id;
       const tabla = source.obra_tablas;
       if (tabla) {
+        const obraRecord = (tabla.obras ?? null) as ObraRecord | null;
         tablaInfoMap.set(tablaId, {
           name: tabla.name,
           obraId: tabla.obra_id,
           obraName: tabla.obras?.designacion_y_ubicacion ?? "",
+          obraValues: mapObraRecord(obraRecord),
         });
       }
     }
@@ -184,8 +274,12 @@ export async function GET(request: Request, context: RouteContext) {
       // Map columns
       for (const col of columns) {
         if (col.columnType === "source" && col.sourceFieldKey) {
-          // Get value from source row data
-          mappedRow[col.id] = rowData[col.sourceFieldKey] ?? null;
+          if (col.sourceFieldKey.startsWith("obra.")) {
+            mappedRow[col.id] = resolveObraSourceValue(tablaInfo?.obraValues ?? {}, col.sourceFieldKey);
+          } else {
+            // Get value from source row data
+            mappedRow[col.id] = rowData[col.sourceFieldKey] ?? null;
+          }
         } else if (col.columnType === "custom") {
           // Get value from custom values
           mappedRow[col.id] = rowCustomValues?.get(col.id) ?? null;
@@ -320,7 +414,6 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
 
 
 

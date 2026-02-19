@@ -177,7 +177,10 @@ function TableCellInner<Row extends FormTableRow>({
 	customMenuItems,
 }: TableCellProps<Row>) {
 	const fieldPath = `rowsById.${rowId}.${column.field}` as const;
-	const editable = column.editable !== false;
+	const isNewRow = !hasInitialSnapshot;
+	const forceEditableForNewObraNameCell =
+		isNewRow && String(column.field) === "designacionYUbicacion";
+	const editable = column.editable !== false || forceEditableForNewObraNameCell;
 	const validators = column.validators;
 
 	return (
