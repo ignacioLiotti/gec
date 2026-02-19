@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AsciiScene } from "@/components/ascii-scene";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -14,12 +14,24 @@ type AuthModalProps = {
 
 export default function AuthModal({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOtherMethods, setShowOtherMethods] = useState(false);
+
+  const returnTo =
+    searchParams?.get("returnTo") && searchParams.get("returnTo")!.startsWith("/")
+      ? searchParams.get("returnTo")!
+      : null;
+
+  const currentPathWithQuery = (() => {
+    const current = `${pathname ?? "/"}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
+    return current.startsWith("/") ? current : "/";
+  })();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +73,9 @@ export default function AuthModal({ open, onOpenChange, forcedOpen = false }: Au
         onOpenChange(false);
         setEmail("");
         setPassword("");
+        if (returnTo) {
+          router.push(returnTo);
+        }
         console.log("[AUTH-MODAL] Modal closed, login flow complete");
       } else {
         console.log("[AUTH-MODAL] Calling signUp...");
@@ -96,7 +111,8 @@ export default function AuthModal({ open, onOpenChange, forcedOpen = false }: Au
     const supabase = createSupabaseBrowserClient();
     console.log("[AUTH-MODAL] handleGoogleSignIn started");
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      const next = encodeURIComponent(returnTo ?? currentPathWithQuery);
+      const redirectTo = `${window.location.origin}/auth/callback?next=${next}`;
       console.log("[AUTH-MODAL] Calling signInWithOAuth, redirectTo:", redirectTo);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -270,4 +286,3 @@ export default function AuthModal({ open, onOpenChange, forcedOpen = false }: Au
     </div>
   );
 }
-

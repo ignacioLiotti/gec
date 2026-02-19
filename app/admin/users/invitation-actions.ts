@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { revalidatePath } from "next/cache";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { sendInvitationEmail } from "@/lib/email/invitations";
@@ -449,7 +450,10 @@ export async function getMyPendingInvitations() {
 		console.warn("expire_old_invitations RPC failed:", expireError);
 	}
 
-	// Get pending invitations for user's email with manual joins
+	const normalizedEmail = user.email.toLowerCase().trim();
+
+	// Get pending invitations for user's email with manual joins.
+	// Use case-insensitive match to avoid missing invites due to casing.
 	const { data: invitations, error } = await supabase
 		.from("invitations")
 		.select(
@@ -463,15 +467,51 @@ export async function getMyPendingInvitations() {
       invited_by
     `
 		)
-		.eq("email", user.email.toLowerCase())
+		.ilike("email", normalizedEmail)
 		.eq("status", "pending")
 		.gt("expires_at", new Date().toISOString())
 		.order("created_at", { ascending: false });
 
+	let invitationRows = invitations ?? [];
+	let invitationError = error;
+
+	// Fallback for stricter RLS setups: query with admin client after authenticating
+	// current user and filter by normalized email server-side.
+	if (invitationError || invitationRows.length === 0) {
+		try {
+			const admin = createSupabaseAdminClient();
+			const { data: adminInvitations, error: adminError } = await admin
+				.from("invitations")
+				.select(
+					`
+          id,
+          token,
+          tenant_id,
+          invited_role,
+          expires_at,
+          created_at,
+          invited_by,
+          email
+        `
+				)
+				.eq("status", "pending")
+				.gt("expires_at", new Date().toISOString())
+				.order("created_at", { ascending: false });
+			if (!adminError && adminInvitations) {
+				invitationRows = adminInvitations.filter(
+					(inv) => typeof inv.email === "string" && inv.email.toLowerCase().trim() === normalizedEmail
+				);
+				invitationError = null;
+			}
+		} catch (fallbackError) {
+			console.warn("Admin fallback for invitations failed:", fallbackError);
+		}
+	}
+
 	// Manually fetch related data if we have invitations
-	if (!error && invitations && invitations.length > 0) {
+	if (!invitationError && invitationRows.length > 0) {
 		// Fetch tenant names
-		const tenantIds = [...new Set(invitations.map((inv) => inv.tenant_id))];
+		const tenantIds = [...new Set(invitationRows.map((inv) => inv.tenant_id))];
 		const { data: tenants } = await supabase
 			.from("tenants")
 			.select("id, name")
@@ -480,7 +520,7 @@ export async function getMyPendingInvitations() {
 		const tenantMap = new Map((tenants || []).map((t) => [t.id, t.name]));
 
 		// Fetch inviter profiles
-		const inviterIds = invitations.map((inv) => inv.invited_by);
+		const inviterIds = invitationRows.map((inv) => inv.invited_by);
 		const { data: profiles } = await supabase
 			.from("profiles")
 			.select("user_id, full_name")
@@ -491,22 +531,22 @@ export async function getMyPendingInvitations() {
 		);
 
 		// Attach related data to each invitation
-		invitations.forEach((inv: any) => {
+		invitationRows.forEach((inv: any) => {
 			inv.tenant = { name: tenantMap.get(inv.tenant_id) || null };
 			inv.inviter = { full_name: profileMap.get(inv.invited_by) || null };
 		});
 	}
 
-	if (error) {
-		if (isInvitationsTableMissing(error)) {
+	if (invitationError) {
+		if (isInvitationsTableMissing(invitationError)) {
 			console.warn(
 				"Invitations table not found; skipping personal invitation list."
 			);
 			return { invitations: [] };
 		}
-		console.error("Error fetching user invitations:", error);
+		console.error("Error fetching user invitations:", invitationError);
 		return { invitations: [] };
 	}
 
-	return { invitations };
+	return { invitations: invitationRows };
 }

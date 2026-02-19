@@ -7,11 +7,16 @@ export async function GET(request: NextRequest) {
 	const requestUrl = new URL(request.url);
 	const code = requestUrl.searchParams.get("code");
 	const origin = requestUrl.origin;
+	const nextParam = requestUrl.searchParams.get("next");
+	const safeNextPath =
+		nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
+			? nextParam
+			: null;
 	console.log("[AUTH-CALLBACK] code present:", !!code, "origin:", origin);
 
 	if (code) {
 		// Create the redirect response FIRST so we can attach cookies to it
-		let redirectUrl = origin;
+		let redirectUrl = safeNextPath ? `${origin}${safeNextPath}` : origin;
 		const response = NextResponse.redirect(redirectUrl);
 
 		// Create Supabase client that reads from request cookies and writes to response cookies
@@ -71,13 +76,17 @@ export async function GET(request: NextRequest) {
 				.limit(1);
 			console.log("[AUTH-CALLBACK] memberships:", memberships);
 
-			// If no memberships, redirect to onboarding
+			// If no memberships, redirect to onboarding unless auth flow requested
+			// a safe internal return path (e.g. invitation acceptance page).
 			if (!memberships || memberships.length === 0) {
 				console.log(
 					"[AUTH-CALLBACK] No memberships, redirecting to onboarding",
 				);
-				// Update the redirect URL and create a new response with the same cookies
-				response.headers.set("Location", `${origin}/onboarding`);
+				const target =
+					safeNextPath && safeNextPath.startsWith("/invitations/")
+						? `${origin}${safeNextPath}`
+						: `${origin}/onboarding`;
+				response.headers.set("Location", target);
 				return response;
 			}
 
@@ -88,7 +97,7 @@ export async function GET(request: NextRequest) {
 					maxAge: 60 * 60 * 24 * 30,
 					sameSite: "lax",
 				});
-				redirectUrl = origin;
+				redirectUrl = safeNextPath ? `${origin}${safeNextPath}` : origin;
 			}
 		}
 
