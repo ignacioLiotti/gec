@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -164,6 +164,7 @@ export default function NewMacroTablePage() {
   // Templates
   const [templates, setTemplates] = useState<DefaultTabla[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedTemplateTableNames, setSelectedTemplateTableNames] = useState<string[]>([]);
 
   // Step 2: Selected sources
   const [selectedSources, setSelectedSources] = useState<SelectedSource[]>([]);
@@ -289,25 +290,65 @@ export default function NewMacroTablePage() {
     }
     // Clear template selection when manually selecting
     setSelectedTemplateId(null);
+    setSelectedTemplateTableNames([]);
   };
 
-  // Select all tables matching a template name
-  const selectByTemplate = (templateId: string | null) => {
-    setSelectedTemplateId(templateId);
+  const selectAllTablesInObra = (obra: Obra) => {
+    const currentIds = new Set(selectedSources.map((source) => source.tablaId));
+    const additions: SelectedSource[] = obra.tablas
+      .filter((tabla) => !currentIds.has(tabla.id))
+      .map((tabla) => ({
+        obraId: obra.id,
+        obraName: obra.designacionYUbicacion,
+        tablaId: tabla.id,
+        tablaName: tabla.name,
+        columns: tabla.columns,
+      }));
+    if (additions.length === 0) return;
+    setSelectedSources((prev) => [...prev, ...additions]);
+    setSelectedTemplateId(null);
+    setSelectedTemplateTableNames([]);
+  };
 
-    if (!templateId) {
-      return;
-    }
+  const clearTablesInObra = (obraId: string) => {
+    setSelectedSources((prev) => prev.filter((source) => source.obraId !== obraId));
+    setSelectedTemplateId(null);
+    setSelectedTemplateTableNames([]);
+  };
 
-    const template = templates.find((t) => t.id === templateId);
-    if (!template) return;
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === selectedTemplateId) ?? null,
+    [selectedTemplateId, templates]
+  );
 
-    // Find all tables across all obras that match this template name
-    const matchingTables: SelectedSource[] = [];
-
+  const selectedTemplateTableOptions = useMemo(() => {
+    if (!selectedTemplate) return [] as string[];
+    const options = new Set<string>();
     for (const obra of obras) {
       for (const tabla of obra.tablas) {
-        if (matchesTemplate(tabla, template)) {
+        if (matchesTemplate(tabla, selectedTemplate)) {
+          options.add(extractBaseTableName(tabla.name));
+        }
+      }
+    }
+    return Array.from(options).sort((a, b) => a.localeCompare(b, "es"));
+  }, [obras, selectedTemplate]);
+
+  const applyTemplateSelection = useCallback(
+    (templateId: string | null, onlyTableNames: string[] = []) => {
+      setSelectedTemplateId(templateId);
+      setSelectedTemplateTableNames(onlyTableNames);
+      if (!templateId) return;
+
+      const template = templates.find((t) => t.id === templateId);
+      if (!template) return;
+
+      const matchingTables: SelectedSource[] = [];
+      for (const obra of obras) {
+        for (const tabla of obra.tablas) {
+          if (!matchesTemplate(tabla, template)) continue;
+          const baseName = extractBaseTableName(tabla.name);
+          if (onlyTableNames.length > 0 && !onlyTableNames.includes(baseName)) continue;
           matchingTables.push({
             obraId: obra.id,
             obraName: obra.designacionYUbicacion,
@@ -317,15 +358,30 @@ export default function NewMacroTablePage() {
           });
         }
       }
-    }
 
-    if (matchingTables.length === 0) {
-      toast.info(`No se encontraron tablas con el nombre "${template.name}"`);
+      if (matchingTables.length === 0) {
+        toast.info(
+          onlyTableNames.length === 0
+            ? `No se encontraron tablas con el nombre "${template.name}"`
+            : `No se encontraron tablas para la selección en la plantilla "${template.name}"`
+        );
+        return;
+      }
+
+      setSelectedSources(matchingTables);
+      toast.success(`${matchingTables.length} tablas seleccionadas automáticamente`);
+    },
+    [obras, templates]
+  );
+
+  // Select all tables matching a template name
+  const selectByTemplate = (templateId: string | null) => {
+    if (!templateId) {
+      setSelectedTemplateId(null);
+      setSelectedTemplateTableNames([]);
       return;
     }
-
-    setSelectedSources(matchingTables);
-    toast.success(`${matchingTables.length} tablas seleccionadas automáticamente`);
+    applyTemplateSelection(templateId, []);
   };
 
   // Count tables matching each template
@@ -341,50 +397,93 @@ export default function NewMacroTablePage() {
     return count;
   };
 
-  // Generate default columns when sources change
+  // Keep source columns in sync with selected sources (prevents stale columns
+  // when narrowing selection from many tables to only one/some table types).
   useEffect(() => {
-    if (currentStep === 2 && columns.length === 0 && selectedSources.length > 0) {
-      // Collect all unique field keys from selected sources
-      const fieldKeyMap = new Map<string, { label: string; dataType: string }>();
+    if (currentStep !== 2) return;
 
-      for (const source of selectedSources) {
-        for (const col of source.columns) {
-          if (!fieldKeyMap.has(col.fieldKey)) {
-            fieldKeyMap.set(col.fieldKey, {
-              label: col.label,
-              dataType: col.dataType,
-            });
-          }
-        }
+    const fieldKeyMap = new Map<string, { label: string; dataType: MacroTableDataType }>();
+    for (const source of selectedSources) {
+      for (const col of source.columns) {
+        if (fieldKeyMap.has(col.fieldKey)) continue;
+        fieldKeyMap.set(col.fieldKey, {
+          label: col.label,
+          dataType: (DATA_TYPES.includes(col.dataType as MacroTableDataType)
+            ? col.dataType
+            : "text") as MacroTableDataType,
+        });
+      }
+    }
+    const fieldEntries = Array.from(fieldKeyMap.entries());
+
+    setColumns((prev) => {
+      if (selectedSources.length === 0) {
+        const withoutSource = prev.filter((column) => column.columnType !== "source");
+        return withoutSource.length === prev.length ? prev : withoutSource;
       }
 
-      // Add computed columns for obra info
-      const defaultColumns: ColumnConfig[] = [
-        {
-          id: crypto.randomUUID(),
-          columnType: "computed",
-          sourceFieldKey: null,
-          label: "Obra",
-          dataType: "text",
-        },
-      ];
+      if (prev.length === 0) {
+        const generated: ColumnConfig[] = [
+          {
+            id: crypto.randomUUID(),
+            columnType: "computed",
+            sourceFieldKey: null,
+            label: "Obra",
+            dataType: "text",
+          },
+        ];
+        for (const [fieldKey, info] of fieldEntries) {
+          generated.push({
+            id: crypto.randomUUID(),
+            columnType: "source",
+            sourceFieldKey: fieldKey,
+            label: info.label,
+            dataType: info.dataType,
+          });
+        }
+        return generated;
+      }
 
-      // Add source columns
-      for (const [fieldKey, info] of fieldKeyMap) {
-        defaultColumns.push({
+      const nonSourceColumns = prev.filter((column) => column.columnType !== "source");
+      const sourceByFieldKey = new Map(
+        prev
+          .filter((column): column is ColumnConfig & { sourceFieldKey: string } =>
+            column.columnType === "source" && typeof column.sourceFieldKey === "string"
+          )
+          .map((column) => [column.sourceFieldKey, column])
+      );
+
+      const syncedSourceColumns: ColumnConfig[] = fieldEntries.map(([fieldKey, info]) => {
+        const existing = sourceByFieldKey.get(fieldKey);
+        if (existing) {
+          return { ...existing, dataType: info.dataType };
+        }
+        return {
           id: crypto.randomUUID(),
           columnType: "source",
           sourceFieldKey: fieldKey,
           label: info.label,
-          dataType: (DATA_TYPES.includes(info.dataType as MacroTableDataType)
-            ? info.dataType
-            : "text") as MacroTableDataType,
-        });
-      }
+          dataType: info.dataType,
+        };
+      });
 
-      setColumns(defaultColumns);
-    }
-  }, [currentStep, columns.length, selectedSources]);
+      const next = [...nonSourceColumns, ...syncedSourceColumns];
+      const same =
+        next.length === prev.length &&
+        next.every((column, index) => {
+          const prevColumn = prev[index];
+          return (
+            prevColumn &&
+            prevColumn.id === column.id &&
+            prevColumn.columnType === column.columnType &&
+            prevColumn.sourceFieldKey === column.sourceFieldKey &&
+            prevColumn.label === column.label &&
+            prevColumn.dataType === column.dataType
+          );
+        });
+      return same ? prev : next;
+    });
+  }, [currentStep, selectedSources]);
 
   // Add custom column
   const addCustomColumn = () => {
@@ -717,10 +816,67 @@ export default function NewMacroTablePage() {
                         );
                       })}
                     </div>
+                    {selectedTemplate && selectedTemplateTableOptions.length > 1 && (
+                      <div className="mt-3 space-y-2">
+                        <Label className="text-xs text-muted-foreground">
+                          Dentro de {selectedTemplate.name}, elegí tablas:
+                        </Label>
+                        <div className="flex flex-wrap gap-3">
+                          <label className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              checked={selectedTemplateTableNames.length === 0}
+                              onCheckedChange={(checked) => {
+                                if (!checked) return;
+                                applyTemplateSelection(selectedTemplate.id, []);
+                              }}
+                            />
+                            <span>Todas</span>
+                          </label>
+                          {selectedTemplateTableOptions.map((tableName) => {
+                            const allSelected = selectedTemplateTableNames.length === 0;
+                            const isChecked = allSelected || selectedTemplateTableNames.includes(tableName);
+                            return (
+                              <label key={tableName} className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => {
+                                  const checkedBool = Boolean(checked);
+                                  if (allSelected) {
+                                    if (checkedBool) return;
+                                    applyTemplateSelection(
+                                      selectedTemplate.id,
+                                      selectedTemplateTableOptions.filter((name) => name !== tableName)
+                                    );
+                                    return;
+                                  }
+                                    const current = selectedTemplateTableNames;
+                                    if (checkedBool) {
+                                      if (current.includes(tableName)) return;
+                                      applyTemplateSelection(selectedTemplate.id, [...current, tableName]);
+                                      return;
+                                    }
+                                    if (!current.includes(tableName)) return;
+                                    if (current.length === 1) return;
+                                    applyTemplateSelection(
+                                      selectedTemplate.id,
+                                      current.filter((name) => name !== tableName)
+                                    );
+                                  }}
+                                />
+                                <span>{tableName}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <Separator />
+                <p className="text-xs text-muted-foreground">
+                  Expandí una obra para elegir tablas individuales, o usá los botones "Todas" y "Ninguna" por obra.
+                </p>
 
                 {obras.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
@@ -771,6 +927,32 @@ export default function NewMacroTablePage() {
                               <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             )}
                           </button>
+                          <div className="px-3 pb-2 -mt-1 flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                selectAllTablesInObra(obra);
+                              }}
+                            >
+                              Todas
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                clearTablesInObra(obra.id);
+                              }}
+                            >
+                              Ninguna
+                            </Button>
+                          </div>
 
                           <AnimatePresence>
                             {isExpanded && (
