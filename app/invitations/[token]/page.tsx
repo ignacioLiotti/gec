@@ -171,9 +171,9 @@ export default function InvitationPage() {
               <Building2 className="h-10 w-10 text-blue-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl">You&apos;re Invited!</CardTitle>
+          <CardTitle className="text-2xl">¡Estás invitado!</CardTitle>
           <CardDescription className="text-base">
-            Join <strong>{invitation.tenant_name}</strong> organization
+            Únete a la organización <strong>{invitation.tenant_name}</strong>
           </CardDescription>
         </CardHeader>
 
@@ -183,15 +183,15 @@ export default function InvitationPage() {
             <div className="flex items-start gap-3">
               <UserPlus className="h-5 w-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Invited by</p>
-                <p className="text-sm text-gray-600">{invitation.inviter_name || "Organization admin"}</p>
+                <p className="text-sm font-medium text-gray-700">Invitado por</p>
+                <p className="text-sm text-gray-600">{invitation.inviter_name || "Administrador de la organización"}</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
               <CheckCircle2 className="h-5 w-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Role</p>
+                <p className="text-sm font-medium text-gray-700">Rol</p>
                 <p className="text-sm text-gray-600 capitalize">{invitation.invited_role}</p>
               </div>
             </div>
@@ -199,14 +199,14 @@ export default function InvitationPage() {
             <div className="flex items-start gap-3">
               <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Expires</p>
+                <p className="text-sm font-medium text-gray-700">Vence</p>
                 <p className="text-sm text-gray-600">
                   {isExpired ? (
-                    <span className="text-red-600">Expired</span>
+                    <span className="text-red-600">Vencida</span>
                   ) : timeRemaining < 24 ? (
-                    <span className="text-orange-600">In {timeRemaining} hours</span>
+                    <span className="text-orange-600">En {timeRemaining} horas</span>
                   ) : (
-                    <span>In {Math.floor(timeRemaining / 24)} days</span>
+                    <span>En {Math.floor(timeRemaining / 24)} días</span>
                   )}
                 </p>
               </div>

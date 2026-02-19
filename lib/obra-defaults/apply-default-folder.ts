@@ -13,6 +13,7 @@ type DefaultFolderBundle = {
 	name: string;
 	path: string;
 	isOcr: boolean;
+	defaultTablaId?: string;
 	tablaName?: string;
 	tablaDescription?: string | null;
 	settings?: Record<string, unknown>;
@@ -314,18 +315,20 @@ async function fetchDefaultFolderBundle(
 	const settings = (tabla.settings as Record<string, unknown>) ?? {};
 	const hasNestedData = Boolean(settings.hasNestedData);
 
-	return {
-		folderId: folder.id as string,
-		name: folder.name as string,
-		path: folder.path as string,
-		isOcr: true,
-		tablaName: tabla.name as string,
-		tablaDescription: (tabla.description as string | null) ?? null,
-		settings: {
-			...settings,
-			ocrFolder: folder.path,
-			ocrTemplateId: tabla.ocr_template_id ?? (settings as any)?.ocrTemplateId,
-		},
+		return {
+			folderId: folder.id as string,
+			name: folder.name as string,
+			path: folder.path as string,
+			isOcr: true,
+			defaultTablaId: tabla.id as string,
+			tablaName: tabla.name as string,
+			tablaDescription: (tabla.description as string | null) ?? null,
+			settings: {
+				...settings,
+				ocrFolder: folder.path,
+				ocrTemplateId: tabla.ocr_template_id ?? (settings as any)?.ocrTemplateId,
+				defaultTablaId: tabla.id as string,
+			},
 		ocrTemplateId: (tabla.ocr_template_id as string | null) ?? null,
 		hasNestedData,
 		columns: resolvedColumns,
@@ -420,22 +423,23 @@ export async function applyDefaultFolderToExistingObras(
 				const existingPresetTabla = (obraOcrTablas ?? []).find((tabla) => tabla.name === presetName);
 				if (existingPresetTabla && !shouldForceSync) continue;
 
-				const presetSettings: Record<string, unknown> = {
-					...bundle.settings,
-					ocrFolder: bundle.path,
-					spreadsheetTemplate: "certificado",
-					spreadsheetPresetKey: preset.key,
-				};
+					const presetSettings: Record<string, unknown> = {
+						...bundle.settings,
+						ocrFolder: bundle.path,
+						spreadsheetTemplate: "certificado",
+						spreadsheetPresetKey: preset.key,
+						defaultTablaId: bundle.defaultTablaId,
+					};
 
 				let presetTablaId = existingPresetTabla?.id ?? null;
 				if (presetTablaId) {
 					const { error: updatePresetTablaError } = await supabase
 						.from("obra_tablas")
-						.update({
-							name: presetName,
-							description: preset.description,
-							source_type: "ocr",
-							settings: presetSettings,
+					.update({
+						name: presetName,
+						description: preset.description,
+						source_type: "ocr",
+						settings: presetSettings,
 						})
 						.eq("id", presetTablaId);
 					if (updatePresetTablaError) {
@@ -449,12 +453,12 @@ export async function applyDefaultFolderToExistingObras(
 				} else {
 					const { data: createdPresetTabla, error: createPresetTablaError } = await supabase
 						.from("obra_tablas")
-						.insert({
-							obra_id: obraId,
-							name: presetName,
-							description: preset.description,
-							source_type: "ocr",
-							settings: presetSettings,
+					.insert({
+						obra_id: obraId,
+						name: presetName,
+						description: preset.description,
+						source_type: "ocr",
+						settings: presetSettings,
 						})
 						.select("id")
 						.single();
@@ -514,12 +518,12 @@ export async function applyDefaultFolderToExistingObras(
 		if (tablaId) {
 			const { error: updateTablaError } = await supabase
 				.from("obra_tablas")
-				.update({
-					name: bundle.tablaName,
-					description: bundle.tablaDescription ?? null,
-					source_type: "ocr",
-					settings: bundle.settings,
-				})
+					.update({
+						name: bundle.tablaName,
+						description: bundle.tablaDescription ?? null,
+						source_type: "ocr",
+						settings: { ...bundle.settings, defaultTablaId: bundle.defaultTablaId },
+					})
 				.eq("id", tablaId);
 
 			if (updateTablaError) {
@@ -544,13 +548,13 @@ export async function applyDefaultFolderToExistingObras(
 		} else {
 			const { data: tabla, error: tablaError } = await supabase
 				.from("obra_tablas")
-				.insert({
-					obra_id: obraId,
-					name: bundle.tablaName,
-					description: bundle.tablaDescription ?? null,
-					source_type: "ocr",
-					settings: bundle.settings,
-				})
+					.insert({
+						obra_id: obraId,
+						name: bundle.tablaName,
+						description: bundle.tablaDescription ?? null,
+						source_type: "ocr",
+						settings: { ...bundle.settings, defaultTablaId: bundle.defaultTablaId },
+					})
 				.select("id")
 				.single();
 

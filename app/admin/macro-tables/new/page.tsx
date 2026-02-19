@@ -66,6 +66,7 @@ type ObraTabla = {
   id: string;
   obraId: string;
   name: string;
+  defaultTablaId?: string | null;
   columns: ObraTablaColumn[];
 };
 
@@ -97,6 +98,45 @@ type DefaultTabla = {
   description: string | null;
   sourceType: string;
   columnCount: number;
+};
+
+const normalizeTemplateName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const extractBaseTableName = (name: string) => {
+  const normalized = name.trim();
+  const separators = [" · ", " - ", " — ", " – ", "|", "/"];
+  for (const separator of separators) {
+    const idx = normalized.lastIndexOf(separator);
+    if (idx > -1 && idx + separator.length < normalized.length) {
+      return normalized.slice(idx + separator.length).trim();
+    }
+  }
+  return normalized;
+};
+
+const matchesTemplateName = (tableName: string, templateName: string) => {
+  const tableNorm = normalizeTemplateName(tableName);
+  const tableBaseNorm = normalizeTemplateName(extractBaseTableName(tableName));
+  const templateNorm = normalizeTemplateName(templateName);
+  return (
+    tableNorm === templateNorm ||
+    tableBaseNorm === templateNorm ||
+    tableNorm.endsWith(` ${templateNorm}`) ||
+    tableNorm.endsWith(`· ${templateNorm}`)
+  );
+};
+
+const matchesTemplate = (
+  tabla: Pick<ObraTabla, "name" | "defaultTablaId">,
+  template: Pick<DefaultTabla, "id" | "name">,
+) => {
+  if (tabla.defaultTablaId && tabla.defaultTablaId === template.id) return true;
+  return matchesTemplateName(tabla.name, template.name);
 };
 
 const STEPS = [
@@ -190,6 +230,8 @@ export default function NewMacroTablePage() {
                 id: t.id,
                 obraId: obra.id,
                 name: t.name,
+                defaultTablaId:
+                  typeof t?.settings?.defaultTablaId === "string" ? t.settings.defaultTablaId : null,
                 columns: t.columns ?? [],
               })),
             };
@@ -265,8 +307,7 @@ export default function NewMacroTablePage() {
 
     for (const obra of obras) {
       for (const tabla of obra.tablas) {
-        // Match by name (case-insensitive)
-        if (tabla.name.toLowerCase() === template.name.toLowerCase()) {
+        if (matchesTemplate(tabla, template)) {
           matchingTables.push({
             obraId: obra.id,
             obraName: obra.designacionYUbicacion,
@@ -292,7 +333,7 @@ export default function NewMacroTablePage() {
     let count = 0;
     for (const obra of obras) {
       for (const tabla of obra.tablas) {
-        if (tabla.name.toLowerCase() === template.name.toLowerCase()) {
+        if (matchesTemplate(tabla, template)) {
           count++;
         }
       }

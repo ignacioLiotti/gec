@@ -360,6 +360,7 @@ export async function applyObraDefaults(
 						ocrFolder: rawPath,
 						spreadsheetTemplate: "certificado",
 						spreadsheetPresetKey: preset.key,
+						defaultTablaId: defaultTabla.id,
 					};
 					if (defaultTabla.ocr_template_id) {
 						presetSettings.ocrTemplateId = defaultTabla.ocr_template_id;
@@ -423,6 +424,7 @@ export async function applyObraDefaults(
 			const settings: Record<string, unknown> = {
 				...defaultSettings,
 				ocrFolder: rawPath,
+				defaultTablaId: defaultTabla.id,
 			};
 			if (defaultTabla.ocr_template_id) {
 				settings.ocrTemplateId = defaultTabla.ocr_template_id;

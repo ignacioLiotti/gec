@@ -1835,21 +1835,21 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		},
 	};
 
-		const content = (
-			<div
-				className="space-y-4 max-w-full overflow-hidden"
-			>
-				{(config.title || config.description) ? (
-					<div>
-						{config.title ? <h1 className="text-xl font-bold mt-2">{config.title}</h1> : null}
-						{config.description && (
-							<p className="text-muted-foreground">{config.description}</p>
-						)}
-					</div>
-				) : null}
-				<FormTableToolbar />
-				<FormTableTabs />
-				<FormTableContent className={className} />
+	const content = (
+		<div
+			className="space-y-4 max-w-full overflow-hidden pt-6"
+		>
+			{(config.title || config.description) ? (
+				<div>
+					{config.title ? <h1 className="text-xl font-bold mt-2">{config.title}</h1> : null}
+					{config.description && (
+						<p className="text-muted-foreground">{config.description}</p>
+					)}
+				</div>
+			) : null}
+			<FormTableToolbar />
+			<FormTableTabs />
+			<FormTableContent className={className} />
 			<FormTablePagination />
 		</div>
 	);

@@ -2699,13 +2699,25 @@ export function FileManager({
         setSheetDocument(null);
         setPreviewUrl(null);
       }
-      if (selectedDocument?.id === item.id) {
-        setSelectedDocument(null);
-        setSheetDocument(null);
-        setPreviewUrl(null);
-      }
+	      if (selectedDocument?.id === item.id) {
+	        setSelectedDocument(null);
+	        setSheetDocument(null);
+	        setPreviewUrl(null);
+	      }
 
-      buildFileTree({ skipCache: true });
+	      if (deletedPaths.length > 0) {
+	        const cleanupRes = await fetch(`/api/obras/${obraId}/extracted-data/cleanup`, {
+	          method: 'POST',
+	          headers: { 'Content-Type': 'application/json' },
+	          body: JSON.stringify({ docPaths: deletedPaths }),
+	        });
+	        if (!cleanupRes.ok) {
+	          const out = await cleanupRes.json().catch(() => ({}));
+	          throw new Error(out?.error || 'No se pudieron limpiar los datos extraídos');
+	        }
+	      }
+
+	      buildFileTree({ skipCache: true });
 
       if (bytesFreed > 0) {
         await applyUsageDelta(
@@ -5436,7 +5448,7 @@ export function FileManager({
                   </button>
                 </>
               )}
-              {contextMenu.item.type === 'folder' && contextMenu.item.id !== 'root' && !contextMenu.item.ocrEnabled && (
+              {/* {contextMenu.item.type === 'folder' && contextMenu.item.id !== 'root' && !contextMenu.item.ocrEnabled && (
                 <button
                   className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-stone-700"
                   onClick={() => {
@@ -5447,7 +5459,7 @@ export function FileManager({
                   <Sparkles className="w-4 h-4" />
                   Convertir a carpeta de extracción
                 </button>
-              )}
+              )} */}
               {contextMenu.item.id !== 'root' && (
                 <button
                   className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-red-600"

@@ -175,10 +175,11 @@ export async function POST(request: Request) {
 
 			// Build settings for the new tabla
 			const defaultSettings = (defaultTabla.settings as Record<string, unknown>) ?? {};
-			const settings: Record<string, unknown> = {
-				...defaultSettings,
-				ocrFolder: folderPath,
-			};
+				const settings: Record<string, unknown> = {
+					...defaultSettings,
+					ocrFolder: folderPath,
+					defaultTablaId: defaultTabla.id,
+				};
 			if (defaultTabla.ocr_template_id) {
 				settings.ocrTemplateId = defaultTabla.ocr_template_id;
 			}
