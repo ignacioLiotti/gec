@@ -143,6 +143,20 @@ function periodKeyFromCurveRow(
 	return null;
 }
 
+function firstDefinedValue(
+	rowData: Record<string, any> | null | undefined,
+	keys: string[],
+) {
+	if (!rowData) return undefined;
+	for (const key of keys) {
+		const value = rowData[key];
+		if (value !== undefined && value !== null && String(value).trim() !== "") {
+			return value;
+		}
+	}
+	return undefined;
+}
+
 async function resolveTenantId(
 	supabase: SupabaseClient,
 	userId: string,
@@ -392,8 +406,10 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 	// Curve pack
 	if (config.enabledPacks.curve) {
 		const curve = config.mappings.curve;
-		if (curve?.measurementTableId && curve.actualPctColumnKey) {
-			const rows = await getRows(curve.measurementTableId);
+		const curveMeasurementTableId =
+			curve?.resumenTableId ?? curve?.measurementTableId;
+		if (curveMeasurementTableId && curve?.actualPctColumnKey) {
+			const rows = await getRows(curveMeasurementTableId);
 			const normalizedRows = rows
 				.map((row) => ({
 					row,
@@ -472,15 +488,58 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 			}
 
 			let planPct: number | null = null;
-			if (curve.plan?.mode === "linear" && curve.plan.months) {
-				if (periodKey || currentPeriodKey) {
-					const targetPeriod = periodKey ?? currentPeriodKey;
-					const startPeriod =
-						derivedStartPeriod ?? curve.plan.startPeriod ?? targetPeriod;
-					const diff = monthsDiff(startPeriod, targetPeriod);
-					const monthIndex = diff != null ? diff + 1 : 1;
-					planPct = Math.min(100, (monthIndex / curve.plan.months) * 100);
+			let planSource: "plan_table_period_match" | "linear" | "none" = "none";
+			let planStartPeriodUsed: string | null = null;
+			const targetPeriod = periodKey ?? currentPeriodKey;
+
+			if (curve?.planTableId) {
+				const planRows = await getRows(curve.planTableId);
+				const normalizedPlanRows = planRows
+					.map((row) => {
+						const rowData = (row.data as Record<string, any>) ?? null;
+						const parsed = parseNumber(
+							firstDefinedValue(rowData, [
+								"avance_acumulado_pct",
+								"avance_acum_pct",
+								"avance_plan_acumulado_pct",
+								"plan_acumulado_pct",
+							]),
+						);
+						if (parsed == null) return null;
+						return {
+							row,
+							value: Math.abs(parsed) <= 1 ? parsed * 100 : parsed,
+							period: periodKeyFromCurveRow(rowData, curve.plan?.startPeriod),
+						};
+					})
+					.filter(
+						(r): r is { row: any; value: number; period: string | null } =>
+							r != null,
+					);
+
+				const rankedPlan = normalizedPlanRows
+					.filter(
+						(r): r is typeof r & { period: string } => typeof r.period === "string",
+					)
+					.map((r) => ({ ...r, diff: monthsDiff(r.period, targetPeriod) }))
+					.filter((r) => r.diff != null && r.diff >= 0)
+					.sort((a, b) => (a.diff as number) - (b.diff as number));
+
+				if (rankedPlan.length > 0) {
+					planPct = rankedPlan[0].value;
+					planSource = "plan_table_period_match";
+					planStartPeriodUsed = rankedPlan[0].period;
 				}
+			}
+
+			if (planPct == null && curve.plan?.mode === "linear" && curve.plan.months) {
+				const startPeriod =
+					derivedStartPeriod ?? curve.plan.startPeriod ?? targetPeriod;
+				const diff = monthsDiff(startPeriod, targetPeriod);
+				const monthIndex = diff != null ? diff + 1 : 1;
+				planPct = Math.min(100, (monthIndex / curve.plan.months) * 100);
+				planSource = "linear";
+				planStartPeriodUsed = startPeriod;
 			}
 
 			const delta =
@@ -514,7 +573,7 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 					{
 						signal_key: "progress.actual_pct",
 						inputs_json: {
-							tableId: curve.measurementTableId,
+							tableId: curveMeasurementTableId,
 							columnKey: curve.actualPctColumnKey,
 						},
 						outputs_json: {
@@ -523,20 +582,24 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 							rowsConsidered: normalizedRows.length,
 						},
 					},
-				{
-					signal_key: "progress.plan_pct",
-					inputs_json: { plan: curve.plan, periodKey },
-					outputs_json: {
-						planPct,
-						startPeriodSource: derivedStartPeriod
-							? "derived_from_measurements"
-							: curve.plan?.startPeriod
-								? "configured"
-								: "target_fallback",
-						startPeriodUsed:
-							derivedStartPeriod ?? curve.plan?.startPeriod ?? (periodKey ?? currentPeriodKey),
+					{
+						signal_key: "progress.plan_pct",
+						inputs_json: { plan: curve.plan, periodKey },
+						outputs_json: {
+							planPct,
+							source: planSource,
+							planTableId: curve?.planTableId ?? null,
+							startPeriodSource:
+								planSource === "linear"
+									? derivedStartPeriod
+										? "derived_from_measurements"
+										: curve.plan?.startPeriod
+											? "configured"
+											: "target_fallback"
+									: "plan_table",
+							startPeriodUsed: planStartPeriodUsed,
+						},
 					},
-				},
 				{
 					signal_key: "progress.delta_pct",
 					inputs_json: { actualPct, planPct },
@@ -774,7 +837,9 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 	if (config.enabledPacks.inactivity) {
 		const inactive = config.mappings.inactivity ?? {};
 		const inactivityMeasurementTableId =
-			inactive.measurementTableId ?? config.mappings.curve?.measurementTableId;
+			inactive.measurementTableId ??
+			config.mappings.curve?.resumenTableId ??
+			config.mappings.curve?.measurementTableId;
 		const inactivityMeasurementDateColumnKey =
 			inactive.measurementDateColumnKey ??
 			(config.mappings.curve?.actualPctColumnKey

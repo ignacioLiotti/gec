@@ -21,6 +21,8 @@ export type RuleConfig = {
   };
   mappings: {
     curve?: {
+      planTableId?: string;
+      resumenTableId?: string;
       measurementTableId?: string;
       actualPctColumnKey?: string;
       plan?: { mode: "linear"; months: number; startPeriod?: string };

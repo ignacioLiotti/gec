@@ -255,6 +255,9 @@ type GeneralTabReportsData = {
 type CurveRuleConfig = {
 	mappings?: {
 		curve?: {
+			planTableId?: string;
+			resumenTableId?: string;
+			measurementTableId?: string;
 			plan?: {
 				startPeriod?: string;
 			};
@@ -473,6 +476,43 @@ function periodLabel(periodKey: string): string {
 	return date.toLocaleDateString("es-AR", { month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+function normalizeFieldKey(value: string): string {
+	return normalizeText(value)
+		.replace(/[^a-z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "");
+}
+
+function getRowFieldValueByCandidates(
+	rowData: Record<string, unknown> | null | undefined,
+	candidates: string[],
+	tokenGroups: string[][] = [],
+): unknown {
+	if (!rowData || typeof rowData !== "object") return null;
+	for (const key of candidates) {
+		if (key in rowData) return rowData[key];
+	}
+
+	const entries = Object.entries(rowData);
+	const normalizedEntries = entries.map(([key, value]) => [normalizeFieldKey(key), value] as const);
+	const normalizedCandidates = new Set(candidates.map((key) => normalizeFieldKey(key)));
+	for (const [key, value] of normalizedEntries) {
+		if (normalizedCandidates.has(key)) return value;
+	}
+
+	if (tokenGroups.length > 0) {
+		for (const [key, value] of normalizedEntries) {
+			const tokenSet = key.split("_").filter(Boolean);
+			for (const group of tokenGroups) {
+				if (group.every((token) => tokenSet.some((entry) => entry.includes(token)))) {
+					return value;
+				}
+			}
+		}
+	}
+
+	return null;
+}
+
 function buildCurvePoints(
 	curvaRows: TablaRowRecord[],
 	resumenRows: TablaRowRecord[],
@@ -485,8 +525,19 @@ function buildCurvePoints(
 			: null;
 
 	curvaRows.forEach((row, index) => {
-		const periodo = row.data?.periodo;
-		const avance = parsePercent(row.data?.avance_acumulado_pct);
+		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+		const periodo = getRowFieldValueByCandidates(
+			rowData,
+			["periodo", "periodo_key", "period", "mes"],
+			[["periodo"], ["period"], ["mes"]],
+		);
+		const avance = parsePercent(
+			getRowFieldValueByCandidates(
+				rowData,
+				["avance_acumulado_pct", "avance_acum_pct", "avance_acumulado", "avance_pct"],
+				[["avance", "acum"], ["acumulado"]],
+			),
+		);
 		if (!periodo || avance == null) return;
 		const raw = String(periodo ?? "").trim();
 		const mesN = normalizeText(raw).match(/mes\s*(\d{1,3})/);
@@ -514,9 +565,32 @@ function buildCurvePoints(
 	});
 
 	resumenRows.forEach((row, index) => {
+		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
 		// Prefer explicit certification date to avoid wrong ordering from long period text.
-		const periodSource = row.data?.fecha_certificacion ?? row.data?.periodo;
-		const avance = parsePercent(row.data?.avance_fisico_acumulado_pct);
+		const periodSource =
+			getRowFieldValueByCandidates(
+				rowData,
+				["fecha_certificacion", "fecha", "issued_at", "date"],
+				[["fecha", "cert"], ["fecha"]],
+			) ??
+			getRowFieldValueByCandidates(
+				rowData,
+				["periodo", "periodo_key", "period", "mes"],
+				[["periodo"], ["period"], ["mes"]],
+			);
+		const avance = parsePercent(
+			getRowFieldValueByCandidates(
+				rowData,
+				[
+					"avance_fisico_acumulado_pct",
+					"avance_fisico_acum_pct",
+					"avance_fisico_acumulado",
+					"avance_acumulado_pct",
+					"avance_acum_pct",
+				],
+				[["avance", "fisico", "acum"], ["avance", "acum"]],
+			),
+		);
 		if (!periodSource || avance == null) return;
 		const parsed = parseMonthOrder(periodSource, index);
 		const periodKey = parsed.order >= 1000
@@ -826,6 +900,10 @@ export default function ObraDetailPage() {
 			pmcResumenName,
 		};
 	}, [tablasQuery.data]);
+	const tablasById = useMemo(() => {
+		const tablas: ObraTabla[] = Array.isArray(tablasQuery.data) ? tablasQuery.data : [];
+		return new Map(tablas.map((tabla) => [tabla.id, tabla] as const));
+	}, [tablasQuery.data]);
 	const currentPeriodKey = useMemo(() => {
 		const now = new Date();
 		return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -842,22 +920,35 @@ export default function ObraDetailPage() {
 		],
 		enabled: isValidObraId,
 		queryFn: async () => {
+			const rulesConfig = await fetchRulesConfig(obraId!);
+			const rulesCurvePlanTableId = rulesConfig?.mappings?.curve?.planTableId ?? null;
+			const rulesResumenTableId =
+				rulesConfig?.mappings?.curve?.resumenTableId ??
+				rulesConfig?.mappings?.curve?.measurementTableId ??
+				null;
+			const curvaTableId = rulesCurvePlanTableId ?? certificadoTableRefs.curvaPlanId;
+			const resumenTableId = rulesResumenTableId ?? certificadoTableRefs.pmcResumenId;
+			const curvaTableName =
+				(curvaTableId ? tablasById.get(curvaTableId)?.name : null) ??
+				certificadoTableRefs.curvaPlanName;
+			const resumenTableName =
+				(resumenTableId ? tablasById.get(resumenTableId)?.name : null) ??
+				certificadoTableRefs.pmcResumenName;
+
 			const findingsPromise = (async () => {
 				const withPeriod = await fetchFindings(obraId!, currentPeriodKey);
 				if (withPeriod.length > 0) return withPeriod;
 				return fetchFindings(obraId!);
 			})();
-			const rulesPromise = fetchRulesConfig(obraId!);
-			const curvaPromise = certificadoTableRefs.curvaPlanId
-				? fetchTablaRowsAll(obraId!, certificadoTableRefs.curvaPlanId)
+			const curvaPromise = curvaTableId
+				? fetchTablaRowsAll(obraId!, curvaTableId)
 				: Promise.resolve([] as TablaRowRecord[]);
-			const resumenPromise = certificadoTableRefs.pmcResumenId
-				? fetchTablaRowsAll(obraId!, certificadoTableRefs.pmcResumenId)
+			const resumenPromise = resumenTableId
+				? fetchTablaRowsAll(obraId!, resumenTableId)
 				: Promise.resolve([] as TablaRowRecord[]);
 
-			const [findings, rulesConfig, curvaRows, resumenRows] = await Promise.all([
+			const [findings, curvaRows, resumenRows] = await Promise.all([
 				findingsPromise,
-				rulesPromise,
 				curvaPromise,
 				resumenPromise,
 			]);
@@ -869,11 +960,11 @@ export default function ObraDetailPage() {
 				findings,
 				curve:
 					points.length > 0
-						? {
-							points,
-							planTableName: certificadoTableRefs.curvaPlanName,
-							resumenTableName: certificadoTableRefs.pmcResumenName,
-						}
+							? {
+								points,
+								planTableName: curvaTableName,
+								resumenTableName,
+							}
 						: null,
 			} satisfies GeneralTabReportsData;
 		},

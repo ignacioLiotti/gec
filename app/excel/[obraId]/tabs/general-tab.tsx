@@ -2,7 +2,17 @@
 
 import type { FormApi } from "@tanstack/react-form";
 import { motion } from "framer-motion";
-import { AlertCircle, AlertTriangle, Building2, Calendar, DollarSign, FileText, LineChart, MapPin, Percent, TrendingUp } from "lucide-react";
+import { AlertCircle, AlertTriangle, Building2, Calendar, DollarSign, FileText, LineChart as LineChartIcon, MapPin, Percent, TrendingUp } from "lucide-react";
+import {
+	CartesianGrid,
+	Line,
+	LineChart,
+	ReferenceLine,
+	ResponsiveContainer,
+	Tooltip,
+	XAxis,
+	YAxis,
+} from "recharts";
 
 import type { Obra } from "@/app/excel/schema";
 import type { OcrTablaColumn } from "./file-manager/types";
@@ -124,33 +134,11 @@ const CircularProgress = ({ value }: { value: number }) => {
 	);
 };
 
-function buildSvgPath(
-	points: ReportCurvePoint[],
-	valueKey: "planPct" | "realPct",
-	xForIndex: (index: number) => number,
-	yForValue: (value: number) => number
-) {
-	let path = "";
-	let started = false;
-	points.forEach((point, index) => {
-		const value = point[valueKey];
-		if (value == null || !Number.isFinite(value)) {
-			started = false;
-			return;
-		}
-		const x = xForIndex(index);
-		const y = yForValue(value);
-		if (!started) {
-			path += `M ${x} ${y}`;
-			started = true;
-		} else {
-			path += ` L ${x} ${y}`;
-		}
-	});
-	return path;
-}
-
-const AdvanceCurveChart = ({ points }: { points: ReportCurvePoint[] }) => {
+const AdvanceCurveChart = ({
+	points,
+}: {
+	points: ReportCurvePoint[];
+}) => {
 	if (points.length === 0) {
 		return (
 			<div className="rounded border border-dashed p-4 text-xs text-muted-foreground">
@@ -181,90 +169,133 @@ const AdvanceCurveChart = ({ points }: { points: ReportCurvePoint[] }) => {
 		return acc;
 	}, []);
 
-	const chartWidth = 880;
-	const chartHeight = 300;
-	const margin = { top: 16, right: 16, bottom: 56, left: 44 };
-	const plotWidth = chartWidth - margin.left - margin.right;
-	const plotHeight = chartHeight - margin.top - margin.bottom;
-
 	const yMax = Math.max(
 		100,
 		...filledPoints.flatMap((point) => [point.planPct ?? 0, point.realPct ?? 0])
 	);
-	const xForIndex = (index: number) =>
-		margin.left + (filledPoints.length <= 1 ? 0 : (index / (filledPoints.length - 1)) * plotWidth);
-	const yForValue = (value: number) =>
-		margin.top + plotHeight - (Math.max(0, value) / yMax) * plotHeight;
-
-	const planPath = buildSvgPath(filledPoints, "planPct", xForIndex, yForValue);
-	const realPath = buildSvgPath(filledPoints, "realPct", xForIndex, yForValue);
+	const chartData = filledPoints.map((point, index) => ({
+		x: point.sortOrder,
+		idx: index,
+		label: point.label,
+		planPct: point.planPct,
+		realPct: point.realPct,
+	}));
+	const now = new Date();
+	const currentMonthOrder = now.getFullYear() * 12 + now.getMonth();
+	const minX = Math.min(...chartData.map((d) => d.x));
+	const maxX = Math.max(...chartData.map((d) => d.x));
+	const totalMonths = Math.max(1, maxX - minX + 1);
+	const elapsedMonths = Math.max(1, Math.min(totalMonths, currentMonthOrder - minX + 1));
+	const timelinePctByCurve = (elapsedMonths / totalMonths) * 100;
+	const timelineLabel = `Hoy ${timelinePctByCurve.toFixed(1)}%`;
+	const markerX =
+		Number.isFinite(currentMonthOrder)
+			? Math.max(minX, Math.min(maxX, currentMonthOrder))
+			: null;
 
 	const yTicks = [0, 25, 50, 75, 100].filter((tick) => tick <= yMax || tick === 100);
-	const labelStep = filledPoints.length > 12 ? Math.ceil(filledPoints.length / 12) : 1;
+	const labelStep = chartData.length > 12 ? Math.ceil(chartData.length / 12) : 1;
+	const xTicks = chartData
+		.filter((_, index) => index % labelStep === 0 || index === chartData.length - 1)
+		.map((point) => point.x);
+	const labelByX = new Map(chartData.map((point) => [point.x, point.label] as const));
 
 	return (
-		<div className="space-y-2 pt-4">
-
-			<div className="overflow-x-auto rounded-md border">
-				<svg
-					viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-					className="min-w-[760px] w-full h-[320px] bg-white"
-					role="img"
-					aria-label="Comparación de curva de avance"
-				>
-					{yTicks.map((tick) => {
-						const y = yForValue(tick);
-						return (
-							<g key={`y-${tick}`}>
-								<line x1={margin.left} y1={y} x2={margin.left + plotWidth} y2={y} stroke="currentColor" className="text-muted/40" />
-								<text x={margin.left - 8} y={y + 4} textAnchor="end" className="fill-muted-foreground text-[11px]">
-									{tick}%
-								</text>
-							</g>
-						);
-					})}
-
-					{planPath ? <path d={planPath} fill="none" stroke="#0ea5e9" strokeWidth={2.5} /> : null}
-					{realPath ? <path d={realPath} fill="none" stroke="#8b1e1e" strokeWidth={2.5} /> : null}
-
-					{filledPoints.map((point, index) => {
-						const x = xForIndex(index);
-						return (
-							<g key={`${point.label}-${index}`}>
-								{point.planPct != null ? (
-									<circle cx={x} cy={yForValue(point.planPct)} r={3} fill="#0ea5e9" />
-								) : null}
-								{point.realPct != null ? (
-									<circle cx={x} cy={yForValue(point.realPct)} r={3} fill="#8b1e1e" />
-								) : null}
-								{index % labelStep === 0 || index === filledPoints.length - 1 ? (
-									<text
-										x={x}
-										y={chartHeight - 18}
-										textAnchor="middle"
-										className="fill-muted-foreground text-[10px]"
-									>
-										{point.label}
-									</text>
-								) : null}
-							</g>
-						);
-					})}
-				</svg>
-			</div>
-			<div className="flex flex-wrap items-center gap-4 text-xs">
-				<div className="flex items-center gap-2">
-					<span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
-					<span className="text-muted-foreground">Curva Plan (avance acumulado)</span>
+		<div className="space-y-2 pt-4 ">
+			<div className="rounded-md border bg-stone-50 p-2">
+				<div className="h-[320px] w-full pt-5 pb-2 px-3">
+						<ResponsiveContainer width="100%" height="100%">
+							<LineChart
+								data={chartData}
+								margin={{ top: 12, right: 16, bottom: 30, left: 0 }}
+						>
+							<CartesianGrid stroke="currentColor" className="text-muted/30" vertical={false} />
+							<XAxis
+								dataKey="x"
+								type="number"
+								domain={[minX, maxX > minX ? maxX : minX + 1]}
+								ticks={xTicks}
+								tickLine={false}
+								axisLine={false}
+								tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+								tickFormatter={(value) => labelByX.get(Number(value)) ?? ""}
+							/>
+							<YAxis
+								width={40}
+								domain={[0, Math.ceil(yMax)]}
+								ticks={yTicks}
+								axisLine={false}
+								tickLine={false}
+								tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+								tickFormatter={(value) => `${value}%`}
+							/>
+							<Tooltip
+								formatter={(value: number, name: string) => [
+									`${Number(value).toFixed(2)}%`,
+									name === "planPct" ? "Curva Plan" : "PMC Resumen",
+								]}
+								labelFormatter={(value) => labelByX.get(Number(value)) ?? ""}
+							/>
+							{markerX != null ? (
+								<ReferenceLine
+									x={markerX}
+									stroke="#f59e0b"
+									strokeWidth={1.5}
+									strokeDasharray="5 4"
+									label={
+										timelineLabel
+											? {
+												value: timelineLabel,
+												position: "top",
+												fill: "#d97706",
+												fontSize: 10,
+											}
+											: undefined
+									}
+								/>
+							) : null}
+							<Line
+								type="monotone"
+								dataKey="planPct"
+								name="planPct"
+								stroke="#0ea5e9"
+								strokeWidth={2.5}
+								strokeDasharray="6 4"
+								dot={{ r: 3 }}
+								connectNulls
+								isAnimationActive={false}
+							/>
+							<Line
+								type="monotone"
+								dataKey="realPct"
+								name="realPct"
+								stroke="#ff5800"
+								strokeWidth={2.5}
+								dot={{ r: 3 }}
+								connectNulls
+									isAnimationActive={false}
+								/>
+							</LineChart>
+						</ResponsiveContainer>
+					</div>
+					<div className="-mt-5 ml-4 flex flex-wrap items-center gap-4 text-xs">
+						<div className="flex items-center gap-2">
+							<span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+							<span className="text-muted-foreground">Curva Plan (avance acumulado)</span>
+						</div>
+						<div className="flex items-center gap-2">
+							<span className="h-2.5 w-2.5 rounded-full bg-[#ff5800]" />
+							<span className="text-muted-foreground">PMC Resumen (avance físico acumulado)</span>
+						</div>
+						<div className="flex items-center gap-2">
+							<span className="h-0.5 w-3 bg-amber-500" />
+							<span className="text-muted-foreground">Hoy (tiempo transcurrido)</span>
+						</div>
+					</div>
 				</div>
-				<div className="flex items-center gap-2">
-					<span className="h-2.5 w-2.5 rounded-full bg-[#8b1e1e]" />
-					<span className="text-muted-foreground">PMC Resumen (avance físico acumulado)</span>
-				</div>
 			</div>
-		</div>
-	);
-};
+		);
+	};
 
 export function ObraGeneralTab({
 	form,
@@ -781,7 +812,7 @@ export function ObraGeneralTab({
 											<div className="flex flex-wrap items-center justify-between gap-2 w-full">
 												<div className="flex items-center gap-2">
 
-													<LineChart className="h-5 w-5 text-primary" />
+													<LineChartIcon className="h-5 w-5 text-primary" />
 													<h2 className="text-base sm:text-lg font-semibold">Curva de avance</h2>
 												</div>
 												{reportsData?.curve ? (

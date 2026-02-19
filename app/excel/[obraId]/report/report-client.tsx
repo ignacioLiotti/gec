@@ -89,8 +89,8 @@ export function ReportClient({ obraId }: { obraId: string }) {
   const builderTableOptions = tableOptions;
   const builderColumns =
     builderPack === "curve"
-      ? config.mappings.curve?.measurementTableId
-        ? columnsByTable.get(config.mappings.curve.measurementTableId) ?? []
+      ? (config.mappings.curve?.resumenTableId ?? config.mappings.curve?.measurementTableId)
+        ? columnsByTable.get(config.mappings.curve?.resumenTableId ?? config.mappings.curve?.measurementTableId ?? "") ?? []
         : []
       : builderPack === "unpaidCerts"
         ? config.mappings.unpaidCerts?.certTableId
@@ -261,9 +261,9 @@ export function ReportClient({ obraId }: { obraId: string }) {
             {builderPack === "curve" && (
               <>
                 <div className="grid gap-1">
-                  <Label>Tabla medición</Label>
+                  <Label>Tabla PMC Resumen</Label>
                   <Select
-                    value={config.mappings.curve?.measurementTableId ?? ""}
+                    value={config.mappings.curve?.resumenTableId ?? config.mappings.curve?.measurementTableId ?? ""}
                     onValueChange={(value) =>
                       setConfig({
                         ...config,
@@ -272,7 +272,38 @@ export function ReportClient({ obraId }: { obraId: string }) {
                           ...config.mappings,
                           curve: {
                             ...config.mappings.curve,
+                            resumenTableId: value,
                             measurementTableId: value,
+                          },
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar tabla" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {builderTableOptions.map((table) => (
+                        <SelectItem key={table.id} value={table.id}>
+                          {table.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label>Tabla Curva Plan</Label>
+                  <Select
+                    value={config.mappings.curve?.planTableId ?? ""}
+                    onValueChange={(value) =>
+                      setConfig({
+                        ...config,
+                        enabledPacks: { ...config.enabledPacks, curve: true },
+                        mappings: {
+                          ...config.mappings,
+                          curve: {
+                            ...config.mappings.curve,
+                            planTableId: value,
                           },
                         },
                       })
@@ -731,8 +762,9 @@ function PackCurve({
   columnsByTable: Map<string, ReportTable["columns"]>;
 }) {
   const curve = config.mappings.curve ?? {};
-  const selectedColumns = curve.measurementTableId
-    ? columnsByTable.get(curve.measurementTableId) ?? []
+  const resumenTableId = curve.resumenTableId ?? curve.measurementTableId;
+  const selectedColumns = resumenTableId
+    ? columnsByTable.get(resumenTableId) ?? []
     : [];
 
   return (
@@ -755,15 +787,46 @@ function PackCurve({
 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="grid gap-1">
-          <Label>Tabla de medición</Label>
+          <Label>Tabla PMC Resumen (real)</Label>
           <Select
-            value={curve.measurementTableId ?? ""}
+            value={resumenTableId ?? ""}
             onValueChange={(value) =>
               setConfig({
                 ...config,
                 mappings: {
                   ...config.mappings,
-                  curve: { ...curve, measurementTableId: value },
+                  curve: {
+                    ...curve,
+                    resumenTableId: value,
+                    measurementTableId: value,
+                  },
+                },
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar tabla" />
+            </SelectTrigger>
+            <SelectContent>
+              {tables.map((table) => (
+                <SelectItem key={table.id} value={table.id}>
+                  {table.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid gap-1">
+          <Label>Tabla Curva Plan</Label>
+          <Select
+            value={curve.planTableId ?? ""}
+            onValueChange={(value) =>
+              setConfig({
+                ...config,
+                mappings: {
+                  ...config.mappings,
+                  curve: { ...curve, planTableId: value },
                 },
               })
             }
