@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { applyDefaultFolderToExistingObras } from "@/lib/obra-defaults/apply-default-folder";
+import { removeDefaultFolderFromExistingObras } from "@/lib/obra-defaults/remove-default-folder";
 
 function isAuthorized(request: Request) {
 	const secret = process.env.CRON_SECRET;
@@ -55,8 +56,8 @@ export async function POST(request: Request) {
 		}
 
 		try {
-			switch (job.type) {
-				case "apply_default_folder": {
+				switch (job.type) {
+					case "apply_default_folder": {
 					const folderId = (job.payload as any)?.folderId as string | undefined;
 					const forceSync = (job.payload as any)?.forceSync === true;
 					const previousPath =
@@ -72,11 +73,29 @@ export async function POST(request: Request) {
 						forceSync,
 						previousPath,
 					});
-					break;
+						break;
+					}
+					case "remove_default_folder": {
+						const folderPath = (job.payload as any)?.folderPath as string | undefined;
+						const defaultTablaIds = Array.isArray((job.payload as any)?.defaultTablaIds)
+							? ((job.payload as any).defaultTablaIds as unknown[]).filter(
+									(value): value is string =>
+										typeof value === "string" && value.length > 0,
+								)
+							: [];
+						if (!folderPath) {
+							throw new Error("folderPath missing in payload");
+						}
+						await removeDefaultFolderFromExistingObras(admin, {
+							tenantId: job.tenant_id,
+							folderPath,
+							defaultTablaIds,
+						});
+						break;
+					}
+					default:
+						throw new Error(`Unknown job type: ${job.type}`);
 				}
-				default:
-					throw new Error(`Unknown job type: ${job.type}`);
-			}
 
 			await admin
 				.from("background_jobs")

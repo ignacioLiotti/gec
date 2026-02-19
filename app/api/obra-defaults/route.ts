@@ -1017,23 +1017,33 @@ export async function DELETE(request: Request) {
 			return NextResponse.json({ error: "ID required" }, { status: 400 });
 		}
 
-		if (type === "folder") {
-			// First get the folder to find its path
-			const { data: folder } = await supabase
-				.from("obra_default_folders")
-				.select("path")
+			if (type === "folder") {
+				// First get the folder to find its path
+				const { data: folder } = await supabase
+					.from("obra_default_folders")
+					.select("path")
 				.eq("id", id)
 				.eq("tenant_id", tenantId)
 				.single();
 
-			if (folder) {
-				// Delete any linked tabla (cascade will delete columns)
-				await supabase
-					.from("obra_default_tablas")
-					.delete()
-					.eq("tenant_id", tenantId)
-					.eq("linked_folder_path", folder.path);
-			}
+				let linkedDefaultTablaIds: string[] = [];
+				if (folder) {
+					const { data: linkedTablas } = await supabase
+						.from("obra_default_tablas")
+						.select("id")
+						.eq("tenant_id", tenantId)
+						.eq("linked_folder_path", folder.path);
+					linkedDefaultTablaIds = (linkedTablas ?? [])
+						.map((row) => (row as { id?: string }).id)
+						.filter((rowId): rowId is string => typeof rowId === "string" && rowId.length > 0);
+
+					// Delete any linked tabla (cascade will delete columns)
+					await supabase
+						.from("obra_default_tablas")
+						.delete()
+						.eq("tenant_id", tenantId)
+						.eq("linked_folder_path", folder.path);
+				}
 
 			// Delete the folder
 			const { error } = await supabase
@@ -1042,8 +1052,22 @@ export async function DELETE(request: Request) {
 				.eq("id", id)
 				.eq("tenant_id", tenantId);
 
-			if (error) throw error;
-			} else if (type === "quick-action") {
+				if (error) throw error;
+
+				if (folder?.path) {
+					const { error: jobError } = await supabase.from("background_jobs").insert({
+						tenant_id: tenantId,
+						type: "remove_default_folder",
+						payload: {
+							folderPath: folder.path,
+							defaultTablaIds: linkedDefaultTablaIds,
+						},
+					});
+					if (jobError) {
+						console.error("[obra-defaults:delete] job enqueue error:", jobError);
+					}
+				}
+				} else if (type === "quick-action") {
 				const { error } = await supabase
 					.from("obra_default_quick_actions")
 					.delete()
