@@ -22,6 +22,7 @@ import { getUserRoles } from "@/lib/route-guard";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next";
+import DomainMigrationGuard from "@/components/domain-migration-guard";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 
@@ -163,6 +164,7 @@ export default async function RootLayout({
       >
         <SpeedInsights />
         <QueryClientProvider>
+          <DomainMigrationGuard />
           <SupabaseAuthListener />
           <AuthController />
           <AuthGate />

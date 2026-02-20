@@ -9,6 +9,9 @@ const rateLimitEnabled =
 	(process.env.RATE_LIMIT_IP ?? "120") !== "0" &&
 	!!process.env.UPSTASH_REDIS_REST_URL &&
 	!!process.env.UPSTASH_REDIS_REST_TOKEN;
+const domainSplitEnabled = process.env.ENABLE_DOMAIN_SPLIT === "true";
+const appHost = process.env.APP_HOST?.toLowerCase();
+const marketingHost = process.env.MARKETING_HOST?.toLowerCase();
 
 // Allowed sources for CSP
 const trustedSources = ["'self'", "https://*.supabase.co"];
@@ -57,6 +60,31 @@ function attachSecurityHeaders(res: NextResponse) {
 	return res;
 }
 
+function getRequestHost(req: NextRequest) {
+	const forwardedHost = req.headers.get("x-forwarded-host");
+	const host = forwardedHost ?? req.headers.get("host") ?? "";
+	return host.split(",")[0].trim().toLowerCase();
+}
+
+function hasSupabaseAuthCookie(req: NextRequest) {
+	return req.cookies
+		.getAll()
+		.some(
+			(cookie) =>
+				cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"),
+		);
+}
+
+function redirectToHost(req: NextRequest, targetHost: string) {
+	const targetUrl = req.nextUrl.clone();
+	targetUrl.host = targetHost;
+	const forwardedProto = req.headers.get("x-forwarded-proto");
+	if (forwardedProto === "http" || forwardedProto === "https") {
+		targetUrl.protocol = `${forwardedProto}:`;
+	}
+	return NextResponse.redirect(targetUrl, 307);
+}
+
 function enforceCsrf(req: NextRequest) {
 	if (!req.nextUrl.pathname.startsWith("/api")) {
 		return null;
@@ -81,6 +109,22 @@ function enforceCsrf(req: NextRequest) {
 }
 
 export async function proxy(req: NextRequest) {
+	const pathname = req.nextUrl.pathname;
+	if (
+		domainSplitEnabled &&
+		appHost &&
+		marketingHost &&
+		getRequestHost(req) === marketingHost &&
+		!pathname.startsWith("/_next") &&
+		!pathname.startsWith("/api") &&
+		!pathname.startsWith("/auth/callback") &&
+		pathname !== "/favicon.ico" &&
+		!pathname.startsWith("/.well-known") &&
+		hasSupabaseAuthCookie(req)
+	) {
+		return attachSecurityHeaders(redirectToHost(req, appHost));
+	}
+
 	const csrfFailure = enforceCsrf(req);
 	if (csrfFailure) {
 		return csrfFailure;
@@ -158,7 +202,6 @@ export async function proxy(req: NextRequest) {
 
 	await supabase.auth.getSession();
 
-	const pathname = req.nextUrl.pathname;
 	const config = getRouteAccessConfig(pathname);
 
 	if (!config) {
