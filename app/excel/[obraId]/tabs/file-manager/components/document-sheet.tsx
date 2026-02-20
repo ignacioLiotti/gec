@@ -117,7 +117,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 									) : (
 										<RefreshCw className="mr-2 h-4 w-4" />
 									)}
-									Reprocesar OCR
+									Reprocesar Extracción
 								</Button>
 							)}
 							{/* <Button variant="outline" size="sm" onClick={() => onDownload(document)} className="shrink-0">

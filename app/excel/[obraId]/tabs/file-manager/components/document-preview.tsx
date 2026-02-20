@@ -36,7 +36,7 @@ export const DocumentPreview = memo(function DocumentPreview({ document, preview
 					<h3 className="font-medium text-stone-800 truncate">{document.name}</h3>
 					<Button variant="outline" size="sm" onClick={() => onDownload(document)}>
 						<Download className="w-4 h-4 mr-2" />
-						Download
+						Descargar
 					</Button>
 				</div>
 			)}

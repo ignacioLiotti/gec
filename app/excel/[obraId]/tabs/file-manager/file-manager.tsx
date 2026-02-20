@@ -283,6 +283,11 @@ type SpreadsheetPreviewPayload = {
   tablaIds: string[];
 };
 
+type TableSelectionEntry = {
+  tablaId: string;
+  tablaName: string;
+};
+
 function getConditionalClass(
   value: unknown,
   config?: Record<string, unknown>
@@ -793,7 +798,14 @@ function FileManagerContent({
   const [isLoadingSpreadsheetPreview, setIsLoadingSpreadsheetPreview] = useState(false);
   const [isApplyingSpreadsheetPreview, setIsApplyingSpreadsheetPreview] = useState(false);
   const [spreadsheetPreviewPayload, setSpreadsheetPreviewPayload] = useState<SpreadsheetPreviewPayload | null>(null);
+  const [spreadsheetPreviewStepIndex, setSpreadsheetPreviewStepIndex] = useState(0);
   const spreadsheetPreviewResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const [isTableSelectionOpen, setIsTableSelectionOpen] = useState(false);
+  const [tableSelectionFileName, setTableSelectionFileName] = useState('');
+  const [tableSelectionEntries, setTableSelectionEntries] = useState<TableSelectionEntry[]>([]);
+  const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+  const [tableSelectionMode, setTableSelectionMode] = useState<'ocr' | 'spreadsheet'>('ocr');
+  const tableSelectionResolverRef = useRef<((tablaIds: string[] | null) => void) | null>(null);
   const rateLimitUntilRef = useRef<number>(0);
 
   useEffect(() => {
@@ -2312,6 +2324,7 @@ function FileManagerContent({
       new Promise<boolean>((resolve) => {
         spreadsheetPreviewResolverRef.current = resolve;
         setSpreadsheetPreviewPayload(payload);
+        setSpreadsheetPreviewStepIndex(0);
         setIsSpreadsheetPreviewOpen(true);
       }),
     []
@@ -2323,6 +2336,43 @@ function FileManagerContent({
     spreadsheetPreviewResolverRef.current = null;
     resolver?.(confirmed);
   }, []);
+
+  const openTableSelectionDialog = useCallback(
+    (params: { fileName: string; linkedTablas: OcrFolderLink[]; mode: 'ocr' | 'spreadsheet' }) =>
+      new Promise<string[] | null>((resolve) => {
+        const uniqueById = new Map<string, OcrFolderLink>();
+        params.linkedTablas.forEach((tabla) => {
+          if (!uniqueById.has(tabla.tablaId)) {
+            uniqueById.set(tabla.tablaId, tabla);
+          }
+        });
+        const entries = Array.from(uniqueById.values()).map((tabla) => ({
+          tablaId: tabla.tablaId,
+          tablaName: tabla.tablaName ?? 'Tabla',
+        }));
+        const ids = entries.map((entry) => entry.tablaId);
+
+        tableSelectionResolverRef.current = resolve;
+        setTableSelectionMode(params.mode);
+        setTableSelectionFileName(params.fileName);
+        setTableSelectionEntries(entries);
+        setSelectedTableIds(ids);
+        setIsTableSelectionOpen(true);
+      }),
+    []
+  );
+
+  const closeTableSelectionDialog = useCallback((confirmed: boolean) => {
+    setIsTableSelectionOpen(false);
+    const resolver = tableSelectionResolverRef.current;
+    tableSelectionResolverRef.current = null;
+    if (!resolver) return;
+    if (!confirmed) {
+      resolver(null);
+      return;
+    }
+    resolver(selectedTableIds.length > 0 ? selectedTableIds : null);
+  }, [selectedTableIds]);
 
   const refreshSpreadsheetPreviewWithOverrides = useCallback(
     async (nextSheetAssignments: Record<string, string | null>, nextColumnMappings: Record<string, Record<string, string | null>>) => {
@@ -2674,13 +2724,25 @@ function FileManagerContent({
             const isSpreadsheet = ext === 'csv' || ext === 'xlsx' || ext === 'xls';
             if (isSpreadsheet) {
               let previewPayload: SpreadsheetPreviewPayload;
+              const uniqueTablaIds = [...new Set(linkedTablas.map((tabla) => tabla.tablaId))];
+              const selectedTablaIds =
+                uniqueTablaIds.length <= 1
+                  ? uniqueTablaIds
+                  : await openTableSelectionDialog({
+                    fileName: storageFileName,
+                    linkedTablas,
+                    mode: 'spreadsheet',
+                  });
+              if (!selectedTablaIds || selectedTablaIds.length === 0) {
+                toast.info(`Importación cancelada para ${file.name}`);
+                continue;
+              }
               try {
                 setIsLoadingSpreadsheetPreview(true);
-                const uniqueTablaIds = [...new Set(linkedTablas.map((tabla) => tabla.tablaId))];
                 previewPayload = await fetchSpreadsheetPreview({
                   existingPath: filePath,
                   existingFileName: storageFileName,
-                  tablaIds: uniqueTablaIds,
+                  tablaIds: selectedTablaIds,
                 });
               } finally {
                 setIsLoadingSpreadsheetPreview(false);
@@ -2721,10 +2783,23 @@ function FileManagerContent({
             } else {
               continue;
             }
+            const uniqueTablaIds = [...new Set(linkedTablas.map((tabla) => tabla.tablaId))];
+            const selectedTablaIds =
+              uniqueTablaIds.length <= 1
+                ? uniqueTablaIds
+                : await openTableSelectionDialog({
+                  fileName: storageFileName,
+                  linkedTablas,
+                  mode: 'ocr',
+                });
+            if (!selectedTablaIds || selectedTablaIds.length === 0) {
+              toast.info(`Extracción OCR cancelada para ${file.name}`);
+              continue;
+            }
             fd.append('existingBucket', 'obra-documents');
             fd.append('existingPath', filePath);
             fd.append('existingFileName', storageFileName);
-            fd.append('tablaIds', JSON.stringify([...new Set(linkedTablas.map((tabla) => tabla.tablaId))]));
+            fd.append('tablaIds', JSON.stringify(selectedTablaIds.filter((id) => uniqueTablaIds.includes(id))));
             const importRes = await fetch(
               `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
               {
@@ -2788,7 +2863,7 @@ function FileManagerContent({
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
     }
-  }, [applyUsageDelta, buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, sanitizeStorageFileName, selectedFolder, supabase]);
+  }, [applyUsageDelta, buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, sanitizeStorageFileName, selectedFolder, supabase]);
 
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
@@ -4299,17 +4374,79 @@ function FileManagerContent({
       }
       try {
         setRetryingDocumentId(doc.id);
+        const docNameLower = (doc.name ?? '').toLowerCase();
+        const docPathLower = (doc.storagePath ?? '').toLowerCase();
+        const mimeLower = (doc.mimetype ?? '').toLowerCase();
+        const isSpreadsheet =
+          docNameLower.endsWith('.csv') ||
+          docNameLower.endsWith('.xlsx') ||
+          docNameLower.endsWith('.xls') ||
+          docPathLower.endsWith('.csv') ||
+          docPathLower.endsWith('.xlsx') ||
+          docPathLower.endsWith('.xls') ||
+          mimeLower.includes('spreadsheet') ||
+          mimeLower.includes('excel') ||
+          mimeLower.includes('csv') ||
+          mimeLower === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          mimeLower === 'application/vnd.ms-excel' ||
+          mimeLower === 'text/csv';
+        const uniqueTablaIds = [...new Set(links.map((link) => link.tablaId))];
+
+        if (isSpreadsheet) {
+          let previewPayload: SpreadsheetPreviewPayload;
+          const selectedTablaIds =
+            uniqueTablaIds.length <= 1
+              ? uniqueTablaIds
+              : await openTableSelectionDialog({
+                fileName: doc.name,
+                linkedTablas: links,
+                mode: 'spreadsheet',
+              });
+          if (!selectedTablaIds || selectedTablaIds.length === 0) {
+            toast.info(`Reproceso cancelado para ${doc.name}`);
+            return;
+          }
+          try {
+            setIsLoadingSpreadsheetPreview(true);
+            previewPayload = await fetchSpreadsheetPreview({
+              existingPath: doc.storagePath,
+              existingFileName: doc.name,
+              tablaIds: selectedTablaIds,
+            });
+          } finally {
+            setIsLoadingSpreadsheetPreview(false);
+          }
+
+          const confirmed = await openSpreadsheetPreview(previewPayload);
+          if (!confirmed) {
+            toast.info(`Reproceso cancelado para ${doc.name}`);
+            return;
+          }
+          await buildFileTree({ skipCache: true });
+          return;
+        }
+
+        const selectedTablaIds =
+          uniqueTablaIds.length <= 1
+            ? uniqueTablaIds
+            : await openTableSelectionDialog({
+              fileName: doc.name,
+              linkedTablas: links,
+              mode: 'ocr',
+            });
+        if (!selectedTablaIds || selectedTablaIds.length === 0) {
+          toast.info(`Reproceso cancelado para ${doc.name}`);
+          return;
+        }
+
         const formData = new FormData();
         formData.append('existingBucket', 'obra-documents');
         formData.append('existingPath', doc.storagePath);
         formData.append('existingFileName', doc.name);
-        formData.append('tablaIds', JSON.stringify([...new Set(links.map((link) => link.tablaId))]));
-        const ext = doc.name.toLowerCase().split('.').pop() ?? '';
-        const isSpreadsheet = ext === 'csv' || ext === 'xlsx' || ext === 'xls';
+        formData.append('tablaIds', JSON.stringify(selectedTablaIds.filter((id) => uniqueTablaIds.includes(id))));
+
         const response = await fetch(
-          isSpreadsheet
-            ? `/api/obras/${obraId}/tablas/import/spreadsheet-multi?skipStorage=1`
-            : `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
+          `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
           {
             method: 'POST',
             body: formData,
@@ -4320,10 +4457,8 @@ function FileManagerContent({
           const limitMessage =
             typeof payload?.error === 'string'
               ? payload.error
-              : isSpreadsheet
-                ? 'No se pudo reprocesar la planilla.'
-                : 'Superaste el límite de tokens de IA de tu plan.';
-          if (!isSpreadsheet && response.status === 402) {
+              : 'Superaste el límite de tokens de IA de tu plan.';
+          if (response.status === 402) {
             toast.warning(limitMessage);
           } else {
             toast.error(limitMessage);
@@ -4350,7 +4485,7 @@ function FileManagerContent({
         setRetryingDocumentId(null);
       }
     },
-    [buildFileTree, obraId, resolveOcrLinksForDocument]
+    [buildFileTree, fetchSpreadsheetPreview, obraId, openSpreadsheetPreview, openTableSelectionDialog, resolveOcrLinksForDocument]
   );
 
   const ocrOrderItemsTableConfig = useMemo<FormTableConfig<OcrOrderItemRow, OcrOrderItemFilters>>(() => {
@@ -4959,13 +5094,33 @@ function FileManagerContent({
             {isLoadingSpreadsheetPreview && (
               <div className="text-sm text-muted-foreground">Actualizando vista previa...</div>
             )}
-            {(spreadsheetPreviewPayload?.perTable ?? []).map((table) => {
+            {(() => {
+              const previewTables = spreadsheetPreviewPayload?.perTable ?? [];
+              if (previewTables.length === 0) return null;
+              const clampedStepIndex = Math.min(
+                Math.max(spreadsheetPreviewStepIndex, 0),
+                previewTables.length - 1
+              );
+              const table = previewTables[clampedStepIndex];
               const availableSheets = table.availableSheets ?? [];
               const selectedSheet = table.sheetName ?? '';
               const previewRows = table.previewRows ?? [];
               const mappings = table.mappings ?? [];
               return (
                 <div key={table.tablaId} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {previewTables.map((previewTable, index) => (
+                      <Button
+                        key={`step-${previewTable.tablaId}`}
+                        variant={index === clampedStepIndex ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSpreadsheetPreviewStepIndex(index)}
+                        disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                      >
+                        Paso {index + 1}: {previewTable.tablaName}
+                      </Button>
+                    ))}
+                  </div>
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold">{table.tablaName}</p>
@@ -5086,14 +5241,15 @@ function FileManagerContent({
                                   {previewRows.slice(0, 20).map((row, idx) => {
                                     const stableRowKey = String(row.id ?? row.__docPath ?? idx);
                                     return (
-                                    <tr key={`${table.tablaId}-row-${stableRowKey}`} className="border-b">
-                                      {visiblePreviewColumns.map((key) => (
-                                        <td key={`${table.tablaId}-cell-${stableRowKey}-${key}`} className="px-2 py-1 align-top">
-                                          {String(row[key] ?? '')}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  )})}
+                                      <tr key={`${table.tablaId}-row-${idx}-${stableRowKey}`} className="border-b">
+                                        {visiblePreviewColumns.map((key) => (
+                                          <td key={`${table.tablaId}-cell-${idx}-${stableRowKey}-${key}`} className="px-2 py-1 align-top">
+                                            {String(row[key] ?? '')}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    )
+                                  })}
                                 </tbody>
                               </table>
                             );
@@ -5102,9 +5258,39 @@ function FileManagerContent({
                       </div>
                     </div>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSpreadsheetPreviewStepIndex((prev) => Math.max(prev - 1, 0))}
+                      disabled={
+                        isLoadingSpreadsheetPreview ||
+                        isApplyingSpreadsheetPreview ||
+                        clampedStepIndex === 0
+                      }
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setSpreadsheetPreviewStepIndex((prev) =>
+                          Math.min(prev + 1, previewTables.length - 1)
+                        )
+                      }
+                      disabled={
+                        isLoadingSpreadsheetPreview ||
+                        isApplyingSpreadsheetPreview ||
+                        clampedStepIndex === previewTables.length - 1
+                      }
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
                 </div>
               );
-            })}
+            })()}
           </div>
           <DialogFooter>
             <Button
@@ -5124,6 +5310,72 @@ function FileManagerContent({
               disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
             >
               {isApplyingSpreadsheetPreview ? 'Importando...' : 'Confirmar e importar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isTableSelectionOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeTableSelectionDialog(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {tableSelectionMode === 'ocr' ? 'Seleccionar tablas para OCR' : 'Seleccionar tablas para planilla'}
+            </DialogTitle>
+            <DialogDescription>
+              Archivo: {tableSelectionFileName || 'documento'}. Elegí una o varias tablas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="max-h-64 overflow-auto space-y-2 px-6 py-3">
+              {tableSelectionEntries.map((entry, index) => {
+                const checked = selectedTableIds.includes(entry.tablaId);
+                return (
+                  <label
+                    key={entry.tablaId}
+                    className={cn(
+                      'flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer',
+                      checked ? 'border-orange-500 bg-orange-50' : 'border-border hover:bg-muted/40'
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      className='border-primary'
+                      onCheckedChange={(value) => {
+                        setSelectedTableIds((prev) => {
+                          const exists = prev.includes(entry.tablaId);
+                          if (value && !exists) return [...prev, entry.tablaId];
+                          if (!value && exists) return prev.filter((id) => id !== entry.tablaId);
+                          return prev;
+                        });
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {index + 1}. {entry.tablaName}
+                      </p>
+                      {/* <p className="text-xs text-muted-foreground">{entry.tablaId}</p> */}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => closeTableSelectionDialog(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => closeTableSelectionDialog(true)}
+              disabled={selectedTableIds.length === 0}
+            >
+              Continuar
             </Button>
           </DialogFooter>
         </DialogContent>
