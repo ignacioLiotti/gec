@@ -28,6 +28,7 @@ export function PendingInvitationsList({ tenantId }: PendingInvitationsListProps
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(0);
 
   const loadInvitations = async () => {
     setLoading(true);
@@ -41,6 +42,10 @@ export function PendingInvitationsList({ tenantId }: PendingInvitationsListProps
   useEffect(() => {
     loadInvitations();
   }, [tenantId]);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
 
   const handleCancel = async (invitationId: string) => {
     setCancellingId(invitationId);
@@ -87,7 +92,7 @@ export function PendingInvitationsList({ tenantId }: PendingInvitationsListProps
             const expiresAt = new Date(invitation.expires_at);
             const hoursRemaining = Math.max(
               0,
-              Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60))
+              Math.floor((expiresAt.getTime() - nowMs) / (1000 * 60 * 60))
             );
             const isExpiringSoon = hoursRemaining < 24;
 

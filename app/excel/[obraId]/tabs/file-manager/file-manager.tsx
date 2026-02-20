@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
-import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import { Suspense, useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { FormTable } from '@/components/form-table/form-table';
 import { createSupabaseBrowserClient } from '@/utils/supabase/client';
@@ -342,6 +342,39 @@ type FileThumbnailProps = {
   renderOcrStatusBadge: (item: FileSystemItem) => ReactNode;
 };
 
+type NotchTailProps = {
+  side?: "left" | "right";
+  className?: string;
+};
+
+function NotchTail({ side = "right", className = "" }: NotchTailProps) {
+  return (
+    <svg
+      width="60"
+      height="42"
+      viewBox="0 0 60 42"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      className={[
+        "pointer-events-none absolute bottom-[-1px] h-[42px] w-[60px]",
+        side === "right" ? "right-[-59px]" : "left-[-59px] scale-x-[-1]",
+        className,
+      ].join(" ")}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60H0V1Z"
+        className="fill-[var(--notch-bg)]"
+      />
+      <path
+        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60"
+        className="fill-none stroke-[var(--notch-stroke)]"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
+
 const pdfThumbnailCache = new Map<string, string>();
 
 const FileThumbnail = memo(function FileThumbnail({
@@ -539,7 +572,7 @@ const FileThumbnail = memo(function FileThumbnail({
   );
 });
 
-export function FileManager({
+function FileManagerContent({
   obraId,
   materialOrders = [],
   onRefreshMaterials,
@@ -3278,6 +3311,14 @@ export function FileManager({
         <div
           className="absolute inset-0 bg-black/40 backdrop-blur-sm"
           onClick={() => setSourceFileModal(null)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setSourceFileModal(null);
+            }
+          }}
         />
         <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-xl border border-stone-200 shadow-2xl flex flex-col overflow-hidden">
           <div className="flex items-center justify-between p-4 border-b border-stone-200">
@@ -4334,37 +4375,6 @@ export function FileManager({
     };
   }, [obraId, ocrOrderItemRows, selectedFolder?.id]);
 
-  function NotchTail({ side = "right", className = "" }) {
-    return (
-      <svg
-        width="60"
-        height="42"
-        viewBox="0 0 60 42"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-        className={[
-          "pointer-events-none absolute bottom-[-1px] h-[42px] w-[60px]",
-          side === "right" ? "right-[-59px]" : "left-[-59px] scale-x-[-1]",
-          className,
-        ].join(" ")}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {/* Fill */}
-        <path
-          d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60H0V1Z"
-          className="fill-[var(--notch-bg)]"
-        />
-        {/* Stroke */}
-        <path
-          d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60"
-          className="fill-none stroke-[var(--notch-stroke)]"
-          strokeWidth="1"
-        />
-      </svg>
-    );
-  }
-
-
   // Render main content
   const renderMainContent = () => {
     if (loading) {
@@ -4626,7 +4636,8 @@ export function FileManager({
                     const isOcrEnabled = item.ocrEnabled;
                     return (
                       <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center justify-end gap-2 shrink-0 h-[105px]">
-                        <div
+                        <button
+                          type="button"
                           className={` flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors relative 
                             ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-6' : ''}
                             ${isOcrEnabled ? "bg-linear-to-b from-amber-500 to-amber-700" : "bg-linear-to-b from-stone-500 to-stone-700"}
@@ -4660,7 +4671,7 @@ export function FileManager({
                               </span>
                             )} */}
                           </div>
-                        </div>
+                        </button>
                       </div>
                     );
                   })}
@@ -4692,7 +4703,8 @@ export function FileManager({
               <div className="grid grid-cols-3 @min-[40rem]:grid-cols-4 @min-[48rem]:grid-cols-5 @min-[64rem]:grid-cols-7 @min-[80rem]:grid-cols-10 gap-4 rounded-lg">
                 {files.map((item) => (
                   <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
-                    <div
+                    <button
+                      type="button"
                       className="flex flex-col items-start gap-2 p-3 w-[120px] h-[145px] border rounded-none transition-colors bg-stone-100 relative"
                       onClick={() => handleDocumentClick(item, selectedFolder, { preserveFilter: true })}
                       onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, item }); }}
@@ -4720,7 +4732,7 @@ export function FileManager({
                       <div className="absolute top-2 right-2">
                         {renderOcrStatusBadge(item)}
                       </div>
-                    </div>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -5071,15 +5083,17 @@ export function FileManager({
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {previewRows.slice(0, 20).map((row, idx) => (
-                                    <tr key={`${table.tablaId}-row-${idx}`} className="border-b">
+                                  {previewRows.slice(0, 20).map((row, idx) => {
+                                    const stableRowKey = String(row.id ?? row.__docPath ?? idx);
+                                    return (
+                                    <tr key={`${table.tablaId}-row-${stableRowKey}`} className="border-b">
                                       {visiblePreviewColumns.map((key) => (
-                                        <td key={`${table.tablaId}-cell-${idx}-${key}`} className="px-2 py-1 align-top">
+                                        <td key={`${table.tablaId}-cell-${stableRowKey}-${key}`} className="px-2 py-1 align-top">
                                           {String(row[key] ?? '')}
                                         </td>
                                       ))}
                                     </tr>
-                                  ))}
+                                  )})}
                                 </tbody>
                               </table>
                             );
@@ -5694,7 +5708,6 @@ export function FileManager({
                 left: `${contextMenu.x}px`,
                 top: `${contextMenu.y}px`,
               }}
-              onClick={(e) => e.stopPropagation()}
             >
               {canCreateHere && (
                 <>
@@ -5774,6 +5787,14 @@ export function FileManager({
         })()
       )}
     </div>
+  );
+}
+
+export function FileManager(props: FileManagerProps) {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Cargando gestor de archivos...</div>}>
+      <FileManagerContent {...props} />
+    </Suspense>
   );
 }
 

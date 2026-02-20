@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AsciiScene } from "@/components/ascii-scene";
@@ -12,7 +12,7 @@ type AuthModalProps = {
   forcedOpen?: boolean;
 };
 
-export default function AuthModal({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
+function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -133,23 +133,25 @@ export default function AuthModal({ open, onOpenChange, forcedOpen = false }: Au
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid grid-cols-2"
-      onClick={(e) => {
-        // Prevent dismissal via backdrop click when forced open
-        if (forcedOpen) {
-          e.stopPropagation();
-          return;
-        }
-        // Allow backdrop click to close if not forced
-        if (e.target === e.currentTarget) {
-          onOpenChange(false);
-        }
-      }}
+      className="fixed inset-0 z-50"
+      role="dialog"
+      aria-modal="true"
     >
-      <div className="h-full w-full p-4">
-        <AsciiScene />
-      </div>
-      <div className="flex h-full w-full flex-col bg-background px-4 py-6 text-foreground sm:px-10 sm:py-8">
+      <button
+        type="button"
+        aria-label="Cerrar modal"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={() => {
+          if (!forcedOpen) {
+            onOpenChange(false);
+          }
+        }}
+      />
+      <div className="relative z-10 grid h-full grid-cols-2">
+        <div className="h-full w-full p-4">
+          <AsciiScene />
+        </div>
+        <div className="flex h-full w-full flex-col bg-background px-4 py-6 text-foreground sm:px-10 sm:py-8">
         <div className="flex items-center justify-end gap-4">
           {!forcedOpen && (
             <button
@@ -282,7 +284,16 @@ export default function AuthModal({ open, onOpenChange, forcedOpen = false }: Au
             )}
           </div>
         </div>
+        </div>
       </div>
     </div>
+  );
+}
+
+export default function AuthModal(props: AuthModalProps) {
+  return (
+    <Suspense fallback={null}>
+      <AuthModalContent {...props} />
+    </Suspense>
   );
 }

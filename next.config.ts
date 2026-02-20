@@ -6,6 +6,16 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
 	reactStrictMode: true,
 	reactCompiler: true,
+	outputFileTracingIncludes: {
+		"/api/pdf-render/route": [
+			"./node_modules/@sparticuz/chromium/bin/**/*",
+			"./node_modules/@sparticuz/chromium/**/*",
+		],
+		"/app/api/pdf-render/route": [
+			"./node_modules/@sparticuz/chromium/bin/**/*",
+			"./node_modules/@sparticuz/chromium/**/*",
+		],
+	},
 	experimental: {
 		// Required for edge workflows and background tasks
 		serverActions: {

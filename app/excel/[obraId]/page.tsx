@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -761,7 +761,7 @@ const coerceMainColumnInputValue = (
 	return rawValue;
 };
 
-export default function ObraDetailPage() {
+function ObraDetailPageContent() {
 	const params = useParams();
 	const queryClient = useQueryClient();
 	const obraId = useMemo(() => {
@@ -2386,5 +2386,13 @@ export default function ObraDetailPage() {
 				</div>
 			)}
 		</div>
+	);
+}
+
+export default function ObraDetailPage() {
+	return (
+		<Suspense fallback={<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">Cargando obra...</div>}>
+			<ObraDetailPageContent />
+		</Suspense>
 	);
 }

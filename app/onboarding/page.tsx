@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { createTenantAction } from "@/app/tenants/actions";
@@ -27,7 +27,7 @@ interface PendingInvitation {
 
 type Mode = "join" | "create";
 
-export default function OnboardingPage() {
+function OnboardingPageContent() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const [mode, setMode] = useState<Mode>("join");
@@ -37,9 +37,14 @@ export default function OnboardingPage() {
 	const [acceptingId, setAcceptingId] = useState<string | null>(null);
 	const [creatingTenant, setCreatingTenant] = useState(false);
 	const [tenantName, setTenantName] = useState("");
+	const [nowMs, setNowMs] = useState(0);
 
 	const errorMessage = searchParams?.get("error");
 	const previewMode = searchParams?.get("preview") === "1" || searchParams?.get("preview") === "true";
+
+	useEffect(() => {
+		setNowMs(Date.now());
+	}, []);
 
 	useEffect(() => {
 		async function init() {
@@ -227,7 +232,7 @@ export default function OnboardingPage() {
 								<div className="space-y-3">
 									{invitations.map((invitation) => {
 										const expiresAt = new Date(invitation.expires_at);
-										const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)));
+										const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - nowMs) / (1000 * 60 * 60)));
 
 										return (
 											<Card key={invitation.id} className="border-2 hover:border-[#ff5800]/30 transition-colors">
@@ -353,5 +358,13 @@ export default function OnboardingPage() {
 				</CardContent>
 			</Card>
 		</div>
+	);
+}
+
+export default function OnboardingPage() {
+	return (
+		<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#444444]" /></div>}>
+			<OnboardingPageContent />
+		</Suspense>
 	);
 }

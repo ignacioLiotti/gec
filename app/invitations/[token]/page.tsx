@@ -159,8 +159,9 @@ export default function InvitationPage() {
   }
 
   const expiresAt = new Date(invitation.expires_at);
-  const isExpired = expiresAt < new Date();
-  const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)));
+  const now = new Date();
+  const isExpired = expiresAt < now;
+  const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60)));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">

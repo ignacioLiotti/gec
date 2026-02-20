@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type MomentCellProps = {
   value: string;
@@ -8,6 +8,11 @@ type MomentCellProps = {
 
 export function MomentCell({ value }: MomentCellProps) {
   const date = useMemo(() => new Date(value), [value]);
+  const [nowMs, setNowMs] = useState(0);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
 
   const formatted = useMemo(
     () =>
@@ -19,7 +24,7 @@ export function MomentCell({ value }: MomentCellProps) {
   );
 
   const relative = useMemo(() => {
-    const diffMs = Date.now() - date.getTime();
+    const diffMs = nowMs - date.getTime();
     if (!Number.isFinite(diffMs)) return "";
 
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
@@ -29,7 +34,7 @@ export function MomentCell({ value }: MomentCellProps) {
     if (diffHours < 24) return `hace ${diffHours} h`;
     const diffDays = Math.floor(diffHours / 24);
     return `hace ${diffDays} d`;
-  }, [date]);
+  }, [date, nowMs]);
 
   return (
     <td className="px-3 py-3 text-sm">

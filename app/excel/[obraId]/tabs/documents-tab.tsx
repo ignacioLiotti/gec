@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from "react";
+import { Suspense, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { FileManager, type FileManagerSelectionChange } from "./file-manager/file-manager";
@@ -14,7 +14,7 @@ type DocumentsTabProps = {
 	refreshMaterialOrders: () => void | Promise<void>;
 };
 
-export function ObraDocumentsTab({ obraId, materialOrders, refreshMaterialOrders }: DocumentsTabProps) {
+function ObraDocumentsTabContent({ obraId, materialOrders, refreshMaterialOrders }: DocumentsTabProps) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
@@ -66,5 +66,13 @@ export function ObraDocumentsTab({ obraId, materialOrders, refreshMaterialOrders
 				onSelectionChange={handleSelectionChange}
 			/>
 		</TabsContent>
+	);
+}
+
+export function ObraDocumentsTab(props: DocumentsTabProps) {
+	return (
+		<Suspense fallback={<TabsContent value="documentos" className="space-y-6"><div className="p-4 text-sm text-muted-foreground">Cargando documentos...</div></TabsContent>}>
+			<ObraDocumentsTabContent {...props} />
+		</Suspense>
 	);
 }

@@ -217,10 +217,10 @@ const AdvanceCurveChart = ({
 		<div className="space-y-2 pt-4 ">
 			<div className="rounded-md border bg-stone-50 p-2">
 				<div className="h-[320px] w-full pt-5 pb-2 px-3">
-						<ResponsiveContainer width="100%" height="100%">
-							<LineChart
-								data={chartData}
-								margin={{ top: 12, right: 16, bottom: 30, left: 0 }}
+					<ResponsiveContainer width="100%" height="100%">
+						<LineChart
+							data={chartData}
+							margin={{ top: 12, right: 16, bottom: 30, left: 0 }}
 						>
 							<CartesianGrid stroke="currentColor" className="text-muted/30" vertical={false} />
 							<XAxis
@@ -286,29 +286,29 @@ const AdvanceCurveChart = ({
 								strokeWidth={2.5}
 								dot={{ r: 3 }}
 								connectNulls
-									isAnimationActive={false}
-								/>
-							</LineChart>
-						</ResponsiveContainer>
+								isAnimationActive={false}
+							/>
+						</LineChart>
+					</ResponsiveContainer>
+				</div>
+				<div className="-mt-5 ml-4 flex flex-wrap items-center gap-4 text-xs">
+					<div className="flex items-center gap-2">
+						<span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+						<span className="text-muted-foreground">Curva Plan (avance acumulado)</span>
 					</div>
-					<div className="-mt-5 ml-4 flex flex-wrap items-center gap-4 text-xs">
-						<div className="flex items-center gap-2">
-							<span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
-							<span className="text-muted-foreground">Curva Plan (avance acumulado)</span>
-						</div>
-						<div className="flex items-center gap-2">
-							<span className="h-2.5 w-2.5 rounded-full bg-[#ff5800]" />
-							<span className="text-muted-foreground">PMC Resumen (avance físico acumulado)</span>
-						</div>
-						<div className="flex items-center gap-2">
-							<span className="h-0.5 w-3 bg-amber-500" />
-							<span className="text-muted-foreground">Hoy (tiempo transcurrido)</span>
-						</div>
+					<div className="flex items-center gap-2">
+						<span className="h-2.5 w-2.5 rounded-full bg-[#ff5800]" />
+						<span className="text-muted-foreground">PMC Resumen (avance físico acumulado)</span>
+					</div>
+					<div className="flex items-center gap-2">
+						<span className="h-0.5 w-3 bg-amber-500" />
+						<span className="text-muted-foreground">Hoy (tiempo transcurrido)</span>
 					</div>
 				</div>
 			</div>
-		);
-	};
+		</div>
+	);
+};
 
 export function ObraGeneralTab({
 	form,
@@ -760,7 +760,7 @@ export function ObraGeneralTab({
 										isFieldDirty("porcentaje") && "bg-orange-primary/5 border-orange-primary/40 border-2"
 									)}
 								>
-									<div className="flex items-center justify-between gap-2 text-muted-foreground bg-muted/50 h-full -mx-5 p-5 pb-4">
+									<div className="flex items-center justify-between gap-2 text-muted-foreground bg-muted/50 h-full -mx-5 p-5 pb-4 max-h-15">
 										<div className="flex items-center gap-2">
 											<Percent className="h-4 w-4" />
 											<span className="text-base sm:text-lg font-semibold text-foreground">Avance</span>

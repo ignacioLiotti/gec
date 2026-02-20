@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Layers, FileText, Settings, Plus } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -244,7 +244,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   );
 }
 
-export default function MacroTablesPage() {
+function MacroTablesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -377,5 +377,13 @@ export default function MacroTablesPage() {
         ))}
       </Tabs>
     </div>
+  );
+}
+
+export default function MacroTablesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+      <MacroTablesPageContent />
+    </Suspense>
   );
 }

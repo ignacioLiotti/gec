@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import SupabaseAuthListener from "@/components/auth/auth-listener";
 import AuthModal from "@/components/auth/auth-modal";
@@ -20,6 +21,7 @@ import { PendingInvitationsBanner } from "@/components/invitations/pending-invit
 import { getUserRoles } from "@/lib/route-guard";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 
@@ -149,10 +151,11 @@ export default async function RootLayout({
     <html lang="en">
       <head>
         {process.env.NODE_ENV === "development" && (
-          <script
+          <Script
             crossOrigin="anonymous"
             src="https://unpkg.com/react-scan/dist/auto.global.js"
-          ></script>
+            strategy="lazyOnload"
+          />
         )}
       </head>
       <body
@@ -186,6 +189,7 @@ export default async function RootLayout({
           </SidebarProvider>
         </QueryClientProvider>
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
