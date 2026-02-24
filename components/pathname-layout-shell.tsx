@@ -8,6 +8,7 @@ import UserMenu from "@/components/auth/user-menu";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import type { Role } from "@/lib/route-access";
+import { track } from "@vercel/analytics";
 
 type SidebarMacroTable = {
   id: string;
@@ -46,6 +47,14 @@ export function PathnameLayoutShell({
       router.replace("/dashboard");
     }
   }, [isMarketingRoot, user?.email, router]);
+
+  useEffect(() => {
+    if (!pathname || pathname === "/") return;
+    track("app_page_view", {
+      path: pathname,
+      section: "app",
+    });
+  }, [pathname]);
 
   if (isMarketingRoot) {
     if (user?.email) {

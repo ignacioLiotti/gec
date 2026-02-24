@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import type { FormTableConfig } from "@/components/form-table/types";
 import UserMenu from "@/components/auth/user-menu";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
+import { track } from "@vercel/analytics";
 
 type DemoObraTableRow = {
   id: string;
@@ -127,6 +128,13 @@ function MarketingLanding() {
     handleHashScroll();
     window.addEventListener("hashchange", handleHashScroll);
     return () => window.removeEventListener("hashchange", handleHashScroll);
+  }, []);
+
+  useEffect(() => {
+    track("landing_page_view", {
+      path: "/",
+      section: "marketing",
+    });
   }, []);
 
   const openContactDialog = (reason: string) => {
