@@ -36,8 +36,8 @@ const playfairDisplay = Playfair_Display({
 
 export const metadata: Metadata = {
   title: {
-    default: "Synthesis | Digitalización y Control de Obras",
-    template: "%s | Synthesis",
+    default: "Sintesis | Digitalización y Control de Obras",
+    template: "%s | Sintesis",
   },
   description:
     "Centralizá documentos, automatizá extracción de datos y monitoreá el avance de tus obras en una sola plataforma.",
