@@ -1492,10 +1492,12 @@ function FileManagerContent({
       setOcrFolderLinks(links);
     } catch (error) {
       console.error('Error building file tree:', error);
-      Sentry.captureException(error, {
-        tags: { feature: 'file-manager' },
-        extra: { obraId, materialOrdersCount: materialOrders.length },
-      });
+      if (IS_SENTRY_ENABLED) {
+        Sentry.captureException(error, {
+          tags: { feature: 'file-manager' },
+          extra: { obraId, materialOrdersCount: materialOrders.length },
+        });
+      }
       toast.error('Error loading documents');
     } finally {
       markDocumentsFetched();
@@ -6190,3 +6192,6 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
     </HoverCard>
   );
 });
+const IS_SENTRY_ENABLED =
+  process.env.NODE_ENV === 'production' &&
+  process.env.NEXT_PUBLIC_VERCEL_ENV === 'production';

@@ -12,8 +12,6 @@ import {
   isSameDay,
   startOfDay,
 } from "date-fns"
-import { es } from "date-fns/locale"
-
 import { cn } from "@/lib/utils"
 import {
   DraggableEvent,
@@ -205,14 +203,14 @@ export function DayView({
         </div>
       )}
       {showAllDaySection && (
-        <div className="border-border/70 bg-muted/50 border-t">
+        <div className="border-t border-zinc-100 bg-zinc-50/50">
           <div className="grid grid-cols-[3rem_1fr] sm:grid-cols-[4rem_1fr]">
             <div className="relative">
-              <span className="text-muted-foreground/70 absolute bottom-0 left-0 h-6 w-16 max-w-full pe-2 text-right text-[10px] sm:pe-4 sm:text-xs">
+              <span className="absolute bottom-0 left-0 h-6 w-16 max-w-full pe-2 text-right text-[10px] text-zinc-400 sm:pe-4 sm:text-xs">
                 Todo el día
               </span>
             </div>
-            <div className="border-border/70 relative border-r p-1 last:border-r-0">
+            <div className="relative border-r border-zinc-100 p-1 last:border-r-0">
               {allDayEvents.map((event) => {
                 const eventStart = new Date(event.start)
                 const eventEnd = new Date(event.end)
@@ -238,15 +236,15 @@ export function DayView({
         </div>
       )}
 
-      <div className="border-border/70 grid flex-1 grid-cols-[3rem_1fr] overflow-hidden border-t sm:grid-cols-[4rem_1fr]">
-        <div>
+      <div className="grid flex-1 grid-cols-[3rem_1fr] overflow-hidden border-t border-zinc-100 bg-white sm:grid-cols-[4rem_1fr]">
+        <div className="bg-zinc-50/35">
           {hours.map((hour, index) => (
             <div
               key={hour.toString()}
-              className="border-border/70 relative h-[var(--week-cells-height)] border-b last:border-b-0"
+              className="relative h-[var(--week-cells-height)] border-b border-zinc-100 last:border-b-0"
             >
               {index > 0 && (
-                <span className="bg-background text-muted-foreground/70 absolute -top-3 left-0 flex h-6 w-16 max-w-full items-center justify-end pe-2 text-[10px] sm:pe-4 sm:text-xs">
+                <span className="absolute -top-3 left-0 flex h-6 w-16 max-w-full items-center justify-end pe-2 text-[10px] text-zinc-400 sm:pe-4 sm:text-xs">
                   {format(hour, "h a")}
                 </span>
               )}
@@ -288,8 +286,8 @@ export function DayView({
               style={{ top: `${currentTimePosition}%` }}
             >
               <div className="relative flex items-center">
-                <div className="bg-primary absolute -left-1 h-2 w-2 rounded-full"></div>
-                <div className="bg-primary h-[2px] w-full"></div>
+                <div className="absolute -left-1 h-2 w-2 rounded-full bg-cyan-500"></div>
+                <div className="h-[2px] w-full bg-cyan-500"></div>
               </div>
             </div>
           )}
@@ -300,7 +298,7 @@ export function DayView({
             return (
               <div
                 key={hour.toString()}
-                className="border-border/70 relative h-[var(--week-cells-height)] border-b last:border-b-0"
+                className="relative h-[var(--week-cells-height)] border-b border-zinc-100 last:border-b-0"
               >
                 {/* Quarter-hour intervals */}
                 {[0, 1, 2, 3].map((quarter) => {
@@ -315,11 +313,11 @@ export function DayView({
                         "absolute h-[calc(var(--week-cells-height)/4)] w-full",
                         quarter === 0 && "top-0",
                         quarter === 1 &&
-                          "top-[calc(var(--week-cells-height)/4)]",
+                        "top-[calc(var(--week-cells-height)/4)]",
                         quarter === 2 &&
-                          "top-[calc(var(--week-cells-height)/4*2)]",
+                        "top-[calc(var(--week-cells-height)/4*2)]",
                         quarter === 3 &&
-                          "top-[calc(var(--week-cells-height)/4*3)]"
+                        "top-[calc(var(--week-cells-height)/4*3)]"
                       )}
                       disabled={!interactive}
                       onClick={() => {

@@ -53,9 +53,9 @@ function EventWrapper({
   // Always use the currentTime (if provided) to determine if the event is in the past
   const displayEnd = currentTime
     ? new Date(
-        new Date(currentTime).getTime() +
-          (new Date(event.end).getTime() - new Date(event.start).getTime())
-      )
+      new Date(currentTime).getTime() +
+      (new Date(event.end).getTime() - new Date(event.start).getTime())
+    )
     : new Date(event.end)
 
   const isEventInPast = isPast(displayEnd)
@@ -71,7 +71,7 @@ function EventWrapper({
   return (
     <button
       className={cn(
-        "focus-visible:border-ring focus-visible:ring-ring/50 flex h-full w-full overflow-hidden px-1 text-left font-medium backdrop-blur-md transition outline-none select-none focus-visible:ring-[3px] data-dragging:cursor-grabbing data-dragging:shadow-lg sm:px-2",
+        "focus-visible:border-ring focus-visible:ring-ring/50 flex h-full w-full overflow-hidden rounded-md px-1.5 text-left font-medium transition outline-none select-none focus-visible:ring-[3px] data-dragging:cursor-grabbing data-dragging:shadow-lg sm:px-2",
         getEventColorClasses(event.color),
         getBorderRadiusClasses(isFirstDay, isLastDay),
         overdueRing,
@@ -139,9 +139,9 @@ export function EventItem({
   const displayEnd = useMemo(() => {
     return currentTime
       ? new Date(
-          new Date(currentTime).getTime() +
-            (new Date(event.end).getTime() - new Date(event.start).getTime())
-        )
+        new Date(currentTime).getTime() +
+        (new Date(event.end).getTime() - new Date(event.start).getTime())
+      )
       : new Date(event.end)
   }, [currentTime, event.start, event.end])
 
@@ -273,7 +273,7 @@ export function EventItem({
   return (
     <button
       className={cn(
-        "focus-visible:border-ring focus-visible:ring-ring/50 flex w-full flex-col gap-1 rounded p-2 text-left transition outline-none focus-visible:ring-[3px] data-past-event:line-through data-past-event:opacity-90",
+        "focus-visible:border-ring focus-visible:ring-ring/50 flex w-full flex-col gap-1 rounded-md p-2 text-left transition outline-none focus-visible:ring-[3px] data-past-event:line-through data-past-event:opacity-90",
         getEventColorClasses(eventColor),
         className
       )}

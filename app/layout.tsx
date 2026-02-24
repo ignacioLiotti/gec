@@ -4,25 +4,18 @@ import Script from "next/script";
 import "./globals.css";
 import SupabaseAuthListener from "@/components/auth/auth-listener";
 import AuthModal from "@/components/auth/auth-modal";
-import UserMenu from "@/components/auth/user-menu";
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import AuthController from "@/components/auth/auth-controller";
 import AuthGate from "@/components/auth/auth-gate";
-import ImpersonateBanner from "./admin/users/_components/impersonate-banner";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { QueryClientProvider } from "@/lib/query-client-provider";
 import NotificationsListener from "@/components/notifications/notifications-listener";
 import { Toaster } from "sonner";
-import { ExcelObraName } from "@/components/excel-obra-name";
-import { MainWrapper } from "@/components/main-wrapper";
-import { PendingInvitationsBanner } from "@/components/invitations/pending-invitations-banner";
 import { getUserRoles } from "@/lib/route-guard";
-import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next";
 import DomainMigrationGuard from "@/components/domain-migration-guard";
+import { PathnameLayoutShell } from "@/components/pathname-layout-shell";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 
@@ -66,7 +59,7 @@ export default async function RootLayout({
   }
 
   // Get user roles for sidebar filtering
-  const userRoles = user ? await getUserRoles() : null;
+  const userRoles = await getUserRoles();
   if (DEBUG_AUTH) {
     console.log("[LAYOUT] userRoles:", userRoles);
   }
@@ -75,38 +68,36 @@ export default async function RootLayout({
   const showAllOrgs = userRoles?.isSuperAdmin || user?.email === "ignacioliotti@gmail.com";
 
   let tenants: { id: string; name: string }[] = [];
-  if (user) {
-    if (showAllOrgs) {
-      // Superadmin or ignacio sees ALL organizations (use admin client to bypass RLS)
-      const admin = createSupabaseAdminClient();
-      const { data: allTenants } = await admin
-        .from("tenants")
-        .select("id, name")
-        .order("name");
-      tenants = (allTenants ?? []).map((t) => ({
-        id: t.id,
-        name: t.name ?? "Organización",
-      }));
-      if (DEBUG_AUTH) {
-        console.log("[LAYOUT] allTenants", allTenants);
-      }
-    } else {
-      // Regular users only see their memberships
-      type TenantRow = {
-        tenant_id: string;
-        tenants: { name: string | null } | null;
-      };
-      const { data } = await supabase
-        .from("memberships")
-        .select("tenant_id, tenants(name)")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-      const tenantRows = (data ?? null) as TenantRow[] | null;
-      tenants = tenantRows?.map((row) => ({
-        id: row.tenant_id,
-        name: row.tenants?.name ?? "Organización",
-      })) ?? [];
+  if (user && showAllOrgs) {
+    // Superadmin or ignacio sees ALL organizations (use admin client to bypass RLS)
+    const admin = createSupabaseAdminClient();
+    const { data: allTenants } = await admin
+      .from("tenants")
+      .select("id, name")
+      .order("name");
+    tenants = (allTenants ?? []).map((t) => ({
+      id: t.id,
+      name: t.name ?? "Organización",
+    }));
+    if (DEBUG_AUTH) {
+      console.log("[LAYOUT] allTenants", allTenants);
     }
+  } else if (user) {
+    // Regular users only see their memberships
+    type TenantRow = {
+      tenant_id: string;
+      tenants: { name: string | null } | null;
+    };
+    const { data } = await supabase
+      .from("memberships")
+      .select("tenant_id, tenants(name)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+    const tenantRows = (data ?? null) as TenantRow[] | null;
+    tenants = tenantRows?.map((row) => ({
+      id: row.tenant_id,
+      name: row.tenants?.name ?? "Organización",
+    })) ?? [];
   }
 
   // Fetch sidebar macro tables for user
@@ -170,25 +161,14 @@ export default async function RootLayout({
           <AuthGate />
           <Toaster position="bottom-right" richColors />
           <NotificationsListener />
-          <SidebarProvider>
-            <AppSidebar user={user} userRoles={userRoles} tenants={tenants} sidebarMacroTables={sidebarMacroTables} />
-            <SidebarInset>
-              <header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <SidebarTrigger className="-ml-1" />
-                  <PageBreadcrumb />
-                </div>
-                <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:ml-auto">
-                  <ImpersonateBanner />
-                  <UserMenu email={user?.email} userRoles={userRoles} />
-                </div>
-              </header>
-              {/* <div className="px-4 pt-4">
-              <PendingInvitationsBanner />
-            </div> */}
-              <main className="flex flex-1 flex-col gap-4">{children}</main>
-            </SidebarInset>
-          </SidebarProvider>
+          <PathnameLayoutShell
+            user={user}
+            userRoles={userRoles as any}
+            tenants={tenants}
+            sidebarMacroTables={sidebarMacroTables}
+          >
+            {children}
+          </PathnameLayoutShell>
         </QueryClientProvider>
         <SpeedInsights />
         <Analytics />

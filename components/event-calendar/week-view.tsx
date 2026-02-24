@@ -232,14 +232,14 @@ export function WeekView({
           Hay pendientes anteriores sin completar
         </div>
       )}
-      <div className="bg-background/80 border-border/70 sticky top-0 z-30 grid grid-cols-8 border-b backdrop-blur-md">
-        <div className="text-muted-foreground/70 py-2 text-center text-sm">
+      <div className="sticky top-0 z-30 grid grid-cols-8 border-b border-zinc-100 bg-white/95 backdrop-blur-md">
+        <div className="py-2 text-center text-xs font-medium text-zinc-400 sm:text-sm">
           <span className="max-[479px]:sr-only">{format(new Date(), "O")}</span>
         </div>
         {days.map((day) => (
           <div
             key={day.toString()}
-            className="data-today:text-foreground text-muted-foreground/70 py-2 text-center text-sm data-today:font-medium"
+            className="py-2 text-center text-xs font-medium text-zinc-500 data-today:bg-cyan-50/70 data-today:text-zinc-900 sm:text-sm data-today:font-semibold"
             data-today={isToday(day) || undefined}
           >
             <span className="sm:hidden" aria-hidden="true">
@@ -251,10 +251,10 @@ export function WeekView({
       </div>
 
       {showAllDaySection && (
-        <div className="border-border/70 bg-muted/50 border-b">
+        <div className="border-b border-zinc-100 bg-zinc-50/50">
           <div className="grid grid-cols-8">
-            <div className="border-border/70 relative border-r">
-              <span className="text-muted-foreground/70 absolute bottom-0 left-0 h-6 w-16 max-w-full pe-2 text-right text-[10px] sm:pe-4 sm:text-xs">
+            <div className="relative border-r border-zinc-100">
+              <span className="absolute bottom-0 left-0 h-6 w-16 max-w-full pe-2 text-right text-[10px] text-zinc-400 sm:pe-4 sm:text-xs">
                 Todo el día
               </span>
             </div>
@@ -272,7 +272,7 @@ export function WeekView({
               return (
                 <div
                   key={day.toString()}
-                  className="border-border/70 relative border-r p-1 last:border-r-0"
+                  className="relative border-r border-zinc-100 p-1 last:border-r-0 data-today:bg-cyan-50/40"
                   data-today={isToday(day) || undefined}
                 >
                   {dayAllDayEvents.map((event) => {
@@ -315,15 +315,15 @@ export function WeekView({
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-8 overflow-hidden">
-        <div className="border-border/70 grid auto-cols-fr border-r">
+      <div className="grid flex-1 grid-cols-8 overflow-hidden bg-white">
+        <div className="grid auto-cols-fr border-r border-zinc-100 bg-zinc-50/35">
           {hours.map((hour, index) => (
             <div
               key={hour.toString()}
-              className="border-border/70 relative min-h-[var(--week-cells-height)] border-b last:border-b-0"
+              className="relative min-h-[var(--week-cells-height)] border-b border-zinc-100 last:border-b-0"
             >
               {index > 0 && (
-                <span className="bg-background text-muted-foreground/70 absolute -top-3 left-0 flex h-6 w-16 max-w-full items-center justify-end pe-2 text-[10px] sm:pe-4 sm:text-xs">
+                <span className="absolute -top-3 left-0 flex h-6 w-16 max-w-full items-center justify-end pe-2 text-[10px] text-zinc-400 sm:pe-4 sm:text-xs">
                   {format(hour, "h a")}
                 </span>
               )}
@@ -334,7 +334,7 @@ export function WeekView({
         {days.map((day, dayIndex) => (
           <div
             key={day.toString()}
-            className="border-border/70 relative grid auto-cols-fr border-r last:border-r-0"
+            className="relative grid auto-cols-fr border-r border-zinc-100 last:border-r-0 data-today:bg-cyan-50/30"
             data-today={isToday(day) || undefined}
           >
             {/* Positioned events */}
@@ -371,8 +371,8 @@ export function WeekView({
                 style={{ top: `${currentTimePosition}%` }}
               >
                 <div className="relative flex items-center">
-                  <div className="bg-primary absolute -left-1 h-2 w-2 rounded-full"></div>
-                  <div className="bg-primary h-[2px] w-full"></div>
+                  <div className="absolute -left-1 h-2 w-2 rounded-full bg-cyan-500"></div>
+                  <div className="h-[2px] w-full bg-cyan-500"></div>
                 </div>
               </div>
             )}
@@ -381,7 +381,7 @@ export function WeekView({
               return (
                 <div
                   key={hour.toString()}
-                  className="border-border/70 relative min-h-[var(--week-cells-height)] border-b last:border-b-0"
+                  className="relative min-h-[var(--week-cells-height)] border-b border-zinc-100 last:border-b-0"
                 >
                   {/* Quarter-hour intervals */}
                   {[0, 1, 2, 3].map((quarter) => {

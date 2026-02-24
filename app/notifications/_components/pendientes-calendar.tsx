@@ -158,13 +158,13 @@ export function PendientesCalendar({
   // }
 
   return (
-    <div className="rounded-lg border bg-card">
+    <div className="rounded-3xl border border-zinc-200/80 bg-white p-2 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_16px_36px_rgba(15,23,42,0.06)]">
       <EventCalendar
         events={calendarEvents}
         onEventAdd={handleEventAdd}
         onEventUpdate={handleEventUpdate}
         onEventDelete={handleEventDelete}
-        className="border-none"
+        initialView="week"
         availableRoles={availableRoles}
       />
     </div>

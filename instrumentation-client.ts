@@ -4,8 +4,13 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+const isVercelProduction =
+  process.env.NODE_ENV === "production" &&
+  process.env.NEXT_PUBLIC_VERCEL_ENV === "production";
+
 Sentry.init({
   dsn: "https://7f010bc9dd4dd67e0737974677944584@o4510431432343552.ingest.us.sentry.io/4510431442567168",
+  enabled: isVercelProduction,
 
   // Add optional integrations for additional features
   integrations: [

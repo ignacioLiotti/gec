@@ -16,7 +16,6 @@ import {
 } from "date-fns"
 import { es } from "date-fns/locale"
 import {
-  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PlusIcon,
@@ -25,13 +24,6 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   AgendaDaysToShow,
   AgendaView,
@@ -111,10 +103,10 @@ export function EventCalendar({
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown)
+    globalThis.addEventListener("keydown", handleKeyDown)
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown)
+      globalThis.removeEventListener("keydown", handleKeyDown)
     }
   }, [isEventDialogOpen])
 
@@ -260,7 +252,7 @@ export function EventCalendar({
           <span className="min-[480px]:hidden" aria-hidden="true">
             {capitalizeFirst(format(currentDate, "MMM d, yyyy", { locale: es }))}
           </span>
-          <span className="max-[479px]:hidden min-md:hidden" aria-hidden="true">
+          <span className="max-[479px]:hidden md:hidden" aria-hidden="true">
             {capitalizeFirst(format(currentDate, "MMMM d, yyyy", { locale: es }))}
           </span>
           <span className="max-md:hidden">
@@ -285,7 +277,10 @@ export function EventCalendar({
 
   return (
     <div
-      className="flex flex-col rounded-lg border has-data-[slot=month-view]:flex-1 "
+      className={cn(
+        "flex flex-col overflow-hidden rounded-3xl border border-zinc-200/80 bg-white has-data-[slot=month-view]:flex-1 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_rgba(15,23,42,0.06)]",
+        className
+      )}
       style={
         {
           "--event-height": `${EventHeight}px`,
@@ -295,29 +290,21 @@ export function EventCalendar({
       }
     >
       <CalendarDndProvider onEventUpdate={handleEventUpdate}>
-        <div
-          className={cn(
-            "flex items-center justify-between p-2 sm:p-4",
-            className
-          )}
-        >
-          <div className="flex items-center gap-1 sm:gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 bg-white/95 px-3 py-3 sm:px-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Button
               variant="outline"
-              className="max-[479px]:aspect-square max-[479px]:p-0!"
+              className="h-8 rounded-xl border-zinc-200 px-3 text-xs text-zinc-700 hover:bg-zinc-50 sm:h-9 sm:text-sm"
               onClick={handleToday}
             >
-              <RiCalendarCheckLine
-                className="min-[480px]:hidden"
-                size={16}
-                aria-hidden="true"
-              />
-              <span className="max-[479px]:sr-only">Hoy</span>
+              <RiCalendarCheckLine className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Hoy
             </Button>
-            <div className="flex items-center sm:gap-2">
+            <div className="flex items-center rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-7 w-7 rounded-lg text-zinc-600 hover:bg-white hover:text-zinc-900 sm:h-8 sm:w-8"
                 onClick={handlePrevious}
                 aria-label="Anterior"
               >
@@ -326,53 +313,46 @@ export function EventCalendar({
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-7 w-7 rounded-lg text-zinc-600 hover:bg-white hover:text-zinc-900 sm:h-8 sm:w-8"
                 onClick={handleNext}
                 aria-label="Siguiente"
               >
                 <ChevronRightIcon size={16} aria-hidden="true" />
               </Button>
             </div>
-            <h2 className="text-sm font-semibold sm:text-lg md:text-xl">
+            <h2 className="text-sm font-semibold text-zinc-900 sm:text-lg md:text-xl">
               {viewTitle}
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-1.5 max-[479px]:h-8">
-                  <span>
-                    <span className="min-[480px]:hidden" aria-hidden="true">
-                      {view === "month" ? "M" : view === "week" ? "S" : view === "day" ? "D" : "A"}
-                    </span>
-                    <span className="max-[479px]:sr-only">
-                      {view === "month" ? "Mes" : view === "week" ? "Semana" : view === "day" ? "Día" : "Agenda"}
-                    </span>
-                  </span>
-                  <ChevronDownIcon
-                    className="-me-1 opacity-60"
-                    size={16}
-                    aria-hidden="true"
-                  />
+            <div className="inline-flex items-center rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+              {(
+                [
+                  { id: "day", label: "Día" },
+                  { id: "week", label: "Semana" },
+                  { id: "month", label: "Mes" },
+                  { id: "agenda", label: "Agenda" },
+                ] as const
+              ).map((option) => (
+                <Button
+                  key={option.id}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setView(option.id)}
+                  className={cn(
+                    "h-7 rounded-lg px-2 text-[11px] font-medium sm:h-8 sm:px-3 sm:text-xs",
+                    view === option.id
+                      ? "bg-white text-zinc-900 shadow-sm hover:bg-white"
+                      : "text-zinc-500 hover:bg-white hover:text-zinc-800"
+                  )}
+                >
+                  {option.label}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-32">
-                <DropdownMenuItem onClick={() => setView("month")}>
-                  Mes <DropdownMenuShortcut>M</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setView("week")}>
-                  Semana <DropdownMenuShortcut>W</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setView("day")}>
-                  Día <DropdownMenuShortcut>D</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setView("agenda")}>
-                  Agenda <DropdownMenuShortcut>A</DropdownMenuShortcut>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              ))}
+            </div>
             {interactive && (
               <Button
-                className="max-[479px]:aspect-square max-[479px]:p-0!"
+                className="h-8 rounded-xl bg-cyan-500 px-3 text-xs text-white hover:bg-cyan-600 sm:h-9 sm:text-sm"
                 onClick={() => {
                   setSelectedEvent(null) // Ensure we're creating a new event
                   setIsEventDialogOpen(true)

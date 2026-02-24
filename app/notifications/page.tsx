@@ -1,10 +1,15 @@
 import { createClient } from "@/utils/supabase/server";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { parseLocalDate, formatLocalDate } from "@/utils/date";
 import { revalidatePath } from "next/cache";
 import { addHours } from "date-fns";
+import { Info } from "lucide-react";
 import { PendientesCalendar, type CalendarEventPayload } from "./_components/pendientes-calendar";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
+import { cn } from "@/lib/utils";
+import { ReactNode } from "react";
 
 type NotificationRow = {
   id: string;
@@ -136,9 +141,9 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     }
     const { data: profileRows } = userIds.size
       ? await supabase
-          .from("profiles")
-          .select("user_id,full_name")
-          .in("user_id", Array.from(userIds))
+        .from("profiles")
+        .select("user_id,full_name")
+        .in("user_id", Array.from(userIds))
       : { data: [] as any[] };
     const userNameById = new Map(
       (profileRows ?? []).map((p: any) => [p.user_id as string, p.full_name as string])
@@ -182,9 +187,9 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
         targetUserId: (row.target_user_id as string | null) ?? undefined,
         targetUserName: row.target_user_id
           ? (row.target_user_id === userId
-              ? currentUserEmail ?? userNameById.get(row.target_user_id as string)
-              : userNameById.get(row.target_user_id as string) ??
-                userEmailById.get(row.target_user_id as string))
+            ? currentUserEmail ?? userNameById.get(row.target_user_id as string)
+            : userNameById.get(row.target_user_id as string) ??
+            userEmailById.get(row.target_user_id as string))
           : undefined,
         targetRoleId: (row.target_role_id as string | null) ?? undefined,
         targetRoleName: row.target_role_id
@@ -193,9 +198,9 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
         createdById: (row.created_by as string | null) ?? undefined,
         createdByName: row.created_by
           ? (row.created_by === userId
-              ? currentUserEmail ?? userNameById.get(row.created_by as string)
-              : userNameById.get(row.created_by as string) ??
-                userEmailById.get(row.created_by as string))
+            ? currentUserEmail ?? userNameById.get(row.created_by as string)
+            : userNameById.get(row.created_by as string) ??
+            userEmailById.get(row.created_by as string))
           : undefined,
         createdAt: row.created_at ? String(row.created_at) : undefined,
       }));
@@ -217,6 +222,109 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     ...pendienteCalendarEvents,
     ...calendarEvents,
   ];
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfToday = new Date(startOfToday);
+  endOfToday.setDate(endOfToday.getDate() + 1);
+  const next7Days = new Date(startOfToday);
+  next7Days.setDate(next7Days.getDate() + 7);
+
+  const totalPendientes = calendarEvents.filter((event) => !event.completed).length;
+  const totalCompletados = calendarEvents.filter((event) => Boolean(event.completed)).length;
+  const totalVencidos = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return !event.completed && start < startOfToday;
+  }).length;
+  const startCurrent7 = new Date(startOfToday);
+  startCurrent7.setDate(startCurrent7.getDate() - 7);
+  const startPrev7 = new Date(startCurrent7);
+  startPrev7.setDate(startPrev7.getDate() - 7);
+
+  const inRange = (date: Date, start: Date, end: Date) => date >= start && date < end;
+
+  const getDeltaPct = (current: number, previous: number) => {
+    if (previous === 0) {
+      return current === 0 ? 0 : 100;
+    }
+    return Math.round(((current - previous) / previous) * 100);
+  };
+
+  const currentPendientes7 = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return !event.completed && inRange(start, startCurrent7, endOfToday);
+  }).length;
+  const prevPendientes7 = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return !event.completed && inRange(start, startPrev7, startCurrent7);
+  }).length;
+
+  const currentCompletados7 = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return Boolean(event.completed) && inRange(start, startCurrent7, endOfToday);
+  }).length;
+  const prevCompletados7 = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return Boolean(event.completed) && inRange(start, startPrev7, startCurrent7);
+  }).length;
+
+  const currentVencidos7 = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return !event.completed && start < startOfToday && inRange(start, startCurrent7, endOfToday);
+  }).length;
+  const prevVencidos7 = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return !event.completed && start < startCurrent7 && inRange(start, startPrev7, startCurrent7);
+  }).length;
+
+  const proximosEventosAll = calendarEvents
+    .filter((event) => {
+      const start = new Date(event.start);
+      return start >= now && start < next7Days;
+    })
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+  const currentProximos7 = proximosEventosAll.length;
+  const prevProximos7 = calendarEvents.filter((event) => {
+    const start = new Date(event.start);
+    return inRange(start, startPrev7, startCurrent7);
+  }).length;
+
+  const metrics = [
+    {
+      title: "Pendientes",
+      subtitle: "Últimos 7 días",
+      value: totalPendientes,
+      delta: getDeltaPct(currentPendientes7, prevPendientes7),
+      positiveColor: "bg-cyan-100 text-cyan-700",
+      negativeColor: "bg-rose-100 text-rose-700",
+    },
+    {
+      title: "Completados",
+      subtitle: "Últimos 7 días",
+      value: totalCompletados,
+      delta: getDeltaPct(currentCompletados7, prevCompletados7),
+      positiveColor: "bg-emerald-100 text-emerald-700",
+      negativeColor: "bg-rose-100 text-rose-700",
+    },
+    {
+      title: "Vencidos",
+      subtitle: "Últimos 7 días",
+      value: totalVencidos,
+      delta: getDeltaPct(currentVencidos7, prevVencidos7),
+      positiveColor: "bg-rose-100 text-rose-700",
+      negativeColor: "bg-emerald-100 text-emerald-700",
+    },
+    {
+      title: "Próximos eventos",
+      subtitle: "Próximos 7 días",
+      value: proximosEventosAll.length,
+      delta: getDeltaPct(currentProximos7, prevProximos7),
+      positiveColor: "bg-cyan-100 text-cyan-700",
+      negativeColor: "bg-zinc-100 text-zinc-700",
+    },
+  ] as const;
+  const proximosEventos = proximosEventosAll.slice(0, 3);
 
   async function markAllRead() {
     "use server";
@@ -382,6 +490,31 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     revalidatePath("/notifications");
   }
 
+  const DS = {
+    page: "bg-stone-100",
+    frame: "rounded-3xl border border-stone-200/70 bg-white p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]",
+    frameInner: "rounded-2xl border ",
+    panel: "rounded-2xl border border-stone-200 bg-stone-50/60",
+    card: "rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]",
+  };
+
+  function Framed({
+    className,
+    innerClassName,
+    children,
+  }: {
+    className?: string;
+    innerClassName?: string;
+    children: ReactNode;
+  }) {
+    return (
+      <div className={cn(DS.frame, className)}>
+        <div className={cn(DS.frameInner, innerClassName)}>{children}</div>
+      </div>
+    );
+  }
+
+
   return (
     <div className="flex min-h-svh flex-col gap-6 p-6">
       <div className="flex items-center justify-between gap-2">
@@ -389,6 +522,69 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
         <form action={markAllRead}>
           <Button variant="outline" size="sm">Marcar todas como leídas</Button>
         </form>
+      </div>
+
+      <div className="rounded-3xl border border-stone-200/70 bg-white p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+        <div className="no-scrollbar flex w-full gap-3 overflow-x-auto border-none bg-transparent flex-row shadow-[0_20px_60px_rgba(15,23,42,0.06)]" >
+          {metrics.map((metric) => {
+            const isPositive = metric.delta >= 0;
+            const badgeClass = isPositive ? metric.positiveColor : metric.negativeColor;
+            const deltaPrefix = metric.delta > 0 ? "+" : "";
+            return (
+              <Card
+                key={metric.title}
+                className="min-w-[250px] flex-1 rounded-2xl border border-zinc-200 bg-white shadow-none gap-0 "
+              >
+                <CardHeader className="space-y-0 pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-xs font-medium text-zinc-700">{metric.title}</CardTitle>
+                    <Info className="h-3.5 w-3.5 text-zinc-400" />
+                  </div>
+                  <p className="text-[11px] text-zinc-400">{metric.subtitle}</p>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex items-end justify-between gap-2">
+                    <p className="text-3xl font-semibold tracking-tight text-zinc-900 tabular-nums">
+                      {metric.value}
+                    </p>
+                    {metric.title !== "Próximos eventos" && (
+                      <div className="mb-1 flex items-center gap-1.5">
+                        <Badge className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
+                          {`${deltaPrefix}${metric.delta}%`}
+                        </Badge>
+                        <span className="text-[10px] text-zinc-400">vs 7d prev.</span>
+                      </div>
+                    )}
+                    {metric.title === "Próximos eventos" && (
+                      <div className="mt-2 space-y-1.5 pt-2 bg-muted/50 rounded-full p-2">
+                        {proximosEventos.length === 0 ? (
+                          <p className="text-[11px] text-zinc-400">Sin eventos programados.</p>
+                        ) : (
+                          proximosEventos.slice(0, 2).map((event) => (
+                            <div
+                              key={`preview-${event.id}`}
+                              className="flex items-center justify-between gap-2 text-[11px] pl-1.5 pr-1"
+                            >
+                              <span className="truncate text-zinc-600">{event.title}</span>
+                              <span className="shrink-0 tabular-nums text-zinc-400">
+                                {new Date(event.start).toLocaleString("es-AR", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1">

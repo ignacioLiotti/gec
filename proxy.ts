@@ -66,23 +66,31 @@ function getRequestHost(req: NextRequest) {
 	return host.split(",")[0].trim().toLowerCase();
 }
 
-function hasSupabaseAuthCookie(req: NextRequest) {
-	return req.cookies
-		.getAll()
-		.some(
-			(cookie) =>
-				cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"),
-		);
-}
-
-function redirectToHost(req: NextRequest, targetHost: string) {
+function redirectToHostPath(
+	req: NextRequest,
+	targetHost: string,
+	targetPathname: string,
+) {
 	const targetUrl = req.nextUrl.clone();
 	targetUrl.host = targetHost;
+	targetUrl.pathname = targetPathname;
+	targetUrl.search = "";
+	targetUrl.hash = "";
 	const forwardedProto = req.headers.get("x-forwarded-proto");
 	if (forwardedProto === "http" || forwardedProto === "https") {
 		targetUrl.protocol = `${forwardedProto}:`;
 	}
 	return NextResponse.redirect(targetUrl, 307);
+}
+
+function isDomainSplitBypassPath(pathname: string) {
+	return (
+		pathname.startsWith("/_next") ||
+		pathname.startsWith("/api") ||
+		pathname.startsWith("/auth/callback") ||
+		pathname === "/favicon.ico" ||
+		pathname.startsWith("/.well-known")
+	);
 }
 
 function enforceCsrf(req: NextRequest) {
@@ -110,20 +118,6 @@ function enforceCsrf(req: NextRequest) {
 
 export async function proxy(req: NextRequest) {
 	const pathname = req.nextUrl.pathname;
-	if (
-		domainSplitEnabled &&
-		appHost &&
-		marketingHost &&
-		getRequestHost(req) === marketingHost &&
-		!pathname.startsWith("/_next") &&
-		!pathname.startsWith("/api") &&
-		!pathname.startsWith("/auth/callback") &&
-		pathname !== "/favicon.ico" &&
-		!pathname.startsWith("/.well-known") &&
-		hasSupabaseAuthCookie(req)
-	) {
-		return attachSecurityHeaders(redirectToHost(req, appHost));
-	}
 
 	const csrfFailure = enforceCsrf(req);
 	if (csrfFailure) {
@@ -201,6 +195,38 @@ export async function proxy(req: NextRequest) {
 	);
 
 	await supabase.auth.getSession();
+	let resolvedUser:
+		| Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"]
+		| undefined;
+	let userLookupDone = false;
+
+	const currentHost = getRequestHost(req);
+	const shouldApplyDomainRedirect =
+		domainSplitEnabled &&
+		appHost &&
+		marketingHost &&
+		!isDomainSplitBypassPath(pathname) &&
+		(currentHost === appHost || currentHost === marketingHost);
+
+	if (shouldApplyDomainRedirect) {
+		const {
+			data: { user },
+		} = await supabase.auth.getUser();
+		resolvedUser = user;
+		userLookupDone = true;
+
+		if (currentHost === marketingHost && user) {
+			return attachSecurityHeaders(
+				redirectToHostPath(req, appHost, "/dashboard"),
+			);
+		}
+
+		if (currentHost === appHost && !user) {
+			return attachSecurityHeaders(
+				redirectToHostPath(req, marketingHost, "/"),
+			);
+		}
+	}
 
 	const config = getRouteAccessConfig(pathname);
 
@@ -209,9 +235,13 @@ export async function proxy(req: NextRequest) {
 	}
 
 	try {
-		const {
-			data: { user },
-		} = await supabase.auth.getUser();
+		let user = resolvedUser;
+		if (!userLookupDone) {
+			const authUserResult = await supabase.auth.getUser();
+			user = authUserResult.data.user;
+			userLookupDone = true;
+			resolvedUser = user;
+		}
 
 		if (!user) {
 			return attachSecurityHeaders(res);

@@ -3,6 +3,10 @@
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
+const isVercelProduction =
+	process.env.NODE_ENV === "production" &&
+	process.env.NEXT_PUBLIC_VERCEL_ENV === "production";
+
 export default function Error({
 	error,
 	reset,
@@ -11,7 +15,9 @@ export default function Error({
 	reset: () => void;
 }) {
 	useEffect(() => {
-		Sentry.captureException(error);
+		if (isVercelProduction) {
+			Sentry.captureException(error);
+		}
 	}, [error]);
 
 	return (

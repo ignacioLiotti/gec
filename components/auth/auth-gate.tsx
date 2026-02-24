@@ -19,8 +19,12 @@ export default function AuthGate() {
 	const [isChecking, setIsChecking] = useState(true);
 
 	useEffect(() => {
-		// Skip checks for auth-related routes to prevent redirect loops
-		if (pathname === "/onboarding" || pathname.startsWith("/auth/")) {
+		// Public/auth routes should not force-open auth modal.
+		if (
+			pathname === "/" ||
+			pathname === "/onboarding" ||
+			pathname.startsWith("/auth/")
+		) {
 			setIsChecking(false);
 			return;
 		}

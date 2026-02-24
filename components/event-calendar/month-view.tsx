@@ -108,15 +108,15 @@ export function MonthView({
     <div data-slot="month-view" className="contents">
       {hasPastIncomplete && (
         <div className="text-destructive mb-2 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-1 text-xs font-medium">
-          <span className="h-2 w-2 rounded-full bg-destructive" />
+          <span className="h-2 w-2 rounded-none bg-destructive" />
           Hay pendientes anteriores sin completar
         </div>
       )}
-      <div className="border-border/70 grid grid-cols-7 border-b">
+      <div className="grid grid-cols-7 border-b border-zinc-100 bg-white/95">
         {weekdays.map((day) => (
           <div
             key={day}
-            className="text-muted-foreground/70 py-2 text-center text-sm"
+            className="py-2 text-center text-xs font-medium text-zinc-500 sm:text-sm"
           >
             {day}
           </div>
@@ -151,7 +151,7 @@ export function MonthView({
               return (
                 <div
                   key={day.toString()}
-                  className="group border-border/70 data-outside-cell:bg-muted/25 data-outside-cell:text-muted-foreground/70 border-r border-b last:border-r-0"
+                  className="group border-r border-b border-zinc-100 data-outside-cell:bg-zinc-50/60 data-outside-cell:text-zinc-400 last:border-r-0 data-today:bg-cyan-50/40"
                   data-today={isToday(day) || undefined}
                   data-outside-cell={!isCurrentMonth || undefined}
                 >
@@ -166,7 +166,7 @@ export function MonthView({
                       onEventCreate(startTime)
                     }}
                   >
-                    <div className="group-data-today:bg-primary group-data-today:text-primary-foreground mt-1 inline-flex size-6 items-center justify-center rounded-full text-sm">
+                    <div className="mt-1 inline-flex size-6 items-center justify-center rounded-full text-sm text-zinc-700 group-data-today:bg-cyan-500 group-data-today:font-semibold group-data-today:text-white">
                       {format(day, "d")}
                     </div>
                     <div
@@ -236,7 +236,7 @@ export function MonthView({
                         <Popover modal>
                           <PopoverTrigger asChild>
                             <button
-                              className="focus-visible:border-ring focus-visible:ring-ring/50 text-muted-foreground hover:text-foreground hover:bg-muted/50 mt-[var(--event-gap)] flex h-[var(--event-height)] w-full items-center overflow-hidden px-1 text-left text-[10px] backdrop-blur-md transition outline-none select-none focus-visible:ring-[3px] sm:px-2 sm:text-xs"
+                              className="focus-visible:border-ring focus-visible:ring-ring/50 mt-[var(--event-gap)] flex h-[var(--event-height)] w-full items-center overflow-hidden rounded-md border border-zinc-200/80 bg-zinc-50/80 px-1 text-left text-[10px] text-zinc-600 transition outline-none select-none hover:bg-zinc-100 focus-visible:ring-[3px] sm:px-2 sm:text-xs"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span>

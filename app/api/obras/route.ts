@@ -10,9 +10,9 @@ import { cookies } from "next/headers";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 export const BASE_COLUMNS =
-	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, custom_data";
+	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at, custom_data";
 export const LEGACY_BASE_COLUMNS =
-	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje";
+	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at";
 export const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
 
 export type DbObraRow = {
@@ -31,6 +31,7 @@ export type DbObraRow = {
 	plazo_total: number | string;
 	plazo_transc: number | string;
 	porcentaje: number | string;
+	updated_at?: string | null;
 	custom_data?: Record<string, unknown> | null;
 	on_finish_first_message?: string | null;
 	on_finish_second_message?: string | null;
@@ -54,8 +55,11 @@ export function mapDbRowToObra(row: DbObraRow) {
 		plazoTotal: Number(row.plazo_total) || 0,
 		plazoTransc: Number(row.plazo_transc) || 0,
 		porcentaje: Number(row.porcentaje) || 0,
+		updatedAt: row.updated_at ?? null,
 		customData:
-			row.custom_data && typeof row.custom_data === "object" && !Array.isArray(row.custom_data)
+			row.custom_data &&
+			typeof row.custom_data === "object" &&
+			!Array.isArray(row.custom_data)
 				? row.custom_data
 				: {},
 		onFinishFirstMessage: row.on_finish_first_message ?? null,
@@ -65,13 +69,14 @@ export function mapDbRowToObra(row: DbObraRow) {
 }
 
 function toPlainObject(value: unknown): Record<string, unknown> {
-	if (typeof value !== "object" || value == null || Array.isArray(value)) return {};
+	if (typeof value !== "object" || value == null || Array.isArray(value))
+		return {};
 	return value as Record<string, unknown>;
 }
 
 export async function loadTenantMainTableCustomColumnIds(
 	supabase: any,
-	tenantId: string
+	tenantId: string,
 ): Promise<Set<string> | null> {
 	try {
 		const { data, error } = await supabase
@@ -107,7 +112,7 @@ export async function loadTenantMainTableCustomColumnIds(
 
 export function sanitizeCustomData(
 	value: unknown,
-	allowedCustomColumnIds: Set<string> | null
+	allowedCustomColumnIds: Set<string> | null,
 ): Record<string, unknown> {
 	const input = toPlainObject(value);
 	if (!allowedCustomColumnIds) return input;
@@ -186,7 +191,7 @@ export async function executeFlujoActions(
 	supabase: any,
 	obraId: string,
 	currentUserId: string,
-	tenantId: string | null
+	tenantId: string | null,
 ) {
 	console.info("Executing flujo actions for obra", { obraId });
 	const adminSupabase = createSupabaseAdminClient();
@@ -233,12 +238,12 @@ export async function executeFlujoActions(
 						break;
 					case "days":
 						executeAt = new Date(
-							now.getTime() + offsetValue * 24 * 60 * 60 * 1000
+							now.getTime() + offsetValue * 24 * 60 * 60 * 1000,
 						);
 						break;
 					case "weeks":
 						executeAt = new Date(
-							now.getTime() + offsetValue * 7 * 24 * 60 * 60 * 1000
+							now.getTime() + offsetValue * 7 * 24 * 60 * 60 * 1000,
 						);
 						break;
 					case "months":
@@ -247,7 +252,7 @@ export async function executeFlujoActions(
 						break;
 					default:
 						executeAt = new Date(
-							now.getTime() + offsetValue * 24 * 60 * 60 * 1000
+							now.getTime() + offsetValue * 24 * 60 * 60 * 1000,
 						);
 				}
 			} else if (action.timing_mode === "scheduled") {
@@ -290,26 +295,28 @@ export async function executeFlujoActions(
 				if (!tenantId) {
 					console.warn(
 						"Skipping calendar_event flujo action because tenantId is null",
-						{ actionId: action.id, obraId }
+						{ actionId: action.id, obraId },
 					);
 				} else {
 					// Batch insert all calendar events for recipients
 					const end = new Date(executeAt.getTime() + 60 * 60 * 1000);
-					const calendarEventPayloads = recipients.map((recipientId: string) => ({
-						tenant_id: tenantId,
-						created_by: currentUserId,
-						obra_id: obraId,
-						flujo_action_id: action.id,
-						title: action.title,
-						description: action.message || "",
-						start_at: executeAt.toISOString(),
-						end_at: end.toISOString(),
-						all_day: false,
-						audience_type: "user",
-						target_user_id: recipientId,
-						deleted_at: null,
-						deleted_by: null,
-					}));
+					const calendarEventPayloads = recipients.map(
+						(recipientId: string) => ({
+							tenant_id: tenantId,
+							created_by: currentUserId,
+							obra_id: obraId,
+							flujo_action_id: action.id,
+							title: action.title,
+							description: action.message || "",
+							start_at: executeAt.toISOString(),
+							end_at: end.toISOString(),
+							all_day: false,
+							audience_type: "user",
+							target_user_id: recipientId,
+							deleted_at: null,
+							deleted_by: null,
+						}),
+					);
 
 					const { error: calErr } = await adminSupabase
 						.from("calendar_events")
@@ -324,7 +331,7 @@ export async function executeFlujoActions(
 								obraId,
 								recipientCount: recipients.length,
 								error: calErr,
-							}
+							},
 						);
 						// Batch insert failed executions
 						const failedExecutions = recipients.map((recipientId: string) => ({
@@ -335,7 +342,9 @@ export async function executeFlujoActions(
 							error_message:
 								calErr instanceof Error ? calErr.message : String(calErr),
 						}));
-						await supabase.from("obra_flujo_executions").insert(failedExecutions);
+						await supabase
+							.from("obra_flujo_executions")
+							.insert(failedExecutions);
 					} else {
 						console.info("Batch inserted calendar_events from flujo action", {
 							actionId: action.id,
@@ -350,7 +359,9 @@ export async function executeFlujoActions(
 							status: "completed",
 							executed_at: executedAt,
 						}));
-						await adminSupabase.from("obra_flujo_executions").insert(successExecutions);
+						await adminSupabase
+							.from("obra_flujo_executions")
+							.insert(successExecutions);
 					}
 				}
 			}
@@ -363,10 +374,11 @@ export async function executeFlujoActions(
 					status: "pending",
 				}));
 
-				const { data: executionRows, error: executionError } = await adminSupabase
-					.from("obra_flujo_executions")
-					.insert(pendingExecutions)
-					.select("id, recipient_user_id");
+				const { data: executionRows, error: executionError } =
+					await adminSupabase
+						.from("obra_flujo_executions")
+						.insert(pendingExecutions)
+						.select("id, recipient_user_id");
 
 				if (executionError) {
 					console.error("Failed to batch insert flujo executions", {
@@ -377,70 +389,72 @@ export async function executeFlujoActions(
 				} else if (executionRows && executionRows.length > 0) {
 					// Map recipient IDs to execution IDs
 					const executionMap = new Map(
-						executionRows.map((row) => [row.recipient_user_id, row.id])
+						executionRows.map((row) => [row.recipient_user_id, row.id]),
 					);
 
 					// Process each recipient's workflow (events must be emitted individually)
-					const workflowPromises = recipients.map(async (recipientId: string) => {
-						const executionId = executionMap.get(recipientId) ?? null;
-						if (!executionId) return;
+					const workflowPromises = recipients.map(
+						async (recipientId: string) => {
+							const executionId = executionMap.get(recipientId) ?? null;
+							if (!executionId) return;
 
-						try {
-							console.info("Scheduling flujo notification workflow", {
-								actionId: action.id,
-								recipientId,
-								executionId,
-								notificationTypes,
-								executeAt: scheduledAtIso,
-							});
-							const result = await emitEvent("flujo.action.triggered", {
-								tenantId,
-								actorId: currentUserId,
-								recipientId,
-								obraId,
-								actionId: action.id,
-								title: action.title,
-								message: action.message,
-								executeAt: scheduledAtIso,
-								notificationTypes,
-								executionId,
-							});
+							try {
+								console.info("Scheduling flujo notification workflow", {
+									actionId: action.id,
+									recipientId,
+									executionId,
+									notificationTypes,
+									executeAt: scheduledAtIso,
+								});
+								const result = await emitEvent("flujo.action.triggered", {
+									tenantId,
+									actorId: currentUserId,
+									recipientId,
+									obraId,
+									actionId: action.id,
+									title: action.title,
+									message: action.message,
+									executeAt: scheduledAtIso,
+									notificationTypes,
+									executionId,
+								});
 
-							// Store the workflow run ID for future cancellation
-							if (result?.runId && executionId) {
-								await adminSupabase
-									.from("obra_flujo_executions")
-									.update({ workflow_run_id: result.runId })
-									.eq("id", executionId);
+								// Store the workflow run ID for future cancellation
+								if (result?.runId && executionId) {
+									await adminSupabase
+										.from("obra_flujo_executions")
+										.update({ workflow_run_id: result.runId })
+										.eq("id", executionId);
+								}
+
+								console.info("Flujo workflow emitted", {
+									actionId: action.id,
+									recipientId,
+									executionId,
+									runId: result?.runId,
+								});
+							} catch (eventError) {
+								console.error("Failed to schedule flujo workflow", {
+									actionId: action.id,
+									recipientId,
+									error: eventError,
+								});
+								if (executionId) {
+									await adminSupabase
+										.from("obra_flujo_executions")
+										.update({
+											status: "failed",
+											executed_at: new Date().toISOString(),
+											error_message:
+												eventError instanceof Error
+													? eventError.message
+													: String(eventError),
+										})
+										.eq("id", executionId);
+								}
 							}
-
-							console.info("Flujo workflow emitted", {
-								actionId: action.id,
-								recipientId,
-								executionId,
-								runId: result?.runId,
-							});
-						} catch (eventError) {
-							console.error("Failed to schedule flujo workflow", {
-								actionId: action.id,
-								recipientId,
-								error: eventError,
-							});
-							if (executionId) {
-								await adminSupabase
-									.from("obra_flujo_executions")
-									.update({
-										status: "failed",
-										executed_at: new Date().toISOString(),
-										error_message:
-											eventError instanceof Error
-												? eventError.message
-												: String(eventError),
-									})
-									.eq("id", executionId);
-							}
-						}
-					});
+						},
+					);
 
 					// Execute all workflows in parallel
 					await Promise.all(workflowPromises);
@@ -457,7 +471,6 @@ export async function executeFlujoActions(
 				actionId: action.id,
 				error: actionError,
 			});
-
 		}
 	}
 }
@@ -499,6 +512,7 @@ export async function GET(request: Request) {
 		"plazo_total",
 		"plazo_transc",
 		"porcentaje",
+		"updated_at",
 	]);
 
 	const rawOrderBy = searchParams.get("orderBy") ?? "n";
@@ -556,7 +570,7 @@ export async function GET(request: Request) {
 					`prorrogas_acordadas.eq.${eqVal}`,
 					`plazo_total.eq.${eqVal}`,
 					`plazo_transc.eq.${eqVal}`,
-					`porcentaje.eq.${eqVal}`
+					`porcentaje.eq.${eqVal}`,
 				);
 			}
 			// Combine text and numeric filters into a single OR group
@@ -567,7 +581,7 @@ export async function GET(request: Request) {
 		const numRange = (
 			nameMin: string,
 			nameMax: string,
-			column: keyof DbObraRow | string
+			column: keyof DbObraRow | string,
 		) => {
 			const rawMin = searchParams.get(nameMin);
 			const rawMax = searchParams.get(nameMax);
@@ -642,12 +656,12 @@ export async function GET(request: Request) {
 		console.error("Error fetching obras", error);
 		return NextResponse.json(
 			{ error: "No se pudieron obtener las obras" },
-			{ status: 500 }
+			{ status: 500 },
 		);
 	}
 
 	const detalleObras = ((data ?? []) as unknown as DbObraRow[]).map(
-		mapDbRowToObra
+		mapDbRowToObra,
 	);
 
 	if (!hasPagination) {
@@ -672,7 +686,7 @@ export async function GET(request: Request) {
 		if (countError) {
 			console.warn(
 				"Obras GET: failed to fetch total count for pagination",
-				countError
+				countError,
 			);
 		}
 		total = totalCount ?? detalleObras.length;
@@ -704,7 +718,7 @@ export async function PUT(request: Request) {
 	if (!tenantId) {
 		return NextResponse.json(
 			{ error: "No se encontró una organización para el usuario" },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	}
 
@@ -725,7 +739,7 @@ export async function PUT(request: Request) {
 	if (!parsingResult.success) {
 		return NextResponse.json(
 			{ error: "Datos inválidos", details: parsingResult.error.flatten() },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	}
 
@@ -740,7 +754,7 @@ export async function PUT(request: Request) {
 	let { data: existingRows, error: fetchExistingError } = await supabase
 		.from("obras")
 		.select(
-			"id, n, porcentaje, designacion_y_ubicacion, on_finish_first_message, on_finish_second_message, on_finish_second_send_at"
+			"id, n, porcentaje, designacion_y_ubicacion, on_finish_first_message, on_finish_second_message, on_finish_second_send_at",
 		)
 		.eq("tenant_id", tenantId)
 		.is("deleted_at", null);
@@ -748,7 +762,7 @@ export async function PUT(request: Request) {
 	if (fetchExistingError && fetchExistingError.code === "42703") {
 		supportsConfigColumns = false;
 		console.warn(
-			"Obras PUT: on_finish_* columns missing when fetching existing rows, falling back"
+			"Obras PUT: on_finish_* columns missing when fetching existing rows, falling back",
 		);
 		const fallback = await supabase
 			.from("obras")
@@ -763,7 +777,7 @@ export async function PUT(request: Request) {
 		console.error("Error fetching existing obras", fetchExistingError);
 		return NextResponse.json(
 			{ error: "No se pudieron validar los datos actuales" },
-			{ status: 500 }
+			{ status: 500 },
 		);
 	}
 
@@ -781,55 +795,58 @@ export async function PUT(request: Request) {
 				onFinishSecondSendAt:
 					(row as DbObraRow).on_finish_second_send_at ?? null,
 			},
-		])
+		]),
 	);
 
 	const allowedCustomColumnIds = await loadTenantMainTableCustomColumnIds(
 		supabase,
-		tenantId
+		tenantId,
 	);
 
 	const buildUpsertPayload = (
 		includeConfigColumns: boolean,
-		includeCustomData: boolean
+		includeCustomData: boolean,
 	) =>
 		payload.map((obra) => {
-		const base = {
-			tenant_id: tenantId,
-			n: obra.n,
-			designacion_y_ubicacion: obra.designacionYUbicacion,
-			sup_de_obra_m2: obra.supDeObraM2,
-			entidad_contratante: obra.entidadContratante,
-			mes_basico_de_contrato: obra.mesBasicoDeContrato,
-			iniciacion: obra.iniciacion,
-			contrato_mas_ampliaciones: obra.contratoMasAmpliaciones,
-			certificado_a_la_fecha: obra.certificadoALaFecha,
-			saldo_a_certificar: obra.saldoACertificar,
-			segun_contrato: obra.segunContrato,
-			prorrogas_acordadas: obra.prorrogasAcordadas,
-			plazo_total: obra.plazoTotal,
-			plazo_transc: obra.plazoTransc,
-			porcentaje: obra.porcentaje,
-			deleted_at: null,
-			deleted_by: null,
-		};
+			const base = {
+				tenant_id: tenantId,
+				n: obra.n,
+				designacion_y_ubicacion: obra.designacionYUbicacion,
+				sup_de_obra_m2: obra.supDeObraM2,
+				entidad_contratante: obra.entidadContratante,
+				mes_basico_de_contrato: obra.mesBasicoDeContrato,
+				iniciacion: obra.iniciacion,
+				contrato_mas_ampliaciones: obra.contratoMasAmpliaciones,
+				certificado_a_la_fecha: obra.certificadoALaFecha,
+				saldo_a_certificar: obra.saldoACertificar,
+				segun_contrato: obra.segunContrato,
+				prorrogas_acordadas: obra.prorrogasAcordadas,
+				plazo_total: obra.plazoTotal,
+				plazo_transc: obra.plazoTransc,
+				porcentaje: obra.porcentaje,
+				deleted_at: null,
+				deleted_by: null,
+			};
 
-		if (includeCustomData) {
-			Object.assign(base, {
-				custom_data: sanitizeCustomData(obra.customData, allowedCustomColumnIds),
-			});
-		}
+			if (includeCustomData) {
+				Object.assign(base, {
+					custom_data: sanitizeCustomData(
+						obra.customData,
+						allowedCustomColumnIds,
+					),
+				});
+			}
 
-		if (includeConfigColumns) {
-			Object.assign(base, {
-				on_finish_first_message: obra.onFinishFirstMessage ?? null,
-				on_finish_second_message: obra.onFinishSecondMessage ?? null,
-				on_finish_second_send_at: obra.onFinishSecondSendAt ?? null,
-			});
-		}
+			if (includeConfigColumns) {
+				Object.assign(base, {
+					on_finish_first_message: obra.onFinishFirstMessage ?? null,
+					on_finish_second_message: obra.onFinishSecondMessage ?? null,
+					on_finish_second_send_at: obra.onFinishSecondSendAt ?? null,
+				});
+			}
 
-		return base;
-	});
+			return base;
+		});
 
 	let { error: upsertError } = await supabase
 		.from("obras")
@@ -858,7 +875,7 @@ export async function PUT(request: Request) {
 		console.error("Error saving obras", upsertError);
 		return NextResponse.json(
 			{ error: "No se pudieron guardar las obras" },
-			{ status: 500 }
+			{ status: 500 },
 		);
 	}
 
@@ -877,7 +894,7 @@ export async function PUT(request: Request) {
 			console.error("Error deleting removed obras", deleteError);
 			return NextResponse.json(
 				{ error: "No se pudieron eliminar algunas obras" },
-				{ status: 500 }
+				{ status: 500 },
 			);
 		}
 	}
@@ -907,7 +924,11 @@ export async function PUT(request: Request) {
 			// Apply defaults to each new obra
 			for (const obraRow of newObraRows) {
 				try {
-					const result = await applyObraDefaults(supabase, obraRow.id, tenantId);
+					const result = await applyObraDefaults(
+						supabase,
+						obraRow.id,
+						tenantId,
+					);
 					if (result.success) {
 						console.info("Obras PUT: applied defaults to obra", {
 							obraId: obraRow.id,
@@ -934,12 +955,13 @@ export async function PUT(request: Request) {
 	const newlyCompleted = payload.filter(
 		(obra) =>
 			obra.porcentaje === 100 &&
-			(existingMap.get(obra.n)?.porcentaje ?? 0) < 100
+			(existingMap.get(obra.n)?.porcentaje ?? 0) < 100,
 	);
 
 	const newlyIncomplete = payload.filter(
 		(obra) =>
-			obra.porcentaje < 100 && (existingMap.get(obra.n)?.porcentaje ?? 0) >= 100
+			obra.porcentaje < 100 &&
+			(existingMap.get(obra.n)?.porcentaje ?? 0) >= 100,
 	);
 
 	console.info("Obras PUT: computed newlyCompleted", {
@@ -993,7 +1015,7 @@ export async function PUT(request: Request) {
 			const query = supabase
 				.from("obras")
 				.select(
-					"id, n, designacion_y_ubicacion, porcentaje, on_finish_first_message, on_finish_second_message, on_finish_second_send_at"
+					"id, n, designacion_y_ubicacion, porcentaje, on_finish_first_message, on_finish_second_message, on_finish_second_send_at",
 				)
 				.eq("tenant_id", tenantId)
 				.is("deleted_at", null)
@@ -1007,7 +1029,7 @@ export async function PUT(request: Request) {
 				if (fetchCompletedError.code === "42703") {
 					supportsConfigColumns = false;
 					console.warn(
-						"Obras PUT: on_finish_* columns missing when fetching completed obras, falling back"
+						"Obras PUT: on_finish_* columns missing when fetching completed obras, falling back",
 					);
 					const fallback = await supabase
 						.from("obras")
@@ -1023,7 +1045,7 @@ export async function PUT(request: Request) {
 			if (fetchCompletedError) {
 				console.error(
 					"Obras PUT: failed to fetch newly created completed obras data",
-					fetchCompletedError
+					fetchCompletedError,
 				);
 			} else {
 				const baseRows = (fetchedCompleted ?? []) as any[];
@@ -1039,7 +1061,7 @@ export async function PUT(request: Request) {
 							(row as DbObraRow).on_finish_second_message ?? null,
 						on_finish_second_send_at:
 							(row as DbObraRow).on_finish_second_send_at ?? null,
-					}))
+					})),
 				);
 			}
 		}
@@ -1110,7 +1132,7 @@ export async function PUT(request: Request) {
 			} catch (flujoError) {
 				console.error(
 					"Obras PUT: error while executing flujo actions",
-					flujoError
+					flujoError,
 				);
 			}
 
@@ -1139,12 +1161,12 @@ export async function PUT(request: Request) {
 
 						const offsetDays = Number((row as any).offset_days ?? 0);
 						const dueDate = new Date(
-							Date.now() + Math.max(0, offsetDays) * 24 * 60 * 60 * 1000
+							Date.now() + Math.max(0, offsetDays) * 24 * 60 * 60 * 1000,
 						);
 
 						const mk = (days: number, label: string) => {
 							const d = new Date(
-								dueDate.getTime() - days * 24 * 60 * 60 * 1000
+								dueDate.getTime() - days * 24 * 60 * 60 * 1000,
 							);
 							if (label !== "due_today") d.setHours(9, 0, 0, 0);
 							return d;
@@ -1171,17 +1193,17 @@ export async function PUT(request: Request) {
 							.from("pendiente_schedules")
 							.upsert(allScheduleRows, { onConflict: "pendiente_id,stage" });
 						if (schedUpsertErr) {
-							console.error(
-								"Obras PUT: failed to upsert pendiente schedules",
-								{ obraId: ctx.obra.id, error: schedUpsertErr }
-							);
+							console.error("Obras PUT: failed to upsert pendiente schedules", {
+								obraId: ctx.obra.id,
+								error: schedUpsertErr,
+							});
 						}
 					}
 				}
 			} catch (scheduleErr) {
 				console.error(
 					"Obras PUT: error while scheduling pendientes after completion",
-					scheduleErr
+					scheduleErr,
 				);
 			}
 		}
@@ -1205,19 +1227,19 @@ export async function PUT(request: Request) {
 				if (delErr) {
 					console.error(
 						"Obras PUT: failed to delete calendar_events for reverted obras",
-						{ obraIds: revertedIds, error: delErr }
+						{ obraIds: revertedIds, error: delErr },
 					);
 				} else {
 					console.info(
 						"Obras PUT: deleted calendar_events for reverted obras",
-						{ obraIds: revertedIds }
+						{ obraIds: revertedIds },
 					);
 				}
 			}
 		} catch (revertError) {
 			console.error(
 				"Obras PUT: unexpected error while cleaning up calendar_events for reverted obras",
-				revertError
+				revertError,
 			);
 		}
 	}

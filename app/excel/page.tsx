@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Upload } from "lucide-react";
 import Papa from "papaparse";
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 type CsvObra = {
 	n?: number | string | null;
@@ -157,6 +158,30 @@ const buildHeaders = (rows: CsvRow[], headerRows: number) => {
 	}
 	return headers;
 };
+
+const DS = {
+	page: "bg-stone-100",
+	frame: "rounded-3xl border border-stone-200/70 bg-stone-100/70 p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]",
+	frameInner: "rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]",
+	panel: "rounded-2xl border border-stone-200 bg-stone-50/60",
+	card: "rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]",
+};
+
+function Framed({
+	className,
+	innerClassName,
+	children,
+}: {
+	className?: string;
+	innerClassName?: string;
+	children: ReactNode;
+}) {
+	return (
+		<div className={cn(DS.frame, className)}>
+			<div className={cn(DS.frameInner, innerClassName)}>{children}</div>
+		</div>
+	);
+}
 
 export default function ExcelPage() {
 	const isMobile = useIsMobile();
@@ -463,155 +488,181 @@ export default function ExcelPage() {
 
 	if (isMobile) {
 		return (
-			<div className="flex-1 px-4 py-4 space-y-4">
-				<div className="flex items-center justify-between gap-2">
-					<h1 className="text-2xl font-bold text-foreground">Panel de obras</h1>
-					<Button variant="outline" size="sm" asChild>
-						<Link href="/excel/reporte" className="gap-2">
-							<FileText className="h-4 w-4" />
-							Reporte
-						</Link>
-					</Button>
-				</div>
-				{isLoadingMobile ? (
-					<div className="text-sm text-muted-foreground">Cargando obras...</div>
-				) : (
-					<div className="grid grid-cols-1 gap-3">
-						{mobileObras.map((obra) => (
-							<Link
-								key={obra.id}
-								href={`/excel/${obra.id}`}
-								className="rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-muted/40"
-							>
-								<div className="text-xs text-muted-foreground">
-									#{obra.n ?? "-"}
-								</div>
-								<div className="text-base font-semibold text-foreground">
-									{toText(obra.designacionYUbicacion) || "Obra"}
-								</div>
-								<div className="text-sm text-muted-foreground">
-									{toText(obra.entidadContratante)}
-								</div>
-								<div className="mt-2 text-sm font-medium text-foreground">
-									Avance: {clampPercentage(obra.porcentaje).toFixed(1)}%
-								</div>
-							</Link>
-						))}
-						{mobileObras.length === 0 && (
-							<div className="text-sm text-muted-foreground">
-								No hay obras para mostrar.
+			<div className={cn("flex-1 px-4 py-4 space-y-4", DS.page)}>
+				<Framed>
+					<div className="space-y-4 p-4">
+						<div className="flex items-center justify-between gap-2">
+							<div>
+								<h1 className="text-2xl font-semibold text-stone-900">Panel de obras</h1>
+								<p className="text-xs text-stone-500">Vista rápida y acceso a cada obra</p>
+							</div>
+							<Button variant="outline" size="sm" asChild className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+								<Link href="/excel/reporte" className="gap-2">
+									<FileText className="h-4 w-4" />
+									Reporte
+								</Link>
+							</Button>
+						</div>
+						{isLoadingMobile ? (
+							<div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-sm text-stone-500">Cargando obras...</div>
+						) : (
+							<div className="grid grid-cols-1 gap-3">
+								{mobileObras.map((obra) => (
+									<Link
+										key={obra.id}
+										href={`/excel/${obra.id}`}
+										className="rounded-2xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-colors hover:bg-stone-50/60"
+									>
+										<div className="text-xs text-stone-500">#{obra.n ?? "-"}</div>
+										<div className="text-base font-semibold text-stone-900">
+											{toText(obra.designacionYUbicacion) || "Obra"}
+										</div>
+										<div className="text-sm text-stone-500">{toText(obra.entidadContratante)}</div>
+										<div className="mt-3">
+											<div className="mb-1 flex items-center justify-between text-xs">
+												<span className="text-stone-500">Avance</span>
+												<span className="font-medium tabular-nums text-stone-700">
+													{clampPercentage(obra.porcentaje).toFixed(1)}%
+												</span>
+											</div>
+											<div className="h-2 rounded-full bg-stone-100">
+												<div
+													className="h-2 rounded-full bg-cyan-600"
+													style={{ width: `${clampPercentage(obra.porcentaje)}%` }}
+												/>
+											</div>
+										</div>
+									</Link>
+								))}
+								{mobileObras.length === 0 && (
+									<div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-sm text-stone-500">
+										No hay obras para mostrar.
+									</div>
+								)}
 							</div>
 						)}
 					</div>
-				)}
+				</Framed>
 			</div>
 		);
 	}
 
 	return (
-		<div className="px-4 py-2">
+		<div className={cn("px-4 py-4 md:px-6 md:py-6 min-h-full", DS.page)}>
 			<Sheet open={isPreviewOpen} onOpenChange={(open) => !open && handleCancelPreview()}>
-				<SheetContent side="right" className="sm:max-w-lg">
-					<SheetHeader>
-						<SheetTitle>Previsualización de importación</SheetTitle>
-						<SheetDescription>
-							{pendingFileName ? `Archivo: ${pendingFileName}` : "Revisá las primeras filas antes de importar."}
-						</SheetDescription>
-					</SheetHeader>
-					<div className="px-4 pb-4">
-						<div className="text-xs text-muted-foreground mb-2">
-							Se importarán {pendingUpdates.length} obras. Mostrando las primeras {previewRows.length}.
-						</div>
-						<div className="border rounded-md overflow-hidden">
-							<table className="w-full text-xs">
-								<thead className="bg-muted/50 text-muted-foreground">
-									<tr>
-										<th className="px-3 py-2 text-left">#</th>
-										<th className="px-3 py-2 text-left">Designación</th>
-										<th className="px-3 py-2 text-left">Entidad</th>
-										<th className="px-3 py-2 text-left">Mes básico</th>
-										<th className="px-3 py-2 text-left">Inicio</th>
-										<th className="px-3 py-2 text-right">%</th>
-									</tr>
-								</thead>
-								<tbody>
-									{previewRows.map((row) => (
-										<tr key={row._rowIndex} className="border-t">
-											<td className="px-3 py-2 text-muted-foreground">{row._rowIndex}</td>
-											<td className="px-3 py-2">{toText(row.designacionYUbicacion)}</td>
-											<td className="px-3 py-2">{toText(row.entidadContratante)}</td>
-											<td className="px-3 py-2">{toText(row.mesBasicoDeContrato)}</td>
-											<td className="px-3 py-2">{toText(row.iniciacion)}</td>
-											<td className="px-3 py-2 text-right tabular-nums">{clampPercentage(row.porcentaje).toFixed(1)}</td>
+				<SheetContent side="right" className="sm:max-w-lg border-l-stone-200 bg-stone-100 p-2 shadow-[0_20px_60px_rgba(0,0,0,0.10)]">
+					<div className="flex h-full flex-col rounded-2xl border border-stone-200/80 bg-white">
+						<SheetHeader>
+							<SheetTitle className="text-stone-900">Previsualización de importación</SheetTitle>
+							<SheetDescription className="text-stone-500">
+								{pendingFileName ? `Archivo: ${pendingFileName}` : "Revisá las primeras filas antes de importar."}
+							</SheetDescription>
+						</SheetHeader>
+						<div className="px-4 pb-4">
+							<div className="mb-2 rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs text-stone-600">
+								Se importarán {pendingUpdates.length} obras. Mostrando las primeras {previewRows.length}.
+							</div>
+							<div className="overflow-hidden rounded-xl border border-stone-200">
+								<table className="w-full text-xs">
+									<thead className="bg-stone-50 text-stone-600">
+										<tr>
+											<th className="px-3 py-2 text-left">#</th>
+											<th className="px-3 py-2 text-left">Designación</th>
+											<th className="px-3 py-2 text-left">Entidad</th>
+											<th className="px-3 py-2 text-left">Mes básico</th>
+											<th className="px-3 py-2 text-left">Inicio</th>
+											<th className="px-3 py-2 text-right">%</th>
 										</tr>
-									))}
-								</tbody>
-							</table>
+									</thead>
+									<tbody>
+										{previewRows.map((row) => (
+											<tr key={row._rowIndex} className="border-t border-stone-200/70 hover:bg-stone-50/60">
+												<td className="px-3 py-2 text-stone-500">{row._rowIndex}</td>
+												<td className="px-3 py-2">{toText(row.designacionYUbicacion)}</td>
+												<td className="px-3 py-2">{toText(row.entidadContratante)}</td>
+												<td className="px-3 py-2">{toText(row.mesBasicoDeContrato)}</td>
+												<td className="px-3 py-2">{toText(row.iniciacion)}</td>
+												<td className="px-3 py-2 text-right tabular-nums">{clampPercentage(row.porcentaje).toFixed(1)}</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
 						</div>
+						<SheetFooter>
+							<div className="flex w-full items-center justify-end gap-2">
+								<Button type="button" variant="outline" onClick={handleCancelPreview} disabled={isImporting} className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+									Cancelar
+								</Button>
+								<Button type="button" onClick={handleConfirmImport} disabled={isImporting} className="bg-stone-900 text-white hover:bg-stone-800">
+									{isImporting ? "Importando..." : "Confirmar importación"}
+								</Button>
+							</div>
+						</SheetFooter>
 					</div>
-					<SheetFooter>
-						<div className="flex w-full items-center justify-end gap-2">
-							<Button type="button" variant="outline" onClick={handleCancelPreview} disabled={isImporting}>
-								Cancelar
-							</Button>
-							<Button type="button" onClick={handleConfirmImport} disabled={isImporting}>
-								{isImporting ? "Importando..." : "Confirmar importación"}
-							</Button>
-						</div>
-					</SheetFooter>
 				</SheetContent>
 			</Sheet>
 
 			<FormTable key={refreshKey} config={tableConfig}>
-				<div className="space-y-1 relative">
-					{/* <p className="text-sm uppercase tracking-wide text-orange-800/80 -mb-1">
+				<Framed className="md:max-w-[calc(97vw-var(--sidebar-current-width))]">
+					<div className="space-y-4 p-4 sm:p-5 relative">
+						<div className="flex flex-col gap-3">
+							<div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+								<div>
+									<h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-stone-900">
+										Panel de obras
+									</h1>
+									<p className="text-sm text-stone-500">
+										Filtrá, buscá y actualizá tus obras desde una vista unificada.
+									</p>
+								</div>
+								<FormTableTabs className={cn(DS.panel, "p-2 justify-start")} />
+							</div>
 
-					</p> */}
-					<div className="w-full flex items-end justify-between gap-3 mb-1">
-						<h1 className="text-5xl my-2 font-bold text-primary">
-							Panel de obras
-						</h1>
-						<FormTableTabs className="justify-start" />
-					</div>
-					{/* <p className="text-sm text-slate-600">
-						Filtrá, buscá y actualizá tus obras directamente desde esta vista.
-					</p> */}
+							<div className={cn(DS.panel, "p-2")}>
+								<div className="flex w-full flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+									<FormTableToolbar />
+									<div className="flex items-center gap-2">
+										<input
+											ref={inputRef}
+											type="file"
+											accept=".csv,text/csv"
+											className="hidden"
+											onChange={(event) => {
+												const file = event.target.files?.[0];
+												if (file) handleCsvImport(file);
+											}}
+										/>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onClick={handleImportClick}
+											disabled={isImporting}
+											className="gap-2 border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+										>
+											<Upload className="h-4 w-4" />
+											{isImporting ? "Importando..." : "Importar CSV"}
+										</Button>
+										<Button variant="outline" size="sm" asChild className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+											<Link href="/excel/reporte" className="gap-2">
+												<FileText className="h-4 w-4" />
+												Generar Reporte
+											</Link>
+										</Button>
+									</div>
+								</div>
+							</div>
+						</div>
 
-					<div className="w-full flex items-center justify-between gap-2 relative">
-						<FormTableToolbar />
-						<div className="flex items-center gap-2">
-							<input
-								ref={inputRef}
-								type="file"
-								accept=".csv,text/csv"
-								className="hidden"
-								onChange={(event) => {
-									const file = event.target.files?.[0];
-									if (file) handleCsvImport(file);
-								}}
-							/>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={handleImportClick}
-								disabled={isImporting}
-								className="gap-2"
-							>
-								<Upload className="h-4 w-4" />
-								{isImporting ? "Importando..." : "Importar CSV"}
-							</Button>
-							<Button variant="outline" size="sm" asChild>
-								<Link href="/excel/reporte" className="gap-2">
-									<FileText className="h-4 w-4" />
-									Generar Reporte
-								</Link>
-							</Button>
+						<div className={cn(DS.card, "p-2")}>
+							<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-0" />
+						</div>
+						<div className={cn(DS.panel, "p-2")}>
+							<FormTablePagination />
 						</div>
 					</div>
-					<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-2" />
-					<FormTablePagination />
-				</div>
+				</Framed>
 			</FormTable>
 		</div>
 	);

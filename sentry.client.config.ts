@@ -1,5 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
 
+const isVercelProduction =
+	process.env.NODE_ENV === "production" &&
+	process.env.NEXT_PUBLIC_VERCEL_ENV === "production";
+
 const tracesSampleRate = Number.parseFloat(
 	process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1"
 );
@@ -14,6 +18,7 @@ const replaysOnErrorSampleRate = Number.parseFloat(
 
 Sentry.init({
 	dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+	enabled: isVercelProduction,
 	environment:
 		process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ??
 		process.env.NODE_ENV ??

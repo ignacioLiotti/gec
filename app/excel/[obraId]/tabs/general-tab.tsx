@@ -145,7 +145,7 @@ const CircularProgress = ({ value }: { value: number }) => {
 	);
 };
 
-const AdvanceCurveChart = ({
+export const AdvanceCurveChart = ({
 	points,
 }: {
 	points: ReportCurvePoint[];

@@ -1,5 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 
+const isVercelProduction =
+	process.env.NODE_ENV === "production" &&
+	process.env.VERCEL === "1" &&
+	process.env.VERCEL_ENV === "production";
+
 export async function register() {
 	if (process.env.NEXT_RUNTIME === "nodejs") {
 		// Server-side Sentry initialization
@@ -12,4 +17,6 @@ export async function register() {
 	}
 }
 
-export const onRequestError = Sentry.captureRequestError;
+export const onRequestError = isVercelProduction
+	? Sentry.captureRequestError
+	: () => {};

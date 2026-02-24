@@ -60,12 +60,14 @@ const sentryOptions = {
 	widenClientFileUpload: true,
 };
 
-const configWithSentry =
-	process.env.SENTRY_DSN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
-		? withSentryConfig(nextConfig, sentryOptions)
-		: nextConfig;
+const isVercelProductionBuild =
+	process.env.NODE_ENV === "production" &&
+	process.env.VERCEL === "1" &&
+	process.env.VERCEL_ENV === "production";
 
-export default withSentryConfig(withWorkflow(configWithSentry), {
+const workflowConfig = withWorkflow(nextConfig);
+
+const sentryWebpackOptions = {
 	// For all available options, see:
 	// https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
@@ -96,4 +98,11 @@ export default withSentryConfig(withWorkflow(configWithSentry), {
 	// https://docs.sentry.io/product/crons/
 	// https://vercel.com/docs/cron-jobs
 	automaticVercelMonitors: true,
-});
+};
+
+export default isVercelProductionBuild
+	? withSentryConfig(
+			withSentryConfig(workflowConfig, sentryOptions),
+			sentryWebpackOptions
+	  )
+	: workflowConfig;

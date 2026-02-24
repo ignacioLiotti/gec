@@ -29,6 +29,9 @@ export default function DomainMigrationGuard() {
 		const moveToAppHost = () => {
 			const targetUrl = new URL(window.location.href);
 			targetUrl.host = appHost;
+			targetUrl.pathname = "/dashboard";
+			targetUrl.search = "";
+			targetUrl.hash = "";
 			if (!appHost.includes("localhost")) {
 				targetUrl.protocol = "https:";
 			}

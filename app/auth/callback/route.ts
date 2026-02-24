@@ -2,6 +2,29 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
+const domainSplitEnabled = process.env.ENABLE_DOMAIN_SPLIT === "true";
+const appHost = process.env.APP_HOST?.toLowerCase();
+const marketingHost = process.env.MARKETING_HOST?.toLowerCase();
+
+function applyDomainSplitHost(request: NextRequest, target: URL) {
+	if (!domainSplitEnabled || !appHost || !marketingHost) {
+		return target;
+	}
+	const currentHost = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "")
+		.split(",")[0]
+		.trim()
+		.toLowerCase();
+	if (currentHost !== marketingHost) {
+		return target;
+	}
+	target.host = appHost;
+	const forwardedProto = request.headers.get("x-forwarded-proto");
+	if (forwardedProto === "http" || forwardedProto === "https") {
+		target.protocol = `${forwardedProto}:`;
+	}
+	return target;
+}
+
 export async function GET(request: NextRequest) {
 	console.log("[AUTH-CALLBACK] GET request received");
 	const requestUrl = new URL(request.url);
@@ -16,8 +39,10 @@ export async function GET(request: NextRequest) {
 
 	if (code) {
 		// Create the redirect response FIRST so we can attach cookies to it
-		let redirectUrl = safeNextPath ? `${origin}${safeNextPath}` : origin;
-		const response = NextResponse.redirect(redirectUrl);
+		let redirectUrl = safeNextPath ? `${origin}${safeNextPath}` : `${origin}/dashboard`;
+		const response = NextResponse.redirect(
+			applyDomainSplitHost(request, new URL(redirectUrl)),
+		);
 
 		// Create Supabase client that reads from request cookies and writes to response cookies
 		const supabase = createServerClient(
@@ -86,7 +111,10 @@ export async function GET(request: NextRequest) {
 					safeNextPath && safeNextPath.startsWith("/invitations/")
 						? `${origin}${safeNextPath}`
 						: `${origin}/onboarding`;
-				response.headers.set("Location", target);
+				response.headers.set(
+					"Location",
+					applyDomainSplitHost(request, new URL(target)).toString(),
+				);
 				return response;
 			}
 
@@ -97,7 +125,7 @@ export async function GET(request: NextRequest) {
 					maxAge: 60 * 60 * 24 * 30,
 					sameSite: "lax",
 				});
-				redirectUrl = safeNextPath ? `${origin}${safeNextPath}` : origin;
+				redirectUrl = safeNextPath ? `${origin}${safeNextPath}` : `${origin}/dashboard`;
 			}
 		}
 
@@ -106,7 +134,10 @@ export async function GET(request: NextRequest) {
 			"[AUTH-CALLBACK] Response cookies:",
 			response.cookies.getAll().map((c) => c.name),
 		);
-		response.headers.set("Location", redirectUrl);
+		response.headers.set(
+			"Location",
+			applyDomainSplitHost(request, new URL(redirectUrl)).toString(),
+		);
 		console.log("[AUTH-CALLBACK] Redirecting to:", redirectUrl);
 		return response;
 	}
