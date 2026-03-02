@@ -82,7 +82,7 @@ export function PathnameLayoutShell({
             <UserMenu email={normalizedUser?.email} userRoles={userRoles as any} />
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4">{children}</main>
+        <main className="flex flex-1 flex-col gap-4 bg-[#fafafa]">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

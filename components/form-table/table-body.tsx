@@ -126,8 +126,8 @@ function TableRowInner<Row extends FormTableRow>({
 					if (!columnMeta) return null;
 
 					const baseClassName = cn(
-						"outline outline-border border-border relative px-4 py-4 group-hover:bg-[hsl(50,17%,95%)]",
-						rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
+						"outline outline-border border-border relative px-4 py-4 group-hover:bg-[#fffaf5]",
+						rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
 						colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 						colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
 						typeof columnMeta.cellClassName === "function"
@@ -283,9 +283,9 @@ function TableRowInner<Row extends FormTableRow>({
 }
 
 export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
-	// Only re-render if these specific props change
+	// Include the TanStack row object reference so table model changes repaint immediately.
 	return (
-		prevProps.row.original.id === nextProps.row.original.id &&
+		prevProps.row === nextProps.row &&
 		prevProps.rowIndex === nextProps.rowIndex &&
 		prevProps.externalRefreshVersion === nextProps.externalRefreshVersion &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&

@@ -56,6 +56,12 @@ export type CellConfig<Row extends FormTableRow> = {
 	badgeVariant?: "default" | "secondary" | "outline" | "destructive";
 	badgeMap?: Record<string, { label: string; variant: string }>;
 	renderReadOnly?: (args: { value: unknown; row: Row; highlightQuery: string }) => ReactNode;
+	renderEditable?: (args: {
+		value: unknown;
+		row: Row;
+		highlightQuery: string;
+		input: ReactNode;
+	}) => ReactNode;
 };
 
 export type AccordionRowConfig<Row extends FormTableRow> = {
@@ -192,7 +198,6 @@ export type RowColorInfo = {
 	tone: RowColorTone;
 	previewing: boolean;
 };
-
 
 
 

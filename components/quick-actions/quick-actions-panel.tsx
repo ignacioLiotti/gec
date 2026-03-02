@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type DragEvent } from "react";
-import { Check, ChevronRight, FileText, Loader2, Upload, X, Zap, FolderOpen } from "lucide-react";
+import { Check, ChevronRight, FileText, Loader2, Upload, X, Zap, FolderOpen, Plus } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import type { OcrTablaColumn } from "@/app/excel/[obraId]/tabs/file-manager/types";
+import { GlassyIcon } from "@/app/excel/page";
 
 type QuickAction = {
   id: string;
@@ -453,18 +454,21 @@ export function QuickActionsPanel({
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="w-full lg:w-68 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4 h-auto"
+          className="w-full lg:w-68 shrink-0 rounded-lg bg-card shadow-card p-4 flex flex-col gap-4 h-auto"
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold">Acciones rápidas</h2>
+              <GlassyIcon size={8} primaryVar="var(--color-orange-primary)" className="w-8">
+                <Zap className="size-4.5 text-primary" />
+              </GlassyIcon>
+              <h2 className="text-[17px] font-semibold">Acciones rápidas</h2>
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
-              Crear
-            </Button>
           </div>
           {panelList}
+          <Button type="button" size="sm" variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="size-4" />
+            Nueva acción
+          </Button>
         </motion.aside>
       )}
 

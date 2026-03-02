@@ -8,7 +8,7 @@ export function MainWrapper({ children }: { children: React.ReactNode }) {
   const isExcelDetailPage = /^\/excel\/[^/]+$/.test(pathname);
 
   return (
-    <main className={cn("flex flex-1 flex-col gap-4 p-4")}>
+    <main className={cn("flex flex-1 flex-col gap-4 p-4 bg-[#fafafa]")}>
       {children}
     </main>
   );

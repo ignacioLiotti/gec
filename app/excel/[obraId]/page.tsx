@@ -960,11 +960,11 @@ function ObraDetailPageContent() {
 				findings,
 				curve:
 					points.length > 0
-							? {
-								points,
-								planTableName: curvaTableName,
-								resumenTableName,
-							}
+						? {
+							points,
+							planTableName: curvaTableName,
+							resumenTableName,
+						}
 						: null,
 			} satisfies GeneralTabReportsData;
 		},
@@ -2154,7 +2154,7 @@ function ObraDetailPageContent() {
 							onValueChange={handleTabChange}
 							className="space-y-4"
 						>
-							<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
+							<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2 bg-white shadow-card rounded-xl p-3">
 								<div className="flex flex-wrap items-center gap-2">
 									<ExcelPageTabs />
 									{isObraAtRisk && (
@@ -2207,7 +2207,6 @@ function ObraDetailPageContent() {
 										<Button
 											type="button"
 											variant={isMemoriaOpen ? "default" : "secondary"}
-											size="sm"
 											onClick={() => setIsMemoriaOpen((open) => !open)}
 											className="gap-2"
 											aria-label="Memoria"

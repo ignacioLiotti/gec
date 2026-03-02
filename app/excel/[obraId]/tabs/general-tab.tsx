@@ -1,8 +1,23 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import type { ComponentType, ReactNode } from "react";
 import { motion } from "framer-motion";
-import { AlertCircle, AlertTriangle, Building2, Calendar, DollarSign, FileText, LineChart as LineChartIcon, MapPin, Percent, TrendingUp } from "lucide-react";
+import {
+	AlertCircle,
+	AlertTriangle,
+	BadgeDollarSign,
+	Building2,
+	Calendar,
+	FileText,
+	Hash,
+	Landmark,
+	LineChart as LineChartIcon,
+	MapPin,
+	Percent,
+	Ruler,
+	TrendingUp,
+} from "lucide-react";
 import {
 	CartesianGrid,
 	Line,
@@ -20,8 +35,8 @@ import { QuickActionsPanel } from "@/components/quick-actions/quick-actions-pane
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { GlassyIcon } from "../../page";
 
 type GeneralTabQuickActions = {
 	obraId: string;
@@ -120,7 +135,7 @@ const CircularProgress = ({ value }: { value: number }) => {
 					cy={radius + strokeWidth}
 				/>
 				<motion.circle
-					className="text-orange-primary h-full w-full"
+					className="text-orange-primary/80 h-full w-full"
 					stroke="currentColor"
 					fill="transparent"
 					strokeWidth={strokeWidth}
@@ -144,6 +159,91 @@ const CircularProgress = ({ value }: { value: number }) => {
 		</div>
 	);
 };
+
+function ShellCard({
+	title,
+	icon: Icon,
+	action,
+	children,
+	className,
+	bodyClassName,
+}: {
+	title: string;
+	icon: ComponentType<{ className?: string }>;
+	action?: ReactNode;
+	children: ReactNode;
+	className?: string;
+	bodyClassName?: string;
+}) {
+	return (
+		<section
+			className={cn(
+				"overflow-hidden rounded-xl bg-white shadow-card",
+				className
+			)}
+		>
+			<header className="flex items-center justify-between gap-3 border-b border-[#f0f0f0] px-5 py-3.5">
+				<div className="flex items-center gap-2.5">
+					<GlassyIcon size={8} primaryVar="var(--color-orange-primary)" className="w-8">
+						<Icon className={cn("size-4.5 text-primary", title === "Datos Financieros" && "size-5")} />
+					</GlassyIcon>
+					<h2 className="text-[18px] font-semibold text-[#1a1a1a]">{title}</h2>
+				</div>
+				{action}
+			</header>
+			<div className={cn("p-5", bodyClassName)}>{children}</div>
+		</section>
+	);
+}
+
+function KpiItem({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="space-y-1">
+			<p className="text-[11px] font-medium uppercase tracking-wide text-[#aaa]">{label}</p>
+			<p className="text-xl font-semibold tabular-nums tracking-tight text-[#1a1a1a] sm:text-2xl">
+				{value}
+			</p>
+		</div>
+	);
+}
+
+function MiniField({
+	icon: Icon,
+	label,
+	value,
+	highlighted = false,
+}: {
+	icon: ComponentType<{ className?: string }>;
+	label: string;
+	value: string;
+	highlighted?: boolean;
+}) {
+	return (
+		<div
+			className={cn(
+				"rounded-lg border border-[#f0f0f0] p-3",
+				highlighted && "border-[#f7b26a] bg-[#fff7ed]"
+			)}
+		>
+			<div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-[#aaa]">
+				<Icon className="size-3.5" />
+				<span>{label}</span>
+			</div>
+			<div className="text-[13px] font-medium leading-snug text-[#1a1a1a]">{value}</div>
+		</div>
+	);
+}
+
+const SURFACE_INPUT_CLASS =
+	"h-10 rounded-lg border-[#e8e8e8] bg-white text-[#1a1a1a] shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset] focus-visible:ring-2 focus-visible:ring-orange-200";
+
+const formatNumber = (value: unknown, suffix = "") => {
+	const num = Number(value ?? 0);
+	const safe = Number.isFinite(num) ? num : 0;
+	return `${safe.toLocaleString("es-AR")}${suffix}`;
+};
+
+const formatCurrency = (value: unknown) => `$ ${formatNumber(value)}`;
 
 export const AdvanceCurveChart = ({
 	points,
@@ -322,105 +422,103 @@ export function ObraGeneralTab({
 	reportsData,
 }: GeneralTabProps) {
 	return (
-		<TabsContent value="general" className="space-y-6 pt-0">
+		<TabsContent value="general" className="space-y-6 pt-4">
 			{isGeneralTabEditMode ? (
 				<>
 					<motion.form
 						initial={{ opacity: 0, y: 20 }}
 						animate={{ opacity: 1, y: 0 }}
 						transition={{ duration: 0.4 }}
-						className="space-y-6"
+						className="space-y-5 rounded-2xl bg-[#f5f5f5] p-4 sm:p-5"
 						onSubmit={(event) => {
 							event.preventDefault();
 							event.stopPropagation();
 							form.handleSubmit();
 						}}
 					>
-						<div className="flex flex-col lg:grid lg:grid-cols-1 lg:grid-cols-3 gap-4">
+						<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
 							<motion.div
 								initial={{ opacity: 0, scale: 0.95 }}
 								animate={{ opacity: 1, scale: 1 }}
 								transition={{ delay: 0.1 }}
-								className="rounded-lg border bg-card p-4 sm:p-5 shadow-sm flex flex-col col-span-1 row-span-1"
+								className="lg:col-span-4"
 							>
-								<form.Field name="porcentaje">
-									{(field: any) => (
-										<>
-											<div className="flex items-center justify-between gap-2 text-muted-foreground mb-4 ">
-												<div className="flex items-center gap-2">
-													<Percent className="h-4 w-4" />
-													<span className="text-sm font-medium">Avance</span>
+								<ShellCard
+									title="Avance"
+									icon={Percent}
+									action={
+										<span className="text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
+											Progreso
+										</span>
+									}
+									className="h-full"
+								>
+									<form.Field name="porcentaje">
+										{(field: any) => (
+											<div className="flex h-full flex-col gap-4">
+												<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
+													<CircularProgress value={Number(field.state.value) ?? 0} />
 												</div>
-												<span className="text-xs uppercase tracking-wide text-orange-primary">
-													Progreso
-												</span>
+												<div className="rounded-lg border border-[#f0f0f0] p-3">
+													<p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Editar avance
+													</p>
+													<Input
+														type="number"
+														step="0.01"
+														value={field.state.value}
+														onChange={(e) => field.handleChange(Number(e.target.value))}
+														onBlur={field.handleBlur}
+														className={cn(SURFACE_INPUT_CLASS, "text-right")}
+													/>
+													{getErrorMessage(field.state.meta.errors) && (
+														<p className="mt-2 text-xs text-red-500">
+															{getErrorMessage(field.state.meta.errors)}
+														</p>
+													)}
+												</div>
 											</div>
-											<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
-												<CircularProgress value={Number(field.state.value) ?? 0} />
-											</div>
-											<div className="mt-4">
-												<Input
-													type="number"
-													step="0.01"
-													value={field.state.value}
-													onChange={(e) => field.handleChange(Number(e.target.value))}
-													onBlur={field.handleBlur}
-													className="text-right"
-												/>
-											</div>
-											{getErrorMessage(field.state.meta.errors) && (
-												<p className="mt-1 text-xs text-red-500">
-													{getErrorMessage(field.state.meta.errors)}
-												</p>
-											)}
-										</>
-									)}
-								</form.Field>
+										)}
+									</form.Field>
+								</ShellCard>
 							</motion.div>
 
 							<motion.section
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
 								transition={{ delay: 0.25 }}
-								className="rounded-lg border bg-card shadow-sm overflow-hidden col-span-2 row-span-1"
+								className="lg:col-span-8"
 							>
-								<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
-									<div className="flex items-center gap-2">
-										<Building2 className="h-5 w-5 text-primary" />
-										<h2 className="text-base sm:text-lg font-semibold">Información General</h2>
-									</div>
-								</div>
-								<div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
-									<form.Field name="designacionYUbicacion">
-										{(field: any) => (
-											<div>
-												<label className="flex items-center gap-2 text-sm font-medium mb-2">
-													<MapPin className="h-4 w-4 text-muted-foreground" />
-													Designación y ubicación
-												</label>
-												<Input
-													type="text"
-													value={field.state.value}
-													onChange={(e) => field.handleChange(e.target.value)}
-													onBlur={field.handleBlur}
-													className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-													placeholder="Describe la ubicación y características principales de la obra..."
-												/>
-												{getErrorMessage(field.state.meta.errors) && (
-													<p className="mt-1 text-xs text-red-500">
-														{getErrorMessage(field.state.meta.errors)}
-													</p>
-												)}
-											</div>
-										)}
-									</form.Field>
-
-									<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+								<ShellCard title="Información General" icon={Landmark} className="h-full">
+									<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+										<form.Field name="designacionYUbicacion">
+											{(field: any) => (
+												<div className="sm:col-span-2">
+													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														<MapPin className="h-3.5 w-3.5" />
+														Designación y ubicación
+													</label>
+													<Input
+														type="text"
+														value={field.state.value}
+														onChange={(e) => field.handleChange(e.target.value)}
+														onBlur={field.handleBlur}
+														className={SURFACE_INPUT_CLASS}
+														placeholder="Describe la ubicación y características principales de la obra..."
+													/>
+													{getErrorMessage(field.state.meta.errors) && (
+														<p className="mt-2 text-xs text-red-500">
+															{getErrorMessage(field.state.meta.errors)}
+														</p>
+													)}
+												</div>
+											)}
+										</form.Field>
 										<form.Field name="entidadContratante">
 											{(field: any) => (
 												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<Building2 className="h-4 w-4 text-muted-foreground" />
+													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														<Building2 className="h-3.5 w-3.5" />
 														Entidad contratante
 													</label>
 													<Input
@@ -428,301 +526,221 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(e.target.value)}
 														onBlur={field.handleBlur}
+														className={SURFACE_INPUT_CLASS}
 														placeholder="Nombre de la entidad"
 													/>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
 												</div>
 											)}
 										</form.Field>
-
 										<form.Field name="mesBasicoDeContrato">
 											{(field: any) => (
 												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<Calendar className="h-4 w-4 text-muted-foreground" />
-														Mes básico de contrato
+													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														<Calendar className="h-3.5 w-3.5" />
+														Mes básico
 													</label>
 													<Input
 														type="text"
 														value={field.state.value}
 														onChange={(e) => field.handleChange(e.target.value)}
 														onBlur={field.handleBlur}
-														placeholder="Ej: Enero 2024"
+														className={SURFACE_INPUT_CLASS}
 													/>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
 												</div>
 											)}
 										</form.Field>
-
 										<form.Field name="iniciacion">
 											{(field: any) => (
 												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<Calendar className="h-4 w-4 text-muted-foreground" />
-														Fecha de iniciación
+													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														<Calendar className="h-3.5 w-3.5" />
+														Iniciación
 													</label>
 													<Input
 														type="text"
 														value={field.state.value}
 														onChange={(e) => field.handleChange(e.target.value)}
 														onBlur={field.handleBlur}
-														placeholder="Ej: 01/01/2024"
+														className={SURFACE_INPUT_CLASS}
 													/>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
 												</div>
 											)}
 										</form.Field>
-
 										<form.Field name="n">
 											{(field: any) => (
 												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<FileText className="h-4 w-4 text-muted-foreground" />
-														N° de Obra
+													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														<Hash className="h-3.5 w-3.5" />
+														N° de obra
 													</label>
 													<Input
 														type="number"
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														placeholder="Número de obra"
+														className={SURFACE_INPUT_CLASS}
 													/>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
 												</div>
 											)}
 										</form.Field>
-
 										<form.Field name="supDeObraM2">
 											{(field: any) => (
 												<div>
-													<label className="flex items-center gap-2 text-sm font-medium mb-2">
-														<TrendingUp className="h-4 w-4 text-muted-foreground" />
-														Superficie (m²)
+													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														<Ruler className="h-3.5 w-3.5" />
+														Superficie
 													</label>
 													<Input
 														type="number"
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														placeholder="Superficie en m²"
+														className={SURFACE_INPUT_CLASS}
 													/>
-													{getErrorMessage(field.state.meta.errors) && (
-														<p className="mt-1 text-xs text-red-500">
-															{getErrorMessage(field.state.meta.errors)}
-														</p>
-													)}
 												</div>
 											)}
 										</form.Field>
 									</div>
-								</div>
+								</ShellCard>
 							</motion.section>
 						</div>
-
 
 						<motion.section
 							initial={{ opacity: 0, y: 20 }}
 							animate={{ opacity: 1, y: 0 }}
 							transition={{ delay: 0.3 }}
-							className="rounded-lg border bg-card shadow-sm overflow-hidden"
 						>
-							<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
-								<div className="flex items-center gap-2">
-									<DollarSign className="h-5 w-5 text-primary" />
-									<h2 className="text-base sm:text-lg font-semibold">Datos Financieros</h2>
-								</div>
-							</div>
-							<div className="p-4 sm:p-6 space-y-4">
-								<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-									<form.Field name="contratoMasAmpliaciones">
-										{(field: any) => (
-											<div>
-												<label className="block text-sm font-medium text-muted-foreground mb-2">
-													Contrato más ampliaciones
-												</label>
-												<div className="relative">
-													<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-														$
-													</span>
+							<ShellCard title="Datos Financieros" icon={BadgeDollarSign}>
+								<div className="space-y-5">
+									<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+										<form.Field name="contratoMasAmpliaciones">
+											{(field: any) => (
+												<div>
+													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Contrato + ampliaciones
+													</label>
 													<Input
 														type="number"
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className="text-right pl-8 font-mono"
+														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
 														placeholder="0.00"
 													/>
 												</div>
-											</div>
-										)}
-									</form.Field>
-
-									<form.Field name="certificadoALaFecha">
-										{(field: any) => (
-											<div>
-												<label className="block text-sm font-medium text-muted-foreground mb-2">
-													Certificado a la fecha
-												</label>
-												<div className="relative">
-													<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-														$
-													</span>
+											)}
+										</form.Field>
+										<form.Field name="certificadoALaFecha">
+											{(field: any) => (
+												<div>
+													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Certificado a la fecha
+													</label>
 													<Input
 														type="number"
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className="text-right pl-8 font-mono"
+														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
 														placeholder="0.00"
 													/>
 												</div>
-											</div>
-										)}
-									</form.Field>
-
-									<form.Field name="saldoACertificar">
-										{(field: any) => (
-											<div>
-												<label className="block text-sm font-medium text-muted-foreground mb-2">
-													Saldo a certificar
-												</label>
-												<div className="relative">
-													<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-														$
-													</span>
+											)}
+										</form.Field>
+										<form.Field name="saldoACertificar">
+											{(field: any) => (
+												<div>
+													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Saldo a certificar
+													</label>
 													<Input
 														type="number"
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className="text-right pl-8 font-mono"
+														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
 														placeholder="0.00"
 													/>
 												</div>
-											</div>
-										)}
-									</form.Field>
+											)}
+										</form.Field>
+									</div>
+									<div className="h-px bg-[#f0f0f0]" />
+									<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+										<form.Field name="segunContrato">
+											{(field: any) => (
+												<div>
+													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Según contrato
+													</label>
+													<Input
+														type="number"
+														value={field.state.value}
+														onChange={(e) => field.handleChange(Number(e.target.value))}
+														onBlur={field.handleBlur}
+														className={cn(SURFACE_INPUT_CLASS, "text-right")}
+													/>
+												</div>
+											)}
+										</form.Field>
+										<form.Field name="prorrogasAcordadas">
+											{(field: any) => (
+												<div>
+													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Prórrogas
+													</label>
+													<Input
+														type="number"
+														value={field.state.value}
+														onChange={(e) => field.handleChange(Number(e.target.value))}
+														onBlur={field.handleBlur}
+														className={cn(SURFACE_INPUT_CLASS, "text-right")}
+													/>
+												</div>
+											)}
+										</form.Field>
+										<form.Field name="plazoTotal">
+											{(field: any) => (
+												<div>
+													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Plazo total
+													</label>
+													<Input
+														type="number"
+														value={field.state.value}
+														onChange={(e) => field.handleChange(Number(e.target.value))}
+														onBlur={field.handleBlur}
+														className={cn(SURFACE_INPUT_CLASS, "text-right")}
+													/>
+												</div>
+											)}
+										</form.Field>
+										<form.Field name="plazoTransc">
+											{(field: any) => (
+												<div>
+													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														Transcurrido
+													</label>
+													<Input
+														type="number"
+														value={field.state.value}
+														onChange={(e) => field.handleChange(Number(e.target.value))}
+														onBlur={field.handleBlur}
+														className={cn(SURFACE_INPUT_CLASS, "text-right")}
+													/>
+												</div>
+											)}
+										</form.Field>
+									</div>
 								</div>
-
-								<Separator />
-
-								<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-									<form.Field name="segunContrato">
-										{(field: any) => (
-											<div>
-												<label className="block text-sm font-medium text-muted-foreground mb-2">
-													Según contrato
-												</label>
-												<div className="relative">
-													<Input
-														type="number"
-														value={field.state.value}
-														onChange={(e) => field.handleChange(Number(e.target.value))}
-														onBlur={field.handleBlur}
-														className="text-right pr-14"
-														placeholder="0"
-													/>
-													<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-														meses
-													</span>
-												</div>
-											</div>
-										)}
-									</form.Field>
-
-									<form.Field name="prorrogasAcordadas">
-										{(field: any) => (
-											<div>
-												<label className="block text-sm font-medium text-muted-foreground mb-2">
-													Prórrogas acordadas
-												</label>
-												<div className="relative">
-													<Input
-														type="number"
-														value={field.state.value}
-														onChange={(e) => field.handleChange(Number(e.target.value))}
-														onBlur={field.handleBlur}
-														className="text-right pr-14"
-														placeholder="0"
-													/>
-													<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-														meses
-													</span>
-												</div>
-											</div>
-										)}
-									</form.Field>
-
-									<form.Field name="plazoTotal">
-										{(field: any) => (
-											<div>
-												<label className="block text-sm font-medium text-muted-foreground mb-2">
-													Plazo total
-												</label>
-												<div className="relative">
-													<Input
-														type="number"
-														value={field.state.value}
-														onChange={(e) => field.handleChange(Number(e.target.value))}
-														onBlur={field.handleBlur}
-														className="text-right pr-14"
-														placeholder="0"
-													/>
-													<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-														meses
-													</span>
-												</div>
-											</div>
-										)}
-									</form.Field>
-
-									<form.Field name="plazoTransc">
-										{(field: any) => (
-											<div>
-												<label className="block text-sm font-medium text-muted-foreground mb-2">
-													Transcurrido
-												</label>
-												<div className="relative">
-													<Input
-														type="number"
-														value={field.state.value}
-														onChange={(e) => field.handleChange(Number(e.target.value))}
-														onBlur={field.handleBlur}
-														className="text-right pr-14"
-														placeholder="0"
-													/>
-													<span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-														meses
-													</span>
-												</div>
-											</div>
-										)}
-									</form.Field>
-								</div>
-							</div>
+							</ShellCard>
 						</motion.section>
 					</motion.form>
 					<motion.div
 						initial={{ opacity: 0 }}
 						animate={{ opacity: 1 }}
 						transition={{ delay: 0.35 }}
-						className="flex justify-end gap-3 p-4 sticky bottom-0 left-0 w-full"
+						className="sticky bottom-0 left-0 z-10 flex w-full justify-end gap-3 rounded-xl border border-[#e8e8e8] bg-white/95 p-4 backdrop-blur"
 					>
 						<Button
 							variant="outline"
@@ -747,288 +765,210 @@ export function ObraGeneralTab({
 					</motion.div>
 				</>
 			) : (
-				<div className="space-y-6">
+				<div className="space-y-5">
 					<div className="flex flex-col lg:flex-row gap-4">
 						<div className="flex-1 space-y-6 min-w-0">
-							<div className="flex flex-col lg:grid lg:grid-cols-1 lg:grid-cols-3 gap-4 lg:auto-rows-fr">
+							<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
 								<motion.div
 									initial={{ opacity: 0, scale: 0.95 }}
 									animate={{ opacity: 1, scale: 1 }}
 									transition={{ delay: 0.1 }}
 									className={cn(
-										"rounded-lg border bg-card p-4  sm:p-5 sm:pt-0 shadow-sm flex flex-col col-span-1 row-span-1 transition-colors",
-										isFieldDirty("porcentaje") && "bg-orange-primary/5 border-orange-primary/40 border-2"
+										"lg:col-span-4",
+										isFieldDirty("porcentaje") && "rounded-xl"
 									)}
 								>
-									<div className="flex items-center justify-between gap-2 text-muted-foreground bg-muted/50 h-full -mx-5 p-5 pb-4 max-h-15">
-										<div className="flex items-center gap-2">
-											<Percent className="h-4 w-4" />
-											<span className="text-base sm:text-lg font-semibold text-foreground">Avance</span>
-										</div>
-										{isFieldDirty("porcentaje") ? (
-											<span className="text-xs text-orange-primary font-semibold">
-												• Sin guardar
-											</span>
-										) : (
-											<span className="text-xs uppercase tracking-wide text-orange-primary">
-												Progreso
-											</span>
+									<ShellCard
+										title="Avance"
+										icon={Percent}
+										className={cn(
+											"h-full",
+											isFieldDirty("porcentaje") && "border-[#f7b26a] bg-[#fffaf5]"
 										)}
-									</div>
-									<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
-										<CircularProgress value={form.state.values.porcentaje ?? 0} />
-									</div>
-									<div>
-										<p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
-											Alertas detectadas
-										</p>
-										{(reportsData?.findings?.length ?? 0) === 0 ? (
-											<p className="text-sm text-muted-foreground">
-												No hay alertas abiertas para esta obra.
-											</p>
-										) : (
-											<div className="space-y-2">
-												{reportsData?.findings.slice(0, 6).map((finding) => {
-													const tone =
-														finding.severity === "critical"
-															? "border-red-200 bg-red-50 text-red-700"
-															: finding.severity === "warn"
-																? "border-amber-200 bg-amber-50 text-amber-700"
-																: "border-sky-200 bg-sky-50 text-sky-700";
-													return (
-														<div key={finding.id} className={cn("rounded-md border px-3 py-2", tone)}>
-															<div className="flex items-start gap-2">
-																<AlertTriangle className="h-4 w-4 mt-0.5" />
-																<div>
-																	<p className="text-sm font-semibold">{finding.title}</p>
-																	{finding.message ? (
-																		<p className="text-xs mt-0.5">{finding.message}</p>
-																	) : null}
-																</div>
-															</div>
-														</div>
-													);
-												})}
+										action={
+											isFieldDirty("porcentaje") ? (
+												<span className="text-[11px] font-semibold text-[#f97316]">Sin guardar</span>
+											) : (
+												<span className="text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
+													Progreso
+												</span>
+											)
+										}
+									>
+										<div className="flex h-full flex-col items-center gap-4">
+											<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
+												<CircularProgress value={form.state.values.porcentaje ?? 0} />
 											</div>
-										)}
-									</div>
+											<div className="w-full rounded-lg border border-[#f0f0f0] p-3">
+												<p className="text-[10px] font-semibold uppercase tracking-wide text-[#aaa]">
+													Alertas detectadas
+												</p>
+												{(reportsData?.findings?.length ?? 0) === 0 ? (
+													<p className="mt-1.5 text-[13px] text-[#999]">
+														No hay alertas abiertas para esta obra.
+													</p>
+												) : (
+													<div className="mt-2 space-y-2">
+														{reportsData?.findings.slice(0, 4).map((finding) => {
+															const tone =
+																finding.severity === "critical"
+																	? "border-red-200 bg-red-50 text-red-700"
+																	: finding.severity === "warn"
+																		? "border-amber-200 bg-amber-50 text-amber-700"
+																		: "border-sky-200 bg-sky-50 text-sky-700";
+															return (
+																<div key={finding.id} className={cn("rounded-md border px-3 py-2", tone)}>
+																	<div className="flex items-start gap-2">
+																		<AlertTriangle className="mt-0.5 h-4 w-4" />
+																		<div>
+																			<p className="text-sm font-semibold">{finding.title}</p>
+																			{finding.message ? (
+																				<p className="mt-0.5 text-xs">{finding.message}</p>
+																			) : null}
+																		</div>
+																	</div>
+																</div>
+															);
+														})}
+													</div>
+												)}
+											</div>
+										</div>
+									</ShellCard>
 								</motion.div>
 
 								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.25 }}
-									className="rounded-lg border bg-card shadow-sm overflow-hidden col-span-2 row-span-1"
+									className="lg:col-span-8"
 								>
-									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
-										<div className="flex items-center gap-2">
-											<div className="flex flex-wrap items-center justify-between gap-2 w-full">
-												<div className="flex items-center gap-2">
-
-													<LineChartIcon className="h-5 w-5 text-primary" />
-													<h2 className="text-base sm:text-lg font-semibold">Curva de avance</h2>
-												</div>
-												{reportsData?.curve ? (
-													<p className="text-xs text-muted-foreground">
-														{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
-													</p>
-												) : null}
-											</div>
-										</div>
-									</div>
-									<div className="p-4 sm:pt-2 sm:p-6 space-y-5">
-										<div className="space-y-2">
-											{reportsData?.curve ? (
-												<AdvanceCurveChart points={reportsData.curve.points} />
-											) : (
-												<div className="rounded border border-dashed p-4 text-sm text-muted-foreground">
+									<ShellCard
+										title="Curva de avance"
+										icon={LineChartIcon}
+										bodyClassName="p-4"
+										action={
+											reportsData?.curve ? (
+												<p className="text-[11px] text-[#bbb]">
+													{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
+												</p>
+											) : undefined
+										}
+									>
+										{reportsData?.curve ? (
+											<AdvanceCurveChart points={reportsData.curve.points} />
+										) : (
+											<div className="flex h-[274px] flex-col rounded-lg border border-dashed border-[#e8e8e8] p-4">
+												<div className="rounded-lg border border-[#f0f0f0] px-4 py-3 text-[13px] text-[#bbb]">
 													No se detectaron tablas Curva Plan + PMC Resumen con datos suficientes.
 												</div>
-											)}
-										</div>
-									</div>
+												<div className="mt-4 flex-1 rounded-lg bg-[linear-gradient(to_right,rgba(240,240,240,0.6)_1px,transparent_1px),linear-gradient(to_bottom,rgba(240,240,240,0.6)_1px,transparent_1px)] bg-[size:24px_24px]" />
+											</div>
+										)}
+									</ShellCard>
 								</motion.section>
 							</div>
 
-							<div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+							<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
 								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.28 }}
-									className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									className="lg:col-span-6"
 								>
-									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
-										<div className="flex items-center gap-2">
-											<Building2 className="h-5 w-5 text-primary" />
-											<h2 className="text-base sm:text-lg font-semibold">Información General</h2>
+									<ShellCard title="Información General" icon={Landmark}>
+										<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+											<MiniField
+												icon={MapPin}
+												label="Designación y ubicación"
+												value={form.state.values.designacionYUbicacion || "No especificado"}
+												highlighted={isFieldDirty("designacionYUbicacion")}
+											/>
+											<MiniField
+												icon={Building2}
+												label="Entidad contratante"
+												value={form.state.values.entidadContratante || "No especificado"}
+												highlighted={isFieldDirty("entidadContratante")}
+											/>
+											<MiniField
+												icon={Calendar}
+												label="Mes básico"
+												value={form.state.values.mesBasicoDeContrato || "No especificado"}
+												highlighted={isFieldDirty("mesBasicoDeContrato")}
+											/>
+											<MiniField
+												icon={Calendar}
+												label="Iniciación"
+												value={form.state.values.iniciacion || "No especificado"}
+												highlighted={isFieldDirty("iniciacion")}
+											/>
+											<MiniField
+												icon={Hash}
+												label="N° de obra"
+												value={`#${form.state.values.n ?? 0}`}
+												highlighted={isFieldDirty("n")}
+											/>
+											<MiniField
+												icon={Ruler}
+												label="Superficie"
+												value={`${formatNumber(form.state.values.supDeObraM2, " m²")}`}
+												highlighted={isFieldDirty("supDeObraM2")}
+											/>
 										</div>
-									</div>
-									<div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-										<div className="rounded border p-3">
-											<p className="text-xs text-muted-foreground mb-1">Designación y ubicación</p>
-											<p className="text-sm">{form.state.values.designacionYUbicacion || "No especificado"}</p>
-										</div>
-										<div className="rounded border p-3">
-											<p className="text-xs text-muted-foreground mb-1">Entidad contratante</p>
-											<p className="text-sm">{form.state.values.entidadContratante || "No especificado"}</p>
-										</div>
-										<div className="rounded border p-3">
-											<p className="text-xs text-muted-foreground mb-1">Mes básico</p>
-											<p className="text-sm">{form.state.values.mesBasicoDeContrato || "No especificado"}</p>
-										</div>
-										<div className="rounded border p-3">
-											<p className="text-xs text-muted-foreground mb-1">Iniciación</p>
-											<p className="text-sm">{form.state.values.iniciacion || "No especificado"}</p>
-										</div>
-										<div className="rounded border p-3">
-											<p className="text-xs text-muted-foreground mb-1">N° de obra</p>
-											<p className="text-sm">#{form.state.values.n}</p>
-										</div>
-										<div className="rounded border p-3">
-											<p className="text-xs text-muted-foreground mb-1">Superficie</p>
-											<p className="text-sm">{form.state.values.supDeObraM2.toLocaleString("es-AR")} m²</p>
-										</div>
-									</div>
+									</ShellCard>
 								</motion.section>
 
 								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.3 }}
-									className="rounded-lg border bg-card shadow-sm overflow-hidden"
+									className="lg:col-span-6"
 								>
-									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
-										<div className="flex items-center gap-2">
-											<DollarSign className="h-5 w-5 text-primary" />
-											<h2 className="text-base sm:text-lg font-semibold">Datos Financieros</h2>
-										</div>
-									</div>
-									<div className="p-4 sm:p-6 space-y-4">
-										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("contratoMasAmpliaciones") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-													Contrato más ampliaciones
-													{isFieldDirty("contratoMasAmpliaciones") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm font-mono">
-													$ {form.state.values.contratoMasAmpliaciones.toLocaleString("es-AR")}
-												</p>
+									<ShellCard title="Datos Financieros" icon={BadgeDollarSign}>
+										<div className="space-y-5">
+											<div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+												<KpiItem
+													label="Contrato + ampliaciones"
+													value={formatCurrency(form.state.values.contratoMasAmpliaciones)}
+												/>
+												<KpiItem
+													label="Certificado a la fecha"
+													value={formatCurrency(form.state.values.certificadoALaFecha)}
+												/>
+												<KpiItem
+													label="Saldo a certificar"
+													value={formatCurrency(form.state.values.saldoACertificar)}
+												/>
 											</div>
-
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("certificadoALaFecha") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-													Certificado a la fecha
-													{isFieldDirty("certificadoALaFecha") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm font-mono">
-													$ {form.state.values.certificadoALaFecha.toLocaleString("es-AR")}
-												</p>
-											</div>
-
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("saldoACertificar") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-													Saldo a certificar
-													{isFieldDirty("saldoACertificar") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm font-mono">
-													$ {form.state.values.saldoACertificar.toLocaleString("es-AR")}
-												</p>
+											<div className="h-px bg-[#f0f0f0]" />
+											<div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+												<MiniField
+													icon={FileText}
+													label="Según contrato"
+													value={`${formatNumber(form.state.values.segunContrato, " meses")}`}
+													highlighted={isFieldDirty("segunContrato")}
+												/>
+												<MiniField
+													icon={TrendingUp}
+													label="Prórrogas"
+													value={`${formatNumber(form.state.values.prorrogasAcordadas, " meses")}`}
+													highlighted={isFieldDirty("prorrogasAcordadas")}
+												/>
+												<MiniField
+													icon={Calendar}
+													label="Plazo total"
+													value={`${formatNumber(form.state.values.plazoTotal, " meses")}`}
+													highlighted={isFieldDirty("plazoTotal")}
+												/>
+												<MiniField
+													icon={Calendar}
+													label="Transcurrido"
+													value={`${formatNumber(form.state.values.plazoTransc, " meses")}`}
+													highlighted={isFieldDirty("plazoTransc")}
+												/>
 											</div>
 										</div>
-
-										<Separator />
-
-										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("segunContrato") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-													Según contrato
-													{isFieldDirty("segunContrato") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm">
-													{form.state.values.segunContrato} meses
-												</p>
-											</div>
-
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("prorrogasAcordadas") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-													Prórrogas acordadas
-													{isFieldDirty("prorrogasAcordadas") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm">
-													{form.state.values.prorrogasAcordadas} meses
-												</p>
-											</div>
-
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("plazoTotal") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-													Plazo total
-													{isFieldDirty("plazoTotal") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm">
-													{form.state.values.plazoTotal} meses
-												</p>
-											</div>
-
-											<div
-												className={cn(
-													"px-3 lg:p-3  rounded-md transition-colors",
-													isFieldDirty("plazoTransc") && "bg-orange-primary/5 border-2 border-orange-primary/40"
-												)}
-											>
-												<label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-													Transcurrido
-													{isFieldDirty("plazoTransc") && (
-														<span className="text-xs text-orange-primary font-semibold ml-auto">• Sin guardar</span>
-													)}
-												</label>
-												<p className="text-sm">
-													{form.state.values.plazoTransc} meses
-												</p>
-											</div>
-										</div>
-									</div>
+									</ShellCard>
 								</motion.section>
 							</div>
 
@@ -1037,7 +977,7 @@ export function ObraGeneralTab({
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.4 }}
-									className="flex justify-center flex-col items-end gap-3 p-4 sticky bottom-0 left-0"
+									className="sticky bottom-0 left-0 z-10 flex flex-col items-end gap-3 rounded-xl border border-[#f7b26a] bg-[#fffaf5]/95 p-4 backdrop-blur"
 								>
 									<div className="flex items-center gap-2 text-orange-primary">
 										<AlertCircle className="h-5 w-5" />

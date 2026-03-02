@@ -39,7 +39,8 @@ export function ExcelObraName() {
     return PAGE_NAME_MAP[firstSegment] || firstSegment;
   };
 
-  const pageName = getPageName();
+  // const pageName = getPageName();
+  const pageName = "";
 
   useEffect(() => {
     if (!obraId) {

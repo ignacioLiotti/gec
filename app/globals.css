@@ -6,6 +6,8 @@
 @theme inline {
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
+	--color-back-dark: #fafafa;
+	--color-back-darker: #f0f0f0;
 	--font-sans: var(--font-geist-sans);
 	--font-mono: var(--font-geist-mono);
 	--font-ui-serif: var(--font-geist-serif);
@@ -47,14 +49,31 @@
 
 	--color-orange-primary: #ff5800;
 
-	/* background with lines at 60deg every 10px */
+	--shadow-card:
+		0 0 0 1px #ffffff14 inset, 0 0 0 1px #09090b1f,
+		0 0.7px 0.9px -1px #09090b14, 0 3px 4px -2px #09090b24;
+
+	--bg-login-button:
+		radial-gradient(100% 50% at 50% 0, #fff3 0, #fff0 100%),
+		var(--background-50, #fafafa80);
+
+	--shadow-dark-wrapper:
+		0 0 0 1px #28255a14, 0 1px 0 0 #fff9 inset, 0 0 0 1px #ffffff4d inset,
+		0 0 10px 0 #4f38921a inset, 0 162px 65px 0 #0b090c03;
+}
+
+@layer utilities {
+	.bg-login-button {
+		background: var(--bg-login-button);
+	}
 }
 
 :root {
 	--radius: 0.375rem;
 	--background: oklch(0.975 0 106);
+
 	--foreground: oklch(0.145 0 0);
-	--card: #f0efea;
+	--card: #fff;
 	--card-foreground: oklch(0.145 0 0);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.145 0 0);
@@ -67,7 +86,8 @@
 	--accent: oklch(0.97 0 0);
 	--accent-foreground: oklch(0.205 0 0);
 	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.922 0 0);
+	/* --border: oklch(0.922 0 0); */
+	--border: oklch(0.17 0.01 0 / 8%);
 	--input: oklch(0.922 0 0);
 	--ring: oklch(0.708 0 0);
 	--chart-1: oklch(0.646 0.222 41.116);
@@ -410,6 +430,32 @@
 	contain: layout style;
 }
 
+/* Scrollbar width */
+.scrollbar::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+/* Track (background) */
+.scrollbar::-webkit-scrollbar-track {
+	background: #fafafa; /* change to your color */
+}
+
+/* Thumb (the draggable part) */
+.scrollbar::-webkit-scrollbar-thumb {
+	background: #334155;
+	border-radius: 9999px;
+}
+
+.scrollbar::-webkit-scrollbar-thumb:hover {
+	background: #475569;
+}
+
+/* Firefox */
+.scrollbar {
+	scrollbar-color: #252e3a9c #f0f0f0;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
@@ -418,5 +464,66 @@
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 		scroll-behavior: auto !important;
+	}
+}
+@layer components {
+	.gradient-ring {
+		--space: 1px;
+		--opacity-start: 35%;
+		--opacity-end: 80%;
+
+		content: "";
+		position: absolute;
+		inset: calc(-1 * var(--space));
+		padding: var(--space);
+		border-radius: inherit;
+
+		/* fallback */
+		background-image: linear-gradient(
+			to bottom,
+			var(--primary),
+			var(--primary)
+		);
+
+		/* la magia: ring recortado con máscara */
+		-webkit-mask-image:
+			linear-gradient(#000, #000), linear-gradient(#000, #000);
+		mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+		-webkit-mask-clip: content-box, border-box;
+		mask-clip: content-box, border-box;
+		-webkit-mask-origin: content-box, border-box;
+		mask-origin: content-box, border-box;
+		-webkit-mask-composite: xor;
+		mask-composite: exclude;
+	}
+
+	@supports (color: color-mix(in lab, red, red)) {
+		.gradient-ring {
+			background-image: linear-gradient(
+				to bottom,
+				color-mix(in srgb, var(--primary) var(--opacity-start), transparent),
+				color-mix(in srgb, var(--primary) var(--opacity-end), transparent)
+			);
+		}
+	}
+
+	.gradient-shadow {
+		box-shadow:
+			0 1px 0 0 #ffffff80 inset,
+			0 46px 18px 0 var(--primary),
+			0 26px 15px 0 var(--primary),
+			0 11px 11px 0 var(--primary),
+			0 3px 6px 0 var(--primary);
+	}
+
+	@supports (color: color-mix(in lab, red, red)) {
+		.gradient-shadow {
+			box-shadow:
+				0 1px 0 0 #ffffff80 inset,
+				0 46px 18px 0 color-mix(in srgb, var(--primary) 1%, transparent),
+				0 26px 15px 0 color-mix(in srgb, var(--primary) 4%, transparent),
+				0 11px 11px 0 color-mix(in srgb, var(--primary) 7%, transparent),
+				0 3px 6px 0 color-mix(in srgb, var(--primary) 8%, transparent);
+		}
 	}
 }

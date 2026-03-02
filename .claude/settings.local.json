@@ -11,7 +11,19 @@
       "Bash(xargs ls:*)",
       "Bash(git add:*)",
       "Bash(grep:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "mcp__paper__get_basic_info",
+      "mcp__paper__get_font_family_info",
+      "mcp__paper__create_artboard",
+      "mcp__paper__write_html",
+      "mcp__paper__get_screenshot",
+      "mcp__paper__get_children",
+      "mcp__paper__update_styles",
+      "mcp__paper__delete_nodes",
+      "mcp__paper__get_node_info",
+      "mcp__ide__getDiagnostics",
+      "mcp__paper__get_tree_summary",
+      "mcp__paper__finish_working_on_nodes"
     ],
     "deny": [],
     "ask": []

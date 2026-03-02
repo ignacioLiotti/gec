@@ -30,6 +30,7 @@ import {
 	Calendar,
 	DollarSign,
 	Clock,
+	ArrowUpRight,
 } from "lucide-react";
 import Link from "next/link";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
@@ -69,10 +70,12 @@ const ObraDetailLink = memo(function ObraDetailLink({
 	return (
 		<Link
 			href={`/excel/${obraId}`}
-			className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2"
+			className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2 "
 			onMouseEnter={() => prefetchObra(obraId)}
 		>
-			<ExternalLink className="min-h-4 min-w-4 max-w-4 max-h-4 text-muted-foreground group-hover:text-primary" />
+			<span className="inline-flex size-4 h-4 w-4 min-h-4 min-w-4 max-h-4 max-w-4 items-center justify-center rounded shadow-card text-[10px] text-bold text-primary/80 group-hover:text-white group-hover:bg-orange-primary/80">
+				<ArrowUpRight className="h-3 w-3 min-h-3 min-w-3 max-h-3 max-w-3 text-muted-foreground group-hover:text-white " />
+			</span>
 			<TruncatedTextWithTooltip text={text} />
 		</Link>
 	);
@@ -159,6 +162,28 @@ const clampPercentage = (value: unknown): number => {
 	const pct = toNumber(value);
 	if (!Number.isFinite(pct)) return 0;
 	return Math.max(0, Math.min(100, pct));
+};
+
+const renderAvanceContent = (
+	value: unknown,
+	options?: { labelClassName?: string }
+): ReactNode => {
+	const avance = clampPercentage(value);
+	const displayValue = Number.isInteger(avance) ? String(avance) : avance.toFixed(1);
+
+	return (
+		<div className="flex w-full items-center gap-2 px-3">
+			<div className="h-2 flex-1 overflow-hidden rounded-full bg-orange-300/90">
+				<div
+					className="h-full rounded-full bg-orange-primary/80 transition-[width]"
+					style={{ width: `${avance}%` }}
+				/>
+			</div>
+			<span className={cn("min-w-[3rem] text-right font-mono tabular-nums", options?.labelClassName)}>
+				{displayValue}%
+			</span>
+		</div>
+	);
 };
 
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
@@ -1345,6 +1370,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		width: 25,
 		enableResize: false,
 		enableSort: false,
+		cellClassName: "group-hover:text-orange-primary group-hover:font-semibold",
 		// sortFn: (a, b) => toNumber(a.n) - toNumber(b.n),
 		// searchFn: (row, query) => String(row.n ?? "").includes(query),
 		// validators: {
@@ -1562,7 +1588,21 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		field: "porcentaje",
 		enableHide: true,
 		enablePin: false,
-		cellType: "text",
+		cellType: "badge",
+		cellClassName: "group-hover:text-orange-primary group-hover:font-semibold",
+		cellConfig: {
+			renderReadOnly: ({ value }) => renderAvanceContent(value),
+			renderEditable: ({ value, input }) => (
+				<div className="group relative h-full w-full ">
+					<div className="pointer-events-none h-full w-full flex items-center group-focus-within:opacity-0">
+						{renderAvanceContent(value, {
+							labelClassName: "transition-opacity",
+						})}
+					</div>
+					{input}
+				</div>
+			),
+		},
 		sortFn: (a, b) => toNumber(a.porcentaje) - toNumber(b.porcentaje),
 		searchFn: (row, query) => String(row.porcentaje ?? "").includes(query),
 		defaultValue: null,
@@ -1751,12 +1791,15 @@ const resolveColumnsFromConfig = (
 		const baseId = item.baseColumnId ?? item.id;
 		const baseColumn = BASE_COLUMNS_BY_ID.get(baseId);
 		if (!baseColumn) continue;
+		const preserveBaseCellType =
+			typeof baseColumn.cellConfig?.renderReadOnly === "function" ||
+			typeof baseColumn.cellConfig?.renderEditable === "function";
 		resolved.push({
 			...baseColumn,
 			id: item.id || baseColumn.id,
 			label: item.label || baseColumn.label,
 			width: typeof item.width === "number" ? item.width : baseColumn.width,
-			cellType: item.cellType ?? baseColumn.cellType,
+			cellType: preserveBaseCellType ? baseColumn.cellType : (item.cellType ?? baseColumn.cellType),
 			required: item.required ?? baseColumn.required,
 			editable: item.editable ?? baseColumn.editable,
 			enableHide: item.enableHide ?? baseColumn.enableHide,
@@ -2210,27 +2253,27 @@ const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>[
 		const payload = {
 			detalleObras: rows.map((row, index) => mapDetailRowToPayload(row, index)),
 		};
-	const response = await fetch("/api/obras", {
-		method: "PUT",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify(payload),
-	});
-	if (!response.ok) {
-		const errorPayload = await response.json().catch(() => ({}));
-		const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
-		const detailErrors = Array.isArray(errorPayload?.details?.fieldErrors?.detalleObras)
-			? (errorPayload.details.fieldErrors.detalleObras as string[])
-			: [];
-		const uniqueDetailErrors = Array.from(
-			new Set(detailErrors.map((msg) => String(msg).trim()).filter(Boolean))
-		);
-		const detailsMessage =
-			uniqueDetailErrors.length > 0 ? uniqueDetailErrors.join(" · ") : null;
-		throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
-	}
-};
+		const response = await fetch("/api/obras", {
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+		});
+		if (!response.ok) {
+			const errorPayload = await response.json().catch(() => ({}));
+			const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
+			const detailErrors = Array.isArray(errorPayload?.details?.fieldErrors?.detalleObras)
+				? (errorPayload.details.fieldErrors.detalleObras as string[])
+				: [];
+			const uniqueDetailErrors = Array.from(
+				new Set(detailErrors.map((msg) => String(msg).trim()).filter(Boolean))
+			);
+			const detailsMessage =
+				uniqueDetailErrors.length > 0 ? uniqueDetailErrors.join(" · ") : null;
+			throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
+		}
+	};
 
 const obrasDetalleBaseConfig: Omit<
 	FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>,

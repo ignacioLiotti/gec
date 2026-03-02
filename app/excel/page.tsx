@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, Upload } from "lucide-react";
+import { FileText, Search, Upload } from "lucide-react";
 import Papa from "papaparse";
 import {
 	FormTable,
@@ -28,6 +28,8 @@ import {
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
+import { NotchTail } from "./[obraId]/tabs/file-manager/file-manager";
 
 type CsvObra = {
 	n?: number | string | null;
@@ -160,12 +162,15 @@ const buildHeaders = (rows: CsvRow[], headerRows: number) => {
 };
 
 const DS = {
-	page: "bg-stone-100",
-	frame: "rounded-3xl border border-stone-200/70 bg-stone-100/70 p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]",
-	frameInner: "rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]",
-	panel: "rounded-2xl border border-stone-200 bg-stone-50/60",
-	card: "rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]",
+	page: "bg-[#fafafa]",
+	frame: "rounded-[28px] border border-[#ece7df] bg-[#f6f2eb]/75 p-2 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_18px_45px_rgba(15,23,42,0.06)]",
+	frameInner: "rounded-[24px] border border-[#f3eee7] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(250,250,250,0.96)_100%)] shadow-[0_1px_0_rgba(255,255,255,0.9)_inset]",
+	panel: "rounded-xl border border-[#ece7df] bg-[radial-gradient(100%_50%_at_50%_0,rgba(255,255,255,0.24)_0,rgba(255,255,255,0)_100%),rgba(250,250,250,0.8)] shadow-[0_0_0_1px_rgba(40,37,90,0.06),0_1px_0_rgba(255,255,255,0.75)_inset,0_0_0_1px_rgba(255,255,255,0.35)_inset,0_0_10px_rgba(79,56,146,0.06)_inset]",
+	card: "overflow-hidden rounded-2xl border border-[#ece7df] bg-white/95 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_32px_rgba(15,23,42,0.06)]",
 };
+
+const toolButtonClass =
+	"gap-2 rounded-lg border-[#e8e1d8] bg-white px-3.5 text-[#5a5248] hover:bg-[#fcfaf7] hover:text-[#1f1a17]";
 
 function Framed({
 	className,
@@ -493,10 +498,10 @@ export default function ExcelPage() {
 					<div className="space-y-4 p-4">
 						<div className="flex items-center justify-between gap-2">
 							<div>
-								<h1 className="text-2xl font-semibold text-stone-900">Panel de obras</h1>
-								<p className="text-xs text-stone-500">Vista rápida y acceso a cada obra</p>
+								<h1 className="text-2xl font-semibold tracking-tight text-[#1a1a1a]">Panel de obras</h1>
+								<p className="text-xs text-[#999]">Vista rápida y acceso a cada obra</p>
 							</div>
-							<Button variant="outline" size="sm" asChild className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+							<Button variant="outline" size="sm" asChild className={toolButtonClass}>
 								<Link href="/excel/reporte" className="gap-2">
 									<FileText className="h-4 w-4" />
 									Reporte
@@ -504,30 +509,30 @@ export default function ExcelPage() {
 							</Button>
 						</div>
 						{isLoadingMobile ? (
-							<div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-sm text-stone-500">Cargando obras...</div>
+							<div className="rounded-xl border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-sm text-[#999]">Cargando obras...</div>
 						) : (
 							<div className="grid grid-cols-1 gap-3">
 								{mobileObras.map((obra) => (
 									<Link
 										key={obra.id}
 										href={`/excel/${obra.id}`}
-										className="rounded-2xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-colors hover:bg-stone-50/60"
+										className="rounded-2xl border border-[#ece7df] bg-white p-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_10px_24px_rgba(15,23,42,0.05)] transition-colors hover:bg-[#fffaf5]"
 									>
-										<div className="text-xs text-stone-500">#{obra.n ?? "-"}</div>
-										<div className="text-base font-semibold text-stone-900">
+										<div className="text-xs text-[#999]">#{obra.n ?? "-"}</div>
+										<div className="text-base font-semibold text-[#1a1a1a]">
 											{toText(obra.designacionYUbicacion) || "Obra"}
 										</div>
-										<div className="text-sm text-stone-500">{toText(obra.entidadContratante)}</div>
+										<div className="text-sm text-[#777]">{toText(obra.entidadContratante)}</div>
 										<div className="mt-3">
 											<div className="mb-1 flex items-center justify-between text-xs">
-												<span className="text-stone-500">Avance</span>
-												<span className="font-medium tabular-nums text-stone-700">
+												<span className="text-[#999]">Avance</span>
+												<span className="font-medium tabular-nums text-[#555]">
 													{clampPercentage(obra.porcentaje).toFixed(1)}%
 												</span>
 											</div>
-											<div className="h-2 rounded-full bg-stone-100">
+											<div className="h-2 rounded-full bg-[#f3eee7]">
 												<div
-													className="h-2 rounded-full bg-cyan-600"
+													className="h-2 rounded-full bg-orange-primary"
 													style={{ width: `${clampPercentage(obra.porcentaje)}%` }}
 												/>
 											</div>
@@ -535,7 +540,7 @@ export default function ExcelPage() {
 									</Link>
 								))}
 								{mobileObras.length === 0 && (
-									<div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-sm text-stone-500">
+									<div className="rounded-xl border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-sm text-[#999]">
 										No hay obras para mostrar.
 									</div>
 								)}
@@ -548,23 +553,23 @@ export default function ExcelPage() {
 	}
 
 	return (
-		<div className={cn("px-4 py-4 md:px-6 md:py-6 min-h-full", DS.page)}>
+		<div className={cn("min-h-full px-4 py-4 md:px-8 md:py-8 max-w-[calc(100vw-var(--sidebar-current-width))]", DS.page)}>
 			<Sheet open={isPreviewOpen} onOpenChange={(open) => !open && handleCancelPreview()}>
-				<SheetContent side="right" className="sm:max-w-lg border-l-stone-200 bg-stone-100 p-2 shadow-[0_20px_60px_rgba(0,0,0,0.10)]">
-					<div className="flex h-full flex-col rounded-2xl border border-stone-200/80 bg-white">
+				<SheetContent side="right" className="sm:max-w-lg border-l-[#ece7df] bg-[#f6f2eb] p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)]">
+					<div className="flex h-full flex-col rounded-[24px] border border-[#f3eee7] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(250,250,250,0.96)_100%)]">
 						<SheetHeader>
-							<SheetTitle className="text-stone-900">Previsualización de importación</SheetTitle>
-							<SheetDescription className="text-stone-500">
+							<SheetTitle className="text-[#1a1a1a]">Previsualización de importación</SheetTitle>
+							<SheetDescription className="text-[#999]">
 								{pendingFileName ? `Archivo: ${pendingFileName}` : "Revisá las primeras filas antes de importar."}
 							</SheetDescription>
 						</SheetHeader>
 						<div className="px-4 pb-4">
-							<div className="mb-2 rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs text-stone-600">
+							<div className="mb-2 rounded-xl border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-xs text-[#777]">
 								Se importarán {pendingUpdates.length} obras. Mostrando las primeras {previewRows.length}.
 							</div>
-							<div className="overflow-hidden rounded-xl border border-stone-200">
+							<div className="overflow-hidden rounded-xl border border-[#ece7df]">
 								<table className="w-full text-xs">
-									<thead className="bg-stone-50 text-stone-600">
+									<thead className="bg-[#fcfaf7] text-[#777]">
 										<tr>
 											<th className="px-3 py-2 text-left">#</th>
 											<th className="px-3 py-2 text-left">Designación</th>
@@ -576,8 +581,8 @@ export default function ExcelPage() {
 									</thead>
 									<tbody>
 										{previewRows.map((row) => (
-											<tr key={row._rowIndex} className="border-t border-stone-200/70 hover:bg-stone-50/60">
-												<td className="px-3 py-2 text-stone-500">{row._rowIndex}</td>
+											<tr key={row._rowIndex} className="border-t border-[#f0ebe5] hover:bg-[#fffaf5]">
+												<td className="px-3 py-2 text-[#999]">{row._rowIndex}</td>
 												<td className="px-3 py-2">{toText(row.designacionYUbicacion)}</td>
 												<td className="px-3 py-2">{toText(row.entidadContratante)}</td>
 												<td className="px-3 py-2">{toText(row.mesBasicoDeContrato)}</td>
@@ -591,10 +596,10 @@ export default function ExcelPage() {
 						</div>
 						<SheetFooter>
 							<div className="flex w-full items-center justify-end gap-2">
-								<Button type="button" variant="outline" onClick={handleCancelPreview} disabled={isImporting} className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+								<Button type="button" variant="outline" onClick={handleCancelPreview} disabled={isImporting} className={toolButtonClass}>
 									Cancelar
 								</Button>
-								<Button type="button" onClick={handleConfirmImport} disabled={isImporting} className="bg-stone-900 text-white hover:bg-stone-800">
+								<Button type="button" onClick={handleConfirmImport} disabled={isImporting} className="rounded-lg bg-[#1f1a17] text-white hover:bg-[#2b241f]">
 									{isImporting ? "Importando..." : "Confirmar importación"}
 								</Button>
 							</div>
@@ -604,66 +609,123 @@ export default function ExcelPage() {
 			</Sheet>
 
 			<FormTable key={refreshKey} config={tableConfig}>
-				<Framed className="md:max-w-[calc(97vw-var(--sidebar-current-width))]">
-					<div className="space-y-4 p-4 sm:p-5 relative">
-						<div className="flex flex-col gap-3">
-							<div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-								<div>
-									<h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-stone-900">
-										Panel de obras
-									</h1>
-									<p className="text-sm text-stone-500">
-										Filtrá, buscá y actualizá tus obras desde una vista unificada.
-									</p>
-								</div>
-								<FormTableTabs className={cn(DS.panel, "p-2 justify-start")} />
+				<div className="relative space-y-5 ">
+					<div className="flex flex-col gap-4">
+						<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between w-full ">
+							<div className="">
+								<h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a] sm:text-4xl">
+									Panel de obras
+								</h1>
+								<p className="mt-1 text-sm text-[#999]">
+									Filtrá, buscá y actualizá tus obras desde una vista unificada.
+								</p>
 							</div>
-
-							<div className={cn(DS.panel, "p-2")}>
-								<div className="flex w-full flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-									<FormTableToolbar />
-									<div className="flex items-center gap-2">
-										<input
-											ref={inputRef}
-											type="file"
-											accept=".csv,text/csv"
-											className="hidden"
-											onChange={(event) => {
-												const file = event.target.files?.[0];
-												if (file) handleCsvImport(file);
-											}}
-										/>
-										<Button
-											type="button"
-											variant="outline"
-											size="sm"
-											onClick={handleImportClick}
-											disabled={isImporting}
-											className="gap-2 border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
-										>
-											<Upload className="h-4 w-4" />
-											{isImporting ? "Importando..." : "Importar CSV"}
-										</Button>
-										<Button variant="outline" size="sm" asChild className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
-											<Link href="/excel/reporte" className="gap-2">
-												<FileText className="h-4 w-4" />
-												Generar Reporte
-											</Link>
-										</Button>
-									</div>
-								</div>
-							</div>
+							<FormTableTabs
+								className={cn(
+									"flex justify-start rounded-lg p-1 h-11",
+								)}
+							/>
 						</div>
 
-						<div className={cn(DS.card, "p-2")}>
-							<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-0" />
+					</div>
+
+					<div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:-mb-0">
+						<div className="flex items-center gap-2 relative rounded-xl xl:rounded-r-none xl:rounded-b-none border xl:border-r-0 xl:border-b-0 border-[#09090b1f] bg-card p-2 pb-0 -ml-[1px]" style={
+							{
+								"--notch-bg": "white",
+								"--notch-stroke": "rgb(231 229 228)", // stone-200
+							} as React.CSSProperties
+						}>
+
+							<FormTableToolbar />
+							<NotchTail side="right" className=" mb-[1px] h-[45px] z-100 !hidden xl:!block" />
+
 						</div>
-						<div className={cn(DS.panel, "p-2")}>
-							<FormTablePagination />
+						<div className="flex items-center gap-2 xl:justify-end relative rounded-xl xl:rounded-l-none xl:rounded-b-none border xl:border-l-0 xl:border-b-0 border-[#09090b1f] bg-card p-2 pb-0 -mr-[1px]"
+							style={{
+								"--notch-bg": "white",
+								"--notch-stroke": "rgb(231 229 228)", // stone-200
+							} as React.CSSProperties
+							}>
+							<NotchTail side="left" className=" mb-[1px] h-[45px] !hidden xl:!block" />
+							<input
+								ref={inputRef}
+								type="file"
+								accept=".csv,text/csv"
+								className="hidden"
+								onChange={(event) => {
+									const file = event.target.files?.[0];
+									if (file) handleCsvImport(file);
+								}}
+							/>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={handleImportClick}
+								disabled={isImporting}
+							>
+								<Upload className="h-4 w-4" />
+								{isImporting ? "Importando..." : "Importar CSV"}
+							</Button>
+							<Button variant="outline" asChild>
+								<Link href="/excel/reporte" className="gap-2">
+									<FileText className="h-4 w-4" />
+									Generar Reporte
+								</Link>
+							</Button>
 						</div>
 					</div>
-				</Framed>
-			</FormTable>
+					<div className="shadow-card bg-card p-2.5 pt-3.5 rounded-xl xl:rounded-t-none gap-4 flex flex-col">
+						<FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-0 shadow-card rounded-lg overflow-hidden " />
+						<Separator className="bg-border" />
+						<FormTablePagination />
+					</div>
+				</div>
+			</FormTable >
+		</div >
+	);
+}
+
+
+type GlassyIconProps = {
+	className?: string;
+	title?: string;
+	/** por default usa var(--primary) como en tu snippet */
+	primaryVar?: string;
+	children: React.ReactNode;
+	size?: number;
+	rounded?: string;
+};
+
+export function GlassyIcon({
+	className = "",
+	title = "Power Lightning",
+	primaryVar = "var(--color-orange-primary)",
+	children,
+	size = 10,
+	rounded = "lg",
+}: GlassyIconProps) {
+	return (
+		<div
+			className={[
+				`relative flex h-${size} shrink-0 items-center justify-center rounded-${rounded}`,
+				"transition-colors duration-300",
+				"[&_*]:transition-colors [&_*]:duration-300",
+				className,
+			].join(" ")}
+			style={
+				{
+					// Esto hace que .gradient-ring y .gradient-shadow usen tu color dinámico
+					["--primary" as any]: primaryVar,
+					// Esto hace que el SVG use ese mismo color (currentColor)
+					color: "var(--primary)",
+				} as React.CSSProperties
+			}
+		>
+			{children}
+
+			<div className={`gradient-ring absolute inset-0 rounded-${rounded}`} />
+			<div className={`gradient-shadow absolute inset-0 rounded-${rounded} bg-[var(--primary)]/20`} />
 		</div>
 	);
 }

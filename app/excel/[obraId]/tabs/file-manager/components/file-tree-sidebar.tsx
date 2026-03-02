@@ -47,7 +47,7 @@ export function FileTreeSidebar({
 	return (
 		<div
 			className={cn(
-				"rounded-lg border border-stone-200 bg-white shadow-sm overflow-auto transition-all duration-300 ease-in-out flex flex-col justify-between",
+				"rounded-lg bg-white shadow-card overflow-auto transition-all duration-300 ease-in-out flex flex-col justify-between",
 				!selectedFolder ? "h-full w-full" : "max-h-[320px] lg:max-h-full"
 			)}
 			onContextMenu={onContextMenu}

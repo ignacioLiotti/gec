@@ -42,7 +42,7 @@ export function ColumnVisibilityMenu({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="secondary" size="sm" className="gap-2" disabled={disabled}>
+				<Button variant="outline" className="gap-2" disabled={disabled}>
 					<Columns3 className="h-4 w-4" />
 					Columnas
 				</Button>

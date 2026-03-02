@@ -914,48 +914,46 @@ export default function Home() {
   // Show dashboard for authenticated users
   return (
     <div className={cn("min-h-screen", DS.page)}>
-      <div className="mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-6 lg:pt-6">
+      <div className="mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-2 lg:pt-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <Framed innerClassName="rounded-xl">
-            <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.1fr_auto] lg:items-start">
-              <div className="space-y-1">
-                <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-stone-900">
-                  Panel de Control
-                </h1>
-                <p className="text-sm text-stone-500">
-                  Resumen de {stats?.total || 0} obras cargadas
-                </p>
-              </div>
-              <div className="flex flex-col gap-3 lg:items-start">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-50">
-                      <Activity className="h-3.5 w-3.5 text-cyan-700" />
-                    </div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xs uppercase tracking-wide text-stone-600">Activas</span>
-                      <span className="text-sm font-semibold text-stone-900 tabular-nums">{stats?.inProgress || 0}</span>
-                    </div>
+          <div className="grid gap-4 p-4 sm:p-2 lg:grid-cols-[1.1fr_auto] lg:items-start">
+            <div className="space-y-1">
+              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-stone-900">
+                Panel de Control
+              </h1>
+              <p className="text-sm text-stone-500">
+                Resumen de {stats?.total || 0} obras cargadas
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 lg:items-start">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-50">
+                    <Activity className="h-3.5 w-3.5 text-cyan-700" />
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-                    </div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xs uppercase tracking-wide text-stone-600">Completadas</span>
-                      <span className="text-sm font-semibold text-stone-900 tabular-nums">{stats?.completed || 0}</span>
-                    </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs uppercase tracking-wide text-stone-600">Activas</span>
+                    <span className="text-sm font-semibold text-stone-900 tabular-nums">{stats?.inProgress || 0}</span>
                   </div>
                 </div>
-
+                <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs uppercase tracking-wide text-stone-600">Completadas</span>
+                    <span className="text-sm font-semibold text-stone-900 tabular-nums">{stats?.completed || 0}</span>
+                  </div>
+                </div>
               </div>
+
             </div>
-          </Framed>
+          </div>
         </motion.div>
 
         {/* Main Grid — 3 equal columns */}

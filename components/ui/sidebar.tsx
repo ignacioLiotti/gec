@@ -245,7 +245,7 @@ function Sidebar({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
+          className="bg-white group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
         >
           {children}
         </div>
@@ -483,14 +483,13 @@ const sidebarMenuButtonVariants = cva(
   "text-muted-foreground " +
 
   // Hover (soft lift, not color flash)
-  "hover:shadow-[0px_4px_8px_rgba(0,0,0,0.08)] " +
-  "hover:text-foreground hover:shadow-[0px_4px_10px_rgba(0,0,0,0.12),0px_0px_0px_1px_#44444454] " +
-  "hover:[background-image:linear-gradient(180deg,rgba(255,255,255,0.05)_0%,rgba(255,255,255,0.02)_100%),linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.06)_100%)] " +
+  // "hover:shadow-[0px_4px_8px_rgba(0,0,0,0.08)] " +
+  // "hover:text-foreground hover:shadow-[0px_4px_10px_rgba(0,0,0,0.12),0px_0px_0px_1px_#44444454] " +
+  // "hover:[background-image:linear-gradient(180deg,rgba(255,255,255,0.05)_0%,rgba(255,255,255,0.02)_100%),linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.06)_100%)] " +
 
   // Active (selected page)
   "data-[active=true]:text-foreground " +
-  "data-[active=true]:shadow-[0px_4px_10px_rgba(0,0,0,0.12),0px_0px_0px_1px_#44444454] " +
-  "data-[active=true]:[background-image:linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_100%),linear-gradient(180deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_100%)] " +
+  "data-[active=true]:bg-[radial-gradient(100%_50%_at_50%_0%,#fff_0%,#fff0_100%),var(--background-85,#fafafad9)] data-[active=true]:shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset,0_8px_3px_0_#0b090c03,0_5px_3px_0_#0b090c08,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_-1px_0_0_#0000001f_inset] " +
 
   // Press
   "active:translate-y-[1px] " +
@@ -504,8 +503,6 @@ const sidebarMenuButtonVariants = cva(
   variants: {
     variant: {
       default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-      outline:
-        "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
     },
     size: {
       default: "h-9 sm:h-8",
@@ -542,6 +539,7 @@ function SidebarMenuButton({
       data-sidebar="menu-button"
       data-size={size}
       data-active={isActive}
+      variant="outline"
       className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
       {...props}
     />

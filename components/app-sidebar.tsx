@@ -26,7 +26,7 @@ import {
 	Globe2,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
 	Sidebar,
@@ -222,11 +222,13 @@ export function AppSidebar({
 	sidebarMacroTables?: SidebarMacroTable[];
 }) {
 	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const router = useRouter();
 	const { state } = useSidebar();
 	const [switchingTenantId, setSwitchingTenantId] = React.useState<string | null>(null);
 	const tenantOptions = tenants ?? [];
 	const activeTenantId = userRoles?.tenantId ?? null;
+	const activeMacroTableId = searchParams.get("macroId");
 
 	const handleTenantSwitch = React.useCallback(
 		async (tenantId: string) => {
@@ -252,6 +254,11 @@ export function AppSidebar({
 		tenantOptions.find((tenant) => tenant.id === activeTenantId) ??
 		tenantOptions[0] ??
 		null;
+	const isMacroTablesActive = Boolean(
+		pathname === "/macro" &&
+		activeMacroTableId &&
+		sidebarMacroTables?.some((table) => table.id === activeMacroTableId)
+	);
 
 	// Helper function to check if user can access a route
 	const canAccessRoute = React.useCallback(
@@ -450,19 +457,23 @@ export function AppSidebar({
 													<SidebarMenuItem>
 														<DropdownMenu>
 															<DropdownMenuTrigger asChild>
-																<SidebarMenuButton tooltip="Tablas">
-																	<Table2 className="size-4" />
+																<SidebarMenuButton asChild isActive={isMacroTablesActive} tooltip="Tablas">
+																	<button type="button">
+																		<Table2 className="size-4" />
+																	</button>
 																</SidebarMenuButton>
 															</DropdownMenuTrigger>
 															<DropdownMenuContent side="right" align="start" className="w-72">
 																<DropdownMenuLabel>Tablas</DropdownMenuLabel>
 																<DropdownMenuSeparator />
 																{sidebarMacroTables.map((table) => {
-																	const isTableActive = pathname === `/macro/${table.id}`;
+																	const tableHref = `/macro?macroId=${encodeURIComponent(table.id)}`;
+																	const isTableActive =
+																		pathname === "/macro" && activeMacroTableId === table.id;
 																	return (
 																		<DropdownMenuItem key={table.id} asChild>
 																			<Link
-																				href={`/macro/${table.id}`}
+																				href={tableHref}
 																				className={isTableActive ? "font-semibold" : undefined}
 																			>
 																				<Columns3 className="size-4" />
@@ -478,20 +489,24 @@ export function AppSidebar({
 													<Collapsible defaultOpen className="group/collapsible">
 														<SidebarMenuItem>
 															<CollapsibleTrigger asChild>
-																<SidebarMenuButton tooltip="Tablas">
-																	<Table2 className="size-4" />
-																	<span>Tablas</span>
-																	<ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+																<SidebarMenuButton asChild isActive={isMacroTablesActive} tooltip="Tablas">
+																	<button type="button">
+																		<Table2 className="size-4" />
+																		<span>Tablas</span>
+																		<ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+																	</button>
 																</SidebarMenuButton>
 															</CollapsibleTrigger>
 															<CollapsibleContent>
 																<SidebarMenuSub>
 																	{sidebarMacroTables.map((table) => {
-																		const isTableActive = pathname === `/macro/${table.id}`;
+																		const tableHref = `/macro?macroId=${encodeURIComponent(table.id)}`;
+																		const isTableActive =
+																			pathname === "/macro" && activeMacroTableId === table.id;
 																		return (
 																			<SidebarMenuSubItem key={table.id}>
 																				<SidebarMenuSubButton asChild isActive={isTableActive}>
-																					<Link href={`/macro/${table.id}`}>
+																					<Link href={tableHref}>
 																						<Columns3 className="size-4" />
 																						{table.name}
 																					</Link>

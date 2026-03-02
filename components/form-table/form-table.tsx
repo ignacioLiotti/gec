@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 	Sheet,
 	SheetContent,
@@ -54,6 +53,7 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Download,
+	Search,
 } from "lucide-react";
 import type {
 	ColumnField,
@@ -102,11 +102,11 @@ export function FormTableToolbar() {
 		<div className="flex flex-wrap items-center justify-between gap-3">
 			<div className="flex flex-wrap items-center gap-2">
 				{search.showInline && (
-					<div className="relative ml-0.5">
-						<SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+					<div className="relative ml-0.5 flex items-center gap-2 group">
+						<Search className="size-4 -mr-6 absolute left-2.5 top-2.5 z-10 text-muted-foreground" />
 						<Input
 							type="search"
-							className="w-64 pl-8"
+							className="h-9 w-64 pointer-events-auto rounded-lg border-[#e8e8e8] pl-9 text-sm bg-white bg-[radial-gradient(100%_50%_at_50%_0%,#fff_0%,#fff0_100%),var(--background-85,#fafafad9)] shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset,0_8px_3px_0_#0b090c03,0_5px_3px_0_#0b090c08,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_-1px_0_0_#0000001f_inset] hover:bg-accent text-foreground"
 							value={search.value}
 							onChange={(event) => search.onChange(event.target.value)}
 							placeholder={search.placeholder}
@@ -118,8 +118,7 @@ export function FormTableToolbar() {
 						<SheetTrigger asChild>
 							<Button
 								type="button"
-								variant={filters.activeCount > 0 ? "default" : "secondary"}
-								size="sm"
+								variant={filters.activeCount > 0 ? "default" : "outline"}
 								className={cn(
 									"gap-2 transition-all",
 									filters.activeCount > 0 && "shadow-sm"
@@ -169,7 +168,7 @@ export function FormTableToolbar() {
 									<Button
 										type="button"
 										variant="ghost"
-										size="sm"
+
 										onClick={filters.reset}
 										className="text-muted-foreground hover:text-foreground"
 									>
@@ -181,7 +180,7 @@ export function FormTableToolbar() {
 											filters.apply();
 											setIsFiltersOpen(false);
 										}}
-										size="sm"
+
 										className="px-6 shadow-sm"
 									>
 										Aplicar
@@ -208,12 +207,12 @@ export function FormTableToolbar() {
 				{config.toolbarActions}
 			</div>
 			<div className="flex flex-wrap items-center gap-2">
-				<Button type="button" variant="secondary" size="sm" className="gap-2" onClick={() => void actions.exportCsv()}>
+				<Button type="button" variant="outline" className="gap-2" onClick={() => void actions.exportCsv()}>
 					<Download className="h-4 w-4" />
 					Exportar tabla
 				</Button>
 				{sorting.state.columnId && (
-					<Button type="button" variant="ghost" size="sm" className="gap-1" onClick={sorting.clear}>
+					<Button type="button" variant="ghost" className="gap-1" onClick={sorting.clear}>
 						<Minus className="h-4 w-4" />
 						Limpiar orden
 					</Button>
@@ -224,32 +223,48 @@ export function FormTableToolbar() {
 }
 
 export function FormTableTabs({ className }: { className?: string }) {
-	const { tabs } = useFormTable<FormTableRow, unknown>();
+	const { tabs, pagination } = useFormTable<FormTableRow, unknown>();
 	if (!tabs.enabled || tabs.items.length === 0) {
 		return null;
 	}
 
-	return (
-		<Tabs
-			value={tabs.activeTab ?? tabs.items[0]?.id ?? ""}
-			onValueChange={tabs.setActiveTab}
-		>
-			<TabsList className={cn("w-full max-w-full overflow-hidden flex-1 flex-grow gap-1", className)}>
-				{tabs.items.map((tab) => (
-					<TabsTrigger
-						key={tab.id}
-						value={tab.id}
+	const handleTabChange = (value: string) => {
+		tabs.setActiveTab(value);
+		pagination.setPage(1);
+	};
 
-						className="group gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground  data-[state=active]:shadow-none rounded-md"
+	return (
+		<div
+			role="tablist"
+			aria-label="Filtros de tabla"
+			className={cn("flex gap-1 shadow-dark-wrapper", className)}
+		>
+			{tabs.items.map((tab) => {
+				const isActive = tabs.activeTab === tab.id;
+				return (
+					<Button
+						key={tab.id}
+						type="button"
+						role="tab"
+						aria-selected={isActive}
+						onClick={() => handleTabChange(tab.id)}
+						variant={isActive ? "default" : "secondary"}
+
+						className="gap-2"
 					>
-						<span>{tab.label}</span>
-						<span className="rounded-full bg-muted px-2 py-0.5 text-xs group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white group-hover:bg-white/20 group-hover:text-white">
+						<span className={isActive ? "text-white" : "text-black"}>{tab.label}</span>
+						<span className={cn(
+							"rounded-full bg-muted px-2 py-0.5 text-xs",
+							isActive
+								? "bg-black/20 text-white"
+								: "hover:bg-black/20 hover:text-white"
+						)}>
 							{tabs.counts[tab.id] ?? 0}
 						</span>
-					</TabsTrigger>
-				))}
-			</TabsList>
-		</Tabs>
+					</Button>
+				);
+			})}
+		</div>
 	);
 }
 
@@ -262,6 +277,7 @@ export function FormTableContent({ className }: { className?: string }) {
 		meta,
 		pagination,
 		sorting,
+		tabs,
 	} = useFormTable<FormTableRow, unknown>();
 	const { externalRefreshVersion } = meta;
 	const rowClassName = config.rowClassName as
@@ -327,7 +343,7 @@ export function FormTableContent({ className }: { className?: string }) {
 					{serverError}
 				</div>
 			)}
-			<div className={cn("relative border border-border rounded-none overflow-x-auto w-full bg-white", className)}>
+			<div className={cn("relative  rounded-none overflow-x-auto w-full bg-white", className)}>
 				{isServerPaging && isFetching && (
 					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm">
 						<Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -336,7 +352,7 @@ export function FormTableContent({ className }: { className?: string }) {
 				)}
 				<div
 					ref={scrollParentRef}
-					className="max-h-[70vh] bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
+					className="max-h-[60vh] overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar ">
 					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
@@ -351,15 +367,15 @@ export function FormTableContent({ className }: { className?: string }) {
 									}}
 								/>
 							))}
-								{showActionsColumn && (
-									<col
-										style={{
-											width: `${colWidths[columnDefs.length] ?? 140}px`,
-										}}
-									/>
-								)}
+							{showActionsColumn && (
+								<col
+									style={{
+										width: `${colWidths[columnDefs.length] ?? 140}px`,
+									}}
+								/>
+							)}
 						</colgroup>
-						<thead className="sticky top-0 z-30 bg-sidebar">
+						<thead className="sticky top-0 z-30 bg-back-darker">
 							<tr>
 								{(() => {
 									const emittedGroups = new Set<string>();
@@ -376,7 +392,7 @@ export function FormTableContent({ className }: { className?: string }) {
 															rowSpan={2}
 															{...getStickyProps(
 																column.id,
-																"relative px-4 py-4 text-left text-xs font-semibold uppercase outline outline-border bg-sidebar"
+																"relative px-4 py-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker"
 															)}
 														>
 															<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
@@ -388,7 +404,7 @@ export function FormTableContent({ className }: { className?: string }) {
 																				onClick={() => toggleSort(column.id)}
 																				className="flex w-full items-center justify-between gap-2 text-left"
 																			>
-																				<span>{column.label}</span>
+																				<span>{column.label.toUpperCase()}</span>
 																				<span className="text-muted-foreground flex items-center gap-2">
 																					{sortState.columnId === column.id ? (
 																						<>
@@ -447,7 +463,7 @@ export function FormTableContent({ className }: { className?: string }) {
 														key={`group-${group.id}`}
 														colSpan={visibleColumns.length}
 														className={cn(
-															"px-4 py-2 text-center text-xs font-semibold uppercase outline outline-border bg-sidebar-accent",
+															"px-4 py-2 text-center text-xs font-semibold uppercase outline outline-border bg-back-darker",
 															group.className
 														)}
 													>
@@ -458,7 +474,7 @@ export function FormTableContent({ className }: { className?: string }) {
 											{showActionsColumn && (
 												<th
 													rowSpan={2}
-													className="relative px-4 py-4 text-right text-xs font-semibold uppercase outline outline-border bg-sidebar"
+													className="relative px-4 py-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker"
 												>
 													<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-end gap-2">
 														<span>Acciones</span>
@@ -478,7 +494,7 @@ export function FormTableContent({ className }: { className?: string }) {
 									if (!groupedColumnLookup.has(column.id)) return null;
 
 									const baseClassName = cn(
-										"relative px-4 py-4 text-left text-xs font-semibold uppercase outline outline-border bg-sidebar"
+										"relative px-4 py-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker"
 									);
 									const isSortable = column.enableSort !== false;
 
@@ -533,7 +549,7 @@ export function FormTableContent({ className }: { className?: string }) {
 								})}
 							</tr>
 						</thead>
-						<tbody className="bg-white">
+						<tbody className="bg-white" key={tabs.activeTab ?? 'all'}>
 							{tableRows.length === 0 ? (
 								<tr>
 									<td
@@ -677,108 +693,105 @@ export function FormTablePagination() {
 	const isLoading = isFetching || isTransitioning;
 
 	return (
-		<>
-			<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-				<div className="flex items-center gap-2 text-foreground">
-					<span>Filas por página</span>
-					{pageSizeLocked ? (
-						<span className="font-medium text-foreground">{pageSize}</span>
-					) : (
-						<Select
-							value={String(pageSize)}
-							onValueChange={(value) => {
-								setPageSize(Number(value));
-							}}
-							disabled={isLoading}
-						>
-							<SelectTrigger className={cn("w-[90px]", isLoading && "opacity-50")}>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{options.map((size) => (
-									<SelectItem key={size} value={String(size)}>
-										{size}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					)}
-					{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-				</div>
-				<div className="flex items-center gap-2">
-					{config.footerActions}
-					{allowAddRows && (
-						<Button type="button" variant="secondary" size="sm" onClick={actions.addRow}>
-							Agregar fila vacía
-						</Button>
-					)}
-					{meta.hasUnsavedChanges && (
-						<Button
-							type="button"
-							onClick={actions.discard}
-							disabled={!meta.hasUnsavedChanges || meta.isSaving}
-							variant="destructiveSecondary"
-							size="sm"
-						>
-							Descartar cambios
-						</Button>
-					)}
-					<Button
-						type="button"
-						onClick={actions.save}
-						disabled={!meta.hasUnsavedChanges || meta.isSaving}
-						size="sm"
-						className="gap-2"
+		<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground px-3 pb-4">
+			<div className="flex items-center gap-2 text-foreground">
+				<span>Filas por página</span>
+				{pageSizeLocked ? (
+					<span className="font-medium text-foreground">{pageSize}</span>
+				) : (
+					<Select
+						value={String(pageSize)}
+						onValueChange={(value) => {
+							setPageSize(Number(value));
+						}}
+						disabled={isLoading}
 					>
-						{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-						{meta.isSaving ? "Guardando..." : "Guardar cambios"}
-					</Button>
-				</div>
-				<div className="flex items-center gap-2">
-					<Button
-						type="button"
-						variant="default"
-						size="sm"
-						onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
-						disabled={!hasPreviousPage || isLoading}
-						className="gap-1"
-					>
-						<ChevronLeft className="h-4 w-4" />
-						Anterior
-					</Button>
-					<span className="text-xs text-muted-foreground">
-						Página {page} de {totalPages}
-					</span>
-					<Button
-						type="button"
-						variant="default"
-						size="sm"
-						onClick={() => startTransition(() => setPage((prev) => prev + 1))}
-						disabled={!hasNextPage || isLoading}
-						className="gap-1"
-					>
-						Siguiente
-						<ChevronRight className="h-4 w-4" />
-					</Button>
-				</div>
-			</div>
-
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				{totalRowCount > 0 && (
-					<div className="flex items-center text-sm text-muted-foreground gap-4">
-						<p>
-							Mostrando <span className="font-medium text-foreground">{visibleRowCount}</span> de{" "}
-							<span className="font-medium text-foreground">{totalRowCount}</span> filas
-						</p>
-						{filters.activeCount > 0 && (
-							<p className="text-xs">
-								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
-							</p>
-						)}
-					</div>
+						<SelectTrigger className={cn("h-9 w-[90px] rounded-lg border-[#e8e8e8] bg-white", isLoading && "opacity-50")}>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{options.map((size) => (
+								<SelectItem key={size} value={String(size)}>
+									{size}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 				)}
+				{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					{totalRowCount > 0 && (
+						<div className="flex items-center text-sm text-muted-foreground gap-4">
+							<p>
+								Mostrando <span className="font-medium text-foreground">{visibleRowCount}</span> de{" "}
+								<span className="font-medium text-foreground">{totalRowCount}</span> filas
+							</p>
+							{filters.activeCount > 0 && (
+								<p className="text-xs">
+									Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+								</p>
+							)}
+						</div>
+					)}
+				</div>
 			</div>
-		</>
+			<div className="flex items-center gap-2">
+				{config.footerActions}
+				{allowAddRows && (
+					<Button type="button" variant="outline" onClick={actions.addRow}>
+						Agregar fila vacía
+					</Button>
+				)}
+				{meta.hasUnsavedChanges && (
+					<Button
+						type="button"
+						onClick={actions.discard}
+						disabled={!meta.hasUnsavedChanges || meta.isSaving}
+						variant="destructiveSecondary"
+
+					>
+						Descartar cambios
+					</Button>
+				)}
+				<Button
+					type="button"
+					onClick={actions.save}
+					disabled={!meta.hasUnsavedChanges || meta.isSaving}
+
+					className="gap-2"
+				>
+					{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+					{meta.isSaving ? "Guardando..." : "Guardar cambios"}
+				</Button>
+			</div>
+			<div className="flex items-center gap-2">
+				<Button
+					type="button"
+					variant="default"
+
+					onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
+					disabled={!hasPreviousPage || isLoading}
+					className="gap-1"
+				>
+					<ChevronLeft className="h-4 w-4" />
+					Anterior
+				</Button>
+				<span className="text-xs text-muted-foreground">
+					Página {page} de {totalPages}
+				</span>
+				<Button
+					type="button"
+					variant="default"
+
+					onClick={() => startTransition(() => setPage((prev) => prev + 1))}
+					disabled={!hasNextPage || isLoading}
+					className="gap-1"
+				>
+					Siguiente
+					<ChevronRight className="h-4 w-4" />
+				</Button>
+			</div>
+		</div>
 	);
 }
 
@@ -789,6 +802,7 @@ import {
 	writePersistedArray,
 	writePersistedNumber,
 } from "./persistence";
+import { GlassyIcon } from "@/app/excel/page";
 
 export { requiredValidator } from "./table-utils";
 
@@ -842,7 +856,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			rowsById: {},
 		},
 	});
-		const setFormFieldValue = form.setFieldValue as (path: string, updater: unknown) => void;
+	const setFormFieldValue = form.setFieldValue as (path: string, updater: unknown) => void;
 	type FormStateType = typeof form.store.state;
 
 	const rowOrderSelector = useCallback<(state: FormStateType) => string[]>(
@@ -977,7 +991,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [searchValue]);
 	const [activeTab, setActiveTab] = useState<string | null>(tabFilters[0]?.id ?? null);
 	useEffect(() => {
-		setActiveTab(tabFilters[0]?.id ?? null);
+		setActiveTab((current) => {
+			if (current && tabFilters.some((tab) => tab.id === current)) {
+				return current;
+			}
+			return tabFilters[0]?.id ?? null;
+		});
 	}, [tabFilters]);
 	const createFiltersRef = useRef(config.createFilters);
 	createFiltersRef.current = config.createFilters;
@@ -1284,7 +1303,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		return { baseFilteredRows: filtered, tabCounts: counts };
 	}, [rows, normalizedSearch, columns, config.applyFilters, filters, tabFilters]);
 
-	// Apply tab filter (uses baseFilteredRows from above)
+	// Apply the selected tab filter synchronously to avoid one-render lag.
 	const tabFilteredRows = useMemo(() => {
 		if (!hasTabFilters || !activeTab) {
 			return baseFilteredRows;
@@ -1295,6 +1314,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}
 		return baseFilteredRows.filter(currentTab.predicate);
 	}, [baseFilteredRows, activeTab, tabFilters, hasTabFilters]);
+
 
 	const enableClientSort = config.enableClientSort !== false;
 	const sortedRows = useMemo(() => {

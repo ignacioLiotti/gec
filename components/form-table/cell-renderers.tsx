@@ -15,6 +15,7 @@ import {
 	ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import { CalendarDays, ExternalLink } from "lucide-react";
+import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type {
 	ColumnDef,
@@ -133,6 +134,7 @@ function DateCellEditor({
 				</PopoverTrigger>
 				<PopoverContent className="w-auto p-0" align="start">
 					<Calendar
+						locale={es}
 						mode="single"
 						selected={selectedDate ?? undefined}
 						defaultMonth={selectedDate ?? new Date()}
@@ -653,19 +655,34 @@ export function renderEditableContent<Row extends FormTableRow>({
 			);
 		}
 		case "badge":
-			return (
-				<div className="space-y-1">
+			{
+				const input = (
 					<LocalInput
 						value={value ?? ""}
 						onChange={setValue}
 						onBlur={handleBlur}
-						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
+						className="z-10 w-full h-full rounded-none border-none bg-transparent text-right font-mono tabular-nums focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
 					/>
-					<div className="peer-focus:opacity-0 opacity-100 p-3 children-input-shown">
-						{renderReadOnlyValue(value, row, column, highlightQuery)}
+				);
+
+				if (typeof config.renderEditable === "function") {
+					return config.renderEditable({
+						value,
+						row,
+						highlightQuery,
+						input,
+					});
+				}
+
+				return (
+					<div className="space-y-1">
+						{input}
+						<div className="opacity-100 p-3 children-input-shown">
+							{renderReadOnlyValue(value, row, column, highlightQuery)}
+						</div>
 					</div>
-				</div>
-			);
+				);
+			}
 		case "text-icon":
 			return (
 				<div className="space-y-1 children-input-hidden">

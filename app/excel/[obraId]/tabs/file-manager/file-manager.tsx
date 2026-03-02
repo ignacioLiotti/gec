@@ -116,6 +116,7 @@ import { FilterSection, RangeInputGroup, TextFilterInput } from '@/components/fo
 import { FileText as FileTextIcon2, Hash, Type, DollarSign as DollarSignIcon, ToggleLeft } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HoverCardPortal } from '@radix-ui/react-hover-card';
+import { GlassyIcon } from '@/app/excel/page';
 
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
@@ -352,7 +353,7 @@ type NotchTailProps = {
   className?: string;
 };
 
-function NotchTail({ side = "right", className = "" }: NotchTailProps) {
+export function NotchTail({ side = "right", className = "" }: NotchTailProps) {
   return (
     <svg
       width="60"
@@ -4555,11 +4556,11 @@ function FileManagerContent({
         <div className="flex flex-wrap items-end justify-between gap-3">
           {/* LEFT TAB */}
           <div
-            className="relative z-10 flex items-center gap-3 border border-b-0 -mb-[2px] border-stone-200 bg-white h-full px-4 py-3 rounded-tr-md rounded-tl-xl overflow-visible"
+            className="relative z-10 flex items-center gap-3 border border-b-0 -mb-[2px] border-[#d9d9d9] bg-white h-full px-4 py-3 rounded-tr-md rounded-tl-xl overflow-visible"
             style={
               {
                 "--notch-bg": "white",
-                "--notch-stroke": "rgb(231 229 228)", // stone-200
+                "--notch-stroke": "#d9d9d9", // stone-200
               } as React.CSSProperties
             }
           >
@@ -4583,11 +4584,11 @@ function FileManagerContent({
 
           {/* RIGHT TAB */}
           <div
-            className="relative z-10 flex flex-wrap items-center gap-2 border border-b-0 -mb-[2px] border-stone-200 bg-white h-full px-4 pl-1 pt-3 pb-0 rounded-tl-md rounded-tr-xl overflow-visible"
+            className="relative z-10 flex flex-wrap items-center gap-2 border border-b-0 -mb-[2px] border-[#d9d9d9] bg-white h-full px-4 pl-1 pt-3 pb-0 rounded-tl-md rounded-tr-xl overflow-visible"
             style={
               {
                 "--notch-bg": "white",
-                "--notch-stroke": "rgb(231 229 228)", // stone-200
+                "--notch-stroke": "#d9d9d9", // stone-200
               } as React.CSSProperties
             }
           >
@@ -4596,7 +4597,7 @@ function FileManagerContent({
 
             {/* Only show Archivos/Tabla toggle for OCR folders with tabla schema and file viewing */}
             {showArchivosTablaToggle && (
-              <div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-0.5">
+              <div className="inline-flex items-center rounded-md border border-[#d9d9d9] bg-stone-50 p-0.5">
                 <Button
                   type="button"
                   variant={documentViewMode === "cards" ? "default" : "ghost"}
@@ -4652,7 +4653,7 @@ function FileManagerContent({
       return (
         <div className="h-full flex flex-col">
           {folderContentHeader}
-          <div className="flex-1 rounded-lg border rounded-t-none border-stone-200 bg-white shadow-sm overflow-hidden pt-0 px-4">
+          <div className="flex-1 rounded-lg border rounded-t-none border-[#d9d9d9] bg-white shadow-sm overflow-hidden pt-0 px-4">
             {!hasTablaSchema ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
                 <Table2 className="w-10 h-10 mb-3 text-stone-300" />
@@ -4756,7 +4757,7 @@ function FileManagerContent({
       return (
         <div className="@container h-full min-h-0 flex flex-col">
           {folders.length > 0 && (
-            <div className="px-4 pt-4 pb-3 border-b border-stone-100">
+            <div className="px-4 pt-4 pb-3 border-b border-[#d9d9d9]">
               <div className="overflow-x-auto overflow-y-hidden">
                 <div className="flex items-start gap-4 w-max px-2 pb-1 ">
                   {folders.map((item) => {
@@ -4889,7 +4890,7 @@ function FileManagerContent({
         onDrop={handleDocumentAreaDrop}
       >
         {folderContentHeader}
-        <div className="flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-stone-200">{folderBody}</div>
+        <div className="flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9]">{folderBody}</div>
       </div>
     );
 
@@ -5044,7 +5045,7 @@ function FileManagerContent({
 
         {/* Main Content */}
         {(selectedFolder || selectedDocument) && (
-          <div className="overflow-auto overflow-x-auto transition-all duration-300 ease-in-out">
+          <div className="overflow-auto overflow-x-auto transition-all duration-300 ease-in-out shadow-[0_1px_0_0_#fff9_inset,_0_0_0_1px_#ffffff4d_inset,0_0.7px_0.9px_-1px_#09090b14,0_3px_4px_-2px_#09090b24] rounded-lg">
             {renderMainContent()}
           </div>
         )}
@@ -6161,9 +6162,9 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
     >
       <HoverCardTrigger asChild>
         <div className="flex items-center justify-start gap-3 min-w-0 cursor-default h-full w-full pl-2">
-          <div className="min-w-7 min-h-7 rounded-md border border-amber-500/40 bg-amber-500/10 flex items-center justify-center">
-            <FileText className="w-5 h-5 text-amber-500" aria-hidden="true" />
-          </div>
+          <GlassyIcon size={7} primaryVar="var(--color-orange-primary)" className="w-7">
+            <FileText className="w-4.5 h-4.5 text-amber-500" aria-hidden="true" />
+          </GlassyIcon>
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-semibold text-stone-800 truncate">{docName}</span>
             <span className="text-[11px] text-stone-500 truncate">{relativePath}</span>
