@@ -26,6 +26,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+	coerceMainColumnInputValue,
+	formatMainColumnValue,
+} from "@/lib/main-table-columns";
 import { ObraDocumentsTab } from "./tabs/documents-tab";
 import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
@@ -721,46 +725,6 @@ const evaluateMainFormula = (
 	return compiled.evaluate(values);
 };
 
-const formatMainColumnValue = (
-	value: unknown,
-	cellType: MainTableColumnConfig["cellType"]
-) => {
-	if (value == null || value === "") return "—";
-	if (cellType === "currency") {
-		const amount = toNumericValue(value);
-		return new Intl.NumberFormat("es-AR", {
-			style: "currency",
-			currency: "ARS",
-		}).format(amount);
-	}
-	if (cellType === "number") {
-		return toNumericValue(value).toLocaleString("es-AR");
-	}
-	if (cellType === "boolean" || cellType === "checkbox" || cellType === "toggle") {
-		return Boolean(value) ? "Sí" : "No";
-	}
-	return String(value);
-};
-
-const coerceMainColumnInputValue = (
-	rawValue: string,
-	cellType: MainTableColumnConfig["cellType"]
-): unknown => {
-	const normalized = rawValue.trim();
-	if (!normalized) return null;
-	if (cellType === "number" || cellType === "currency") {
-		const parsed = Number(normalized.replace(",", "."));
-		return Number.isFinite(parsed) ? parsed : null;
-	}
-	if (cellType === "boolean" || cellType === "checkbox" || cellType === "toggle") {
-		if (normalized === "unset") return null;
-		if (normalized === "true") return true;
-		if (normalized === "false") return false;
-		return null;
-	}
-	return rawValue;
-};
-
 function ObraDetailPageContent() {
 	const params = useParams();
 	const queryClient = useQueryClient();
@@ -786,6 +750,7 @@ function ObraDetailPageContent() {
 		queryFn: () => fetchObraDetail(obraId!),
 		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
+		refetchOnWindowFocus: false,
 	});
 
 	// Memoria notes - always fetch (lightweight)
@@ -1061,6 +1026,7 @@ function ObraDetailPageContent() {
 	const [createCertificateError, setCreateCertificateError] = useState<string | null>(null);
 	const [isCreatingCertificate, setIsCreatingCertificate] = useState(false);
 	const mountedRef = useRef(true);
+	const lastAppliedObraDataUpdatedAtRef = useRef<number>(0);
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
 	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
@@ -1476,7 +1442,7 @@ function ObraDetailPageContent() {
 		[mainTableColumnsConfig]
 	);
 
-	const mainTableColumnValues = useMemo(() => {
+	const mainTableColumnValues = (() => {
 		const customData =
 			(form.state.values.customData as Record<string, unknown> | null) ?? {};
 		const source = {
@@ -1493,7 +1459,7 @@ function ObraDetailPageContent() {
 						: source[column.baseColumnId ?? column.id];
 		}
 		return values;
-	}, [activeMainTableColumns, form.state.values]);
+	})();
 
 	// Only depend on form (stable hook reference) - read current customData at call time
 	// to avoid stale closure and excessive callback recreation
@@ -1583,9 +1549,13 @@ function ObraDetailPageContent() {
 	// Apply obra data to form when it loads
 	useEffect(() => {
 		if (obraQuery.data) {
+			const updatedAt = obraQuery.dataUpdatedAt ?? 0;
+			if (updatedAt <= 0) return;
+			if (updatedAt === lastAppliedObraDataUpdatedAtRef.current) return;
+			lastAppliedObraDataUpdatedAtRef.current = updatedAt;
 			applyObraToForm(obraQuery.data);
 		}
-	}, [obraQuery.data, applyObraToForm]);
+	}, [obraQuery.data, obraQuery.dataUpdatedAt, applyObraToForm]);
 
 	// Apply pendientes data when it loads
 	useEffect(() => {
@@ -2228,6 +2198,9 @@ function ObraDetailPageContent() {
 								getErrorMessage={getErrorMessage}
 								quickActionsAllData={quickActionsAllData}
 								reportsData={generalReportsData}
+								mainTableColumns={activeMainTableColumns}
+								mainTableColumnValues={mainTableColumnValues}
+								setCustomMainColumnValue={setCustomMainColumnValue}
 							/>
 							{/* {activeTab === "general" && (
 								<section className="rounded-lg border bg-card shadow-sm overflow-hidden">

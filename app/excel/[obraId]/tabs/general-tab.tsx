@@ -30,11 +30,23 @@ import {
 } from "recharts";
 
 import type { Obra } from "@/app/excel/schema";
+import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
 import type { OcrTablaColumn } from "./file-manager/types";
 import { QuickActionsPanel } from "@/components/quick-actions/quick-actions-panel";
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
+	coerceMainColumnInputValue,
+	formatMainColumnValue,
+} from "@/lib/main-table-columns";
 import { cn } from "@/lib/utils";
 import { GlassyIcon } from "../../page";
 
@@ -97,7 +109,27 @@ type GeneralTabProps = {
 	getErrorMessage: (errors: unknown) => string;
 	quickActionsAllData?: GeneralTabQuickActions;
 	reportsData?: GeneralTabReportsData;
+	mainTableColumns?: MainTableColumnConfig[];
+	mainTableColumnValues?: Record<string, unknown>;
+	setCustomMainColumnValue?: (columnId: string, value: unknown) => void;
 };
+
+const STATIC_GENERAL_FIELD_IDS = new Set([
+	"porcentaje",
+	"designacionYUbicacion",
+	"entidadContratante",
+	"mesBasicoDeContrato",
+	"iniciacion",
+	"n",
+	"supDeObraM2",
+	"contratoMasAmpliaciones",
+	"certificadoALaFecha",
+	"saldoACertificar",
+	"segunContrato",
+	"prorrogasAcordadas",
+	"plazoTotal",
+	"plazoTransc",
+]);
 
 const periodLabel = (period: string): string => {
 	const [year, month] = period.split("-");
@@ -420,7 +452,16 @@ export function ObraGeneralTab({
 	getErrorMessage,
 	quickActionsAllData,
 	reportsData,
+	mainTableColumns = [],
+	mainTableColumnValues = {},
+	setCustomMainColumnValue,
 }: GeneralTabProps) {
+	const extraMainTableColumns = mainTableColumns.filter((column) => {
+		if (column.kind === "custom") return true;
+		const sourceId = column.baseColumnId ?? column.id;
+		return !STATIC_GENERAL_FIELD_IDS.has(sourceId) && !STATIC_GENERAL_FIELD_IDS.has(column.id);
+	});
+
 	return (
 		<TabsContent value="general" className="space-y-6 pt-4">
 			{isGeneralTabEditMode ? (
@@ -735,6 +776,97 @@ export function ObraGeneralTab({
 								</div>
 							</ShellCard>
 						</motion.section>
+
+						{extraMainTableColumns.length > 0 ? (
+							<motion.section
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.35 }}
+							>
+								<ShellCard title="Campos Configurados" icon={FileText}>
+									<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+										{extraMainTableColumns.map((column) => {
+											const rawValue = mainTableColumnValues[column.id];
+											const isBooleanType =
+												column.cellType === "boolean" ||
+												column.cellType === "checkbox" ||
+												column.cellType === "toggle";
+											const inputType =
+												column.cellType === "number" || column.cellType === "currency"
+													? "number"
+													: column.cellType === "date"
+														? "date"
+														: "text";
+
+											return (
+												<div key={column.id} className="space-y-2">
+													<label className="block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
+														{column.label}
+													</label>
+													{column.kind === "custom" && setCustomMainColumnValue ? (
+														<form.Subscribe
+															selector={(state: any) =>
+																(state.values.customData as Record<string, unknown> | null)?.[
+																	column.id
+																] ?? null
+															}
+														>
+															{(liveValue: any) =>
+																isBooleanType ? (
+																	<Select
+																		value={
+																			liveValue === true
+																				? "true"
+																				: liveValue === false
+																					? "false"
+																					: "unset"
+																		}
+																		onValueChange={(value) =>
+																			setCustomMainColumnValue(
+																				column.id,
+																				coerceMainColumnInputValue(value, column.cellType)
+																			)
+																		}
+																	>
+																		<SelectTrigger className={SURFACE_INPUT_CLASS}>
+																			<SelectValue placeholder="Sin definir" />
+																		</SelectTrigger>
+																		<SelectContent>
+																			<SelectItem value="unset">Sin definir</SelectItem>
+																			<SelectItem value="true">Sí</SelectItem>
+																			<SelectItem value="false">No</SelectItem>
+																		</SelectContent>
+																	</Select>
+																) : (
+																	<Input
+																		type={inputType}
+																		value={String(liveValue ?? "")}
+																		onChange={(event) =>
+																			setCustomMainColumnValue(
+																				column.id,
+																				coerceMainColumnInputValue(
+																					event.target.value,
+																					column.cellType
+																				)
+																			)
+																		}
+																		className={SURFACE_INPUT_CLASS}
+																	/>
+																)
+															}
+														</form.Subscribe>
+													) : (
+														<div className="rounded-lg border border-[#f0f0f0] p-3 text-sm text-[#1a1a1a]">
+															{formatMainColumnValue(rawValue, column.cellType)}
+														</div>
+													)}
+												</div>
+											);
+										})}
+									</div>
+								</ShellCard>
+							</motion.section>
+						) : null}
 					</motion.form>
 					<motion.div
 						initial={{ opacity: 0 }}
@@ -971,6 +1103,30 @@ export function ObraGeneralTab({
 									</ShellCard>
 								</motion.section>
 							</div>
+
+							{extraMainTableColumns.length > 0 ? (
+								<motion.section
+									initial={{ opacity: 0, y: 20 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{ delay: 0.34 }}
+								>
+									<ShellCard title="Campos Configurados" icon={FileText}>
+										<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+											{extraMainTableColumns.map((column) => (
+												<MiniField
+													key={column.id}
+													icon={FileText}
+													label={column.label}
+													value={formatMainColumnValue(
+														mainTableColumnValues[column.id],
+														column.cellType
+													)}
+												/>
+											))}
+										</div>
+									</ShellCard>
+								</motion.section>
+							) : null}
 
 							{hasUnsavedChanges() && (
 								<motion.div
