@@ -65,7 +65,7 @@ const CERT_TEMPLATE_TABLE_DEFS: CertTemplateTableDef[] = [
     id: "pmc_items",
     label: "PMC Items",
     columns: [
-      { key: "item_code", label: "Código Item", type: "text", keywords: ["item", "codigo", "cod", "rubro"] },
+      { key: "item_code", label: "Código Item", type: "text", keywords: ["item", "codigo", "cod", "n°"] },
       { key: "descripcion", label: "Descripción", type: "text", keywords: ["descripcion", "rubro", "concepto", "detalle"] },
       { key: "incidencia_pct", label: "Incidencia %", type: "numeric", keywords: ["incidencia", "incd", "inc", "%"] },
       { key: "monto_rubro", label: "Monto Rubro", type: "numeric", keywords: ["total", "rubro", "$", "monto"] },
@@ -336,7 +336,9 @@ function scoreHeaderVsCertColumn(excelHeader: string, col: CertTemplateColumnDef
   const normKey = normalize(col.key.replace(/_/g, " "));
   if (normHeader === normLabel) return 1.0;
   if (normHeader === normKey) return 0.95;
-  const headerWords = new Set(normHeader.split(" ").filter((w) => w.length > 1));
+  // Require ≥ 3 chars so short prepositions ("de", "al", "el") don't
+  // produce false positives via substring matching (e.g. "descripcion".includes("de")).
+  const headerWords = new Set(normHeader.split(" ").filter((w) => w.length > 2));
   const matchingKeywords = col.keywords.filter((kw) => {
     const normKw = normalize(kw);
     for (const hw of headerWords) {
@@ -796,6 +798,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         headers: string[];
         rowCount: number;
       }>;
+      /** For pmc_resumen / curva_plan — tells the client how data was extracted */
+      extractionMode?: "pmc_resumen" | "curva_plan";
+      /** pmc_resumen only: fieldKey → A1 cell ref where the value was read from */
+      fixedCellRefs?: Record<string, string>;
     }> = [];
 
     const uniqueTablaIds = [...new Set(tablaIds)];
@@ -922,17 +928,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const parentColumns = columns.filter((c) => (c.config?.ocrScope as string | undefined) === "parent");
       const itemColumns = columns.filter((c) => (c.config?.ocrScope as string | undefined) !== "parent");
 
+      // PMC Resumen reads values from fixed A1 cell positions in the template.
+      // Hoisted so we can include them in the preview response for the UI to highlight.
+      const pmcResumenFixedRefs: Record<string, string> | null =
+        certTableDef?.id === "pmc_resumen"
+          ? { periodo: "A17", nro_certificado: "", fecha_certificacion: "A15", monto_certificado: "E197", avance_fisico_acumulado_pct: "J185", monto_acumulado: "P185" }
+          : null;
+
       let extractedRows =
         certTableDef?.id === "pmc_resumen"
           ? (() => {
-              const fixedRefs: Record<string, string> = {
-                periodo: "A17",
-                nro_certificado: "",
-                fecha_certificacion: "A15",
-                monto_certificado: "E197",
-                avance_fisico_acumulado_pct: "J185",
-                monto_acumulado: "P185",
-              };
+              const fixedRefs = pmcResumenFixedRefs!;
               const data: Record<string, unknown> = {};
               for (const map of mappings) {
                 const fieldKey = map.column.fieldKey;
@@ -1101,6 +1107,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
             headers: sheet.headers,
             rowCount: sheet.dataRows.length,
           })),
+          extractionMode: certTableDef?.id === "pmc_resumen" ? "pmc_resumen"
+            : certTableDef?.id === "curva_plan" ? "curva_plan"
+            : undefined,
+          fixedCellRefs: pmcResumenFixedRefs
+            ? Object.fromEntries(Object.entries(pmcResumenFixedRefs).filter(([, ref]) => ref !== ""))
+            : undefined,
         });
         continue;
       }
