@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ContextualWizard, type WizardFlow } from '@/components/ui/contextual-wizard';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -35,6 +36,7 @@ import {
   List,
   Download,
   Eye,
+  EyeOff,
   Loader2,
   FolderPlus,
   BarChart3,
@@ -802,9 +804,10 @@ function FileManagerContent({
   const [isTemplateConfiguratorOpen, setIsTemplateConfiguratorOpen] = useState(false);
   const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
   const [isSpreadsheetPreviewOpen, setIsSpreadsheetPreviewOpen] = useState(false);
+  const [isSpreadsheetWizardOpen, setIsSpreadsheetWizardOpen] = useState(false);
+  const [isSpreadsheetMappingVisible, setIsSpreadsheetMappingVisible] = useState(false);
   const [isLoadingSpreadsheetPreview, setIsLoadingSpreadsheetPreview] = useState(false);
   const [isApplyingSpreadsheetPreview, setIsApplyingSpreadsheetPreview] = useState(false);
-  const [showSpreadsheetGrid, setShowSpreadsheetGrid] = useState(false);
   const [activeMappingDbColumn, setActiveMappingDbColumn] = useState<string | null>(null);
   const [spreadsheetPreviewPayload, setSpreadsheetPreviewPayload] = useState<SpreadsheetPreviewPayload | null>(null);
   const [spreadsheetPreviewStepIndex, setSpreadsheetPreviewStepIndex] = useState(0);
@@ -2343,7 +2346,8 @@ function FileManagerContent({
 
   const closeSpreadsheetPreview = useCallback((confirmed: boolean) => {
     setIsSpreadsheetPreviewOpen(false);
-    setShowSpreadsheetGrid(false);
+    setIsSpreadsheetWizardOpen(false);
+    setIsSpreadsheetMappingVisible(false);
     setActiveMappingDbColumn(null);
     const resolver = spreadsheetPreviewResolverRef.current;
     spreadsheetPreviewResolverRef.current = null;
@@ -2460,37 +2464,6 @@ function FileManagerContent({
       );
     },
     [refreshSpreadsheetPreviewWithOverrides, spreadsheetPreviewPayload]
-  );
-
-  const handleSpreadsheetPreviewManualValueChange = useCallback(
-    async (tablaId: string, dbColumn: string, manualValue: string) => {
-      if (!spreadsheetPreviewPayload) return;
-      const nextManualValues = {
-        ...spreadsheetPreviewPayload.manualValues,
-        [tablaId]: {
-          ...(spreadsheetPreviewPayload.manualValues[tablaId] ?? {}),
-          [dbColumn]: manualValue,
-        },
-      };
-      try {
-        setIsLoadingSpreadsheetPreview(true);
-        const nextPayload = await fetchSpreadsheetPreview({
-          existingPath: spreadsheetPreviewPayload.existingPath,
-          existingFileName: spreadsheetPreviewPayload.existingFileName,
-          tablaIds: spreadsheetPreviewPayload.tablaIds,
-          sheetAssignments: spreadsheetPreviewPayload.sheetAssignments,
-          columnMappings: spreadsheetPreviewPayload.columnMappings,
-          manualValues: nextManualValues,
-        });
-        setSpreadsheetPreviewPayload(nextPayload);
-      } catch (error) {
-        console.error(error);
-        toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el valor manual.');
-      } finally {
-        setIsLoadingSpreadsheetPreview(false);
-      }
-    },
-    [fetchSpreadsheetPreview, spreadsheetPreviewPayload]
   );
 
   const applySpreadsheetPreviewImport = useCallback(async () => {
@@ -5095,7 +5068,10 @@ function FileManagerContent({
           if (!open) closeSpreadsheetPreview(false);
         }}
       >
-        <DialogContent className="max-w-[96vw] h-[92vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogContent
+          className="!fixed !left-4 !right-4 !top-4 !w-auto !max-w-none !translate-x-0 !-translate-y-0 h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] flex flex-col gap-0 p-0 overflow-hidden"
+          style={{ top: "1rem", transform: "none" }}
+        >
           {/* ── Header: title + step tabs ── */}
           {(() => {
             const previewTables = spreadsheetPreviewPayload?.perTable ?? [];
@@ -5114,30 +5090,143 @@ function FileManagerContent({
             );
             const expectedRowCount = previewRows.length || table?.inserted || 0;
 
+            const spreadsheetWizardFlow: WizardFlow = {
+              id: 'excel-extraction',
+              title: 'Guia de extraccion Excel',
+              steps: [
+                {
+                  id: 'tabs',
+                  targetId: 'wizard-step-tabs',
+                  title: 'Pasos por tabla',
+                  content: 'Usa estas pestanas para cambiar entre las tablas detectadas del certificado.',
+                  placement: 'bottom',
+                  fallback: 'skip',
+                  when: () => previewTables.length > 1,
+                },
+                {
+                  id: 'sheet',
+                  targetId: 'wizard-sheet-selector',
+                  title: 'Seleccionar hoja origen',
+                  content: 'Elegi la hoja de Excel desde donde queres extraer datos para esta tabla.',
+                  placement: 'left',
+                },
+                {
+                  id: 'grid',
+                  targetId: 'wizard-grid-preview',
+                  title: 'Vista de planilla',
+                  content: 'Este panel muestra la hoja real y resalta lo que el sistema esta leyendo.',
+                  placement: 'right',
+                  allowClickThrough: true,
+                },
+                {
+                  id: 'preview',
+                  targetId: 'wizard-result-preview',
+                  title: 'Resultado extraido',
+                  content: 'Aca validas rapidamente como quedaran las filas antes de importar.',
+                  placement: 'left',
+                },
+                {
+                  id: 'mapping',
+                  targetId: 'wizard-column-mapping',
+                  title: 'Mapeo de columnas',
+                  content: 'Ajusta el mapeo de cada columna de base contra los headers de Excel.',
+                  placement: 'left',
+                },
+                {
+                  id: 'pick',
+                  targetId: 'wizard-pick-column',
+                  title: 'Seleccion directa desde la grilla',
+                  content: 'Con esta mira podes elegir una columna haciendo clic directamente en la planilla.',
+                  placement: 'left',
+                  allowClickThrough: true,
+                  fallback: 'skip',
+                },
+                {
+                  id: 'confirm',
+                  targetId: 'wizard-confirm-import',
+                  title: 'Confirmar importacion',
+                  content: 'Cuando el preview sea correcto, confirma para guardar filas en la base.',
+                  placement: 'top',
+                },
+              ],
+            };
+
             return (
               <>
                 <div className="flex shrink-0 flex-col border-b">
-                  <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-2">
+                  <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-2" data-wizard-target="wizard-header">
                     <div>
                       <DialogTitle>Vista previa de extracción Excel/CSV</DialogTitle>
                       <DialogDescription className="mt-0.5">
-                        Elegí hoja y mapeo por tabla antes de guardar filas en la base.
+                        Elegí tabla y hoja antes de confirmar la importación.
                       </DialogDescription>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsSpreadsheetWizardOpen(true)}
+                    >
+                      Guia
+                    </Button>
                   </div>
-                  {previewTables.length > 0 && (
-                    <div className="flex items-center gap-2 px-4 pb-2 flex-wrap">
-                      {previewTables.map((previewTable, index) => (
-                        <Button
-                          key={`step-${previewTable.tablaId}`}
-                          variant={index === clampedStepIndex ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => { setSpreadsheetPreviewStepIndex(index); setActiveMappingDbColumn(null); }}
-                          disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
-                        >
-                          Paso {index + 1}: {previewTable.tablaName}
-                        </Button>
-                      ))}
+                  {table && (
+                    <div className="mx-4 mb-3 rounded-lg border bg-muted/20 p-3">
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        <div className="min-w-0 rounded-md border bg-background px-3 py-2" data-wizard-target="wizard-step-tabs">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            1) Tabla a extraer (paso)
+                          </Label>
+                          <Select
+                            value={String(clampedStepIndex)}
+                            onValueChange={(value) => {
+                              setSpreadsheetPreviewStepIndex(Number(value));
+                              setActiveMappingDbColumn(null);
+                            }}
+                            disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                          >
+                            <SelectTrigger className="mt-1.5 h-8 w-full">
+                              <SelectValue placeholder="Seleccionar paso" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {previewTables.map((previewTable, index) => (
+                                <SelectItem key={`step-${previewTable.tablaId}`} value={String(index)}>
+                                  Paso {index + 1}: {previewTable.tablaName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="min-w-0 rounded-md border bg-background px-3 py-2" data-wizard-target="wizard-sheet-selector">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            2) Hoja de Excel a visualizar
+                          </Label>
+                          <Select
+                            value={selectedSheet || '__none__'}
+                            onValueChange={(value) =>
+                              void handleSpreadsheetPreviewSheetChange(
+                                table.tablaId,
+                                value === '__none__' ? null : value
+                              )
+                            }
+                            disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                          >
+                            <SelectTrigger className="mt-1.5 h-8 w-full">
+                              <SelectValue placeholder="Seleccionar hoja" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Sin hoja</SelectItem>
+                              {availableSheets
+                                .filter((s) => s.name.trim().length > 0)
+                                .map((s) => (
+                                  <SelectItem key={s.name} value={s.name}>
+                                    {s.name} ({s.rowCount})
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -5146,7 +5235,7 @@ function FileManagerContent({
                 <div className="flex flex-1 overflow-hidden min-h-0">
 
                   {/* Left: Excel grid */}
-                  <div className="flex-1 overflow-hidden border-r min-w-0">
+                  <div className="flex-[0_0_45%] min-w-0 overflow-hidden border-r" data-wizard-target="wizard-grid-preview">
                     {spreadsheetPreviewPayload && table ? (
                       <SpreadsheetGridPreview
                         bucket={spreadsheetPreviewPayload.existingBucket}
@@ -5176,139 +5265,27 @@ function FileManagerContent({
                   </div>
 
                   {/* Right: Controls */}
-                  <div className="flex w-[400px] shrink-0 flex-col overflow-hidden">
+                  <div className="flex-[1_1_55%] min-w-0 flex flex-col overflow-hidden">
 
-                    {/* Sheet selector + table info */}
-                    <div className="shrink-0 border-b px-4 py-3 space-y-2">
-                      {table && (
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate">{table.tablaName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Filas detectadas: {table.inserted}
-                              {isLoadingSpreadsheetPreview && (
-                                <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground/70">
-                                  <Loader2 className="size-3 animate-spin" /> actualizando…
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <div className="shrink-0 space-y-1">
-                            <Label className="text-xs">Hoja origen</Label>
-                            <Select
-                              value={selectedSheet || '__none__'}
-                              onValueChange={(value) =>
-                                void handleSpreadsheetPreviewSheetChange(
-                                  table.tablaId,
-                                  value === '__none__' ? null : value
-                                )
-                              }
-                              disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
-                            >
-                              <SelectTrigger className="h-8 w-44">
-                                <SelectValue placeholder="Seleccionar hoja" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">Sin hoja</SelectItem>
-                                {availableSheets
-                                  .filter((s) => s.name.trim().length > 0)
-                                  .map((s) => (
-                                    <SelectItem key={s.name} value={s.name}>
-                                      {s.name} ({s.rowCount})
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Scrollable: mappings + preview */}
+                    {/* Scrollable: preview + optional mapping */}
                     <div className="flex-1 overflow-auto min-h-0 px-4 py-3 space-y-4">
-
-                      {/* Mapeo de columnas */}
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Mapeo de columnas
-                        </p>
-                        <div className="space-y-1">
-                          {mappings.map((mapping) => (
-                            <div
-                              key={`${table?.tablaId}-${mapping.dbColumn}`}
-                              className={`grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded px-1 py-1 -mx-1 transition-colors ${activeMappingDbColumn === mapping.dbColumn ? 'bg-blue-50' : ''}`}
-                            >
-                              <div className="text-xs min-w-0">
-                                <p className="font-medium truncate">{mapping.label}</p>
-                                <p className="text-muted-foreground truncate text-[11px]">{mapping.dbColumn}</p>
-                              </div>
-                              <Select
-                                value={mapping.excelHeader ?? '__none__'}
-                                onValueChange={(value) =>
-                                  void handleSpreadsheetPreviewMappingChange(
-                                    table!.tablaId,
-                                    mapping.dbColumn,
-                                    value === '__none__' ? null : value
-                                  )
-                                }
-                                disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
-                              >
-                                <SelectTrigger className="h-8 w-36 text-xs">
-                                  <SelectValue placeholder="Sin mapear" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">Sin mapear</SelectItem>
-                                  {headersForSheet.filter((h) => h.trim().length > 0).map((h) => (
-                                    <SelectItem key={`${table?.tablaId}-${mapping.dbColumn}-${h}`} value={h}>
-                                      {h}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <button
-                                type="button"
-                                title={activeMappingDbColumn === mapping.dbColumn ? 'Cancelar selección' : 'Seleccionar columna desde la hoja Excel'}
-                                className={`flex items-center justify-center rounded p-1 transition-colors ${
-                                  activeMappingDbColumn === mapping.dbColumn
-                                    ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                                }`}
-                                onClick={() => {
-                                  if (activeMappingDbColumn === mapping.dbColumn) {
-                                    setActiveMappingDbColumn(null);
-                                  } else {
-                                    setActiveMappingDbColumn(mapping.dbColumn);
-                                  }
-                                }}
-                                disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
-                              >
-                                <Crosshair className="size-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Vista previa */}
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5" data-wizard-target="wizard-result-preview">
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-semibold uppercase tracking-wide text-foreground">
-                            Resultado extraído
+                            Resultado extraido
                           </p>
                           {previewRows.length > 0 && (
-                            <span className="text-[11px] font-medium text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
+                            <span className="text-[11px] font-medium text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded">
                               {previewRows.length} {previewRows.length === 1 ? 'fila' : 'filas'}
                             </span>
                           )}
                         </div>
-                        <div className="rounded-md border border-orange-200 overflow-auto max-h-72 shadow-sm">
+                        <div className="rounded-md border border-orange-200 overflow-auto max-h-[46vh] shadow-sm">
                           {previewRows.length === 0 ? (
                             <div className="p-3 text-xs text-muted-foreground text-center">
                               Sin filas detectadas con el mapeo actual.
                             </div>
                           ) : (() => {
-                            // Use mappings to drive column order and labels.
-                            // Only show columns that have at least one non-empty value in the preview.
                             const fallbackCols = Object.keys(previewRows[0] ?? {})
                               .filter((k) => !k.startsWith('__doc'))
                               .map((k) => ({ dbColumn: k, label: k }));
@@ -5328,12 +5305,12 @@ function FileManagerContent({
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {previewRows.slice(0, 30).map((row, idx) => {
+                                  {previewRows.slice(0, 40).map((row, idx) => {
                                     const stableKey = String(row.id ?? row.__docPath ?? idx);
                                     return (
                                       <tr key={`row-${idx}-${stableKey}`} className={cn('border-b border-border/50 last:border-0', idx % 2 === 0 ? 'bg-white' : 'bg-orange-50/30')}>
                                         {previewCols.map((col) => (
-                                          <td key={`cell-${idx}-${col.dbColumn}`} className="px-2.5 py-1.5 align-top whitespace-nowrap text-foreground/80 font-mono text-[11px]">
+                                          <td key={`cell-${idx}-${col.dbColumn}`} className="px-2.5 py-1.5 align-top whitespace-nowrap text-foreground/90 font-mono text-[11px]">
                                             {String(row[col.dbColumn] ?? '')}
                                           </td>
                                         ))}
@@ -5346,6 +5323,90 @@ function FileManagerContent({
                           })()}
                         </div>
                       </div>
+
+                      <div className="flex items-center justify-between rounded-md border px-2.5 py-2 bg-muted/30">
+                        <div>
+                          <p className="text-xs font-semibold">Edicion de mapeo</p>
+                          <p className="text-[11px] text-muted-foreground">Mostralo solo si necesitas ajustar columnas.</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsSpreadsheetMappingVisible((prev) => !prev)}
+                        >
+                          {isSpreadsheetMappingVisible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                          <span className="ml-1">{isSpreadsheetMappingVisible ? 'Ocultar mapeo' : 'Mostrar mapeo'}</span>
+                        </Button>
+                      </div>
+
+                      {isSpreadsheetMappingVisible && (
+                        <div className="space-y-2" data-wizard-target="wizard-column-mapping">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Mapeo de columnas
+                          </p>
+                          <div className="space-y-1">
+                            {mappings.map((mapping, index) => (
+                              <div
+                                key={`${table?.tablaId}-${mapping.dbColumn}`}
+                                className={cn(
+                                  'grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded px-1 py-1 -mx-1 transition-colors border border-transparent',
+                                  activeMappingDbColumn === mapping.dbColumn && 'bg-blue-50 border-blue-100'
+                                )}
+                              >
+                                <div className="text-xs min-w-0">
+                                  <p className="font-medium truncate">{mapping.label}</p>
+                                  <p className="text-muted-foreground truncate text-[11px]">{mapping.dbColumn}</p>
+                                </div>
+                                <Select
+                                  value={mapping.excelHeader ?? '__none__'}
+                                  onValueChange={(value) =>
+                                    void handleSpreadsheetPreviewMappingChange(
+                                      table!.tablaId,
+                                      mapping.dbColumn,
+                                      value === '__none__' ? null : value
+                                    )
+                                  }
+                                  disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                                >
+                                  <SelectTrigger className="h-8 w-36 text-xs">
+                                    <SelectValue placeholder="Sin mapear" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Sin mapear</SelectItem>
+                                    {headersForSheet.filter((h) => h.trim().length > 0).map((h) => (
+                                      <SelectItem key={`${table?.tablaId}-${mapping.dbColumn}-${h}`} value={h}>
+                                        {h}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <button
+                                  data-wizard-target={index === 0 ? 'wizard-pick-column' : undefined}
+                                  type="button"
+                                  title={activeMappingDbColumn === mapping.dbColumn ? 'Cancelar seleccion' : 'Seleccionar columna desde la hoja Excel'}
+                                  className={cn(
+                                    'flex items-center justify-center rounded p-1 transition-colors',
+                                    activeMappingDbColumn === mapping.dbColumn
+                                      ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                  )}
+                                  onClick={() => {
+                                    if (activeMappingDbColumn === mapping.dbColumn) {
+                                      setActiveMappingDbColumn(null);
+                                    } else {
+                                      setActiveMappingDbColumn(mapping.dbColumn);
+                                    }
+                                  }}
+                                  disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
+                                >
+                                  <Crosshair className="size-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                            )}
                     </div>
 
                     {/* Step navigation */}
@@ -5379,6 +5440,7 @@ function FileManagerContent({
                     Cancelar
                   </Button>
                   <Button
+                    data-wizard-target="wizard-confirm-import"
                     onClick={async () => {
                       const ok = await applySpreadsheetPreviewImport();
                       if (ok) closeSpreadsheetPreview(true);
@@ -5388,6 +5450,13 @@ function FileManagerContent({
                     {isApplyingSpreadsheetPreview ? 'Importando...' : 'Confirmar e importar'}
                   </Button>
                 </DialogFooter>
+
+                <ContextualWizard
+                  open={isSpreadsheetWizardOpen}
+                  onOpenChange={setIsSpreadsheetWizardOpen}
+                  flow={spreadsheetWizardFlow}
+                  storageKey={`spreadsheet-wizard-${obraId}`}
+                />
               </>
             );
           })()}
@@ -6272,3 +6341,12 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
 const IS_SENTRY_ENABLED =
   process.env.NODE_ENV === 'production' &&
   process.env.NEXT_PUBLIC_VERCEL_ENV === 'production';
+
+
+
+
+
+
+
+
+

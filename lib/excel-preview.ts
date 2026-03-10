@@ -26,10 +26,28 @@ export function colToLetter(col: number): string {
   return letter;
 }
 
+function resolveMergedCells(ws: XLSX.WorkSheet): void {
+  const merges = ws["!merges"];
+  if (!merges || merges.length === 0) return;
+  for (const merge of merges) {
+    const topLeftAddr = XLSX.utils.encode_cell({ r: merge.s.r, c: merge.s.c });
+    const topLeftCell = ws[topLeftAddr];
+    if (!topLeftCell) continue;
+    for (let r = merge.s.r; r <= merge.e.r; r++) {
+      for (let c = merge.s.c; c <= merge.e.c; c++) {
+        if (r === merge.s.r && c === merge.s.c) continue;
+        const addr = XLSX.utils.encode_cell({ r, c });
+        ws[addr] = { ...topLeftCell };
+      }
+    }
+  }
+}
+
 export function parseWorkbook(data: ArrayBuffer): ParsedWorkbook {
   const wb = XLSX.read(data, { type: "array" });
   const sheets: SheetData[] = wb.SheetNames.map((name) => {
     const ws = wb.Sheets[name];
+    resolveMergedCells(ws);
     const ref = ws["!ref"];
     if (!ref) return { name, data: [], rowCount: 0, colCount: 0 };
     const range = XLSX.utils.decode_range(ref);
@@ -49,3 +67,4 @@ export function parseWorkbook(data: ArrayBuffer): ParsedWorkbook {
   });
   return { fileName: "", sheets };
 }
+

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Loader2, Crosshair } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { parseWorkbook, formatCellRef, type SheetData } from "@/lib/excel-preview";
 import { ExcelGrid } from "@/components/excel-grid";
+
+const workbookCache = new Map<string, SheetData[]>();
 
 interface SpreadsheetGridPreviewProps {
   bucket: string;
@@ -199,6 +201,17 @@ function findColumnHeader(sheet: SheetData, col: number): string | null {
   return null;
 }
 
+function findMappedHeaderForColumn(
+  col: number,
+  headerToColMap?: Record<string, number>,
+): string | null {
+  if (!headerToColMap) return null;
+  for (const [header, mappedCol] of Object.entries(headerToColMap)) {
+    if (mappedCol === col) return header;
+  }
+  return null;
+}
+
 export function SpreadsheetGridPreview({
   bucket,
   storagePath,
@@ -211,22 +224,19 @@ export function SpreadsheetGridPreview({
   extractionMode,
   fixedCellRefs,
 }: SpreadsheetGridPreviewProps) {
-  const [sheets, setSheets] = useState<SheetData[] | null>(null);
+  const [downloadedSheets, setDownloadedSheets] = useState<SheetData[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  // Module-level cache keyed by storagePath so remounts don't re-download
-  const cacheRef = useRef<Map<string, SheetData[]>>(new Map());
+  const cacheKey = useMemo(() => `${bucket}::${storagePath}`, [bucket, storagePath]);
+  const cachedSheets = useMemo(() => workbookCache.get(cacheKey) ?? null, [cacheKey]);
+  const sheets = cachedSheets ?? downloadedSheets;
 
   useEffect(() => {
-    const cached = cacheRef.current.get(storagePath);
-    if (cached) {
-      setSheets(cached);
-      return;
-    }
+    if (cachedSheets) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     setError(null);
-    setSheets(null);
 
     const supabase = createSupabaseBrowserClient();
     supabase.storage
@@ -245,8 +255,8 @@ export function SpreadsheetGridPreview({
         if (cancelled || !buffer) return;
         try {
           const wb = parseWorkbook(buffer);
-          cacheRef.current.set(storagePath, wb.sheets);
-          setSheets(wb.sheets);
+          workbookCache.set(cacheKey, wb.sheets);
+          setDownloadedSheets(wb.sheets);
         } catch {
           setError("Error al parsear el archivo.");
         }
@@ -259,7 +269,7 @@ export function SpreadsheetGridPreview({
       });
 
     return () => { cancelled = true; };
-  }, [bucket, storagePath]);
+  }, [bucket, storagePath, cacheKey, cachedSheets]);
 
   const sheet = useMemo(() => {
     if (!sheets) return null;
@@ -301,7 +311,8 @@ export function SpreadsheetGridPreview({
 
   function handleCellClick(col: number) {
     if (!sheet || !onColumnSelect) return;
-    const header = findColumnHeader(sheet, col);
+    const mappedHeader = findMappedHeaderForColumn(col, headerToColMap);
+    const header = mappedHeader ?? findColumnHeader(sheet, col);
     if (header) onColumnSelect(header);
   }
 
@@ -345,3 +356,4 @@ export function SpreadsheetGridPreview({
     </div>
   );
 }
+
