@@ -512,7 +512,7 @@
 			0 1px 0 0 #ffffff80 inset,
 			0 46px 18px 0 var(--primary),
 			0 26px 15px 0 var(--primary),
-			0 11px 11px 0 var(--primary),
+			0 1px 5px 0 var(--primary),
 			0 3px 6px 0 var(--primary);
 	}
 
@@ -522,7 +522,7 @@
 				0 1px 0 0 #ffffff80 inset,
 				0 46px 18px 0 color-mix(in srgb, var(--primary) 1%, transparent),
 				0 26px 15px 0 color-mix(in srgb, var(--primary) 4%, transparent),
-				0 11px 11px 0 color-mix(in srgb, var(--primary) 7%, transparent),
+				0 1px 5px 0 color-mix(in srgb, var(--primary) 7%, transparent),
 				0 3px 6px 0 color-mix(in srgb, var(--primary) 8%, transparent);
 		}
 	}

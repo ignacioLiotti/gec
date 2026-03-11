@@ -323,6 +323,24 @@ export async function GET(request: Request, context: RouteContext) {
       }
     }
 
+    const apsUrnByPath = new Map<string, string>();
+    const { data: apsModels, error: apsModelsError } = await supabase
+      .from("aps_models")
+      .select("file_path, aps_urn")
+      .eq("obra_id", obraId);
+    if (apsModelsError) {
+      console.error("[documents-tree:get] aps models error:", apsModelsError);
+    } else {
+      for (const model of apsModels ?? []) {
+        const filePath =
+          typeof model.file_path === "string" ? model.file_path : null;
+        const apsUrn =
+          typeof model.aps_urn === "string" ? model.aps_urn : null;
+        if (!filePath || !apsUrn) continue;
+        apsUrnByPath.set(filePath, apsUrn);
+      }
+    }
+
     // Build full tree recursively by traversing each storage folder.
     const queue: string[] = [""];
     const seen = new Set<string>([""]);
@@ -381,6 +399,7 @@ export async function GET(request: Request, context: RouteContext) {
           name: item.name,
           type: "file",
           storagePath,
+          apsUrn: apsUrnByPath.get(storagePath) ?? undefined,
           size: item.metadata?.size,
           mimetype: item.metadata?.mimetype,
           ocrDocumentStatus: docStatus

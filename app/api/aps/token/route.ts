@@ -25,7 +25,17 @@ export async function GET() {
 		if (!response.ok) {
 			const errBody = await response.json().catch(() => ({}));
 			return NextResponse.json(
-				{ error: "Failed to obtain APS token", detail: errBody },
+				{
+					error:
+						typeof errBody?.developerMessage === "string" && errBody.developerMessage.trim().length > 0
+							? errBody.developerMessage.trim()
+							: "Failed to obtain APS token",
+					code:
+						typeof errBody?.errorCode === "string" && errBody.errorCode.trim().length > 0
+							? errBody.errorCode.trim()
+							: undefined,
+					detail: errBody,
+				},
 				{ status: response.status }
 			);
 		}
@@ -38,9 +48,11 @@ export async function GET() {
 			);
 		}
 		return NextResponse.json(data);
-	} catch (error: any) {
+	} catch (error: unknown) {
+		const message =
+			error instanceof Error ? error.message : "Token request failed";
 		return NextResponse.json(
-			{ error: error?.message ?? "Token request failed" },
+			{ error: message },
 			{ status: 500 }
 		);
 	}

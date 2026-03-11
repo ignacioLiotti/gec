@@ -69,6 +69,33 @@ function parseDate(value: unknown): Date | null {
 			}
 			return null;
 		}
+		const longSpanishMatch = normalizeText(trimmed).match(
+			/^(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})$/,
+		);
+		if (longSpanishMatch) {
+			const day = Number(longSpanishMatch[1]);
+			const monthName = longSpanishMatch[2];
+			const year = Number(longSpanishMatch[3]);
+			const monthIndexMap: Record<string, number> = {
+				enero: 0,
+				febrero: 1,
+				marzo: 2,
+				abril: 3,
+				mayo: 4,
+				junio: 5,
+				julio: 6,
+				agosto: 7,
+				septiembre: 8,
+				octubre: 9,
+				noviembre: 10,
+				diciembre: 11,
+			};
+			const month = monthIndexMap[monthName];
+			if (month != null) {
+				const parsed = new Date(Date.UTC(year, month, day));
+				if (!Number.isNaN(parsed.getTime())) return parsed;
+			}
+		}
 		const parsed = new Date(trimmed);
 		return Number.isNaN(parsed.getTime()) ? null : parsed;
 	}
@@ -113,21 +140,48 @@ function addMonthsToPeriodKey(
 	return Number.isNaN(date.getTime()) ? null : toPeriodKey(date);
 }
 
+function getCurveMonthNumber(rawPeriodo: string): number | null {
+	const mesN = normalizeText(rawPeriodo).match(/mes\s*(\d{1,3})/);
+	if (!mesN) return null;
+	const monthNumber = Number(mesN[1]);
+	if (!Number.isFinite(monthNumber)) return null;
+	return monthNumber;
+}
+
+function getCurveMonthOffset(
+	rawPeriodo: string,
+	monthIndexBase: 0 | 1 = 0,
+): number | null {
+	const monthNumber = getCurveMonthNumber(rawPeriodo);
+	if (monthNumber == null) return null;
+	return Math.max(0, monthNumber - monthIndexBase);
+}
+
+function detectCurveMonthIndexBase(
+	rows: Array<{ data?: Record<string, any> | null }>,
+): 0 | 1 {
+	for (const row of rows) {
+		const rowData = (row.data ?? null) as Record<string, any> | null;
+		const rawPeriodo =
+			rowData?.periodo ?? rowData?.periodo_key ?? rowData?.period ?? rowData?.mes;
+		if (typeof rawPeriodo !== "string") continue;
+		if (getCurveMonthNumber(rawPeriodo) === 0) return 0;
+	}
+	return 1;
+}
+
 function periodKeyFromCurveRow(
 	rowData: Record<string, any> | null | undefined,
 	startPeriod?: string,
+	monthIndexBase: 0 | 1 = 0,
 ): string | null {
 	const rawPeriodo =
 		rowData?.periodo ?? rowData?.periodo_key ?? rowData?.period ?? rowData?.mes;
 	if (typeof rawPeriodo === "string") {
-		const normalized = normalizeText(rawPeriodo);
-		const mesN = normalized.match(/mes\s*(\d{1,3})/);
-		if (mesN && startPeriod) {
-			const offset = Number(mesN[1]);
-			if (Number.isFinite(offset)) {
-				const period = addMonthsToPeriodKey(startPeriod, offset);
-				if (period) return period;
-			}
+		const offset = getCurveMonthOffset(rawPeriodo, monthIndexBase);
+		if (offset != null && startPeriod) {
+			const period = addMonthsToPeriodKey(startPeriod, offset);
+			if (period) return period;
 		}
 		const dateFromPeriodo = parseDate(rawPeriodo);
 		if (dateFromPeriodo) return toPeriodKey(dateFromPeriodo);
@@ -180,19 +234,188 @@ async function resolveTenantId(
 	return membership?.tenant_id ?? null;
 }
 
-async function loadRuleConfigForTenant(
-	supabase: SupabaseClient,
-	tenantId: string,
-	obraId: string,
-): Promise<RuleConfig> {
-	const { data } = await supabase
-		.from("obra_rule_config")
-		.select("config_json")
-		.eq("tenant_id", tenantId)
-		.eq("obra_id", obraId)
-		.maybeSingle();
+type ObraRuleTableMeta = {
+	id: string;
+	name: string;
+	columns: ReportTableColumn[];
+};
 
-	const stored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
+function getCurveActualPctColumnKey(
+	columns: ReportTableColumn[],
+): string | undefined {
+	const preferredKeys = [
+		"avance_fisico_acumulado_pct",
+		"avance_fisico_acum_pct",
+		"avance_fisico_acumulado",
+		"avance_acumulado_pct",
+		"avance_acum_pct",
+	];
+	const byNormalizedKey = new Map(
+		columns.map((column) => [normalizeText(column.key), column.key] as const),
+	);
+	for (const key of preferredKeys) {
+		const match = byNormalizedKey.get(normalizeText(key));
+		if (match) return match;
+	}
+	return columns.find((column) => {
+		const normalized = normalizeText(column.key);
+		return normalized.includes("avance") && normalized.includes("acum");
+	})?.key;
+}
+
+function inferCurveTableIds(
+	tables: ObraRuleTableMeta[],
+): { planTableId?: string; resumenTableId?: string; actualPctColumnKey?: string } {
+	let planTable: ObraRuleTableMeta | null = null;
+	let resumenTable: ObraRuleTableMeta | null = null;
+
+	for (const table of tables) {
+		const normalizedName = normalizeText(table.name);
+		const fieldKeys = new Set(
+			table.columns.map((column) => normalizeText(column.key)),
+		);
+		const isPlanByColumns =
+			fieldKeys.has("periodo") &&
+			fieldKeys.has("avance_mensual_pct") &&
+			fieldKeys.has("avance_acumulado_pct");
+		const isResumenByColumns =
+			fieldKeys.has("periodo") &&
+			fieldKeys.has("monto_certificado") &&
+			(fieldKeys.has("avance_fisico_acumulado_pct") ||
+				fieldKeys.has("avance_acumulado_pct"));
+
+		if (isPlanByColumns || normalizedName.includes("curva plan")) {
+			if (!planTable || normalizedName.includes("curva plan")) {
+				planTable = table;
+			}
+		}
+		if (isResumenByColumns || normalizedName.includes("pmc resumen")) {
+			if (!resumenTable || normalizedName.includes("pmc resumen")) {
+				resumenTable = table;
+			}
+		}
+	}
+
+	return {
+		planTableId: planTable?.id,
+		resumenTableId: resumenTable?.id,
+		actualPctColumnKey: resumenTable
+			? getCurveActualPctColumnKey(resumenTable.columns)
+			: undefined,
+	};
+}
+
+async function loadObraRuleInference(
+	supabase: SupabaseClient,
+	obraId: string,
+): Promise<Partial<RuleConfig>> {
+	const [{ data: obraRow }, { data: tablaRows }] = await Promise.all([
+		supabase
+			.from("obras")
+			.select("iniciacion")
+			.eq("id", obraId)
+			.maybeSingle(),
+		supabase
+			.from("obra_tablas")
+			.select("id,name")
+			.eq("obra_id", obraId)
+			.order("name"),
+	]);
+
+	const tablaIds = (tablaRows ?? []).map((table: any) => table.id as string);
+	const { data: columnRows } = tablaIds.length
+		? await supabase
+				.from("obra_tabla_columns")
+				.select("tabla_id,field_key,label,data_type")
+				.in("tabla_id", tablaIds)
+				.order("position")
+		: { data: [] as any[] };
+
+	const columnsByTabla = new Map<string, ReportTableColumn[]>();
+	for (const column of columnRows ?? []) {
+		const list = columnsByTabla.get(column.tabla_id) ?? [];
+		list.push({
+			key: column.field_key,
+			label: column.label,
+			type: column.data_type,
+		});
+		columnsByTabla.set(column.tabla_id, list);
+	}
+
+	const tables: ObraRuleTableMeta[] = (tablaRows ?? []).map((table: any) => ({
+		id: table.id as string,
+		name: (table.name as string) ?? "Tabla",
+		columns: columnsByTabla.get(table.id as string) ?? [],
+	}));
+	const inferredCurve = inferCurveTableIds(tables);
+	if (!inferredCurve.planTableId && !inferredCurve.resumenTableId) {
+		return {};
+	}
+
+	let inferredStartPeriod: string | undefined;
+	if (inferredCurve.planTableId) {
+		const { data: planRows } = await supabase
+			.from("obra_tabla_rows")
+			.select("data")
+			.eq("tabla_id", inferredCurve.planTableId);
+		const usesRelativeMonths = (planRows ?? []).some((row: any) => {
+			const rowData = (row?.data ?? {}) as Record<string, unknown>;
+			const rawPeriodo =
+				rowData.periodo ??
+				rowData.periodo_key ??
+				rowData.period ??
+				rowData.mes;
+			return (
+				typeof rawPeriodo === "string" &&
+				getCurveMonthNumber(rawPeriodo) != null
+			);
+		});
+		if (usesRelativeMonths) {
+			const obraStart = parseDate((obraRow as any)?.iniciacion);
+			if (obraStart) {
+				inferredStartPeriod = toPeriodKey(obraStart);
+			}
+		}
+	}
+
+	return {
+		mappings: {
+			curve: {
+				...(inferredCurve.planTableId
+					? { planTableId: inferredCurve.planTableId }
+					: {}),
+				...(inferredCurve.resumenTableId
+					? {
+							resumenTableId: inferredCurve.resumenTableId,
+							measurementTableId: inferredCurve.resumenTableId,
+						}
+					: {}),
+				...(inferredCurve.actualPctColumnKey
+					? { actualPctColumnKey: inferredCurve.actualPctColumnKey }
+					: {}),
+				...(inferredStartPeriod
+					? {
+							plan: {
+								startPeriod: inferredStartPeriod,
+							} as NonNullable<
+								NonNullable<RuleConfig["mappings"]["curve"]>["plan"]
+							>,
+						}
+					: {}),
+			},
+		},
+	};
+}
+
+function mergeRuleConfig(
+	stored: Partial<RuleConfig>,
+	inferred: Partial<RuleConfig> = {},
+): RuleConfig {
+	const storedCurve = stored.mappings?.curve;
+	const inferredCurve = inferred.mappings?.curve;
+	const storedPlan = storedCurve?.plan;
+	const inferredPlan = inferredCurve?.plan;
+
 	return {
 		...DEFAULT_RULE_CONFIG,
 		...stored,
@@ -202,7 +425,22 @@ async function loadRuleConfigForTenant(
 		},
 		mappings: {
 			...DEFAULT_RULE_CONFIG.mappings,
+			...(inferred.mappings ?? {}),
 			...(stored.mappings ?? {}),
+			curve:
+				storedCurve || inferredCurve
+					? {
+							...(inferredCurve ?? {}),
+							...(storedCurve ?? {}),
+							plan:
+								storedPlan || inferredPlan
+									? {
+											...(inferredPlan ?? {}),
+											...(storedPlan ?? {}),
+										}
+									: undefined,
+						}
+					: undefined,
 		},
 		thresholds: {
 			...DEFAULT_RULE_CONFIG.thresholds,
@@ -229,6 +467,33 @@ async function loadRuleConfigForTenant(
 			},
 		},
 	} as RuleConfig;
+}
+
+function needsCurveInference(config: Partial<RuleConfig>): boolean {
+	const curve = config.mappings?.curve;
+	return !curve?.planTableId ||
+		!(curve.resumenTableId ?? curve.measurementTableId) ||
+		!curve.actualPctColumnKey ||
+		!curve.plan?.startPeriod;
+}
+
+async function loadRuleConfigForTenant(
+	supabase: SupabaseClient,
+	tenantId: string,
+	obraId: string,
+): Promise<RuleConfig> {
+	const { data } = await supabase
+		.from("obra_rule_config")
+		.select("config_json")
+		.eq("tenant_id", tenantId)
+		.eq("obra_id", obraId)
+		.maybeSingle();
+
+	const stored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
+	const inferred = needsCurveInference(stored)
+		? await loadObraRuleInference(supabase, obraId)
+		: {};
+	return mergeRuleConfig(stored, inferred);
 }
 
 async function loadSignalsSnapshotForTenant(
@@ -494,6 +759,7 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 
 			if (curve?.planTableId) {
 				const planRows = await getRows(curve.planTableId);
+				const planMonthIndexBase = detectCurveMonthIndexBase(planRows);
 				const normalizedPlanRows = planRows
 					.map((row) => {
 						const rowData = (row.data as Record<string, any>) ?? null;
@@ -509,7 +775,11 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 						return {
 							row,
 							value: Math.abs(parsed) <= 1 ? parsed * 100 : parsed,
-							period: periodKeyFromCurveRow(rowData, curve.plan?.startPeriod),
+							period: periodKeyFromCurveRow(
+								rowData,
+								curve.plan?.startPeriod,
+								planMonthIndexBase,
+							),
 						};
 					})
 					.filter(

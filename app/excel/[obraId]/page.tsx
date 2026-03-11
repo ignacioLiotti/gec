@@ -424,6 +424,18 @@ function parseMonthOrder(rawValue: unknown, fallback: number): { label: string; 
 		return { label: raw, order: year * 12 + Math.max(0, Math.min(11, month)) };
 	}
 
+	const dayDeMonthYear = norm.match(
+		/(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|sept|octubre|noviembre|diciembre)\s+de\s+(\d{2,4})/
+	);
+	if (dayDeMonthYear) {
+		const month = MONTH_INDEX[dayDeMonthYear[2]];
+		if (month != null) {
+			const yearRaw = Number.parseInt(dayDeMonthYear[3], 10);
+			const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+			return { label: raw, order: year * 12 + month };
+		}
+	}
+
 	const monYear = norm.match(/([a-z]{3})[-\s_/]*(\d{2,4})/);
 	if (monYear) {
 		const month = MONTH_INDEX[monYear[1]];
@@ -469,6 +481,27 @@ function addMonths(periodKey: string, offset: number): string | null {
 	const date = new Date(Date.UTC(year, month + offset, 1));
 	if (!Number.isFinite(date.getTime())) return null;
 	return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function getCurveMonthNumber(rawValue: unknown): number | null {
+	const mesN = normalizeText(String(rawValue ?? "")).match(/mes\s*(\d{1,3})/);
+	if (!mesN) return null;
+	const monthNumber = Number.parseInt(mesN[1], 10);
+	return Number.isFinite(monthNumber) ? monthNumber : null;
+}
+
+function detectCurveMonthIndexBase(curvaRows: TablaRowRecord[]): 0 | 1 {
+	for (const row of curvaRows) {
+		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+		const periodo =
+			getRowFieldValueByCandidates(
+				rowData,
+				["periodo", "periodo_key", "period", "mes"],
+				[["periodo"], ["period"], ["mes"]],
+			);
+		if (getCurveMonthNumber(periodo) === 0) return 0;
+	}
+	return 1;
 }
 
 function periodLabel(periodKey: string): string {
@@ -527,6 +560,7 @@ function buildCurvePoints(
 		typeof options?.curveStartPeriod === "string" && /^\d{4}-\d{2}$/.test(options.curveStartPeriod)
 			? options.curveStartPeriod
 			: null;
+	const curveMonthIndexBase = detectCurveMonthIndexBase(curvaRows);
 
 	curvaRows.forEach((row, index) => {
 		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
@@ -544,10 +578,12 @@ function buildCurvePoints(
 		);
 		if (!periodo || avance == null) return;
 		const raw = String(periodo ?? "").trim();
-		const mesN = normalizeText(raw).match(/mes\s*(\d{1,3})/);
+		const monthNumber = getCurveMonthNumber(raw);
+		const monthOffset =
+			monthNumber == null ? null : Math.max(0, monthNumber - curveMonthIndexBase);
 		const periodFromMesN =
-			mesN && curveStartPeriod
-				? addMonths(curveStartPeriod, Number.parseInt(mesN[1], 10))
+			monthOffset != null && curveStartPeriod
+				? addMonths(curveStartPeriod, monthOffset)
 				: null;
 		const parsed = parseMonthOrder(periodo, index);
 		const periodKey = periodFromMesN ?? (parsed.order >= 1000 ? `${Math.floor(parsed.order / 12)}-${String((parsed.order % 12) + 1).padStart(2, "0")}` : null);
