@@ -34,6 +34,23 @@ export async function GET(request: NextRequest) {
 		);
 
 		const tokenData = await tokenResponse.json();
+		if (!tokenResponse.ok || !tokenData?.access_token) {
+			const message =
+				typeof tokenData?.developerMessage === "string" && tokenData.developerMessage.trim().length > 0
+					? tokenData.developerMessage.trim()
+					: "Failed to obtain APS token";
+			return NextResponse.json(
+				{
+					error: message,
+					code:
+						typeof tokenData?.errorCode === "string" && tokenData.errorCode.trim().length > 0
+							? tokenData.errorCode.trim()
+							: undefined,
+					detail: tokenData,
+				},
+				{ status: tokenResponse.status }
+			);
+		}
 
 		// Check translation status
 		const statusResponse = await fetch(
@@ -48,8 +65,24 @@ export async function GET(request: NextRequest) {
 		);
 
 		const statusData = await statusResponse.json();
+		if (!statusResponse.ok) {
+			return NextResponse.json(
+				{
+					error:
+						typeof statusData?.developerMessage === "string" && statusData.developerMessage.trim().length > 0
+							? statusData.developerMessage.trim()
+							: "Failed to obtain APS model status",
+					code:
+						typeof statusData?.errorCode === "string" && statusData.errorCode.trim().length > 0
+							? statusData.errorCode.trim()
+							: undefined,
+					detail: statusData,
+				},
+				{ status: statusResponse.status }
+			);
+		}
 		return NextResponse.json(statusData);
-	} catch (error: any) {
+	} catch (error: unknown) {
 		if (error instanceof ApiValidationError) {
 			return NextResponse.json(
 				{ error: error.message, issues: error.issues },
@@ -57,8 +90,10 @@ export async function GET(request: NextRequest) {
 			);
 		}
 		console.error("Status check error:", error);
+		const message =
+			error instanceof Error ? error.message : "Status check failed";
 		return NextResponse.json(
-			{ error: error.message || "Status check failed" },
+			{ error: message },
 			{ status: 500 }
 		);
 	}

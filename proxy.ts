@@ -21,6 +21,10 @@ const sentrySources = [
 	"https://*.ingest.us.sentry.io",
 ];
 const vercelSources = ["https://va.vercel-scripts.com"];
+const autodeskSources = [
+	"https://developer.api.autodesk.com",
+	"https://*.autodesk.com",
+];
 
 // WebSocket sources
 const wsSources = ["wss://*.supabase.co"];
@@ -38,15 +42,15 @@ const securityHeaders: Record<string, string> = {
 	"referrer-policy": "strict-origin-when-cross-origin",
 	"content-security-policy": [
 		`default-src ${trustedSources.join(" ")}`,
-		`script-src ${trustedSources.join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com ${vercelSources.join(" ")}`,
-		`style-src ${trustedSources.join(" ")} 'unsafe-inline'`,
-		`img-src ${trustedSources.join(" ")} data: blob:`,
-		`font-src ${trustedSources.join(" ")}`,
+		`script-src ${trustedSources.concat(autodeskSources).join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com ${vercelSources.join(" ")}`,
+		`style-src ${trustedSources.concat(autodeskSources).join(" ")} 'unsafe-inline'`,
+		`img-src ${trustedSources.concat(autodeskSources).join(" ")} data: blob:`,
+		`font-src ${trustedSources.concat(autodeskSources).join(" ")}`,
 		`connect-src ${trustedSources
-			.concat(sentrySources)
+			.concat(sentrySources, autodeskSources)
 			.join(" ")} ${wsSources.join(" ")} blob:`,
-		`media-src ${trustedSources.join(" ")} data: blob:`,
-		`worker-src ${trustedSources.join(" ")} blob:`,
+		`media-src ${trustedSources.concat(autodeskSources).join(" ")} data: blob:`,
+		`worker-src ${trustedSources.concat(autodeskSources).join(" ")} blob:`,
 		"frame-ancestors 'none'",
 		"form-action 'self'",
 		"base-uri 'self'",

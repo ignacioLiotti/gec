@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 
+import {
+  buildSpreadsheetPreviewInsight,
+  buildSpreadsheetPreviewSummary,
+  resolveSpreadsheetSectionType,
+  type SpreadsheetPreviewSectionType,
+  type SpreadsheetPreviewStatus,
+} from "@/lib/spreadsheet-preview-summary";
 import { createClient } from "@/utils/supabase/server";
 import {
   coerceValueForType,
@@ -65,7 +72,7 @@ const CERT_TEMPLATE_TABLE_DEFS: CertTemplateTableDef[] = [
     id: "pmc_items",
     label: "PMC Items",
     columns: [
-      { key: "item_code", label: "Código Item", type: "text", keywords: ["item", "codigo", "cod", "rubro"] },
+      { key: "item_code", label: "Código Item", type: "text", keywords: ["item", "codigo", "cod", "n°"] },
       { key: "descripcion", label: "Descripción", type: "text", keywords: ["descripcion", "rubro", "concepto", "detalle"] },
       { key: "incidencia_pct", label: "Incidencia %", type: "numeric", keywords: ["incidencia", "incd", "inc", "%"] },
       { key: "monto_rubro", label: "Monto Rubro", type: "numeric", keywords: ["total", "rubro", "$", "monto"] },
@@ -336,7 +343,9 @@ function scoreHeaderVsCertColumn(excelHeader: string, col: CertTemplateColumnDef
   const normKey = normalize(col.key.replace(/_/g, " "));
   if (normHeader === normLabel) return 1.0;
   if (normHeader === normKey) return 0.95;
-  const headerWords = new Set(normHeader.split(" ").filter((w) => w.length > 1));
+  // Require ≥ 3 chars so short prepositions ("de", "al", "el") don't
+  // produce false positives via substring matching (e.g. "descripcion".includes("de")).
+  const headerWords = new Set(normHeader.split(" ").filter((w) => w.length > 2));
   const matchingKeywords = col.keywords.filter((kw) => {
     const normKw = normalize(kw);
     for (const hw of headerWords) {
@@ -359,7 +368,16 @@ function scoreSheetVsCertTable(sheet: RawSheet, table: CertTemplateTableDef): nu
     if (normSheetName.includes("nota cert")) nameBonus = 0.3;
     if (normSheetName.includes("cert desac")) nameBonus = 0.1;
   } else if (table.id === "curva_plan") {
-    if (normSheetName.includes("plan") && normSheetName.includes("curv")) nameBonus = 0.3;
+    if (
+      normSheetName.includes("plan de trab y curv") ||
+      (normSheetName.includes("plan") && normSheetName.includes("trab") && normSheetName.includes("curv"))
+    ) {
+      nameBonus = 0.9;
+    } else if (normSheetName.includes("plan") && normSheetName.includes("curv")) {
+      nameBonus = 0.45;
+    } else if (normSheetName.includes("acta de medicion")) {
+      nameBonus = -0.25;
+    }
   }
   const columnScores = table.columns.map((col) => {
     let best = 0;
@@ -381,6 +399,17 @@ function scoreSheetVsCertTable(sheet: RawSheet, table: CertTemplateTableDef): nu
 }
 
 function pickBestSheetForCertTable(sheets: RawSheet[], table: CertTemplateTableDef): RawSheet | null {
+  if (table.id === "curva_plan") {
+    const preferredCurvaSheet = sheets.find((sheet) => {
+      const normalized = normalize(sheet.name);
+      return (
+        normalized.includes("plan de trab y curv") ||
+        (normalized.includes("plan") && normalized.includes("trab") && normalized.includes("curv"))
+      );
+    });
+    if (preferredCurvaSheet) return preferredCurvaSheet;
+  }
+
   let bestSheet: RawSheet | null = null;
   let bestScore = 0;
   for (const sheet of sheets) {
@@ -547,17 +576,6 @@ function parsePercentValue(raw: unknown): number {
   if (hadPercent) return Math.round(num * 100) / 100;
   if (Math.abs(num) < 1 && Math.abs(num) > 0) return Math.round(num * 10000) / 100;
   return Math.round(num * 100) / 100;
-}
-
-function isCurvaPlanTable(columns: TablaColumn[], tablaName: string, profile: string | null): boolean {
-  if (profile !== "certificado") return false;
-  const keys = new Set(columns.map((c) => c.fieldKey));
-  const hasCoreFields =
-    keys.has("periodo") &&
-    keys.has("avance_mensual_pct") &&
-    keys.has("avance_acumulado_pct");
-  if (hasCoreFields) return true;
-  return normalize(tablaName).includes("curva plan");
 }
 
 function extractCurvaPlanRows(params: {
@@ -796,6 +814,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
         headers: string[];
         rowCount: number;
       }>;
+      /** For pmc_resumen / curva_plan — tells the client how data was extracted */
+      extractionMode?: "pmc_resumen" | "curva_plan";
+      /** pmc_resumen only: fieldKey → A1 cell ref where the value was read from */
+      fixedCellRefs?: Record<string, string>;
+      sectionType?: SpreadsheetPreviewSectionType;
+      status?: SpreadsheetPreviewStatus;
+      statusReason?: string | null;
+      includedByDefault?: boolean;
+      sampleColumns?: string[];
+      sampleRows?: Record<string, unknown>[];
+      keyFieldCoverage?: Record<string, boolean>;
+      sourceLabel?: string;
+      warnings?: string[];
     }> = [];
 
     const uniqueTablaIds = [...new Set(tablaIds)];
@@ -828,12 +859,43 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const certTableDef = certTableId
         ? CERT_TEMPLATE_TABLE_DEFS.find((def) => def.id === certTableId) ?? null
         : null;
+      const sectionType = resolveSpreadsheetSectionType({
+        certTableId,
+        tablaName: tablaMeta?.name ?? "Tabla",
+        fieldKeys: columns.map((column) => column.fieldKey),
+      });
+      const curvaPlanHasExistingRows =
+        previewMode && sectionType === "curva_plan"
+          ? await (async () => {
+              const { count, error } = await supabase
+                .from("obra_tabla_rows")
+                .select("id", { count: "exact", head: true })
+                .eq("tabla_id", tablaId);
+              if (error) throw error;
+              return (count ?? 0) > 0;
+            })()
+          : false;
+      const availableSheetOptions = sheets.map((sheet) => ({
+        name: sheet.name,
+        headers: sheet.headers,
+        rowCount: sheet.dataRows.length,
+      }));
       if (columns.length === 0) {
+        const insight = buildSpreadsheetPreviewInsight({
+          sectionType,
+          inserted: 0,
+          sheetName: null,
+          previewRows: [],
+          mappings: [],
+        });
         perTable.push({
           tablaId,
           tablaName: tablaMeta?.name ?? "Tabla",
           inserted: 0,
           sheetName: null,
+          availableSheets: availableSheetOptions,
+          ...insight,
+          includedByDefault: insight.includedByDefault && !curvaPlanHasExistingRows,
         });
         continue;
       }
@@ -846,11 +908,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
         assignedSheet ??
         (certTableDef ? pickBestSheetForCertTable(sheets, certTableDef) : pickBestSheetForTable(sheets, columns, profile));
       if (!bestSheet) {
+        const insight = buildSpreadsheetPreviewInsight({
+          sectionType,
+          inserted: 0,
+          sheetName: assignedSheet?.name ?? null,
+          previewRows: [],
+        });
         perTable.push({
           tablaId,
           tablaName: tablaMeta?.name ?? "Tabla",
           inserted: 0,
-          sheetName: null,
+          sheetName: assignedSheet?.name ?? null,
+          availableSheets: availableSheetOptions,
+          ...insight,
+          includedByDefault: insight.includedByDefault && !curvaPlanHasExistingRows,
         });
         continue;
       }
@@ -922,17 +993,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const parentColumns = columns.filter((c) => (c.config?.ocrScope as string | undefined) === "parent");
       const itemColumns = columns.filter((c) => (c.config?.ocrScope as string | undefined) !== "parent");
 
+      // PMC Resumen reads values from fixed A1 cell positions in the template.
+      // Hoisted so we can include them in the preview response for the UI to highlight.
+      const pmcResumenFixedRefs: Record<string, string> | null =
+        certTableDef?.id === "pmc_resumen"
+          ? { periodo: "A17", nro_certificado: "", fecha_certificacion: "A15", monto_certificado: "E197", avance_fisico_acumulado_pct: "J185", monto_acumulado: "P185" }
+          : null;
+
       let extractedRows =
         certTableDef?.id === "pmc_resumen"
           ? (() => {
-              const fixedRefs: Record<string, string> = {
-                periodo: "A17",
-                nro_certificado: "",
-                fecha_certificacion: "A15",
-                monto_certificado: "E197",
-                avance_fisico_acumulado_pct: "J185",
-                monto_acumulado: "P185",
-              };
+              const fixedRefs = pmcResumenFixedRefs!;
               const data: Record<string, unknown> = {};
               for (const map of mappings) {
                 const fieldKey = map.column.fieldKey;
@@ -1089,18 +1160,30 @@ export async function POST(request: NextRequest, context: RouteContext) {
           confidence: map.confidence ?? (map.excelHeader ? 1 : 0),
           manualValue: typeof map.manualValue === "string" ? map.manualValue : "",
         }));
+        const previewDataRows = extractedRows.slice(0, 40).map((row) => row.data);
+        const insight = buildSpreadsheetPreviewInsight({
+          sectionType,
+          inserted: extractedRows.length,
+          sheetName: bestSheet.name,
+          previewRows: previewDataRows,
+          mappings: mappedPreview,
+        });
         perTable.push({
           tablaId,
           tablaName: tablaMeta?.name ?? "Tabla",
           inserted: extractedRows.length,
           sheetName: bestSheet.name,
           mappings: mappedPreview,
-          previewRows: extractedRows.slice(0, 40).map((row) => row.data),
-          availableSheets: sheets.map((sheet) => ({
-            name: sheet.name,
-            headers: sheet.headers,
-            rowCount: sheet.dataRows.length,
-          })),
+          previewRows: previewDataRows,
+          availableSheets: availableSheetOptions,
+          extractionMode: certTableDef?.id === "pmc_resumen" ? "pmc_resumen"
+            : certTableDef?.id === "curva_plan" ? "curva_plan"
+            : undefined,
+          fixedCellRefs: pmcResumenFixedRefs
+            ? Object.fromEntries(Object.entries(pmcResumenFixedRefs).filter(([, ref]) => ref !== ""))
+            : undefined,
+          ...insight,
+          includedByDefault: insight.includedByDefault && !curvaPlanHasExistingRows,
         });
         continue;
       }
@@ -1142,12 +1225,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
+    const summary = buildSpreadsheetPreviewSummary(perTable);
+
     return NextResponse.json({
       ok: true,
       preview: previewMode,
       sourceName,
       inserted: perTable.reduce((acc, row) => acc + row.inserted, 0),
       perTable,
+      summary,
     });
   } catch (error) {
     console.error("[tablas:spreadsheet-multi]", error);

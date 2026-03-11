@@ -2,9 +2,9 @@
 
 import { memo } from "react";
 import type { ReactNode } from "react";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetOverlay } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Download, RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 import type { FileSystemItem } from "../types";
 import { DocumentPreview } from "./document-preview";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ type DocumentSheetProps = {
 	onToggleDataSheet?: () => void;
 	showDataToggle?: boolean;
 	isDataSheetOpen?: boolean;
+	highlightRetryAction?: boolean;
 };
 
 export const DocumentSheet = memo(function DocumentSheet({
@@ -37,6 +38,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 	onToggleDataSheet,
 	showDataToggle = false,
 	isDataSheetOpen = false,
+	highlightRetryAction = false,
 }: DocumentSheetProps) {
 	if (!isOpen || !document) {
 		return null;
@@ -73,7 +75,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 				<SheetHeader className="border-b bg-white px-3 sm:px-6 py-3 sm:py-4">
 					<div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
 						<div className="min-w-0 flex-1">
-							<div className="flex items-center gap-2">
+							<div className="flex flex-wrap items-center gap-2">
 								<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
 								{ocrStatusBadge}
 							</div>
@@ -106,11 +108,15 @@ export const DocumentSheet = memo(function DocumentSheet({
 							)}
 							{onRetryOcr && (
 								<Button
-									variant="secondary"
+									variant={highlightRetryAction ? "outline" : "secondary"}
 									size="sm"
 									disabled={retryingOcr}
 									onClick={() => onRetryOcr(document)}
-									className="shrink-0"
+									className={cn(
+										"shrink-0",
+										highlightRetryAction &&
+										"border-amber-300 bg-amber-50 text-amber-950 shadow-[0_0_0_1px_rgba(251,191,36,0.45),0_10px_30px_rgba(245,158,11,0.18)] hover:bg-amber-100 focus-visible:ring-amber-300"
+									)}
 								>
 									{retryingOcr ? (
 										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
