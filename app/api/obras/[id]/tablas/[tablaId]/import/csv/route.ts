@@ -11,7 +11,7 @@ async function fetchColumns(
 ) {
 	const { data, error } = await supabase
 		.from("obra_tabla_columns")
-		.select("id, tabla_id, field_key, label, data_type, position, required")
+		.select("id, tabla_id, field_key, label, data_type, position, required, config")
 		.eq("tabla_id", tablaId)
 		.order("position", { ascending: true });
 	if (error) throw error;
@@ -21,6 +21,7 @@ async function fetchColumns(
 		label: column.label as string,
 		dataType: ensureTablaDataType(column.data_type as string | undefined),
 		required: Boolean(column.required),
+		config: (column.config as Record<string, unknown>) ?? {},
 	}));
 }
 
@@ -66,19 +67,42 @@ export async function POST(request: Request, context: RouteContext) {
 
 		const rowsPayload = records.map((record) => {
 			const data: Record<string, unknown> = {};
+			const normalizedRecord = new Map<string, unknown>();
+			for (const [recordKey, recordValue] of Object.entries(record ?? {})) {
+				normalizedRecord.set(normalizeFieldKey(recordKey), recordValue);
+			}
 			for (const column of columns) {
 				const key = column.fieldKey;
+				const aliases = Array.isArray(column.config?.aliases)
+					? (column.config.aliases as unknown[]).filter(
+							(value): value is string => typeof value === "string"
+					  )
+					: [];
+				const excelKeywords = Array.isArray(column.config?.excelKeywords)
+					? (column.config.excelKeywords as unknown[]).filter(
+							(value): value is string => typeof value === "string"
+					  )
+					: [];
 				const candidateKeys = [
 					key,
 					column.label,
 					key.toLowerCase(),
 					column.label.toLowerCase(),
 					normalizeFieldKey(column.label),
+					...aliases,
+					...excelKeywords,
+					...aliases.map((alias) => normalizeFieldKey(alias)),
+					...excelKeywords.map((keyword) => normalizeFieldKey(keyword)),
 				];
 				let rawValue: unknown = null;
 				for (const candidate of candidateKeys) {
 					if (candidate && candidate in record) {
 						rawValue = (record as Record<string, unknown>)[candidate];
+						break;
+					}
+					const normalizedCandidate = normalizeFieldKey(candidate);
+					if (normalizedCandidate && normalizedRecord.has(normalizedCandidate)) {
+						rawValue = normalizedRecord.get(normalizedCandidate);
 						break;
 					}
 				}

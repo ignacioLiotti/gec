@@ -122,48 +122,88 @@ function buildEmptyExtraction(
   };
 }
 
+function readStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getConfiguredDocumentTypes(settings: Record<string, unknown> | null | undefined) {
+  const configured = readStringList(settings?.extractionDocumentTypes);
+  if (configured.length > 0) return configured;
+  const legacy = typeof settings?.ocrDocType === "string" ? settings.ocrDocType.trim() : "";
+  return legacy ? [legacy] : [];
+}
+
+function getConfiguredExtractionInstructions(
+  settings: Record<string, unknown> | null | undefined
+) {
+  const configured =
+    typeof settings?.extractionInstructions === "string"
+      ? settings.extractionInstructions.trim()
+      : "";
+  if (configured) return configured;
+  const legacy =
+    typeof settings?.ocrInstructions === "string"
+      ? settings.ocrInstructions.trim()
+      : "";
+  return legacy || null;
+}
+
+function describeColumn(column: ColumnMeta) {
+  const label = column.label || column.fieldKey;
+  const description =
+    typeof column.config?.ocrDescription === "string"
+      ? (column.config.ocrDescription as string).trim()
+      : "";
+  const aliases = readStringList(column.config?.aliases);
+  const examples = readStringList(column.config?.examples);
+  const details = [`campo "${column.fieldKey}"`, `tipo ${column.dataType}`];
+  if (description) details.push(description);
+  if (aliases.length > 0) details.push(`aliases: ${aliases.join(", ")}`);
+  if (examples.length > 0) details.push(`ejemplos: ${examples.join(", ")}`);
+  return `- ${label} (${details.join(" | ")})`;
+}
+
 function buildTableAutoInstructions({
-  docType,
+  docTypes,
+  customInstructions,
   parentColumns,
   itemColumns,
 }: {
-  docType?: string | null;
+  docTypes?: string[];
+  customInstructions?: string | null;
   parentColumns: ColumnMeta[];
   itemColumns: ColumnMeta[];
 }) {
   const lines: string[] = [];
-  const docLabel = docType && docType.length > 0 ? docType : "documento";
+  const docLabel = docTypes && docTypes.length > 0 ? docTypes.join(" / ") : "documento";
   lines.push(`Analizá el ${docLabel} para esta tabla y devolvé JSON.`);
+  if (docTypes && docTypes.length > 0) {
+    lines.push(`Tipos de documento esperados: ${docTypes.join(", ")}.`);
+  }
   if (parentColumns.length > 0) {
     lines.push("Campos de cabecera:");
     parentColumns.forEach((column) => {
-      const label = column.label || column.fieldKey;
-      const description =
-        typeof column.config?.ocrDescription === "string"
-          ? (column.config.ocrDescription as string)
-          : "";
-      lines.push(
-        `- ${label} (campo "${column.fieldKey}", tipo ${column.dataType})${description ? ` - ${description}` : ""}`
-      );
+      lines.push(describeColumn(column));
     });
   }
   if (itemColumns.length > 0) {
     lines.push("Campos por ítem (items[]):");
     itemColumns.forEach((column) => {
-      const label = column.label || column.fieldKey;
-      const description =
-        typeof column.config?.ocrDescription === "string"
-          ? (column.config.ocrDescription as string)
-          : "";
-      lines.push(
-        `- ${label} (campo "${column.fieldKey}", tipo ${column.dataType})${description ? ` - ${description}` : ""}`
-      );
+      lines.push(describeColumn(column));
     });
     lines.push('Incluí "items" si ves filas claras; si no, devolvé una lista vacía.');
   } else {
     lines.push("Esta tabla es de nivel documento: no repitas filas.");
   }
   lines.push("No inventes valores; deja campos vacíos si no se pueden leer.");
+  if (customInstructions && customInstructions.trim().length > 0) {
+    lines.push("Instrucciones adicionales:");
+    lines.push(customInstructions.trim());
+  }
   return lines.join("\n");
 }
 
@@ -182,22 +222,17 @@ function buildMultiInstructions(tablas: TablaDef[]) {
     const settings = tabla.settings ?? {};
     const ocrProfile =
       typeof settings.ocrProfile === "string" ? settings.ocrProfile : null;
-    const docType =
-      typeof settings.ocrDocType === "string" ? settings.ocrDocType : null;
-    const customInstructions =
-      typeof settings.ocrInstructions === "string" &&
-      settings.ocrInstructions.trim().length > 0
-        ? settings.ocrInstructions.trim()
-        : null;
+    const documentTypes = getConfiguredDocumentTypes(settings);
+    const customInstructions = getConfiguredExtractionInstructions(settings);
     const instructions =
-      customInstructions ??
-      (ocrProfile === "materials"
-        ? MATERIALS_OCR_PROMPT
+      ocrProfile === "materials"
+        ? [MATERIALS_OCR_PROMPT, customInstructions].filter(Boolean).join("\n\n")
         : buildTableAutoInstructions({
-            docType,
+            docTypes: documentTypes,
+            customInstructions,
             parentColumns: tabla.parentColumns,
             itemColumns: tabla.itemColumns,
-          }));
+          });
     lines.push(`\nTabla ${tabla.tablaName} (id: ${tabla.tablaId}):`);
     lines.push(instructions);
   }

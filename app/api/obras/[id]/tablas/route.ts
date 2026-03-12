@@ -168,9 +168,19 @@ export async function POST(request: Request, context: RouteContext) {
 			typeof body.ocrFolderPath === "string" ? body.ocrFolderPath : "";
 		const rawOcrDocType =
 			typeof body.ocrDocType === "string" ? body.ocrDocType.trim() : "";
-	const rawOcrInstructions =
+		const rawOcrInstructions =
 			typeof body.ocrInstructions === "string"
 				? body.ocrInstructions.trim()
+				: "";
+		const documentTypes = Array.isArray(body.documentTypes)
+			? body.documentTypes
+					.filter((value: unknown): value is string => typeof value === "string")
+					.map((value: string) => value.trim())
+					.filter(Boolean)
+			: [];
+		const extractionInstructions =
+			typeof body.extractionInstructions === "string"
+				? body.extractionInstructions.trim()
 				: "";
 		const rawOcrTemplateId =
 			typeof body.ocrTemplateId === "string" ? body.ocrTemplateId : null;
@@ -218,6 +228,12 @@ export async function POST(request: Request, context: RouteContext) {
 				spreadsheetTemplate: rawSpreadsheetTemplate || "auto",
 				dataInputMethod,
 			};
+			if (documentTypes.length > 0) {
+				settings.extractionDocumentTypes = documentTypes;
+			}
+			if (extractionInstructions) {
+				settings.extractionInstructions = extractionInstructions;
+			}
 		}
 
 		if (normalizedColumns.length === 0) {

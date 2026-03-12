@@ -18,6 +18,8 @@ type DefaultFolder = {
 	ocrTemplateId?: string | null;
 	ocrTemplateName?: string | null;
 	hasNestedData?: boolean;
+	documentTypes?: string[];
+	extractionInstructions?: string | null;
 	columns?: Array<{
 		id?: string;
 		fieldKey: string;
@@ -26,6 +28,9 @@ type DefaultFolder = {
 		required?: boolean;
 		ocrScope?: string;
 		description?: string | null;
+		aliases?: string[];
+		examples?: string[];
+		excelKeywords?: string[];
 	}>;
 };
 
@@ -46,6 +51,9 @@ type DefaultColumnInput = {
 	required?: boolean;
 	ocrScope?: string;
 	description?: string | null;
+	aliases?: string[];
+	examples?: string[];
+	excelKeywords?: string[];
 	position?: number;
 };
 
@@ -65,6 +73,9 @@ type OcrTemplateColumn = {
 	dataType?: string;
 	ocrScope?: string;
 	description?: string;
+	aliases?: string[];
+	examples?: string[];
+	excelKeywords?: string[];
 };
 
 type QuickActionRow = {
@@ -113,11 +124,38 @@ function normalizeDefaultColumnInput(
 			: label
 	);
 	const config: Record<string, unknown> = {};
+	const aliases = Array.isArray(column.aliases)
+		? column.aliases
+				.filter((value): value is string => typeof value === "string")
+				.map((value) => value.trim())
+				.filter(Boolean)
+		: [];
+	const examples = Array.isArray(column.examples)
+		? column.examples
+				.filter((value): value is string => typeof value === "string")
+				.map((value) => value.trim())
+				.filter(Boolean)
+		: [];
+	const excelKeywords = Array.isArray(column.excelKeywords)
+		? column.excelKeywords
+				.filter((value): value is string => typeof value === "string")
+				.map((value) => value.trim())
+				.filter(Boolean)
+		: [];
 	if (hasNestedData && typeof column.ocrScope === "string" && column.ocrScope) {
 		config.ocrScope = column.ocrScope;
 	}
 	if (typeof column.description === "string" && column.description.trim()) {
 		config.ocrDescription = column.description.trim();
+	}
+	if (aliases.length > 0) {
+		config.aliases = aliases;
+	}
+	if (examples.length > 0) {
+		config.examples = examples;
+	}
+	if (excelKeywords.length > 0) {
+		config.excelKeywords = excelKeywords;
 	}
 	return {
 		id: typeof column.id === "string" && column.id ? column.id : undefined,
@@ -140,6 +178,21 @@ function toResponseDefaultColumn(column: PersistedDefaultColumn) {
 		ocrScope: (column.config as Record<string, unknown> | null)?.ocrScope as
 			| string
 			| undefined,
+		aliases: Array.isArray((column.config as Record<string, unknown> | null)?.aliases)
+			? (((column.config as Record<string, unknown>).aliases as unknown[]).filter(
+					(value): value is string => typeof value === "string" && value.trim().length > 0
+				))
+			: [],
+		examples: Array.isArray((column.config as Record<string, unknown> | null)?.examples)
+			? (((column.config as Record<string, unknown>).examples as unknown[]).filter(
+					(value): value is string => typeof value === "string" && value.trim().length > 0
+				))
+			: [],
+		excelKeywords: Array.isArray((column.config as Record<string, unknown> | null)?.excelKeywords)
+			? (((column.config as Record<string, unknown>).excelKeywords as unknown[]).filter(
+					(value): value is string => typeof value === "string" && value.trim().length > 0
+				))
+			: [],
 		description:
 			((column.config as Record<string, unknown> | null)?.ocrDescription as
 				| string
@@ -382,6 +435,9 @@ export async function GET(request: Request) {
 				required?: boolean;
 				ocrScope?: string;
 				description?: string | null;
+				aliases?: string[];
+				examples?: string[];
+				excelKeywords?: string[];
 			}>>();
 
 		if (tablaIds.length > 0) {
@@ -407,6 +463,24 @@ export async function GET(request: Request) {
 							typeof config.ocrDescription === "string"
 								? config.ocrDescription
 								: null,
+						aliases: Array.isArray(config.aliases)
+							? (config.aliases as unknown[]).filter(
+									(value): value is string =>
+										typeof value === "string" && value.trim().length > 0
+								)
+							: [],
+						examples: Array.isArray(config.examples)
+							? (config.examples as unknown[]).filter(
+									(value): value is string =>
+										typeof value === "string" && value.trim().length > 0
+								)
+							: [],
+						excelKeywords: Array.isArray(config.excelKeywords)
+							? (config.excelKeywords as unknown[]).filter(
+									(value): value is string =>
+										typeof value === "string" && value.trim().length > 0
+								)
+							: [],
 					});
 					columnsMap.set(col.default_tabla_id, existing);
 				});
@@ -451,6 +525,16 @@ export async function GET(request: Request) {
 					? templatesMap.get(linkedTabla.ocr_template_id)
 					: null,
 				hasNestedData: Boolean(settings.hasNestedData),
+				documentTypes: Array.isArray(settings.extractionDocumentTypes)
+					? (settings.extractionDocumentTypes as unknown[]).filter(
+							(value): value is string =>
+								typeof value === "string" && value.trim().length > 0
+					  )
+					: [],
+				extractionInstructions:
+					typeof settings.extractionInstructions === "string"
+						? settings.extractionInstructions
+						: null,
 				columns: columnsMap.get(linkedTabla.id) ?? [],
 			};
 		});
@@ -602,6 +686,9 @@ export async function POST(request: Request) {
 				required?: boolean;
 				ocrScope?: string;
 				description?: string | null;
+				aliases?: string[];
+				examples?: string[];
+				excelKeywords?: string[];
 				position?: number;
 			}> = Array.isArray(body.columns) ? body.columns : [];
 
@@ -628,6 +715,9 @@ export async function POST(request: Request) {
 							required: false,
 							ocrScope: col.ocrScope,
 							description: col.description ?? null,
+							aliases: col.aliases ?? [],
+							examples: col.examples ?? [],
+							excelKeywords: col.excelKeywords ?? [],
 							position: index,
 						}));
 					}
@@ -642,6 +732,17 @@ export async function POST(request: Request) {
 					? body.spreadsheetTemplate.trim()
 					: "";
 			const spreadsheetTemplate = rawSpreadsheetTemplate === "certificado" ? "certificado" : "auto";
+			const documentTypes = Array.isArray(body.documentTypes)
+				? body.documentTypes
+						.filter((value: unknown): value is string => typeof value === "string")
+						.map((value: string) => value.trim())
+						.filter(Boolean)
+				: [];
+			const extractionInstructions =
+				typeof body.extractionInstructions === "string" &&
+				body.extractionInstructions.trim().length > 0
+					? body.extractionInstructions.trim()
+					: null;
 
 			// Build settings
 			const settings: Record<string, unknown> = {
@@ -652,6 +753,12 @@ export async function POST(request: Request) {
 			};
 			if (ocrTemplateId) {
 				settings.ocrTemplateId = ocrTemplateId;
+			}
+			if (documentTypes.length > 0) {
+				settings.extractionDocumentTypes = documentTypes;
+			}
+			if (extractionInstructions) {
+				settings.extractionInstructions = extractionInstructions;
 			}
 
 			// Get max position for tablas
@@ -695,6 +802,9 @@ export async function POST(request: Request) {
 				required?: boolean;
 				ocrScope?: string;
 				description?: string | null;
+				aliases?: string[];
+				examples?: string[];
+				excelKeywords?: string[];
 			}> = [];
 
 			console.log("[obra-defaults:post] Creating columns for default tabla:", {
@@ -704,50 +814,15 @@ export async function POST(request: Request) {
 			});
 
 			if (resolvedColumns.length > 0) {
-				const columnsPayload = resolvedColumns.map((col, index) => ({
-					default_tabla_id: tabla.id,
-					field_key: normalizeFieldKey(col.fieldKey || col.label),
-					label: col.label,
-					data_type: ensureTablaDataType(col.dataType),
-					position: col.position ?? index,
-					required: Boolean(col.required),
-					config:
-						hasNestedData && col.ocrScope
-							? { ocrScope: col.ocrScope, ocrDescription: col.description ?? null }
-							: col.description
-								? { ocrDescription: col.description }
-								: {},
-				}));
-
-				const { data: columns, error: columnsError } = await supabase
-					.from("obra_default_tabla_columns")
-					.insert(columnsPayload)
-					.select("id, field_key, label, data_type, required, config");
-
-					if (columnsError) {
-						console.error("[obra-defaults:post] columns error:", columnsError);
-					} else if (columns) {
-						console.log("[obra-defaults:post] Successfully created", columns.length, "columns for default tabla", tabla.id);
-						insertedColumns = columns.map(col => {
-							const config = (col.config ?? {}) as Record<string, unknown>;
-							return {
-								id: col.id,
-								fieldKey: col.field_key,
-								label: col.label,
-								dataType: col.data_type,
-								required: Boolean(col.required),
-								ocrScope:
-									typeof config.ocrScope === "string" ? config.ocrScope : undefined,
-								description:
-									typeof config.ocrDescription === "string"
-										? config.ocrDescription
-										: null,
-							};
-						});
-					}
-				} else {
-					console.warn("[obra-defaults:post] No columns provided for OCR folder - this will cause issues!");
-				}
+				insertedColumns = await syncDefaultTablaColumns(
+					supabase,
+					tabla.id,
+					resolvedColumns,
+					hasNestedData
+				);
+			} else {
+				console.warn("[obra-defaults:post] No columns provided for OCR folder - this will cause issues!");
+			}
 
 			// Get template name if applicable
 			let ocrTemplateName: string | null = null;
@@ -768,6 +843,8 @@ export async function POST(request: Request) {
 					ocrTemplateId,
 					ocrTemplateName,
 					hasNestedData,
+					documentTypes,
+					extractionInstructions,
 					columns: insertedColumns,
 				};
 
@@ -1045,6 +1122,9 @@ export async function PUT(request: Request) {
 						required: false,
 						ocrScope: col.ocrScope,
 						description: col.description ?? null,
+						aliases: col.aliases ?? [],
+						examples: col.examples ?? [],
+						excelKeywords: col.excelKeywords ?? [],
 						position: index,
 					}));
 				}
@@ -1060,6 +1140,17 @@ export async function PUT(request: Request) {
 				? body.spreadsheetTemplate.trim()
 				: "";
 		const spreadsheetTemplate = rawSpreadsheetTemplate === "certificado" ? "certificado" : "auto";
+		const documentTypes = Array.isArray(body.documentTypes)
+			? body.documentTypes
+					.filter((value: unknown): value is string => typeof value === "string")
+					.map((value: string) => value.trim())
+					.filter(Boolean)
+			: [];
+		const extractionInstructions =
+			typeof body.extractionInstructions === "string" &&
+			body.extractionInstructions.trim().length > 0
+				? body.extractionInstructions.trim()
+				: null;
 
 		const settings: Record<string, unknown> = {
 			ocrFolder: path,
@@ -1069,6 +1160,12 @@ export async function PUT(request: Request) {
 		};
 		if (ocrTemplateId) {
 			settings.ocrTemplateId = ocrTemplateId;
+		}
+		if (documentTypes.length > 0) {
+			settings.extractionDocumentTypes = documentTypes;
+		}
+		if (extractionInstructions) {
+			settings.extractionInstructions = extractionInstructions;
 		}
 
 		const linkedPaths = Array.from(new Set([existingFolder.path, path].filter(Boolean)));
@@ -1101,10 +1198,6 @@ export async function PUT(request: Request) {
 
 			if (updateTablaError) throw updateTablaError;
 
-			await supabase
-				.from("obra_default_tabla_columns")
-				.delete()
-				.eq("default_tabla_id", tablaId);
 		} else {
 			const { data: existingTablas } = await supabase
 				.from("obra_default_tablas")
@@ -1141,6 +1234,9 @@ export async function PUT(request: Request) {
 			required?: boolean;
 			ocrScope?: string;
 			description?: string | null;
+			aliases?: string[];
+			examples?: string[];
+			excelKeywords?: string[];
 		}> = [];
 
 		if (tablaId && resolvedColumns.length > 0) {
@@ -1170,6 +1266,8 @@ export async function PUT(request: Request) {
 			ocrTemplateId,
 			ocrTemplateName,
 			hasNestedData,
+			documentTypes,
+			extractionInstructions,
 			columns: insertedColumns,
 		};
 

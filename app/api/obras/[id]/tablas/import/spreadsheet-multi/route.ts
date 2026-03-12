@@ -323,7 +323,10 @@ function scoreHeaderVsColumn(header: string, column: TablaColumn): number {
   const configKeywords = Array.isArray(column.config?.excelKeywords)
     ? (column.config.excelKeywords as unknown[]).filter((v): v is string => typeof v === "string")
     : [];
-  const baseKeywords = [column.label, column.fieldKey, normalizeFieldKey(column.label)]
+  const aliases = Array.isArray(column.config?.aliases)
+    ? (column.config.aliases as unknown[]).filter((v): v is string => typeof v === "string")
+    : [];
+  const baseKeywords = [column.label, column.fieldKey, normalizeFieldKey(column.label), ...aliases]
     .filter(Boolean);
   const keywords = [...new Set([...baseKeywords, ...configKeywords])].map((k) => normalize(k));
   if (keywords.length === 0) return 0;

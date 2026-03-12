@@ -69,6 +69,9 @@ type OcrColumn = {
   required: boolean;
   scope: "parent" | "item";
   description?: string;
+  aliases?: string[];
+  examples?: string[];
+  excelKeywords?: string[];
 };
 
 type DefaultFolder = {
@@ -83,6 +86,8 @@ type DefaultFolder = {
   ocrTemplateId?: string | null;
   ocrTemplateName?: string | null;
   hasNestedData?: boolean;
+  documentTypes?: string[];
+  extractionInstructions?: string | null;
   columns?: Array<{
     id?: string;
     fieldKey: string;
@@ -91,6 +96,9 @@ type DefaultFolder = {
     ocrScope?: string;
     required?: boolean;
     description?: string | null;
+    aliases?: string[];
+    examples?: string[];
+    excelKeywords?: string[];
   }>;
 };
 
@@ -155,8 +163,22 @@ const buildSpreadsheetDefaultColumns = (
     required: false,
     scope: "item",
     description: "",
+    aliases: [],
+    examples: [],
+    excelKeywords: [],
   }));
 };
+
+function parseCommaSeparatedList(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function joinCommaSeparatedList(values?: string[]): string {
+  return Array.isArray(values) ? values.join(", ") : "";
+}
 
 // Get icon for data type
 function getDataTypeIcon(dataType: string) {
@@ -572,6 +594,8 @@ export default function ObraDefaultsPage() {
   const [newFolderSpreadsheetTemplate, setNewFolderSpreadsheetTemplate] = useState<"" | "auto" | "certificado">("");
   const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState("");
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
+  const [newFolderDocumentTypesText, setNewFolderDocumentTypesText] = useState("");
+  const [newFolderExtractionInstructions, setNewFolderExtractionInstructions] = useState("");
   const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
 
   // Quick actions state
@@ -594,6 +618,8 @@ export default function ObraDefaultsPage() {
     setNewFolderSpreadsheetTemplate("");
     setNewFolderOcrTemplateId("");
     setNewFolderHasNested(false);
+    setNewFolderDocumentTypesText("");
+    setNewFolderExtractionInstructions("");
     setNewFolderColumns([]);
   }, []);
 
@@ -656,6 +682,9 @@ export default function ObraDefaultsPage() {
       required: false,
       scope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
       description: col.description,
+      aliases: [],
+      examples: [],
+      excelKeywords: [],
     }));
 
     setNewFolderColumns(mappedColumns);
@@ -706,6 +735,8 @@ export default function ObraDefaultsPage() {
     setNewFolderSpreadsheetTemplate(folder.spreadsheetTemplate ?? "");
     setNewFolderOcrTemplateId(folder.ocrTemplateId ?? "");
     setNewFolderHasNested(Boolean(folder.hasNestedData));
+    setNewFolderDocumentTypesText(joinCommaSeparatedList(folder.documentTypes));
+    setNewFolderExtractionInstructions(folder.extractionInstructions ?? "");
     setNewFolderColumns(
       (folder.columns ?? []).map((col) => ({
         id: crypto.randomUUID(),
@@ -716,6 +747,9 @@ export default function ObraDefaultsPage() {
         required: Boolean(col.required),
         scope: col.ocrScope === "parent" ? "parent" : "item",
         description: col.description ?? "",
+        aliases: col.aliases ?? [],
+        examples: col.examples ?? [],
+        excelKeywords: col.excelKeywords ?? [],
       })),
     );
     setIsAddFolderOpen(true);
@@ -756,11 +790,14 @@ export default function ObraDefaultsPage() {
       };
 
       if (folderMode === "data") {
+        const documentTypes = parseCommaSeparatedList(newFolderDocumentTypesText);
         payload.isOcr = true; // Kept for backward compatibility
         payload.dataInputMethod = newFolderDataInputMethod;
         payload.spreadsheetTemplate = newFolderSpreadsheetTemplate || null;
         payload.ocrTemplateId = needsOcrTemplate ? newFolderOcrTemplateId : null;
         payload.hasNestedData = needsOcrTemplate ? newFolderHasNested : false;
+        payload.documentTypes = documentTypes;
+        payload.extractionInstructions = newFolderExtractionInstructions.trim() || null;
         payload.columns = effectiveColumns.map((col, index) => ({
           id: col.columnId,
           label: col.label,
@@ -770,6 +807,9 @@ export default function ObraDefaultsPage() {
           position: index,
           ocrScope: newFolderHasNested && needsOcrTemplate ? col.scope : "item",
           description: col.description,
+          aliases: col.aliases ?? [],
+          examples: col.examples ?? [],
+          excelKeywords: col.excelKeywords ?? [],
         }));
       }
 
@@ -905,6 +945,9 @@ export default function ObraDefaultsPage() {
         dataType: "text",
         required: false,
         scope: "item",
+        aliases: [],
+        examples: [],
+        excelKeywords: [],
       },
     ]);
   };
@@ -923,6 +966,17 @@ export default function ObraDefaultsPage() {
       }
       return updated;
     }));
+  };
+
+  const handleColumnListChange = (
+    id: string,
+    field: "aliases" | "examples" | "excelKeywords",
+    value: string,
+  ) => {
+    const items = parseCommaSeparatedList(value);
+    setNewFolderColumns((prev) =>
+      prev.map((col) => (col.id === id ? { ...col, [field]: items } : col)),
+    );
   };
 
   const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
@@ -1419,6 +1473,35 @@ export default function ObraDefaultsPage() {
                   </div>
                 )}
 
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  <div>
+                    <Label htmlFor="document-types">Tipos de documento esperados</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Separados por coma. Ejemplo: certificado mensual, certificado desacopio, curva de avance.
+                    </p>
+                  </div>
+                  <Textarea
+                    id="document-types"
+                    value={newFolderDocumentTypesText}
+                    onChange={(e) => setNewFolderDocumentTypesText(e.target.value)}
+                    placeholder="certificado mensual, certificado desacopio, curva de avance"
+                    className="min-h-[72px]"
+                  />
+                  <div>
+                    <Label htmlFor="extraction-instructions">Instrucciones de extraccion</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Explicale al sistema como interpretar estos documentos, que significan los campos y que debe ignorar.
+                    </p>
+                  </div>
+                  <Textarea
+                    id="extraction-instructions"
+                    value={newFolderExtractionInstructions}
+                    onChange={(e) => setNewFolderExtractionInstructions(e.target.value)}
+                    placeholder="Estos documentos pueden venir con encabezados distintos. El expediente puede aparecer como Expte., Nro. Expte o EX-2025..."
+                    className="min-h-[96px]"
+                  />
+                </div>
+
                 {/* Nested Data Toggle - Only when OCR is needed */}
                 {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
                   <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
@@ -1460,61 +1543,89 @@ export default function ObraDefaultsPage() {
                       {newFolderColumns.map((col) => (
                         <div
                           key={col.id}
-                          className="flex items-center gap-2 p-2 rounded-lg border bg-background"
+                          className="space-y-2 rounded-lg border bg-background p-2"
                         >
-                          <Input
-                            value={col.label}
-                            onChange={(e) => handleColumnChange(col.id, "label", e.target.value)}
-                            placeholder="Nombre columna"
-                            className="flex-1 h-8 text-sm"
-                          />
-                          <Select
-                            value={col.dataType}
-                            onValueChange={(value) => handleColumnChange(col.id, "dataType", value)}
-                          >
-                            <SelectTrigger className="w-28 h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {DATA_TYPE_OPTIONS.map((type) => (
-                                <SelectItem key={type.value} value={type.value}>
-                                  {type.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <label className="flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              checked={col.required}
-                              onChange={(e) => handleColumnChange(col.id, "required", e.target.checked)}
-                              className="rounded border-stone-300"
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={col.label}
+                              onChange={(e) => handleColumnChange(col.id, "label", e.target.value)}
+                              placeholder="Nombre columna"
+                              className="flex-1 h-8 text-sm"
                             />
-                            Req.
-                          </label>
-                          {newFolderHasNested && (newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
                             <Select
-                              value={col.scope}
-                              onValueChange={(value) => handleColumnChange(col.id, "scope", value)}
+                              value={col.dataType}
+                              onValueChange={(value) => handleColumnChange(col.id, "dataType", value)}
                             >
-                              <SelectTrigger className="w-24 h-8">
+                              <SelectTrigger className="w-28 h-8">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="parent">Doc</SelectItem>
-                                <SelectItem value="item">Item</SelectItem>
+                                {DATA_TYPE_OPTIONS.map((type) => (
+                                  <SelectItem key={type.value} value={type.value}>
+                                    {type.label}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveColumn(col.id)}
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={col.required}
+                                onChange={(e) => handleColumnChange(col.id, "required", e.target.checked)}
+                                className="rounded border-stone-300"
+                              />
+                              Req.
+                            </label>
+                            {newFolderHasNested && (newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                              <Select
+                                value={col.scope}
+                                onValueChange={(value) => handleColumnChange(col.id, "scope", value)}
+                              >
+                                <SelectTrigger className="w-24 h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="parent">Doc</SelectItem>
+                                  <SelectItem value="item">Item</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveColumn(col.id)}
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Textarea
+                            value={col.description ?? ""}
+                            onChange={(e) => handleColumnChange(col.id, "description", e.target.value)}
+                            placeholder="Que significa este campo y como deberia interpretarse"
+                            className="min-h-[64px]"
+                          />
+                          <div className="grid gap-2 md:grid-cols-3">
+                            <Input
+                              value={joinCommaSeparatedList(col.aliases)}
+                              onChange={(e) => handleColumnListChange(col.id, "aliases", e.target.value)}
+                              placeholder="Aliases / nombres alternativos"
+                              className="h-8 text-sm"
+                            />
+                            <Input
+                              value={joinCommaSeparatedList(col.examples)}
+                              onChange={(e) => handleColumnListChange(col.id, "examples", e.target.value)}
+                              placeholder="Ejemplos de valores"
+                              className="h-8 text-sm"
+                            />
+                            <Input
+                              value={joinCommaSeparatedList(col.excelKeywords)}
+                              onChange={(e) => handleColumnListChange(col.id, "excelKeywords", e.target.value)}
+                              placeholder="Encabezados / keywords Excel"
+                              className="h-8 text-sm"
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
