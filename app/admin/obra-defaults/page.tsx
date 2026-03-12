@@ -62,6 +62,7 @@ type DataInputMethod = 'ocr' | 'manual' | 'both';
 
 type OcrColumn = {
   id: string;
+  columnId?: string;
   label: string;
   fieldKey: string;
   dataType: string;
@@ -83,6 +84,7 @@ type DefaultFolder = {
   ocrTemplateName?: string | null;
   hasNestedData?: boolean;
   columns?: Array<{
+    id?: string;
     fieldKey: string;
     label: string;
     dataType: string;
@@ -707,6 +709,7 @@ export default function ObraDefaultsPage() {
     setNewFolderColumns(
       (folder.columns ?? []).map((col) => ({
         id: crypto.randomUUID(),
+        columnId: col.id,
         label: col.label,
         fieldKey: col.fieldKey,
         dataType: ensureTablaDataType(col.dataType),
@@ -759,6 +762,7 @@ export default function ObraDefaultsPage() {
         payload.ocrTemplateId = needsOcrTemplate ? newFolderOcrTemplateId : null;
         payload.hasNestedData = needsOcrTemplate ? newFolderHasNested : false;
         payload.columns = effectiveColumns.map((col, index) => ({
+          id: col.columnId,
           label: col.label,
           fieldKey: col.fieldKey || normalizeFieldKey(col.label),
           dataType: col.dataType,

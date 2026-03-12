@@ -1,9 +1,4 @@
-type SupabaseClient = {
-	from: (table: string) => any;
-	storage: {
-		from: (bucket: string) => any;
-	};
-};
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type DefaultFolder = {
 	id: string;
@@ -24,6 +19,7 @@ type DefaultTabla = {
 };
 
 type DefaultColumn = {
+	id: string;
 	default_tabla_id: string;
 	field_key: string;
 	label: string;
@@ -281,7 +277,7 @@ export async function applyObraDefaults(
 		if (defaultTablaIds.length > 0) {
 			const { data: defaultColumns, error: columnsError } = await supabase
 				.from("obra_default_tabla_columns")
-				.select("default_tabla_id, field_key, label, data_type, position, required, config")
+				.select("id, default_tabla_id, field_key, label, data_type, position, required, config")
 				.in("default_tabla_id", defaultTablaIds)
 				.order("position", { ascending: true });
 
@@ -462,7 +458,10 @@ export async function applyObraDefaults(
 					data_type: column.data_type,
 					position: column.position,
 					required: column.required,
-					config: column.config ?? {},
+					config: {
+						...(column.config ?? {}),
+						defaultColumnId: column.id,
+					},
 				}));
 
 				const { error: insertColumnsError } = await supabase

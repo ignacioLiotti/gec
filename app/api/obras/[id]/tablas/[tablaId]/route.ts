@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
-	coerceValueForType,
 	ensureTablaDataType,
-	evaluateTablaFormula,
 	normalizeFieldKey,
+	remapTablaRowDataToSchema,
 } from "@/lib/tablas";
 
 type RouteContext = { params: Promise<{ id: string; tablaId: string }> };
@@ -132,6 +131,11 @@ export async function PATCH(request: Request, context: RouteContext) {
 		const insertNew = normalizedColumns.filter((col) => !col.id);
 
 		for (const col of updateExisting) {
+			const previous = existingById.get(col.id as string);
+			const mergedConfig = {
+				...((previous?.config as Record<string, unknown> | undefined) ?? {}),
+				...col.config,
+			};
 			const { error: updateError } = await supabase
 				.from("obra_tabla_columns")
 				.update({
@@ -140,7 +144,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 					data_type: col.data_type,
 					required: col.required,
 					position: col.position,
-					config: col.config,
+					config: mergedConfig,
 				})
 				.eq("id", col.id as string)
 				.eq("tabla_id", tablaId);
@@ -212,39 +216,17 @@ export async function PATCH(request: Request, context: RouteContext) {
 			}
 
 			const migratedRows = (tablaRows ?? []).map((row) => {
-				const previousData = ((row.data as Record<string, unknown>) ?? {}) as Record<
-					string,
-					unknown
-				>;
-				const migratedData: Record<string, unknown> = {};
-				for (const column of nextColumns) {
-					const previousKey = sourceKeyByColumnId.get(column.id) ?? column.field_key;
-					const rawValue = previousData[previousKey];
-					migratedData[column.field_key] = coerceValueForType(
-						column.data_type,
-						rawValue
-					);
-				}
-
-				// Preserve source metadata keys for traceability.
-				for (const [key, value] of Object.entries(previousData)) {
-					if (key.startsWith("__")) {
-						migratedData[key] = value;
-					}
-				}
-
-				for (const column of nextColumns) {
-					const formula =
-						typeof column.config?.formula === "string"
-							? column.config.formula.trim()
-							: "";
-					if (!formula) continue;
-					const computed = evaluateTablaFormula(formula, migratedData);
-					migratedData[column.field_key] = coerceValueForType(
-						column.data_type,
-						computed
-					);
-				}
+				const migratedData = remapTablaRowDataToSchema({
+					previousData:
+						((row.data as Record<string, unknown>) ?? {}) as Record<string, unknown>,
+					nextColumns: nextColumns.map((column) => ({
+						id: column.id,
+						fieldKey: column.field_key,
+						dataType: column.data_type,
+						config: column.config,
+					})),
+					previousFieldKeyByColumnId: sourceKeyByColumnId,
+				});
 
 				return {
 					id: row.id as string,

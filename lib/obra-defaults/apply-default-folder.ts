@@ -1,4 +1,8 @@
-import { normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
+import {
+	normalizeFieldKey,
+	ensureTablaDataType,
+	remapTablaRowDataToSchema,
+} from "@/lib/tablas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ApplyDefaultFolderParams = {
@@ -20,6 +24,7 @@ type DefaultFolderBundle = {
 	ocrTemplateId?: string | null;
 	hasNestedData?: boolean;
 	columns?: Array<{
+		id?: string;
 		label: string;
 		fieldKey?: string;
 		dataType?: string;
@@ -223,6 +228,53 @@ const CERTIFICADO_SPREADSHEET_PRESETS: SpreadsheetPreset[] = [
 	},
 ];
 
+type ExistingObraColumn = {
+	id: string;
+	field_key: string;
+	data_type: string;
+	config: Record<string, unknown> | null;
+};
+
+type OcrTemplateColumn = {
+	fieldKey?: string;
+	label?: string;
+	dataType?: string;
+	ocrScope?: string;
+	description?: string;
+};
+
+function buildObraColumnConfig(
+	bundle: DefaultFolderBundle,
+	column: NonNullable<DefaultFolderBundle["columns"]>[number]
+) {
+	const config: Record<string, unknown> = {};
+	if (bundle.hasNestedData && column.ocrScope) {
+		config.ocrScope = column.ocrScope;
+	}
+	if (column.description) {
+		config.ocrDescription = column.description;
+	}
+	if (column.id) {
+		config.defaultColumnId = column.id;
+	}
+	return config;
+}
+
+function buildPreviousFieldKeyByIdentity(columns: ExistingObraColumn[]) {
+	const map = new Map<string, string>();
+	for (const column of columns) {
+		const config =
+			(column.config as Record<string, unknown> | null | undefined) ?? {};
+		const defaultColumnId =
+			typeof config.defaultColumnId === "string" ? config.defaultColumnId : null;
+		if (defaultColumnId) {
+			map.set(defaultColumnId, column.field_key);
+		}
+		map.set(column.field_key, column.field_key);
+	}
+	return map;
+}
+
 async function fetchDefaultFolderBundle(
 	supabase: SupabaseClient,
 	params: ApplyDefaultFolderParams,
@@ -260,21 +312,29 @@ async function fetchDefaultFolderBundle(
 
 	const { data: columns, error: columnsError } = await supabase
 		.from("obra_default_tabla_columns")
-		.select("field_key, label, data_type, required, position, config")
+		.select("id, field_key, label, data_type, required, position, config")
 		.eq("default_tabla_id", tabla.id)
 		.order("position", { ascending: true });
 
 	if (columnsError) throw columnsError;
 
-	const mappedColumns = (columns ?? []).map((col) => ({
-		label: col.label as string,
-		fieldKey: col.field_key as string,
-		dataType: col.data_type as string,
-		required: Boolean(col.required),
-		position: col.position ?? 0,
-		ocrScope: (col.config as any)?.ocrScope,
-		description: (col.config as any)?.ocrDescription ?? null,
-	}));
+	const mappedColumns: NonNullable<DefaultFolderBundle["columns"]> = (columns ?? []).map((col) => {
+		const config = (col.config ?? {}) as Record<string, unknown>;
+		return {
+			id: col.id as string,
+			label: col.label as string,
+			fieldKey: col.field_key as string,
+			dataType: col.data_type as string,
+			required: Boolean(col.required),
+			position: col.position ?? 0,
+			ocrScope:
+				typeof config.ocrScope === "string" ? config.ocrScope : undefined,
+			description:
+				typeof config.ocrDescription === "string"
+					? config.ocrDescription
+					: null,
+		};
+	});
 
 	let resolvedColumns = mappedColumns;
 	const templateId = (tabla.ocr_template_id as string | null) ?? null;
@@ -287,18 +347,14 @@ async function fetchDefaultFolderBundle(
 
 		if (templateError) throw templateError;
 
-		const templateColumns = Array.isArray((template as any)?.columns)
-			? ((template as any).columns as Array<{
-					fieldKey?: string;
-					label?: string;
-					dataType?: string;
-					ocrScope?: string;
-					description?: string;
-			  }>)
+		const templateColumnsValue = (template as { columns?: unknown } | null)?.columns;
+		const templateColumns = Array.isArray(templateColumnsValue)
+			? (templateColumnsValue as OcrTemplateColumn[])
 			: [];
 
 		if (templateColumns.length > 0) {
 			resolvedColumns = templateColumns.map((col, index) => ({
+				id: undefined,
 				label: col.label ?? `Columna ${index + 1}`,
 				fieldKey: normalizeFieldKey(
 					col.fieldKey ?? col.label ?? `columna_${index + 1}`,
@@ -326,7 +382,11 @@ async function fetchDefaultFolderBundle(
 			settings: {
 				...settings,
 				ocrFolder: folder.path,
-				ocrTemplateId: tabla.ocr_template_id ?? (settings as any)?.ocrTemplateId,
+				ocrTemplateId:
+					tabla.ocr_template_id ??
+					(typeof settings.ocrTemplateId === "string"
+						? settings.ocrTemplateId
+						: null),
 				defaultTablaId: tabla.id as string,
 			},
 		ocrTemplateId: (tabla.ocr_template_id as string | null) ?? null,
@@ -390,6 +450,9 @@ export async function applyDefaultFolderToExistingObras(
 		const matchingTabla = (obraOcrTablas ?? []).find((tabla) => {
 			const settings = (tabla.settings as Record<string, unknown>) ?? {};
 			const tablaFolder = typeof settings.ocrFolder === "string" ? settings.ocrFolder : null;
+			const defaultTablaId =
+				typeof settings.defaultTablaId === "string" ? settings.defaultTablaId : null;
+			if (bundle.defaultTablaId && defaultTablaId === bundle.defaultTablaId) return true;
 			if (tablaFolder === bundle.path) return true;
 			if (previousPath && tablaFolder === previousPath) return true;
 			return bundle.tablaName ? tabla.name === bundle.tablaName : false;
@@ -515,7 +578,45 @@ export async function applyDefaultFolderToExistingObras(
 			}
 		}
 
+		let previousColumns: ExistingObraColumn[] = [];
+		let existingRows:
+			| Array<{ id: string; data: Record<string, unknown> | null; source: string | null }>
+			| null = null;
+
 		if (tablaId) {
+			const { data: loadedColumns, error: loadedColumnsError } = await supabase
+				.from("obra_tabla_columns")
+				.select("id, field_key, data_type, config")
+				.eq("tabla_id", tablaId)
+				.order("position", { ascending: true });
+			if (loadedColumnsError) {
+				console.error(
+					"[apply-default-folder] Error loading previous columns",
+					loadedColumnsError,
+				);
+				continue;
+			}
+			previousColumns = (loadedColumns ?? []) as ExistingObraColumn[];
+
+			if (shouldForceSync) {
+				const { data: loadedRows, error: loadedRowsError } = await supabase
+					.from("obra_tabla_rows")
+					.select("id, data, source")
+					.eq("tabla_id", tablaId);
+				if (loadedRowsError) {
+					console.error(
+						"[apply-default-folder] Error loading previous rows",
+						loadedRowsError,
+					);
+					continue;
+				}
+				existingRows = (loadedRows ?? []) as Array<{
+					id: string;
+					data: Record<string, unknown> | null;
+					source: string | null;
+				}>;
+			}
+
 			const { error: updateTablaError } = await supabase
 				.from("obra_tablas")
 					.update({
@@ -573,34 +674,66 @@ export async function applyDefaultFolderToExistingObras(
 		const rawColumns = bundle.columns ?? [];
 		if (rawColumns.length === 0) continue;
 
-		const columnsPayload = rawColumns.map((col, index) => {
-			const config: Record<string, unknown> = {};
-			if (bundle.hasNestedData && col.ocrScope) {
-				config.ocrScope = col.ocrScope;
-			}
-			if (col.description) {
-				config.ocrDescription = col.description;
-			}
-			return {
-				tabla_id: tablaId,
-				field_key: normalizeFieldKey(col.fieldKey || col.label),
-				label: col.label,
-				data_type: ensureTablaDataType(col.dataType),
-				position: col.position ?? index,
-				required: Boolean(col.required),
-				config,
-			};
-		});
+		const columnsPayload = rawColumns.map((col, index) => ({
+			tabla_id: tablaId,
+			field_key: normalizeFieldKey(col.fieldKey || col.label),
+			label: col.label,
+			data_type: ensureTablaDataType(col.dataType),
+			position: col.position ?? index,
+			required: Boolean(col.required),
+			config: buildObraColumnConfig(bundle, col),
+		}));
 
-		const { error: columnsError } = await supabase
+		const { data: insertedColumns, error: columnsError } = await supabase
 			.from("obra_tabla_columns")
-			.insert(columnsPayload);
+			.insert(columnsPayload)
+			.select("id, field_key, data_type, config");
 
 		if (columnsError) {
 			console.error(
 				"[apply-default-folder] Error creating columns",
 				columnsError,
 			);
+			continue;
+		}
+
+		if (tablaId && shouldForceSync && existingRows && existingRows.length > 0) {
+			const previousFieldKeyByIdentity = buildPreviousFieldKeyByIdentity(previousColumns);
+			const nextColumns = (insertedColumns ?? []).map((column) => {
+				const config =
+					(column.config as Record<string, unknown> | null | undefined) ?? {};
+				const defaultColumnId =
+					typeof config.defaultColumnId === "string"
+						? config.defaultColumnId
+						: null;
+				return {
+					id: defaultColumnId ?? (column.field_key as string),
+					fieldKey: column.field_key as string,
+					dataType: column.data_type as string,
+					config,
+				};
+			});
+
+			const migratedRows = existingRows.map((row) => ({
+				id: row.id,
+				tabla_id: tablaId,
+				data: remapTablaRowDataToSchema({
+					previousData: row.data,
+					nextColumns,
+					previousFieldKeyByColumnId: previousFieldKeyByIdentity,
+				}),
+				source: row.source ?? "manual",
+			}));
+
+			const { error: upsertRowsError } = await supabase
+				.from("obra_tabla_rows")
+				.upsert(migratedRows, { onConflict: "id" });
+			if (upsertRowsError) {
+				console.error(
+					"[apply-default-folder] Error migrating existing rows",
+					upsertRowsError,
+				);
+			}
 		}
 	}
 

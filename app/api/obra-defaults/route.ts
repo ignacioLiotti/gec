@@ -19,6 +19,7 @@ type DefaultFolder = {
 	ocrTemplateName?: string | null;
 	hasNestedData?: boolean;
 	columns?: Array<{
+		id?: string;
 		fieldKey: string;
 		label: string;
 		dataType: string;
@@ -37,6 +38,53 @@ type QuickAction = {
 	obraId?: string | null;
 };
 
+type DefaultColumnInput = {
+	id?: string;
+	label?: string;
+	fieldKey?: string;
+	dataType?: string;
+	required?: boolean;
+	ocrScope?: string;
+	description?: string | null;
+	position?: number;
+};
+
+type PersistedDefaultColumn = {
+	id: string;
+	field_key: string;
+	label: string;
+	data_type: ReturnType<typeof ensureTablaDataType>;
+	required: boolean;
+	position: number;
+	config: Record<string, unknown>;
+};
+
+type OcrTemplateColumn = {
+	label?: string;
+	fieldKey?: string;
+	dataType?: string;
+	ocrScope?: string;
+	description?: string;
+};
+
+type QuickActionRow = {
+	id: string;
+	name: string;
+	description: string | null;
+	folder_paths: string[] | null;
+	position: number | null;
+	obra_id?: string | null;
+};
+
+type QuickActionInsertPayload = {
+	tenant_id: string;
+	name: string;
+	description: string | null;
+	folder_paths: string[];
+	position: number;
+	obra_id?: string | null;
+};
+
 function isMissingQuickActionsTableError(error: unknown): boolean {
 	if (!error || typeof error !== "object") return false;
 	const maybe = error as { code?: string; message?: string };
@@ -48,6 +96,177 @@ function isMissingQuickActionObraScopeColumn(error: unknown): boolean {
 	if (!error || typeof error !== "object") return false;
 	const maybe = error as { code?: string; message?: string };
 	return maybe.code === "42703" || (maybe.message ?? "").includes("obra_id");
+}
+
+function normalizeDefaultColumnInput(
+	column: DefaultColumnInput,
+	index: number,
+	hasNestedData: boolean
+) {
+	const label =
+		typeof column.label === "string" && column.label.trim()
+			? column.label.trim()
+			: `Columna ${index + 1}`;
+	const fieldKey = normalizeFieldKey(
+		typeof column.fieldKey === "string" && column.fieldKey.trim()
+			? column.fieldKey
+			: label
+	);
+	const config: Record<string, unknown> = {};
+	if (hasNestedData && typeof column.ocrScope === "string" && column.ocrScope) {
+		config.ocrScope = column.ocrScope;
+	}
+	if (typeof column.description === "string" && column.description.trim()) {
+		config.ocrDescription = column.description.trim();
+	}
+	return {
+		id: typeof column.id === "string" && column.id ? column.id : undefined,
+		label,
+		field_key: fieldKey,
+		data_type: ensureTablaDataType(column.dataType),
+		required: Boolean(column.required),
+		position: typeof column.position === "number" ? column.position : index,
+		config,
+	};
+}
+
+function toResponseDefaultColumn(column: PersistedDefaultColumn) {
+	return {
+		id: column.id,
+		fieldKey: column.field_key,
+		label: column.label,
+		dataType: column.data_type,
+		required: Boolean(column.required),
+		ocrScope: (column.config as Record<string, unknown> | null)?.ocrScope as
+			| string
+			| undefined,
+		description:
+			((column.config as Record<string, unknown> | null)?.ocrDescription as
+				| string
+				| null
+				| undefined) ?? null,
+	};
+}
+
+async function syncDefaultTablaColumns(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	defaultTablaId: string,
+	rawColumns: DefaultColumnInput[],
+	hasNestedData: boolean
+) {
+	const draftColumns = rawColumns.map((column, index) =>
+		normalizeDefaultColumnInput(column, index, hasNestedData)
+	);
+	const uniqueFieldKeys = new Set(draftColumns.map((col) => col.field_key));
+	if (uniqueFieldKeys.size !== draftColumns.length) {
+		throw new Error("Las columnas deben tener fieldKey único");
+	}
+
+	const { data: existingColumnsData, error: existingColumnsError } = await supabase
+		.from("obra_default_tabla_columns")
+		.select("id, field_key, label, data_type, required, position, config")
+		.eq("default_tabla_id", defaultTablaId)
+		.order("position", { ascending: true });
+	if (existingColumnsError) throw existingColumnsError;
+
+	const existingColumns = (existingColumnsData ?? []) as PersistedDefaultColumn[];
+	const existingById = new Map(existingColumns.map((column) => [column.id, column]));
+	const existingByFieldKey = new Map(
+		existingColumns.map((column) => [column.field_key, column])
+	);
+
+	const normalizedColumns = draftColumns.map((column) => {
+		if (column.id && existingById.has(column.id)) {
+			return column;
+		}
+		const matchByFieldKey = existingByFieldKey.get(column.field_key);
+		if (matchByFieldKey) {
+			return {
+				...column,
+				id: matchByFieldKey.id,
+			};
+		}
+		return {
+			...column,
+			id: undefined,
+		};
+	});
+
+	const incomingIds = new Set(
+		normalizedColumns
+			.map((column) => column.id)
+			.filter((id): id is string => typeof id === "string")
+	);
+	const removedIds = existingColumns
+		.map((column) => column.id)
+		.filter((id) => !incomingIds.has(id));
+
+	for (const column of normalizedColumns.filter((item) => item.id)) {
+		const { error: updateError } = await supabase
+			.from("obra_default_tabla_columns")
+			.update({
+				field_key: column.field_key,
+				label: column.label,
+				data_type: column.data_type,
+				required: column.required,
+				position: column.position,
+				config: column.config,
+			})
+			.eq("id", column.id as string)
+			.eq("default_tabla_id", defaultTablaId);
+		if (updateError) throw updateError;
+	}
+
+	let insertedColumns: PersistedDefaultColumn[] = [];
+	const newColumns = normalizedColumns.filter((item) => !item.id);
+	if (newColumns.length > 0) {
+		const { data: inserted, error: insertError } = await supabase
+			.from("obra_default_tabla_columns")
+			.insert(
+				newColumns.map((column) => ({
+					default_tabla_id: defaultTablaId,
+					field_key: column.field_key,
+					label: column.label,
+					data_type: column.data_type,
+					required: column.required,
+					position: column.position,
+					config: column.config,
+				}))
+			)
+			.select("id, field_key, label, data_type, required, position, config");
+		if (insertError) throw insertError;
+		insertedColumns = (inserted ?? []) as PersistedDefaultColumn[];
+	}
+
+	if (removedIds.length > 0) {
+		const { error: deleteError } = await supabase
+			.from("obra_default_tabla_columns")
+			.delete()
+			.in("id", removedIds);
+		if (deleteError) throw deleteError;
+	}
+
+	const insertedByPosition = new Map(
+		insertedColumns.map((column) => [column.position, column])
+	);
+	return normalizedColumns.map((column) => {
+		if (column.id) {
+			return toResponseDefaultColumn({
+				id: column.id,
+				field_key: column.field_key,
+				label: column.label,
+				data_type: column.data_type,
+				required: column.required,
+				position: column.position,
+				config: column.config,
+			});
+		}
+		const inserted = insertedByPosition.get(column.position);
+		if (!inserted) {
+			throw new Error("No se pudo persistir una columna nueva");
+		}
+		return toResponseDefaultColumn(inserted);
+	});
 }
 
 async function getAuthContext() {
@@ -141,7 +360,7 @@ export async function GET(request: Request) {
 			.filter(t => t.ocr_template_id)
 			.map(t => t.ocr_template_id);
 
-		let templatesMap = new Map<string, string>();
+		const templatesMap = new Map<string, string>();
 		if (templateIds.length > 0) {
 			const { data: templates } = await supabase
 				.from("ocr_templates")
@@ -155,7 +374,8 @@ export async function GET(request: Request) {
 
 			// Fetch columns for OCR tablas
 			const tablaIds = (tablas ?? []).map(t => t.id);
-			let columnsMap = new Map<string, Array<{
+			const columnsMap = new Map<string, Array<{
+				id?: string;
 				fieldKey: string;
 				label: string;
 				dataType: string;
@@ -167,20 +387,26 @@ export async function GET(request: Request) {
 		if (tablaIds.length > 0) {
 			const { data: columns } = await supabase
 				.from("obra_default_tabla_columns")
-				.select("default_tabla_id, field_key, label, data_type, required, config")
+				.select("id, default_tabla_id, field_key, label, data_type, required, config")
 				.in("default_tabla_id", tablaIds)
 				.order("position", { ascending: true });
 
 			if (columns) {
 				columns.forEach(col => {
+					const config = (col.config ?? {}) as Record<string, unknown>;
 					const existing = columnsMap.get(col.default_tabla_id) ?? [];
 					existing.push({
+						id: col.id,
 						fieldKey: col.field_key,
 						label: col.label,
 						dataType: col.data_type,
 						required: Boolean(col.required),
-						ocrScope: (col.config as any)?.ocrScope,
-						description: (col.config as any)?.ocrDescription ?? null,
+						ocrScope:
+							typeof config.ocrScope === "string" ? config.ocrScope : undefined,
+						description:
+							typeof config.ocrDescription === "string"
+								? config.ocrDescription
+								: null,
 					});
 					columnsMap.set(col.default_tabla_id, existing);
 				});
@@ -239,8 +465,9 @@ export async function GET(request: Request) {
 			} else {
 				quickActionsQuery.is("obra_id", null);
 			}
-			let { data: quickActions, error: quickActionsError } =
-				await quickActionsQuery;
+			const quickActionsResult = await quickActionsQuery;
+			let quickActions = (quickActionsResult.data ?? null) as QuickActionRow[] | null;
+			let quickActionsError = quickActionsResult.error;
 			if (quickActionsError && isMissingQuickActionObraScopeColumn(quickActionsError)) {
 				// Backward compatibility: environments without migration 0081 still have global quick actions.
 				const fallback = await supabase
@@ -248,8 +475,8 @@ export async function GET(request: Request) {
 					.select("id, name, description, folder_paths, position")
 					.eq("tenant_id", tenantId)
 					.order("position", { ascending: true });
-				quickActions = fallback.data as any;
-				quickActionsError = fallback.error as any;
+				quickActions = (fallback.data ?? null) as QuickActionRow[] | null;
+				quickActionsError = fallback.error;
 			}
 
 			if (quickActionsError) {
@@ -268,7 +495,7 @@ export async function GET(request: Request) {
 
 		return NextResponse.json({
 			folders: enrichedFolders,
-				quickActions: (quickActions ?? []).map((action: any): QuickAction => ({
+				quickActions: (quickActions ?? []).map((action): QuickAction => ({
 				id: action.id,
 				name: action.name,
 				description: action.description,
@@ -347,7 +574,7 @@ export async function POST(request: Request) {
 			const isOcr = body.isOcr === true;
 
 			if (!isOcr) {
-				const { data: job, error: jobError } = await supabase
+				const { error: jobError } = await supabase
 					.from("background_jobs")
 					.insert({
 						tenant_id: tenantId,
@@ -389,14 +616,9 @@ export async function POST(request: Request) {
 				if (templateError) {
 					console.error("[obra-defaults:post] template columns error:", templateError);
 				} else {
-					const templateColumns = Array.isArray((template as any)?.columns)
-						? ((template as any).columns as Array<{
-								label?: string;
-								fieldKey?: string;
-								dataType?: string;
-								ocrScope?: string;
-								description?: string;
-						  }>)
+					const templateColumnsValue = (template as { columns?: unknown } | null)?.columns;
+					const templateColumns = Array.isArray(templateColumnsValue)
+						? (templateColumnsValue as OcrTemplateColumn[])
 						: [];
 					if (templateColumns.length > 0) {
 						resolvedColumns = templateColumns.map((col, index) => ({
@@ -466,6 +688,7 @@ export async function POST(request: Request) {
 
 			// Create columns
 			let insertedColumns: Array<{
+				id?: string;
 				fieldKey: string;
 				label: string;
 				dataType: string;
@@ -499,20 +722,28 @@ export async function POST(request: Request) {
 				const { data: columns, error: columnsError } = await supabase
 					.from("obra_default_tabla_columns")
 					.insert(columnsPayload)
-					.select("field_key, label, data_type, required, config");
+					.select("id, field_key, label, data_type, required, config");
 
 					if (columnsError) {
 						console.error("[obra-defaults:post] columns error:", columnsError);
 					} else if (columns) {
 						console.log("[obra-defaults:post] Successfully created", columns.length, "columns for default tabla", tabla.id);
-						insertedColumns = columns.map(col => ({
-							fieldKey: col.field_key,
-							label: col.label,
-							dataType: col.data_type,
-							required: Boolean(col.required),
-							ocrScope: (col.config as any)?.ocrScope,
-							description: (col.config as any)?.ocrDescription ?? null,
-						}));
+						insertedColumns = columns.map(col => {
+							const config = (col.config ?? {}) as Record<string, unknown>;
+							return {
+								id: col.id,
+								fieldKey: col.field_key,
+								label: col.label,
+								dataType: col.data_type,
+								required: Boolean(col.required),
+								ocrScope:
+									typeof config.ocrScope === "string" ? config.ocrScope : undefined,
+								description:
+									typeof config.ocrDescription === "string"
+										? config.ocrDescription
+										: null,
+							};
+						});
 					}
 				} else {
 					console.warn("[obra-defaults:post] No columns provided for OCR folder - this will cause issues!");
@@ -540,7 +771,7 @@ export async function POST(request: Request) {
 					columns: insertedColumns,
 				};
 
-			const { data: job, error: jobError } = await supabase
+			const { error: jobError } = await supabase
 				.from("background_jobs")
 				.insert({
 					tenant_id: tenantId,
@@ -641,7 +872,7 @@ export async function POST(request: Request) {
 
 			const nextPosition = (existingActions?.[0]?.position ?? -1) + 1;
 
-				const quickActionInsertPayload: Record<string, unknown> = {
+				const quickActionInsertPayload: QuickActionInsertPayload = {
 					tenant_id: tenantId,
 					name: rawName,
 					description,
@@ -654,7 +885,7 @@ export async function POST(request: Request) {
 
 				const { data: quickAction, error: quickActionError } = await supabase
 					.from("obra_default_quick_actions")
-					.insert(quickActionInsertPayload as any)
+					.insert(quickActionInsertPayload)
 					.select("id, name, description, folder_paths, position, obra_id")
 					.single();
 
@@ -786,15 +1017,9 @@ export async function PUT(request: Request) {
 			? body.ocrTemplateId.trim()
 			: null;
 		const hasNestedData = body.hasNestedData === true;
-		const rawColumns: Array<{
-			label: string;
-			fieldKey?: string;
-			dataType?: string;
-			required?: boolean;
-			ocrScope?: string;
-			description?: string | null;
-			position?: number;
-		}> = Array.isArray(body.columns) ? body.columns : [];
+		const rawColumns: DefaultColumnInput[] = Array.isArray(body.columns)
+			? body.columns
+			: [];
 
 		let resolvedColumns = rawColumns;
 		if (resolvedColumns.length === 0 && ocrTemplateId) {
@@ -807,14 +1032,9 @@ export async function PUT(request: Request) {
 			if (templateError) {
 				console.error("[obra-defaults:put] template columns error:", templateError);
 			} else {
-				const templateColumns = Array.isArray((template as any)?.columns)
-					? ((template as any).columns as Array<{
-							label?: string;
-							fieldKey?: string;
-							dataType?: string;
-							ocrScope?: string;
-							description?: string;
-					  }>)
+				const templateColumnsValue = (template as { columns?: unknown } | null)?.columns;
+				const templateColumns = Array.isArray(templateColumnsValue)
+					? (templateColumnsValue as OcrTemplateColumn[])
 					: [];
 
 				if (templateColumns.length > 0) {
@@ -914,6 +1134,7 @@ export async function PUT(request: Request) {
 		}
 
 		let insertedColumns: Array<{
+			id?: string;
 			fieldKey: string;
 			label: string;
 			dataType: string;
@@ -923,38 +1144,12 @@ export async function PUT(request: Request) {
 		}> = [];
 
 		if (tablaId && resolvedColumns.length > 0) {
-			const columnsPayload = resolvedColumns.map((col, index) => ({
-				default_tabla_id: tablaId,
-				field_key: normalizeFieldKey(col.fieldKey || col.label),
-				label: col.label,
-				data_type: ensureTablaDataType(col.dataType),
-				position: col.position ?? index,
-				required: Boolean(col.required),
-				config:
-					hasNestedData && col.ocrScope
-						? { ocrScope: col.ocrScope, ocrDescription: col.description ?? null }
-						: col.description
-							? { ocrDescription: col.description }
-							: {},
-			}));
-
-			const { data: columns, error: columnsError } = await supabase
-				.from("obra_default_tabla_columns")
-				.insert(columnsPayload)
-				.select("field_key, label, data_type, required, config");
-
-			if (columnsError) {
-				console.error("[obra-defaults:put] columns error:", columnsError);
-			} else {
-				insertedColumns = (columns ?? []).map((col) => ({
-					fieldKey: col.field_key,
-					label: col.label,
-					dataType: col.data_type,
-					required: Boolean(col.required),
-					ocrScope: (col.config as any)?.ocrScope,
-					description: (col.config as any)?.ocrDescription ?? null,
-				}));
-			}
+			insertedColumns = await syncDefaultTablaColumns(
+				supabase,
+				tablaId,
+				resolvedColumns,
+				hasNestedData
+			);
 		}
 
 		let ocrTemplateName: string | null = null;
