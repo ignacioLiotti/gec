@@ -11,6 +11,7 @@ type Region = {
 	description?: string;
 	color: string;
 	type: "single" | "table";
+	pageNumber?: number;
 	tableColumns?: string[];
 };
 
@@ -105,7 +106,9 @@ export async function POST(request: Request) {
 				typeof r.x === "number" &&
 				typeof r.y === "number" &&
 				typeof r.width === "number" &&
-				typeof r.height === "number"
+				typeof r.height === "number" &&
+				(r.pageNumber === undefined ||
+					(typeof r.pageNumber === "number" && Number.isFinite(r.pageNumber) && r.pageNumber >= 1))
 		);
 
 		if (validRegions.length === 0) {
@@ -187,8 +190,9 @@ export async function POST(request: Request) {
 			.single();
 
 		if (error) {
-			const code = (error as any)?.code;
-			const message = (error as any)?.message ?? "";
+			const typedError = error as { code?: string; message?: string } | null;
+			const code = typedError?.code;
+			const message = typedError?.message ?? "";
 			if (code === "23505" && message.includes("ocr_templates_name_unique")) {
 				console.log("[ocr-templates:post] duplicate name constraint", {
 					tenantId,

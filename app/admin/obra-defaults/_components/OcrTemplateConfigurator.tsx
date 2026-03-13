@@ -18,6 +18,8 @@ import {
 	RotateCcw,
 	Move,
 	Pencil,
+	ChevronLeft,
+	ChevronRight,
 	CheckCircle2,
 	Sparkles,
 } from "lucide-react";
@@ -50,6 +52,7 @@ interface Region {
 	description?: string;
 	color: string;
 	type: RegionType;
+	pageNumber?: number;
 	tableColumns?: string[];
 }
 
@@ -68,6 +71,33 @@ interface OcrTemplate {
 	}>;
 	is_active: boolean;
 }
+
+type PdfViewport = {
+	width: number;
+	height: number;
+};
+
+type PdfPageProxy = {
+	getViewport: (options: { scale: number }) => PdfViewport;
+	render: (options: {
+		canvasContext: CanvasRenderingContext2D;
+		viewport: PdfViewport;
+	}) => { promise: Promise<void> };
+};
+
+type PdfDocumentProxy = {
+	numPages: number;
+	getPage: (pageNumber: number) => Promise<PdfPageProxy>;
+	destroy?: () => void;
+};
+
+type PdfJsModule = {
+	GlobalWorkerOptions?: { workerSrc: string };
+	getDocument: (options: {
+		data: Uint8Array;
+		disableWorker: boolean;
+	}) => { promise: Promise<PdfDocumentProxy> };
+};
 
 // Constants
 const REGION_COLORS = [
@@ -96,6 +126,8 @@ export function OcrTemplateConfigurator({
 }: Props) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const pdfBytesRef = useRef<Uint8Array | null>(null);
+	const pdfRenderTokenRef = useRef(0);
 
 	// State
 	const [templateName, setTemplateName] = useState("");
@@ -103,6 +135,10 @@ export function OcrTemplateConfigurator({
 	const [image, setImage] = useState<HTMLImageElement | null>(null);
 	const [imageSrc, setImageSrc] = useState<string | null>(null);
 	const [fileName, setFileName] = useState<string | null>(null);
+	const [documentKind, setDocumentKind] = useState<"image" | "pdf" | null>(null);
+	const [pageCount, setPageCount] = useState(1);
+	const [selectedPageNumber, setSelectedPageNumber] = useState(1);
+	const [isRenderingPdf, setIsRenderingPdf] = useState(false);
 	const [regions, setRegions] = useState<Region[]>([]);
 	const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
 	const [isDrawing, setIsDrawing] = useState(false);
@@ -120,6 +156,9 @@ export function OcrTemplateConfigurator({
 				setTemplateName(existingTemplate.name);
 				setTemplateDescription(existingTemplate.description ?? "");
 				setRegions(existingTemplate.regions);
+				setDocumentKind(null);
+				setPageCount(1);
+				setSelectedPageNumber(1);
 				// TODO: Load template image
 			} else {
 				setTemplateName("");
@@ -127,6 +166,10 @@ export function OcrTemplateConfigurator({
 				setImage(null);
 				setImageSrc(null);
 				setFileName(null);
+				setDocumentKind(null);
+				setPageCount(1);
+				setSelectedPageNumber(1);
+				pdfBytesRef.current = null;
 				setRegions([]);
 				setSelectedRegionId(null);
 				setScale(1);
@@ -135,13 +178,87 @@ export function OcrTemplateConfigurator({
 		}
 	}, [open, existingTemplate]);
 
+	const loadPreviewFromDataUrl = useCallback((src: string) => {
+		return new Promise<HTMLImageElement>((resolve, reject) => {
+			const img = new window.Image();
+			img.onload = () => resolve(img);
+			img.onerror = () => reject(new Error("No se pudo renderizar la previsualizaciÃ³n"));
+			img.src = src;
+		});
+	}, []);
+
+	const renderPdfPage = useCallback(
+		async (pdfBytes: Uint8Array, pageNumber: number, currentFileName: string) => {
+			setIsRenderingPdf(true);
+			const renderToken = ++pdfRenderTokenRef.current;
+			try {
+				// @ts-expect-error pdfjs-dist legacy client build is imported dynamically without local typings
+				const pdfjsModule = await import("pdfjs-dist/legacy/build/pdf");
+				const pdfjs = pdfjsModule as unknown as PdfJsModule;
+				if (pdfjs?.GlobalWorkerOptions) {
+					pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+						"pdfjs-dist/build/pdf.worker.min.mjs",
+						import.meta.url
+					).toString();
+				}
+				const loadingTask = pdfjs.getDocument({ data: pdfBytes, disableWorker: true });
+				const pdf = await loadingTask.promise;
+				const safePage = Math.max(1, Math.min(pageNumber, pdf.numPages));
+				const page = await pdf.getPage(safePage);
+				const viewport = page.getViewport({ scale: 1.4 });
+				const canvas = document.createElement("canvas");
+				const ctx = canvas.getContext("2d");
+				if (!ctx) {
+					throw new Error("No se pudo preparar el canvas para el PDF");
+				}
+				canvas.width = Math.max(1, Math.floor(viewport.width));
+				canvas.height = Math.max(1, Math.floor(viewport.height));
+				await page.render({ canvasContext: ctx as never, viewport }).promise;
+				const dataUrl = canvas.toDataURL("image/png");
+				const img = await loadPreviewFromDataUrl(dataUrl);
+				if (renderToken !== pdfRenderTokenRef.current) {
+					if (typeof pdf.destroy === "function") {
+						pdf.destroy();
+					}
+					return;
+				}
+				setImage(img);
+				setImageSrc(dataUrl);
+				setFileName(currentFileName);
+				setDocumentKind("pdf");
+				setPageCount(pdf.numPages);
+				if (typeof pdf.destroy === "function") {
+					pdf.destroy();
+				}
+			} finally {
+				if (renderToken === pdfRenderTokenRef.current) {
+					setIsRenderingPdf(false);
+				}
+			}
+		},
+		[loadPreviewFromDataUrl]
+	);
+
 	// Handle file upload
-	const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+	const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		if (!file) return;
 
 		const isImage = file.type.startsWith("image/");
-		const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
+		const isPdf =
+			file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+		if (!isImage && !isPdf) {
+			toast.error("Solo se permiten imÃ¡genes o PDFs");
+			return;
+		}
+
+		setSaveError(null);
+		setFileName(file.name);
+		setRegions([]);
+		setSelectedRegionId(null);
+		setScale(1);
+		setSelectedPageNumber(1);
 
 		if (!isImage && !isPdf) {
 			toast.error("Solo se permiten imágenes o PDFs");
@@ -149,32 +266,73 @@ export function OcrTemplateConfigurator({
 		}
 
 		if (isPdf) {
-			// For now, only support images. PDF support would require pdf.js
+			try {
+				const arrayBuffer = await file.arrayBuffer();
+				pdfBytesRef.current = new Uint8Array(arrayBuffer);
+				await renderPdfPage(pdfBytesRef.current, 1, file.name);
+			} catch (error) {
+				console.error(error);
+				pdfBytesRef.current = null;
+				setImage(null);
+				setImageSrc(null);
+				setDocumentKind(null);
+				setPageCount(1);
+				toast.error("No se pudo abrir el PDF seleccionado");
+			}
+			return;
+		}
+
+		if (false && isPdf) {
+			// Legacy fallback kept inert after PDF support landed.
 			toast.error("Por ahora solo se permiten imágenes. Soporte PDF próximamente.");
 			return;
 		}
 
 		setFileName(file.name);
 
+		pdfBytesRef.current = null;
+		setDocumentKind("image");
+		setPageCount(1);
+
 		const reader = new FileReader();
-		reader.onload = (event) => {
+		reader.onload = async (event) => {
 			const src = typeof event.target?.result === "string" ? event.target.result : null;
 			if (!src) {
 				toast.error("No se pudo leer la imagen seleccionada");
 				return;
 			}
-			const img = new Image();
-			img.onload = () => {
+			try {
+				const img = await loadPreviewFromDataUrl(src);
 				setImage(img);
 				setImageSrc(src);
-				setRegions([]);
-				setSelectedRegionId(null);
-				setScale(1);
-			};
-			img.src = src;
+			} catch (error) {
+				console.error(error);
+				toast.error("No se pudo renderizar la imagen seleccionada");
+			}
 		};
 		reader.readAsDataURL(file);
-	}, []);
+	}, [loadPreviewFromDataUrl, renderPdfPage]);
+
+	const currentPageRegions = useMemo(
+		() =>
+			regions.filter(
+				(region) => (region.pageNumber ?? 1) === selectedPageNumber
+			),
+		[regions, selectedPageNumber]
+	);
+
+	useEffect(() => {
+		if (!selectedRegionId) return;
+		const stillVisible = currentPageRegions.some((region) => region.id === selectedRegionId);
+		if (!stillVisible) {
+			setSelectedRegionId(null);
+		}
+	}, [currentPageRegions, selectedRegionId]);
+
+	useEffect(() => {
+		if (documentKind !== "pdf" || !pdfBytesRef.current) return;
+		void renderPdfPage(pdfBytesRef.current, selectedPageNumber, fileName || "documento.pdf");
+	}, [documentKind, fileName, renderPdfPage, selectedPageNumber]);
 
 	// Get scaled coordinates from mouse event
 	const getScaledCoords = useCallback(
@@ -203,8 +361,8 @@ export function OcrTemplateConfigurator({
 
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-			// Draw existing regions
-			for (const region of regions) {
+			// Draw existing regions for the visible page
+			for (const region of currentPageRegions) {
 				const isSelected = region.id === selectedRegionId;
 				const isTable = region.type === "table";
 
@@ -233,14 +391,14 @@ export function OcrTemplateConfigurator({
 
 			// Draw temporary rectangle
 			if (tempRect) {
-				ctx.strokeStyle = REGION_COLORS[regions.length % REGION_COLORS.length];
+				ctx.strokeStyle = REGION_COLORS[currentPageRegions.length % REGION_COLORS.length];
 				ctx.lineWidth = 3;
 				ctx.setLineDash([6, 3]);
 				ctx.strokeRect(tempRect.x, tempRect.y, tempRect.width, tempRect.height);
 				ctx.setLineDash([]);
 			}
 		},
-		[image, regions, selectedRegionId]
+		[image, currentPageRegions, selectedRegionId]
 	);
 
 	// Redraw when dependencies change
@@ -265,8 +423,8 @@ export function OcrTemplateConfigurator({
 			const coords = getScaledCoords(e);
 
 			// Check if clicking on existing region
-			for (let i = regions.length - 1; i >= 0; i--) {
-				const r = regions[i];
+			for (let i = currentPageRegions.length - 1; i >= 0; i--) {
+				const r = currentPageRegions[i];
 				if (
 					coords.x >= r.x &&
 					coords.x <= r.x + r.width &&
@@ -283,7 +441,7 @@ export function OcrTemplateConfigurator({
 			setIsDrawing(true);
 			setDrawStart(coords);
 		},
-		[image, isDrawModeEnabled, getScaledCoords, regions]
+		[image, isDrawModeEnabled, getScaledCoords, currentPageRegions]
 	);
 
 	const handleMouseMove = useCallback(
@@ -317,9 +475,10 @@ export function OcrTemplateConfigurator({
 					y: Math.min(drawStart.y, coords.y),
 					width,
 					height,
-					label: `Campo ${regions.length + 1}`,
-					color: REGION_COLORS[regions.length % REGION_COLORS.length],
+					label: `Campo ${currentPageRegions.length + 1}`,
+					color: REGION_COLORS[currentPageRegions.length % REGION_COLORS.length],
 					type: "single",
+					pageNumber: selectedPageNumber,
 				};
 				setRegions((prev) => [...prev, newRegion]);
 				setSelectedRegionId(newRegion.id);
@@ -329,7 +488,14 @@ export function OcrTemplateConfigurator({
 			setDrawStart(null);
 			redraw();
 		},
-		[isDrawing, drawStart, getScaledCoords, regions.length, redraw]
+		[
+			isDrawing,
+			drawStart,
+			getScaledCoords,
+			currentPageRegions.length,
+			redraw,
+			selectedPageNumber,
+		]
 	);
 
 	// Region actions
@@ -416,6 +582,9 @@ export function OcrTemplateConfigurator({
 					regions,
 					templateWidth: image?.width,
 					templateHeight: image?.height,
+					templateSourceType: documentKind,
+					templatePageCount: pageCount,
+					templatePageNumber: selectedPageNumber,
 					templateFileName: fileName,
 				}),
 			});
@@ -442,7 +611,18 @@ export function OcrTemplateConfigurator({
 		} finally {
 			setIsSaving(false);
 		}
-	}, [templateName, templateDescription, regions, image, fileName, onTemplateCreated, onOpenChange]);
+	}, [
+		templateName,
+		templateDescription,
+		regions,
+		image,
+		documentKind,
+		pageCount,
+		selectedPageNumber,
+		fileName,
+		onTemplateCreated,
+		onOpenChange,
+	]);
 
 	const singleRegions = useMemo(
 		() => regions.filter((region) => region.type === "single"),
@@ -467,7 +647,7 @@ export function OcrTemplateConfigurator({
 	const steps = ["Contexto", "Documento ejemplo", "Regiones y significado", "Publicación"];
 	const canGoNext =
 		(currentStep === 0 && templateName.trim().length > 0) ||
-		(currentStep === 1 && Boolean(image)) ||
+		(currentStep === 1 && Boolean(image) && !isRenderingPdf) ||
 		(currentStep === 2 && regions.length > 0);
 
 	return (
@@ -572,7 +752,7 @@ export function OcrTemplateConfigurator({
 										{image ? "Cambiar ejemplo" : "Subir documento ejemplo"}
 										<input
 											type="file"
-											accept="image/*"
+											accept="image/*,.pdf,application/pdf"
 											onChange={handleFileUpload}
 											className="absolute inset-0 opacity-0 cursor-pointer"
 										/>
@@ -613,6 +793,30 @@ export function OcrTemplateConfigurator({
 										<Button variant="outline" size="icon" onClick={() => setScale(1)}>
 											<RotateCcw className="h-4 w-4" />
 										</Button>
+										{documentKind === "pdf" && pageCount > 1 && (
+											<>
+												<div className="h-6 w-px bg-border" />
+												<Button
+													variant="outline"
+													size="icon"
+													onClick={() => setSelectedPageNumber((page) => Math.max(1, page - 1))}
+													disabled={selectedPageNumber <= 1 || isRenderingPdf}
+												>
+													<ChevronLeft className="h-4 w-4" />
+												</Button>
+												<span className="text-xs font-medium min-w-[88px] text-center">
+													Pág. {selectedPageNumber} / {pageCount}
+												</span>
+												<Button
+													variant="outline"
+													size="icon"
+													onClick={() => setSelectedPageNumber((page) => Math.min(pageCount, page + 1))}
+													disabled={selectedPageNumber >= pageCount || isRenderingPdf}
+												>
+													<ChevronRight className="h-4 w-4" />
+												</Button>
+											</>
+										)}
 									</>
 								)}
 							</div>
@@ -621,6 +825,13 @@ export function OcrTemplateConfigurator({
 								ref={containerRef}
 								className="flex-1 min-h-[460px] bg-muted/30 rounded-lg border-2 border-dashed border-muted-foreground/20 overflow-auto"
 							>
+								{isRenderingPdf && (
+									<div className="sticky top-0 z-10 flex items-center justify-end p-3">
+										<div className="rounded-full border bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+											Renderizando PDF...
+										</div>
+									</div>
+								)}
 								{image ? (
 									<div
 										className="p-4"
@@ -668,7 +879,7 @@ export function OcrTemplateConfigurator({
 									<div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
 										<Upload className="h-16 w-16 mb-4 opacity-30" />
 										<p className="font-medium">Subí un documento de ejemplo</p>
-										<p className="text-sm opacity-70">PNG, JPG o WebP</p>
+										<p className="text-sm opacity-70">PNG, JPG, WebP o PDF</p>
 									</div>
 								)}
 							</div>
@@ -688,6 +899,9 @@ export function OcrTemplateConfigurator({
 									<div className="rounded-xl border bg-muted/20 p-4">
 										<p className="text-sm font-medium">Vista rápida</p>
 										<div className="mt-3 flex flex-wrap gap-2">
+											{documentKind === "pdf" && (
+												<Badge variant="secondary">{pageCount} pÃ¡ginas detectadas</Badge>
+											)}
 											<Badge variant="secondary">{singleRegions.length} campos únicos</Badge>
 											<Badge variant="secondary">{tableRegions.length} regiones tabla</Badge>
 										</div>
@@ -696,7 +910,7 @@ export function OcrTemplateConfigurator({
 							) : (
 								<>
 									<div className="space-y-2">
-										<Label className="mb-0 block">Regiones ({regions.length})</Label>
+										<Label className="mb-0 block">Regiones ({currentPageRegions.length})</Label>
 										<p className="text-xs text-muted-foreground">
 											Editá nombre, significado y tipo para cada región.
 										</p>
@@ -704,7 +918,7 @@ export function OcrTemplateConfigurator({
 									<div className="flex-1 min-h-0">
 										<ScrollArea className="h-full pr-3">
 											<AnimatePresence mode="popLayout">
-												{regions.length === 0 ? (
+												{currentPageRegions.length === 0 ? (
 													<motion.p
 														initial={{ opacity: 0 }}
 														animate={{ opacity: 1 }}
@@ -714,7 +928,7 @@ export function OcrTemplateConfigurator({
 													</motion.p>
 												) : (
 													<div className="space-y-2">
-														{regions.map((region) => (
+														{currentPageRegions.map((region) => (
 															<RegionItem
 																key={region.id}
 																region={region}
@@ -754,6 +968,18 @@ export function OcrTemplateConfigurator({
 									<div className="rounded-lg border bg-background p-3">
 										<p className="text-xs text-muted-foreground">Documento ejemplo</p>
 										<p className="text-sm font-medium">{fileName || "No cargado"}</p>
+									</div>
+									<div className="rounded-lg border bg-background p-3">
+										<p className="text-xs text-muted-foreground">Tipo de fuente</p>
+										<p className="text-sm font-medium">
+											{documentKind === "pdf" ? "PDF" : documentKind === "image" ? "Imagen" : "Sin definir"}
+										</p>
+									</div>
+									<div className="rounded-lg border bg-background p-3">
+										<p className="text-xs text-muted-foreground">Cobertura de páginas</p>
+										<p className="text-sm font-medium">
+											{documentKind === "pdf" ? `${pageCount} página(s)` : "1 página"}
+										</p>
 									</div>
 									<div className="rounded-lg border bg-background p-3">
 										<p className="text-xs text-muted-foreground">Campos únicos</p>
