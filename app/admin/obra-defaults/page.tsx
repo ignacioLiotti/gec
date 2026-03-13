@@ -2669,6 +2669,50 @@ export default function ObraDefaultsPage() {
             {/* Data Folder Specific Fields */}
             {folderMode === "data" && (
               <>
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label>Importar definicion JSON</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Pega el resultado del LLM y precargamos documentos esperados,
+                        instrucciones y columnas.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsDefinitionImportOpen((prev) => !prev)}
+                    >
+                      {isDefinitionImportOpen ? "Ocultar" : "Pegar JSON"}
+                    </Button>
+                  </div>
+
+                  {isDefinitionImportOpen && (
+                    <div className="space-y-3">
+                      <Textarea
+                        value={definitionImportText}
+                        onChange={(e) => setDefinitionImportText(e.target.value)}
+                        placeholder="Pegá acá el JSON completo de la definición de extracción"
+                        className="min-h-[220px] font-mono text-xs"
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          Si hay secciones tabulares, se activan como datos anidados.
+                        </p>
+                        <Button
+                          type="button"
+                          onClick={handleImportDefinitionJson}
+                          className="bg-amber-500 hover:bg-amber-600"
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Importar definicion
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Data Input Method */}
                 <div className="space-y-3">
                   <Label>Método de carga de datos</Label>
