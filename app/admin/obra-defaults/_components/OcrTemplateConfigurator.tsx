@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import NextImage from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -100,6 +101,7 @@ export function OcrTemplateConfigurator({
 	const [templateName, setTemplateName] = useState("");
 	const [templateDescription, setTemplateDescription] = useState("");
 	const [image, setImage] = useState<HTMLImageElement | null>(null);
+	const [imageSrc, setImageSrc] = useState<string | null>(null);
 	const [fileName, setFileName] = useState<string | null>(null);
 	const [regions, setRegions] = useState<Region[]>([]);
 	const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
@@ -123,6 +125,7 @@ export function OcrTemplateConfigurator({
 				setTemplateName("");
 				setTemplateDescription("");
 				setImage(null);
+				setImageSrc(null);
 				setFileName(null);
 				setRegions([]);
 				setSelectedRegionId(null);
@@ -155,14 +158,20 @@ export function OcrTemplateConfigurator({
 
 		const reader = new FileReader();
 		reader.onload = (event) => {
+			const src = typeof event.target?.result === "string" ? event.target.result : null;
+			if (!src) {
+				toast.error("No se pudo leer la imagen seleccionada");
+				return;
+			}
 			const img = new Image();
 			img.onload = () => {
 				setImage(img);
+				setImageSrc(src);
 				setRegions([]);
 				setSelectedRegionId(null);
 				setScale(1);
 			};
-			img.src = event.target?.result as string;
+			img.src = src;
 		};
 		reader.readAsDataURL(file);
 	}, []);
@@ -193,7 +202,6 @@ export function OcrTemplateConfigurator({
 			if (!canvas || !ctx || !image) return;
 
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
-			ctx.drawImage(image, 0, 0);
 
 			// Draw existing regions
 			for (const region of regions) {
@@ -499,6 +507,12 @@ export function OcrTemplateConfigurator({
 					})}
 				</div>
 
+				{saveError && (
+					<div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+						{saveError}
+					</div>
+				)}
+
 				{currentStep === 0 && (
 					<div className="grid gap-4 lg:grid-cols-[1.1fr,0.9fr] my-4">
 						<div className="space-y-4">
@@ -549,8 +563,8 @@ export function OcrTemplateConfigurator({
 				)}
 
 				{(currentStep === 1 || currentStep === 2) && (
-					<div className="flex-1 grid lg:grid-cols-[1fr_340px] gap-4 overflow-hidden my-4">
-						<div className="flex flex-col gap-3 min-h-0">
+					<div className="grid lg:grid-cols-[1fr_340px] gap-4 overflow-hidden my-4 min-h-[560px]">
+						<div className="flex flex-col gap-3 min-h-[560px]">
 							<div className="flex items-center gap-2 flex-wrap">
 								<Button asChild variant="outline" size="sm" className="relative">
 									<label>
@@ -605,7 +619,7 @@ export function OcrTemplateConfigurator({
 
 							<div
 								ref={containerRef}
-								className="flex-1 bg-muted/30 rounded-lg border-2 border-dashed border-muted-foreground/20 overflow-auto"
+								className="flex-1 min-h-[460px] bg-muted/30 rounded-lg border-2 border-dashed border-muted-foreground/20 overflow-auto"
 							>
 								{image ? (
 									<div
@@ -615,17 +629,40 @@ export function OcrTemplateConfigurator({
 											transformOrigin: "top left",
 										}}
 									>
-										<canvas
-											ref={canvasRef}
-											onMouseDown={handleMouseDown}
-											onMouseMove={handleMouseMove}
-											onMouseUp={handleMouseUp}
-											onMouseLeave={handleMouseUp}
+										<div
+											className="relative inline-block"
 											style={{
-												cursor: isDrawModeEnabled ? "crosshair" : "grab",
-												maxWidth: "100%",
+												width: image.width,
+												height: image.height,
 											}}
-										/>
+										>
+											{imageSrc && (
+												<NextImage
+													src={imageSrc}
+													alt={fileName || "Documento ejemplo"}
+													unoptimized
+													width={image.width}
+													height={image.height}
+													className="absolute inset-0 block max-w-none select-none"
+													style={{
+														pointerEvents: "none",
+													}}
+													draggable={false}
+												/>
+											)}
+											<canvas
+												ref={canvasRef}
+												onMouseDown={handleMouseDown}
+												onMouseMove={handleMouseMove}
+												onMouseUp={handleMouseUp}
+												onMouseLeave={handleMouseUp}
+												className="absolute inset-0"
+												style={{
+													cursor: isDrawModeEnabled ? "crosshair" : "grab",
+													maxWidth: "100%",
+												}}
+											/>
+										</div>
 									</div>
 								) : (
 									<div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
@@ -755,9 +792,9 @@ export function OcrTemplateConfigurator({
 					</div>
 				)}
 
-				<div className="hidden">
+				{/*
 
-				{/* Explanation */}
+				
 				<div className="rounded-md bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 p-3 my-4">
 					<p className="text-sm text-purple-800 dark:text-purple-200">
 						<strong>¿Qué es una plantilla de extracción?</strong> Es una configuración que le indica al sistema qué información extraer de un documento.
@@ -774,9 +811,9 @@ export function OcrTemplateConfigurator({
 				)}
 
 				<div className="flex-1 grid lg:grid-cols-[1fr_320px] gap-4 overflow-hidden">
-					{/* Canvas Area */}
+					
 					<div className="flex flex-col gap-3 min-h-0">
-						{/* Toolbar */}
+						
 						<div className="flex items-center gap-2 flex-wrap">
 							<Button asChild variant="outline" size="sm" className="relative">
 								<label>
@@ -847,7 +884,7 @@ export function OcrTemplateConfigurator({
 							)}
 						</div>
 
-						{/* Canvas Container */}
+						
 						<div
 							ref={containerRef}
 							className="flex-1 bg-muted/30 rounded-lg border-2 border-dashed border-muted-foreground/20 overflow-auto"
@@ -882,9 +919,9 @@ export function OcrTemplateConfigurator({
 						</div>
 					</div>
 
-					{/* Right Panel: Regions List */}
+					
 					<div className="flex flex-col gap-3 min-h-0">
-						{/* Template Name */}
+						
 						<div className="space-y-2">
 							<Label>Nombre de la plantilla</Label>
 							<Input
@@ -894,7 +931,7 @@ export function OcrTemplateConfigurator({
 							/>
 						</div>
 
-						{/* Regions List */}
+						
 						<div className="flex-1 min-h-0">
 							<Label className="mb-2 block">
 								Regiones ({regions.length})
@@ -936,6 +973,8 @@ export function OcrTemplateConfigurator({
 				</div>
 
 				</div>
+
+				*/}
 
 				<DialogFooter className="gap-2 mt-4">
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
