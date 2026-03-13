@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
 	Upload,
-	Trash2,
 	Save,
 	Loader2,
 	FileText,
@@ -18,12 +17,15 @@ import {
 	RotateCcw,
 	Move,
 	Pencil,
+	CheckCircle2,
+	Sparkles,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	Dialog,
 	DialogContent,
@@ -96,6 +98,7 @@ export function OcrTemplateConfigurator({
 
 	// State
 	const [templateName, setTemplateName] = useState("");
+	const [templateDescription, setTemplateDescription] = useState("");
 	const [image, setImage] = useState<HTMLImageElement | null>(null);
 	const [fileName, setFileName] = useState<string | null>(null);
 	const [regions, setRegions] = useState<Region[]>([]);
@@ -106,22 +109,26 @@ export function OcrTemplateConfigurator({
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [scale, setScale] = useState(1);
 	const [isDrawModeEnabled, setIsDrawModeEnabled] = useState(true);
+	const [currentStep, setCurrentStep] = useState(0);
 
 	// Reset when dialog opens/closes
 	useEffect(() => {
 		if (open) {
 			if (existingTemplate) {
 				setTemplateName(existingTemplate.name);
+				setTemplateDescription(existingTemplate.description ?? "");
 				setRegions(existingTemplate.regions);
 				// TODO: Load template image
 			} else {
 				setTemplateName("");
+				setTemplateDescription("");
 				setImage(null);
 				setFileName(null);
 				setRegions([]);
 				setSelectedRegionId(null);
 				setScale(1);
 			}
+			setCurrentStep(0);
 		}
 	}, [open, existingTemplate]);
 
@@ -397,6 +404,7 @@ export function OcrTemplateConfigurator({
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					name: templateName.trim(),
+					description: templateDescription.trim() || null,
 					regions,
 					templateWidth: image?.width,
 					templateHeight: image?.height,
@@ -426,9 +434,33 @@ export function OcrTemplateConfigurator({
 		} finally {
 			setIsSaving(false);
 		}
-	}, [templateName, regions, image, fileName, onTemplateCreated, onOpenChange]);
+	}, [templateName, templateDescription, regions, image, fileName, onTemplateCreated, onOpenChange]);
 
-	const selectedRegion = regions.find((r) => r.id === selectedRegionId);
+	const singleRegions = useMemo(
+		() => regions.filter((region) => region.type === "single"),
+		[regions]
+	);
+	const tableRegions = useMemo(
+		() => regions.filter((region) => region.type === "table"),
+		[regions]
+	);
+	const derivedColumns = useMemo(
+		() =>
+			regions.flatMap((region) =>
+				region.type === "single"
+					? [{ label: region.label || "Campo sin nombre", type: "Campo" }]
+					: (region.tableColumns ?? []).map((column) => ({
+							label: `${region.label || "Tabla"} > ${column}`,
+							type: "Tabla",
+					  }))
+			),
+		[regions]
+	);
+	const steps = ["Contexto", "Documento ejemplo", "Regiones y significado", "Publicación"];
+	const canGoNext =
+		(currentStep === 0 && templateName.trim().length > 0) ||
+		(currentStep === 1 && Boolean(image)) ||
+		(currentStep === 2 && regions.length > 0);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -442,6 +474,288 @@ export function OcrTemplateConfigurator({
 						Subí un documento de ejemplo y marcá las regiones a extraer
 					</DialogDescription>
 				</DialogHeader>
+
+				<div className="grid gap-2 sm:grid-cols-4 my-4">
+					{steps.map((step, index) => {
+						const isActive = currentStep === index;
+						const isDone = currentStep > index;
+						return (
+							<div
+								key={step}
+								className={`rounded-xl border px-3 py-2 ${
+									isActive
+										? "border-purple-500 bg-purple-50 dark:bg-purple-950/20"
+										: isDone
+											? "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20"
+											: "bg-muted/30"
+								}`}
+							>
+								<p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+									Paso {index + 1}
+								</p>
+								<p className="text-sm font-medium">{step}</p>
+							</div>
+						);
+					})}
+				</div>
+
+				{currentStep === 0 && (
+					<div className="grid gap-4 lg:grid-cols-[1.1fr,0.9fr] my-4">
+						<div className="space-y-4">
+							<div className="space-y-2">
+								<Label>Nombre de la plantilla</Label>
+								<Input
+									value={templateName}
+									onChange={(e) => setTemplateName(e.target.value)}
+									placeholder="Ej. Certificado mensual"
+								/>
+							</div>
+							<div className="space-y-2">
+								<Label>Qué documentos representa</Label>
+								<Textarea
+									value={templateDescription}
+									onChange={(e) => setTemplateDescription(e.target.value)}
+									placeholder="Indicá variantes, señales visuales y diferencias importantes del documento."
+									className="min-h-[160px]"
+								/>
+							</div>
+						</div>
+						<div className="space-y-4">
+							<div className="rounded-xl border bg-muted/20 p-4">
+								<p className="text-sm font-medium">Objetivo</p>
+								<p className="mt-2 text-sm text-muted-foreground">
+									Una buena plantilla enseña al sistema cómo luce el documento y qué estructura de datos puede producir.
+								</p>
+							</div>
+							<div className="rounded-xl border bg-muted/20 p-4">
+								<p className="text-sm font-medium">Checklist</p>
+								<div className="mt-3 space-y-2 text-sm">
+									<div className="flex items-center gap-2">
+										<CheckCircle2 className="h-4 w-4 text-emerald-500" />
+										<span>Usar un documento representativo</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<CheckCircle2 className="h-4 w-4 text-emerald-500" />
+										<span>Nombrar cada región por su significado</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<CheckCircle2 className="h-4 w-4 text-emerald-500" />
+										<span>Separar campos únicos y tablas</span>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{(currentStep === 1 || currentStep === 2) && (
+					<div className="flex-1 grid lg:grid-cols-[1fr_340px] gap-4 overflow-hidden my-4">
+						<div className="flex flex-col gap-3 min-h-0">
+							<div className="flex items-center gap-2 flex-wrap">
+								<Button asChild variant="outline" size="sm" className="relative">
+									<label>
+										<Upload className="h-4 w-4 mr-2" />
+										{image ? "Cambiar ejemplo" : "Subir documento ejemplo"}
+										<input
+											type="file"
+											accept="image/*"
+											onChange={handleFileUpload}
+											className="absolute inset-0 opacity-0 cursor-pointer"
+										/>
+									</label>
+								</Button>
+
+								{image && (
+									<>
+										<div className="h-6 w-px bg-border" />
+										<Button
+											variant={isDrawModeEnabled ? "default" : "outline"}
+											size="sm"
+											onClick={() => setIsDrawModeEnabled((prev) => !prev)}
+											className={isDrawModeEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+										>
+											{isDrawModeEnabled ? (
+												<>
+													<Pencil className="h-4 w-4 mr-1" />
+													Dibujar
+												</>
+											) : (
+												<>
+													<Move className="h-4 w-4 mr-1" />
+													Navegar
+												</>
+											)}
+										</Button>
+										<div className="h-6 w-px bg-border" />
+										<Button variant="outline" size="icon" onClick={() => setScale((s) => Math.max(0.25, s - 0.25))}>
+											<ZoomOut className="h-4 w-4" />
+										</Button>
+										<span className="text-xs font-mono w-12 text-center">
+											{Math.round(scale * 100)}%
+										</span>
+										<Button variant="outline" size="icon" onClick={() => setScale((s) => Math.min(3, s + 0.25))}>
+											<ZoomIn className="h-4 w-4" />
+										</Button>
+										<Button variant="outline" size="icon" onClick={() => setScale(1)}>
+											<RotateCcw className="h-4 w-4" />
+										</Button>
+									</>
+								)}
+							</div>
+
+							<div
+								ref={containerRef}
+								className="flex-1 bg-muted/30 rounded-lg border-2 border-dashed border-muted-foreground/20 overflow-auto"
+							>
+								{image ? (
+									<div
+										className="p-4"
+										style={{
+											transform: `scale(${scale})`,
+											transformOrigin: "top left",
+										}}
+									>
+										<canvas
+											ref={canvasRef}
+											onMouseDown={handleMouseDown}
+											onMouseMove={handleMouseMove}
+											onMouseUp={handleMouseUp}
+											onMouseLeave={handleMouseUp}
+											style={{
+												cursor: isDrawModeEnabled ? "crosshair" : "grab",
+												maxWidth: "100%",
+											}}
+										/>
+									</div>
+								) : (
+									<div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
+										<Upload className="h-16 w-16 mb-4 opacity-30" />
+										<p className="font-medium">Subí un documento de ejemplo</p>
+										<p className="text-sm opacity-70">PNG, JPG o WebP</p>
+									</div>
+								)}
+							</div>
+						</div>
+
+						<div className="flex flex-col gap-3 min-h-0 overflow-hidden">
+							{currentStep === 1 ? (
+								<div className="space-y-4 overflow-auto pr-1">
+									<div className="rounded-xl border bg-muted/20 p-4">
+										<p className="text-sm font-medium">Cómo dibujar mejor</p>
+										<div className="mt-3 space-y-2 text-sm text-muted-foreground">
+											<p>Marcá una región por concepto.</p>
+											<p>Usá <strong>campo</strong> para valores únicos y <strong>tabla</strong> para bloques repetitivos.</p>
+											<p>Ignorá firmas, logos y ruido visual si no aportan al dato.</p>
+										</div>
+									</div>
+									<div className="rounded-xl border bg-muted/20 p-4">
+										<p className="text-sm font-medium">Vista rápida</p>
+										<div className="mt-3 flex flex-wrap gap-2">
+											<Badge variant="secondary">{singleRegions.length} campos únicos</Badge>
+											<Badge variant="secondary">{tableRegions.length} regiones tabla</Badge>
+										</div>
+									</div>
+								</div>
+							) : (
+								<>
+									<div className="space-y-2">
+										<Label className="mb-0 block">Regiones ({regions.length})</Label>
+										<p className="text-xs text-muted-foreground">
+											Editá nombre, significado y tipo para cada región.
+										</p>
+									</div>
+									<div className="flex-1 min-h-0">
+										<ScrollArea className="h-full pr-3">
+											<AnimatePresence mode="popLayout">
+												{regions.length === 0 ? (
+													<motion.p
+														initial={{ opacity: 0 }}
+														animate={{ opacity: 1 }}
+														className="text-sm text-muted-foreground py-8 text-center"
+													>
+														Dibujá regiones sobre el documento
+													</motion.p>
+												) : (
+													<div className="space-y-2">
+														{regions.map((region) => (
+															<RegionItem
+																key={region.id}
+																region={region}
+																isSelected={region.id === selectedRegionId}
+																onSelect={() => setSelectedRegionId(region.id)}
+																onLabelChange={(label) => handleRegionLabelChange(region.id, label)}
+																onDescriptionChange={(description) =>
+																	handleRegionDescriptionChange(region.id, description)
+																}
+																onTypeChange={(type) => handleRegionTypeChange(region.id, type)}
+																onAddColumn={(col) => handleAddColumn(region.id, col)}
+																onRemoveColumn={(idx) => handleRemoveColumn(region.id, idx)}
+																onDelete={() => handleDeleteRegion(region.id)}
+															/>
+														))}
+													</div>
+												)}
+											</AnimatePresence>
+										</ScrollArea>
+									</div>
+								</>
+							)}
+						</div>
+					</div>
+				)}
+
+				{currentStep === 3 && (
+					<div className="grid gap-4 lg:grid-cols-[1fr_340px] my-4">
+						<div className="space-y-4">
+							<div className="rounded-xl border bg-muted/20 p-4">
+								<p className="text-sm font-medium">Resumen de publicación</p>
+								<div className="mt-4 grid gap-3 md:grid-cols-2">
+									<div className="rounded-lg border bg-background p-3">
+										<p className="text-xs text-muted-foreground">Plantilla</p>
+										<p className="text-sm font-medium">{templateName || "Sin nombre"}</p>
+									</div>
+									<div className="rounded-lg border bg-background p-3">
+										<p className="text-xs text-muted-foreground">Documento ejemplo</p>
+										<p className="text-sm font-medium">{fileName || "No cargado"}</p>
+									</div>
+									<div className="rounded-lg border bg-background p-3">
+										<p className="text-xs text-muted-foreground">Campos únicos</p>
+										<p className="text-sm font-medium">{singleRegions.length}</p>
+									</div>
+									<div className="rounded-lg border bg-background p-3">
+										<p className="text-xs text-muted-foreground">Tablas</p>
+										<p className="text-sm font-medium">{tableRegions.length}</p>
+									</div>
+								</div>
+							</div>
+							<div className="rounded-xl border bg-muted/20 p-4">
+								<p className="text-sm font-medium">Descripción operativa</p>
+								<p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
+									{templateDescription || "Sin descripción cargada."}
+								</p>
+							</div>
+						</div>
+						<div className="rounded-xl border bg-muted/20 p-4">
+							<div className="flex items-center gap-2">
+								<Sparkles className="h-4 w-4 text-purple-500" />
+								<p className="text-sm font-medium">Columnas derivadas</p>
+							</div>
+							<div className="mt-3 flex flex-wrap gap-2">
+								{derivedColumns.length === 0 ? (
+									<p className="text-sm text-muted-foreground">Todavía no hay columnas derivadas.</p>
+								) : (
+									derivedColumns.map((column) => (
+										<Badge key={column.label} variant="secondary">
+											{column.type}: {column.label}
+										</Badge>
+									))
+								)}
+							</div>
+						</div>
+					</div>
+				)}
+
+				<div className="hidden">
 
 				{/* Explanation */}
 				<div className="rounded-md bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 p-3 my-4">
@@ -621,22 +935,42 @@ export function OcrTemplateConfigurator({
 					</div>
 				</div>
 
+				</div>
+
 				<DialogFooter className="gap-2 mt-4">
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
 						Cancelar
 					</Button>
-					<Button
-						onClick={handleSave}
-						disabled={isSaving || regions.length === 0 || !templateName.trim()}
-						className="bg-purple-600 hover:bg-purple-700"
-					>
-						{isSaving ? (
-							<Loader2 className="h-4 w-4 animate-spin" />
-						) : (
-							<Save className="h-4 w-4" />
-						)}
-						Guardar plantilla
-					</Button>
+					{currentStep > 0 && (
+						<Button
+							variant="outline"
+							onClick={() => setCurrentStep((prev) => Math.max(0, prev - 1))}
+						>
+							Atrás
+						</Button>
+					)}
+					{currentStep < steps.length - 1 ? (
+						<Button
+							onClick={() => setCurrentStep((prev) => Math.min(steps.length - 1, prev + 1))}
+							disabled={!canGoNext}
+							className="bg-purple-600 hover:bg-purple-700"
+						>
+							Continuar
+						</Button>
+					) : (
+						<Button
+							onClick={handleSave}
+							disabled={isSaving || regions.length === 0 || !templateName.trim()}
+							className="bg-purple-600 hover:bg-purple-700"
+						>
+							{isSaving ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Save className="h-4 w-4" />
+							)}
+							Guardar plantilla
+						</Button>
+					)}
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
