@@ -968,6 +968,7 @@ export default function ObraDefaultsPage() {
   const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
   const [definitionImportText, setDefinitionImportText] = useState("");
   const [isDefinitionImportOpen, setIsDefinitionImportOpen] = useState(false);
+  const [hasImportedDefinition, setHasImportedDefinition] = useState(false);
 
   // Quick actions state
   const [isAddQuickActionOpen, setIsAddQuickActionOpen] = useState(false);
@@ -995,6 +996,7 @@ export default function ObraDefaultsPage() {
     setNewFolderColumns([]);
     setDefinitionImportText("");
     setIsDefinitionImportOpen(false);
+    setHasImportedDefinition(false);
   }, []);
 
   const resetQuickActionForm = useCallback(() => {
@@ -1143,6 +1145,7 @@ export default function ObraDefaultsPage() {
     );
     setDefinitionImportText("");
     setIsDefinitionImportOpen(false);
+    setHasImportedDefinition(false);
     setFolderEditorStep(0);
     setIsAddFolderOpen(true);
   }, []);
@@ -1161,7 +1164,7 @@ export default function ObraDefaultsPage() {
     }
 
     if (folderMode === "data") {
-      if (needsOcrTemplate && !hasAnyTemplateSelected) {
+      if (needsOcrTemplate && !hasAnyTemplateSelected && !hasImportedDefinition) {
         toast.error("Seleccioná una plantilla OCR o una plantilla XLSX/CSV");
         return;
       }
@@ -1362,6 +1365,7 @@ export default function ObraDefaultsPage() {
       setNewFolderExtractionInstructions(imported.extractionInstructions);
       setNewFolderColumns(imported.columns);
       setIsDefinitionImportOpen(false);
+      setHasImportedDefinition(true);
       toast.success(`Definición importada: ${imported.columns.length} campos precargados`);
     } catch (error) {
       console.error(error);
@@ -1400,8 +1404,8 @@ export default function ObraDefaultsPage() {
   const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
-    (folderMode === "data" && newFolderColumns.length === 0 && !hasAnyTemplateSelected) ||
-    (folderMode === "data" && needsOcrTemplate && !hasAnyTemplateSelected);
+    (folderMode === "data" && newFolderColumns.length === 0) ||
+    (folderMode === "data" && needsOcrTemplate && !hasAnyTemplateSelected && !hasImportedDefinition);
   const isCreateQuickActionDisabled =
     !newQuickActionName.trim() || newQuickActionFolders.length === 0;
 
