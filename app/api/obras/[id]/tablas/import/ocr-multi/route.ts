@@ -275,6 +275,25 @@ function dataUrlToBuffer(imageDataUrl: string) {
   return { buffer: Buffer.from(b64, "base64"), mime };
 }
 
+function applyExtractionRowPolicy(
+	items: Record<string, unknown>[],
+	settings: Record<string, unknown> | null | undefined,
+) {
+	const rowMode = settings?.extractionRowMode === "multiple" ? "multiple" : "single";
+	const maxRowsRaw = settings?.extractionMaxRows;
+	const maxRows =
+		typeof maxRowsRaw === "number"
+			? Math.floor(maxRowsRaw)
+			: Number.parseInt(String(maxRowsRaw ?? ""), 10);
+	if (rowMode === "single") {
+		return items.length > 0 ? [items[0]] : [];
+	}
+	if (Number.isFinite(maxRows) && maxRows > 0) {
+		return items.slice(0, maxRows);
+	}
+	return items;
+}
+
 function estimateBase64Size(dataUrl: string | null): number {
   if (!dataUrl) return 0;
   const commaIndex = dataUrl.indexOf(",");
@@ -766,6 +785,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       } else if (items.length === 0) {
         items = buildEmptyExtraction(def.parentColumns, def.itemColumns).items;
       }
+      items = applyExtractionRowPolicy(items as Record<string, unknown>[], def.settings);
 
       const baseMeta: Record<string, unknown> = {};
       for (const column of def.parentColumns) {

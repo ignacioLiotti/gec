@@ -281,6 +281,25 @@ function estimateBase64Size(dataUrl: string | null): number {
 	return Math.floor((base64.length * 3) / 4);
 }
 
+function applyExtractionRowPolicy(
+	items: Record<string, unknown>[],
+	settings: Record<string, unknown> | null | undefined,
+) {
+	const rowMode = settings?.extractionRowMode === "multiple" ? "multiple" : "single";
+	const maxRowsRaw = settings?.extractionMaxRows;
+	const maxRows =
+		typeof maxRowsRaw === "number"
+			? Math.floor(maxRowsRaw)
+			: Number.parseInt(String(maxRowsRaw ?? ""), 10);
+	if (rowMode === "single") {
+		return items.length > 0 ? [items[0]] : [];
+	}
+	if (Number.isFinite(maxRows) && maxRows > 0) {
+		return items.slice(0, maxRows);
+	}
+	return items;
+}
+
 function estimateOcrTokenUsage(baseBytes: number): number {
 	if (!baseBytes) {
 		return DEFAULT_OCR_TOKEN_RESERVE;
@@ -852,6 +871,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			const emptyItem = buildEmptyExtraction(parentColumns, itemColumns).items;
 			(extraction as any).items = emptyItem;
 		}
+		(extraction as any).items = applyExtractionRowPolicy(
+			(extraction as any).items as Record<string, unknown>[],
+			settings,
+		);
 
 		const actualTokenUsage =
 			reservationApplied

@@ -305,6 +305,25 @@ function a1ToRowCol(a1: string): { row: number; col: number } | null {
   return { row: Number.parseInt(digits, 10) - 1, col: col - 1 };
 }
 
+function applyExtractionRowPolicy<T extends { data: Record<string, unknown> }>(
+	rows: T[],
+	settings: Record<string, unknown> | null | undefined,
+) {
+	const rowMode = settings?.extractionRowMode === "multiple" ? "multiple" : "single";
+	const maxRowsRaw = settings?.extractionMaxRows;
+	const maxRows =
+		typeof maxRowsRaw === "number"
+			? Math.floor(maxRowsRaw)
+			: Number.parseInt(String(maxRowsRaw ?? ""), 10);
+	if (rowMode === "single") {
+		return rows.length > 0 ? [rows[0]] : [];
+	}
+	if (Number.isFinite(maxRows) && maxRows > 0) {
+		return rows.slice(0, maxRows);
+	}
+	return rows;
+}
+
 function getCellByA1(sheet: RawSheet, a1: string): unknown {
   const decoded = a1ToRowCol(a1);
   if (!decoded) return null;
@@ -1154,6 +1173,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
         extractedRows = extractedRows.length > 0 ? [extractedRows[0]] : [];
       }
+
+      extractedRows = applyExtractionRowPolicy(extractedRows, tablaMeta?.settings);
 
       if (previewMode) {
         const mappedPreview = mappings.map((map) => ({

@@ -54,6 +54,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,6 +67,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ensureTablaDataType, normalizeFieldKey, normalizeFolderName } from "@/lib/tablas";
 
 type DataInputMethod = 'ocr' | 'manual' | 'both';
+type ExtractionRowMode = "single" | "multiple";
 
 type OcrColumn = {
   id: string;
@@ -90,6 +97,8 @@ type DefaultFolder = {
   hasNestedData?: boolean;
   documentTypes?: string[];
   extractionInstructions?: string | null;
+  extractionRowMode?: ExtractionRowMode;
+  extractionMaxRows?: number | null;
   columns?: Array<{
     id?: string;
     fieldKey: string;
@@ -102,6 +111,22 @@ type DefaultFolder = {
     examples?: string[];
     excelKeywords?: string[];
   }>;
+  extractedTables?: ExtractedTableConfig[];
+};
+
+type ExtractedTableConfig = {
+  id: string;
+  name: string;
+  rowMode: ExtractionRowMode;
+  maxRows: number | null;
+  dataInputMethod: DataInputMethod;
+  spreadsheetTemplate?: "auto" | "certificado" | null;
+  ocrTemplateId?: string | null;
+  ocrTemplateName?: string | null;
+  hasNestedData?: boolean;
+  documentTypes?: string[];
+  extractionInstructions?: string | null;
+  columns: OcrColumn[];
 };
 
 type QuickAction = {
@@ -229,6 +254,33 @@ const buildSpreadsheetDefaultColumns = (
     excelKeywords: [],
   }));
 };
+
+function sanitizeMaxRows(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : null;
+}
+
+function createEmptyExtractedTable(name = "Nueva tabla extraida"): ExtractedTableConfig {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    rowMode: "single",
+    maxRows: 1,
+    dataInputMethod: "both",
+    spreadsheetTemplate: null,
+    ocrTemplateId: null,
+    ocrTemplateName: null,
+    hasNestedData: false,
+    documentTypes: [],
+    extractionInstructions: "",
+    columns: [],
+  };
+}
+
+function getEffectiveTableMaxRows(table: Pick<ExtractedTableConfig, "rowMode" | "maxRows">) {
+  return table.rowMode === "single" ? 1 : sanitizeMaxRows(table.maxRows);
+}
 
 function parseCommaSeparatedList(value: string): string[] {
   return value
@@ -514,6 +566,64 @@ function getDataInputMethodLabel(method?: DataInputMethod) {
   }
 }
 
+function mapFolderToExtractedTables(folder: DefaultFolder): ExtractedTableConfig[] {
+  if (Array.isArray(folder.extractedTables) && folder.extractedTables.length > 0) {
+    return folder.extractedTables.map((table, index) => ({
+      ...table,
+      id: table.id || `${folder.id}::${index}`,
+      name: table.name?.trim() || (index === 0 ? folder.name : `Tabla ${index + 1}`),
+      rowMode: table.rowMode === "multiple" ? "multiple" : "single",
+      maxRows:
+        table.rowMode === "multiple"
+          ? sanitizeMaxRows(table.maxRows)
+          : 1,
+      dataInputMethod: table.dataInputMethod ?? folder.dataInputMethod ?? "both",
+      spreadsheetTemplate: table.spreadsheetTemplate ?? folder.spreadsheetTemplate ?? null,
+      ocrTemplateId: table.ocrTemplateId ?? folder.ocrTemplateId ?? null,
+      ocrTemplateName: table.ocrTemplateName ?? folder.ocrTemplateName ?? null,
+      hasNestedData: Boolean(table.hasNestedData ?? folder.hasNestedData),
+      documentTypes: table.documentTypes ?? [],
+      extractionInstructions: table.extractionInstructions ?? "",
+      columns: (table.columns ?? []).map((col) => ({
+        ...col,
+        id: col.id || crypto.randomUUID(),
+      })),
+    }));
+  }
+
+  return [
+    {
+      id: `${folder.id}::primary`,
+      name: folder.name,
+      rowMode: folder.extractionRowMode === "multiple" ? "multiple" : "single",
+      maxRows:
+        folder.extractionRowMode === "multiple"
+          ? sanitizeMaxRows(folder.extractionMaxRows)
+          : 1,
+      dataInputMethod: folder.dataInputMethod ?? "both",
+      spreadsheetTemplate: folder.spreadsheetTemplate ?? null,
+      ocrTemplateId: folder.ocrTemplateId ?? null,
+      ocrTemplateName: folder.ocrTemplateName ?? null,
+      hasNestedData: Boolean(folder.hasNestedData),
+      documentTypes: folder.documentTypes ?? [],
+      extractionInstructions: folder.extractionInstructions ?? "",
+      columns: (folder.columns ?? []).map((col) => ({
+        id: col.id || `${folder.id}::${col.fieldKey}`,
+        columnId: col.id,
+        label: col.label,
+        fieldKey: col.fieldKey,
+        dataType: ensureTablaDataType(col.dataType),
+        required: Boolean(col.required),
+        scope: col.ocrScope === "parent" ? "parent" : "item",
+        description: col.description ?? "",
+        aliases: col.aliases ?? [],
+        examples: col.examples ?? [],
+        excelKeywords: col.excelKeywords ?? [],
+      })),
+    },
+  ];
+}
+
 // Get icon for data type
 function getDataTypeIcon(dataType: string) {
   switch (dataType) {
@@ -545,6 +655,7 @@ function FolderRow({
   const [isOpen, setIsOpen] = useState(false);
   const isOcr = folder.isOcr;
   const hasColumns = folder.columns && folder.columns.length > 0;
+  const extractedTables = mapFolderToExtractedTables(folder);
 
   const parentColumns = folder.columns?.filter(c => c.ocrScope === "parent") ?? [];
   const itemColumns = folder.columns?.filter(c => c.ocrScope !== "parent") ?? [];
@@ -682,6 +793,46 @@ function FolderRow({
                         {type}
                       </Badge>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {extractedTables.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Tablas a extraer</p>
+                  <div className="space-y-2">
+                    {extractedTables.map((table) => {
+                      const sourceBadges = [
+                        table.ocrTemplateId ? `PDF / imagen: ${table.ocrTemplateName ?? "OCR configurado"}` : null,
+                        table.spreadsheetTemplate ? `Excel / CSV: ${table.spreadsheetTemplate}` : null,
+                      ].filter(Boolean);
+                      return (
+                        <div key={table.id} className="rounded-lg border bg-background p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium">{table.name}</p>
+                            <Badge variant="outline" className="text-[10px]">
+                              {table.rowMode === "single"
+                                ? "1 fila"
+                                : `${getEffectiveTableMaxRows(table) ?? "N"} filas`}
+                            </Badge>
+                          </div>
+                          {table.documentTypes && table.documentTypes.length > 0 && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Documentos: {table.documentTypes.join(", ")}
+                            </p>
+                          )}
+                          {sourceBadges.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {sourceBadges.map((badge) => (
+                                <Badge key={`${table.id}-${badge}`} variant="secondary" className="text-[10px]">
+                                  {badge}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -966,6 +1117,10 @@ export default function ObraDefaultsPage() {
   const [newFolderDocumentTypesText, setNewFolderDocumentTypesText] = useState("");
   const [newFolderExtractionInstructions, setNewFolderExtractionInstructions] = useState("");
   const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
+  const [newFolderExtractedTables, setNewFolderExtractedTables] = useState<ExtractedTableConfig[]>([
+    createEmptyExtractedTable(),
+  ]);
+  const [activeExtractedTableId, setActiveExtractedTableId] = useState<string | null>(null);
   const [definitionImportText, setDefinitionImportText] = useState("");
   const [isDefinitionImportOpen, setIsDefinitionImportOpen] = useState(false);
   const [hasImportedDefinition, setHasImportedDefinition] = useState(false);
@@ -994,6 +1149,9 @@ export default function ObraDefaultsPage() {
     setNewFolderDocumentTypesText("");
     setNewFolderExtractionInstructions("");
     setNewFolderColumns([]);
+    const initialTable = createEmptyExtractedTable();
+    setNewFolderExtractedTables([initialTable]);
+    setActiveExtractedTableId(initialTable.id);
     setDefinitionImportText("");
     setIsDefinitionImportOpen(false);
     setHasImportedDefinition(false);
@@ -1036,6 +1194,59 @@ export default function ObraDefaultsPage() {
     void fetchDefaults();
     void fetchOcrTemplates();
   }, [fetchDefaults, fetchOcrTemplates]);
+
+  useEffect(() => {
+    if (!activeExtractedTableId && newFolderExtractedTables.length > 0) {
+      setActiveExtractedTableId(newFolderExtractedTables[0].id);
+    }
+  }, [activeExtractedTableId, newFolderExtractedTables]);
+
+  const loadEditorFromExtractedTable = useCallback((table: ExtractedTableConfig) => {
+    setNewFolderDataInputMethod(table.dataInputMethod ?? "both");
+    setNewFolderSpreadsheetTemplate(table.spreadsheetTemplate ?? "");
+    setNewFolderOcrTemplateId(table.ocrTemplateId ?? "");
+    setNewFolderHasNested(Boolean(table.hasNestedData));
+    setNewFolderDocumentTypesText(joinCommaSeparatedList(table.documentTypes));
+    setNewFolderExtractionInstructions(table.extractionInstructions ?? "");
+    setNewFolderColumns(
+      (table.columns ?? []).map((col) => ({
+        ...col,
+        id: col.id || crypto.randomUUID(),
+      })),
+    );
+  }, []);
+
+  const syncActiveTableFromEditor = useCallback(() => {
+    if (!activeExtractedTableId) return;
+    setNewFolderExtractedTables((prev) =>
+      prev.map((table) =>
+        table.id === activeExtractedTableId
+          ? {
+              ...table,
+              dataInputMethod: newFolderDataInputMethod,
+              spreadsheetTemplate: newFolderSpreadsheetTemplate || null,
+              ocrTemplateId: newFolderOcrTemplateId || null,
+              ocrTemplateName:
+                ocrTemplates.find((template) => template.id === newFolderOcrTemplateId)?.name ?? null,
+              hasNestedData: newFolderHasNested,
+              documentTypes: parseCommaSeparatedList(newFolderDocumentTypesText),
+              extractionInstructions: newFolderExtractionInstructions.trim(),
+              columns: newFolderColumns.map((column) => ({ ...column })),
+            }
+          : table,
+      ),
+    );
+  }, [
+    activeExtractedTableId,
+    newFolderColumns,
+    newFolderDataInputMethod,
+    newFolderDocumentTypesText,
+    newFolderExtractionInstructions,
+    newFolderHasNested,
+    newFolderOcrTemplateId,
+    newFolderSpreadsheetTemplate,
+    ocrTemplates,
+  ]);
 
   // When template is selected, populate columns from template
   const handleTemplateSelect = useCallback((templateId: string) => {
@@ -1118,48 +1329,58 @@ export default function ObraDefaultsPage() {
   const handleEditFolder = useCallback((folder: DefaultFolder) => {
     const pathSegments = folder.path.split("/").filter(Boolean);
     const parentPath = pathSegments.length > 1 ? pathSegments.slice(0, -1).join("/") : "";
+    const extractedTables = mapFolderToExtractedTables(folder);
+    const activeTable = extractedTables[0] ?? createEmptyExtractedTable(folder.name);
     setEditingFolderId(folder.id);
     setNewFolderName(folder.name);
     setNewFolderParentPath(parentPath);
     setFolderMode(folder.isOcr ? "data" : "normal");
-    setNewFolderDataInputMethod(folder.dataInputMethod ?? "both");
-    setNewFolderSpreadsheetTemplate(folder.spreadsheetTemplate ?? "");
-    setNewFolderOcrTemplateId(folder.ocrTemplateId ?? "");
-    setNewFolderHasNested(Boolean(folder.hasNestedData));
-    setNewFolderDocumentTypesText(joinCommaSeparatedList(folder.documentTypes));
-    setNewFolderExtractionInstructions(folder.extractionInstructions ?? "");
-    setNewFolderColumns(
-      (folder.columns ?? []).map((col) => ({
-        id: crypto.randomUUID(),
-        columnId: col.id,
-        label: col.label,
-        fieldKey: col.fieldKey,
-        dataType: ensureTablaDataType(col.dataType),
-        required: Boolean(col.required),
-        scope: col.ocrScope === "parent" ? "parent" : "item",
-        description: col.description ?? "",
-        aliases: col.aliases ?? [],
-        examples: col.examples ?? [],
-        excelKeywords: col.excelKeywords ?? [],
-      })),
-    );
+    setNewFolderExtractedTables(extractedTables);
+    setActiveExtractedTableId(activeTable.id);
+    loadEditorFromExtractedTable(activeTable);
     setDefinitionImportText("");
     setIsDefinitionImportOpen(false);
     setHasImportedDefinition(false);
     setFolderEditorStep(0);
     setIsAddFolderOpen(true);
-  }, []);
+  }, [loadEditorFromExtractedTable]);
 
   const handleSaveFolder = async () => {
     if (!newFolderName.trim()) return;
 
-    const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
-    const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
-    const hasSpreadsheetTemplateOnly = Boolean(newFolderSpreadsheetTemplate) && !newFolderOcrTemplateId;
-    let effectiveColumns = newFolderColumns;
+    const currentExtractedTables = newFolderExtractedTables.map((table, index) => {
+      if (table.id !== activeExtractedTableId) return table;
+      return {
+        ...table,
+        name: table.name?.trim() || (index === 0 ? newFolderName.trim() : `Tabla ${index + 1}`),
+        dataInputMethod: newFolderDataInputMethod,
+        spreadsheetTemplate: newFolderSpreadsheetTemplate || null,
+        ocrTemplateId: newFolderOcrTemplateId || null,
+        ocrTemplateName:
+          ocrTemplates.find((template) => template.id === newFolderOcrTemplateId)?.name ?? null,
+        hasNestedData: newFolderHasNested,
+        documentTypes: parseCommaSeparatedList(newFolderDocumentTypesText),
+        extractionInstructions: newFolderExtractionInstructions.trim(),
+        columns: newFolderColumns.map((column) => ({ ...column })),
+      };
+    });
+
+    const primaryTable =
+      currentExtractedTables[0] ?? createEmptyExtractedTable(newFolderName.trim());
+    const effectiveDataInputMethod = primaryTable.dataInputMethod ?? "both";
+    const effectiveSpreadsheetTemplate = primaryTable.spreadsheetTemplate ?? "";
+    const effectiveOcrTemplateId = primaryTable.ocrTemplateId ?? "";
+    const effectiveHasNested = Boolean(primaryTable.hasNestedData);
+    const effectiveDocumentTypes = primaryTable.documentTypes ?? [];
+    const effectiveExtractionInstructions = primaryTable.extractionInstructions ?? "";
+
+    const needsOcrTemplate = effectiveDataInputMethod === 'ocr' || effectiveDataInputMethod === 'both';
+    const hasAnyTemplateSelected = Boolean(effectiveOcrTemplateId || effectiveSpreadsheetTemplate);
+    const hasSpreadsheetTemplateOnly = Boolean(effectiveSpreadsheetTemplate) && !effectiveOcrTemplateId;
+    let effectiveColumns = primaryTable.columns;
 
     if (folderMode === "data" && effectiveColumns.length === 0 && hasSpreadsheetTemplateOnly) {
-      effectiveColumns = buildSpreadsheetDefaultColumns(newFolderSpreadsheetTemplate);
+      effectiveColumns = buildSpreadsheetDefaultColumns(effectiveSpreadsheetTemplate);
       setNewFolderColumns(effectiveColumns);
     }
 
@@ -1185,14 +1406,42 @@ export default function ObraDefaultsPage() {
       };
 
       if (folderMode === "data") {
-        const documentTypes = parseCommaSeparatedList(newFolderDocumentTypesText);
         payload.isOcr = true; // Kept for backward compatibility
-        payload.dataInputMethod = newFolderDataInputMethod;
-        payload.spreadsheetTemplate = newFolderSpreadsheetTemplate || null;
-        payload.ocrTemplateId = needsOcrTemplate ? newFolderOcrTemplateId : null;
-        payload.hasNestedData = needsOcrTemplate ? newFolderHasNested : false;
-        payload.documentTypes = documentTypes;
-        payload.extractionInstructions = newFolderExtractionInstructions.trim() || null;
+        payload.dataInputMethod = effectiveDataInputMethod;
+        payload.spreadsheetTemplate = effectiveSpreadsheetTemplate || null;
+        payload.ocrTemplateId = needsOcrTemplate ? effectiveOcrTemplateId : null;
+        payload.hasNestedData = needsOcrTemplate ? effectiveHasNested : false;
+        payload.documentTypes = effectiveDocumentTypes;
+        payload.extractionInstructions = effectiveExtractionInstructions.trim() || null;
+        payload.extractionRowMode = primaryTable.rowMode;
+        payload.extractionMaxRows = getEffectiveTableMaxRows(primaryTable);
+        payload.extractedTables = currentExtractedTables.map((table, tableIndex) => ({
+          id: table.id,
+          name: table.name?.trim() || `Tabla ${tableIndex + 1}`,
+          rowMode: table.rowMode,
+          maxRows: getEffectiveTableMaxRows(table),
+          dataInputMethod: table.dataInputMethod,
+          spreadsheetTemplate: table.spreadsheetTemplate || null,
+          ocrTemplateId: table.ocrTemplateId || null,
+          hasNestedData: Boolean(table.hasNestedData),
+          documentTypes: table.documentTypes ?? [],
+          extractionInstructions: table.extractionInstructions?.trim() || null,
+          columns: table.columns.map((col, index) => ({
+            id: col.columnId,
+            label: col.label,
+            fieldKey: col.fieldKey || normalizeFieldKey(col.label),
+            dataType: col.dataType,
+            required: col.required,
+            position: index,
+            ocrScope: table.hasNestedData && (table.dataInputMethod === "ocr" || table.dataInputMethod === "both")
+              ? col.scope
+              : "item",
+            description: col.description,
+            aliases: col.aliases ?? [],
+            examples: col.examples ?? [],
+            excelKeywords: col.excelKeywords ?? [],
+          })),
+        }));
         payload.columns = effectiveColumns.map((col, index) => ({
           id: col.columnId,
           label: col.label,
@@ -1200,7 +1449,7 @@ export default function ObraDefaultsPage() {
           dataType: col.dataType,
           required: col.required,
           position: index,
-          ocrScope: newFolderHasNested && needsOcrTemplate ? col.scope : "item",
+          ocrScope: effectiveHasNested && needsOcrTemplate ? col.scope : "item",
           description: col.description,
           aliases: col.aliases ?? [],
           examples: col.examples ?? [],
@@ -1364,6 +1613,28 @@ export default function ObraDefaultsPage() {
       setNewFolderDocumentTypesText(imported.documentTypes.join(", "));
       setNewFolderExtractionInstructions(imported.extractionInstructions);
       setNewFolderColumns(imported.columns);
+      const importedTableId = activeExtractedTableId ?? crypto.randomUUID();
+      setNewFolderExtractedTables((prev) => {
+        const importedTable: ExtractedTableConfig = {
+          id: importedTableId,
+          name: imported.folderName,
+          rowMode: imported.hasNestedData ? "multiple" : "single",
+          maxRows: imported.hasNestedData ? null : 1,
+          dataInputMethod: imported.suggestedDataInputMethod,
+          spreadsheetTemplate: null,
+          ocrTemplateId: null,
+          ocrTemplateName: null,
+          hasNestedData: imported.hasNestedData,
+          documentTypes: imported.documentTypes,
+          extractionInstructions: imported.extractionInstructions,
+          columns: imported.columns,
+        };
+        if (!activeExtractedTableId) {
+          return [importedTable];
+        }
+        return prev.map((table) => (table.id === activeExtractedTableId ? importedTable : table));
+      });
+      setActiveExtractedTableId(importedTableId);
       setIsDefinitionImportOpen(false);
       setHasImportedDefinition(true);
       toast.success(`Definición importada: ${imported.columns.length} campos precargados`);
@@ -1371,7 +1642,60 @@ export default function ObraDefaultsPage() {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "No se pudo importar la definición");
     }
-  }, [definitionImportText]);
+  }, [activeExtractedTableId, definitionImportText]);
+
+  const handleSelectExtractedTable = useCallback((tableId: string) => {
+    syncActiveTableFromEditor();
+    const nextTable = newFolderExtractedTables.find((table) => table.id === tableId);
+    if (!nextTable) return;
+    setActiveExtractedTableId(nextTable.id);
+    loadEditorFromExtractedTable(nextTable);
+  }, [loadEditorFromExtractedTable, newFolderExtractedTables, syncActiveTableFromEditor]);
+
+  const handleAddExtractedTable = useCallback(() => {
+    syncActiveTableFromEditor();
+    const nextTable = createEmptyExtractedTable(`Tabla ${newFolderExtractedTables.length + 1}`);
+    setNewFolderExtractedTables((prev) => [...prev, nextTable]);
+    setActiveExtractedTableId(nextTable.id);
+    loadEditorFromExtractedTable(nextTable);
+  }, [loadEditorFromExtractedTable, newFolderExtractedTables.length, syncActiveTableFromEditor]);
+
+  const handleRemoveExtractedTable = useCallback((tableId: string) => {
+    const remaining = newFolderExtractedTables.filter((table) => table.id !== tableId);
+    if (remaining.length === 0) {
+      const fallbackTable = createEmptyExtractedTable();
+      setNewFolderExtractedTables([fallbackTable]);
+      setActiveExtractedTableId(fallbackTable.id);
+      loadEditorFromExtractedTable(fallbackTable);
+      return;
+    }
+    setNewFolderExtractedTables(remaining);
+    setActiveExtractedTableId(remaining[0].id);
+    loadEditorFromExtractedTable(remaining[0]);
+  }, [loadEditorFromExtractedTable, newFolderExtractedTables]);
+
+  const handleExtractedTableMetaChange = useCallback((
+    tableId: string,
+    field: "name" | "rowMode" | "maxRows",
+    value: string,
+  ) => {
+    setNewFolderExtractedTables((prev) =>
+      prev.map((table) => {
+        if (table.id !== tableId) return table;
+        if (field === "maxRows") {
+          return { ...table, maxRows: sanitizeMaxRows(Number(value)) };
+        }
+        if (field === "rowMode") {
+          return {
+            ...table,
+            rowMode: value === "multiple" ? "multiple" : "single",
+            maxRows: value === "multiple" ? sanitizeMaxRows(table.maxRows) : 1,
+          };
+        }
+        return { ...table, name: value };
+      }),
+    );
+  }, []);
 
   const handleRemoveColumn = (id: string) => {
     setNewFolderColumns(prev => prev.filter(col => col.id !== id));
@@ -1402,9 +1726,10 @@ export default function ObraDefaultsPage() {
 
   const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
   const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
+  const extractedTableCount = newFolderExtractedTables.length;
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
-    (folderMode === "data" && newFolderColumns.length === 0) ||
+    (folderMode === "data" && (newFolderColumns.length === 0 || extractedTableCount === 0)) ||
     (folderMode === "data" && needsOcrTemplate && !hasAnyTemplateSelected && !hasImportedDefinition);
   const isCreateQuickActionDisabled =
     !newQuickActionName.trim() || newQuickActionFolders.length === 0;
@@ -2715,6 +3040,119 @@ export default function ObraDefaultsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label>Tablas extraidas dentro de esta carpeta</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cada tabla puede tener su propia cantidad de filas, tipos de documento y origen de extraccion.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={handleAddExtractedTable}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Agregar tabla
+                    </Button>
+                  </div>
+
+                  <Accordion
+                    type="single"
+                    collapsible
+                    value={activeExtractedTableId ?? undefined}
+                    onValueChange={(value) => {
+                      if (value) {
+                        handleSelectExtractedTable(value);
+                      }
+                    }}
+                    className="w-full"
+                  >
+                    {newFolderExtractedTables.map((table, index) => (
+                      <AccordionItem key={table.id} value={table.id} className="rounded-lg border bg-background px-3">
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex w-full items-center justify-between gap-3 pr-3 text-left">
+                            <div>
+                              <p className="text-sm font-medium">{table.name || `Tabla ${index + 1}`}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {table.rowMode === "single"
+                                  ? "Extrae 1 fila"
+                                  : `Extrae ${getEffectiveTableMaxRows(table) ?? "N"} filas`}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {table.ocrTemplateId && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  PDF / imagen
+                                </Badge>
+                              )}
+                              {table.spreadsheetTemplate && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Excel / CSV
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-3 pb-3">
+                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px_auto]">
+                            <Input
+                              value={table.name}
+                              onChange={(e) => handleExtractedTableMetaChange(table.id, "name", e.target.value)}
+                              placeholder="Ej. Certificados resumen"
+                            />
+                            <Select
+                              value={table.rowMode}
+                              onValueChange={(value) => handleExtractedTableMetaChange(table.id, "rowMode", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="single">1 fila</SelectItem>
+                                <SelectItem value="multiple">Multiples filas</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={table.rowMode === "single" ? "1" : String(table.maxRows ?? "")}
+                              disabled={table.rowMode === "single"}
+                              onChange={(e) => handleExtractedTableMetaChange(table.id, "maxRows", e.target.value)}
+                              placeholder="N"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveExtractedTable(table.id)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-lg border p-3">
+                              <p className="text-sm font-medium">PDF e imagen</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {table.ocrTemplateName ?? "Usa una plantilla OCR para este tipo de documento"}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border p-3">
+                              <p className="text-sm font-medium">Excel y CSV</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {table.spreadsheetTemplate
+                                  ? `Usa la extraccion ${table.spreadsheetTemplate}`
+                                  : "Sin extractor de planillas configurado"}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Selecciona esta tabla para editar sus columnas, documentos esperados y templates en los bloques siguientes.
+                          </p>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
                 </div>
 
                 {/* Data Input Method */}

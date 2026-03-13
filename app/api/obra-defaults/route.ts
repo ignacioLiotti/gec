@@ -5,6 +5,7 @@ import { normalizeFolderName, normalizeFolderPath, normalizeFieldKey, ensureTabl
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 type DataInputMethod = 'ocr' | 'manual' | 'both';
+type ExtractionRowMode = "single" | "multiple";
 
 type DefaultFolder = {
 	id: string;
@@ -20,6 +21,8 @@ type DefaultFolder = {
 	hasNestedData?: boolean;
 	documentTypes?: string[];
 	extractionInstructions?: string | null;
+	extractionRowMode?: ExtractionRowMode;
+	extractionMaxRows?: number | null;
 	columns?: Array<{
 		id?: string;
 		fieldKey: string;
@@ -32,6 +35,22 @@ type DefaultFolder = {
 		examples?: string[];
 		excelKeywords?: string[];
 	}>;
+	extractedTables?: ExtractedTableConfig[];
+};
+
+type ExtractedTableConfig = {
+	id: string;
+	name: string;
+	rowMode: ExtractionRowMode;
+	maxRows: number | null;
+	dataInputMethod: DataInputMethod;
+	spreadsheetTemplate?: "auto" | "certificado" | null;
+	ocrTemplateId?: string | null;
+	ocrTemplateName?: string | null;
+	hasNestedData?: boolean;
+	documentTypes?: string[];
+	extractionInstructions?: string | null;
+	columns?: DefaultFolder["columns"];
 };
 
 type QuickAction = {
@@ -95,6 +114,139 @@ type QuickActionInsertPayload = {
 	position: number;
 	obra_id?: string | null;
 };
+
+function normalizeRowMode(value: unknown): ExtractionRowMode {
+	return value === "multiple" ? "multiple" : "single";
+}
+
+function normalizePositiveInt(value: unknown): number | null {
+	const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+	return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+	return Array.isArray(value)
+		? value
+				.filter((item): item is string => typeof item === "string")
+				.map((item) => item.trim())
+				.filter(Boolean)
+		: [];
+}
+
+function normalizeDataInputMethod(value: unknown): DataInputMethod {
+	return value === "ocr" || value === "manual" || value === "both" ? value : "both";
+}
+
+function normalizeSpreadsheetTemplate(value: unknown): "auto" | "certificado" | null {
+	if (typeof value !== "string") return null;
+	return value.trim() === "certificado" ? "certificado" : value.trim() ? "auto" : null;
+}
+
+function buildLegacyExtractedTable(params: {
+	id: string;
+	name: string;
+	settings: Record<string, unknown>;
+	ocrTemplateId: string | null;
+	ocrTemplateName: string | null;
+	columns: NonNullable<DefaultFolder["columns"]>;
+}): ExtractedTableConfig {
+	const { id, name, settings, ocrTemplateId, ocrTemplateName, columns } = params;
+	return {
+		id,
+		name,
+		rowMode: normalizeRowMode(settings.extractionRowMode),
+		maxRows:
+			normalizeRowMode(settings.extractionRowMode) === "multiple"
+				? normalizePositiveInt(settings.extractionMaxRows)
+				: 1,
+		dataInputMethod: normalizeDataInputMethod(settings.dataInputMethod),
+		spreadsheetTemplate: normalizeSpreadsheetTemplate(settings.spreadsheetTemplate),
+		ocrTemplateId,
+		ocrTemplateName,
+		hasNestedData: Boolean(settings.hasNestedData),
+		documentTypes: normalizeStringArray(settings.extractionDocumentTypes),
+		extractionInstructions:
+			typeof settings.extractionInstructions === "string"
+				? settings.extractionInstructions
+				: null,
+		columns,
+	};
+}
+
+function normalizeExtractedTables(
+	value: unknown,
+	fallback: ExtractedTableConfig,
+): ExtractedTableConfig[] {
+	if (!Array.isArray(value) || value.length === 0) {
+		return [fallback];
+	}
+
+	const normalized = value
+		.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+		.map((item, index) => {
+			const name =
+				typeof item.name === "string" && item.name.trim().length > 0
+					? item.name.trim()
+					: index === 0
+						? fallback.name
+						: `Tabla ${index + 1}`;
+			const rowMode = normalizeRowMode(item.rowMode);
+			const maxRows = rowMode === "multiple" ? normalizePositiveInt(item.maxRows) : 1;
+			const columns = (Array.isArray(item.columns)
+				? (item.columns as DefaultColumnInput[])
+				: index === 0
+					? (fallback.columns ?? [])
+					: []
+			).map((column, columnIndex) => ({
+				id: typeof column.id === "string" ? column.id : undefined,
+				fieldKey:
+					typeof column.fieldKey === "string" && column.fieldKey.trim().length > 0
+						? normalizeFieldKey(column.fieldKey)
+						: normalizeFieldKey(column.label ?? `campo_${columnIndex + 1}`),
+				label:
+					typeof column.label === "string" && column.label.trim().length > 0
+						? column.label.trim()
+						: `Columna ${columnIndex + 1}`,
+				dataType: ensureTablaDataType(column.dataType),
+				required: Boolean(column.required),
+				ocrScope: typeof column.ocrScope === "string" ? column.ocrScope : undefined,
+				description:
+					typeof column.description === "string" ? column.description : null,
+				aliases: normalizeStringArray(column.aliases),
+				examples: normalizeStringArray(column.examples),
+				excelKeywords: normalizeStringArray(column.excelKeywords),
+			}));
+			return {
+				id:
+					typeof item.id === "string" && item.id.trim().length > 0
+						? item.id.trim()
+						: `${fallback.id}-${index + 1}`,
+				name,
+				rowMode,
+				maxRows,
+				dataInputMethod: normalizeDataInputMethod(item.dataInputMethod),
+				spreadsheetTemplate: normalizeSpreadsheetTemplate(item.spreadsheetTemplate),
+				ocrTemplateId:
+					typeof item.ocrTemplateId === "string" && item.ocrTemplateId.trim().length > 0
+						? item.ocrTemplateId.trim()
+						: null,
+				ocrTemplateName:
+					typeof item.ocrTemplateName === "string" && item.ocrTemplateName.trim().length > 0
+						? item.ocrTemplateName.trim()
+						: null,
+				hasNestedData: Boolean(item.hasNestedData),
+				documentTypes: normalizeStringArray(item.documentTypes),
+				extractionInstructions:
+					typeof item.extractionInstructions === "string" &&
+					item.extractionInstructions.trim().length > 0
+						? item.extractionInstructions.trim()
+						: null,
+				columns,
+			};
+		});
+
+	return normalized.length > 0 ? normalized : [fallback];
+}
 
 function isMissingQuickActionsTableError(error: unknown): boolean {
 	if (!error || typeof error !== "object") return false;
@@ -409,9 +561,20 @@ export async function GET(request: Request) {
 		}
 
 		// Fetch OCR templates for names
-		const templateIds = (tablas ?? [])
-			.filter(t => t.ocr_template_id)
-			.map(t => t.ocr_template_id);
+		const templateIds = (tablas ?? []).flatMap((tabla) => {
+			const settings = (tabla.settings as Record<string, unknown>) ?? {};
+			const nestedIds = Array.isArray(settings.extractedTables)
+				? (settings.extractedTables as Array<Record<string, unknown>>)
+						.map((item) =>
+							typeof item?.ocrTemplateId === "string" ? item.ocrTemplateId : null
+						)
+						.filter((value): value is string => typeof value === "string" && value.length > 0)
+				: [];
+			return [
+				typeof tabla.ocr_template_id === "string" ? tabla.ocr_template_id : null,
+				...nestedIds,
+			].filter((value): value is string => typeof value === "string" && value.length > 0);
+		});
 
 		const templatesMap = new Map<string, string>();
 		if (templateIds.length > 0) {
@@ -509,6 +672,30 @@ export async function GET(request: Request) {
 				rawDataInputMethod === 'ocr' || rawDataInputMethod === 'manual' || rawDataInputMethod === 'both'
 					? rawDataInputMethod
 					: 'both';
+			const columns = columnsMap.get(linkedTabla.id) ?? [];
+			const legacyTable = buildLegacyExtractedTable({
+				id: linkedTabla.id,
+				name:
+					typeof linkedTabla.name === "string" && linkedTabla.name.trim().length > 0
+						? linkedTabla.name
+						: folder.name,
+				settings,
+				ocrTemplateId: linkedTabla.ocr_template_id ?? null,
+				ocrTemplateName: linkedTabla.ocr_template_id
+					? templatesMap.get(linkedTabla.ocr_template_id) ?? null
+					: null,
+				columns,
+			});
+			const extractedTables = normalizeExtractedTables(
+				settings.extractedTables,
+				legacyTable,
+			).map((table) => ({
+				...table,
+				ocrTemplateName:
+					table.ocrTemplateId && templatesMap.has(table.ocrTemplateId)
+						? templatesMap.get(table.ocrTemplateId) ?? null
+						: table.ocrTemplateName ?? null,
+			}));
 
 			return {
 				...folder,
@@ -523,7 +710,7 @@ export async function GET(request: Request) {
 				ocrTemplateId: linkedTabla.ocr_template_id,
 				ocrTemplateName: linkedTabla.ocr_template_id
 					? templatesMap.get(linkedTabla.ocr_template_id)
-					: null,
+						: null,
 				hasNestedData: Boolean(settings.hasNestedData),
 				documentTypes: Array.isArray(settings.extractionDocumentTypes)
 					? (settings.extractionDocumentTypes as unknown[]).filter(
@@ -535,7 +722,13 @@ export async function GET(request: Request) {
 					typeof settings.extractionInstructions === "string"
 						? settings.extractionInstructions
 						: null,
-				columns: columnsMap.get(linkedTabla.id) ?? [],
+				extractionRowMode: normalizeRowMode(settings.extractionRowMode),
+				extractionMaxRows:
+					normalizeRowMode(settings.extractionRowMode) === "multiple"
+						? normalizePositiveInt(settings.extractionMaxRows)
+						: 1,
+				columns,
+				extractedTables,
 			};
 		});
 
@@ -680,6 +873,7 @@ export async function POST(request: Request) {
 				: null;
 			const hasNestedData = body.hasNestedData === true;
 			const rawColumns: Array<{
+				id?: string;
 				label: string;
 				fieldKey?: string;
 				dataType?: string;
@@ -724,35 +918,69 @@ export async function POST(request: Request) {
 				}
 			}
 
-			// Parse dataInputMethod
-			const rawDataInputMethod = typeof body.dataInputMethod === "string" ? body.dataInputMethod : "both";
-			const dataInputMethod = ["ocr", "manual", "both"].includes(rawDataInputMethod) ? rawDataInputMethod : "both";
-			const rawSpreadsheetTemplate =
-				typeof body.spreadsheetTemplate === "string"
-					? body.spreadsheetTemplate.trim()
-					: "";
-			const spreadsheetTemplate = rawSpreadsheetTemplate === "certificado" ? "certificado" : "auto";
-			const documentTypes = Array.isArray(body.documentTypes)
-				? body.documentTypes
-						.filter((value: unknown): value is string => typeof value === "string")
-						.map((value: string) => value.trim())
-						.filter(Boolean)
-				: [];
-			const extractionInstructions =
-				typeof body.extractionInstructions === "string" &&
-				body.extractionInstructions.trim().length > 0
-					? body.extractionInstructions.trim()
-					: null;
+			const legacyFallback = buildLegacyExtractedTable({
+				id: path,
+				name: rawName,
+				settings: {
+					dataInputMethod: body.dataInputMethod,
+					spreadsheetTemplate: body.spreadsheetTemplate,
+					hasNestedData,
+					extractionDocumentTypes: body.documentTypes,
+					extractionInstructions: body.extractionInstructions,
+					extractionRowMode: body.extractionRowMode,
+					extractionMaxRows: body.extractionMaxRows,
+				},
+				ocrTemplateId,
+				ocrTemplateName: null,
+				columns: resolvedColumns.map((column) => ({
+					id: column.id,
+					fieldKey:
+						typeof column.fieldKey === "string" ? column.fieldKey : normalizeFieldKey(column.label ?? "campo"),
+					label: column.label ?? "Campo",
+					dataType: column.dataType ?? "text",
+					required: Boolean(column.required),
+					ocrScope: column.ocrScope,
+					description: column.description ?? null,
+					aliases: column.aliases ?? [],
+					examples: column.examples ?? [],
+					excelKeywords: column.excelKeywords ?? [],
+				})),
+			});
+			const extractedTables = normalizeExtractedTables(body.extractedTables, legacyFallback);
+			const primaryTable = extractedTables[0];
+			const primaryOcrTemplateId = primaryTable.ocrTemplateId ?? ocrTemplateId;
+			const dataInputMethod = primaryTable.dataInputMethod;
+			const spreadsheetTemplate = primaryTable.spreadsheetTemplate ?? "auto";
+			const documentTypes = primaryTable.documentTypes ?? [];
+			const extractionInstructions = primaryTable.extractionInstructions ?? null;
+			const extractionRowMode = primaryTable.rowMode;
+			const extractionMaxRows = primaryTable.maxRows;
+			resolvedColumns = (primaryTable.columns ?? []).map((column) => ({
+				id: column.id,
+				label: column.label ?? "Campo",
+				fieldKey: column.fieldKey,
+				dataType: column.dataType,
+				required: Boolean(column.required),
+				ocrScope: column.ocrScope,
+				description: column.description ?? null,
+				aliases: column.aliases ?? [],
+				examples: column.examples ?? [],
+				excelKeywords: column.excelKeywords ?? [],
+			}));
 
 			// Build settings
+			const effectiveHasNestedData = Boolean(primaryTable.hasNestedData);
 			const settings: Record<string, unknown> = {
 				ocrFolder: path,
-				hasNestedData,
+				hasNestedData: effectiveHasNestedData,
 				dataInputMethod,
 				spreadsheetTemplate,
+				extractionRowMode,
+				extractionMaxRows,
+				extractedTables,
 			};
-			if (ocrTemplateId) {
-				settings.ocrTemplateId = ocrTemplateId;
+			if (primaryOcrTemplateId) {
+				settings.ocrTemplateId = primaryOcrTemplateId;
 			}
 			if (documentTypes.length > 0) {
 				settings.extractionDocumentTypes = documentTypes;
@@ -782,7 +1010,7 @@ export async function POST(request: Request) {
 					linked_folder_path: path,
 					settings,
 					position: nextTablaPosition,
-					ocr_template_id: ocrTemplateId,
+					ocr_template_id: primaryOcrTemplateId,
 				})
 				.select("id, name, ocr_template_id")
 				.single();
@@ -818,7 +1046,7 @@ export async function POST(request: Request) {
 					supabase,
 					tabla.id,
 					resolvedColumns,
-					hasNestedData
+					effectiveHasNestedData
 				);
 			} else {
 				console.warn("[obra-defaults:post] No columns provided for OCR folder - this will cause issues!");
@@ -826,11 +1054,11 @@ export async function POST(request: Request) {
 
 			// Get template name if applicable
 			let ocrTemplateName: string | null = null;
-			if (ocrTemplateId) {
+			if (primaryOcrTemplateId) {
 				const { data: template } = await supabase
 					.from("ocr_templates")
 					.select("name")
-					.eq("id", ocrTemplateId)
+					.eq("id", primaryOcrTemplateId)
 					.single();
 				ocrTemplateName = template?.name ?? null;
 			}
@@ -840,12 +1068,15 @@ export async function POST(request: Request) {
 					isOcr: true,
 					dataInputMethod,
 					spreadsheetTemplate,
-					ocrTemplateId,
+					ocrTemplateId: primaryOcrTemplateId,
 					ocrTemplateName,
-					hasNestedData,
+					hasNestedData: effectiveHasNestedData,
 					documentTypes,
 					extractionInstructions,
+					extractionRowMode,
+					extractionMaxRows,
 					columns: insertedColumns,
+					extractedTables,
 				};
 
 			const { error: jobError } = await supabase
@@ -1131,35 +1362,68 @@ export async function PUT(request: Request) {
 			}
 		}
 
-		const rawDataInputMethod = typeof body.dataInputMethod === "string" ? body.dataInputMethod : "both";
-		const dataInputMethod = ["ocr", "manual", "both"].includes(rawDataInputMethod)
-			? rawDataInputMethod
-			: "both";
-		const rawSpreadsheetTemplate =
-			typeof body.spreadsheetTemplate === "string"
-				? body.spreadsheetTemplate.trim()
-				: "";
-		const spreadsheetTemplate = rawSpreadsheetTemplate === "certificado" ? "certificado" : "auto";
-		const documentTypes = Array.isArray(body.documentTypes)
-			? body.documentTypes
-					.filter((value: unknown): value is string => typeof value === "string")
-					.map((value: string) => value.trim())
-					.filter(Boolean)
-			: [];
-		const extractionInstructions =
-			typeof body.extractionInstructions === "string" &&
-			body.extractionInstructions.trim().length > 0
-				? body.extractionInstructions.trim()
-				: null;
+		const legacyFallback = buildLegacyExtractedTable({
+			id: path,
+			name: rawName,
+			settings: {
+				dataInputMethod: body.dataInputMethod,
+				spreadsheetTemplate: body.spreadsheetTemplate,
+				hasNestedData,
+				extractionDocumentTypes: body.documentTypes,
+				extractionInstructions: body.extractionInstructions,
+				extractionRowMode: body.extractionRowMode,
+				extractionMaxRows: body.extractionMaxRows,
+			},
+			ocrTemplateId,
+			ocrTemplateName: null,
+			columns: resolvedColumns.map((column) => ({
+				id: column.id,
+				fieldKey:
+					typeof column.fieldKey === "string" ? column.fieldKey : normalizeFieldKey(column.label ?? "campo"),
+				label: column.label ?? "Campo",
+				dataType: column.dataType ?? "text",
+				required: Boolean(column.required),
+				ocrScope: column.ocrScope,
+				description: column.description ?? null,
+				aliases: column.aliases ?? [],
+				examples: column.examples ?? [],
+				excelKeywords: column.excelKeywords ?? [],
+			})),
+		});
+		const extractedTables = normalizeExtractedTables(body.extractedTables, legacyFallback);
+		const primaryTable = extractedTables[0];
+		const primaryOcrTemplateId = primaryTable.ocrTemplateId ?? ocrTemplateId;
+		const dataInputMethod = primaryTable.dataInputMethod;
+		const spreadsheetTemplate = primaryTable.spreadsheetTemplate ?? "auto";
+		const documentTypes = primaryTable.documentTypes ?? [];
+		const extractionInstructions = primaryTable.extractionInstructions ?? null;
+		const extractionRowMode = primaryTable.rowMode;
+		const extractionMaxRows = primaryTable.maxRows;
+		resolvedColumns = (primaryTable.columns ?? []).map((column) => ({
+			id: column.id,
+			label: column.label ?? "Campo",
+			fieldKey: column.fieldKey,
+			dataType: column.dataType,
+			required: Boolean(column.required),
+			ocrScope: column.ocrScope,
+			description: column.description ?? null,
+			aliases: column.aliases ?? [],
+			examples: column.examples ?? [],
+			excelKeywords: column.excelKeywords ?? [],
+		}));
 
+		const effectiveHasNestedData = Boolean(primaryTable.hasNestedData);
 		const settings: Record<string, unknown> = {
 			ocrFolder: path,
-			hasNestedData,
+			hasNestedData: effectiveHasNestedData,
 			dataInputMethod,
 			spreadsheetTemplate,
+			extractionRowMode,
+			extractionMaxRows,
+			extractedTables,
 		};
-		if (ocrTemplateId) {
-			settings.ocrTemplateId = ocrTemplateId;
+		if (primaryOcrTemplateId) {
+			settings.ocrTemplateId = primaryOcrTemplateId;
 		}
 		if (documentTypes.length > 0) {
 			settings.extractionDocumentTypes = documentTypes;
@@ -1191,7 +1455,7 @@ export async function PUT(request: Request) {
 					source_type: "ocr",
 					linked_folder_path: path,
 					settings,
-					ocr_template_id: ocrTemplateId,
+					ocr_template_id: primaryOcrTemplateId,
 				})
 				.eq("id", tablaId)
 				.eq("tenant_id", tenantId);
@@ -1217,7 +1481,7 @@ export async function PUT(request: Request) {
 					linked_folder_path: path,
 					settings,
 					position: nextTablaPosition,
-					ocr_template_id: ocrTemplateId,
+					ocr_template_id: primaryOcrTemplateId,
 				})
 				.select("id")
 				.single();
@@ -1244,16 +1508,16 @@ export async function PUT(request: Request) {
 				supabase,
 				tablaId,
 				resolvedColumns,
-				hasNestedData
+				effectiveHasNestedData
 			);
 		}
 
 		let ocrTemplateName: string | null = null;
-		if (ocrTemplateId) {
+		if (primaryOcrTemplateId) {
 			const { data: template } = await supabase
 				.from("ocr_templates")
 				.select("name")
-				.eq("id", ocrTemplateId)
+				.eq("id", primaryOcrTemplateId)
 				.maybeSingle();
 			ocrTemplateName = template?.name ?? null;
 		}
@@ -1263,12 +1527,15 @@ export async function PUT(request: Request) {
 			isOcr: true,
 			dataInputMethod,
 			spreadsheetTemplate,
-			ocrTemplateId,
+			ocrTemplateId: primaryOcrTemplateId,
 			ocrTemplateName,
-			hasNestedData,
+			hasNestedData: effectiveHasNestedData,
 			documentTypes,
 			extractionInstructions,
+			extractionRowMode,
+			extractionMaxRows,
 			columns: insertedColumns,
+			extractedTables,
 		};
 
 		const { error: jobError } = await supabase.from("background_jobs").insert({
