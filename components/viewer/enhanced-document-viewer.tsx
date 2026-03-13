@@ -77,6 +77,17 @@ type DocumentViewerProps = {
   onDownload?: () => void;
 };
 
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName;
+  return (
+    target.isContentEditable ||
+    tagName === 'INPUT' ||
+    tagName === 'TEXTAREA' ||
+    tagName === 'SELECT'
+  );
+}
+
 export function EnhancedDocumentViewer({
   url,
   fileName,
@@ -188,6 +199,7 @@ export function EnhancedDocumentViewer({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (fileType !== 'pdf') return;
+      if (isEditableEventTarget(e.target)) return;
 
       switch (e.key) {
         case 'ArrowLeft':

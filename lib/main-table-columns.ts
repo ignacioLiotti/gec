@@ -1,13 +1,5 @@
 import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
-
-const toNumericValue = (value: unknown): number => {
-	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-	if (typeof value === "string") {
-		const parsed = Number(value.replace(",", "."));
-		return Number.isFinite(parsed) ? parsed : 0;
-	}
-	return 0;
-};
+import { parseLocalizedNumber, toNumericValue } from "@/lib/tablas";
 
 export const formatMainColumnValue = (
 	value: unknown,
@@ -18,10 +10,10 @@ export const formatMainColumnValue = (
 		return new Intl.NumberFormat("es-AR", {
 			style: "currency",
 			currency: "ARS",
-		}).format(toNumericValue(value));
+		}).format(toNumericValue(value) ?? 0);
 	}
 	if (cellType === "number") {
-		return toNumericValue(value).toLocaleString("es-AR");
+		return (toNumericValue(value) ?? 0).toLocaleString("es-AR");
 	}
 	if (cellType === "boolean" || cellType === "checkbox" || cellType === "toggle") {
 		return Boolean(value) ? "Sí" : "No";
@@ -36,7 +28,7 @@ export const coerceMainColumnInputValue = (
 	const normalized = rawValue.trim();
 	if (!normalized) return null;
 	if (cellType === "number" || cellType === "currency") {
-		const parsed = Number(normalized.replace(",", "."));
+		const parsed = parseLocalizedNumber(normalized);
 		return Number.isFinite(parsed) ? parsed : null;
 	}
 	if (cellType === "boolean" || cellType === "checkbox" || cellType === "toggle") {

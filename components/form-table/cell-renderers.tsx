@@ -17,6 +17,7 @@ import {
 import { CalendarDays, ExternalLink } from "lucide-react";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { parseLocalizedNumber, toNumericValue } from "@/lib/tablas";
 import type {
 	ColumnDef,
 	FormFieldComponent,
@@ -183,17 +184,21 @@ function LocalInput({
 	onChange: syncToForm,
 	onBlur,
 	transformOnBlur,
+	formatDisplayValue,
 	...props
 }: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur" | "value"> & {
 	value: EditableCellValue;
 	onChange: (value: unknown) => void;
 	onBlur?: () => void;
 	transformOnBlur?: (value: string) => unknown;
+	formatDisplayValue?: (value: EditableCellValue) => string;
 }) {
 	// Convert external value to string for the input
 	const normalizedExternal =
 		props.type === "date"
 			? normalizeDateInputValue(externalValue)
+			: formatDisplayValue
+				? formatDisplayValue(externalValue)
 			: externalValue == null
 				? ""
 				: String(externalValue);
@@ -285,14 +290,20 @@ function checkedLabel(value: boolean) {
 	return value ? "Activo" : "Inactivo";
 }
 
-function parseNumericInput(value: EditableCellValue): number | null {
-	if (value == null) return null;
-	const raw = String(value).trim();
-	if (!raw) return null;
-	const normalized = raw.replace(/[^\d+\-.,]/g, "").replace(",", ".");
-	if (!normalized) return null;
-	const parsed = Number(normalized);
-	return Number.isFinite(parsed) ? parsed : null;
+function formatNumericInputDisplay(value: EditableCellValue): string {
+	if (value == null || value === "") return "";
+	const parsed = parseLocalizedNumber(value);
+	return parsed == null ? String(value) : parsed.toLocaleString("es-AR");
+}
+
+function formatCurrencyInputDisplay(value: EditableCellValue): string {
+	if (value == null || value === "") return "";
+	const parsed = parseLocalizedNumber(value);
+	if (parsed == null) return String(value);
+	return new Intl.NumberFormat("es-AR", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	}).format(parsed);
 }
 
 export function renderReadOnlyValue<Row extends FormTableRow>(
@@ -309,17 +320,16 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 	const config = column.cellConfig || {};
 
 	switch (cellType) {
-		case "number":
+		case "number": {
+			const amount = toNumericValue(value);
 			return (
 				<span className="font-mono tabular-nums ">
-					{typeof value === "number" ? value.toLocaleString() : String(value ?? "-")}
+					{amount == null ? String(value ?? "-") : amount.toLocaleString("es-AR")}
 				</span>
 			);
+		}
 		case "currency": {
-			const amount =
-				typeof value === "number"
-					? value
-					: Number.parseFloat(String(value ?? 0)) || 0;
+			const amount = toNumericValue(value) ?? 0;
 			const formatted = new Intl.NumberFormat(config.currencyLocale || "es-AR", {
 				style: "currency",
 				currency: config.currencyCode || "USD",
@@ -489,9 +499,10 @@ export function renderEditableContent<Row extends FormTableRow>({
 					onChange={setValue}
 					onBlur={handleBlur}
 					transformOnBlur={(val) => {
-						const parsed = parseNumericInput(val);
+						const parsed = parseLocalizedNumber(val);
 						return parsed == null ? null : Number(parsed.toFixed(2));
 					}}
+					formatDisplayValue={formatCurrencyInputDisplay}
 					placeholder="0.00"
 					required={column.required}
 				/>
@@ -507,9 +518,10 @@ export function renderEditableContent<Row extends FormTableRow>({
 					onChange={setValue}
 					onBlur={handleBlur}
 					transformOnBlur={(val) => {
-						const parsed = parseNumericInput(val);
+						const parsed = parseLocalizedNumber(val);
 						return parsed == null ? null : parsed;
 					}}
+					formatDisplayValue={formatNumericInputDisplay}
 					required={column.required}
 				/>
 			);

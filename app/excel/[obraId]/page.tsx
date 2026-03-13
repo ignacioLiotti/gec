@@ -34,7 +34,7 @@ import { ObraDocumentsTab } from "./tabs/documents-tab";
 import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
 import { prefetchDocuments } from "./tabs/file-manager/hooks/useDocumentsStore";
-import type { OcrTablaColumn } from "./tabs/file-manager/types";
+import type { OcrFolderLink, OcrTablaColumn, TablaDataRow } from "./tabs/file-manager/types";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
 	DEFAULT_MAIN_TABLE_COLUMN_CONFIG,
@@ -172,6 +172,15 @@ async function fetchCertificates(obraId: string): Promise<{ certificates: Certif
 	}
 	const data = await response.json();
 	return { certificates: data.certificates || [], total: data.total || 0 };
+}
+
+async function fetchDocumentsTreeLinks(obraId: string): Promise<OcrFolderLink[]> {
+	const response = await fetch(`/api/obras/${obraId}/documents-tree?limit=500`);
+	if (!response.ok) {
+		throw new Error("Failed to load document tree links");
+	}
+	const data = await response.json().catch(() => ({}));
+	return Array.isArray(data?.links) ? (data.links as OcrFolderLink[]) : [];
 }
 
 async function fetchObraRecipients(obraId: string): Promise<{ roles: ObraRole[]; users: ObraUser[]; userRoles: ObraUserRole[] }> {
@@ -356,6 +365,29 @@ function normalizeText(value: string): string {
 		.trim();
 }
 
+function isCertificadosExtraidosFolder(folderName: string): boolean {
+	const normalized = normalizeText(folderName)
+		.replace(/\\/g, "/")
+		.replace(/[_\s]+/g, "-");
+
+	return (
+		normalized.includes("documentos/certificados/certificados-extraidos") ||
+		normalized.includes("certificados/certificados-extraidos") ||
+		(normalized.includes("certificados") && normalized.includes("extraidos"))
+	);
+}
+
+function isCertificadoResumenLink(link: OcrFolderLink): boolean {
+	const keySet = new Set((link.columns ?? []).map((column) => normalizeFieldKey(column.fieldKey)));
+	return (
+		keySet.has("monto_acumulado") &&
+		keySet.has("monto_certificado") &&
+		(keySet.has("periodo") || keySet.has("fecha_certificacion")) &&
+		!keySet.has("item_code") &&
+		!keySet.has("avance_mensual_pct")
+	);
+}
+
 function parsePercent(value: unknown): number | null {
 	if (typeof value === "number" && Number.isFinite(value)) return value;
 	const raw = String(value ?? "").trim();
@@ -372,6 +404,105 @@ function parsePercent(value: unknown): number | null {
 	const parsed = Number.parseFloat(normalized);
 	return Number.isFinite(parsed) ? parsed : null;
 }
+
+function parseCurrencyLike(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	const raw = String(value ?? "").trim();
+	if (!raw) return null;
+	const stripped = raw.replace(/[^\d,.-]/g, "");
+	if (!stripped) return null;
+	const lastDot = stripped.lastIndexOf(".");
+	const lastComma = stripped.lastIndexOf(",");
+	const normalized =
+		lastComma > lastDot
+			? stripped.replace(/\./g, "").replace(",", ".")
+			: stripped.replace(/,/g, "");
+	const parsed = Number.parseFloat(normalized);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDateTimestamp(value: unknown): number | null {
+	const raw = String(value ?? "").trim();
+	if (!raw) return null;
+	const normalized = normalizeText(raw).replace(/\./g, "");
+
+	const ymd = normalized.match(/^(\d{4})[/-](\d{1,2})(?:[/-](\d{1,2}))?$/);
+	if (ymd) {
+		const year = Number.parseInt(ymd[1], 10);
+		const month = Number.parseInt(ymd[2], 10) - 1;
+		const day = Number.parseInt(ymd[3] ?? "1", 10);
+		return Date.UTC(year, month, day);
+	}
+
+	const dmy = normalized.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+	if (dmy) {
+		const day = Number.parseInt(dmy[1], 10);
+		const month = Number.parseInt(dmy[2], 10) - 1;
+		const rawYear = Number.parseInt(dmy[3], 10);
+		const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+		return Date.UTC(year, month, day);
+	}
+
+	const parsed = new Date(raw);
+	return Number.isNaN(parsed.getTime())
+		? null
+		: Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function getCertificadoRowSortValue(row: TablaDataRow, fallbackIndex: number): number {
+	const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+	const fecha =
+		getRowFieldValueByCandidates(
+			rowData,
+			["fecha_certificacion", "fecha", "issued_at", "date"],
+			[["fecha", "cert"], ["fecha"]],
+		);
+	const fechaTs = parseDateTimestamp(fecha);
+	if (fechaTs != null) return fechaTs;
+
+	const periodo = getRowFieldValueByCandidates(
+		rowData,
+		["periodo", "periodo_key", "period", "mes"],
+		[["periodo"], ["period"], ["mes"]],
+	);
+	if (periodo != null) {
+		const parsed = parseMonthOrder(periodo, fallbackIndex);
+		if (parsed.order >= 1000) {
+			const year = Math.floor(parsed.order / 12);
+			const month = parsed.order % 12;
+			return Date.UTC(year, month, 1);
+		}
+		return parsed.order;
+	}
+
+	return -fallbackIndex;
+}
+
+function sortCertificadosExtraidosRows(rows: TablaDataRow[]): TablaDataRow[] {
+	return rows
+		.map((row, index) => ({ row, index }))
+		.sort((a, b) => {
+			const sortA = getCertificadoRowSortValue(a.row, a.index);
+			const sortB = getCertificadoRowSortValue(b.row, b.index);
+			return sortB - sortA;
+		})
+		.map((entry) => entry.row);
+}
+
+const roundDerivedValue = (value: number) =>
+	Math.round((value + Number.EPSILON) * 100) / 100;
+
+const isUnsetDerivedNumber = (value: unknown) => {
+	const numeric = Number(value ?? 0);
+	return !Number.isFinite(numeric) || Math.abs(numeric) < 0.000001;
+};
+
+const approximatelyEqual = (a: unknown, b: unknown, epsilon = 0.01) => {
+	const numA = Number(a ?? 0);
+	const numB = Number(b ?? 0);
+	if (!Number.isFinite(numA) || !Number.isFinite(numB)) return false;
+	return Math.abs(numA - numB) <= epsilon;
+};
 
 const MONTH_INDEX: Record<string, number> = {
 	ene: 0,
@@ -471,6 +602,91 @@ function parseMonthOrder(rawValue: unknown, fallback: number): { label: string; 
 	}
 
 	return { label: raw, order: fallback };
+}
+
+type DerivedCertificadosMetrics = {
+	certificadoALaFecha: number;
+	saldoACertificar: number;
+	porcentaje: number;
+};
+
+function getLatestCertificadoMontoAcumulado(rows: TablaDataRow[]): number | null {
+	const sorted = rows
+		.map((row, index) => ({ row, index }))
+		.sort((a, b) => getCertificadoRowSortValue(b.row, b.index) - getCertificadoRowSortValue(a.row, a.index))
+		.map((entry) => entry.row);
+
+	for (const row of sorted) {
+		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+		const montoAcumulado = parseCurrencyLike(
+			getRowFieldValueByCandidates(
+				rowData,
+				["monto_acumulado", "monto_acumulado_total", "acumulado", "total_acumulado"],
+				[["monto", "acumul"], ["acumulado"]],
+			),
+		);
+		if (montoAcumulado != null) {
+			return roundDerivedValue(montoAcumulado);
+		}
+	}
+
+	return null;
+}
+
+function isMeaningfulCertificadoResumenRow(row: TablaDataRow): boolean {
+	const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+	const montoAcumulado = parseCurrencyLike(
+		getRowFieldValueByCandidates(
+			rowData,
+			["monto_acumulado", "monto_acumulado_total", "acumulado", "total_acumulado"],
+			[["monto", "acumul"], ["acumulado"]],
+		),
+	);
+	const montoCertificado = parseCurrencyLike(
+		getRowFieldValueByCandidates(
+			rowData,
+			["monto_certificado", "monto", "importe", "total"],
+			[["monto", "cert"], ["importe"]],
+		),
+	);
+	const periodoOFecha =
+		getRowFieldValueByCandidates(
+			rowData,
+			["fecha_certificacion", "fecha", "issued_at", "date"],
+			[["fecha", "cert"], ["fecha"]],
+		) ??
+		getRowFieldValueByCandidates(
+			rowData,
+			["periodo", "periodo_key", "period", "mes"],
+			[["periodo"], ["period"], ["mes"]],
+		);
+
+	return Boolean(periodoOFecha) && (montoAcumulado != null || montoCertificado != null);
+}
+
+function computeDerivedCertificadosMetrics(
+	rows: TablaDataRow[],
+	contratoMasAmpliaciones: unknown,
+	certificadoOverride?: unknown,
+): DerivedCertificadosMetrics | null {
+	const latestCertificado = certificadoOverride != null
+		? parseCurrencyLike(certificadoOverride)
+		: getLatestCertificadoMontoAcumulado(rows);
+	if (latestCertificado == null) return null;
+
+	const contrato = parseCurrencyLike(contratoMasAmpliaciones) ?? Number(contratoMasAmpliaciones ?? 0) ?? 0;
+	const safeContrato = Number.isFinite(contrato) ? contrato : 0;
+	const saldo = roundDerivedValue(safeContrato - latestCertificado);
+	const porcentaje =
+		safeContrato > 0
+			? roundDerivedValue((latestCertificado * 100) / safeContrato)
+			: 0;
+
+	return {
+		certificadoALaFecha: roundDerivedValue(latestCertificado),
+		saldoACertificar: saldo,
+		porcentaje,
+	};
 }
 
 function addMonths(periodKey: string, offset: number): string | null {
@@ -821,6 +1037,13 @@ function ObraDetailPageContent() {
 		staleTime: 10 * 60 * 1000, // Recipients change less often
 	});
 
+	const documentsTreeLinksQuery = useQuery({
+		queryKey: ['obra', obraId, 'documents-tree-links'],
+		queryFn: () => fetchDocumentsTreeLinks(obraId!),
+		enabled: !!obraId && obraId !== "undefined",
+		staleTime: 5 * 60 * 1000,
+	});
+
 	// Flujo actions - always fetch (cached by React Query)
 	const flujoActionsQuery = useQuery({
 		queryKey: ['obra', obraId, 'flujo-actions'],
@@ -993,8 +1216,6 @@ function ObraDetailPageContent() {
 	const loadError = obraQuery.error?.message ?? null;
 	const routeError = !obraId || obraId === "undefined" ? "Obra no encontrada" : null;
 	const certificates = certificatesQuery.data?.certificates ?? [];
-	const certificatesTotal = certificatesQuery.data?.total ?? 0;
-	const certificatesLoading = certificatesQuery.isLoading;
 	const memoriaNotes = memoriaQuery.data ?? [];
 	const materialOrders = materialsQuery.data ?? [];
 	const obraRoles = recipientsQuery.data?.roles ?? [];
@@ -1002,7 +1223,25 @@ function ObraDetailPageContent() {
 	const obraUserRoles = recipientsQuery.data?.userRoles ?? [];
 	const flujoActions = flujoActionsQuery.data ?? [];
 	const isLoadingFlujoActions = flujoActionsQuery.isLoading;
+	const certificadosExtraidosRows = useMemo<TablaDataRow[]>(() => {
+		const links = documentsTreeLinksQuery.data ?? [];
+		return sortCertificadosExtraidosRows(
+			links
+			.filter(
+				(link) =>
+					typeof link.folderName === "string" &&
+					isCertificadosExtraidosFolder(link.folderName) &&
+					isCertificadoResumenLink(link),
+			)
+			.flatMap((link) => (Array.isArray(link.rows) ? link.rows : []))
+			.filter(isMeaningfulCertificadoResumenRow)
+		);
+	}, [documentsTreeLinksQuery.data]);
 	const obraData = obraQuery.data;
+	const latestExtractedCertificadoALaFecha = useMemo(
+		() => getLatestCertificadoMontoAcumulado(certificadosExtraidosRows),
+		[certificadosExtraidosRows]
+	);
 	const generalReportsData = generalReportsQuery.data ?? { findings: [], curve: null };
 	const obraTimeProgress =
 		obraData && obraData.plazoTotal > 0
@@ -1592,6 +1831,122 @@ function ObraDetailPageContent() {
 			applyObraToForm(obraQuery.data);
 		}
 	}, [obraQuery.data, obraQuery.dataUpdatedAt, applyObraToForm]);
+
+	useEffect(() => {
+		if (!obraData || certificadosExtraidosRows.length === 0) return;
+		if (latestExtractedCertificadoALaFecha == null) return;
+
+		const savedCertificadoIsManual =
+			!isUnsetDerivedNumber(obraData.certificadoALaFecha) &&
+			!approximatelyEqual(
+				obraData.certificadoALaFecha,
+				latestExtractedCertificadoALaFecha,
+			);
+		const currentCertificadoIsDirty = !approximatelyEqual(
+			form.state.values.certificadoALaFecha,
+			initialFormValues.certificadoALaFecha,
+		);
+
+		const savedMetrics = computeDerivedCertificadosMetrics(
+			certificadosExtraidosRows,
+			obraData.contratoMasAmpliaciones,
+			savedCertificadoIsManual ? obraData.certificadoALaFecha : undefined,
+		);
+		const currentMetrics = computeDerivedCertificadosMetrics(
+			certificadosExtraidosRows,
+			form.state.values.contratoMasAmpliaciones,
+			savedCertificadoIsManual || currentCertificadoIsDirty
+				? form.state.values.certificadoALaFecha
+				: undefined,
+		);
+
+		if (!savedMetrics || !currentMetrics) return;
+
+		const savedSaldoIsManual =
+			!isUnsetDerivedNumber(obraData.saldoACertificar) &&
+			!approximatelyEqual(
+				obraData.saldoACertificar,
+				savedMetrics.saldoACertificar,
+			);
+		const savedPorcentajeIsManual =
+			!isUnsetDerivedNumber(obraData.porcentaje) &&
+			!approximatelyEqual(
+				obraData.porcentaje,
+				savedMetrics.porcentaje,
+			);
+
+		const currentSaldoIsDirty = !approximatelyEqual(
+			form.state.values.saldoACertificar,
+			initialFormValues.saldoACertificar,
+		);
+		const currentPorcentajeIsDirty = !approximatelyEqual(
+			form.state.values.porcentaje,
+			initialFormValues.porcentaje,
+		);
+
+		const updates: Partial<Obra> = {};
+		const nextInitialValues: Partial<Obra> = {};
+
+		const maybeApplyDerivedField = (
+			field: keyof Pick<Obra, "certificadoALaFecha" | "saldoACertificar" | "porcentaje">,
+			nextValue: number,
+			options: {
+				currentValue: unknown;
+				currentDirty: boolean;
+				savedValue: unknown;
+				savedManual: boolean;
+			},
+		) => {
+			if (options.currentDirty) return;
+			if (!isUnsetDerivedNumber(options.savedValue) && options.savedManual) return;
+			if (approximatelyEqual(options.currentValue, nextValue)) return;
+			updates[field] = nextValue;
+			nextInitialValues[field] = nextValue;
+		};
+
+		maybeApplyDerivedField("certificadoALaFecha", currentMetrics.certificadoALaFecha, {
+			currentValue: form.state.values.certificadoALaFecha,
+			currentDirty: currentCertificadoIsDirty,
+			savedValue: obraData.certificadoALaFecha,
+			savedManual: savedCertificadoIsManual,
+		});
+		maybeApplyDerivedField("saldoACertificar", currentMetrics.saldoACertificar, {
+			currentValue: form.state.values.saldoACertificar,
+			currentDirty: currentSaldoIsDirty,
+			savedValue: obraData.saldoACertificar,
+			savedManual: savedSaldoIsManual,
+		});
+		maybeApplyDerivedField("porcentaje", currentMetrics.porcentaje, {
+			currentValue: form.state.values.porcentaje,
+			currentDirty: currentPorcentajeIsDirty,
+			savedValue: obraData.porcentaje,
+			savedManual: savedPorcentajeIsManual,
+		});
+
+		if (Object.keys(updates).length === 0) return;
+
+		(Object.entries(updates) as Array<[keyof typeof updates, number]>).forEach(
+			([field, nextValue]) => {
+				form.setFieldValue(field, nextValue as any);
+			},
+		);
+		setInitialFormValues((prev) => ({
+			...prev,
+			...nextInitialValues,
+		}));
+	}, [
+		certificadosExtraidosRows,
+		form,
+		form.state.values.certificadoALaFecha,
+		form.state.values.contratoMasAmpliaciones,
+		form.state.values.porcentaje,
+		form.state.values.saldoACertificar,
+		initialFormValues.certificadoALaFecha,
+		initialFormValues.porcentaje,
+		initialFormValues.saldoACertificar,
+		latestExtractedCertificadoALaFecha,
+		obraData,
+	]);
 
 	// Apply pendientes data when it loads
 	useEffect(() => {
@@ -2237,6 +2592,7 @@ function ObraDetailPageContent() {
 								mainTableColumns={activeMainTableColumns}
 								mainTableColumnValues={mainTableColumnValues}
 								setCustomMainColumnValue={setCustomMainColumnValue}
+								certificadosExtraidosRows={certificadosExtraidosRows}
 							/>
 							{/* {activeTab === "general" && (
 								<section className="rounded-lg border bg-card shadow-sm overflow-hidden">

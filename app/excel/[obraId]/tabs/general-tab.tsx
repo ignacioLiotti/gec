@@ -31,7 +31,7 @@ import {
 
 import type { Obra } from "@/app/excel/schema";
 import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
-import type { OcrTablaColumn } from "./file-manager/types";
+import type { OcrTablaColumn, TablaDataRow } from "./file-manager/types";
 import { QuickActionsPanel } from "@/components/quick-actions/quick-actions-panel";
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -112,6 +112,7 @@ type GeneralTabProps = {
 	mainTableColumns?: MainTableColumnConfig[];
 	mainTableColumnValues?: Record<string, unknown>;
 	setCustomMainColumnValue?: (columnId: string, value: unknown) => void;
+	certificadosExtraidosRows?: TablaDataRow[];
 };
 
 const STATIC_GENERAL_FIELD_IDS = new Set([
@@ -144,7 +145,7 @@ const periodLabel = (period: string): string => {
 
 const CircularProgress = ({ value }: { value: number }) => {
 	const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-	const radius = 80;
+	const radius = 60;
 	const strokeWidth = 30;
 	const circumference = 2 * Math.PI * radius;
 	const offset = circumference - (clamped / 100) * circumference;
@@ -183,7 +184,7 @@ const CircularProgress = ({ value }: { value: number }) => {
 				/>
 			</svg>
 			<div className="absolute flex flex-col items-center justify-center h-full w-full">
-				<div className="text-4xl font-bold leading-none">
+				<div className="text-3xl font-bold leading-none">
 					{Number.isNaN(clamped) ? 0 : Math.round(clamped)}%
 				</div>
 				<div className="mt-1 text-xs text-muted-foreground">Completado</div>
@@ -232,7 +233,7 @@ function KpiItem({ label, value }: { label: string; value: string }) {
 	return (
 		<div className="space-y-1">
 			<p className="text-[11px] font-medium uppercase tracking-wide text-[#aaa]">{label}</p>
-			<p className="text-xl font-semibold tabular-nums tracking-tight text-[#1a1a1a] sm:text-2xl">
+			<p className="text-lg font-semibold tabular-nums tracking-tight text-[#1a1a1a] sm:text-xl">
 				{value}
 			</p>
 		</div>
@@ -276,6 +277,178 @@ const formatNumber = (value: unknown, suffix = "") => {
 };
 
 const formatCurrency = (value: unknown) => `$ ${formatNumber(value)}`;
+
+type ObraCertificateSummary = {
+	id: string;
+	certificateNumber: string;
+	expedienteNumber: string;
+	location: string;
+	period: string | null;
+	amount: string | null;
+	status: string | null;
+};
+
+const CERTIFICATE_NUMBER_KEYS = [
+	"n_certificado",
+	"nro_certificado",
+	"numero_certificado",
+	"certificado",
+	"certificate_number",
+];
+const CERTIFICATE_EXPEDIENTE_KEYS = [
+	"n_exp",
+	"n_expediente",
+	"nro_expediente",
+	"numero_expediente",
+	"expediente",
+	"expediente_numero",
+];
+const CERTIFICATE_LOCATION_KEYS = [
+	"ubicacion_exte",
+	"ubicacion_expediente",
+	"ubicacion_actual",
+	"ubicacion",
+	"location",
+];
+const CERTIFICATE_PERIOD_KEYS = ["mes", "periodo", "period", "fecha", "fecha_certificacion"];
+const CERTIFICATE_AMOUNT_KEYS = ["monto", "monto_certificado", "importe", "total"];
+const CERTIFICATE_STATUS_KEYS = ["estado", "status", "situacion"];
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function findFirstDisplayValue(
+	record: Record<string, unknown>,
+	keys: string[],
+): string {
+	for (const key of keys) {
+		const raw = record[key];
+		if (raw == null) continue;
+		const text = String(raw).trim();
+		if (text) return text;
+	}
+	return "";
+}
+
+function formatCertificateAmount(value: unknown): string | null {
+	if (value == null) return null;
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return formatCurrency(value);
+	}
+
+	const text = String(value).trim();
+	if (!text) return null;
+
+	const normalized = text.replace(/[^\d,.-]/g, "");
+	if (!normalized) return text;
+
+	const lastComma = normalized.lastIndexOf(",");
+	const lastDot = normalized.lastIndexOf(".");
+	const parsed =
+		lastComma > lastDot
+			? Number(normalized.replace(/\./g, "").replace(",", "."))
+			: Number(normalized.replace(/,/g, ""));
+
+	return Number.isFinite(parsed) ? formatCurrency(parsed) : text;
+}
+
+function normalizeExtractedCertificateRows(rows: TablaDataRow[]): ObraCertificateSummary[] {
+	return rows
+		.map((row, index) => {
+			const entry = isPlainRecord(row.data) ? row.data : {};
+			const certificateNumber = findFirstDisplayValue(entry, CERTIFICATE_NUMBER_KEYS);
+			const expedienteNumber = findFirstDisplayValue(entry, CERTIFICATE_EXPEDIENTE_KEYS);
+			const location = findFirstDisplayValue(entry, CERTIFICATE_LOCATION_KEYS);
+			const period = findFirstDisplayValue(entry, CERTIFICATE_PERIOD_KEYS) || null;
+			const status = findFirstDisplayValue(entry, CERTIFICATE_STATUS_KEYS) || null;
+			const amount = formatCertificateAmount(
+				CERTIFICATE_AMOUNT_KEYS.map((key) => entry[key]).find((candidate) => candidate != null),
+			);
+			const hasVisibleData = Boolean(
+				certificateNumber || expedienteNumber || location || period || status || amount,
+			);
+
+			if (!hasVisibleData) return null;
+
+			return {
+				id: row.id || `obra-cert-ocr-${index}`,
+				certificateNumber,
+				expedienteNumber,
+				location,
+				period,
+				amount,
+				status,
+			};
+		})
+		.filter((entry): entry is ObraCertificateSummary => entry !== null);
+}
+
+function CertificatesSummaryCard({
+	certificates,
+}: {
+	certificates: ObraCertificateSummary[];
+}) {
+	return (
+		<ShellCard
+			title="Certificados"
+			icon={FileText}
+			action={
+				<span className="text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
+					{certificates.length} {certificates.length === 1 ? "registro" : "registros"}
+				</span>
+			}
+		>
+			<div className="overflow-x-auto rounded-xl border border-[#f0f0f0] bg-[#fcfcfc]">
+				<table className="min-w-full text-sm">
+					<thead className="bg-[#f8f8f8]">
+						<tr className="border-b border-[#f0f0f0] text-left">
+							<th className="px-4 py-3 font-semibold text-[#777]">N° certificado</th>
+							<th className="px-4 py-3 font-semibold text-[#777]">N° expediente</th>
+							<th className="px-4 py-3 font-semibold text-[#777]">Ubicación exte.</th>
+							<th className="px-4 py-3 font-semibold text-[#777]">Período</th>
+							<th className="px-4 py-3 font-semibold text-[#777]">Monto</th>
+							<th className="px-4 py-3 font-semibold text-[#777]">Estado</th>
+						</tr>
+					</thead>
+					<tbody>
+						{certificates.map((certificate) => (
+							<tr
+								key={certificate.id}
+								className="border-b border-[#f0f0f0] last:border-b-0"
+							>
+								<td className="px-4 py-3 font-medium text-[#1a1a1a]">
+									{certificate.certificateNumber || "Sin dato"}
+								</td>
+								<td className="px-4 py-3 text-[#1a1a1a]">
+									{certificate.expedienteNumber || "Sin dato"}
+								</td>
+								<td className="px-4 py-3 text-[#1a1a1a]">
+									{certificate.location || "Sin dato"}
+								</td>
+								<td className="px-4 py-3 text-[#1a1a1a]">
+									{certificate.period || "Sin dato"}
+								</td>
+								<td className="px-4 py-3 text-[#1a1a1a]">
+									{certificate.amount || "Sin dato"}
+								</td>
+								<td className="px-4 py-3">
+									{certificate.status ? (
+										<span className="rounded-full bg-[#fff7ed] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
+											{certificate.status}
+										</span>
+									) : (
+										<span className="text-[#999]">Sin dato</span>
+									)}
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		</ShellCard>
+	);
+}
 
 export const AdvanceCurveChart = ({
 	points,
@@ -348,7 +521,7 @@ export const AdvanceCurveChart = ({
 	return (
 		<div className="space-y-2 pt-4 ">
 			<div className="rounded-md border bg-stone-50 p-2">
-				<div className="h-[320px] w-full pt-5 pb-2 px-3">
+				<div className="h-[240px] w-full pt-5 pb-2 px-3">
 					<ResponsiveContainer width="100%" height="100%">
 						<LineChart
 							data={chartData}
@@ -455,12 +628,14 @@ export function ObraGeneralTab({
 	mainTableColumns = [],
 	mainTableColumnValues = {},
 	setCustomMainColumnValue,
+	certificadosExtraidosRows = [],
 }: GeneralTabProps) {
 	const extraMainTableColumns = mainTableColumns.filter((column) => {
 		if (column.kind === "custom") return true;
 		const sourceId = column.baseColumnId ?? column.id;
 		return !STATIC_GENERAL_FIELD_IDS.has(sourceId) && !STATIC_GENERAL_FIELD_IDS.has(column.id);
 	});
+	const obraCertificates = normalizeExtractedCertificateRows(certificadosExtraidosRows);
 
 	return (
 		<TabsContent value="general" className="space-y-6 pt-4">
@@ -807,7 +982,7 @@ export function ObraGeneralTab({
 														<form.Subscribe
 															selector={(state: any) =>
 																(state.values.customData as Record<string, unknown> | null)?.[
-																	column.id
+																column.id
 																] ?? null
 															}
 														>
@@ -1002,59 +1177,21 @@ export function ObraGeneralTab({
 							</div>
 
 							<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-								<motion.section
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ delay: 0.28 }}
-									className="lg:col-span-6"
-								>
-									<ShellCard title="Información General" icon={Landmark}>
-										<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-											<MiniField
-												icon={MapPin}
-												label="Designación y ubicación"
-												value={form.state.values.designacionYUbicacion || "No especificado"}
-												highlighted={isFieldDirty("designacionYUbicacion")}
-											/>
-											<MiniField
-												icon={Building2}
-												label="Entidad contratante"
-												value={form.state.values.entidadContratante || "No especificado"}
-												highlighted={isFieldDirty("entidadContratante")}
-											/>
-											<MiniField
-												icon={Calendar}
-												label="Mes básico"
-												value={form.state.values.mesBasicoDeContrato || "No especificado"}
-												highlighted={isFieldDirty("mesBasicoDeContrato")}
-											/>
-											<MiniField
-												icon={Calendar}
-												label="Iniciación"
-												value={form.state.values.iniciacion || "No especificado"}
-												highlighted={isFieldDirty("iniciacion")}
-											/>
-											<MiniField
-												icon={Hash}
-												label="N° de obra"
-												value={`#${form.state.values.n ?? 0}`}
-												highlighted={isFieldDirty("n")}
-											/>
-											<MiniField
-												icon={Ruler}
-												label="Superficie"
-												value={`${formatNumber(form.state.values.supDeObraM2, " m²")}`}
-												highlighted={isFieldDirty("supDeObraM2")}
-											/>
-										</div>
-									</ShellCard>
-								</motion.section>
-
+								{obraCertificates.length > 0 ? (
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: 0.32 }}
+										className="lg:col-span-7"
+									>
+										<CertificatesSummaryCard certificates={obraCertificates} />
+									</motion.section>
+								) : null}
 								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.3 }}
-									className="lg:col-span-6"
+									className="lg:col-span-5"
 								>
 									<ShellCard title="Datos Financieros" icon={BadgeDollarSign}>
 										<div className="space-y-5">
@@ -1102,7 +1239,56 @@ export function ObraGeneralTab({
 										</div>
 									</ShellCard>
 								</motion.section>
+
 							</div>
+							<motion.section
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.28 }}
+								className="lg:col-span-12"
+							>
+								<ShellCard title="Información General" icon={Landmark}>
+									<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+										<MiniField
+											icon={MapPin}
+											label="Designación y ubicación"
+											value={form.state.values.designacionYUbicacion || "No especificado"}
+											highlighted={isFieldDirty("designacionYUbicacion")}
+										/>
+										<MiniField
+											icon={Building2}
+											label="Entidad contratante"
+											value={form.state.values.entidadContratante || "No especificado"}
+											highlighted={isFieldDirty("entidadContratante")}
+										/>
+										<MiniField
+											icon={Calendar}
+											label="Mes básico"
+											value={form.state.values.mesBasicoDeContrato || "No especificado"}
+											highlighted={isFieldDirty("mesBasicoDeContrato")}
+										/>
+										<MiniField
+											icon={Calendar}
+											label="Iniciación"
+											value={form.state.values.iniciacion || "No especificado"}
+											highlighted={isFieldDirty("iniciacion")}
+										/>
+										<MiniField
+											icon={Hash}
+											label="N° de obra"
+											value={`#${form.state.values.n ?? 0}`}
+											highlighted={isFieldDirty("n")}
+										/>
+										<MiniField
+											icon={Ruler}
+											label="Superficie"
+											value={`${formatNumber(form.state.values.supDeObraM2, " m²")}`}
+											highlighted={isFieldDirty("supDeObraM2")}
+										/>
+									</div>
+								</ShellCard>
+							</motion.section>
+
 
 							{extraMainTableColumns.length > 0 ? (
 								<motion.section

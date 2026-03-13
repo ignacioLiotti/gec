@@ -352,7 +352,7 @@ export function FormTableContent({ className }: { className?: string }) {
 				)}
 				<div
 					ref={scrollParentRef}
-					className="max-h-[60vh] overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar ">
+					className="max-h-[60vh] bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar ">
 					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
