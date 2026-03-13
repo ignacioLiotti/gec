@@ -1108,7 +1108,7 @@ export default function ObraDefaultsPage() {
   const openCreateFolderFromDefinition = useCallback(() => {
     resetFolderForm();
     setFolderMode("data");
-    setFolderEditorStep(0);
+    setFolderEditorStep(1);
     setIsDefinitionImportOpen(true);
     setIsAddFolderOpen(true);
   }, [resetFolderForm]);
