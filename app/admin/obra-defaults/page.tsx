@@ -127,6 +127,65 @@ type OcrTemplate = {
   is_active: boolean;
 };
 
+type ImportedDefinitionField = {
+  field_key?: string;
+  label?: string;
+  business_meaning?: string;
+  required?: boolean;
+  data_type?: string;
+  scope?: string;
+  aliases?: string[];
+  multiword_variants?: string[];
+  abbreviations?: string[];
+  ocr_variants?: string[];
+  example_values?: string[];
+  extraction_hints?: string[];
+  disambiguation_notes?: string[];
+};
+
+type ImportedDefinitionTableColumn = {
+  field_key?: string;
+  label?: string;
+  business_meaning?: string;
+  required?: boolean;
+  data_type?: string;
+  aliases?: string[];
+  multiword_variants?: string[];
+  abbreviations?: string[];
+  ocr_variants?: string[];
+  example_values?: string[];
+  extraction_hints?: string[];
+};
+
+type ImportedDefinitionTableSection = {
+  label?: string;
+  description?: string;
+  columns?: ImportedDefinitionTableColumn[];
+};
+
+type ImportedExcelHint = {
+  field_key?: string;
+  possible_headers?: string[];
+  keyword_fragments?: string[];
+  anchor_labels?: string[];
+};
+
+type ImportedDefinition = {
+  document_family?: string;
+  document_summary?: string;
+  document_variants?: Array<{ name?: string; description?: string; identifying_clues?: string[] }>;
+  document_level_clues?: {
+    title_aliases?: string[];
+    header_keywords?: string[];
+    footer_keywords_to_ignore?: string[];
+  };
+  fields?: ImportedDefinitionField[];
+  table_sections?: ImportedDefinitionTableSection[];
+  excel_mapping_hints?: ImportedExcelHint[];
+  global_extraction_instructions?: string[];
+  review_warnings?: string[];
+};
+
 const CERTIFICADO_XLSX_DEFAULT_COLUMNS: Array<{
   label: string;
   fieldKey: string;
@@ -180,6 +239,268 @@ function parseCommaSeparatedList(value: string): string[] {
 
 function joinCommaSeparatedList(values?: string[]): string {
   return Array.isArray(values) ? values.join(", ") : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
+    : [];
+}
+
+function uniqueStrings(values: Array<string | undefined | null>): string[] {
+  return [...new Set(values.map((value) => value?.trim() ?? "").filter(Boolean))];
+}
+
+function mapImportedDataType(dataType: string | undefined): string {
+  switch ((dataType ?? "").trim().toLowerCase()) {
+    case "currency":
+    case "money":
+    case "moneda":
+      return "currency";
+    case "number":
+    case "numeric":
+    case "numero":
+    case "decimal":
+    case "percentage":
+    case "percent":
+      return "number";
+    case "date":
+    case "fecha":
+    case "datetime":
+      return "date";
+    case "boolean":
+    case "bool":
+    case "si/no":
+      return "boolean";
+    default:
+      return "text";
+  }
+}
+
+function buildImportedColumnDescription(
+  meaning?: string,
+  hints?: string[],
+  disambiguation?: string[],
+  sectionDescription?: string,
+): string {
+  const parts: string[] = [];
+  if (meaning) parts.push(meaning.trim());
+  if (sectionDescription) parts.push(`Sección: ${sectionDescription.trim()}`);
+  if (hints && hints.length > 0) parts.push(`Hints: ${hints.join("; ")}`);
+  if (disambiguation && disambiguation.length > 0) {
+    parts.push(`No confundir con: ${disambiguation.join("; ")}`);
+  }
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function importDefinitionToFolderConfig(
+  rawJson: string,
+): {
+  folderName: string;
+  documentTypes: string[];
+  extractionInstructions: string;
+  columns: OcrColumn[];
+  hasNestedData: boolean;
+  suggestedDataInputMethod: DataInputMethod;
+} {
+  const parsed = JSON.parse(rawJson) as unknown;
+  if (!isRecord(parsed)) {
+    throw new Error("El JSON debe ser un objeto");
+  }
+
+  const definition = parsed as ImportedDefinition;
+  const documentFamily =
+    typeof definition.document_family === "string" && definition.document_family.trim().length > 0
+      ? definition.document_family.trim()
+      : "Extracción importada";
+
+  const fields = Array.isArray(definition.fields)
+    ? definition.fields.filter((field): field is ImportedDefinitionField => isRecord(field))
+    : [];
+  const tableSections = Array.isArray(definition.table_sections)
+    ? definition.table_sections.filter((section): section is ImportedDefinitionTableSection => isRecord(section))
+    : [];
+
+  if (fields.length === 0 && tableSections.length === 0) {
+    throw new Error("La definición no trae campos ni secciones de tabla importables");
+  }
+
+  const excelHintsByField = new Map<string, ImportedExcelHint>();
+  if (Array.isArray(definition.excel_mapping_hints)) {
+    for (const rawHint of definition.excel_mapping_hints) {
+      if (!isRecord(rawHint)) continue;
+      const hint = rawHint as ImportedExcelHint;
+      const fieldKey =
+        typeof hint.field_key === "string" && hint.field_key.trim().length > 0
+          ? hint.field_key.trim()
+          : "";
+      if (!fieldKey) continue;
+      excelHintsByField.set(fieldKey, hint);
+    }
+  }
+
+  const hasNestedData = tableSections.some(
+    (section) => Array.isArray(section.columns) && section.columns.length > 0,
+  );
+
+  const parentColumns: OcrColumn[] = fields.map((field) => {
+    const label =
+      typeof field.label === "string" && field.label.trim().length > 0
+        ? field.label.trim()
+        : typeof field.field_key === "string" && field.field_key.trim().length > 0
+          ? field.field_key.trim()
+          : "Campo";
+    const fieldKey =
+      typeof field.field_key === "string" && field.field_key.trim().length > 0
+        ? normalizeFieldKey(field.field_key)
+        : normalizeFieldKey(label);
+    const hint = excelHintsByField.get(fieldKey);
+    return {
+      id: crypto.randomUUID(),
+      label,
+      fieldKey,
+      dataType: mapImportedDataType(field.data_type),
+      required: Boolean(field.required),
+      scope: hasNestedData ? "parent" : "item",
+      description: buildImportedColumnDescription(
+        typeof field.business_meaning === "string" ? field.business_meaning : "",
+        readStringArray(field.extraction_hints),
+        readStringArray(field.disambiguation_notes),
+      ),
+      aliases: uniqueStrings([
+        ...readStringArray(field.aliases),
+        ...readStringArray(field.multiword_variants),
+        ...readStringArray(field.abbreviations),
+        ...readStringArray(field.ocr_variants),
+      ]),
+      examples: readStringArray(field.example_values),
+      excelKeywords: uniqueStrings([
+        ...readStringArray(hint?.possible_headers),
+        ...readStringArray(hint?.keyword_fragments),
+        ...readStringArray(hint?.anchor_labels),
+      ]),
+    };
+  });
+
+  const itemColumns: OcrColumn[] = hasNestedData
+    ? tableSections.flatMap((section) => {
+      const sectionColumns = Array.isArray(section.columns) ? section.columns : [];
+      return sectionColumns
+        .filter((column): column is ImportedDefinitionTableColumn => isRecord(column))
+        .map((column) => {
+          const label =
+            typeof column.label === "string" && column.label.trim().length > 0
+              ? column.label.trim()
+              : typeof column.field_key === "string" && column.field_key.trim().length > 0
+                ? column.field_key.trim()
+                : "Campo item";
+          const fieldKey =
+            typeof column.field_key === "string" && column.field_key.trim().length > 0
+              ? normalizeFieldKey(column.field_key)
+              : normalizeFieldKey(label);
+          const hint = excelHintsByField.get(fieldKey);
+          return {
+            id: crypto.randomUUID(),
+            label,
+            fieldKey,
+            dataType: mapImportedDataType(column.data_type),
+            required: Boolean(column.required),
+            scope: "item" as const,
+            description: buildImportedColumnDescription(
+              typeof column.business_meaning === "string" ? column.business_meaning : "",
+              readStringArray(column.extraction_hints),
+              [],
+              typeof section.description === "string" ? section.description : undefined,
+            ),
+            aliases: uniqueStrings([
+              ...readStringArray(column.aliases),
+              ...readStringArray(column.multiword_variants),
+              ...readStringArray(column.abbreviations),
+              ...readStringArray(column.ocr_variants),
+            ]),
+            examples: readStringArray(column.example_values),
+            excelKeywords: uniqueStrings([
+              ...readStringArray(hint?.possible_headers),
+              ...readStringArray(hint?.keyword_fragments),
+              ...readStringArray(hint?.anchor_labels),
+            ]),
+          };
+        });
+    })
+    : [];
+
+  const columns = [...parentColumns, ...itemColumns];
+
+  const variantNames = Array.isArray(definition.document_variants)
+    ? definition.document_variants
+      .filter((variant): variant is { name?: string } => isRecord(variant))
+      .map((variant) => (typeof variant.name === "string" ? variant.name.trim() : ""))
+      .filter(Boolean)
+    : [];
+
+  const documentTypes = uniqueStrings([documentFamily, ...variantNames]);
+
+  const instructionsBlocks: string[] = [];
+  if (typeof definition.document_summary === "string" && definition.document_summary.trim()) {
+    instructionsBlocks.push(`Resumen del documento:\n${definition.document_summary.trim()}`);
+  }
+
+  const titleAliases = readStringArray(definition.document_level_clues?.title_aliases);
+  const headerKeywords = readStringArray(definition.document_level_clues?.header_keywords);
+  const footerIgnore = readStringArray(definition.document_level_clues?.footer_keywords_to_ignore);
+
+  if (titleAliases.length > 0 || headerKeywords.length > 0 || footerIgnore.length > 0) {
+    const clueLines: string[] = [];
+    if (titleAliases.length > 0) clueLines.push(`Títulos posibles: ${titleAliases.join(", ")}`);
+    if (headerKeywords.length > 0) clueLines.push(`Keywords de encabezado: ${headerKeywords.join(", ")}`);
+    if (footerIgnore.length > 0) clueLines.push(`Ignorar pie / ruido: ${footerIgnore.join(", ")}`);
+    instructionsBlocks.push(clueLines.join("\n"));
+  }
+
+  const globalInstructions = readStringArray(definition.global_extraction_instructions);
+  if (globalInstructions.length > 0) {
+    instructionsBlocks.push(`Instrucciones globales:\n- ${globalInstructions.join("\n- ")}`);
+  }
+
+  const reviewWarnings = readStringArray(definition.review_warnings);
+  if (reviewWarnings.length > 0) {
+    instructionsBlocks.push(`Advertencias:\n- ${reviewWarnings.join("\n- ")}`);
+  }
+
+  if (tableSections.length > 0) {
+    const sectionsSummary = tableSections
+      .map((section) => {
+        const label =
+          typeof section.label === "string" && section.label.trim().length > 0
+            ? section.label.trim()
+            : "Sección";
+        const description =
+          typeof section.description === "string" && section.description.trim().length > 0
+            ? `: ${section.description.trim()}`
+            : "";
+        return `- ${label}${description}`;
+      })
+      .join("\n");
+    if (sectionsSummary) {
+      instructionsBlocks.push(`Secciones tabulares detectadas:\n${sectionsSummary}`);
+    }
+  }
+
+  return {
+    folderName: documentFamily,
+    documentTypes,
+    extractionInstructions: instructionsBlocks.join("\n\n"),
+    columns,
+    hasNestedData,
+    suggestedDataInputMethod: "both",
+  };
 }
 
 function getDataInputMethodLabel(method?: DataInputMethod) {
@@ -645,6 +966,8 @@ export default function ObraDefaultsPage() {
   const [newFolderDocumentTypesText, setNewFolderDocumentTypesText] = useState("");
   const [newFolderExtractionInstructions, setNewFolderExtractionInstructions] = useState("");
   const [newFolderColumns, setNewFolderColumns] = useState<OcrColumn[]>([]);
+  const [definitionImportText, setDefinitionImportText] = useState("");
+  const [isDefinitionImportOpen, setIsDefinitionImportOpen] = useState(false);
 
   // Quick actions state
   const [isAddQuickActionOpen, setIsAddQuickActionOpen] = useState(false);
@@ -670,6 +993,8 @@ export default function ObraDefaultsPage() {
     setNewFolderDocumentTypesText("");
     setNewFolderExtractionInstructions("");
     setNewFolderColumns([]);
+    setDefinitionImportText("");
+    setIsDefinitionImportOpen(false);
   }, []);
 
   const resetQuickActionForm = useCallback(() => {
@@ -780,6 +1105,14 @@ export default function ObraDefaultsPage() {
     setIsAddFolderOpen(true);
   }, [resetFolderForm]);
 
+  const openCreateFolderFromDefinition = useCallback(() => {
+    resetFolderForm();
+    setFolderMode("data");
+    setFolderEditorStep(0);
+    setIsDefinitionImportOpen(true);
+    setIsAddFolderOpen(true);
+  }, [resetFolderForm]);
+
   const handleEditFolder = useCallback((folder: DefaultFolder) => {
     const pathSegments = folder.path.split("/").filter(Boolean);
     const parentPath = pathSegments.length > 1 ? pathSegments.slice(0, -1).join("/") : "";
@@ -808,6 +1141,8 @@ export default function ObraDefaultsPage() {
         excelKeywords: col.excelKeywords ?? [],
       })),
     );
+    setDefinitionImportText("");
+    setIsDefinitionImportOpen(false);
     setFolderEditorStep(0);
     setIsAddFolderOpen(true);
   }, []);
@@ -1008,6 +1343,31 @@ export default function ObraDefaultsPage() {
       },
     ]);
   };
+
+  const handleImportDefinitionJson = useCallback(() => {
+    if (!definitionImportText.trim()) {
+      toast.error("Pegá una definición JSON primero");
+      return;
+    }
+
+    try {
+      const imported = importDefinitionToFolderConfig(definitionImportText);
+      setFolderMode("data");
+      setNewFolderName((prev) => prev.trim() || imported.folderName);
+      setNewFolderDataInputMethod(imported.suggestedDataInputMethod);
+      setNewFolderSpreadsheetTemplate("");
+      setNewFolderOcrTemplateId("");
+      setNewFolderHasNested(imported.hasNestedData);
+      setNewFolderDocumentTypesText(imported.documentTypes.join(", "));
+      setNewFolderExtractionInstructions(imported.extractionInstructions);
+      setNewFolderColumns(imported.columns);
+      setIsDefinitionImportOpen(false);
+      toast.success(`Definición importada: ${imported.columns.length} campos precargados`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "No se pudo importar la definición");
+    }
+  }, [definitionImportText]);
 
   const handleRemoveColumn = (id: string) => {
     setNewFolderColumns(prev => prev.filter(col => col.id !== id));
@@ -1271,13 +1631,22 @@ export default function ObraDefaultsPage() {
                     Definí los campos, qué documentos pueden llegar y cómo deben interpretarse.
                   </p>
                 </div>
-                <Button
-                  onClick={() => openCreateFolder("data")}
-                  className="bg-amber-500 hover:bg-amber-600 text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nueva carpeta de datos
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => openCreateFolder("data")}
+                    className="bg-amber-500 hover:bg-amber-600 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nueva carpeta de datos
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={openCreateFolderFromDefinition}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Importar JSON
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1781,6 +2150,50 @@ export default function ObraDefaultsPage() {
 
             {folderMode === "data" && folderEditorStep === 1 && (
               <div className="space-y-4">
+                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label>Importar definicion JSON</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Pega el resultado del LLM y precargamos documentos esperados,
+                        instrucciones y columnas.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsDefinitionImportOpen((prev) => !prev)}
+                    >
+                      {isDefinitionImportOpen ? "Ocultar" : "Pegar JSON"}
+                    </Button>
+                  </div>
+
+                  {isDefinitionImportOpen && (
+                    <div className="space-y-3">
+                      <Textarea
+                        value={definitionImportText}
+                        onChange={(e) => setDefinitionImportText(e.target.value)}
+                        placeholder="Pegá acá el JSON completo de la definición de extracción"
+                        className="min-h-[220px] font-mono text-xs"
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          Si hay secciones tabulares, se activan como datos anidados.
+                        </p>
+                        <Button
+                          type="button"
+                          onClick={handleImportDefinitionJson}
+                          className="bg-amber-500 hover:bg-amber-600"
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Importar definicion
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
                   <div>
                     <Label>Método de carga de datos</Label>
