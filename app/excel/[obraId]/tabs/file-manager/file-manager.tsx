@@ -62,6 +62,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Sentry from '@sentry/nextjs';
+import { useQueryClient } from '@tanstack/react-query';
 import ForgeViewer from '@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer';
 import { EnhancedDocumentViewer } from '@/components/viewer/enhanced-document-viewer';
 import FolderFront from '@/components/ui/FolderFront';
@@ -163,6 +164,7 @@ const CERTIFICADO_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] = [
       { label: 'Monto Certificado', fieldKey: 'monto_certificado', dataType: 'currency', required: false, position: 3, config: { excelKeywords: ['monto', 'importe', 'certificado'] } },
       { label: 'Avance Físico Acum. %', fieldKey: 'avance_fisico_acumulado_pct', dataType: 'number', required: false, position: 4, config: { excelKeywords: ['avance', 'fisico', 'acumulado', '%'] } },
       { label: 'Monto Acumulado', fieldKey: 'monto_acumulado', dataType: 'currency', required: false, position: 5, config: { excelKeywords: ['monto', 'acumulado', 'total'] } },
+      { label: 'N° Expediente', fieldKey: 'n_expediente', dataType: 'text', required: false, position: 6, config: { excelKeywords: ['expediente', 'exp', 'nro', 'numero', 'n°'] } },
     ],
   },
   {
@@ -674,6 +676,7 @@ function FileManagerContent({
   onSelectionChange,
 }: FileManagerProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const queryClient = useQueryClient();
   const [usageInfo, setUsageInfo] = useState<TenantUsageInfo | null>(null);
   const usageInfoRef = useRef<TenantUsageInfo | null>(null);
   const mapUsagePayload = useCallback((payload: any): TenantUsageInfo | null => {
@@ -1613,6 +1616,11 @@ function FileManagerContent({
     }
   }, [expandedFolderIds, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
 
+  const refreshFileTreeDerivedData = useCallback(async () => {
+    await buildFileTree({ skipCache: true });
+    await queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'documents-tree-links'] });
+  }, [buildFileTree, obraId, queryClient]);
+
   useEffect(() => {
     if (!obraId) return;
     const shouldRefetchTree = needsRefetch(obraId) || !fileTree;
@@ -2107,7 +2115,7 @@ function FileManagerContent({
       toast.success('Carpeta creada correctamente');
       setIsCreateFolderOpen(false);
       resetNewFolderForm();
-      await buildFileTree({ skipCache: true });
+      await refreshFileTreeDerivedData();
     } catch (error) {
       console.error('Error creating folder:', error);
       toast.error('Error creando carpeta');
@@ -2281,7 +2289,7 @@ function FileManagerContent({
       );
       setIsCreateFolderOpen(false);
       resetNewFolderForm();
-      await buildFileTree({ skipCache: true });
+      await refreshFileTreeDerivedData();
     } catch (error) {
       console.error('Error creating data folder:', error);
       const message = error instanceof Error ? error.message : 'Error creando carpeta de datos';
@@ -2332,7 +2340,7 @@ function FileManagerContent({
     setIsRefreshing(true);
     try {
       // Force refresh by skipping cache
-      await buildFileTree({ skipCache: true });
+      await refreshFileTreeDerivedData();
       toast.success('Documentos sincronizados');
     } catch (error) {
       console.error('Error refreshing documents:', error);
@@ -2346,7 +2354,7 @@ function FileManagerContent({
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
-      await buildFileTree({ skipCache: true });
+      await refreshFileTreeDerivedData();
     } catch (error) {
       console.error('Error refreshing documents:', error);
     } finally {
@@ -3037,7 +3045,7 @@ function FileManagerContent({
         pendingUsageBytes = 0;
       }
 
-      await buildFileTree({ skipCache: true });
+      await refreshFileTreeDerivedData();
     } catch (error) {
       console.error('Error uploading files:', error);
       toast.error('Error al subir archivos');
@@ -3289,7 +3297,7 @@ function FileManagerContent({
         }
       }
 
-      await buildFileTree({ skipCache: true });
+      await refreshFileTreeDerivedData();
 
       if (bytesFreed > 0) {
         await applyUsageDelta(
@@ -3823,7 +3831,7 @@ function FileManagerContent({
             throw new Error(text || 'No se pudieron guardar los cambios');
           }
           toast.success('Datos actualizados');
-          await buildFileTree({ skipCache: true });
+          await refreshFileTreeDerivedData();
         } catch (error) {
           console.error(error);
           toast.error(error instanceof Error ? error.message : 'No se pudo guardar la tabla');
@@ -3915,7 +3923,7 @@ function FileManagerContent({
           throw new Error(text || 'No se pudieron guardar los cambios');
         }
         toast.success('Tabla actualizada');
-        await buildFileTree({ skipCache: true });
+        await refreshFileTreeDerivedData();
       } catch (error) {
         console.error(error);
         toast.error(error instanceof Error ? error.message : 'No se pudo guardar la tabla');
@@ -4626,7 +4634,7 @@ function FileManagerContent({
             toast.info(`Reproceso cancelado para ${doc.name}`);
             return;
           }
-          await buildFileTree({ skipCache: true });
+          await refreshFileTreeDerivedData();
           return;
         }
 
@@ -4681,7 +4689,7 @@ function FileManagerContent({
         } else {
           toast.success('Documento reprocesado en tablas OCR.');
         }
-        await buildFileTree({ skipCache: true });
+        await refreshFileTreeDerivedData();
       } catch (error) {
         console.error('Error retrying OCR document', error);
         toast.error('No se pudo reprocesar el documento.');

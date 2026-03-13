@@ -104,6 +104,14 @@ const CERTIFICADO_SPREADSHEET_PRESETS: SpreadsheetPreset[] = [
 				required: false,
 				config: { excelKeywords: ["monto", "acumulado", "total"] },
 			},
+			{
+				field_key: "n_expediente",
+				label: "N° Expediente",
+				data_type: "text",
+				position: 6,
+				required: false,
+				config: { excelKeywords: ["expediente", "exp", "nro", "numero", "n°"] },
+			},
 		],
 	},
 	{

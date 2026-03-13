@@ -131,11 +131,6 @@ export async function PATCH(request: Request, context: RouteContext) {
 		const insertNew = normalizedColumns.filter((col) => !col.id);
 
 		for (const col of updateExisting) {
-			const previous = existingById.get(col.id as string);
-			const mergedConfig = {
-				...((previous?.config as Record<string, unknown> | undefined) ?? {}),
-				...col.config,
-			};
 			const { error: updateError } = await supabase
 				.from("obra_tabla_columns")
 				.update({
@@ -144,7 +139,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 					data_type: col.data_type,
 					required: col.required,
 					position: col.position,
-					config: mergedConfig,
+					config: col.config,
 				})
 				.eq("id", col.id as string)
 				.eq("tabla_id", tablaId);

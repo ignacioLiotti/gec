@@ -1885,7 +1885,6 @@ function ObraDetailPageContent() {
 		);
 
 		const updates: Partial<Obra> = {};
-		const nextInitialValues: Partial<Obra> = {};
 
 		const maybeApplyDerivedField = (
 			field: keyof Pick<Obra, "certificadoALaFecha" | "saldoACertificar" | "porcentaje">,
@@ -1901,7 +1900,6 @@ function ObraDetailPageContent() {
 			if (!isUnsetDerivedNumber(options.savedValue) && options.savedManual) return;
 			if (approximatelyEqual(options.currentValue, nextValue)) return;
 			updates[field] = nextValue;
-			nextInitialValues[field] = nextValue;
 		};
 
 		maybeApplyDerivedField("certificadoALaFecha", currentMetrics.certificadoALaFecha, {
@@ -1930,10 +1928,6 @@ function ObraDetailPageContent() {
 				form.setFieldValue(field, nextValue as any);
 			},
 		);
-		setInitialFormValues((prev) => ({
-			...prev,
-			...nextInitialValues,
-		}));
 	}, [
 		certificadosExtraidosRows,
 		form,
