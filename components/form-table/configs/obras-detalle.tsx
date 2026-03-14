@@ -81,6 +81,26 @@ const ObraDetailLink = memo(function ObraDetailLink({
 	);
 });
 
+const ObraDetailShortcut = memo(function ObraDetailShortcut({
+	obraId,
+}: {
+	obraId: string;
+}) {
+	const { prefetchObra } = usePrefetchObra();
+
+	return (
+		<Link
+			href={`/excel/${obraId}`}
+			data-testid={`open-obra-${obraId}`}
+			aria-label="Abrir detalle de la obra"
+			className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+			onMouseEnter={() => prefetchObra(obraId)}
+		>
+			<ExternalLink className="h-4 w-4" />
+		</Link>
+	);
+});
+
 export type DetailAdvancedFilters = {
 	supMin: string;
 	supMax: string;
@@ -1415,6 +1435,16 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 
 				return <ObraDetailLink obraId={obraId} text={text} />;
 			},
+			renderEditable: ({ value, row, input }) => {
+				const obraId = row.id;
+				const canNavigate = isValidObraId(obraId) && !row.__pendingNavigation;
+				return (
+					<div className="flex items-center gap-2">
+						<div className="min-w-0 flex-1">{input}</div>
+						{canNavigate ? <ObraDetailShortcut obraId={obraId} /> : null}
+					</div>
+				);
+			},
 		},
 		cellMenuItems: [
 			{
@@ -2221,9 +2251,8 @@ function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 
 const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["fetchRows"] =
 	async () => {
-		// Use next revalidate for ISR-style caching (revalidate every 60 seconds)
 		const response = await fetch(`/api/obras`, {
-			next: { revalidate: 60 },
+			cache: "no-store",
 		});
 		if (!response.ok) {
 			const text = await response.text();
