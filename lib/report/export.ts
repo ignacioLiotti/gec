@@ -17,7 +17,7 @@ function formatCsvValue(value: unknown): string {
 	if (value == null) return "";
 	const text = String(value);
 	const escaped = text.replace(/"/g, '""');
-	return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+	return /[";\n]/.test(escaped) ? `"${escaped}"` : escaped;
 }
 
 function formatFilters(filters?: Record<string, unknown>) {
@@ -39,23 +39,24 @@ export function exportToCsv<Row>(
 	fileName: string,
 	meta?: ReportExportMeta,
 ) {
-	const header = columns.map((c) => formatCsvValue(c.label)).join(",");
+	const separator = ";";
+	const header = columns.map((c) => formatCsvValue(c.label)).join(separator);
 	const body = rows
-		.map((row) => columns.map((c) => formatCsvValue(c.accessor(row))).join(","))
+		.map((row) => columns.map((c) => formatCsvValue(c.accessor(row))).join(separator))
 		.join("\n");
 	const metaLines: string[] = [];
-	if (meta?.title) metaLines.push(`Reporte,${formatCsvValue(meta.title)}`);
+	if (meta?.title) metaLines.push(`Reporte${separator}${formatCsvValue(meta.title)}`);
 	if (meta?.companyName)
-		metaLines.push(`Empresa,${formatCsvValue(meta.companyName)}`);
-	if (meta?.date) metaLines.push(`Fecha,${formatCsvValue(meta.date)}`);
+		metaLines.push(`Empresa${separator}${formatCsvValue(meta.companyName)}`);
+	if (meta?.date) metaLines.push(`Fecha${separator}${formatCsvValue(meta.date)}`);
 	if (meta?.generatedAt)
-		metaLines.push(`Generado,${formatCsvValue(meta.generatedAt)}`);
-	if (meta?.viewMode) metaLines.push(`Vista,${formatCsvValue(meta.viewMode)}`);
+		metaLines.push(`Generado${separator}${formatCsvValue(meta.generatedAt)}`);
+	if (meta?.viewMode) metaLines.push(`Vista${separator}${formatCsvValue(meta.viewMode)}`);
 	const filtersText = formatFilters(meta?.filters);
-	if (filtersText) metaLines.push(`Filtros,${formatCsvValue(filtersText)}`);
+	if (filtersText) metaLines.push(`Filtros${separator}${formatCsvValue(filtersText)}`);
 
 	const metaBlock = metaLines.length ? `${metaLines.join("\n")}\n\n` : "";
-	const csv = `${metaBlock}${header}\n${body}`;
+	const csv = `\uFEFF${metaBlock}${header}\n${body}`;
 	const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
 	const url = URL.createObjectURL(blob);
 	const link = document.createElement("a");

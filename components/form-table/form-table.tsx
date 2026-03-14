@@ -50,6 +50,8 @@ import {
 	ArrowUpDown,
 	Minus,
 	Loader2,
+	ChevronsLeft,
+	ChevronsRight,
 	ChevronLeft,
 	ChevronRight,
 	Download,
@@ -767,6 +769,16 @@ export function FormTablePagination() {
 			<div className="flex items-center gap-2">
 				<Button
 					type="button"
+					variant="outline"
+					onClick={() => startTransition(() => setPage(1))}
+					disabled={page <= 1 || isLoading}
+					className="gap-1"
+				>
+					<ChevronsLeft className="h-4 w-4" />
+					Primera
+				</Button>
+				<Button
+					type="button"
 					variant="default"
 
 					onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
@@ -776,7 +788,7 @@ export function FormTablePagination() {
 					<ChevronLeft className="h-4 w-4" />
 					Anterior
 				</Button>
-				<span className="text-xs text-muted-foreground">
+				<span className="min-w-[120px] text-center text-xs text-muted-foreground">
 					Página {page} de {totalPages}
 				</span>
 				<Button
@@ -789,6 +801,16 @@ export function FormTablePagination() {
 				>
 					Siguiente
 					<ChevronRight className="h-4 w-4" />
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={() => startTransition(() => setPage(totalPages))}
+					disabled={page >= totalPages || isLoading}
+					className="gap-1"
+				>
+					Ultima
+					<ChevronsRight className="h-4 w-4" />
 				</Button>
 			</div>
 		</div>
@@ -910,29 +932,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [isPageSizeTransitioning, startPageSizeTransition] = useTransition();
 	const handleSetPageSize = useCallback((size: number) => {
 		if (lockedPageSize) return;
-		// Use startTransition to make the re-render non-blocking
 		startPageSizeTransition(() => {
 			setPageSizeState(size);
 			setPage(1);
 		});
-		if (fetchRowsFn) {
-			void fetchRowsFn({ page: 1, limit: size, filters: filtersRef.current as Filters, search: searchRef.current }).then((result) => {
-				const fetchedRows = result.rows ?? [];
-				startTransition(() => {
-					setFormRows(fetchedRows as Row[]);
-					setServerMeta((prev) => ({
-						page: 1,
-						limit: size,
-						total: result.pagination?.total ?? prev.total,
-						totalPages: result.pagination?.totalPages ?? prev.totalPages,
-						hasNextPage: result.pagination?.hasNextPage ?? prev.hasNextPage,
-						hasPreviousPage: result.pagination?.hasPreviousPage ?? prev.hasPreviousPage,
-					}));
-				});
-				setIsFetchingServerRows(false);
-			});
-		}
-	}, [lockedPageSize, fetchRowsFn, setFormRows]);
+	}, [lockedPageSize]);
 	const [isServerPaging, setIsServerPaging] = useState(Boolean(fetchRowsFn));
 	const useClientPagination = !isServerPaging;
 	const [isFetchingServerRows, setIsFetchingServerRows] = useState(false);
@@ -989,6 +993,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	useEffect(() => {
 		searchRef.current = searchValue.trim();
 	}, [searchValue]);
+	const searchRequestKey = searchValue.trim();
 	const [activeTab, setActiveTab] = useState<string | null>(tabFilters[0]?.id ?? null);
 	useEffect(() => {
 		setActiveTab((current) => {
@@ -1006,6 +1011,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	useEffect(() => {
 		filtersRef.current = filters;
 	}, [filters]);
+	const appliedFiltersKey = useMemo(() => JSON.stringify(filters ?? null), [filters]);
 	// Reset filters when the table identity changes
 	const prevTableIdRef = useRef(TABLE_ID);
 	useEffect(() => {
@@ -1112,6 +1118,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	useEffect(() => {
 		if (!fetchRowsFn) return;
+		if (page === 1) return;
+		setPage(1);
+	}, [fetchRowsFn, page, searchRequestKey, appliedFiltersKey]);
+
+	useEffect(() => {
+		if (!fetchRowsFn) return;
 		let isMounted = true;
 		const run = async () => {
 			setIsFetchingServerRows(true);
@@ -1151,7 +1163,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		return () => {
 			isMounted = false;
 		};
-	}, [fetchRowsFn, page, pageSize, setFormRows]);
+	}, [fetchRowsFn, page, pageSize, setFormRows, searchRequestKey, appliedFiltersKey]);
 
 	useEffect(() => {
 		if (fetchRowsFn) return;
@@ -1690,9 +1702,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			toast.error("No hay filas para exportar");
 			return;
 		}
-		const header = exportColumns.map((column) => `"${column.label.replace(/"/g, '""')}"`).join(",");
+		const separator = ";";
+		const header = exportColumns
+			.map((column) => `"${column.label.replace(/"/g, '""')}"`)
+			.join(separator);
 		const body = sortedRows.map((row) => tableRowToCsv(row, exportColumns)).join("\n");
-		const csv = `${header}\n${body}`;
+		const csv = `\uFEFF${header}\n${body}`;
 		const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
 		const url = URL.createObjectURL(blob);
 		const link = document.createElement("a");

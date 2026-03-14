@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import {
+  matchesMacroFilters,
+  matchesMacroSearch,
+  type MacroTableFilters,
+} from "@/lib/macro-table-filters";
+import { mapColumnToResponse, type MacroTableRow } from "@/lib/macro-tables";
 import { createClient } from "@/utils/supabase/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
-import { mapColumnToResponse, type MacroTableRow } from "@/lib/macro-tables";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -122,6 +127,23 @@ async function getAuthContext() {
 export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const { supabase, user, tenantId } = await getAuthContext();
+  const url = new URL(request.url);
+  const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
+  const query = url.searchParams.get("q")?.trim() ?? "";
+  const rawFilters = url.searchParams.get("filters");
+  let parsedFilters: unknown = {};
+  if (rawFilters) {
+    try {
+      parsedFilters = JSON.parse(rawFilters);
+    } catch {
+      parsedFilters = {};
+    }
+  }
+  const filters: MacroTableFilters =
+    parsedFilters && typeof parsedFilters === "object" && !Array.isArray(parsedFilters)
+      ? (parsedFilters as MacroTableFilters)
+      : {};
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -153,6 +175,19 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (columnsError) throw columnsError;
     const columns = (columnsData ?? []).map(mapColumnToResponse);
+    const displayColumns = columns.some(
+      (column) =>
+        column.columnType === "computed" &&
+        column.label.toLowerCase().includes("obra")
+    )
+      ? columns
+      : [
+          {
+            id: "_obraName",
+            dataType: "text" as const,
+          },
+          ...columns,
+        ];
 
     // Fetch sources with obra and tabla info
     const { data: sources, error: sourcesError } = await supabase
@@ -296,27 +331,28 @@ export async function GET(request: Request, context: RouteContext) {
 
       return mappedRow;
     });
+    const filteredRows = mappedRows.filter(
+      (row) =>
+        matchesMacroSearch(row, displayColumns, query) &&
+        matchesMacroFilters(row, displayColumns, filters)
+    );
 
-    // Pagination
-    const url = new URL(request.url);
-    const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
-    
-    const total = mappedRows.length;
+    const total = filteredRows.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
-    const from = (page - 1) * limit;
-    const pagedRows = mappedRows.slice(from, from + limit);
+    const safePage = Math.min(page, totalPages);
+    const from = (safePage - 1) * limit;
+    const pagedRows = filteredRows.slice(from, from + limit);
 
     return NextResponse.json({
       rows: pagedRows,
       columns,
       pagination: {
-        page,
+        page: safePage,
         limit,
         total,
         totalPages,
-        hasNextPage: page < totalPages,
-        hasPreviousPage: page > 1,
+        hasNextPage: safePage < totalPages,
+        hasPreviousPage: safePage > 1,
       },
     });
   } catch (error) {
@@ -414,8 +450,6 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-
 
 
 
