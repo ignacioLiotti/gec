@@ -88,9 +88,17 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 					type="button"
 					variant="outline"
 					size="sm"
-					onMouseDown={(event) => event.preventDefault()}
+					onPointerDown={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+					}}
+					onClick={(event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						setOpen((prev) => !prev);
+					}}
 					className={cn(
-						"h-6 rounded-full border-orange-200 bg-orange-50 px-2 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm hover:bg-orange-100",
+						"pointer-events-auto relative z-20 h-6 rounded-full border-orange-200 bg-orange-50 px-2 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm hover:bg-orange-100",
 						className
 					)}
 				>
@@ -120,8 +128,13 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 							type="button"
 							variant="ghost"
 							size="sm"
-							onMouseDown={(event) => event.preventDefault()}
-							onClick={() => {
+							onPointerDown={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+							}}
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
 								onIgnore();
 								setOpen(false);
 							}}
@@ -131,8 +144,13 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 						<Button
 							type="button"
 							size="sm"
-							onMouseDown={(event) => event.preventDefault()}
-							onClick={() => {
+							onPointerDown={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+							}}
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
 								onApply();
 								setOpen(false);
 							}}

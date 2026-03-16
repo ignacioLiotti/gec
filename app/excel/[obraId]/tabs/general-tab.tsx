@@ -446,17 +446,54 @@ function buildCobradoLookupByCertificateNumber(
 	return lookup;
 }
 
-function findFirstDisplayValue(
+function normalizeCertificateRecordKey(value: string): string {
+	return value
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "");
+}
+
+function findRecordValueByCandidates(
 	record: Record<string, unknown>,
 	keys: string[],
-): string {
+	tokenGroups: string[][] = [],
+): unknown {
 	for (const key of keys) {
-		const raw = record[key];
-		if (raw == null) continue;
-		const text = String(raw).trim();
-		if (text) return text;
+		if (key in record) return record[key];
 	}
-	return "";
+
+	const normalizedEntries = Object.entries(record).map(([key, value]) => [
+		normalizeCertificateRecordKey(key),
+		value,
+	] as const);
+	const normalizedCandidates = new Set(keys.map((key) => normalizeCertificateRecordKey(key)));
+
+	for (const [key, value] of normalizedEntries) {
+		if (normalizedCandidates.has(key)) return value;
+	}
+
+	for (const [key, value] of normalizedEntries) {
+		if (
+			tokenGroups.some((tokens) => tokens.every((token) => key.includes(normalizeCertificateRecordKey(token))))
+		) {
+			return value;
+		}
+	}
+
+	return null;
+}
+
+function findDisplayValueByCandidates(
+	record: Record<string, unknown>,
+	keys: string[],
+	tokenGroups: string[][] = [],
+): string {
+	const raw = findRecordValueByCandidates(record, keys, tokenGroups);
+	if (raw == null) return "";
+	const text = String(raw).trim();
+	return text;
 }
 
 function formatCertificateAmount(value: unknown): string | null {
@@ -489,16 +526,37 @@ function normalizeExtractedCertificateRows(
 	return rows
 		.map((row, index) => {
 			const entry = isPlainRecord(row.data) ? row.data : {};
-			const certificateNumber = findFirstDisplayValue(entry, CERTIFICATE_NUMBER_KEYS);
-			const expedienteNumber = findFirstDisplayValue(entry, CERTIFICATE_EXPEDIENTE_KEYS);
-			const location = findFirstDisplayValue(entry, CERTIFICATE_LOCATION_KEYS);
-			const period = findFirstDisplayValue(entry, CERTIFICATE_PERIOD_KEYS) || null;
+			const certificateNumber = findDisplayValueByCandidates(entry, CERTIFICATE_NUMBER_KEYS, [
+				["certificado"],
+				["cert", "numero"],
+				["cert", "nro"],
+			]);
+			const expedienteNumber = findDisplayValueByCandidates(entry, CERTIFICATE_EXPEDIENTE_KEYS, [
+				["expediente"],
+				["exp", "numero"],
+				["exp", "nro"],
+			]);
+			const location = findDisplayValueByCandidates(entry, CERTIFICATE_LOCATION_KEYS, [
+				["ubicacion"],
+				["location"],
+			]);
+			const period =
+				findDisplayValueByCandidates(entry, CERTIFICATE_PERIOD_KEYS, [
+					["periodo"],
+					["fecha", "cert"],
+					["mes"],
+				]) || null;
 			const cobrado =
 				cobradoByCertificateNumber.get(
 					normalizeCertificateLookupValue(certificateNumber)
 				) ?? null;
 			const amount = formatCertificateAmount(
-				CERTIFICATE_AMOUNT_KEYS.map((key) => entry[key]).find((candidate) => candidate != null),
+				findRecordValueByCandidates(entry, CERTIFICATE_AMOUNT_KEYS, [
+					["monto", "cert"],
+					["monto", "acumul"],
+					["importe"],
+					["total"],
+				]),
 			);
 			const hasVisibleData = Boolean(
 				certificateNumber || expedienteNumber || location || period || cobrado || amount,

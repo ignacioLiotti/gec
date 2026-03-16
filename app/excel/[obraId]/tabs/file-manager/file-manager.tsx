@@ -2010,6 +2010,19 @@ function FileManagerContent({
   }, [ensureAncestorsExpanded, fileTree, folderPathKey, folderPathSegments, selectedFolderId, handleFolderClick, findFolderBySegments]);
 
   useEffect(() => {
+    if (!selectedFolder || selectedFolder.type !== 'folder') return;
+    ensureAncestorsExpanded(selectedFolder);
+  }, [ensureAncestorsExpanded, selectedFolder]);
+
+  useEffect(() => {
+    if (!selectedDocument) return;
+    const parent = parentMapRef.current.get(selectedDocument.id) ?? null;
+    if (parent?.type === 'folder') {
+      ensureAncestorsExpanded(parent);
+    }
+  }, [ensureAncestorsExpanded, selectedDocument]);
+
+  useEffect(() => {
     // Skip this sync when opening document sheet directly (e.g., from context menu)
     if (skipFilePathSyncRef.current) {
       skipFilePathSyncRef.current = false;
