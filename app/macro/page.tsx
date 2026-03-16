@@ -27,7 +27,6 @@ import {
   FormTable,
   FormTableContent,
   FormTablePagination,
-  FormTableTabs,
   FormTableToolbar,
 } from "@/components/form-table/form-table";
 import {
@@ -40,9 +39,9 @@ import type {
   FetchRowsArgs,
   FilterRendererProps,
 } from "@/components/form-table/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   countActiveMacroFilters,
@@ -84,18 +83,42 @@ type MacroDisplayColumn = {
   columnType: "source" | "custom" | "computed";
 };
 
-const DS = {
-  page: "bg-[#fafafa]",
-  shell:
-    "rounded-[28px] border border-[#ece7df] bg-[#f6f2eb]/75 p-2 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_18px_45px_rgba(15,23,42,0.06)]",
-  shellInner:
-    "rounded-[24px] border border-[#f3eee7] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(250,250,250,0.96)_100%)] shadow-[0_1px_0_rgba(255,255,255,0.9)_inset]",
-  card:
-    "rounded-[22px] border border-[#ece7df] bg-white/95 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_32px_rgba(15,23,42,0.06)]",
-};
-
 const toolButtonClass =
   "gap-2 rounded-lg border-[#e8e1d8] bg-white px-3.5 text-[#5a5248] hover:bg-[#fcfaf7] hover:text-[#1f1a17]";
+
+function NotchTail({
+  side = "right",
+  className = "",
+}: {
+  side?: "left" | "right";
+  className?: string;
+}) {
+  return (
+    <svg
+      width="60"
+      height="42"
+      viewBox="0 0 60 42"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      className={[
+        "pointer-events-none absolute bottom-[-1px] h-[42px] w-[60px]",
+        side === "right" ? "right-[-59px]" : "left-[-59px] scale-x-[-1]",
+        className,
+      ].join(" ")}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60H0V1Z"
+        className="fill-[var(--notch-bg)]"
+      />
+      <path
+        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60"
+        className="fill-none stroke-[var(--notch-stroke)]"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
 
 function mapDataTypeToCell(
   dataType: string
@@ -300,7 +323,6 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       column.columnType === "computed" &&
       column.label.toLowerCase().includes("obra")
   );
-  const editableColumns = columns.filter((column) => column.columnType === "custom");
   const displayColumns = useMemo<MacroDisplayColumn[]>(() => {
     const next = columns.map((column) => ({
       id: column.id,
@@ -444,25 +466,25 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         cellConfig:
           renderAsObraLink
             ? {
-                renderReadOnly: ({
-                  value,
-                  row,
-                }: {
-                  value: unknown;
-                  row: MacroTableRowData;
-                }) => {
-                  const text = String(value ?? "");
-                  if (!text) {
-                    return <span className="text-muted-foreground">-</span>;
-                  }
+              renderReadOnly: ({
+                value,
+                row,
+              }: {
+                value: unknown;
+                row: MacroTableRowData;
+              }) => {
+                const text = String(value ?? "");
+                if (!text) {
+                  return <span className="text-muted-foreground">-</span>;
+                }
 
-                  return <MacroObraLink obraId={String(row._obraId ?? "")} text={text} />;
-                },
-              }
+                return <MacroObraLink obraId={String(row._obraId ?? "")} text={text} />;
+              },
+            }
             : cellType === "currency"
-            ? { currencyCode: "ARS", currencyLocale: "es-AR" }
-            : cellType === "text"
-              ? {
+              ? { currencyCode: "ARS", currencyLocale: "es-AR" }
+              : cellType === "text"
+                ? {
                   renderReadOnly: ({ value }: { value: unknown }) => {
                     const text = String(value ?? "");
                     if (!text) {
@@ -471,7 +493,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
                     return <TruncatedTextWithTooltip text={text} />;
                   },
                 }
-              : undefined,
+                : undefined,
         enableHide: true,
         enablePin: column.id !== "_obraName",
       };
@@ -506,26 +528,14 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       showInlineSearch: true,
       showActionsColumn: false,
       allowAddRows: false,
-      footerActions: (
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" className="bg-[#f3eee7] text-[#5a5248]">
-            {macroTable.sources.length} fuentes
-          </Badge>
-          <Badge variant="secondary" className="bg-[#fff4df] text-[#8a5a12]">
-            {editableColumns.length} columnas editables
-          </Badge>
-        </div>
-      ),
     };
   }, [
     displayColumns,
-    editableColumns.length,
     fetchRows,
     isObraRedirectColumn,
     macroTable.description,
     macroTable.id,
     macroTable.name,
-    macroTable.sources.length,
     onSave,
   ]);
 
@@ -540,56 +550,70 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   }
 
   return (
-    <div className={cn(DS.card, "p-3")}>
-      <FormTable config={config}>
-        <div className="space-y-3 px-2 py-2">
-          <div className="rounded-2xl border border-[#ece7df] bg-[#fbf8f2] px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="border-[#ddd4c7] bg-white/80">
-                  Spreadsheet
-                </Badge>
-                <Badge variant="outline" className="border-[#ddd4c7] bg-white/80">
-                  Scroll horizontal
-                </Badge>
-                {editableColumns.length > 0 ? (
-                  <Badge
-                    variant="outline"
-                    className="border-[#f4d7a7] bg-[#fff7ea] text-[#8a5a12]"
-                  >
-                    Edicion inline en columnas personalizadas
-                  </Badge>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={toolButtonClass}
-                  onClick={() => router.push(`/macro/${macroTable.id}/reporte`)}
-                >
-                  <FileText className="h-4 w-4" />
-                  Reportes
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={toolButtonClass}
-                  onClick={() => router.push(`/admin/macro-tables/${macroTable.id}`)}
-                >
-                  <Settings className="h-4 w-4" />
-                  Configurar
-                </Button>
-              </div>
-            </div>
+    <FormTable config={config}>
+      <div className="relative ">
+        <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div
+            className="relative flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
+            style={
+              {
+                "--notch-bg": "white",
+                "--notch-stroke": "rgb(231 229 228)",
+              } as React.CSSProperties
+            }
+          >
+            <FormTableToolbar />
+            <NotchTail
+              side="right"
+              className="z-10 mb-[1px] hidden h-[45px] xl:!block"
+            />
           </div>
-          <FormTableToolbar />
-          <FormTableTabs />
-          <FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] overflow-hidden rounded-2xl border border-[#ece7df] shadow-[0_1px_0_rgba(255,255,255,0.75)_inset,0_12px_30px_rgba(15,23,42,0.05)]" />
+          <div
+            className="relative flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 
+            xl:-mr-[1px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 z-10 -mb-[4px]"
+            style={
+              {
+                "--notch-bg": "white",
+                "--notch-stroke": "rgb(231 229 228)",
+              } as React.CSSProperties
+            }
+          >
+            <NotchTail side="left" className="hidden h-[41px] mb-[1px] xl:!block" />
+            <Button
+              variant="outline"
+              size="sm"
+              className={toolButtonClass}
+              onClick={() => router.push(`/macro/${macroTable.id}/reporte`)}
+            >
+              <FileText className="h-4 w-4" />
+              Generar reporte
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className={toolButtonClass}
+              onClick={() => router.push(`/admin/macro-tables/${macroTable.id}`)}
+            >
+              <Settings className="h-4 w-4" />
+              Configurar
+            </Button>
+            <Button
+              size="sm"
+              className="gap-2 rounded-lg bg-[#1f1a17] text-white hover:bg-[#2b241f]"
+              onClick={() => router.push("/admin/macro-tables/new")}
+            >
+              <Plus className="h-4 w-4" />
+              Nueva macro tabla
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none">
+          <FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-0 overflow-hidden rounded-lg shadow-card" />
+          <Separator className="bg-border" />
           <FormTablePagination />
         </div>
-      </FormTable>
-    </div>
+      </div>
+    </FormTable>
   );
 }
 
@@ -686,68 +710,45 @@ function MacroTablesPageContent() {
   }
 
   return (
-    <div className={cn(DS.page, "min-h-full p-4 pt-2")}>
-      <div className={DS.shell}>
-        <div className={cn(DS.shellInner, "space-y-4 p-4")}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-[#201b16]">
-                Macro tablas
-              </h1>
-              <p className="mt-1 text-sm text-[#6b6258]">
-                Visualizacion consolidada de certificados contables con una experiencia mas cercana a la vista Excel.
-              </p>
-            </div>
-            <Button
-              onClick={() => router.push("/admin/macro-tables/new")}
-              className="gap-2 rounded-xl"
-            >
-              <Plus className="h-4 w-4" />
-              Nueva macro tabla
-            </Button>
+    <Tabs
+      value={selectedId ?? macroTables[0].id}
+      onValueChange={handleTabChange}
+      className="p-4 md:p-8 max-w-[calc(100vw-var(--sidebar-current-width))] overflow-hidden"
+    >
+      <div className="relative">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a] sm:text-4xl">
+              Panel de macrotablas
+            </h1>
+            <p className="mt-1 text-sm text-[#999]">
+              Filtra, busca y actualiza tus macrotablas desde una vista unificada.
+            </p>
           </div>
-
-          <Tabs
-            value={selectedId ?? macroTables[0].id}
-            onValueChange={handleTabChange}
-            className="pt-1"
-          >
-            <TabsList className="h-auto flex-wrap items-start justify-start gap-2 rounded-2xl border border-[#ece7df] bg-white/80 p-2 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
-              {macroTables.map((macroTable) => (
-                <TabsTrigger
-                  key={macroTable.id}
-                  value={macroTable.id}
-                  className={cn(
-                    "flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium text-[#5a5248] data-[state=active]:text-[#1f1a17]",
-                    selectedId === macroTable.id
-                      ? "border-[#d7d0c3] bg-[#fbf8f2] shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_8px_20px_rgba(15,23,42,0.05)]"
-                      : "border-transparent bg-transparent hover:border-[#ece7df] hover:bg-white"
-                  )}
-                >
-                  <Layers className="h-4 w-4" />
-                  <span className="truncate max-w-[180px]">{macroTable.name}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
+          <TabsList className={cn("flex justify-start rounded-lg p-1 h-11")}>
             {macroTables.map((macroTable) => (
-              <TabsContent
-                key={macroTable.id}
-                value={macroTable.id}
-                className={cn("mt-4", macroTable.id === selectedId ? "block" : "hidden")}
-                forceMount
-              >
-                <div className={macroTable.id === selectedId ? "" : "hidden"}>
-                  {mountedTabs.has(macroTable.id) ? (
-                    <MacroTablePanel macroTable={macroTable} />
-                  ) : null}
-                </div>
-              </TabsContent>
+              <TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
+                {macroTable.name}
+              </TabsTrigger>
             ))}
-          </Tabs>
+          </TabsList>
         </div>
+        {macroTables.map((macroTable) => (
+          <TabsContent
+            key={macroTable.id}
+            value={macroTable.id}
+            className={cn("m-0!important", macroTable.id === selectedId ? "block" : "hidden")}
+            forceMount
+          >
+            <div className={macroTable.id === selectedId ? "" : "hidden"}>
+              {mountedTabs.has(macroTable.id) ? (
+                <MacroTablePanel macroTable={macroTable} />
+              ) : null}
+            </div>
+          </TabsContent>
+        ))}
       </div>
-    </div>
+    </Tabs>
   );
 }
 

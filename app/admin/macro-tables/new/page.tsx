@@ -31,7 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -743,8 +743,14 @@ export default function NewMacroTablePage() {
       const payload = {
         name: name.trim(),
         description: description.trim() || null,
+        settings: {
+          sourceMode: selectedTemplateId ? "template" : "manual",
+          sourceTemplateId: selectedTemplateId,
+          sourceTemplateName: selectedTemplate?.name ?? null,
+          sourceTemplateTableNames: selectedTemplateId ? selectedTemplateTableNames : [],
+        },
         sources: selectedSources.map((s) => ({ obraTablaId: s.tablaId })),
-        columns: columns.map((c, index) => ({
+        columns: columns.map((c) => ({
           columnType: c.columnType,
           sourceFieldKey: c.sourceFieldKey,
           label: c.label.trim(),

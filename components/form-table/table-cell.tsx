@@ -37,6 +37,7 @@ type CellContentProps<Row extends FormTableRow> = {
 	field: any;
 	column: ColumnDef<Row>;
 	row: Row;
+	rowId: string;
 	highlightQuery: string;
 	isRowDirty: boolean;
 	isCellDirty: boolean;
@@ -57,6 +58,7 @@ function CellContent<Row extends FormTableRow>({
 	field,
 	column,
 	row,
+	rowId,
 	highlightQuery,
 	isRowDirty,
 	isCellDirty,
@@ -85,6 +87,7 @@ function CellContent<Row extends FormTableRow>({
 		? renderEditableContent({
 			column,
 			row,
+			rowId,
 			value: fieldValue as EditableCellValue,
 			setValue,
 			handleBlur: field.handleBlur,
@@ -190,6 +193,7 @@ function TableCellInner<Row extends FormTableRow>({
 					field={field}
 					column={column}
 					row={row}
+					rowId={rowId}
 					highlightQuery={highlightQuery}
 					isRowDirty={isRowDirty}
 					isCellDirty={isCellDirty}

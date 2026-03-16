@@ -7,9 +7,13 @@ import {
   mapColumnToResponse,
   mapSourceToResponse,
   ensureMacroDataType,
-  normalizeFieldKey,
   type MacroTableColumnType,
 } from "@/lib/macro-tables";
+import {
+  buildMacroSourceSelectionSettings,
+  resolveMacroSourceTablas,
+  type MacroSourceTablaRecord,
+} from "@/lib/macro-table-source-selection";
 
 async function getAuthContext() {
   const supabase = await createClient();
@@ -80,27 +84,79 @@ export async function GET() {
     const tableIds = (macroTables ?? []).map((t) => t.id as string);
 
     // Fetch sources for all tables
-    let sourcesByTable = new Map<string, ReturnType<typeof mapSourceToResponse>[]>();
+    const sourcesByTable = new Map<string, ReturnType<typeof mapSourceToResponse>[]>();
+    const sourceTablasByTable = new Map<string, MacroSourceTablaRecord[]>();
+    const sourceCounts = new Map<string, number>();
     if (tableIds.length > 0) {
       const { data: sources, error: sourcesError } = await supabase
         .from("macro_table_sources")
-        .select("id, macro_table_id, obra_tabla_id, position")
+        .select(`
+          id, macro_table_id, obra_tabla_id, position,
+          obra_tablas!inner(
+            id, name, obra_id, settings
+          )
+        `)
         .in("macro_table_id", tableIds)
         .order("position", { ascending: true });
 
       if (sourcesError) throw sourcesError;
 
       for (const source of sources ?? []) {
+        const macroTableId = source.macro_table_id as string;
         const mapped = mapSourceToResponse(source);
-        if (!sourcesByTable.has(mapped.macroTableId)) {
-          sourcesByTable.set(mapped.macroTableId, []);
+        if (!sourcesByTable.has(macroTableId)) {
+          sourcesByTable.set(macroTableId, []);
         }
-        sourcesByTable.get(mapped.macroTableId)?.push(mapped);
+        sourcesByTable.get(macroTableId)?.push(mapped);
+
+        const obraTabla = source.obra_tablas;
+        if (obraTabla) {
+          if (!sourceTablasByTable.has(macroTableId)) {
+            sourceTablasByTable.set(macroTableId, []);
+          }
+          sourceTablasByTable.get(macroTableId)?.push(mapTablaRecord(obraTabla));
+        }
+      }
+
+      const needsDynamicSources = (macroTables ?? []).some((table) => {
+        const explicitSourceTablas = sourceTablasByTable.get(table.id as string) ?? [];
+        const settings = buildMacroSourceSelectionSettings(table.settings ?? {}, explicitSourceTablas);
+        return settings.sourceMode === "template";
+      });
+
+      let candidateTablas: MacroSourceTablaRecord[] = [];
+      if (needsDynamicSources) {
+        const { data: tenantTablas, error: tenantTablasError } = await supabase
+          .from("obra_tablas")
+          .select(`
+            id, name, obra_id, settings,
+            obras!inner(tenant_id)
+          `)
+          .eq("obras.tenant_id", tenantId)
+          .order("created_at", { ascending: true });
+
+        if (tenantTablasError) throw tenantTablasError;
+        candidateTablas = (tenantTablas ?? []).map(mapTablaRecord);
+      }
+
+      for (const table of macroTables ?? []) {
+        const tableId = table.id as string;
+        const explicitSourceTablas = sourceTablasByTable.get(tableId) ?? [];
+        const normalizedSettings = buildMacroSourceSelectionSettings(
+          table.settings ?? {},
+          explicitSourceTablas
+        );
+        const resolvedSourceTablas = resolveMacroSourceTablas({
+          settings: normalizedSettings,
+          explicitSourceTablas,
+          candidateTablas,
+        });
+        sourceCounts.set(tableId, resolvedSourceTablas.length);
       }
     }
 
     // Fetch columns for all tables
-    let columnsByTable = new Map<string, ReturnType<typeof mapColumnToResponse>[]>();
+    const columnsByTable = new Map<string, ReturnType<typeof mapColumnToResponse>[]>();
     if (tableIds.length > 0) {
       const { data: columns, error: columnsError } = await supabase
         .from("macro_table_columns")
@@ -119,19 +175,17 @@ export async function GET() {
       }
     }
 
-    // Count sources per table
-    const sourceCounts = new Map<string, number>();
-    sourcesByTable.forEach((sources, tableId) => {
-      sourceCounts.set(tableId, sources.length);
-    });
-
     const result = (macroTables ?? []).map((table) => {
       const tableId = table.id as string;
+      const normalizedSettings = buildMacroSourceSelectionSettings(
+        table.settings ?? {},
+        sourceTablasByTable.get(tableId) ?? []
+      );
       return {
-        ...mapMacroTableToResponse(table),
+        ...mapMacroTableToResponse({ ...table, settings: normalizedSettings }),
         sources: sourcesByTable.get(tableId) ?? [],
         columns: columnsByTable.get(tableId) ?? [],
-        sourceCount: sourceCounts.get(tableId) ?? 0,
+        sourceCount: sourceCounts.get(tableId) ?? (sourcesByTable.get(tableId)?.length ?? 0),
       };
     });
 
@@ -154,6 +208,43 @@ type ColumnInput = {
 type SourceInput = {
   obraTablaId: string;
 };
+
+function mapTablaRecord(record: unknown): MacroSourceTablaRecord {
+  const resolvedRecord = Array.isArray(record) ? record[0] : record;
+  const safeRecord =
+    resolvedRecord && typeof resolvedRecord === "object"
+      ? (resolvedRecord as {
+          id?: unknown;
+          name?: unknown;
+          obra_id?: unknown;
+          settings?: unknown;
+          obras?: unknown;
+        })
+      : {};
+  const obrasRecord = Array.isArray(safeRecord.obras) ? safeRecord.obras[0] : safeRecord.obras;
+  const safeObraRecord =
+    obrasRecord && typeof obrasRecord === "object"
+      ? (obrasRecord as { designacion_y_ubicacion?: unknown })
+      : {};
+  const settings =
+    safeRecord.settings &&
+    typeof safeRecord.settings === "object" &&
+    !Array.isArray(safeRecord.settings)
+      ? (safeRecord.settings as Record<string, unknown>)
+      : {};
+
+  return {
+    id: safeRecord.id as string,
+    name: (safeRecord.name as string) ?? "",
+    defaultTablaId:
+      typeof settings.defaultTablaId === "string" ? (settings.defaultTablaId as string) : null,
+    obraId: typeof safeRecord.obra_id === "string" ? safeRecord.obra_id : undefined,
+    obraName:
+      typeof safeObraRecord.designacion_y_ubicacion === "string"
+        ? (safeObraRecord.designacion_y_ubicacion as string)
+        : undefined,
+  };
+}
 
 export async function POST(request: Request) {
   const { supabase, user, tenantId } = await getAuthContext();
@@ -181,7 +272,8 @@ export async function POST(request: Request) {
     }
 
     const description = typeof body.description === "string" ? body.description.trim() : null;
-    const settings = typeof body.settings === "object" && body.settings !== null ? body.settings : {};
+    const rawSettings =
+      typeof body.settings === "object" && body.settings !== null ? body.settings : {};
     
     const rawSources: SourceInput[] = Array.isArray(body.sources) ? body.sources : [];
     const rawColumns: ColumnInput[] = Array.isArray(body.columns) ? body.columns : [];
@@ -204,7 +296,7 @@ export async function POST(request: Request) {
     const sourceTablaIds = rawSources.map(s => s.obraTablaId).filter(Boolean);
     const { data: validTablas, error: validationError } = await supabase
       .from("obra_tablas")
-      .select("id, obra_id, obras!inner(tenant_id)")
+      .select("id, obra_id, name, settings, obras!inner(tenant_id)")
       .in("id", sourceTablaIds);
 
     if (validationError) throw validationError;
@@ -219,6 +311,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const normalizedSettings = buildMacroSourceSelectionSettings(
+      rawSettings,
+      (validTablas ?? []).map(mapTablaRecord)
+    );
+
     // Create macro table
     const { data: macroTable, error: tableError } = await supabase
       .from("macro_tables")
@@ -226,7 +323,7 @@ export async function POST(request: Request) {
         tenant_id: tenantId,
         name: rawName,
         description,
-        settings,
+        settings: normalizedSettings,
       })
       .select("id, tenant_id, name, description, settings, created_at, updated_at")
       .single();
@@ -293,10 +390,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-
-
-
-
-
 

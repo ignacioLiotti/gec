@@ -99,10 +99,29 @@ type GeneralTabReportsData = {
 	} | null;
 };
 
+type MacroCertificateColumn = {
+	id: string;
+	label: string;
+	sourceFieldKey?: string | null;
+};
+
+type MacroCertificateRow = {
+	id: string;
+	_obraId?: unknown;
+	[key: string]: unknown;
+};
+
+type MacroCertificateData = {
+	columns: MacroCertificateColumn[];
+	rows: MacroCertificateRow[];
+} | null;
+
 type GeneralTabProps = {
 	form: any; // FormApi type requires 11-12 type arguments, using any for simplicity
 	isGeneralTabEditMode: boolean;
 	hasUnsavedChanges: () => boolean;
+	onSave: () => void | Promise<void>;
+	isSaving: boolean;
 	isFieldDirty: (field: keyof Obra) => boolean;
 	applyObraToForm: (obra: Obra) => void;
 	initialFormValues: Obra;
@@ -113,6 +132,15 @@ type GeneralTabProps = {
 	mainTableColumnValues?: Record<string, unknown>;
 	setCustomMainColumnValue?: (columnId: string, value: unknown) => void;
 	certificadosExtraidosRows?: TablaDataRow[];
+	certificadoContableMacro?: MacroCertificateData;
+	derivedCertificadosNotice?: {
+		sourceLabel: string | null;
+		updatedFieldKeys: Array<"certificadoALaFecha" | "saldoACertificar" | "porcentaje">;
+		updatedFieldLabels: string[];
+		blockedFieldKeys: Array<"saldoACertificar" | "porcentaje">;
+		blockedFieldLabels: string[];
+		warningMessage: string | null;
+	} | null;
 };
 
 const STATIC_GENERAL_FIELD_IDS = new Set([
@@ -229,9 +257,22 @@ function ShellCard({
 	);
 }
 
-function KpiItem({ label, value }: { label: string; value: string }) {
+function KpiItem({
+	label,
+	value,
+	highlighted = false,
+}: {
+	label: string;
+	value: string;
+	highlighted?: boolean;
+}) {
 	return (
-		<div className="space-y-1">
+		<div
+			className={cn(
+				"space-y-1 rounded-xl px-3 py-2 transition-colors",
+				highlighted && "border border-[#f7b26a] bg-[#fffaf5] shadow-[0_0_0_1px_rgba(247,178,106,0.15)]"
+			)}
+		>
 			<p className="text-[11px] font-medium uppercase tracking-wide text-[#aaa]">{label}</p>
 			<p className="text-lg font-semibold tabular-nums tracking-tight text-[#1a1a1a] sm:text-xl">
 				{value}
@@ -285,7 +326,7 @@ type ObraCertificateSummary = {
 	location: string;
 	period: string | null;
 	amount: string | null;
-	status: string | null;
+	cobrado: string | null;
 };
 
 const CERTIFICATE_NUMBER_KEYS = [
@@ -312,10 +353,97 @@ const CERTIFICATE_LOCATION_KEYS = [
 ];
 const CERTIFICATE_PERIOD_KEYS = ["mes", "periodo", "period", "fecha", "fecha_certificacion"];
 const CERTIFICATE_AMOUNT_KEYS = ["monto", "monto_certificado", "importe", "total"];
-const CERTIFICATE_STATUS_KEYS = ["estado", "status", "situacion"];
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeCertificateLookupValue(value: unknown): string {
+	if (value == null) return "";
+	const text = String(value).trim();
+	if (!text) return "";
+	const digits = text.replace(/\D/g, "");
+	if (digits) {
+		const normalizedDigits = digits.replace(/^0+/, "");
+		return normalizedDigits || "0";
+	}
+	return text
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase();
+}
+
+function normalizeMacroColumnKey(value: string | null | undefined): string {
+	return String(value ?? "")
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "");
+}
+
+function formatCobradoValue(value: unknown): string | null {
+	if (value == null) return null;
+	if (typeof value === "boolean") return value ? "Si" : "No";
+	const text = String(value).trim();
+	if (!text) return null;
+	const normalized = text
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase();
+	if (["true", "si", "yes", "1"].includes(normalized)) return "Si";
+	if (["false", "no", "0"].includes(normalized)) return "No";
+	return text;
+}
+
+function findMacroColumnId(
+	columns: MacroCertificateColumn[],
+	options: { sourceFieldKeys?: string[]; labels?: string[] },
+): string | null {
+	const wantedSourceKeys = new Set(
+		(options.sourceFieldKeys ?? []).map((key) => normalizeMacroColumnKey(key))
+	);
+	const wantedLabels = new Set((options.labels ?? []).map((label) => normalizeMacroColumnKey(label)));
+
+	for (const column of columns) {
+		const sourceKey = normalizeMacroColumnKey(column.sourceFieldKey);
+		if (sourceKey && wantedSourceKeys.has(sourceKey)) return column.id;
+	}
+
+	for (const column of columns) {
+		const labelKey = normalizeMacroColumnKey(column.label);
+		if (labelKey && wantedLabels.has(labelKey)) return column.id;
+	}
+
+	return null;
+}
+
+function buildCobradoLookupByCertificateNumber(
+	macroData: MacroCertificateData,
+): Map<string, string> {
+	if (!macroData) return new Map();
+	const certificateColumnId = findMacroColumnId(macroData.columns, {
+		sourceFieldKeys: CERTIFICATE_NUMBER_KEYS,
+		labels: ["n certificado", "numero certificado", "certificado"],
+	});
+	const cobradoColumnId = findMacroColumnId(macroData.columns, {
+		sourceFieldKeys: ["cobrado"],
+		labels: ["cobrado"],
+	});
+
+	if (!certificateColumnId || !cobradoColumnId) {
+		return new Map();
+	}
+
+	const lookup = new Map<string, string>();
+	for (const row of macroData.rows) {
+		const key = normalizeCertificateLookupValue(row[certificateColumnId]);
+		if (!key) continue;
+		const cobrado = formatCobradoValue(row[cobradoColumnId]);
+		if (!cobrado) continue;
+		lookup.set(key, cobrado);
+	}
+	return lookup;
 }
 
 function findFirstDisplayValue(
@@ -353,7 +481,11 @@ function formatCertificateAmount(value: unknown): string | null {
 	return Number.isFinite(parsed) ? formatCurrency(parsed) : text;
 }
 
-function normalizeExtractedCertificateRows(rows: TablaDataRow[]): ObraCertificateSummary[] {
+function normalizeExtractedCertificateRows(
+	rows: TablaDataRow[],
+	certificadoContableMacro: MacroCertificateData,
+): ObraCertificateSummary[] {
+	const cobradoByCertificateNumber = buildCobradoLookupByCertificateNumber(certificadoContableMacro);
 	return rows
 		.map((row, index) => {
 			const entry = isPlainRecord(row.data) ? row.data : {};
@@ -361,12 +493,15 @@ function normalizeExtractedCertificateRows(rows: TablaDataRow[]): ObraCertificat
 			const expedienteNumber = findFirstDisplayValue(entry, CERTIFICATE_EXPEDIENTE_KEYS);
 			const location = findFirstDisplayValue(entry, CERTIFICATE_LOCATION_KEYS);
 			const period = findFirstDisplayValue(entry, CERTIFICATE_PERIOD_KEYS) || null;
-			const status = findFirstDisplayValue(entry, CERTIFICATE_STATUS_KEYS) || null;
+			const cobrado =
+				cobradoByCertificateNumber.get(
+					normalizeCertificateLookupValue(certificateNumber)
+				) ?? null;
 			const amount = formatCertificateAmount(
 				CERTIFICATE_AMOUNT_KEYS.map((key) => entry[key]).find((candidate) => candidate != null),
 			);
 			const hasVisibleData = Boolean(
-				certificateNumber || expedienteNumber || location || period || status || amount,
+				certificateNumber || expedienteNumber || location || period || cobrado || amount,
 			);
 
 			if (!hasVisibleData) return null;
@@ -378,7 +513,7 @@ function normalizeExtractedCertificateRows(rows: TablaDataRow[]): ObraCertificat
 				location,
 				period,
 				amount,
-				status,
+				cobrado,
 			};
 		})
 		.filter((entry): entry is ObraCertificateSummary => entry !== null);
@@ -408,7 +543,7 @@ function CertificatesSummaryCard({
 							<th className="px-4 py-3 font-semibold text-[#777]">Ubicación exte.</th>
 							<th className="px-4 py-3 font-semibold text-[#777]">Período</th>
 							<th className="px-4 py-3 font-semibold text-[#777]">Monto</th>
-							<th className="px-4 py-3 font-semibold text-[#777]">Estado</th>
+							<th className="px-4 py-3 font-semibold text-[#777]">Cobrado</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -433,9 +568,9 @@ function CertificatesSummaryCard({
 									{certificate.amount || "Sin dato"}
 								</td>
 								<td className="px-4 py-3">
-									{certificate.status ? (
+									{certificate.cobrado ? (
 										<span className="rounded-full bg-[#fff7ed] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
-											{certificate.status}
+											{certificate.cobrado}
 										</span>
 									) : (
 										<span className="text-[#999]">Sin dato</span>
@@ -445,6 +580,67 @@ function CertificatesSummaryCard({
 						))}
 					</tbody>
 				</table>
+			</div>
+		</ShellCard>
+	);
+}
+
+function GeneralInfoCard({
+	values,
+	isFieldDirty,
+	className,
+}: {
+	values: Pick<
+		Obra,
+		| "designacionYUbicacion"
+		| "entidadContratante"
+		| "mesBasicoDeContrato"
+		| "iniciacion"
+		| "n"
+		| "supDeObraM2"
+	>;
+	isFieldDirty: (field: keyof Obra) => boolean;
+	className?: string;
+}) {
+	return (
+		<ShellCard title="Información General" icon={Landmark} className={className}>
+			<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+				<MiniField
+					icon={MapPin}
+					label="Designación y ubicación"
+					value={values.designacionYUbicacion || "No especificado"}
+					highlighted={isFieldDirty("designacionYUbicacion")}
+				/>
+				<MiniField
+					icon={Building2}
+					label="Entidad contratante"
+					value={values.entidadContratante || "No especificado"}
+					highlighted={isFieldDirty("entidadContratante")}
+				/>
+				<MiniField
+					icon={Calendar}
+					label="Mes básico"
+					value={values.mesBasicoDeContrato || "No especificado"}
+					highlighted={isFieldDirty("mesBasicoDeContrato")}
+				/>
+				<MiniField
+					icon={Calendar}
+					label="Iniciación"
+					value={values.iniciacion || "No especificado"}
+					highlighted={isFieldDirty("iniciacion")}
+				/>
+				<MiniField
+					icon={Hash}
+					label="N° de obra"
+					value={`#${values.n ?? 0}`}
+					highlighted={isFieldDirty("n")}
+				/>
+				<MiniField
+					icon={Ruler}
+					label="Superficie"
+					value={`${formatNumber(values.supDeObraM2, " m²")}`}
+					highlighted={isFieldDirty("supDeObraM2")}
+				/>
 			</div>
 		</ShellCard>
 	);
@@ -619,6 +815,8 @@ export function ObraGeneralTab({
 	form,
 	isGeneralTabEditMode,
 	hasUnsavedChanges,
+	onSave,
+	isSaving,
 	isFieldDirty,
 	applyObraToForm,
 	initialFormValues,
@@ -629,13 +827,28 @@ export function ObraGeneralTab({
 	mainTableColumnValues = {},
 	setCustomMainColumnValue,
 	certificadosExtraidosRows = [],
+	certificadoContableMacro = null,
+	derivedCertificadosNotice = null,
 }: GeneralTabProps) {
 	const extraMainTableColumns = mainTableColumns.filter((column) => {
 		if (column.kind === "custom") return true;
 		const sourceId = column.baseColumnId ?? column.id;
 		return !STATIC_GENERAL_FIELD_IDS.has(sourceId) && !STATIC_GENERAL_FIELD_IDS.has(column.id);
 	});
-	const obraCertificates = normalizeExtractedCertificateRows(certificadosExtraidosRows);
+	const obraCertificates = normalizeExtractedCertificateRows(
+		certificadosExtraidosRows,
+		certificadoContableMacro,
+	);
+	const hasCertificates = obraCertificates.length > 0;
+	const derivedFieldSet = new Set(derivedCertificadosNotice?.updatedFieldKeys ?? []);
+	const blockedDerivedFieldSet = new Set(derivedCertificadosNotice?.blockedFieldKeys ?? []);
+	const isDerivedFieldHighlighted = (
+		field: "certificadoALaFecha" | "saldoACertificar" | "porcentaje"
+	) => derivedFieldSet.has(field);
+	const isDerivedFieldBlocked = (
+		field: "saldoACertificar" | "porcentaje"
+	) => blockedDerivedFieldSet.has(field);
+	const isContratoBlockingDerived = blockedDerivedFieldSet.size > 0;
 
 	return (
 		<TabsContent value="general" className="space-y-6 pt-4">
@@ -652,6 +865,47 @@ export function ObraGeneralTab({
 							form.handleSubmit();
 						}}
 					>
+						{derivedCertificadosNotice ? (
+							<motion.div
+								initial={{ opacity: 0, y: 12 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.05 }}
+								className="rounded-2xl border border-[#f7b26a] bg-[#fffaf5] p-4 text-[#7a4b13]"
+							>
+								<div className="flex items-start gap-3">
+									<div className="mt-0.5 rounded-full bg-[#fff1df] p-2 text-[#f97316]">
+										<AlertCircle className="h-4 w-4" />
+									</div>
+									<div className="space-y-1.5">
+										<p className="text-sm font-semibold">
+											Actualizamos valores desde Certificados Extraidos · PMC Resumen
+										</p>
+										<p className="text-sm leading-6">
+											{derivedCertificadosNotice.updatedFieldLabels.length > 0
+												? (
+													<>
+														Se recalcularon {derivedCertificadosNotice.updatedFieldLabels.join(", ")} usando el
+														monto acumulado del ultimo certificado detectado
+														{derivedCertificadosNotice.sourceLabel
+															? ` (${derivedCertificadosNotice.sourceLabel})`
+															: ""}.
+													</>
+												)
+												: "Detectamos cambios en certificados extraídos que impactan los cálculos de esta obra."}
+										</p>
+										<p className="text-sm leading-6 text-[#9a6a31]">
+											Por eso la obra quedo con cambios sin guardar: revisa los importes y
+											guarda para confirmar la actualizacion en la ficha principal.
+										</p>
+										{derivedCertificadosNotice.warningMessage ? (
+											<p className="text-sm leading-6 font-medium text-[#b45309]">
+												{derivedCertificadosNotice.warningMessage}
+											</p>
+										) : null}
+									</div>
+								</div>
+							</motion.div>
+						) : null}
 						<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
 							<motion.div
 								initial={{ opacity: 0, scale: 0.95 }}
@@ -675,7 +929,13 @@ export function ObraGeneralTab({
 												<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
 													<CircularProgress value={Number(field.state.value) ?? 0} />
 												</div>
-												<div className="rounded-lg border border-[#f0f0f0] p-3">
+												<div
+													className={cn(
+														"rounded-lg border border-[#f0f0f0] p-3",
+														(isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
+															"border-[#f7b26a] bg-[#fffaf5]"
+													)}
+												>
 													<p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#aaa]">
 														Editar avance
 													</p>
@@ -685,13 +945,23 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(SURFACE_INPUT_CLASS, "text-right")}
+														className={cn(
+															SURFACE_INPUT_CLASS,
+															"text-right",
+															(isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
+																"border-[#f7b26a] bg-white"
+														)}
 													/>
 													{getErrorMessage(field.state.meta.errors) && (
 														<p className="mt-2 text-xs text-red-500">
 															{getErrorMessage(field.state.meta.errors)}
 														</p>
 													)}
+													{isDerivedFieldBlocked("porcentaje") && derivedCertificadosNotice?.warningMessage ? (
+														<p className="mt-2 text-xs text-[#b45309]">
+															{derivedCertificadosNotice.warningMessage}
+														</p>
+													) : null}
 												</div>
 											</div>
 										)}
@@ -831,7 +1101,10 @@ export function ObraGeneralTab({
 									<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 										<form.Field name="contratoMasAmpliaciones">
 											{(field: any) => (
-												<div>
+												<div className={cn(
+													"rounded-xl p-2 transition-colors",
+													isContratoBlockingDerived && "border border-[#f7b26a] bg-[#fffaf5]"
+												)}>
 													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
 														Contrato + ampliaciones
 													</label>
@@ -840,15 +1113,27 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
+														className={cn(
+															SURFACE_INPUT_CLASS,
+															"text-right font-mono",
+															isContratoBlockingDerived && "border-[#f7b26a] bg-white"
+														)}
 														placeholder="0.00"
 													/>
+													{derivedCertificadosNotice?.warningMessage ? (
+														<p className="mt-2 text-xs text-[#b45309]">
+															{derivedCertificadosNotice.warningMessage}
+														</p>
+													) : null}
 												</div>
 											)}
 										</form.Field>
 										<form.Field name="certificadoALaFecha">
 											{(field: any) => (
-												<div>
+												<div className={cn(
+													"rounded-xl p-2 transition-colors",
+													isDerivedFieldHighlighted("certificadoALaFecha") && "border border-[#f7b26a] bg-[#fffaf5]"
+												)}>
 													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
 														Certificado a la fecha
 													</label>
@@ -857,7 +1142,12 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
+														className={cn(
+															SURFACE_INPUT_CLASS,
+															"text-right font-mono",
+															isDerivedFieldHighlighted("certificadoALaFecha") &&
+																"border-[#f7b26a] bg-white"
+														)}
 														placeholder="0.00"
 													/>
 												</div>
@@ -865,7 +1155,11 @@ export function ObraGeneralTab({
 										</form.Field>
 										<form.Field name="saldoACertificar">
 											{(field: any) => (
-												<div>
+												<div className={cn(
+													"rounded-xl p-2 transition-colors",
+													(isDerivedFieldHighlighted("saldoACertificar") || isDerivedFieldBlocked("saldoACertificar")) &&
+														"border border-[#f7b26a] bg-[#fffaf5]"
+												)}>
 													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
 														Saldo a certificar
 													</label>
@@ -874,9 +1168,19 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
+														className={cn(
+															SURFACE_INPUT_CLASS,
+															"text-right font-mono",
+															(isDerivedFieldHighlighted("saldoACertificar") || isDerivedFieldBlocked("saldoACertificar")) &&
+																"border-[#f7b26a] bg-white"
+														)}
 														placeholder="0.00"
 													/>
+													{isDerivedFieldBlocked("saldoACertificar") && derivedCertificadosNotice?.warningMessage ? (
+														<p className="mt-2 text-xs text-[#b45309]">
+															{derivedCertificadosNotice.warningMessage}
+														</p>
+													) : null}
 												</div>
 											)}
 										</form.Field>
@@ -1057,18 +1361,17 @@ export function ObraGeneralTab({
 						>
 							Cancelar
 						</Button>
-						<form.Subscribe selector={(state: any) => [state.canSubmit, state.isSubmitting]}>
-							{([canSubmit, isSubmitting]: [any, any]) => (
-								<Button type="submit" disabled={!canSubmit} className="min-w-[140px]"
-									onClick={(e) => {
-										e.preventDefault();
-										form.handleSubmit();
-									}}
-								>
-									{isSubmitting ? "Guardando..." : "Guardar cambios"}
-								</Button>
-							)}
-						</form.Subscribe>
+						<Button
+							type="button"
+							disabled={!hasUnsavedChanges() || isSaving}
+							className="min-w-[140px]"
+							onClick={(e) => {
+								e.preventDefault();
+								void onSave();
+							}}
+						>
+							{isSaving ? "Guardando..." : "Guardar cambios"}
+						</Button>
 					</motion.div>
 				</>
 			) : (
@@ -1082,7 +1385,8 @@ export function ObraGeneralTab({
 									transition={{ delay: 0.1 }}
 									className={cn(
 										"lg:col-span-4",
-										isFieldDirty("porcentaje") && "rounded-xl"
+										(isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
+											"rounded-xl"
 									)}
 								>
 									<ShellCard
@@ -1090,10 +1394,11 @@ export function ObraGeneralTab({
 										icon={Percent}
 										className={cn(
 											"h-full",
-											isFieldDirty("porcentaje") && "border-[#f7b26a] bg-[#fffaf5]"
+											(isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
+												"border-[#f7b26a] bg-[#fffaf5]"
 										)}
 										action={
-											isFieldDirty("porcentaje") ? (
+											isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje") ? (
 												<span className="text-[11px] font-semibold text-[#f97316]">Sin guardar</span>
 											) : (
 												<span className="text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
@@ -1177,12 +1482,12 @@ export function ObraGeneralTab({
 							</div>
 
 							<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-								{obraCertificates.length > 0 ? (
+								{hasCertificates ? (
 									<motion.section
 										initial={{ opacity: 0, y: 20 }}
 										animate={{ opacity: 1, y: 0 }}
 										transition={{ delay: 0.32 }}
-										className="lg:col-span-7"
+										className="lg:col-span-6"
 									>
 										<CertificatesSummaryCard certificates={obraCertificates} />
 									</motion.section>
@@ -1191,7 +1496,7 @@ export function ObraGeneralTab({
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.3 }}
-									className="lg:col-span-5"
+									className={cn("lg:col-span-6", !hasCertificates && "lg:order-2")}
 								>
 									<ShellCard title="Datos Financieros" icon={BadgeDollarSign}>
 										<div className="space-y-5">
@@ -1199,14 +1504,17 @@ export function ObraGeneralTab({
 												<KpiItem
 													label="Contrato + ampliaciones"
 													value={formatCurrency(form.state.values.contratoMasAmpliaciones)}
+													highlighted={isContratoBlockingDerived}
 												/>
 												<KpiItem
 													label="Certificado a la fecha"
 													value={formatCurrency(form.state.values.certificadoALaFecha)}
+													highlighted={isDerivedFieldHighlighted("certificadoALaFecha")}
 												/>
 												<KpiItem
 													label="Saldo a certificar"
 													value={formatCurrency(form.state.values.saldoACertificar)}
+													highlighted={isDerivedFieldHighlighted("saldoACertificar")}
 												/>
 											</div>
 											<div className="h-px bg-[#f0f0f0]" />
@@ -1239,13 +1547,27 @@ export function ObraGeneralTab({
 										</div>
 									</ShellCard>
 								</motion.section>
+								{!hasCertificates ? (
+									<motion.section
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: 0.32 }}
+										className="lg:col-span-6 lg:order-1"
+									>
+										<GeneralInfoCard
+											values={form.state.values}
+											isFieldDirty={isFieldDirty}
+											className="h-full"
+										/>
+									</motion.section>
+								) : null}
 
 							</div>
 							<motion.section
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
 								transition={{ delay: 0.28 }}
-								className="lg:col-span-12"
+								className={cn("lg:col-span-12", !hasCertificates && "hidden")}
 							>
 								<ShellCard title="Información General" icon={Landmark}>
 									<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1325,6 +1647,27 @@ export function ObraGeneralTab({
 										<AlertCircle className="h-5 w-5" />
 										<p className="text-sm font-semibold">Tenés cambios sin guardar</p>
 									</div>
+									{derivedCertificadosNotice ? (
+										<p className="max-w-xl text-right text-sm text-[#9a6a31]">
+											Parte de estos cambios viene de la tabla <span className="font-medium">Certificados Extraidos · PMC Resumen</span>.
+											{derivedCertificadosNotice.updatedFieldLabels.length > 0 ? (
+												<>
+													Recalculamos {derivedCertificadosNotice.updatedFieldLabels.join(", ")}
+													{derivedCertificadosNotice.sourceLabel
+														? ` a partir del ultimo certificado detectado (${derivedCertificadosNotice.sourceLabel})`
+														: " a partir del ultimo certificado detectado"}
+													, pero hace falta que guardes para persistirlo.
+												</>
+											) : (
+												<>Detectamos certificados nuevos, pero todavía faltan datos para terminar algunos cálculos.</>
+											)}
+										</p>
+									) : null}
+									{derivedCertificadosNotice?.warningMessage ? (
+										<p className="max-w-xl text-right text-sm font-medium text-[#b45309]">
+											{derivedCertificadosNotice.warningMessage}
+										</p>
+									) : null}
 									<div className="flex gap-3 justify-end">
 										<Button
 											variant="outline"
@@ -1334,33 +1677,29 @@ export function ObraGeneralTab({
 										>
 											Descartar cambios
 										</Button>
-										<form.Subscribe selector={(state: any) => [state.canSubmit, state.isSubmitting]}>
-											{([canSubmit, isSubmitting]: [any, any]) => (
-												<Button
-													onClick={(e) => {
-														e.preventDefault();
-														form.handleSubmit();
-													}}
-													disabled={!canSubmit || isSubmitting}
-													className="gap-2"
-												>
-													{isSubmitting ? (
-														<>
-															<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-																<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-																<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-															</svg>
-															Guardando...
-														</>
-													) : (
-														<>
-															<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-															Guardar cambios
-														</>
-													)}
-												</Button>
+										<Button
+											onClick={(e) => {
+												e.preventDefault();
+												void onSave();
+											}}
+											disabled={!hasUnsavedChanges() || isSaving}
+											className="gap-2"
+										>
+											{isSaving ? (
+												<>
+													<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+														<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+														<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+													</svg>
+													Guardando...
+												</>
+											) : (
+												<>
+													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+													Guardar cambios
+												</>
 											)}
-										</form.Subscribe>
+										</Button>
 									</div>
 								</motion.div>
 							)}

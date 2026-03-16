@@ -108,6 +108,7 @@ export function FormTableToolbar() {
 						<Search className="size-4 -mr-6 absolute left-2.5 top-2.5 z-10 text-muted-foreground" />
 						<Input
 							type="search"
+							data-testid="form-table-search"
 							className="h-9 w-64 pointer-events-auto rounded-lg border-[#e8e8e8] pl-9 text-sm bg-white bg-[radial-gradient(100%_50%_at_50%_0%,#fff_0%,#fff0_100%),var(--background-85,#fafafad9)] shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset,0_8px_3px_0_#0b090c03,0_5px_3px_0_#0b090c08,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_-1px_0_0_#0000001f_inset] hover:bg-accent text-foreground"
 							value={search.value}
 							onChange={(event) => search.onChange(event.target.value)}
@@ -270,7 +271,7 @@ export function FormTableTabs({ className }: { className?: string }) {
 	);
 }
 
-export function FormTableContent({ className }: { className?: string }) {
+export function FormTableContent({ className, innerClassName }: { className?: string, innerClassName?: string }) {
 	const {
 		tableId,
 		config,
@@ -345,7 +346,7 @@ export function FormTableContent({ className }: { className?: string }) {
 					{serverError}
 				</div>
 			)}
-			<div className={cn("relative  rounded-none overflow-x-auto w-full bg-white", className)}>
+			<div className={cn("relative rounded-none overflow-x-auto w-full bg-white", className)}>
 				{isServerPaging && isFetching && (
 					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm">
 						<Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -354,7 +355,7 @@ export function FormTableContent({ className }: { className?: string }) {
 				)}
 				<div
 					ref={scrollParentRef}
-					className="max-h-[60vh] overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar ">
+					className={cn("max-h-[60vh] overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
 					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
@@ -740,7 +741,7 @@ export function FormTablePagination() {
 			<div className="flex items-center gap-2">
 				{config.footerActions}
 				{allowAddRows && (
-					<Button type="button" variant="outline" onClick={actions.addRow}>
+					<Button type="button" variant="outline" onClick={actions.addRow} data-testid="form-table-add-row">
 						Agregar fila vacía
 					</Button>
 				)}
@@ -750,6 +751,7 @@ export function FormTablePagination() {
 						onClick={actions.discard}
 						disabled={!meta.hasUnsavedChanges || meta.isSaving}
 						variant="destructiveSecondary"
+						data-testid="form-table-discard"
 
 					>
 						Descartar cambios
@@ -759,6 +761,7 @@ export function FormTablePagination() {
 					type="button"
 					onClick={actions.save}
 					disabled={!meta.hasUnsavedChanges || meta.isSaving}
+					data-testid="form-table-save"
 
 					className="gap-2"
 				>
@@ -767,7 +770,7 @@ export function FormTablePagination() {
 				</Button>
 			</div>
 			<div className="flex items-center gap-2">
-				<Button
+				{/* <Button
 					type="button"
 					variant="outline"
 					onClick={() => startTransition(() => setPage(1))}
@@ -776,7 +779,7 @@ export function FormTablePagination() {
 				>
 					<ChevronsLeft className="h-4 w-4" />
 					Primera
-				</Button>
+				</Button> */}
 				<Button
 					type="button"
 					variant="default"
@@ -802,7 +805,7 @@ export function FormTablePagination() {
 					Siguiente
 					<ChevronRight className="h-4 w-4" />
 				</Button>
-				<Button
+				{/* <Button
 					type="button"
 					variant="outline"
 					onClick={() => startTransition(() => setPage(totalPages))}
@@ -811,7 +814,7 @@ export function FormTablePagination() {
 				>
 					Ultima
 					<ChevronsRight className="h-4 w-4" />
-				</Button>
+				</Button> */}
 			</div>
 		</div>
 	);
@@ -838,6 +841,7 @@ const DEFAULT_PAGE_SIZE = 10;
 type FormTableProps<Row extends FormTableRow, Filters> = {
 	config: FormTableConfig<Row, Filters>;
 	className?: string;
+	innerClassName?: string;
 	searchQuery?: string;
 	onSearchQueryChange?: (value: string) => void;
 	variant?: "page" | "embedded";
@@ -847,6 +851,7 @@ type FormTableProps<Row extends FormTableRow, Filters> = {
 export function FormTable<Row extends FormTableRow, Filters>({
 	config,
 	className,
+	innerClassName,
 	searchQuery,
 	onSearchQueryChange,
 	variant = "page",
@@ -1116,11 +1121,18 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		});
 	}, [accordionAlwaysOpen, rows, accordionRowConfig, hasAccordionRows]);
 
+	const serverRequestIdentity = `${searchRequestKey}::${appliedFiltersKey}`;
+	const previousServerRequestIdentityRef = useRef<string | null>(null);
 	useEffect(() => {
-		if (!fetchRowsFn) return;
-		if (page === 1) return;
+		if (!fetchRowsFn) {
+			previousServerRequestIdentityRef.current = null;
+			return;
+		}
+		const previousIdentity = previousServerRequestIdentityRef.current;
+		previousServerRequestIdentityRef.current = serverRequestIdentity;
+		if (previousIdentity === null || previousIdentity === serverRequestIdentity) return;
 		setPage(1);
-	}, [fetchRowsFn, page, searchRequestKey, appliedFiltersKey]);
+	}, [fetchRowsFn, serverRequestIdentity]);
 
 	useEffect(() => {
 		if (!fetchRowsFn) return;
@@ -1886,7 +1898,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			) : null}
 			<FormTableToolbar />
 			<FormTableTabs />
-			<FormTableContent className={className} />
+			<FormTableContent className={className} innerClassName={innerClassName} />
 			<FormTablePagination />
 		</div>
 	);

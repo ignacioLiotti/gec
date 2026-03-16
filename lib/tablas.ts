@@ -79,6 +79,228 @@ export function defaultValueForType(type: TablaColumnDataType) {
 	}
 }
 
+const DATE_MONTH_INDEX: Record<string, number> = {
+	ene: 0,
+	enero: 0,
+	feb: 1,
+	febrero: 1,
+	mar: 2,
+	marzo: 2,
+	abr: 3,
+	abril: 3,
+	may: 4,
+	mayo: 4,
+	jun: 5,
+	junio: 5,
+	jul: 6,
+	julio: 6,
+	ago: 7,
+	agosto: 7,
+	sep: 8,
+	sept: 8,
+	septiembre: 8,
+	oct: 9,
+	octubre: 9,
+	nov: 10,
+	noviembre: 10,
+	dic: 11,
+	diciembre: 11,
+	jan: 0,
+	february: 1,
+	march: 2,
+	apr: 3,
+	april: 3,
+	june: 5,
+	july: 6,
+	aug: 7,
+	august: 7,
+	septe: 8,
+	september: 8,
+	october: 9,
+	november: 10,
+	dec: 11,
+	december: 11,
+};
+
+type ParsedLooseDate = {
+	date: Date;
+	inferredParts: Array<"day" | "month" | "year">;
+};
+
+function normalizeYear(year: number) {
+	return year < 100 ? 2000 + year : year;
+}
+
+function buildLocalDate(year: number, monthIndex: number, day: number) {
+	const date = new Date(year, monthIndex, day);
+	if (
+		Number.isNaN(date.getTime()) ||
+		date.getFullYear() !== year ||
+		date.getMonth() !== monthIndex ||
+		date.getDate() !== day
+	) {
+		return null;
+	}
+	return date;
+}
+
+export function normalizeTextForDetection(value: string) {
+	return value
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.trim();
+}
+
+export function formatDateAsDmy(value: Date) {
+	const day = String(value.getDate()).padStart(2, "0");
+	const month = String(value.getMonth() + 1).padStart(2, "0");
+	const year = value.getFullYear();
+	return `${day}/${month}/${year}`;
+}
+
+export function formatDateAsIso(value: Date) {
+	const day = String(value.getDate()).padStart(2, "0");
+	const month = String(value.getMonth() + 1).padStart(2, "0");
+	const year = value.getFullYear();
+	return `${year}-${month}-${day}`;
+}
+
+export function parseFlexibleDateValue(value: unknown): Date | null {
+	if (!value) return null;
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime()) ? null : value;
+	}
+
+	const raw = String(value).trim();
+	if (!raw) return null;
+
+	const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+	if (isoMatch) {
+		return buildLocalDate(
+			Number(isoMatch[1]),
+			Number(isoMatch[2]) - 1,
+			Number(isoMatch[3])
+		);
+	}
+
+	const numericMatch = raw.match(/^(\d{1,2})[/. -](\d{1,2})[/. -](\d{2,4})$/);
+	if (numericMatch) {
+		return buildLocalDate(
+			normalizeYear(Number(numericMatch[3])),
+			Number(numericMatch[2]) - 1,
+			Number(numericMatch[1])
+		);
+	}
+
+	const normalized = normalizeTextForDetection(raw).replace(/\./g, "");
+	const textualMatch = normalized.match(
+		/^(\d{1,2})(?:\s+de)?[\s/_-]+([a-z]+)(?:(?:\s+de)?[\s/_-]+(\d{2,4}))?$/
+	);
+	if (textualMatch?.[3]) {
+		const monthIndex = DATE_MONTH_INDEX[textualMatch[2]];
+		if (monthIndex != null) {
+			return buildLocalDate(
+				normalizeYear(Number(textualMatch[3])),
+				monthIndex,
+				Number(textualMatch[1])
+			);
+		}
+	}
+
+	return null;
+}
+
+export function parseLooseDateInput(
+	value: string,
+	options?: {
+		referenceDate?: Date | null;
+		fallbackYear?: number;
+		defaultDay?: number;
+	}
+): ParsedLooseDate | null {
+	const raw = value.trim();
+	if (!raw) return null;
+
+	const fullDate = parseFlexibleDateValue(raw);
+	if (fullDate) {
+		return { date: fullDate, inferredParts: [] };
+	}
+
+	const referenceDate = options?.referenceDate ?? null;
+	const fallbackYear = options?.fallbackYear ?? new Date().getFullYear();
+	const defaultDay = options?.defaultDay ?? 1;
+	const normalized = normalizeTextForDetection(raw).replace(/\./g, "");
+
+	const shortDateMatch = raw.match(/^(\d{1,2})[/. -](\d{1,2})$/);
+	if (shortDateMatch) {
+		const day = Number(shortDateMatch[1]);
+		const monthIndex = Number(shortDateMatch[2]) - 1;
+		const year = referenceDate?.getFullYear() ?? fallbackYear;
+		const date = buildLocalDate(year, monthIndex, day);
+		return date ? { date, inferredParts: ["year"] } : null;
+	}
+
+	const textualDayMonthMatch = normalized.match(
+		/^(\d{1,2})(?:\s+de)?[\s/_-]+([a-z]+)(?:(?:\s+de)?[\s/_-]+(\d{2,4}))?$/
+	);
+	if (textualDayMonthMatch) {
+		const monthIndex = DATE_MONTH_INDEX[textualDayMonthMatch[2]];
+		if (monthIndex != null) {
+			const year = textualDayMonthMatch[3]
+				? normalizeYear(Number(textualDayMonthMatch[3]))
+				: (referenceDate?.getFullYear() ?? fallbackYear);
+			const date = buildLocalDate(year, monthIndex, Number(textualDayMonthMatch[1]));
+			return date
+				? {
+					date,
+					inferredParts: textualDayMonthMatch[3] ? [] : ["year"],
+				}
+				: null;
+		}
+	}
+
+	const shortMonthYearMatch = normalized.match(/^([a-z]+)[\s/_-]*(\d{2,4})$/);
+	if (shortMonthYearMatch) {
+		const monthIndex = DATE_MONTH_INDEX[shortMonthYearMatch[1]];
+		if (monthIndex != null) {
+			const date = buildLocalDate(
+				normalizeYear(Number(shortMonthYearMatch[2])),
+				monthIndex,
+				referenceDate?.getDate() ?? defaultDay
+			);
+			return date
+				? {
+					date,
+					inferredParts: ["day"],
+				}
+				: null;
+		}
+	}
+
+	const fullMonthYearMatch = normalized.match(
+		/^(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|sept|octubre|noviembre|diciembre|january|february|march|april|may|june|july|august|september|october|november|december)[\s/_-]*(\d{2,4})$/
+	);
+	if (fullMonthYearMatch) {
+		const monthIndex = DATE_MONTH_INDEX[fullMonthYearMatch[1]];
+		if (monthIndex != null) {
+			const date = buildLocalDate(
+				normalizeYear(Number(fullMonthYearMatch[2])),
+				monthIndex,
+				referenceDate?.getDate() ?? defaultDay
+			);
+			return date
+				? {
+					date,
+					inferredParts: ["day"],
+				}
+				: null;
+		}
+	}
+
+	return null;
+}
+
 const DOT_THOUSANDS_PATTERN = /^\d{1,3}(?:\.\d{3})+$/;
 const COMMA_THOUSANDS_PATTERN = /^\d{1,3}(?:,\d{3})+$/;
 

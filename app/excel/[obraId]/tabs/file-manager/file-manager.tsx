@@ -259,8 +259,8 @@ type TablaSchemaDraftColumn = {
   criticalAbove: string;
 };
 
-  /** How the server extracted data — drives client-side cell highlighting */
-  /** pmc_resumen only: fieldKey → A1 cell ref (e.g. "J185") where value was read */
+/** How the server extracted data — drives client-side cell highlighting */
+/** pmc_resumen only: fieldKey → A1 cell ref (e.g. "J185") where value was read */
 type TableSelectionEntry = {
   tablaId: string;
   tablaName: string;
@@ -1531,7 +1531,7 @@ function FileManagerContent({
       setOcrFolderLinks(links);
     } catch (error) {
       console.error('Error refreshing OCR folder links', error);
-      }
+    }
   }, [expandedFolderIds, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setSelectedFolder, sheetDocument]);
 
   // Build file tree from storage
@@ -2917,12 +2917,12 @@ function FileManagerContent({
                 autoSelectedTablaIds.length > 0
                   ? autoSelectedTablaIds
                   : uniqueTablaIds.length <= 1
-                  ? uniqueTablaIds
-                  : await openTableSelectionDialog({
-                    fileName: storageFileName,
-                    linkedTablas,
-                    mode: 'spreadsheet',
-                  });
+                    ? uniqueTablaIds
+                    : await openTableSelectionDialog({
+                      fileName: storageFileName,
+                      linkedTablas,
+                      mode: 'spreadsheet',
+                    });
               if (!selectedTablaIds || selectedTablaIds.length === 0) {
                 toast.info(`Importación cancelada para ${file.name}`);
                 continue;
@@ -4608,12 +4608,12 @@ function FileManagerContent({
             autoSelectedTablaIds.length > 0
               ? autoSelectedTablaIds
               : uniqueTablaIds.length <= 1
-              ? uniqueTablaIds
-              : await openTableSelectionDialog({
-                fileName: doc.name,
-                linkedTablas: links,
-                mode: 'spreadsheet',
-              });
+                ? uniqueTablaIds
+                : await openTableSelectionDialog({
+                  fileName: doc.name,
+                  linkedTablas: links,
+                  mode: 'spreadsheet',
+                });
           if (!selectedTablaIds || selectedTablaIds.length === 0) {
             toast.info(`Reproceso cancelado para ${doc.name}`);
             return;
@@ -4929,7 +4929,7 @@ function FileManagerContent({
               </div>
             ) : (
               <div className="flex flex-col h-full">
-                <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} className="max-h-[50vh] " />
+                <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} innerClassName="max-h-[50vh]" />
               </div>
             )}
           </div>

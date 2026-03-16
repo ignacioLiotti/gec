@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useState, useRef, useCallback, useMemo, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,51 +14,42 @@ import {
 	ContextMenuTrigger,
 	ContextMenuSeparator,
 } from "@/components/ui/context-menu";
-import { CalendarDays, ExternalLink } from "lucide-react";
+import { CalendarDays, ExternalLink, Sparkles } from "lucide-react";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { parseLocalizedNumber, toNumericValue } from "@/lib/tablas";
+import {
+	formatDateAsIso,
+	parseFlexibleDateValue,
+	parseLocalizedNumber,
+	toNumericValue,
+} from "@/lib/tablas";
 import type {
+	CellSuggestion,
 	ColumnDef,
 	FormFieldComponent,
 	FormTableRow,
 } from "./types";
+import { resolveCellSuggestion } from "./cell-suggestions";
 import { escapeRegExp, formatDateSafe } from "./table-utils";
 
 export type EditableCellValue = string | number | readonly string[] | null | undefined;
+type FieldRenderState = {
+	state: {
+		value: unknown;
+		meta?: {
+			errors?: unknown[];
+		};
+	};
+	handleChange: (value: unknown) => void;
+	handleBlur: () => void;
+};
 
 function toIsoDateOnly(date: Date): string {
-	const year = date.getFullYear();
-	const month = String(date.getMonth() + 1).padStart(2, "0");
-	const day = String(date.getDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
+	return formatDateAsIso(date);
 }
 
 function parseDateValue(value: unknown): Date | null {
-	if (!value) return null;
-	if (value instanceof Date) {
-		return Number.isNaN(value.getTime()) ? null : value;
-	}
-	const raw = String(value).trim();
-	if (!raw) return null;
-	const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-	if (isoMatch) {
-		const y = Number(isoMatch[1]);
-		const m = Number(isoMatch[2]) - 1;
-		const d = Number(isoMatch[3]);
-		const date = new Date(y, m, d);
-		return Number.isNaN(date.getTime()) ? null : date;
-	}
-	const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-	if (slashMatch) {
-		const d = Number(slashMatch[1]);
-		const m = Number(slashMatch[2]) - 1;
-		const y = Number(slashMatch[3]);
-		const date = new Date(y, m, d);
-		return Number.isNaN(date.getTime()) ? null : date;
-	}
-	const parsed = new Date(raw);
-	return Number.isNaN(parsed.getTime()) ? null : parsed;
+	return parseFlexibleDateValue(value);
 }
 
 function normalizeDateInputValue(value: EditableCellValue): string {
@@ -68,58 +59,179 @@ function normalizeDateInputValue(value: EditableCellValue): string {
 	return toIsoDateOnly(parsed);
 }
 
-function DateCellEditor({
+function buildSuggestionKey<Row extends FormTableRow>(
+	suggestion: CellSuggestion<Row> | null
+) {
+	if (!suggestion) return null;
+	return `${suggestion.kind}:${suggestion.sourceInput}:${suggestion.suggestedDisplayValue}`;
+}
+
+function CellSuggestionPrompt<Row extends FormTableRow>({
+	suggestion,
+	onApply,
+	onIgnore,
+	className,
+}: {
+	suggestion: CellSuggestion<Row> | null;
+	onApply: () => void;
+	onIgnore: () => void;
+	className?: string;
+}) {
+	const [open, setOpen] = useState(false);
+
+	if (!suggestion) return null;
+
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onMouseDown={(event) => event.preventDefault()}
+					className={cn(
+						"h-6 rounded-full border-orange-200 bg-orange-50 px-2 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm hover:bg-orange-100",
+						className
+					)}
+				>
+					<Sparkles className="mr-1 h-3 w-3" />
+					Sugerencia
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent align="end" side="bottom" className="w-72 p-0">
+				<div className="border-b bg-orange-50/70 px-4 py-3">
+					<p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">
+						Sugerencia automática
+					</p>
+					<p className="mt-1 text-sm font-medium text-foreground">
+						{suggestion.suggestedDisplayValue}
+					</p>
+				</div>
+				<div className="space-y-3 px-4 py-3 text-sm">
+					<p className="text-muted-foreground">{suggestion.description}</p>
+					<div className="rounded-lg border bg-muted/30 px-3 py-2">
+						<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+							Valor detectado
+						</p>
+						<p className="mt-1 font-medium text-foreground">{suggestion.sourceInput}</p>
+					</div>
+					<div className="flex items-center justify-end gap-2">
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onMouseDown={(event) => event.preventDefault()}
+							onClick={() => {
+								onIgnore();
+								setOpen(false);
+							}}
+						>
+							Ignorar
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							onMouseDown={(event) => event.preventDefault()}
+							onClick={() => {
+								onApply();
+								setOpen(false);
+							}}
+						>
+							Aplicar
+						</Button>
+					</div>
+				</div>
+			</PopoverContent>
+		</Popover>
+	);
+}
+
+function DateCellEditor<Row extends FormTableRow>({
 	value,
 	setValue,
 	handleBlur,
 	required,
+	inputProps,
+	column,
+	row,
 }: {
 	value: EditableCellValue;
 	setValue: (value: unknown) => void;
 	handleBlur: () => void;
 	required?: boolean;
+	inputProps?: Record<string, string>;
+	column: ColumnDef<Row>;
+	row: Row;
 }) {
 	const [open, setOpen] = useState(false);
 	const selectedDate = parseDateValue(value ?? null);
-	const [typedValue, setTypedValue] = useState(() => {
+	const externalTypedValue = useMemo(() => {
 		if (!value) return "";
 		return selectedDate ? selectedDate.toLocaleDateString("es-AR") : String(value);
-	});
-
-	useEffect(() => {
-		if (!value) {
-			setTypedValue("");
-			return;
-		}
-		if (selectedDate) {
-			setTypedValue(selectedDate.toLocaleDateString("es-AR"));
-			return;
-		}
-		setTypedValue(String(value));
 	}, [value, selectedDate]);
+	const [draftValue, setDraftValue] = useState<string | null>(null);
+	const typedValue = draftValue ?? externalTypedValue;
+
+	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
+	const suggestion = useMemo(
+		() =>
+			resolveCellSuggestion({
+				rawValue: typedValue,
+				currentValue: value,
+				cellType: "date",
+				column,
+				row,
+			}),
+		[typedValue, value, column, row]
+	);
+	const suggestionKey = buildSuggestionKey(suggestion);
+	const visibleSuggestion =
+		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
 
 	return (
-		<div className="w-full h-full absolute top-0 left-0 flex items-center gap-1 px-2 children-input-hidden">
+		<div className="w-full h-full absolute top-0 left-0 flex items-center gap-1 px-2 children-input-hidden relative">
 			<Input
 				type="text"
 				inputMode="numeric"
 				placeholder="dd/mm/aaaa"
+				{...inputProps}
 				value={typedValue}
-				onChange={(event) => setTypedValue(event.target.value)}
+				onChange={(event) => {
+					setDraftValue(event.target.value);
+					if (ignoredSuggestionKey) {
+						setIgnoredSuggestionKey(null);
+					}
+				}}
 				onBlur={() => {
 					const nextRaw = typedValue.trim();
 					if (!nextRaw) {
 						if (!required) {
 							setValue(null);
 						}
+						setDraftValue(null);
 						handleBlur();
 						return;
 					}
 					const parsed = parseDateValue(nextRaw);
+					setDraftValue(null);
 					setValue(parsed ? toIsoDateOnly(parsed) : nextRaw);
 					handleBlur();
 				}}
-				className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 focus-visible:ring-offset-1 pr-0 pl-1"
+				className={cn(
+					"w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 focus-visible:ring-offset-1 pl-1",
+					visibleSuggestion ? "pr-24" : "pr-0"
+				)}
+			/>
+			<CellSuggestionPrompt
+				suggestion={visibleSuggestion}
+				onApply={() => {
+					if (!visibleSuggestion) return;
+					setDraftValue(visibleSuggestion.suggestedDisplayValue);
+					setValue(visibleSuggestion.suggestedValue);
+					setIgnoredSuggestionKey(null);
+				}}
+				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
+				className="absolute right-9 top-1"
 			/>
 			<Popover open={open} onOpenChange={setOpen}>
 				<PopoverTrigger asChild>
@@ -142,7 +254,7 @@ function DateCellEditor({
 						onSelect={(date) => {
 							if (!date) return;
 							setValue(toIsoDateOnly(date));
-							setTypedValue(date.toLocaleDateString("es-AR"));
+							setDraftValue(null);
 							handleBlur();
 							setOpen(false);
 						}}
@@ -156,6 +268,7 @@ function DateCellEditor({
 							onClick={() => {
 								if (!required) {
 									setValue(null);
+									setDraftValue(null);
 									handleBlur();
 								}
 								setOpen(false);
@@ -179,12 +292,15 @@ function DateCellEditor({
  * and only syncs to the form on blur. This prevents cascading re-renders
  * on every keystroke.
  */
-function LocalInput({
+function LocalInput<Row extends FormTableRow>({
 	value: externalValue,
 	onChange: syncToForm,
 	onBlur,
 	transformOnBlur,
 	formatDisplayValue,
+	column,
+	row,
+	cellType,
 	...props
 }: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur" | "value"> & {
 	value: EditableCellValue;
@@ -192,6 +308,9 @@ function LocalInput({
 	onBlur?: () => void;
 	transformOnBlur?: (value: string) => unknown;
 	formatDisplayValue?: (value: EditableCellValue) => string;
+	column: ColumnDef<Row>;
+	row: Row;
+	cellType: NonNullable<ColumnDef<Row>["cellType"]> | "text";
 }) {
 	// Convert external value to string for the input
 	const normalizedExternal =
@@ -199,22 +318,33 @@ function LocalInput({
 			? normalizeDateInputValue(externalValue)
 			: formatDisplayValue
 				? formatDisplayValue(externalValue)
-			: externalValue == null
-				? ""
-				: String(externalValue);
-	const [localValue, setLocalValue] = useState(() => normalizedExternal);
+				: externalValue == null
+					? ""
+					: String(externalValue);
+	const [draftValue, setDraftValue] = useState<string | null>(null);
+	const localValue = draftValue ?? normalizedExternal;
 	const isTypingRef = useRef(false);
+	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
 
-	// Sync external value to local state only when not actively typing
-	useEffect(() => {
-		if (!isTypingRef.current) {
-			setLocalValue(normalizedExternal);
-		}
-	}, [normalizedExternal]);
+	const suggestion = useMemo(
+		() =>
+			resolveCellSuggestion({
+				rawValue: localValue,
+				currentValue: externalValue,
+				cellType,
+				column,
+				row,
+			}),
+		[localValue, externalValue, cellType, column, row]
+	);
+	const suggestionKey = buildSuggestionKey(suggestion);
+	const visibleSuggestion =
+		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
 
 	const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
 		isTypingRef.current = true;
-		setLocalValue(e.target.value);
+		setDraftValue(e.target.value);
+		setIgnoredSuggestionKey(null);
 	}, []);
 
 	const handleBlur = useCallback(() => {
@@ -228,22 +358,39 @@ function LocalInput({
 			syncToForm(finalValue);
 		}
 
+		setDraftValue(null);
 		onBlur?.();
 	}, [localValue, syncToForm, onBlur, transformOnBlur, normalizedExternal, externalValue]);
 
 	return (
-		<Input
-			{...props}
-			value={localValue}
-			onChange={handleChange}
-			onBlur={handleBlur}
-		/>
+		<>
+			<Input
+				{...props}
+				value={localValue}
+				onChange={handleChange}
+				onBlur={handleBlur}
+				className={cn(props.className, visibleSuggestion ? "pr-24" : undefined)}
+			/>
+			<CellSuggestionPrompt
+				suggestion={visibleSuggestion}
+				onApply={() => {
+					if (!visibleSuggestion) return;
+					isTypingRef.current = false;
+					setDraftValue(visibleSuggestion.suggestedDisplayValue);
+					syncToForm(visibleSuggestion.suggestedValue);
+					setIgnoredSuggestionKey(null);
+				}}
+				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
+				className="absolute right-1 top-1 z-20"
+			/>
+		</>
 	);
 }
 
 export type EditableContentArgs<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
 	row: Row;
+	rowId: string;
 	value: EditableCellValue;
 	setValue: (value: unknown) => void;
 	handleBlur: () => void;
@@ -431,7 +578,11 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 			if (!text) return <span>-</span>;
 			if (config.badgeMap?.[text]) {
 				const mapped = config.badgeMap[text];
-				return <Badge variant={mapped.variant as any}>{mapped.label}</Badge>;
+				return (
+					<Badge variant={mapped.variant as React.ComponentProps<typeof Badge>["variant"]}>
+						{mapped.label}
+					</Badge>
+				);
 			}
 			return (
 				<Badge variant={config.badgeVariant || "default"}>
@@ -480,6 +631,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 export function renderEditableContent<Row extends FormTableRow>({
 	column,
 	row,
+	rowId,
 	value,
 	setValue,
 	handleBlur,
@@ -487,6 +639,11 @@ export function renderEditableContent<Row extends FormTableRow>({
 }: EditableContentArgs<Row>): ReactNode {
 	const cellType = column.cellType || "text";
 	const config = column.cellConfig || {};
+	const inputDataProps = {
+		"data-testid": `cell-input-${rowId}-${String(column.field)}`,
+		"data-row-id": rowId,
+		"data-field": String(column.field),
+	};
 
 	switch (cellType) {
 		case "currency":
@@ -495,6 +652,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					type="text"
 					inputMode="decimal"
 					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
+					{...inputDataProps}
 					value={value ?? ""}
 					onChange={setValue}
 					onBlur={handleBlur}
@@ -503,6 +661,9 @@ export function renderEditableContent<Row extends FormTableRow>({
 						return parsed == null ? null : Number(parsed.toFixed(2));
 					}}
 					formatDisplayValue={formatCurrencyInputDisplay}
+					column={column}
+					row={row}
+					cellType="currency"
 					placeholder="0.00"
 					required={column.required}
 				/>
@@ -514,6 +675,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					inputMode="decimal"
 					pattern="[0-9.,\\-]*"
 					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden "
+					{...inputDataProps}
 					value={value ?? ""}
 					onChange={setValue}
 					onBlur={handleBlur}
@@ -522,6 +684,9 @@ export function renderEditableContent<Row extends FormTableRow>({
 						return parsed == null ? null : parsed;
 					}}
 					formatDisplayValue={formatNumericInputDisplay}
+					column={column}
+					row={row}
+					cellType="number"
 					required={column.required}
 				/>
 			);
@@ -532,6 +697,9 @@ export function renderEditableContent<Row extends FormTableRow>({
 					setValue={setValue}
 					handleBlur={handleBlur}
 					required={column.required}
+					inputProps={inputDataProps}
+					column={column}
+					row={row}
 				/>
 			);
 		case "boolean":
@@ -577,8 +745,12 @@ export function renderEditableContent<Row extends FormTableRow>({
 					<LocalInput
 						value={tagsStr}
 						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 focus-visible:opacity-100 opacity-0 peer children-input-hidden"
+						{...inputDataProps}
 						onChange={setValue}
 						onBlur={handleBlur}
+						column={column}
+						row={row}
+						cellType="tags"
 						placeholder="Ej: diseño, arquitectura"
 					/>
 					{tags.length > 0 && (
@@ -603,9 +775,13 @@ export function renderEditableContent<Row extends FormTableRow>({
 				<div className="space-y-1 overflow-hidden">
 					<LocalInput
 						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
+						{...inputDataProps}
 						value={text}
 						onChange={setValue}
 						onBlur={handleBlur}
+						column={column}
+						row={row}
+						cellType="link"
 						placeholder="https://..."
 						required={column.required}
 					/>
@@ -636,9 +812,13 @@ export function renderEditableContent<Row extends FormTableRow>({
 						<AvatarFallback>{fallback}</AvatarFallback>
 					</Avatar>
 					<LocalInput
+						{...inputDataProps}
 						value={text}
 						onChange={setValue}
 						onBlur={handleBlur}
+						column={column}
+						row={row}
+						cellType="avatar"
 						placeholder="https://..."
 					/>
 				</div>
@@ -658,9 +838,13 @@ export function renderEditableContent<Row extends FormTableRow>({
 						)}
 					</div>
 					<LocalInput
+						{...inputDataProps}
 						value={src}
 						onChange={setValue}
 						onBlur={handleBlur}
+						column={column}
+						row={row}
+						cellType="image"
 						placeholder="https://..."
 					/>
 				</div>
@@ -670,9 +854,13 @@ export function renderEditableContent<Row extends FormTableRow>({
 			{
 				const input = (
 					<LocalInput
+						{...inputDataProps}
 						value={value ?? ""}
 						onChange={setValue}
 						onBlur={handleBlur}
+						column={column}
+						row={row}
+						cellType="badge"
 						className="z-10 w-full h-full rounded-none border-none bg-transparent text-right font-mono tabular-nums focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
 					/>
 				);
@@ -699,9 +887,13 @@ export function renderEditableContent<Row extends FormTableRow>({
 			return (
 				<div className="space-y-1 children-input-hidden">
 					<LocalInput
+						{...inputDataProps}
 						value={value ?? ""}
 						onChange={setValue}
 						onBlur={handleBlur}
+						column={column}
+						row={row}
+						cellType="text-icon"
 					/>
 					<div>{renderReadOnlyValue(value, row, column, highlightQuery)}</div>
 				</div>
@@ -710,9 +902,13 @@ export function renderEditableContent<Row extends FormTableRow>({
 			return (
 				<LocalInput
 					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
+					{...inputDataProps}
 					value={value ?? ""}
 					onChange={setValue}
 					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="text"
 					required={column.required}
 				/>
 			);
@@ -741,14 +937,17 @@ export function renderCellByType<Row extends FormTableRow>({
 
 	return (
 		<FieldComponent name={fieldPath} validators={validators}>
-			{(field: any) => {
+			{(field: FieldRenderState) => {
 				const fieldValue = field.state.value;
 				const setValue = (value: unknown) => field.handleChange(value);
-				const errorMessage = field.state.meta?.errors?.[0];
+				const firstError = field.state.meta?.errors?.[0];
+				const errorMessage =
+					typeof firstError === "string" ? firstError : firstError != null ? String(firstError) : null;
 				const content = editable
 					? renderEditableContent({
 						column,
 						row,
+						rowId,
 						value: fieldValue as EditableCellValue,
 						setValue,
 						handleBlur: field.handleBlur,

@@ -6,6 +6,11 @@ import {
   type MacroTableFilters,
 } from "@/lib/macro-table-filters";
 import { mapColumnToResponse, type MacroTableRow } from "@/lib/macro-tables";
+import {
+  buildMacroSourceSelectionSettings,
+  resolveMacroSourceTablas,
+  type MacroSourceTablaRecord,
+} from "@/lib/macro-table-source-selection";
 import { createClient } from "@/utils/supabase/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
@@ -29,6 +34,43 @@ type ObraRecord = {
   porcentaje: number | string | null;
   custom_data?: Record<string, unknown> | null;
 };
+
+function mapTablaRecord(record: unknown): MacroSourceTablaRecord {
+  const resolvedRecord = Array.isArray(record) ? record[0] : record;
+  const safeRecord =
+    resolvedRecord && typeof resolvedRecord === "object"
+      ? (resolvedRecord as {
+          id?: unknown;
+          name?: unknown;
+          obra_id?: unknown;
+          settings?: unknown;
+          obras?: unknown;
+        })
+      : {};
+  const obrasRecord = Array.isArray(safeRecord.obras) ? safeRecord.obras[0] : safeRecord.obras;
+  const safeObraRecord =
+    obrasRecord && typeof obrasRecord === "object"
+      ? (obrasRecord as { designacion_y_ubicacion?: unknown })
+      : {};
+  const settings =
+    safeRecord.settings &&
+    typeof safeRecord.settings === "object" &&
+    !Array.isArray(safeRecord.settings)
+      ? (safeRecord.settings as Record<string, unknown>)
+      : {};
+
+  return {
+    id: safeRecord.id as string,
+    name: (safeRecord.name as string) ?? "",
+    defaultTablaId:
+      typeof settings.defaultTablaId === "string" ? (settings.defaultTablaId as string) : null,
+    obraId: typeof safeRecord.obra_id === "string" ? safeRecord.obra_id : undefined,
+    obraName:
+      typeof safeObraRecord.designacion_y_ubicacion === "string"
+        ? (safeObraRecord.designacion_y_ubicacion as string)
+        : undefined,
+  };
+}
 
 const toNumber = (value: unknown): number => {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -130,6 +172,7 @@ export async function GET(request: Request, context: RouteContext) {
   const url = new URL(request.url);
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
+  const obraIdFilter = url.searchParams.get("obraId")?.trim() ?? "";
   const query = url.searchParams.get("q")?.trim() ?? "";
   const rawFilters = url.searchParams.get("filters");
   let parsedFilters: unknown = {};
@@ -157,7 +200,7 @@ export async function GET(request: Request, context: RouteContext) {
     // Verify macro table exists and belongs to tenant
     const { data: macroTable, error: tableError } = await supabase
       .from("macro_tables")
-      .select("id, name")
+      .select("id, name, settings")
       .eq("id", id)
       .eq("tenant_id", tenantId)
       .single();
@@ -189,15 +232,16 @@ export async function GET(request: Request, context: RouteContext) {
           ...columns,
         ];
 
-    // Fetch sources with obra and tabla info
-    const { data: sources, error: sourcesError } = await supabase
+    // Fetch stored sources with obra and tabla info
+    const { data: storedSources, error: sourcesError } = await supabase
       .from("macro_table_sources")
       .select(`
         id, macro_table_id, obra_tabla_id, position,
         obra_tablas!inner(
-          id, name, obra_id,
+          id, name, obra_id, settings,
           obras!inner(
             id,
+            tenant_id,
             n,
             designacion_y_ubicacion,
             sup_de_obra_m2,
@@ -221,6 +265,81 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (sourcesError) throw sourcesError;
 
+    const explicitSourceTablas = (storedSources ?? [])
+      .map((source) => source.obra_tablas)
+      .filter(Boolean)
+      .map(mapTablaRecord);
+    const normalizedSettings = buildMacroSourceSelectionSettings(
+      macroTable.settings ?? {},
+      explicitSourceTablas
+    );
+
+    let sources = storedSources ?? [];
+    if (normalizedSettings.sourceMode === "template") {
+      const { data: tenantTablas, error: tenantTablasError } = await supabase
+        .from("obra_tablas")
+        .select(`
+          id, name, obra_id, settings,
+          obras!inner(
+            id,
+            tenant_id,
+            n,
+            designacion_y_ubicacion,
+            sup_de_obra_m2,
+            entidad_contratante,
+            mes_basico_de_contrato,
+            iniciacion,
+            contrato_mas_ampliaciones,
+            certificado_a_la_fecha,
+            saldo_a_certificar,
+            segun_contrato,
+            prorrogas_acordadas,
+            plazo_total,
+            plazo_transc,
+            porcentaje,
+            custom_data
+          )
+        `)
+        .eq("obras.tenant_id", tenantId)
+        .order("created_at", { ascending: true });
+
+      if (tenantTablasError) throw tenantTablasError;
+
+      const tenantTablaRecords = (tenantTablas ?? []).map(mapTablaRecord);
+      const resolvedSourceTablas = resolveMacroSourceTablas({
+        settings: normalizedSettings,
+        explicitSourceTablas,
+        candidateTablas: tenantTablaRecords,
+      });
+      const tenantTablaById = new Map((tenantTablas ?? []).map((tabla) => [tabla.id as string, tabla]));
+      const storedSourceByTablaId = new Map(
+        (storedSources ?? []).map((source) => [source.obra_tabla_id as string, source])
+      );
+
+      sources = resolvedSourceTablas
+        .map((tabla, index) => {
+          const storedSource = storedSourceByTablaId.get(tabla.id);
+          if (storedSource) return storedSource;
+          const tenantTabla = tenantTablaById.get(tabla.id);
+          if (!tenantTabla) return null;
+          return {
+            id: `dynamic:${id}:${tabla.id}`,
+            macro_table_id: id,
+            obra_tabla_id: tabla.id,
+            position: index,
+            obra_tablas: tenantTabla,
+          };
+        })
+        .filter(Boolean) as typeof storedSources;
+    }
+
+    if (obraIdFilter) {
+      sources = sources.filter((source) => {
+        const tabla = Array.isArray(source.obra_tablas) ? source.obra_tablas[0] : source.obra_tablas;
+        return tabla?.obra_id === obraIdFilter;
+      });
+    }
+
     if (!sources || sources.length === 0) {
       return NextResponse.json({
         rows: [],
@@ -237,22 +356,23 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     // Fetch all rows from all source tablas
-    const tablaIds = sources.map((s: any) => s.obra_tabla_id);
+    const tablaIds = sources.map((source) => source.obra_tabla_id);
     
     // Build a map of tabla info
     const tablaInfoMap = new Map<
       string,
       { name: string; obraId: string; obraName: string; obraValues: Record<string, unknown> }
     >();
-    for (const source of sources as any[]) {
+    for (const source of sources) {
       const tablaId = source.obra_tabla_id;
-      const tabla = source.obra_tablas;
+      const tabla = Array.isArray(source.obra_tablas) ? source.obra_tablas[0] : source.obra_tablas;
       if (tabla) {
-        const obraRecord = (tabla.obras ?? null) as ObraRecord | null;
+        const obraValue = Array.isArray(tabla.obras) ? tabla.obras[0] : tabla.obras;
+        const obraRecord = (obraValue ?? null) as ObraRecord | null;
         tablaInfoMap.set(tablaId, {
           name: tabla.name,
           obraId: tabla.obra_id,
-          obraName: tabla.obras?.designacion_y_ubicacion ?? "",
+          obraName: obraRecord?.designacion_y_ubicacion ?? "",
           obraValues: mapObraRecord(obraRecord),
         });
       }
@@ -269,7 +389,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     // Fetch custom values for this macro table
     const rowIds = (allRows ?? []).map(r => r.id);
-    let customValuesMap = new Map<string, Map<string, unknown>>();
+    const customValuesMap = new Map<string, Map<string, unknown>>();
     
     if (rowIds.length > 0) {
       const { data: customValues, error: customError } = await supabase
@@ -412,8 +532,8 @@ export async function POST(request: Request, context: RouteContext) {
 
     const validCustomColumnIds = new Set(
       (validColumns ?? [])
-        .filter((col: any) => col.column_type === "custom")
-        .map((col: any) => col.id)
+        .filter((col) => col.column_type === "custom")
+        .map((col) => col.id)
     );
 
     // Filter to only valid custom columns
@@ -450,7 +570,3 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-
-
-

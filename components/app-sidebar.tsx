@@ -42,6 +42,7 @@ import {
 	SidebarMenuSub,
 	SidebarMenuSubButton,
 	SidebarMenuSubItem,
+	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -329,9 +330,14 @@ export function AppSidebar({
 			<SidebarHeader>
 				<SidebarMenu>
 					<SidebarMenuItem>
-						<div className="space-y-2">
-							<SidebarMenuButton size="lg" asChild>
-								<Link href="/" className="flex w-full items-center gap-3 px-2 py-1.5">
+						<div className={state === "collapsed" ? "space-y-2" : ""}>
+							<div className={state === "collapsed" ? "space-y-2" : "flex items-start gap-2"}>
+								<SidebarMenuButton
+									size="lg"
+									asChild
+									className={state === "collapsed" ? "" : "min-w-0 flex-1"}
+								>
+									<Link href="/" className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5">
 									{/* if sidebar is closed make logo smaller */}
 									<div
 										className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === "collapsed" ? "size-8" : "size-10"
@@ -344,7 +350,11 @@ export function AppSidebar({
 										<span className="truncate text-xs">Plataforma de gestión</span>
 									</div>
 								</Link>
-							</SidebarMenuButton>
+								</SidebarMenuButton>
+								<SidebarTrigger
+									className={`shrink-0 border bg-sidebar-accent/40 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground ${state === "collapsed" ? "mx-auto flex" : "mt-1"}`}
+								/>
+							</div>
 							{tenantOptions.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>

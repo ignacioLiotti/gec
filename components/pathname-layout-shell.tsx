@@ -5,10 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import ImpersonateBanner from "@/app/admin/users/_components/impersonate-banner";
 import { AppSidebar } from "@/components/app-sidebar";
 import UserMenu from "@/components/auth/user-menu";
-import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import type { Role } from "@/lib/route-access";
 import { track } from "@vercel/analytics";
+import { ExcelObraName } from "./excel-obra-name";
 
 type SidebarMacroTable = {
   id: string;
@@ -40,7 +40,9 @@ export function PathnameLayoutShell({
   const pathname = usePathname();
   const router = useRouter();
   const isMarketingRoot = pathname === "/";
-  const normalizedUser = user ? { ...user, email: user.email ?? undefined } : null;
+  const normalizedUser = user
+    ? { ...user, email: user.email ?? undefined }
+    : null;
 
   useEffect(() => {
     if (isMarketingRoot && user?.email) {
@@ -67,22 +69,27 @@ export function PathnameLayoutShell({
     <SidebarProvider>
       <AppSidebar
         user={normalizedUser}
-        userRoles={userRoles as any}
+        userRoles={userRoles}
         tenants={tenants}
         sidebarMacroTables={sidebarMacroTables}
       />
       <SidebarInset>
-        <header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
+        <header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4 bg-[#fafafa]">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <SidebarTrigger className="-ml-1" />
-            <PageBreadcrumb />
+            <ExcelObraName />
           </div>
           <div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
             <ImpersonateBanner />
-            <UserMenu email={normalizedUser?.email} userRoles={userRoles as any} />
+            <UserMenu
+              email={normalizedUser?.email}
+              userRoles={userRoles ?? undefined}
+            />
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 bg-[#fafafa]">{children}</main>
+        <main className="flex flex-1 flex-col gap-4 bg-[#fafafa]">
+          {children}
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

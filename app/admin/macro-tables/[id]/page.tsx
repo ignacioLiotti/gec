@@ -339,6 +339,27 @@ export default function EditMacroTablePage() {
 
       setName(macroTable.name);
       setDescription(macroTable.description ?? "");
+      const sourceSettings =
+        macroTable.settings && typeof macroTable.settings === "object" && !Array.isArray(macroTable.settings)
+          ? (macroTable.settings as {
+              sourceMode?: string;
+              sourceTemplateId?: string | null;
+              sourceTemplateTableNames?: string[];
+            })
+          : null;
+      if (sourceSettings?.sourceMode === "template" && sourceSettings.sourceTemplateId) {
+        setSelectedTemplateId(sourceSettings.sourceTemplateId);
+        setSelectedTemplateTableNames(
+          Array.isArray(sourceSettings.sourceTemplateTableNames)
+            ? sourceSettings.sourceTemplateTableNames.filter(
+                (name): name is string => typeof name === "string" && name.trim().length > 0
+              )
+            : []
+        );
+      } else {
+        setSelectedTemplateId(null);
+        setSelectedTemplateTableNames([]);
+      }
 
       // Map sources
       const sources: SelectedSource[] = macroTable.sources.map((s) => ({
@@ -857,6 +878,12 @@ export default function EditMacroTablePage() {
       const payload = {
         name: name.trim(),
         description: description.trim() || null,
+        settings: {
+          sourceMode: selectedTemplateId ? "template" : "manual",
+          sourceTemplateId: selectedTemplateId,
+          sourceTemplateName: selectedTemplate?.name ?? null,
+          sourceTemplateTableNames: selectedTemplateId ? selectedTemplateTableNames : [],
+        },
         sources: selectedSources.map((s) => ({ obraTablaId: s.tablaId })),
         columns: columns.map((c) => ({
           columnType: c.columnType,

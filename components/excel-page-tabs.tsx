@@ -11,7 +11,11 @@ const tabs = [
   { value: "documentos", label: "Documentos", icon: Folder },
 ];
 
-export function ExcelPageTabs() {
+export function ExcelPageTabs({
+	tabBadges,
+}: {
+	tabBadges?: Partial<Record<"general" | "flujo" | "documentos", string>>;
+}) {
   const pathname = usePathname();
 
   // Only show tabs on excel/[obraId] detail pages
@@ -30,6 +34,11 @@ export function ExcelPageTabs() {
           >
             <Icon className="sm:h-4 sm:w-4 h-5 w-5" />
             <span className="inline text-base md:text-sm">{tab.label}</span>
+            {tabBadges?.[tab.value as keyof typeof tabBadges] ? (
+              <span className="rounded-full bg-[#fff1df] px-2 py-0.5 text-[10px] font-semibold text-[#c96b14]">
+                {tabBadges[tab.value as keyof typeof tabBadges]}
+              </span>
+            ) : null}
           </TabsTrigger>
         );
       })}

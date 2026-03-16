@@ -39,8 +39,7 @@ export function ExcelObraName() {
     return PAGE_NAME_MAP[firstSegment] || firstSegment;
   };
 
-  // const pageName = getPageName();
-  const pageName = "";
+  const pageName = getPageName();
 
   useEffect(() => {
     if (!obraId) {
@@ -88,17 +87,17 @@ export function ExcelObraName() {
   if (!displayName && !isLoading) return null;
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50">
-      {obraName && (
+    <div className="flex items-center gap-2 px-2 py-1">
+      {obraName ? (
         <Building2 className="h-4 w-4 text-muted-foreground" />
-      )}
+      ) : null}
       {isLoading ? (
         <Skeleton className="h-4 w-48" />
       ) : (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-md font-medium truncate max-w-xs cursor-default">
+              <span className="text-3xl font-regular truncate cursor-default max-w-[55vw]">
                 {displayName || "Cargando..."}
               </span>
             </TooltipTrigger>

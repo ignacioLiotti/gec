@@ -39,6 +39,35 @@ export type CellType =
 	| "text-icon"
 	| "badge";
 
+export type CellSuggestionKind =
+	| "date"
+	| "number"
+	| "currency"
+	| "math"
+	| "text";
+
+export type CellSuggestion<Row extends FormTableRow> = {
+	kind: CellSuggestionKind;
+	suggestedValue: unknown;
+	suggestedDisplayValue: string;
+	description: string;
+	sourceInput: string;
+	column: ColumnDef<Row>;
+	row: Row;
+};
+
+export type CellSuggestionDetectorArgs<Row extends FormTableRow> = {
+	rawValue: string;
+	currentValue: unknown;
+	cellType: CellType;
+	column: ColumnDef<Row>;
+	row: Row;
+};
+
+export type CellSuggestionDetector<Row extends FormTableRow> = (
+	args: CellSuggestionDetectorArgs<Row>
+) => CellSuggestion<Row> | null;
+
 export type CellConfig<Row extends FormTableRow> = {
 	onToggle?: (value: boolean, row: Row) => void;
 	currencyCode?: string;
@@ -55,6 +84,8 @@ export type CellConfig<Row extends FormTableRow> = {
 	iconPosition?: "left" | "right";
 	badgeVariant?: "default" | "secondary" | "outline" | "destructive";
 	badgeMap?: Record<string, { label: string; variant: string }>;
+	suggestionDetection?: CellSuggestionKind | "auto" | false;
+	suggestionDetectors?: Array<CellSuggestionDetector<Row>>;
 	renderReadOnly?: (args: { value: unknown; row: Row; highlightQuery: string }) => ReactNode;
 	renderEditable?: (args: {
 		value: unknown;
@@ -198,7 +229,6 @@ export type RowColorInfo = {
 	tone: RowColorTone;
 	previewing: boolean;
 };
-
 
 
 

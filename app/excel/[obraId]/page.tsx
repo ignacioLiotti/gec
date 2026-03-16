@@ -183,6 +183,87 @@ async function fetchDocumentsTreeLinks(obraId: string): Promise<OcrFolderLink[]>
 	return Array.isArray(data?.links) ? (data.links as OcrFolderLink[]) : [];
 }
 
+type MacroTableListItem = {
+	id: string;
+	name: string;
+};
+
+type MacroTableColumnItem = {
+	id: string;
+	label: string;
+	sourceFieldKey?: string | null;
+};
+
+type MacroTableRowItem = {
+	id: string;
+	_obraId?: unknown;
+	[key: string]: unknown;
+};
+
+function normalizeMacroTableName(value: string): string {
+	return value
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim();
+}
+
+function isCertificadoContableMacroTable(name: string): boolean {
+	const normalized = normalizeMacroTableName(name);
+	return (
+		normalized === "certificado contable" ||
+		normalized === "certificados contable" ||
+		(normalized.includes("certificado") && normalized.includes("contable"))
+	);
+}
+
+async function fetchMacroTablesList(): Promise<MacroTableListItem[]> {
+	const response = await fetch("/api/macro-tables");
+	if (!response.ok) {
+		throw new Error("Failed to load macro tables");
+	}
+	const data = await response.json();
+	return Array.isArray(data?.macroTables) ? (data.macroTables as MacroTableListItem[]) : [];
+}
+
+async function fetchAllMacroTableRows(macroTableId: string, obraId?: string): Promise<{
+	columns: MacroTableColumnItem[];
+	rows: MacroTableRowItem[];
+}> {
+	const rows: MacroTableRowItem[] = [];
+	let columns: MacroTableColumnItem[] = [];
+	let page = 1;
+	let totalPages = 1;
+
+	do {
+		const params = new URLSearchParams({
+			page: String(page),
+			limit: "200",
+		});
+		if (obraId) {
+			params.set("obraId", obraId);
+		}
+		const response = await fetch(
+			`/api/macro-tables/${encodeURIComponent(macroTableId)}/rows?${params.toString()}`
+		);
+		if (!response.ok) {
+			throw new Error("Failed to load macro table rows");
+		}
+		const data = await response.json();
+		if (page === 1 && Array.isArray(data?.columns)) {
+			columns = data.columns as MacroTableColumnItem[];
+		}
+		if (Array.isArray(data?.rows)) {
+			rows.push(...(data.rows as MacroTableRowItem[]));
+		}
+		totalPages = Math.max(1, Number(data?.pagination?.totalPages ?? 1));
+		page += 1;
+	} while (page <= totalPages);
+
+	return { columns, rows };
+}
+
 async function fetchObraRecipients(obraId: string): Promise<{ roles: ObraRole[]; users: ObraUser[]; userRoles: ObraUserRole[] }> {
 	const res = await fetch(`/api/obra-recipients?obraId=${obraId}`);
 	if (!res.ok) return { roles: [], users: [], userRoles: [] };
@@ -223,6 +304,20 @@ type MemoriaNote = {
 	userId: string;
 	userName: string | null;
 };
+
+type DerivedCertificadosNotice = {
+	sourceLabel: string | null;
+	updatedFieldKeys: Array<"certificadoALaFecha" | "saldoACertificar" | "porcentaje">;
+	updatedFieldLabels: string[];
+	blockedFieldKeys: Array<"saldoACertificar" | "porcentaje">;
+	blockedFieldLabels: string[];
+	warningMessage: string | null;
+};
+
+type DerivedCertificadosField =
+	| "certificadoALaFecha"
+	| "saldoACertificar"
+	| "porcentaje";
 
 type PendingDoc = {
 	id: string;
@@ -606,8 +701,10 @@ function parseMonthOrder(rawValue: unknown, fallback: number): { label: string; 
 
 type DerivedCertificadosMetrics = {
 	certificadoALaFecha: number;
-	saldoACertificar: number;
-	porcentaje: number;
+	saldoACertificar: number | null;
+	porcentaje: number | null;
+	blockedFieldKeys: Array<"saldoACertificar" | "porcentaje">;
+	warningMessage: string | null;
 };
 
 function getLatestCertificadoMontoAcumulado(rows: TablaDataRow[]): number | null {
@@ -628,6 +725,41 @@ function getLatestCertificadoMontoAcumulado(rows: TablaDataRow[]): number | null
 		if (montoAcumulado != null) {
 			return roundDerivedValue(montoAcumulado);
 		}
+	}
+
+	return null;
+}
+
+function getLatestCertificadoSourceLabel(rows: TablaDataRow[]): string | null {
+	const sorted = rows
+		.map((row, index) => ({ row, index }))
+		.sort((a, b) => getCertificadoRowSortValue(b.row, b.index) - getCertificadoRowSortValue(a.row, a.index))
+		.map((entry) => entry.row);
+
+	for (const [index, row] of sorted.entries()) {
+		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+		const montoAcumulado = parseCurrencyLike(
+			getRowFieldValueByCandidates(
+				rowData,
+				["monto_acumulado", "monto_acumulado_total", "acumulado", "total_acumulado"],
+				[["monto", "acumul"], ["acumulado"]],
+			),
+		);
+		if (montoAcumulado == null) continue;
+
+		const fecha = getRowFieldValueByCandidates(
+			rowData,
+			["fecha_certificacion", "fecha", "issued_at", "date"],
+			[["fecha", "cert"], ["fecha"]],
+		);
+		if (typeof fecha === "string" && fecha.trim()) return fecha.trim();
+
+		const periodo = getRowFieldValueByCandidates(
+			rowData,
+			["periodo", "periodo_key", "period", "mes"],
+			[["periodo"], ["period"], ["mes"]],
+		);
+		if (periodo != null) return parseMonthOrder(periodo, index).label;
 	}
 
 	return null;
@@ -676,16 +808,38 @@ function computeDerivedCertificadosMetrics(
 
 	const contrato = parseCurrencyLike(contratoMasAmpliaciones) ?? Number(contratoMasAmpliaciones ?? 0) ?? 0;
 	const safeContrato = Number.isFinite(contrato) ? contrato : 0;
+
+	if (safeContrato <= 0) {
+		return {
+			certificadoALaFecha: roundDerivedValue(latestCertificado),
+			saldoACertificar: null,
+			porcentaje: null,
+			blockedFieldKeys: ["saldoACertificar", "porcentaje"],
+			warningMessage:
+				"Completá Contrato + ampliaciones para poder calcular Saldo a certificar y Porcentaje de avance desde certificados.",
+		};
+	}
+
+	if (latestCertificado > safeContrato) {
+		return {
+			certificadoALaFecha: roundDerivedValue(latestCertificado),
+			saldoACertificar: null,
+			porcentaje: null,
+			blockedFieldKeys: ["saldoACertificar", "porcentaje"],
+			warningMessage:
+				"El último certificado acumulado supera Contrato + ampliaciones. Revisá el contrato antes de aceptar Saldo a certificar y Porcentaje de avance.",
+		};
+	}
+
 	const saldo = roundDerivedValue(safeContrato - latestCertificado);
-	const porcentaje =
-		safeContrato > 0
-			? roundDerivedValue((latestCertificado * 100) / safeContrato)
-			: 0;
+	const porcentaje = roundDerivedValue((latestCertificado * 100) / safeContrato);
 
 	return {
 		certificadoALaFecha: roundDerivedValue(latestCertificado),
 		saldoACertificar: saldo,
 		porcentaje,
+		blockedFieldKeys: [],
+		warningMessage: null,
 	};
 }
 
@@ -980,12 +1134,18 @@ const evaluateMainFormula = (
 function ObraDetailPageContent() {
 	const params = useParams();
 	const queryClient = useQueryClient();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+	const isMobile = useIsMobile();
 	const obraId = useMemo(() => {
 		const raw = (params as Record<string, string | string[] | undefined>)?.obraId;
 		if (Array.isArray(raw)) return raw[0];
 		return raw;
 	}, [params]);
 	const isValidObraId = Boolean(obraId && obraId !== "undefined");
+	const initialTab = searchParams?.get("tab") || "general";
+	const [activeTab, setActiveTab] = useState(initialTab);
 
 	// Prefetch documents in background when page loads (before user navigates to documents tab)
 	useEffect(() => {
@@ -1081,6 +1241,40 @@ function ObraDetailPageContent() {
 					required: Boolean(column.required),
 				})),
 			})) as ObraTabla[];
+		},
+		staleTime: 5 * 60 * 1000,
+	});
+	const shouldLoadCertificadoContableMacro = useMemo(() => {
+		if (!isValidObraId || activeTab !== "general") {
+			return false;
+		}
+
+		const links = documentsTreeLinksQuery.data ?? [];
+		return links.some(
+			(link) =>
+				typeof link.folderName === "string" &&
+				isCertificadosExtraidosFolder(link.folderName) &&
+				isCertificadoResumenLink(link) &&
+				(Array.isArray(link.rows) ? link.rows : []).some(isMeaningfulCertificadoResumenRow)
+		);
+	}, [activeTab, documentsTreeLinksQuery.data, isValidObraId]);
+
+	const certificadoContableMacroQuery = useQuery({
+		queryKey: ["obra-certificado-contable-macro", obraId],
+		enabled: shouldLoadCertificadoContableMacro,
+		queryFn: async () => {
+			const macroTables = await fetchMacroTablesList();
+			const targetMacroTable =
+				macroTables.find((macroTable) => isCertificadoContableMacroTable(macroTable.name)) ?? null;
+			if (!targetMacroTable) {
+				return null;
+			}
+
+			const macroData = await fetchAllMacroTableRows(targetMacroTable.id, obraId);
+			return {
+				columns: macroData.columns,
+				rows: macroData.rows,
+			};
 		},
 		staleTime: 5 * 60 * 1000,
 	});
@@ -1227,19 +1421,23 @@ function ObraDetailPageContent() {
 		const links = documentsTreeLinksQuery.data ?? [];
 		return sortCertificadosExtraidosRows(
 			links
-			.filter(
-				(link) =>
-					typeof link.folderName === "string" &&
-					isCertificadosExtraidosFolder(link.folderName) &&
-					isCertificadoResumenLink(link),
-			)
-			.flatMap((link) => (Array.isArray(link.rows) ? link.rows : []))
-			.filter(isMeaningfulCertificadoResumenRow)
+				.filter(
+					(link) =>
+						typeof link.folderName === "string" &&
+						isCertificadosExtraidosFolder(link.folderName) &&
+						isCertificadoResumenLink(link),
+				)
+				.flatMap((link) => (Array.isArray(link.rows) ? link.rows : []))
+				.filter(isMeaningfulCertificadoResumenRow)
 		);
 	}, [documentsTreeLinksQuery.data]);
 	const obraData = obraQuery.data;
 	const latestExtractedCertificadoALaFecha = useMemo(
 		() => getLatestCertificadoMontoAcumulado(certificadosExtraidosRows),
+		[certificadosExtraidosRows]
+	);
+	const latestExtractedCertificadoSourceLabel = useMemo(
+		() => getLatestCertificadoSourceLabel(certificadosExtraidosRows),
 		[certificadosExtraidosRows]
 	);
 	const generalReportsData = generalReportsQuery.data ?? { findings: [], curve: null };
@@ -1304,7 +1502,13 @@ function ObraDetailPageContent() {
 	const lastAppliedObraDataUpdatedAtRef = useRef<number>(0);
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
+	const [isSavingObra, setIsSavingObra] = useState(false);
 	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
+	const [derivedCertificadosNotice, setDerivedCertificadosNotice] =
+		useState<DerivedCertificadosNotice | null>(null);
+	const [pendingDerivedFieldValues, setPendingDerivedFieldValues] = useState<
+		Partial<Record<DerivedCertificadosField, number>>
+	>({});
 	const [mainTableColumnsConfig, setMainTableColumnsConfig] = useState<
 		MainTableColumnConfig[] | null
 	>(null);
@@ -1338,14 +1542,6 @@ function ObraDetailPageContent() {
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
-	const router = useRouter();
-	const pathname = usePathname();
-	const searchParams = useSearchParams();
-	const isMobile = useIsMobile();
-
-	// Use local state for immediate tab switching, sync to URL in background
-	const initialTab = searchParams?.get("tab") || "general";
-	const [activeTab, setActiveTab] = useState(initialTab);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1664,24 +1860,45 @@ function ObraDetailPageContent() {
 		queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'materials'] });
 	}, [obraId, queryClient]);
 
-	const form = useForm({
-		defaultValues: emptyObra,
-		validators: {
-			onChange: obraSchema,
-		},
-		onSubmit: async ({ value }) => {
+	const areObraValuesEqual = useCallback((a: unknown, b: unknown) => {
+		if (typeof a === "object" && a != null && typeof b === "object" && b != null) {
+			return JSON.stringify(a) === JSON.stringify(b);
+		}
+		return Object.is(a, b);
+	}, []);
+
+	const buildDirtyObraPayload = useCallback((current: Obra, initial: Obra): Partial<Obra> => {
+		const dirty: Partial<Obra> = {};
+		for (const key of Object.keys(current) as Array<keyof Obra>) {
+			if (!areObraValuesEqual(current[key], initial[key])) {
+				(dirty as Record<string, unknown>)[key] = current[key];
+			}
+		}
+		return dirty;
+	}, [areObraValuesEqual]);
+
+	const persistObra = useCallback(
+		async (value: Partial<Obra>, options?: { method?: "PUT" | "PATCH" }) => {
 			if (!obraId || obraId === "undefined") {
 				toast.error("Obra no encontrada");
 				return;
 			}
+
+			const method = options?.method ?? "PUT";
+			setIsSavingObra(true);
 			try {
-				const payload: Obra = {
+				const payload = {
 					...value,
-					id: obraId,
-					onFinishSecondSendAt: toIsoDateTime(value.onFinishSecondSendAt ?? null) ?? null,
+					...(method === "PUT" ? { id: obraId } : {}),
+					...(typeof value.onFinishSecondSendAt !== "undefined"
+						? {
+							onFinishSecondSendAt:
+								toIsoDateTime(value.onFinishSecondSendAt ?? null) ?? null,
+						}
+						: {}),
 				};
 				const response = await fetch(`/api/obras/${obraId}`, {
-					method: "PUT",
+					method,
 					headers: {
 						"Content-Type": "application/json",
 					},
@@ -1690,12 +1907,22 @@ function ObraDetailPageContent() {
 
 				if (!response.ok) {
 					const result = await response.json().catch(() => ({}));
-					throw new Error(result.error ?? "No se pudo actualizar la obra");
+					const details =
+						typeof result?.details === "object" && result.details !== null
+							? JSON.stringify(result.details)
+							: "";
+					throw new Error([result.error ?? "No se pudo actualizar la obra", details].filter(Boolean).join(": "));
 				}
 
+				setInitialFormValues({
+					...initialFormValues,
+					...value,
+					id: obraId,
+				});
+				setDerivedCertificadosNotice(null);
+				setPendingDerivedFieldValues({});
 				toast.success("Obra actualizada correctamente");
 
-				// Invalidate cache and refetch
 				queryClient.invalidateQueries({ queryKey: ['obra', obraId] });
 				queryClient.invalidateQueries({ queryKey: ['obras-dashboard'] });
 			} catch (error) {
@@ -1705,9 +1932,33 @@ function ObraDetailPageContent() {
 						? error.message
 						: "No se pudo actualizar la obra"
 				);
+			} finally {
+				setIsSavingObra(false);
 			}
 		},
+		[obraId, initialFormValues, queryClient]
+	);
+
+	const form = useForm({
+		defaultValues: emptyObra,
+		validators: {
+			onChange: obraSchema,
+		},
+		onSubmit: async ({ value }) => {
+			const dirtyPayload = buildDirtyObraPayload(value, initialFormValues);
+			if (Object.keys(dirtyPayload).length === 0) return;
+			await persistObra(dirtyPayload, { method: "PATCH" });
+		},
 	});
+
+	const saveCurrentObra = useCallback(async () => {
+		const dirtyPayload = buildDirtyObraPayload(
+			form.state.values as Obra,
+			initialFormValues
+		);
+		if (Object.keys(dirtyPayload).length === 0) return;
+		await persistObra(dirtyPayload, { method: "PATCH" });
+	}, [buildDirtyObraPayload, form.state.values, initialFormValues, persistObra]);
 
 	const activeMainTableColumns = useMemo(
 		() =>
@@ -1817,6 +2068,8 @@ function ObraDetailPageContent() {
 
 			// Store initial values for dirty tracking
 			setInitialFormValues(normalized);
+			setDerivedCertificadosNotice(null);
+			setPendingDerivedFieldValues({});
 		},
 		[form]
 	);
@@ -1884,10 +2137,25 @@ function ObraDetailPageContent() {
 			initialFormValues.porcentaje,
 		);
 
-		const updates: Partial<Obra> = {};
+		const updates: Partial<Record<DerivedCertificadosField, number>> = {};
+		const blockedFieldLabels: Record<"saldoACertificar" | "porcentaje", string> = {
+			saldoACertificar: "Saldo a certificar",
+			porcentaje: "Porcentaje de avance",
+		};
+		const nextPendingDerivedFieldValues = { ...pendingDerivedFieldValues };
+		let pendingChanged = false;
+
+		(Object.keys(nextPendingDerivedFieldValues) as DerivedCertificadosField[]).forEach((field) => {
+			const pendingValue = nextPendingDerivedFieldValues[field];
+			if (pendingValue == null) return;
+			if (!approximatelyEqual(form.state.values[field], pendingValue)) {
+				delete nextPendingDerivedFieldValues[field];
+				pendingChanged = true;
+			}
+		});
 
 		const maybeApplyDerivedField = (
-			field: keyof Pick<Obra, "certificadoALaFecha" | "saldoACertificar" | "porcentaje">,
+			field: DerivedCertificadosField,
 			nextValue: number,
 			options: {
 				currentValue: unknown;
@@ -1908,26 +2176,70 @@ function ObraDetailPageContent() {
 			savedValue: obraData.certificadoALaFecha,
 			savedManual: savedCertificadoIsManual,
 		});
-		maybeApplyDerivedField("saldoACertificar", currentMetrics.saldoACertificar, {
-			currentValue: form.state.values.saldoACertificar,
-			currentDirty: currentSaldoIsDirty,
-			savedValue: obraData.saldoACertificar,
-			savedManual: savedSaldoIsManual,
-		});
-		maybeApplyDerivedField("porcentaje", currentMetrics.porcentaje, {
-			currentValue: form.state.values.porcentaje,
-			currentDirty: currentPorcentajeIsDirty,
-			savedValue: obraData.porcentaje,
-			savedManual: savedPorcentajeIsManual,
+		if (currentMetrics.saldoACertificar != null) {
+			maybeApplyDerivedField("saldoACertificar", currentMetrics.saldoACertificar, {
+				currentValue: form.state.values.saldoACertificar,
+				currentDirty: currentSaldoIsDirty,
+				savedValue: obraData.saldoACertificar,
+				savedManual: savedSaldoIsManual,
+			});
+		}
+		if (currentMetrics.porcentaje != null) {
+			maybeApplyDerivedField("porcentaje", currentMetrics.porcentaje, {
+				currentValue: form.state.values.porcentaje,
+				currentDirty: currentPorcentajeIsDirty,
+				savedValue: obraData.porcentaje,
+				savedManual: savedPorcentajeIsManual,
+			});
+		}
+
+		const fieldLabels: Record<DerivedCertificadosField, string> = {
+			certificadoALaFecha: "Certificado a la fecha",
+			saldoACertificar: "Saldo a certificar",
+			porcentaje: "Porcentaje de avance",
+		};
+		const blockedFieldKeys = currentMetrics.blockedFieldKeys;
+		const hasUpdates = Object.keys(updates).length > 0;
+		const hasBlockedFields = blockedFieldKeys.length > 0;
+
+		blockedFieldKeys.forEach((field) => {
+			const pendingValue = nextPendingDerivedFieldValues[field];
+			if (pendingValue == null) return;
+			if (approximatelyEqual(form.state.values[field], pendingValue)) {
+				form.setFieldValue(field, initialFormValues[field] as any);
+			}
+			delete nextPendingDerivedFieldValues[field];
+			pendingChanged = true;
 		});
 
-		if (Object.keys(updates).length === 0) return;
+		if (!hasUpdates && !hasBlockedFields) {
+			if (pendingChanged) {
+				setPendingDerivedFieldValues(nextPendingDerivedFieldValues);
+			}
+			setDerivedCertificadosNotice(null);
+			return;
+		}
 
-		(Object.entries(updates) as Array<[keyof typeof updates, number]>).forEach(
+		(Object.entries(updates) as Array<[DerivedCertificadosField, number]>).forEach(
 			([field, nextValue]) => {
 				form.setFieldValue(field, nextValue as any);
+				nextPendingDerivedFieldValues[field] = nextValue;
+				pendingChanged = true;
 			},
 		);
+		if (pendingChanged) {
+			setPendingDerivedFieldValues(nextPendingDerivedFieldValues);
+		}
+		setDerivedCertificadosNotice({
+			sourceLabel: latestExtractedCertificadoSourceLabel,
+			updatedFieldKeys: Object.keys(updates) as DerivedCertificadosField[],
+			updatedFieldLabels: (Object.keys(updates) as DerivedCertificadosField[]).map(
+				(field) => fieldLabels[field],
+			),
+			blockedFieldKeys,
+			blockedFieldLabels: blockedFieldKeys.map((field) => blockedFieldLabels[field]),
+			warningMessage: currentMetrics.warningMessage,
+		});
 	}, [
 		certificadosExtraidosRows,
 		form,
@@ -1939,7 +2251,9 @@ function ObraDetailPageContent() {
 		initialFormValues.porcentaje,
 		initialFormValues.saldoACertificar,
 		latestExtractedCertificadoALaFecha,
+		latestExtractedCertificadoSourceLabel,
 		obraData,
+		pendingDerivedFieldValues,
 	]);
 
 	// Apply pendientes data when it loads
@@ -2509,9 +2823,16 @@ function ObraDetailPageContent() {
 							onValueChange={handleTabChange}
 							className="space-y-4"
 						>
+							{/* <p className="text-3xl font-normal">{obraData?.designacionYUbicacion ?? ""}</p> */}
 							<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2 bg-white shadow-card rounded-xl p-3">
 								<div className="flex flex-wrap items-center gap-2">
-									<ExcelPageTabs />
+									<ExcelPageTabs
+										tabBadges={
+											derivedCertificadosNotice
+												? { general: "Actualizado" }
+												: undefined
+										}
+									/>
 									{isObraAtRisk && (
 										<Tooltip>
 											<TooltipTrigger asChild>
@@ -2572,11 +2893,52 @@ function ObraDetailPageContent() {
 									</div>
 								)}
 							</div>
+							{derivedCertificadosNotice && activeTab !== "general" ? (
+								<motion.div
+									initial={{ opacity: 0, y: 12 }}
+									animate={{ opacity: 1, y: 0 }}
+									className="mb-2 flex flex-col gap-3 rounded-xl border border-[#f7b26a] bg-[#fffaf5] p-4 text-[#7a4b13] shadow-card sm:flex-row sm:items-center sm:justify-between"
+								>
+									<div className="space-y-1">
+										<p className="text-sm font-semibold">
+											Se detectaron actualizaciones en General desde Certificados Extraidos · PMC Resumen
+										</p>
+										<p className="text-sm">
+											{derivedCertificadosNotice.updatedFieldLabels.length > 0 ? (
+												<>
+													Actualizamos {derivedCertificadosNotice.updatedFieldLabels.join(", ")}
+													{derivedCertificadosNotice.sourceLabel
+														? ` con el ultimo certificado detectado (${derivedCertificadosNotice.sourceLabel})`
+														: " con el ultimo certificado detectado"}.
+													Revisa General y guarda para persistirlos.
+												</>
+											) : (
+												<>Hay certificados nuevos para revisar en General antes de confirmar los cálculos.</>
+											)}
+										</p>
+										{derivedCertificadosNotice.warningMessage ? (
+											<p className="text-sm font-medium text-[#b45309]">
+												{derivedCertificadosNotice.warningMessage}
+											</p>
+										) : null}
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										className="border-[#f7b26a] bg-white text-[#7a4b13] hover:bg-[#fff3e6]"
+										onClick={() => handleTabChange("general")}
+									>
+										Ir a General
+									</Button>
+								</motion.div>
+							) : null}
 
 							<ObraGeneralTab
 								form={form}
 								isGeneralTabEditMode={isGeneralTabEditMode}
 								hasUnsavedChanges={hasUnsavedChanges}
+								onSave={saveCurrentObra}
+								isSaving={isSavingObra}
 								isFieldDirty={isFieldDirty}
 								applyObraToForm={applyObraToForm}
 								initialFormValues={initialFormValues}
@@ -2587,6 +2949,8 @@ function ObraDetailPageContent() {
 								mainTableColumnValues={mainTableColumnValues}
 								setCustomMainColumnValue={setCustomMainColumnValue}
 								certificadosExtraidosRows={certificadosExtraidosRows}
+								certificadoContableMacro={certificadoContableMacroQuery.data ?? null}
+								derivedCertificadosNotice={derivedCertificadosNotice}
 							/>
 							{/* {activeTab === "general" && (
 								<section className="rounded-lg border bg-card shadow-sm overflow-hidden">
