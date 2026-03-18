@@ -227,9 +227,48 @@ export function AppSidebar({
 	const router = useRouter();
 	const { state } = useSidebar();
 	const [switchingTenantId, setSwitchingTenantId] = React.useState<string | null>(null);
+	const [macroTables, setMacroTables] = React.useState<SidebarMacroTable[]>(
+		sidebarMacroTables ?? []
+	);
 	const tenantOptions = tenants ?? [];
 	const activeTenantId = userRoles?.tenantId ?? null;
 	const activeMacroTableId = searchParams.get("macroId");
+
+	React.useEffect(() => {
+		setMacroTables(sidebarMacroTables ?? []);
+	}, [sidebarMacroTables]);
+
+	React.useEffect(() => {
+		if (!userRoles?.tenantId) {
+			setMacroTables([]);
+			return;
+		}
+		if (sidebarMacroTables) return;
+
+		let cancelled = false;
+		(async () => {
+			try {
+				const response = await fetch("/api/sidebar-macro-tables", {
+					cache: "no-store",
+				});
+				if (!response.ok) return;
+				const payload = (await response.json()) as {
+					tables?: SidebarMacroTable[];
+				};
+				if (!cancelled) {
+					setMacroTables(Array.isArray(payload.tables) ? payload.tables : []);
+				}
+			} catch (error) {
+				if (!cancelled) {
+					console.error("[sidebar-macro-tables] client fetch failed", error);
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [sidebarMacroTables, userRoles?.tenantId]);
 
 	const handleTenantSwitch = React.useCallback(
 		async (tenantId: string) => {
@@ -258,7 +297,7 @@ export function AppSidebar({
 	const isMacroTablesActive = Boolean(
 		pathname === "/macro" &&
 		activeMacroTableId &&
-		sidebarMacroTables?.some((table) => table.id === activeMacroTableId)
+		macroTables.some((table) => table.id === activeMacroTableId)
 	);
 
 	// Helper function to check if user can access a route
@@ -457,7 +496,8 @@ export function AppSidebar({
 							<SidebarMenu>
 								{filteredNavItems.map((item, index) => {
 									const isActive = pathname === item.href;
-									const showTablasBeforeThis = item.href === "/notifications" && sidebarMacroTables && sidebarMacroTables.length > 0;
+									const showTablasBeforeThis =
+										item.href === "/notifications" && macroTables.length > 0;
 
 									return (
 										<React.Fragment key={item.title}>
@@ -476,7 +516,7 @@ export function AppSidebar({
 															<DropdownMenuContent side="right" align="start" className="w-72">
 																<DropdownMenuLabel>Tablas</DropdownMenuLabel>
 																<DropdownMenuSeparator />
-																{sidebarMacroTables.map((table) => {
+																{macroTables.map((table) => {
 																	const tableHref = `/macro?macroId=${encodeURIComponent(table.id)}`;
 																	const isTableActive =
 																		pathname === "/macro" && activeMacroTableId === table.id;
@@ -509,7 +549,7 @@ export function AppSidebar({
 															</CollapsibleTrigger>
 															<CollapsibleContent>
 																<SidebarMenuSub>
-																	{sidebarMacroTables.map((table) => {
+																	{macroTables.map((table) => {
 																		const tableHref = `/macro?macroId=${encodeURIComponent(table.id)}`;
 																		const isTableActive =
 																			pathname === "/macro" && activeMacroTableId === table.id;

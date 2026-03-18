@@ -827,7 +827,7 @@ import {
 	writePersistedArray,
 	writePersistedNumber,
 } from "./persistence";
-import { GlassyIcon } from "@/app/excel/page";
+import { GlassyIcon } from "@/components/ui/glassy-icon";
 
 export { requiredValidator } from "./table-utils";
 
@@ -958,6 +958,20 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const columns = config.columns;
 	const headerGroups = config.headerGroups ?? [];
 	const defaultRows = config.defaultRows;
+	const hydratedServerRowsRef = useRef(false);
+
+	useEffect(() => {
+		if (!fetchRowsFn || !Array.isArray(defaultRows)) return;
+		setFormRows(defaultRows);
+		setServerMeta((prev) => ({
+			page: 1,
+			limit: prev.limit || pageSize,
+			total: defaultRows.length,
+			totalPages: 1,
+			hasNextPage: false,
+			hasPreviousPage: false,
+		}));
+	}, [defaultRows, fetchRowsFn, pageSize, setFormRows]);
 
 	useEffect(() => {
 		const handleExternalRefresh = (event: Event) => {
@@ -1136,6 +1150,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	useEffect(() => {
 		if (!fetchRowsFn) return;
+		if (
+			Array.isArray(defaultRows) &&
+			!hydratedServerRowsRef.current &&
+			page === 1 &&
+			searchRequestKey.length === 0
+		) {
+			hydratedServerRowsRef.current = true;
+			return;
+		}
 		let isMounted = true;
 		const run = async () => {
 			setIsFetchingServerRows(true);
@@ -1175,11 +1198,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		return () => {
 			isMounted = false;
 		};
-	}, [fetchRowsFn, page, pageSize, setFormRows, searchRequestKey, appliedFiltersKey]);
+	}, [appliedFiltersKey, defaultRows, fetchRowsFn, page, pageSize, setFormRows, searchRequestKey]);
 
 	useEffect(() => {
 		if (fetchRowsFn) return;
-		if (defaultRows) {
+		if (Array.isArray(defaultRows)) {
 			setFormRows(defaultRows);
 		}
 	}, [fetchRowsFn, defaultRows, setFormRows]);

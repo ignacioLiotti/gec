@@ -1,8 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
-const ACTIVE_TENANT_COOKIE = "active_tenant";
+import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 export async function GET() {
 	const supabase = await createClient();

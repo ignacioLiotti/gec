@@ -1,0 +1,247 @@
+{
+  "sourceWorkbook": "C:\\Users\\Usuario\\Desktop\\projects\\multi-tenant\\docs\\OBRAS EN EJECUCION y EJECUTADAS- 23-07-25- GEC (4).xlsx",
+  "generatedAt": "2026-03-18T14:38:16.974Z",
+  "sheetCount": 48,
+  "sheets": [
+    {
+      "sheetName": "EN EJECUCIÓN",
+      "fileName": "EN EJECUCIÓN.csv",
+      "rowCount": 60
+    },
+    {
+      "sheetName": "EJECUTADAS",
+      "fileName": "EJECUTADAS.csv",
+      "rowCount": 68
+    },
+    {
+      "sheetName": "4° BOMB ITU",
+      "fileName": "4° BOMB ITU.csv",
+      "rowCount": 16
+    },
+    {
+      "sheetName": "F.12-1-Arq, (2)",
+      "fileName": "F.12-1-Arq, (2).csv",
+      "rowCount": 17
+    },
+    {
+      "sheetName": "4° BOMB PASO",
+      "fileName": "4° BOMB PASO.csv",
+      "rowCount": 16
+    },
+    {
+      "sheetName": "1",
+      "fileName": "1.csv",
+      "rowCount": 31
+    },
+    {
+      "sheetName": "2",
+      "fileName": "2.csv",
+      "rowCount": 26
+    },
+    {
+      "sheetName": "3",
+      "fileName": "3.csv",
+      "rowCount": 0
+    },
+    {
+      "sheetName": "4",
+      "fileName": "4.csv",
+      "rowCount": 83
+    },
+    {
+      "sheetName": "5",
+      "fileName": "5.csv",
+      "rowCount": 40
+    },
+    {
+      "sheetName": "6",
+      "fileName": "6.csv",
+      "rowCount": 8
+    },
+    {
+      "sheetName": "7",
+      "fileName": "7.csv",
+      "rowCount": 34
+    },
+    {
+      "sheetName": "8",
+      "fileName": "8.csv",
+      "rowCount": 10
+    },
+    {
+      "sheetName": "9",
+      "fileName": "9.csv",
+      "rowCount": 12
+    },
+    {
+      "sheetName": "10",
+      "fileName": "10.csv",
+      "rowCount": 12
+    },
+    {
+      "sheetName": "10A",
+      "fileName": "10A.csv",
+      "rowCount": 4
+    },
+    {
+      "sheetName": "11",
+      "fileName": "11.csv",
+      "rowCount": 15
+    },
+    {
+      "sheetName": "12 CONCRET",
+      "fileName": "12 CONCRET.csv",
+      "rowCount": 7
+    },
+    {
+      "sheetName": "12A",
+      "fileName": "12A.csv",
+      "rowCount": 4
+    },
+    {
+      "sheetName": "13",
+      "fileName": "13.csv",
+      "rowCount": 11
+    },
+    {
+      "sheetName": "14",
+      "fileName": "14.csv",
+      "rowCount": 12
+    },
+    {
+      "sheetName": "15",
+      "fileName": "15.csv",
+      "rowCount": 11
+    },
+    {
+      "sheetName": "16",
+      "fileName": "16.csv",
+      "rowCount": 8
+    },
+    {
+      "sheetName": "17",
+      "fileName": "17.csv",
+      "rowCount": 12
+    },
+    {
+      "sheetName": "18",
+      "fileName": "18.csv",
+      "rowCount": 8
+    },
+    {
+      "sheetName": "19",
+      "fileName": "19.csv",
+      "rowCount": 4
+    },
+    {
+      "sheetName": "20",
+      "fileName": "20.csv",
+      "rowCount": 4
+    },
+    {
+      "sheetName": "21",
+      "fileName": "21.csv",
+      "rowCount": 4
+    },
+    {
+      "sheetName": "22",
+      "fileName": "22.csv",
+      "rowCount": 4
+    },
+    {
+      "sheetName": "23",
+      "fileName": "23.csv",
+      "rowCount": 5
+    },
+    {
+      "sheetName": "24",
+      "fileName": "24.csv",
+      "rowCount": 9
+    },
+    {
+      "sheetName": "25",
+      "fileName": "25.csv",
+      "rowCount": 6
+    },
+    {
+      "sheetName": "26",
+      "fileName": "26.csv",
+      "rowCount": 8
+    },
+    {
+      "sheetName": "27",
+      "fileName": "27.csv",
+      "rowCount": 0
+    },
+    {
+      "sheetName": "28",
+      "fileName": "28.csv",
+      "rowCount": 7
+    },
+    {
+      "sheetName": "29",
+      "fileName": "29.csv",
+      "rowCount": 14
+    },
+    {
+      "sheetName": "30",
+      "fileName": "30.csv",
+      "rowCount": 6
+    },
+    {
+      "sheetName": "31",
+      "fileName": "31.csv",
+      "rowCount": 25
+    },
+    {
+      "sheetName": "5 - EJECUTADA",
+      "fileName": "5 - EJECUTADA.csv",
+      "rowCount": 12
+    },
+    {
+      "sheetName": "355",
+      "fileName": "355.csv",
+      "rowCount": 14
+    },
+    {
+      "sheetName": "365",
+      "fileName": "365.csv",
+      "rowCount": 22
+    },
+    {
+      "sheetName": "32 EJEC.",
+      "fileName": "32 EJEC..csv",
+      "rowCount": 14
+    },
+    {
+      "sheetName": "366",
+      "fileName": "366.csv",
+      "rowCount": 12
+    },
+    {
+      "sheetName": "34 ejec",
+      "fileName": "34 ejec.csv",
+      "rowCount": 18
+    },
+    {
+      "sheetName": "35 ejec",
+      "fileName": "35 ejec.csv",
+      "rowCount": 12
+    },
+    {
+      "sheetName": "DEUDA INVICO",
+      "fileName": "DEUDA INVICO.csv",
+      "rowCount": 277
+    },
+    {
+      "sheetName": "RESUMEN DEUDA INVICO",
+      "fileName": "RESUMEN DEUDA INVICO.csv",
+      "rowCount": 26
+    },
+    {
+      "sheetName": "Hoja3",
+      "fileName": "Hoja3.csv",
+      "rowCount": 0
+    }
+  ]
+}

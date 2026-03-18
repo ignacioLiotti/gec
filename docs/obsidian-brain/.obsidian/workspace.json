@@ -1,0 +1,185 @@
+{
+  "main": {
+    "id": "main",
+    "type": "split",
+    "children": [
+      {
+        "id": "left",
+        "type": "split",
+        "children": [
+          {
+            "id": "e0cab1a2e24215b8",
+            "type": "tabs",
+            "children": [
+              {
+                "id": "home",
+                "type": "leaf",
+                "state": {
+                  "type": "graph",
+                  "state": {},
+                  "icon": "lucide-git-fork",
+                  "title": "Graph view"
+                }
+              }
+            ]
+          }
+        ],
+        "direction": "vertical"
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "left-ribbon",
+    "type": "split",
+    "children": [
+      {
+        "id": "f003f2f265964bb5",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "file-explorer",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "89feb9e1dbbfb1f9",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "221b6b34d0007347",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 240
+  },
+  "right": {
+    "id": "right-ribbon",
+    "type": "split",
+    "children": [
+      {
+        "id": "35b106fd04563d3c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "outline",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {},
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          },
+          {
+            "id": "97b2246fdc9e0c14",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "908ff7ddfe942c27",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "2003b0d49e2df4ae",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 240
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false
+    }
+  },
+  "active": "home",
+  "lastOpenFiles": [
+    "43 - Graph Navigation Guide.md",
+    "13 - Notifications Engine.md",
+    "42 - Flujo Actions & Workflow Runtime.md",
+    "41 - Onboarding Flow.md",
+    "40 - Flow Engine (PMC State Machine).md",
+    "39 - API Secrets & Request Signing.md",
+    "38 - Soft Delete Pattern.md",
+    "37 - Audit Log System.md",
+    "36 - Dynamic Tables Deep Dive.md",
+    "35 - Usage Metering & Subscriptions.md",
+    "34 - Invitation System.md",
+    "33 - Superadmin Implementation.md",
+    "32 - Environment Variables & Config.md",
+    "31 - RLS & Security Policies.md",
+    "30 - Background Jobs.md",
+    "29 - Signals, Findings & Reporting Engine.md",
+    "28 - Database Migrations.md",
+    "00 - Home.md",
+    "01 - Architecture Overview.md"
+  ]
+}

@@ -48,7 +48,7 @@ import {
 	formatMainColumnValue,
 } from "@/lib/main-table-columns";
 import { cn } from "@/lib/utils";
-import { GlassyIcon } from "../../page";
+import { GlassyIcon } from "@/components/ui/glassy-icon";
 
 type GeneralTabQuickActions = {
 	obraId: string;

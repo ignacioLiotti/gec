@@ -70,6 +70,7 @@ const ObraDetailLink = memo(function ObraDetailLink({
 	return (
 		<Link
 			href={`/excel/${obraId}`}
+			prefetch={false}
 			className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2 "
 			onMouseEnter={() => prefetchObra(obraId)}
 		>
@@ -91,6 +92,7 @@ const ObraDetailShortcut = memo(function ObraDetailShortcut({
 	return (
 		<Link
 			href={`/excel/${obraId}`}
+			prefetch={false}
 			data-testid={`open-obra-${obraId}`}
 			aria-label="Abrir detalle de la obra"
 			className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -2212,7 +2214,7 @@ type ObrasDetalleApiRow = {
 	onFinishSecondSendAt?: string | null;
 };
 
-function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
+export function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 	const customData =
 		obra.customData && typeof obra.customData === "object" && !Array.isArray(obra.customData)
 			? obra.customData

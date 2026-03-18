@@ -98,7 +98,7 @@ function MarketingLanding() {
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
   const [contactSubmitting, setContactSubmitting] = useState(false);
-  const [contactReason, setContactReason] = useState("Solicitar acceso");
+  const [contactReason, setContactReason] = useState("agendar una demo");
   const [contactForm, setContactForm] = useState({
     name: "",
     email: "",
@@ -143,7 +143,7 @@ function MarketingLanding() {
       ...prev,
       message:
         prev.message ||
-        `Hola, quiero ${reason.toLowerCase()} para mi empresa constructora.`,
+        `Hola, quiero agendar una demo para mi empresa constructora.`,
     }));
     setContactOpen(true);
   };
@@ -924,17 +924,17 @@ function MarketingLanding() {
           {/* CTA button */}
           <button
             type="button"
-            onClick={() => openContactDialog("Solicitar acceso")}
-            className="group relative rounded-full bg-stone-900 px-10 py-4 text-[11px] font-bold uppercase tracking-widest text-white transition-all hover:bg-stone-700 hover:shadow-xl hover:shadow-stone-400/25 active:scale-[0.98]"
+            onClick={() => openContactDialog("Agendá tu demo")}
+            className="group relative rounded-full bg-stone-900 px-10 py-4 text-[14px] font-bold uppercase tracking-widest text-white transition-all hover:bg-stone-700 hover:shadow-xl hover:shadow-stone-400/25 active:scale-[0.98]"
           >
-            Contactate con nosotros
+            Empezá hoy
           </button>
 
           {/* Trust line */}
-          <p className="mt-6 text-[10px] font-bold uppercase tracking-widest text-stone-400">
+          {/* <p className="mt-6 text-[10px] font-bold uppercase tracking-widest text-stone-400">
             100% online
             Siempre disponible cuando lo necesites
-          </p>
+          </p> */}
         </motion.div>
       </section>
 
@@ -950,7 +950,6 @@ function MarketingLanding() {
         open={contactOpen}
         onOpenChange={setContactOpen}
         title={contactReason}
-        description="Contanos brevemente tu caso y te escribimos por email."
         variant="dashboard"
         fields={[
           {
@@ -971,12 +970,14 @@ function MarketingLanding() {
             key: "company",
             label: "Empresa",
             type: "text",
+            required: true,
             placeholder: "Constructora XYZ",
           },
           {
             key: "phone",
             label: "Teléfono",
             type: "text",
+            required: true,
             placeholder: "+54 9 ...",
           },
           {
@@ -993,7 +994,7 @@ function MarketingLanding() {
         }
         onSubmit={submitContact}
         isSubmitting={contactSubmitting}
-        submitLabel={contactSubmitting ? "Enviando..." : "Enviar consulta"}
+        submitLabel={contactSubmitting ? "Enviando..." : "Enviar información"}
         cancelLabel="Cancelar"
       />
     </div >

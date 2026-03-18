@@ -124,7 +124,8 @@ import { FilterSection, RangeInputGroup, TextFilterInput } from '@/components/fo
 import { FileText as FileTextIcon2, Hash, Type, DollarSign as DollarSignIcon, ToggleLeft } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HoverCardPortal } from '@radix-ui/react-hover-card';
-import { GlassyIcon } from '@/app/excel/page';
+import { GlassyIcon } from '@/components/ui/glassy-icon';
+import { NotchTail } from "@/components/ui/notch-tail";
 import { resolveSpreadsheetSectionType } from '@/lib/spreadsheet-preview-summary';
 
 // Re-export types for external consumers
@@ -265,6 +266,9 @@ type TableSelectionEntry = {
   tablaId: string;
   tablaName: string;
 };
+
+const buildPdfPageNumbers = (pageCount: number) =>
+  Array.from({ length: Math.max(0, pageCount) }, (_, index) => index + 1);
 
 function getConditionalClass(
   value: unknown,
@@ -434,39 +438,6 @@ function renderOcrStatusBadge(item: FileSystemItem, context: OcrStatusBadgeConte
       </TooltipTrigger>
       <TooltipContent>{meta.tooltip}</TooltipContent>
     </Tooltip>
-  );
-}
-
-type NotchTailProps = {
-  side?: "left" | "right";
-  className?: string;
-};
-
-export function NotchTail({ side = "right", className = "" }: NotchTailProps) {
-  return (
-    <svg
-      width="60"
-      height="42"
-      viewBox="0 0 60 42"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-      className={[
-        "pointer-events-none absolute bottom-[-1px] h-[42px] w-[60px]",
-        side === "right" ? "right-[-59px]" : "left-[-59px] scale-x-[-1]",
-        className,
-      ].join(" ")}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60H0V1Z"
-        className="fill-[var(--notch-bg)]"
-      />
-      <path
-        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60"
-        className="fill-none stroke-[var(--notch-stroke)]"
-        strokeWidth="1"
-      />
-    </svg>
   );
 }
 
@@ -902,6 +873,11 @@ function FileManagerContent({
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
   const [tableSelectionMode, setTableSelectionMode] = useState<'ocr' | 'spreadsheet'>('ocr');
   const tableSelectionResolverRef = useRef<((tablaIds: string[] | null) => void) | null>(null);
+  const [isPdfPageSelectionOpen, setIsPdfPageSelectionOpen] = useState(false);
+  const [pdfPageSelectionFileName, setPdfPageSelectionFileName] = useState('');
+  const [pdfPageSelectionPageCount, setPdfPageSelectionPageCount] = useState(0);
+  const [selectedPdfPages, setSelectedPdfPages] = useState<number[]>([]);
+  const pdfPageSelectionResolverRef = useRef<((pages: number[] | null) => void) | null>(null);
   const rateLimitUntilRef = useRef<number>(0);
 
   useEffect(() => {
@@ -2531,6 +2507,155 @@ function FileManagerContent({
     resolver(selectedTableIds.length > 0 ? selectedTableIds : null);
   }, [selectedTableIds]);
 
+  const loadPdfJs = useCallback(async () => {
+    // @ts-ignore - pdfjs types are not required for client-side rasterization
+    const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
+    if (pdfjs?.GlobalWorkerOptions) {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url
+      ).toString();
+    }
+    return pdfjs;
+  }, []);
+
+  const getPdfPageCount = useCallback(async (pdfBytes: Uint8Array) => {
+    const pdfjs = await loadPdfJs();
+    const loadingTask = pdfjs.getDocument({ data: pdfBytes, disableWorker: true });
+    const pdf = await loadingTask.promise;
+    try {
+      return typeof pdf.numPages === 'number' && pdf.numPages > 0 ? pdf.numPages : 1;
+    } finally {
+      if (typeof pdf.destroy === 'function') {
+        pdf.destroy();
+      }
+    }
+  }, [loadPdfJs]);
+
+  const rasterizePdfPagesToDataUrl = useCallback(
+    async (pdfBytes: Uint8Array, pageNumbers: number[]) => {
+      const normalizedPages = Array.from(
+        new Set(pageNumbers.filter((pageNumber) => Number.isInteger(pageNumber) && pageNumber > 0))
+      ).sort((left, right) => left - right);
+      if (normalizedPages.length === 0) {
+        throw new Error('No hay páginas seleccionadas para OCR.');
+      }
+
+      const pdfjs = await loadPdfJs();
+      const loadingTask = pdfjs.getDocument({ data: pdfBytes, disableWorker: true });
+      const pdf = await loadingTask.promise;
+
+      try {
+        const renderedPages: HTMLCanvasElement[] = [];
+        let maxWidth = 1;
+        let totalHeight = 0;
+
+        for (const pageNumber of normalizedPages) {
+          if (pageNumber > pdf.numPages) continue;
+          const page = await pdf.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.ceil(viewport.width));
+          canvas.height = Math.max(1, Math.ceil(viewport.height));
+          const context = canvas.getContext('2d');
+          if (!context) {
+            throw new Error('No se pudo inicializar el canvas para OCR.');
+          }
+          await page.render({ canvasContext: context as any, viewport }).promise;
+          renderedPages.push(canvas);
+          maxWidth = Math.max(maxWidth, canvas.width);
+          totalHeight += canvas.height;
+        }
+
+        if (renderedPages.length === 0) {
+          throw new Error('Las páginas seleccionadas no existen en el PDF.');
+        }
+
+        const gap = renderedPages.length > 1 ? 24 : 0;
+        totalHeight += gap * Math.max(0, renderedPages.length - 1);
+
+        const combinedCanvas = document.createElement('canvas');
+        combinedCanvas.width = maxWidth;
+        combinedCanvas.height = Math.max(1, totalHeight);
+        const combinedContext = combinedCanvas.getContext('2d');
+        if (!combinedContext) {
+          throw new Error('No se pudo generar la imagen compuesta para OCR.');
+        }
+        combinedContext.fillStyle = '#ffffff';
+        combinedContext.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+
+        let offsetY = 0;
+        renderedPages.forEach((pageCanvas, index) => {
+          combinedContext.drawImage(pageCanvas, 0, offsetY);
+          offsetY += pageCanvas.height;
+          if (index < renderedPages.length - 1) {
+            offsetY += gap;
+          }
+        });
+
+        return combinedCanvas.toDataURL('image/png');
+      } finally {
+        if (typeof pdf.destroy === 'function') {
+          pdf.destroy();
+        }
+      }
+    },
+    [loadPdfJs]
+  );
+
+  const loadStoredDocumentBytes = useCallback(
+    async (storagePath: string) => {
+      const { data, error } = await supabase.storage.from('obra-documents').download(storagePath);
+      if (error || !data) {
+        throw new Error(error?.message || 'No se pudo descargar el PDF para OCR.');
+      }
+      return new Uint8Array(await data.arrayBuffer());
+    },
+    [supabase]
+  );
+
+  const openPdfPageSelectionDialog = useCallback(
+    (params: { fileName: string; pageCount: number }) =>
+      new Promise<number[] | null>((resolve) => {
+        const initialPages = buildPdfPageNumbers(params.pageCount);
+        pdfPageSelectionResolverRef.current = resolve;
+        setPdfPageSelectionFileName(params.fileName);
+        setPdfPageSelectionPageCount(params.pageCount);
+        setSelectedPdfPages(initialPages);
+        setIsPdfPageSelectionOpen(true);
+      }),
+    []
+  );
+
+  const closePdfPageSelectionDialog = useCallback((confirmed: boolean) => {
+    setIsPdfPageSelectionOpen(false);
+    const resolver = pdfPageSelectionResolverRef.current;
+    pdfPageSelectionResolverRef.current = null;
+    if (!resolver) return;
+    if (!confirmed) {
+      resolver(null);
+      return;
+    }
+    const normalizedPages = Array.from(
+      new Set(selectedPdfPages.filter((pageNumber) => Number.isInteger(pageNumber) && pageNumber > 0))
+    ).sort((left, right) => left - right);
+    resolver(normalizedPages.length > 0 ? normalizedPages : null);
+  }, [selectedPdfPages]);
+
+  const resolveSelectedPdfPages = useCallback(
+    async (params: { fileName: string; pdfBytes: Uint8Array }) => {
+      const pageCount = await getPdfPageCount(params.pdfBytes);
+      if (pageCount <= 1) {
+        return [1];
+      }
+      return openPdfPageSelectionDialog({
+        fileName: params.fileName,
+        pageCount,
+      });
+    },
+    [getPdfPageCount, openPdfPageSelectionDialog]
+  );
+
   const getAutoSelectedSpreadsheetTablaIds = useCallback((links: OcrFolderLink[]) => {
     const uniqueLinks = Array.from(
       new Map(links.map((link) => [link.tablaId, link])).values()
@@ -2962,24 +3087,22 @@ function FileManagerContent({
 
             if (file.type.includes('pdf')) {
               try {
-                // @ts-ignore - pdfjs types are not required for client-side rasterization
-                const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
                 const array = new Uint8Array(await file.arrayBuffer());
-                const loadingTask = pdfjs.getDocument({ data: array, disableWorker: true });
-                const pdf = await loadingTask.promise;
-                const page = await pdf.getPage(1);
-                const viewport = page.getViewport({ scale: 2 });
-                const canvasEl = document.createElement('canvas');
-                canvasEl.width = Math.ceil(viewport.width);
-                canvasEl.height = Math.ceil(viewport.height);
-                const ctx = canvasEl.getContext('2d');
-                if (!ctx) throw new Error('No canvas context');
-                await page.render({ canvasContext: ctx as any, viewport }).promise;
-                const dataUrl = canvasEl.toDataURL('image/png');
+                const selectedPages = await resolveSelectedPdfPages({
+                  fileName: storageFileName,
+                  pdfBytes: array,
+                });
+                if (!selectedPages || selectedPages.length === 0) {
+                  toast.info(`Extracción OCR cancelada para ${file.name}`);
+                  continue;
+                }
+                const dataUrl = await rasterizePdfPagesToDataUrl(array, selectedPages);
                 fd.append('imageDataUrl', dataUrl);
+                fd.append('selectedPages', JSON.stringify(selectedPages));
               } catch (pdfErr) {
                 console.error('PDF rasterization failed', pdfErr);
-                fd.append('file', file);
+                toast.error(`No se pudo preparar el PDF ${file.name} para OCR.`);
+                continue;
               }
             } else if (file.type.startsWith('image/')) {
               fd.append('file', file);
@@ -4668,6 +4791,28 @@ function FileManagerContent({
         formData.append('existingBucket', 'obra-documents');
         formData.append('existingPath', doc.storagePath);
         formData.append('existingFileName', doc.name);
+        const isPdf =
+          mimeLower.includes('pdf') || doc.name.toLowerCase().endsWith('.pdf');
+        if (isPdf) {
+          try {
+            const pdfBytes = await loadStoredDocumentBytes(doc.storagePath);
+            const selectedPages = await resolveSelectedPdfPages({
+              fileName: doc.name,
+              pdfBytes,
+            });
+            if (!selectedPages || selectedPages.length === 0) {
+              toast.info(`Reproceso cancelado para ${doc.name}`);
+              return;
+            }
+            const imageDataUrl = await rasterizePdfPagesToDataUrl(pdfBytes, selectedPages);
+            formData.append('imageDataUrl', imageDataUrl);
+            formData.append('selectedPages', JSON.stringify(selectedPages));
+          } catch (error) {
+            console.error('Existing PDF rasterization failed', error);
+            toast.error(`No se pudo preparar el PDF ${doc.name} para OCR.`);
+            return;
+          }
+        }
         formData.append('tablaIds', JSON.stringify(selectedTablaIds.filter((id) => uniqueTablaIds.includes(id))));
 
         const response = await fetch(
@@ -5857,6 +6002,104 @@ function FileManagerContent({
               onClick={() => closeTableSelectionDialog(true)}
               disabled={selectedTableIds.length === 0}
             >
+              Continuar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isPdfPageSelectionOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closePdfPageSelectionDialog(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl" data-testid="pdf-page-selection-dialog">
+          <DialogHeader>
+            <DialogTitle>Seleccionar páginas para OCR</DialogTitle>
+            <DialogDescription>
+              Archivo: {pdfPageSelectionFileName || 'documento'}. Elegí qué páginas usar para esta extracción.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  PDF con {pdfPageSelectionPageCount} {pdfPageSelectionPageCount === 1 ? 'página' : 'páginas'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  La selección se aplica a todos los datasets elegidos en esta corrida.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSelectedPdfPages(buildPdfPageNumbers(pdfPageSelectionPageCount))}
+                >
+                  Todas
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedPdfPages([])}
+                >
+                  Limpiar
+                </Button>
+              </div>
+            </div>
+
+            <div className="max-h-72 overflow-auto rounded-md border p-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {buildPdfPageNumbers(pdfPageSelectionPageCount).map((pageNumber) => {
+                  const checked = selectedPdfPages.includes(pageNumber);
+                  return (
+                    <label
+                      key={pageNumber}
+                      className={cn(
+                        'flex items-center gap-3 rounded-md border px-3 py-3 cursor-pointer',
+                        checked ? 'border-orange-500 bg-orange-50' : 'border-border hover:bg-muted/40'
+                      )}
+                      data-testid={`pdf-page-option-${pageNumber}`}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        className="border-primary"
+                        onCheckedChange={(value) => {
+                          setSelectedPdfPages((prev) => {
+                            const exists = prev.includes(pageNumber);
+                            if (value && !exists) {
+                              return [...prev, pageNumber].sort((left, right) => left - right);
+                            }
+                            if (!value && exists) {
+                              return prev.filter((currentPage) => currentPage !== pageNumber);
+                            }
+                            return prev;
+                          });
+                        }}
+                      />
+                      <div>
+                        <p className="text-sm font-medium">Página {pageNumber}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Seleccionadas: {selectedPdfPages.length > 0 ? selectedPdfPages.join(', ') : 'ninguna'}.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => closePdfPageSelectionDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => closePdfPageSelectionDialog(true)} disabled={selectedPdfPages.length === 0}>
               Continuar
             </Button>
           </DialogFooter>

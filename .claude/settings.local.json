@@ -23,7 +23,14 @@
       "mcp__paper__get_node_info",
       "mcp__ide__getDiagnostics",
       "mcp__paper__get_tree_summary",
-      "mcp__paper__finish_working_on_nodes"
+      "mcp__paper__finish_working_on_nodes",
+      "Bash(wc -l /c/Users/Usuario/AppData/Local/Temp/claude/C--Users-Usuario-Desktop-projects-multi-tenant/tasks/a*.output 2>/dev/null)",
+      "Bash(ls -la \"/c/Users/Usuario/Desktop/projects/multi-tenant/docs/obsidian-brain/\" | grep -v \"^total\" && echo \"\" && wc -l \"/c/Users/Usuario/Desktop/projects/multi-tenant/docs/obsidian-brain/\"*.md | tail -1)",
+      "Bash(ls \"/c/Users/Usuario/Desktop/projects/multi-tenant/docs/obsidian-brain/\"*.md | wc -l && echo \"---\" && wc -c \"/c/Users/Usuario/Desktop/projects/multi-tenant/docs/obsidian-brain/\"*.md | tail -1)",
+      "Bash(find /c/Users/Usuario/Desktop/projects/multi-tenant -type f -name \"*quick*\" 2>/dev/null | head -20)",
+      "Bash(git ls-tree:*)",
+      "mcp__paper__set_text_content",
+      "Bash(node -e \":*)"
     ],
     "deny": [],
     "ask": []

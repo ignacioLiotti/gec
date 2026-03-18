@@ -18,6 +18,7 @@ type DefaultFolder = {
 	spreadsheetTemplate?: "auto" | "certificado" | null;
 	ocrTemplateId?: string | null;
 	ocrTemplateName?: string | null;
+	manualEntryEnabled?: boolean;
 	hasNestedData?: boolean;
 	documentTypes?: string[];
 	extractionInstructions?: string | null;
@@ -47,6 +48,7 @@ type ExtractedTableConfig = {
 	spreadsheetTemplate?: "auto" | "certificado" | null;
 	ocrTemplateId?: string | null;
 	ocrTemplateName?: string | null;
+	manualEntryEnabled?: boolean;
 	hasNestedData?: boolean;
 	documentTypes?: string[];
 	extractionInstructions?: string | null;
@@ -163,6 +165,10 @@ function buildLegacyExtractedTable(params: {
 		spreadsheetTemplate: normalizeSpreadsheetTemplate(settings.spreadsheetTemplate),
 		ocrTemplateId,
 		ocrTemplateName,
+		manualEntryEnabled:
+			typeof settings.manualEntryEnabled === "boolean"
+				? settings.manualEntryEnabled
+				: normalizeDataInputMethod(settings.dataInputMethod) !== "ocr",
 		hasNestedData: Boolean(settings.hasNestedData),
 		documentTypes: normalizeStringArray(settings.extractionDocumentTypes),
 		extractionInstructions:
@@ -234,6 +240,10 @@ function normalizeExtractedTables(
 					typeof item.ocrTemplateName === "string" && item.ocrTemplateName.trim().length > 0
 						? item.ocrTemplateName.trim()
 						: null,
+				manualEntryEnabled:
+					typeof item.manualEntryEnabled === "boolean"
+						? item.manualEntryEnabled
+						: normalizeDataInputMethod(item.dataInputMethod) !== "ocr",
 				hasNestedData: Boolean(item.hasNestedData),
 				documentTypes: normalizeStringArray(item.documentTypes),
 				extractionInstructions:
@@ -711,6 +721,10 @@ export async function GET(request: Request) {
 				ocrTemplateName: linkedTabla.ocr_template_id
 					? templatesMap.get(linkedTabla.ocr_template_id)
 						: null,
+				manualEntryEnabled:
+					typeof settings.manualEntryEnabled === "boolean"
+						? settings.manualEntryEnabled
+						: dataInputMethod !== "ocr",
 				hasNestedData: Boolean(settings.hasNestedData),
 				documentTypes: Array.isArray(settings.extractionDocumentTypes)
 					? (settings.extractionDocumentTypes as unknown[]).filter(
@@ -924,6 +938,7 @@ export async function POST(request: Request) {
 				settings: {
 					dataInputMethod: body.dataInputMethod,
 					spreadsheetTemplate: body.spreadsheetTemplate,
+					manualEntryEnabled: body.manualEntryEnabled,
 					hasNestedData,
 					extractionDocumentTypes: body.documentTypes,
 					extractionInstructions: body.extractionInstructions,
@@ -975,6 +990,10 @@ export async function POST(request: Request) {
 				hasNestedData: effectiveHasNestedData,
 				dataInputMethod,
 				spreadsheetTemplate,
+				manualEntryEnabled:
+					typeof primaryTable.manualEntryEnabled === "boolean"
+						? primaryTable.manualEntryEnabled
+						: dataInputMethod !== "ocr",
 				extractionRowMode,
 				extractionMaxRows,
 				extractedTables,
@@ -1362,14 +1381,15 @@ export async function PUT(request: Request) {
 			}
 		}
 
-		const legacyFallback = buildLegacyExtractedTable({
-			id: path,
-			name: rawName,
-			settings: {
-				dataInputMethod: body.dataInputMethod,
-				spreadsheetTemplate: body.spreadsheetTemplate,
-				hasNestedData,
-				extractionDocumentTypes: body.documentTypes,
+			const legacyFallback = buildLegacyExtractedTable({
+				id: path,
+				name: rawName,
+				settings: {
+					dataInputMethod: body.dataInputMethod,
+					spreadsheetTemplate: body.spreadsheetTemplate,
+					manualEntryEnabled: body.manualEntryEnabled,
+					hasNestedData,
+					extractionDocumentTypes: body.documentTypes,
 				extractionInstructions: body.extractionInstructions,
 				extractionRowMode: body.extractionRowMode,
 				extractionMaxRows: body.extractionMaxRows,
@@ -1418,6 +1438,10 @@ export async function PUT(request: Request) {
 			hasNestedData: effectiveHasNestedData,
 			dataInputMethod,
 			spreadsheetTemplate,
+			manualEntryEnabled:
+				typeof primaryTable.manualEntryEnabled === "boolean"
+					? primaryTable.manualEntryEnabled
+					: dataInputMethod !== "ocr",
 			extractionRowMode,
 			extractionMaxRows,
 			extractedTables,

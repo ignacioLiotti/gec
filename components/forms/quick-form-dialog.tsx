@@ -77,12 +77,13 @@ export function QuickFormDialog({
       <DialogContent
         className={cn(
           "sm:max-w-[500px]",
-          variant === "dashboard" && "sm:max-w-[550px]"
+          variant === "dashboard" && "sm:max-w-[550px]",
+          "rounded-2xl"
         )}
       >
         <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
+          <DialogHeader >
+            <DialogTitle className="text-2xl font-semibold">{title}</DialogTitle>
             {description && (
               <DialogDescription>{description}</DialogDescription>
             )}

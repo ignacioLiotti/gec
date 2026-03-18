@@ -87,7 +87,7 @@ export function ExcelObraName() {
   if (!displayName && !isLoading) return null;
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1">
+    <span className="flex items-center gap-2 px-2 py-1">
       {obraName ? (
         <Building2 className="h-4 w-4 text-muted-foreground" />
       ) : null}
@@ -107,6 +107,6 @@ export function ExcelObraName() {
           </Tooltip>
         </TooltipProvider>
       )}
-    </div>
+    </span>
   );
 }

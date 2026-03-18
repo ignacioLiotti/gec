@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import type { OcrTablaColumn } from "@/app/excel/[obraId]/tabs/file-manager/types";
-import { GlassyIcon } from "@/app/excel/page";
+import { GlassyIcon } from "@/components/ui/glassy-icon";
 
 type QuickAction = {
   id: string;

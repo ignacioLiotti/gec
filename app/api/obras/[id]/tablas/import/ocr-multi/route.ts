@@ -275,6 +275,28 @@ function dataUrlToBuffer(imageDataUrl: string) {
   return { buffer: Buffer.from(b64, "base64"), mime };
 }
 
+function parseSelectedPages(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    const normalized = Array.from(
+      new Set(
+        parsed
+          .map((page) => (typeof page === "number" ? page : Number(page)))
+          .filter((page) => Number.isInteger(page) && page > 0)
+      )
+    ).sort((left, right) => left - right);
+    return normalized.length > 0 ? normalized : null;
+  } catch {
+    return null;
+  }
+}
+
 function applyExtractionRowPolicy(
 	items: Record<string, unknown>[],
 	settings: Record<string, unknown> | null | undefined,
@@ -521,6 +543,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const existingBucket = form.get("existingBucket");
     const existingPath = form.get("existingPath");
     const existingFileName = form.get("existingFileName");
+    const selectedPages = parseSelectedPages(form.get("selectedPages"));
 
     const folderNames = Array.from(
       new Set(
@@ -799,6 +822,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         baseMeta.__docBucket = storageInfo.bucket;
         baseMeta.__docPath = storageInfo.path;
         baseMeta.__docFileName = storageInfo.fileName;
+      }
+      if (selectedPages) {
+        baseMeta.__docSelectedPages = selectedPages;
       }
 
       if (storageInfo?.path) {

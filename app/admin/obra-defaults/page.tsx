@@ -94,6 +94,7 @@ type DefaultFolder = {
   spreadsheetTemplate?: "auto" | "certificado" | null;
   ocrTemplateId?: string | null;
   ocrTemplateName?: string | null;
+  manualEntryEnabled?: boolean;
   hasNestedData?: boolean;
   documentTypes?: string[];
   extractionInstructions?: string | null;
@@ -123,6 +124,7 @@ type ExtractedTableConfig = {
   spreadsheetTemplate?: "auto" | "certificado" | null;
   ocrTemplateId?: string | null;
   ocrTemplateName?: string | null;
+  manualEntryEnabled?: boolean;
   hasNestedData?: boolean;
   documentTypes?: string[];
   extractionInstructions?: string | null;
@@ -271,11 +273,140 @@ function createEmptyExtractedTable(name = "Nueva tabla extraida"): ExtractedTabl
     spreadsheetTemplate: null,
     ocrTemplateId: null,
     ocrTemplateName: null,
+    manualEntryEnabled: true,
     hasNestedData: false,
     documentTypes: [],
     extractionInstructions: "",
     columns: [],
   };
+}
+
+function createRecipeColumn(params: {
+  label: string;
+  fieldKey?: string;
+  dataType?: string;
+  description?: string;
+}) {
+  return {
+    id: crypto.randomUUID(),
+    label: params.label,
+    fieldKey: params.fieldKey ?? normalizeFieldKey(params.label),
+    dataType: ensureTablaDataType(params.dataType),
+    required: false,
+    scope: "item" as const,
+    description: params.description ?? "",
+    aliases: [],
+    examples: [],
+    excelKeywords: [],
+  };
+}
+
+function buildCertificadoRecipeTables(): ExtractedTableConfig[] {
+  return [
+    {
+      id: crypto.randomUUID(),
+      name: "resumen",
+      rowMode: "single",
+      maxRows: 1,
+      dataInputMethod: "both",
+      spreadsheetTemplate: "certificado",
+      ocrTemplateId: null,
+      ocrTemplateName: null,
+      manualEntryEnabled: true,
+      hasNestedData: false,
+      documentTypes: ["certificado", "resumen de certificado"],
+      extractionInstructions:
+        "Extrae una sola fila por certificado. Si el documento tiene varias paginas o varios certificados, separa cada certificado y usa solo las paginas que correspondan a este resumen.",
+      columns: [
+        createRecipeColumn({
+          label: "Nro certificado",
+          fieldKey: "nro_certificado",
+          description: "Identificador unico del certificado.",
+        }),
+        createRecipeColumn({
+          label: "Fecha",
+          fieldKey: "fecha",
+          dataType: "date",
+          description: "Fecha del certificado o de certificacion.",
+        }),
+        createRecipeColumn({
+          label: "Monto total",
+          fieldKey: "monto_total",
+          dataType: "currency",
+          description: "Monto total certificado en el documento.",
+        }),
+      ],
+    },
+    {
+      id: crypto.randomUUID(),
+      name: "items",
+      rowMode: "multiple",
+      maxRows: null,
+      dataInputMethod: "both",
+      spreadsheetTemplate: "certificado",
+      ocrTemplateId: null,
+      ocrTemplateName: null,
+      manualEntryEnabled: true,
+      hasNestedData: false,
+      documentTypes: ["certificado", "detalle de items"],
+      extractionInstructions:
+        "Extrae una fila por item del certificado. Si los items ocupan varias paginas, incluye solo esas paginas. Si el PDF trae varios certificados y esta tabla no aplica, permite que el usuario elija no cargar items.",
+      columns: [
+        createRecipeColumn({
+          label: "Item numero",
+          fieldKey: "item_numero",
+          description: "Numero o codigo del item certificado.",
+        }),
+        createRecipeColumn({
+          label: "Rubro",
+          fieldKey: "rubro",
+          description: "Descripcion corta del rubro o item.",
+        }),
+        createRecipeColumn({
+          label: "Avance certificado previo",
+          fieldKey: "avance_certificado_previo",
+          dataType: "number",
+        }),
+        createRecipeColumn({
+          label: "Avance certificado actual",
+          fieldKey: "avance_certificado_actual",
+          dataType: "number",
+        }),
+        createRecipeColumn({
+          label: "Avance acumulado",
+          fieldKey: "avance_acumulado",
+          dataType: "number",
+        }),
+      ],
+    },
+  ];
+}
+
+function deriveDataInputMethod(params: {
+  acceptsPdfImage: boolean;
+  acceptsSpreadsheet: boolean;
+  allowsManualEntry: boolean;
+}): DataInputMethod {
+  const { acceptsPdfImage, acceptsSpreadsheet, allowsManualEntry } = params;
+  if (acceptsPdfImage && (acceptsSpreadsheet || allowsManualEntry)) {
+    return "both";
+  }
+  if (acceptsPdfImage) {
+    return "ocr";
+  }
+  return "manual";
+}
+
+function getAcceptedInputLabels(params: {
+  acceptsPdfImage: boolean;
+  acceptsSpreadsheet: boolean;
+  allowsManualEntry: boolean;
+}) {
+  const labels: string[] = [];
+  if (params.acceptsPdfImage) labels.push("PDF / image");
+  if (params.acceptsSpreadsheet) labels.push("XLSX / CSV");
+  if (params.allowsManualEntry) labels.push("Carga manual");
+  return labels;
 }
 
 function getEffectiveTableMaxRows(table: Pick<ExtractedTableConfig, "rowMode" | "maxRows">) {
@@ -581,6 +712,12 @@ function mapFolderToExtractedTables(folder: DefaultFolder): ExtractedTableConfig
       spreadsheetTemplate: table.spreadsheetTemplate ?? folder.spreadsheetTemplate ?? null,
       ocrTemplateId: table.ocrTemplateId ?? folder.ocrTemplateId ?? null,
       ocrTemplateName: table.ocrTemplateName ?? folder.ocrTemplateName ?? null,
+      manualEntryEnabled:
+        typeof table.manualEntryEnabled === "boolean"
+          ? table.manualEntryEnabled
+          : typeof folder.manualEntryEnabled === "boolean"
+            ? folder.manualEntryEnabled
+            : (table.dataInputMethod ?? folder.dataInputMethod ?? "both") !== "ocr",
       hasNestedData: Boolean(table.hasNestedData ?? folder.hasNestedData),
       documentTypes: table.documentTypes ?? [],
       extractionInstructions: table.extractionInstructions ?? "",
@@ -604,6 +741,10 @@ function mapFolderToExtractedTables(folder: DefaultFolder): ExtractedTableConfig
       spreadsheetTemplate: folder.spreadsheetTemplate ?? null,
       ocrTemplateId: folder.ocrTemplateId ?? null,
       ocrTemplateName: folder.ocrTemplateName ?? null,
+      manualEntryEnabled:
+        typeof folder.manualEntryEnabled === "boolean"
+          ? folder.manualEntryEnabled
+          : (folder.dataInputMethod ?? "both") !== "ocr",
       hasNestedData: Boolean(folder.hasNestedData),
       documentTypes: folder.documentTypes ?? [],
       extractionInstructions: folder.extractionInstructions ?? "",
@@ -1113,6 +1254,9 @@ export default function ObraDefaultsPage() {
   const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>("both");
   const [newFolderSpreadsheetTemplate, setNewFolderSpreadsheetTemplate] = useState<"" | "auto" | "certificado">("");
   const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState("");
+  const [newFolderAcceptsPdfImage, setNewFolderAcceptsPdfImage] = useState(true);
+  const [newFolderAcceptsSpreadsheet, setNewFolderAcceptsSpreadsheet] = useState(true);
+  const [newFolderAllowsManualEntry, setNewFolderAllowsManualEntry] = useState(true);
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
   const [newFolderDocumentTypesText, setNewFolderDocumentTypesText] = useState("");
   const [newFolderExtractionInstructions, setNewFolderExtractionInstructions] = useState("");
@@ -1145,6 +1289,9 @@ export default function ObraDefaultsPage() {
     setNewFolderDataInputMethod("both");
     setNewFolderSpreadsheetTemplate("");
     setNewFolderOcrTemplateId("");
+    setNewFolderAcceptsPdfImage(true);
+    setNewFolderAcceptsSpreadsheet(true);
+    setNewFolderAllowsManualEntry(true);
     setNewFolderHasNested(false);
     setNewFolderDocumentTypesText("");
     setNewFolderExtractionInstructions("");
@@ -1166,7 +1313,7 @@ export default function ObraDefaultsPage() {
   const fetchOcrTemplates = useCallback(async () => {
     try {
       const res = await fetch("/api/ocr-templates");
-      if (!res.ok) throw new Error("Failed to load OCR templates");
+      if (!res.ok) throw new Error("Failed to load Plantilla OCRs");
       const data = await res.json();
       setOcrTemplates(data.templates ?? []);
     } catch (error) {
@@ -1205,6 +1352,13 @@ export default function ObraDefaultsPage() {
     setNewFolderDataInputMethod(table.dataInputMethod ?? "both");
     setNewFolderSpreadsheetTemplate(table.spreadsheetTemplate ?? "");
     setNewFolderOcrTemplateId(table.ocrTemplateId ?? "");
+    setNewFolderAcceptsPdfImage(table.dataInputMethod === "ocr" || table.dataInputMethod === "both");
+    setNewFolderAcceptsSpreadsheet(Boolean(table.spreadsheetTemplate));
+    setNewFolderAllowsManualEntry(
+      typeof table.manualEntryEnabled === "boolean"
+        ? table.manualEntryEnabled
+        : table.dataInputMethod !== "ocr",
+    );
     setNewFolderHasNested(Boolean(table.hasNestedData));
     setNewFolderDocumentTypesText(joinCommaSeparatedList(table.documentTypes));
     setNewFolderExtractionInstructions(table.extractionInstructions ?? "");
@@ -1218,28 +1372,38 @@ export default function ObraDefaultsPage() {
 
   const syncActiveTableFromEditor = useCallback(() => {
     if (!activeExtractedTableId) return;
+    const derivedDataInputMethod = deriveDataInputMethod({
+      acceptsPdfImage: newFolderAcceptsPdfImage,
+      acceptsSpreadsheet: newFolderAcceptsSpreadsheet,
+      allowsManualEntry: newFolderAllowsManualEntry,
+    });
     setNewFolderExtractedTables((prev) =>
       prev.map((table) =>
         table.id === activeExtractedTableId
           ? {
-              ...table,
-              dataInputMethod: newFolderDataInputMethod,
-              spreadsheetTemplate: newFolderSpreadsheetTemplate || null,
-              ocrTemplateId: newFolderOcrTemplateId || null,
-              ocrTemplateName:
-                ocrTemplates.find((template) => template.id === newFolderOcrTemplateId)?.name ?? null,
-              hasNestedData: newFolderHasNested,
-              documentTypes: parseCommaSeparatedList(newFolderDocumentTypesText),
-              extractionInstructions: newFolderExtractionInstructions.trim(),
-              columns: newFolderColumns.map((column) => ({ ...column })),
-            }
+            ...table,
+            dataInputMethod: derivedDataInputMethod,
+            spreadsheetTemplate: newFolderAcceptsSpreadsheet ? newFolderSpreadsheetTemplate || null : null,
+            ocrTemplateId: newFolderAcceptsPdfImage ? newFolderOcrTemplateId || null : null,
+            ocrTemplateName:
+              newFolderAcceptsPdfImage
+                ? ocrTemplates.find((template) => template.id === newFolderOcrTemplateId)?.name ?? null
+                : null,
+            manualEntryEnabled: newFolderAllowsManualEntry,
+            hasNestedData: newFolderAcceptsPdfImage ? newFolderHasNested : false,
+            documentTypes: parseCommaSeparatedList(newFolderDocumentTypesText),
+            extractionInstructions: newFolderExtractionInstructions.trim(),
+            columns: newFolderColumns.map((column) => ({ ...column })),
+          }
           : table,
       ),
     );
   }, [
     activeExtractedTableId,
+    newFolderAcceptsPdfImage,
+    newFolderAcceptsSpreadsheet,
+    newFolderAllowsManualEntry,
     newFolderColumns,
-    newFolderDataInputMethod,
     newFolderDocumentTypesText,
     newFolderExtractionInstructions,
     newFolderHasNested,
@@ -1281,6 +1445,13 @@ export default function ObraDefaultsPage() {
     const hasItem = mappedColumns.some(c => c.scope === "item");
     setNewFolderHasNested(hasParent && hasItem);
   }, [ocrTemplates]);
+
+  const handleSpreadsheetTemplateSelect = useCallback((template: "auto" | "certificado") => {
+    setNewFolderSpreadsheetTemplate(template);
+    if (!newFolderAcceptsPdfImage && newFolderColumns.length === 0) {
+      setNewFolderColumns(buildSpreadsheetDefaultColumns(template));
+    }
+  }, [newFolderAcceptsPdfImage, newFolderColumns.length]);
 
   // Sync columns scope when hasNested changes
   useEffect(() => {
@@ -1326,6 +1497,16 @@ export default function ObraDefaultsPage() {
     setIsAddFolderOpen(true);
   }, [resetFolderForm]);
 
+  const handleApplyFolderRecipe = useCallback(() => {
+    const recipeTables = buildCertificadoRecipeTables();
+    const firstTable = recipeTables[0];
+    setFolderMode("data");
+    setNewFolderName((current) => (current.trim() ? current : "Certificados"));
+    setNewFolderExtractedTables(recipeTables);
+    setActiveExtractedTableId(firstTable.id);
+    loadEditorFromExtractedTable(firstTable);
+  }, [loadEditorFromExtractedTable]);
+
   const handleEditFolder = useCallback((folder: DefaultFolder) => {
     const pathSegments = folder.path.split("/").filter(Boolean);
     const parentPath = pathSegments.length > 1 ? pathSegments.slice(0, -1).join("/") : "";
@@ -1347,18 +1528,26 @@ export default function ObraDefaultsPage() {
 
   const handleSaveFolder = async () => {
     if (!newFolderName.trim()) return;
+    const derivedDataInputMethod = deriveDataInputMethod({
+      acceptsPdfImage: newFolderAcceptsPdfImage,
+      acceptsSpreadsheet: newFolderAcceptsSpreadsheet,
+      allowsManualEntry: newFolderAllowsManualEntry,
+    });
 
     const currentExtractedTables = newFolderExtractedTables.map((table, index) => {
       if (table.id !== activeExtractedTableId) return table;
       return {
         ...table,
         name: table.name?.trim() || (index === 0 ? newFolderName.trim() : `Tabla ${index + 1}`),
-        dataInputMethod: newFolderDataInputMethod,
-        spreadsheetTemplate: newFolderSpreadsheetTemplate || null,
-        ocrTemplateId: newFolderOcrTemplateId || null,
+        dataInputMethod: derivedDataInputMethod,
+        spreadsheetTemplate: newFolderAcceptsSpreadsheet ? newFolderSpreadsheetTemplate || null : null,
+        ocrTemplateId: newFolderAcceptsPdfImage ? newFolderOcrTemplateId || null : null,
         ocrTemplateName:
-          ocrTemplates.find((template) => template.id === newFolderOcrTemplateId)?.name ?? null,
-        hasNestedData: newFolderHasNested,
+          newFolderAcceptsPdfImage
+            ? ocrTemplates.find((template) => template.id === newFolderOcrTemplateId)?.name ?? null
+            : null,
+        manualEntryEnabled: newFolderAllowsManualEntry,
+        hasNestedData: newFolderAcceptsPdfImage ? newFolderHasNested : false,
         documentTypes: parseCommaSeparatedList(newFolderDocumentTypesText),
         extractionInstructions: newFolderExtractionInstructions.trim(),
         columns: newFolderColumns.map((column) => ({ ...column })),
@@ -1375,13 +1564,26 @@ export default function ObraDefaultsPage() {
     const effectiveExtractionInstructions = primaryTable.extractionInstructions ?? "";
 
     const needsOcrTemplate = effectiveDataInputMethod === 'ocr' || effectiveDataInputMethod === 'both';
-    const hasAnyTemplateSelected = Boolean(effectiveOcrTemplateId || effectiveSpreadsheetTemplate);
+    const hasAnyTemplateSelected = Boolean(
+      (newFolderAcceptsPdfImage && effectiveOcrTemplateId) ||
+      (newFolderAcceptsSpreadsheet && effectiveSpreadsheetTemplate),
+    );
     const hasSpreadsheetTemplateOnly = Boolean(effectiveSpreadsheetTemplate) && !effectiveOcrTemplateId;
     let effectiveColumns = primaryTable.columns;
 
     if (folderMode === "data" && effectiveColumns.length === 0 && hasSpreadsheetTemplateOnly) {
       effectiveColumns = buildSpreadsheetDefaultColumns(effectiveSpreadsheetTemplate);
       setNewFolderColumns(effectiveColumns);
+    }
+
+    if (folderMode === "data" && !newFolderAcceptsPdfImage && !newFolderAcceptsSpreadsheet && !newFolderAllowsManualEntry) {
+      toast.error("ActivÃ¡ al menos un tipo de entrada");
+      return;
+    }
+
+    if (folderMode === "data" && newFolderAcceptsSpreadsheet && !effectiveSpreadsheetTemplate) {
+      toast.error("SeleccionÃ¡ una plantilla XLSX / CSV");
+      return;
     }
 
     if (folderMode === "data") {
@@ -1410,6 +1612,7 @@ export default function ObraDefaultsPage() {
         payload.dataInputMethod = effectiveDataInputMethod;
         payload.spreadsheetTemplate = effectiveSpreadsheetTemplate || null;
         payload.ocrTemplateId = needsOcrTemplate ? effectiveOcrTemplateId : null;
+        payload.manualEntryEnabled = newFolderAllowsManualEntry;
         payload.hasNestedData = needsOcrTemplate ? effectiveHasNested : false;
         payload.documentTypes = effectiveDocumentTypes;
         payload.extractionInstructions = effectiveExtractionInstructions.trim() || null;
@@ -1423,6 +1626,8 @@ export default function ObraDefaultsPage() {
           dataInputMethod: table.dataInputMethod,
           spreadsheetTemplate: table.spreadsheetTemplate || null,
           ocrTemplateId: table.ocrTemplateId || null,
+          manualEntryEnabled:
+            typeof table.manualEntryEnabled === "boolean" ? table.manualEntryEnabled : true,
           hasNestedData: Boolean(table.hasNestedData),
           documentTypes: table.documentTypes ?? [],
           extractionInstructions: table.extractionInstructions?.trim() || null,
@@ -1609,6 +1814,9 @@ export default function ObraDefaultsPage() {
       setNewFolderDataInputMethod(imported.suggestedDataInputMethod);
       setNewFolderSpreadsheetTemplate("");
       setNewFolderOcrTemplateId("");
+      setNewFolderAcceptsPdfImage(true);
+      setNewFolderAcceptsSpreadsheet(false);
+      setNewFolderAllowsManualEntry(imported.suggestedDataInputMethod !== "ocr");
       setNewFolderHasNested(imported.hasNestedData);
       setNewFolderDocumentTypesText(imported.documentTypes.join(", "));
       setNewFolderExtractionInstructions(imported.extractionInstructions);
@@ -1624,6 +1832,7 @@ export default function ObraDefaultsPage() {
           spreadsheetTemplate: null,
           ocrTemplateId: null,
           ocrTemplateName: null,
+          manualEntryEnabled: true,
           hasNestedData: imported.hasNestedData,
           documentTypes: imported.documentTypes,
           extractionInstructions: imported.extractionInstructions,
@@ -1724,13 +1933,29 @@ export default function ObraDefaultsPage() {
     );
   };
 
-  const needsOcrTemplate = newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both';
-  const hasAnyTemplateSelected = Boolean(newFolderOcrTemplateId || newFolderSpreadsheetTemplate);
+  const acceptedInputDataMethod = deriveDataInputMethod({
+    acceptsPdfImage: newFolderAcceptsPdfImage,
+    acceptsSpreadsheet: newFolderAcceptsSpreadsheet,
+    allowsManualEntry: newFolderAllowsManualEntry,
+  });
+  const needsOcrTemplate = newFolderAcceptsPdfImage;
+  const hasAnyTemplateSelected = Boolean(
+    (newFolderAcceptsPdfImage && newFolderOcrTemplateId) ||
+    (newFolderAcceptsSpreadsheet && newFolderSpreadsheetTemplate),
+  );
+  const acceptedInputLabels = getAcceptedInputLabels({
+    acceptsPdfImage: newFolderAcceptsPdfImage,
+    acceptsSpreadsheet: newFolderAcceptsSpreadsheet,
+    allowsManualEntry: newFolderAllowsManualEntry,
+  });
   const extractedTableCount = newFolderExtractedTables.length;
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
     (folderMode === "data" && (newFolderColumns.length === 0 || extractedTableCount === 0)) ||
-    (folderMode === "data" && needsOcrTemplate && !hasAnyTemplateSelected && !hasImportedDefinition);
+    (folderMode === "data" &&
+      (!newFolderAcceptsPdfImage && !newFolderAcceptsSpreadsheet && !newFolderAllowsManualEntry)) ||
+    (folderMode === "data" && newFolderAcceptsPdfImage && !newFolderOcrTemplateId && !hasImportedDefinition) ||
+    (folderMode === "data" && newFolderAcceptsSpreadsheet && !newFolderSpreadsheetTemplate);
   const isCreateQuickActionDisabled =
     !newQuickActionName.trim() || newQuickActionFolders.length === 0;
 
@@ -1754,18 +1979,123 @@ export default function ObraDefaultsPage() {
       ).length,
     [dataFolders]
   );
-  const folderEditorSteps = useMemo(
+  const folderEditorStepMeta = useMemo(
+    () =>
+      folderMode === "data"
+        ? [
+          {
+            label: "Base",
+            title: "Defini la carpeta",
+            description: "Elegi el objetivo de esta carpeta y donde va a vivir dentro de la obra.",
+          },
+          {
+            label: "Captura",
+            title: "Explica que entra",
+            description: "Define las fuentes, los documentos esperados y la logica de captura.",
+          },
+          {
+            label: "Campos",
+            title: "Diseña el resultado",
+            description: "Define las columnas finales que queres ver siempre en la tabla.",
+          },
+          {
+            label: "Revision",
+            title: "Revisa antes de guardar",
+            description: "Chequea el recorrido completo y confirma lo importante.",
+          },
+        ]
+        : [
+          {
+            label: "Base",
+            title: "Defini la carpeta",
+            description: "Ubica la carpeta y confirma el objetivo de organizacion.",
+          },
+          {
+            label: "Revision",
+            title: "Revisa antes de guardar",
+            description: "Confirma la ubicacion final y el tipo de carpeta que vas a crear.",
+          },
+        ],
+    [folderMode]
+  );
+  const folderEditorStepsLegacy = useMemo(
     () =>
       folderMode === "data"
         ? ["Base", "Carga", "Campos", "RevisiÃ³n"]
         : ["Base", "RevisiÃ³n"],
     [folderMode]
   );
+  void folderEditorStepsLegacy;
+  const folderEditorSteps = useMemo(
+    () => folderEditorStepMeta.map((step) => step.label),
+    [folderEditorStepMeta]
+  );
   const folderEditorLastStep = folderEditorSteps.length - 1;
   const isFolderReviewStep = folderEditorStep === folderEditorLastStep;
   const parentFolderOptions = useMemo(
     () => folders.filter((folder) => folder.id !== editingFolderId),
     [folders, editingFolderId]
+  );
+  const folderPathPreview = `/${newFolderParentPath ? `${newFolderParentPath}/` : ""}${normalizeFolderName(newFolderName || "carpeta")}`;
+  const activeExtractedTable = useMemo(
+    () =>
+      newFolderExtractedTables.find((table) => table.id === activeExtractedTableId) ??
+      newFolderExtractedTables[0] ??
+      null,
+    [activeExtractedTableId, newFolderExtractedTables]
+  );
+  const selectedOcrTemplate = useMemo(
+    () => ocrTemplates.find((template) => template.id === newFolderOcrTemplateId) ?? null,
+    [newFolderOcrTemplateId, ocrTemplates]
+  );
+  const currentFolderStepMeta =
+    folderEditorStepMeta[folderEditorStep] ?? folderEditorStepMeta[0];
+  const folderProgressValue = ((folderEditorStep + 1) / folderEditorSteps.length) * 100;
+  const currentWizardTitle =
+    folderMode === "data"
+      ? folderEditorStep === 0
+        ? "¿Qué tipo de carpeta es esta?"
+        : folderEditorStep === 1
+          ? "¿Qué puede llegar a esta carpeta?"
+          : folderEditorStep === 2
+            ? "¿Cómo debe quedar la tabla?"
+            : "Revisión antes de guardar"
+      : folderEditorStep === 0
+        ? "¿Qué tipo de carpeta es esta?"
+        : "Revisión antes de guardar";
+  const currentWizardDescription =
+    folderMode === "data"
+      ? folderEditorStep === 0
+        ? "Elegí si esta carpeta solo guarda archivos o también genera una tabla de datos reutilizable."
+        : folderEditorStep === 1
+          ? "Definí qué tipos de entrada acepta esta carpeta y qué debe pasar con cada uno."
+          : folderEditorStep === 2
+            ? "Estos campos definen la estructura reutilizable para todos los proyectos."
+            : "Revisá el resultado antes de que forme parte de la configuración base del proyecto."
+      : folderEditorStep === 0
+        ? "Elegí si esta carpeta solo guarda archivos o también genera una tabla de datos reutilizable."
+        : "Revisá el resultado antes de que forme parte de la configuración base del proyecto.";
+  const isFolderBaseReady = Boolean(newFolderName.trim());
+  const isFolderCaptureReady =
+    folderMode !== "data" ||
+    (extractedTableCount > 0 && (!needsOcrTemplate || hasAnyTemplateSelected || hasImportedDefinition));
+  const isFolderColumnsReady = folderMode !== "data" || newFolderColumns.length > 0;
+  const canAdvanceFolderStep =
+    folderEditorStep === 0
+      ? isFolderBaseReady
+      : folderMode === "data" && folderEditorStep === 1
+        ? isFolderCaptureReady
+        : folderMode === "data" && folderEditorStep === 2
+          ? isFolderColumnsReady
+          : true;
+  const goToFolderEditorStep = useCallback(
+    (nextStep: number) => {
+      if (folderMode === "data") {
+        syncActiveTableFromEditor();
+      }
+      setFolderEditorStep(Math.max(0, Math.min(nextStep, folderEditorLastStep)));
+    },
+    [folderEditorLastStep, folderMode, syncActiveTableFromEditor]
   );
 
   if (isLoading) {
@@ -1964,6 +2294,7 @@ export default function ObraDefaultsPage() {
                   <Button
                     onClick={() => openCreateFolder("data")}
                     className="bg-amber-500 hover:bg-amber-600 text-white"
+                    data-testid="open-data-folder-dialog"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Nueva carpeta de datos
@@ -2319,6 +2650,167 @@ export default function ObraDefaultsPage() {
             </DialogDescription>
           </DialogHeader>
 
+          {false && (
+            <div className="mx-auto max-w-3xl space-y-8 py-4">
+              <div className="space-y-4 rounded-3xl border bg-background p-6">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      <span>Paso {folderEditorStep + 1} de {folderEditorSteps.length}</span>
+                      <Badge variant="outline" className="rounded-full">
+                        {Math.round(folderProgressValue)}%
+                      </Badge>
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-semibold tracking-tight">{currentFolderStepMeta.label}</h3>
+                      <p className="max-w-2xl text-sm text-muted-foreground">
+                        {currentFolderStepMeta.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="min-w-[220px] space-y-3 lg:max-w-xs">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Ruta final</p>
+                      <p className="font-mono text-sm">{folderPathPreview}</p>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-amber-500 transition-all"
+                        style={{ width: `${folderProgressValue}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`grid gap-3 ${folderMode === "data" ? "md:grid-cols-4" : "md:grid-cols-2"}`}>
+                {folderEditorStepMeta.map((step, index) => {
+                  const isActive = index === folderEditorStep;
+                  const isComplete = index < folderEditorStep;
+                  return (
+                    <button
+                      key={step.label}
+                      type="button"
+                      onClick={() => {
+                        if (index <= folderEditorStep) {
+                          goToFolderEditorStep(index);
+                        }
+                      }}
+                      className={`rounded-2xl border px-4 py-4 text-left transition ${isActive
+                        ? "border-amber-500 bg-amber-50"
+                        : isComplete
+                          ? "border-border bg-background"
+                          : "bg-muted/20"
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${isActive
+                            ? "bg-amber-500 text-white"
+                            : isComplete
+                              ? "bg-emerald-500 text-white"
+                              : "bg-background text-muted-foreground"
+                            }`}
+                        >
+                          {isComplete ? "OK" : index + 1}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{step.label}</p>
+                          <p className="text-xs text-muted-foreground">{step.title}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {folderEditorStep === 0 && (
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setFolderMode("normal")}
+                      disabled={Boolean(editingFolderId)}
+                      className={`rounded-3xl border p-5 text-left transition ${folderMode === "normal"
+                        ? "border-amber-500 bg-amber-50 shadow-sm"
+                        : "hover:border-amber-200 hover:bg-amber-50/50"
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-900 text-white">
+                          <Folder className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-base font-semibold">Carpeta normal</p>
+                          <p className="text-sm text-muted-foreground">
+                            Solo organiza archivos y deja una estructura clara.
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFolderMode("data")}
+                      disabled={Boolean(editingFolderId)}
+                      className={`rounded-3xl border p-5 text-left transition ${folderMode === "data"
+                        ? "border-amber-500 bg-amber-50 shadow-sm"
+                        : "hover:border-amber-200 hover:bg-amber-50/50"
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500 text-white">
+                          <Table2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-base font-semibold">Carpeta de datos</p>
+                          <p className="text-sm text-muted-foreground">
+                            Guarda archivos y crea una tabla lista para captura o extraccion.
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="rounded-3xl border bg-background p-6 space-y-5">
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Carpeta padre</Label>
+                        <Select
+                          value={newFolderParentPath || "__root__"}
+                          onValueChange={(value) => setNewFolderParentPath(value === "__root__" ? "" : value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Raiz" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__root__">Raiz</SelectItem>
+                            {parentFolderOptions.map((folder) => (
+                              <SelectItem key={folder.id} value={folder.path}>
+                                {folder.name} (/{folder.path})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Nombre de la carpeta</Label>
+                        <Input
+                          value={newFolderName}
+                          onChange={(e) => setNewFolderName(e.target.value)}
+                          placeholder={folderMode === "data" ? "Ej. Certificados" : "Ej. Documentacion"}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2 border-t pt-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Preview</p>
+                      <p className="font-mono text-sm">{folderPathPreview}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Nombre de la acción</Label>
@@ -2384,911 +2876,273 @@ export default function ObraDefaultsPage() {
             </div>
 
             <div className="hidden">
-            <div className="grid gap-2 sm:grid-cols-4">
-              {folderEditorSteps.map((step, index) => {
-                const isActive = index === folderEditorStep;
-                const isComplete = index < folderEditorStep;
-                return (
-                  <div
-                    key={step}
-                    className={`rounded-xl border px-3 py-2 text-left ${
-                      isActive
+              <div className="grid gap-2 sm:grid-cols-4">
+                {folderEditorSteps.map((step, index) => {
+                  const isActive = index === folderEditorStep;
+                  const isComplete = index < folderEditorStep;
+                  return (
+                    <div
+                      key={step}
+                      className={`rounded-xl border px-3 py-2 text-left ${isActive
                         ? "border-amber-500 bg-amber-50 dark:bg-amber-950/20"
                         : isComplete
                           ? "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20"
                           : "bg-muted/30"
-                    }`}
-                  >
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      Paso {index + 1}
-                    </p>
-                    <p className="text-sm font-medium">{step}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {folderEditorStep === 0 && (
-              <div className="space-y-4">
-                <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    <strong>Carpeta normal:</strong> solo organiza archivos.
-                    <br />
-                    <strong>Carpeta de datos:</strong> crea una tabla asociada para carga manual o extracción.
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={folderMode === "normal" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFolderMode("normal")}
-                    className="flex-1"
-                    disabled={Boolean(editingFolderId)}
-                  >
-                    <Folder className="h-4 w-4 mr-2" />
-                    Solo guardar archivos
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={folderMode === "data" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFolderMode("data")}
-                    className="flex-1"
-                    disabled={Boolean(editingFolderId)}
-                  >
-                    <Table2 className="h-4 w-4 mr-2" />
-                    Guardar archivos y capturar datos
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Carpeta padre (opcional)</Label>
-                  <Select
-                    value={newFolderParentPath || "__root__"}
-                    onValueChange={(value) => setNewFolderParentPath(value === "__root__" ? "" : value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Raíz" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__root__">Raíz</SelectItem>
-                      {parentFolderOptions.map((folder) => (
-                        <SelectItem key={folder.id} value={folder.path}>
-                          {folder.name} (/{folder.path})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Nombre de la carpeta</Label>
-                  <Input
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    placeholder={folderMode === "data" ? "Ej. Certificados Extraídos" : "Ej. Documentación"}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Ruta final: /{newFolderParentPath ? `${newFolderParentPath}/` : ""}{normalizeFolderName(newFolderName || "carpeta")}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {folderMode === "data" && folderEditorStep === 1 && (
-              <div className="space-y-4">
-                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Label>Importar definicion JSON</Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Pega el resultado del LLM y precargamos documentos esperados,
-                        instrucciones y columnas.
+                        }`}
+                    >
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Paso {index + 1}
                       </p>
+                      <p className="text-sm font-medium">{step}</p>
                     </div>
+                  );
+                })}
+              </div>
+
+              {folderEditorStep === 0 && (
+                <div className="space-y-4">
+                  <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      <strong>Carpeta normal:</strong> solo organiza archivos.
+                      <br />
+                      <strong>Carpeta de datos:</strong> crea una tabla asociada para carga manual o extracción.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
                     <Button
                       type="button"
-                      variant="outline"
+                      variant={folderMode === "normal" ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setIsDefinitionImportOpen((prev) => !prev)}
+                      onClick={() => setFolderMode("normal")}
+                      className="flex-1"
+                      disabled={Boolean(editingFolderId)}
                     >
-                      {isDefinitionImportOpen ? "Ocultar" : "Pegar JSON"}
+                      <Folder className="h-4 w-4 mr-2" />
+                      Solo guardar archivos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={folderMode === "data" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setFolderMode("data")}
+                      className="flex-1"
+                      disabled={Boolean(editingFolderId)}
+                    >
+                      <Table2 className="h-4 w-4 mr-2" />
+                      Guardar archivos y capturar datos
                     </Button>
                   </div>
 
-                  {isDefinitionImportOpen && (
-                    <div className="space-y-3">
-                      <Textarea
-                        value={definitionImportText}
-                        onChange={(e) => setDefinitionImportText(e.target.value)}
-                        placeholder="Pegá acá el JSON completo de la definición de extracción"
-                        className="min-h-[220px] font-mono text-xs"
-                      />
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs text-muted-foreground">
-                          Si hay secciones tabulares, se activan como datos anidados.
-                        </p>
-                        <Button
-                          type="button"
-                          onClick={handleImportDefinitionJson}
-                          className="bg-amber-500 hover:bg-amber-600"
-                        >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Importar definicion
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-                  <div>
-                    <Label>Método de carga de datos</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Elegí si esta tabla recibe datos manuales, desde OCR o desde ambos.
-                    </p>
-                  </div>
-                  <RadioGroup
-                    value={newFolderDataInputMethod}
-                    onValueChange={(value) => setNewFolderDataInputMethod(value as DataInputMethod)}
-                    className="grid gap-3 sm:grid-cols-3"
-                  >
-                    <div className="flex items-center space-x-2 rounded-lg border bg-background px-3 py-2">
-                      <RadioGroupItem value="ocr" id="defaults-method-ocr-step" />
-                      <Label htmlFor="defaults-method-ocr-step" className="text-sm font-normal cursor-pointer">Solo OCR</Label>
-                    </div>
-                    <div className="flex items-center space-x-2 rounded-lg border bg-background px-3 py-2">
-                      <RadioGroupItem value="manual" id="defaults-method-manual-step" />
-                      <Label htmlFor="defaults-method-manual-step" className="text-sm font-normal cursor-pointer">Solo manual</Label>
-                    </div>
-                    <div className="flex items-center space-x-2 rounded-lg border bg-background px-3 py-2">
-                      <RadioGroupItem value="both" id="defaults-method-both-step" />
-                      <Label htmlFor="defaults-method-both-step" className="text-sm font-normal cursor-pointer">Ambos</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                {newFolderDataInputMethod !== "ocr" && (
                   <div className="space-y-2">
-                    <Label>Plantilla de extracción XLSX/CSV</Label>
+                    <Label>Carpeta padre (opcional)</Label>
                     <Select
-                      value={newFolderSpreadsheetTemplate || undefined}
-                      onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as "auto" | "certificado")}
+                      value={newFolderParentPath || "__root__"}
+                      onValueChange={(value) => setNewFolderParentPath(value === "__root__" ? "" : value)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar plantilla XLSX..." />
+                        <SelectValue placeholder="Raíz" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="auto">Auto (detectar por columnas)</SelectItem>
-                        <SelectItem value="certificado">Certificado</SelectItem>
+                        <SelectItem value="__root__">Raíz</SelectItem>
+                        {parentFolderOptions.map((folder) => (
+                          <SelectItem key={folder.id} value={folder.path}>
+                            {folder.name} (/{folder.path})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
-                {(newFolderDataInputMethod === "ocr" || newFolderDataInputMethod === "both") && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Plantilla OCR</Label>
-                      {ocrTemplates.length === 0 ? (
-                        <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
-                          No hay plantillas disponibles. Creá una primero.
-                        </div>
-                      ) : (
-                        <Select
-                          value={newFolderOcrTemplateId || undefined}
-                          onValueChange={handleTemplateSelect}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar plantilla..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ocrTemplates.map((template) => (
-                              <SelectItem key={template.id} value={template.id}>
-                                {template.name} ({template.columns.length} campos)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Nombre de la carpeta</Label>
+                    <Input
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      placeholder={folderMode === "data" ? "Ej. Certificados Extraídos" : "Ej. Documentación"}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Ruta final: /{newFolderParentPath ? `${newFolderParentPath}/` : ""}{normalizeFolderName(newFolderName || "carpeta")}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+              {folderMode === "data" && folderEditorStep === 1 && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-medium">Datos anidados</p>
-                        <p className="text-xs text-muted-foreground">
-                          El documento tiene datos a nivel documento e items.
+                        <Label>Importar definicion JSON</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Pega el resultado del LLM y precargamos documentos esperados,
+                          instrucciones y columnas.
                         </p>
                       </div>
-                      <Switch
-                        checked={newFolderHasNested}
-                        onCheckedChange={setNewFolderHasNested}
-                        disabled={Boolean(newFolderOcrTemplateId)}
-                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsDefinitionImportOpen((prev) => !prev)}
+                      >
+                        {isDefinitionImportOpen ? "Ocultar" : "Pegar JSON"}
+                      </Button>
                     </div>
-                  </>
-                )}
 
-                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                  <div>
-                    <Label htmlFor="document-types-step">Tipos de documento esperados</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Separados por coma. Ejemplo: certificado mensual, certificado desacopio.
-                    </p>
-                  </div>
-                  <Textarea
-                    id="document-types-step"
-                    value={newFolderDocumentTypesText}
-                    onChange={(e) => setNewFolderDocumentTypesText(e.target.value)}
-                    placeholder="certificado mensual, certificado desacopio, curva de avance"
-                    className="min-h-[72px]"
-                  />
-                  <div>
-                    <Label htmlFor="extraction-instructions-step">Instrucciones de extracción</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Explicale al sistema cómo interpretar estos documentos, qué significan los campos y qué debe ignorar.
-                    </p>
-                  </div>
-                  <Textarea
-                    id="extraction-instructions-step"
-                    value={newFolderExtractionInstructions}
-                    onChange={(e) => setNewFolderExtractionInstructions(e.target.value)}
-                    placeholder="El expediente puede aparecer como Expte., Nro. Expte o EX-2025..."
-                    className="min-h-[96px]"
-                  />
-                </div>
-              </div>
-            )}
-
-            {folderMode === "data" && folderEditorStep === 2 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Columnas de la tabla</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Definí el resultado final que querés ver en todas las obras.
-                    </p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={handleAddColumn}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Agregar
-                  </Button>
-                </div>
-
-                {newFolderColumns.length === 0 ? (
-                  <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed text-center">
-                    No hay columnas definidas. Agregá al menos una columna.
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[420px] overflow-y-auto">
-                    {newFolderColumns.map((col) => (
-                      <div key={col.id} className="space-y-2 rounded-lg border bg-background p-2">
-                        <div className="flex items-center gap-2">
-                          <Input
-                            value={col.label}
-                            onChange={(e) => handleColumnChange(col.id, "label", e.target.value)}
-                            placeholder="Nombre columna"
-                            className="flex-1 h-8 text-sm"
-                          />
-                          <Select
-                            value={col.dataType}
-                            onValueChange={(value) => handleColumnChange(col.id, "dataType", value)}
+                    {isDefinitionImportOpen && (
+                      <div className="space-y-3">
+                        <Textarea
+                          value={definitionImportText}
+                          onChange={(e) => setDefinitionImportText(e.target.value)}
+                          placeholder="Pegá acá el JSON completo de la definición de extracción"
+                          className="min-h-[220px] font-mono text-xs"
+                        />
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground">
+                            Si hay secciones tabulares, se activan como datos anidados.
+                          </p>
+                          <Button
+                            type="button"
+                            onClick={handleImportDefinitionJson}
+                            className="bg-amber-500 hover:bg-amber-600"
                           >
-                            <SelectTrigger className="w-28 h-8">
-                              <SelectValue />
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Importar definicion
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                    <div>
+                      <Label>Método de carga de datos</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Elegí si esta tabla recibe datos manuales, desde OCR o desde ambos.
+                      </p>
+                    </div>
+                    <RadioGroup
+                      value={newFolderDataInputMethod}
+                      onValueChange={(value) => setNewFolderDataInputMethod(value as DataInputMethod)}
+                      className="grid gap-3 sm:grid-cols-3"
+                    >
+                      <div className="flex items-center space-x-2 rounded-lg border bg-background px-3 py-2">
+                        <RadioGroupItem value="ocr" id="defaults-method-ocr-step" />
+                        <Label htmlFor="defaults-method-ocr-step" className="text-sm font-normal cursor-pointer">Solo OCR</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 rounded-lg border bg-background px-3 py-2">
+                        <RadioGroupItem value="manual" id="defaults-method-manual-step" />
+                        <Label htmlFor="defaults-method-manual-step" className="text-sm font-normal cursor-pointer">Solo manual</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 rounded-lg border bg-background px-3 py-2">
+                        <RadioGroupItem value="both" id="defaults-method-both-step" />
+                        <Label htmlFor="defaults-method-both-step" className="text-sm font-normal cursor-pointer">Ambos</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  {newFolderDataInputMethod !== "ocr" && (
+                    <div className="space-y-2">
+                      <Label>Plantilla de extracción XLSX/CSV</Label>
+                      <Select
+                        value={newFolderSpreadsheetTemplate || undefined}
+                        onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as "auto" | "certificado")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar plantilla XLSX..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Auto (detectar por columnas)</SelectItem>
+                          <SelectItem value="certificado">Certificado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {(newFolderDataInputMethod === "ocr" || newFolderDataInputMethod === "both") && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Plantilla OCR</Label>
+                        {ocrTemplates.length === 0 ? (
+                          <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
+                            No hay plantillas disponibles. Creá una primero.
+                          </div>
+                        ) : (
+                          <Select
+                            value={newFolderOcrTemplateId || undefined}
+                            onValueChange={handleTemplateSelect}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleccionar plantilla..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {DATA_TYPE_OPTIONS.map((type) => (
-                                <SelectItem key={type.value} value={type.value}>
-                                  {type.label}
+                              {ocrTemplates.map((template) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name} ({template.columns.length} campos)
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <label className="flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              checked={col.required}
-                              onChange={(e) => handleColumnChange(col.id, "required", e.target.checked)}
-                              className="rounded border-stone-300"
-                            />
-                            Req.
-                          </label>
-                          {newFolderHasNested && needsOcrTemplate && (
-                            <Select
-                              value={col.scope}
-                              onValueChange={(value) => handleColumnChange(col.id, "scope", value)}
-                            >
-                              <SelectTrigger className="w-24 h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="parent">Doc</SelectItem>
-                                <SelectItem value="item">Item</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveColumn(col.id)}
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <Textarea
-                          value={col.description ?? ""}
-                          onChange={(e) => handleColumnChange(col.id, "description", e.target.value)}
-                          placeholder="Qué significa este campo y cómo debería interpretarse"
-                          className="min-h-[64px]"
-                        />
-                        <div className="grid gap-2 md:grid-cols-3">
-                          <Input
-                            value={joinCommaSeparatedList(col.aliases)}
-                            onChange={(e) => handleColumnListChange(col.id, "aliases", e.target.value)}
-                            placeholder="Aliases / nombres alternativos"
-                            className="h-8 text-sm"
-                          />
-                          <Input
-                            value={joinCommaSeparatedList(col.examples)}
-                            onChange={(e) => handleColumnListChange(col.id, "examples", e.target.value)}
-                            placeholder="Ejemplos de valores"
-                            className="h-8 text-sm"
-                          />
-                          <Input
-                            value={joinCommaSeparatedList(col.excelKeywords)}
-                            onChange={(e) => handleColumnListChange(col.id, "excelKeywords", e.target.value)}
-                            placeholder="Encabezados / keywords Excel"
-                            className="h-8 text-sm"
-                          />
-                        </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
-            {isFolderReviewStep && (
-              <div className="space-y-4">
-                <div className="rounded-xl border bg-muted/20 p-4 space-y-4">
-                  <div>
-                    <p className="text-sm font-medium">Resumen</p>
-                    <p className="text-xs text-muted-foreground">
-                      Revisá el impacto antes de guardar.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-lg border bg-background p-3">
-                      <p className="text-xs text-muted-foreground">Tipo</p>
-                      <p className="text-sm font-medium">
-                        {folderMode === "data" ? "Carpeta de datos" : "Carpeta normal"}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-background p-3">
-                      <p className="text-xs text-muted-foreground">Ruta</p>
-                      <p className="text-sm font-medium font-mono">
-                        /{newFolderParentPath ? `${newFolderParentPath}/` : ""}{normalizeFolderName(newFolderName || "carpeta")}
-                      </p>
-                    </div>
-                    {folderMode === "data" && (
-                      <>
-                        <div className="rounded-lg border bg-background p-3">
-                          <p className="text-xs text-muted-foreground">Carga</p>
-                          <p className="text-sm font-medium">{getDataInputMethodLabel(newFolderDataInputMethod)}</p>
-                        </div>
-                        <div className="rounded-lg border bg-background p-3">
-                          <p className="text-xs text-muted-foreground">Columnas</p>
-                          <p className="text-sm font-medium">{newFolderColumns.length} definidas</p>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {folderMode === "data" && newFolderColumns.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-2">Campos finales</p>
-                      <div className="flex flex-wrap gap-2">
-                        {newFolderColumns.map((col) => (
-                          <Badge key={col.id} variant="secondary">{col.label || col.fieldKey || "Sin nombre"}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="hidden">
-            <div className="space-y-2">
-              <Label>Nombre de la acción</Label>
-              <Input
-                value={newQuickActionName}
-                onChange={(e) => setNewQuickActionName(e.target.value)}
-                placeholder="Ej. Carga mensual"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Descripción (opcional)</Label>
-              <Textarea
-                value={newQuickActionDescription}
-                onChange={(e) => setNewQuickActionDescription(e.target.value)}
-                placeholder="Ej. Subir certificados y facturas"
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <Label>Carpetas (orden de pasos)</Label>
-                <p className="text-xs text-muted-foreground">
-                  Seleccioná las carpetas en el orden deseado.
-                </p>
-              </div>
-
-              {folders.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed text-center">
-                  No hay carpetas configuradas. Creá una carpeta primero.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {folders.map((folder) => {
-                    const orderIndex = newQuickActionFolders.indexOf(folder.path);
-                    const isSelected = orderIndex !== -1;
-
-                    return (
-                      <button
-                        key={folder.id}
-                        type="button"
-                        onClick={() => toggleQuickActionFolder(folder.path)}
-                        className={`w-full rounded-lg border p-3 flex items-center gap-3 text-left transition-colors ${isSelected ? "border-orange-500 bg-orange-50" : "hover:bg-accent/50"}`}
-                      >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
-                          {folder.isOcr ? <Table2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{folder.name}</p>
-                          <p className="text-xs text-muted-foreground font-mono">/{folder.path}</p>
-                        </div>
-                        {isSelected ? (
-                          <Badge variant="secondary" className="text-[10px]">
-                            Paso {orderIndex + 1}
-                          </Badge>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setIsAddQuickActionOpen(false);
-              resetQuickActionForm();
-            }}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => void handleAddQuickAction()}
-              disabled={isSubmittingQuickAction || isCreateQuickActionDisabled}
-              className="bg-orange-500 hover:bg-orange-600"
-            >
-              {isSubmittingQuickAction ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Zap className="h-4 w-4 mr-2" />
-              )}
-              Crear acción
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Folder Dialog */}
-      <Dialog open={isAddFolderOpen} onOpenChange={(open) => {
-        setIsAddFolderOpen(open);
-        if (!open) resetFolderForm();
-      }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto px-4">
-          <DialogHeader className="px-0">
-            <DialogTitle className="flex items-center gap-2">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${folderMode === "data"
-                ? "bg-amber-100 dark:bg-amber-900/30"
-                : "bg-amber-100 dark:bg-amber-900/30"
-                }`}>
-                {folderMode === "data" ? (
-                  <Table2 className="h-4 w-4 text-amber-600" />
-                ) : (
-                  <FolderPlus className="h-4 w-4 text-amber-600" />
-                )}
-              </div>
-              {editingFolderId
-                ? folderMode === "data"
-                  ? "Editar carpeta de datos"
-                  : "Editar carpeta"
-                : folderMode === "data"
-                  ? "Nueva carpeta de datos"
-                  : "Nueva carpeta"}
-            </DialogTitle>
-            <DialogDescription>
-              {folderMode === "data"
-                ? "Esta carpeta tendrá una tabla de datos asociada que podés llenar manualmente o con extracción de documentos."
-                : "Esta carpeta se creará automáticamente en cada nueva obra."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Explanation */}
-            <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                <strong>Carpeta normal:</strong> Solo organiza archivos. <br />
-                <strong>Carpeta de datos:</strong> Tiene una tabla asociada donde podés cargar datos manualmente o extraerlos de documentos. La tabla queda disponible para usar en Macro Tablas.
-              </p>
-            </div>
-
-            {/* Folder Type Toggle */}
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={folderMode === "normal" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFolderMode("normal")}
-                className="flex-1"
-                disabled={Boolean(editingFolderId)}
-              >
-                <Folder className="h-4 w-4 mr-2" />
-                Carpeta normal
-              </Button>
-              <Button
-                type="button"
-                variant={folderMode === "data" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFolderMode("data")}
-                className="flex-1"
-                disabled={Boolean(editingFolderId)}
-              >
-                <Table2 className="h-4 w-4 mr-2" />
-                Carpeta de datos
-              </Button>
-            </div>
-
-            {/* Folder Name */}
-            <div className="space-y-2">
-              <Label>Carpeta padre (opcional)</Label>
-              <Select
-                value={newFolderParentPath || "__root__"}
-                onValueChange={(value) => setNewFolderParentPath(value === "__root__" ? "" : value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Raíz" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__root__">Raíz</SelectItem>
-                  {parentFolderOptions.map((folder) => (
-                    <SelectItem key={folder.id} value={folder.path}>
-                      {folder.name} (/{folder.path})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Folder Name */}
-            <div className="space-y-2">
-              <Label>Nombre de la carpeta</Label>
-              <Input
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder={folderMode === "data" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
-              />
-              <p className="text-xs text-muted-foreground">
-                Ruta final: /{newFolderParentPath ? `${newFolderParentPath}/` : ""}{normalizeFolderName(newFolderName || "carpeta")}
-              </p>
-            </div>
-
-            {/* Data Folder Specific Fields */}
-            {folderMode === "data" && (
-              <>
-                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Label>Importar definicion JSON</Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Pega el resultado del LLM y precargamos documentos esperados,
-                        instrucciones y columnas.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsDefinitionImportOpen((prev) => !prev)}
-                    >
-                      {isDefinitionImportOpen ? "Ocultar" : "Pegar JSON"}
-                    </Button>
-                  </div>
-
-                  {isDefinitionImportOpen && (
-                    <div className="space-y-3">
-                      <Textarea
-                        value={definitionImportText}
-                        onChange={(e) => setDefinitionImportText(e.target.value)}
-                        placeholder="Pegá acá el JSON completo de la definición de extracción"
-                        className="min-h-[220px] font-mono text-xs"
-                      />
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs text-muted-foreground">
-                          Si hay secciones tabulares, se activan como datos anidados.
-                        </p>
-                        <Button
-                          type="button"
-                          onClick={handleImportDefinitionJson}
-                          className="bg-amber-500 hover:bg-amber-600"
-                        >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Importar definicion
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <Label>Tablas extraidas dentro de esta carpeta</Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Cada tabla puede tener su propia cantidad de filas, tipos de documento y origen de extraccion.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={handleAddExtractedTable}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      Agregar tabla
-                    </Button>
-                  </div>
-
-                  <Accordion
-                    type="single"
-                    collapsible
-                    value={activeExtractedTableId ?? undefined}
-                    onValueChange={(value) => {
-                      if (value) {
-                        handleSelectExtractedTable(value);
-                      }
-                    }}
-                    className="w-full"
-                  >
-                    {newFolderExtractedTables.map((table, index) => (
-                      <AccordionItem key={table.id} value={table.id} className="rounded-lg border bg-background px-3">
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex w-full items-center justify-between gap-3 pr-3 text-left">
-                            <div>
-                              <p className="text-sm font-medium">{table.name || `Tabla ${index + 1}`}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {table.rowMode === "single"
-                                  ? "Extrae 1 fila"
-                                  : `Extrae ${getEffectiveTableMaxRows(table) ?? "N"} filas`}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {table.ocrTemplateId && (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  PDF / imagen
-                                </Badge>
-                              )}
-                              {table.spreadsheetTemplate && (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  Excel / CSV
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-3 pb-3">
-                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px_auto]">
-                            <Input
-                              value={table.name}
-                              onChange={(e) => handleExtractedTableMetaChange(table.id, "name", e.target.value)}
-                              placeholder="Ej. Certificados resumen"
-                            />
-                            <Select
-                              value={table.rowMode}
-                              onValueChange={(value) => handleExtractedTableMetaChange(table.id, "rowMode", value)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="single">1 fila</SelectItem>
-                                <SelectItem value="multiple">Multiples filas</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={table.rowMode === "single" ? "1" : String(table.maxRows ?? "")}
-                              disabled={table.rowMode === "single"}
-                              onChange={(e) => handleExtractedTableMetaChange(table.id, "maxRows", e.target.value)}
-                              placeholder="N"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleRemoveExtractedTable(table.id)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="rounded-lg border p-3">
-                              <p className="text-sm font-medium">PDF e imagen</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {table.ocrTemplateName ?? "Usa una plantilla OCR para este tipo de documento"}
-                              </p>
-                            </div>
-                            <div className="rounded-lg border p-3">
-                              <p className="text-sm font-medium">Excel y CSV</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {table.spreadsheetTemplate
-                                  ? `Usa la extraccion ${table.spreadsheetTemplate}`
-                                  : "Sin extractor de planillas configurado"}
-                              </p>
-                            </div>
-                          </div>
+                      <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                        <div>
+                          <p className="text-sm font-medium">Datos anidados</p>
                           <p className="text-xs text-muted-foreground">
-                            Selecciona esta tabla para editar sus columnas, documentos esperados y templates en los bloques siguientes.
+                            El documento tiene datos a nivel documento e items.
                           </p>
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
-
-                {/* Data Input Method */}
-                <div className="space-y-3">
-                  <Label>Método de carga de datos</Label>
-                  <RadioGroup
-                    value={newFolderDataInputMethod}
-                    onValueChange={(value) => setNewFolderDataInputMethod(value as DataInputMethod)}
-                    className="grid grid-cols-3 gap-3"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="ocr" id="defaults-method-ocr" />
-                      <Label htmlFor="defaults-method-ocr" className="text-sm font-normal cursor-pointer">Solo OCR</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="manual" id="defaults-method-manual" />
-                      <Label htmlFor="defaults-method-manual" className="text-sm font-normal cursor-pointer">Solo manual</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="both" id="defaults-method-both" />
-                      <Label htmlFor="defaults-method-both" className="text-sm font-normal cursor-pointer">Ambos</Label>
-                    </div>
-                  </RadioGroup>
-                  <p className="text-xs text-muted-foreground">
-                    {newFolderDataInputMethod === 'ocr' && 'Los datos se extraerán automáticamente de documentos subidos.'}
-                    {newFolderDataInputMethod === 'manual' && 'Los datos se ingresarán manualmente en la tabla.'}
-                    {newFolderDataInputMethod === 'both' && 'Podés cargar datos manualmente o extraerlos de documentos.'}
-                  </p>
-                </div>
-
-                {/* Spreadsheet Template Selection - when manual input is allowed */}
-                {newFolderDataInputMethod !== 'ocr' && (
-                  <div className="space-y-2">
-                    <Label>Plantilla de extracción XLSX/CSV</Label>
-                    <Select
-                      value={newFolderSpreadsheetTemplate || undefined}
-                      onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as "auto" | "certificado")}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar plantilla XLSX..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="auto">Auto (detectar por columnas)</SelectItem>
-                        <SelectItem value="certificado">Certificado (certexampleplayground)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Template Selection - Only when OCR is needed */}
-                {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
-                  <div className="space-y-2">
-                    <Label>Plantilla de extracción</Label>
-                    {ocrTemplates.length === 0 ? (
-                      <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
-                        No hay plantillas disponibles. Creá una primero.
+                        </div>
+                        <Switch
+                          checked={newFolderHasNested}
+                          onCheckedChange={setNewFolderHasNested}
+                          disabled={Boolean(newFolderOcrTemplateId)}
+                        />
                       </div>
-                    ) : (
-                      <Select
-                        value={newFolderOcrTemplateId || undefined}
-                        onValueChange={handleTemplateSelect}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar plantilla..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ocrTemplates.map((template) => (
-                            <SelectItem key={template.id} value={template.id}>
-                              <span className="flex items-center gap-2">
-                                <ScanLine className="h-4 w-4 text-purple-500" />
-                                {template.name} ({template.columns.length} campos)
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                )}
+                    </>
+                  )}
 
-                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                  <div>
-                    <Label htmlFor="document-types">Tipos de documento esperados</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Separados por coma. Ejemplo: certificado mensual, certificado desacopio, curva de avance.
-                    </p>
-                  </div>
-                  <Textarea
-                    id="document-types"
-                    value={newFolderDocumentTypesText}
-                    onChange={(e) => setNewFolderDocumentTypesText(e.target.value)}
-                    placeholder="certificado mensual, certificado desacopio, curva de avance"
-                    className="min-h-[72px]"
-                  />
-                  <div>
-                    <Label htmlFor="extraction-instructions">Instrucciones de extraccion</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Explicale al sistema como interpretar estos documentos, que significan los campos y que debe ignorar.
-                    </p>
-                  </div>
-                  <Textarea
-                    id="extraction-instructions"
-                    value={newFolderExtractionInstructions}
-                    onChange={(e) => setNewFolderExtractionInstructions(e.target.value)}
-                    placeholder="Estos documentos pueden venir con encabezados distintos. El expediente puede aparecer como Expte., Nro. Expte o EX-2025..."
-                    className="min-h-[96px]"
-                  />
-                </div>
-
-                {/* Nested Data Toggle - Only when OCR is needed */}
-                {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
-                  <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
                     <div>
-                      <p className="text-sm font-medium">Datos anidados</p>
-                      <p className="text-xs text-muted-foreground">
-                        El documento tiene datos a nivel documento e items
+                      <Label htmlFor="document-types-step">Tipos de documento esperados</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Separados por coma. Ejemplo: certificado mensual, certificado desacopio.
                       </p>
                     </div>
-                    <Switch
-                      checked={newFolderHasNested}
-                      onCheckedChange={setNewFolderHasNested}
-                      disabled={Boolean(newFolderOcrTemplateId)}
+                    <Textarea
+                      id="document-types-step"
+                      value={newFolderDocumentTypesText}
+                      onChange={(e) => setNewFolderDocumentTypesText(e.target.value)}
+                      placeholder="certificado mensual, certificado desacopio, curva de avance"
+                      className="min-h-[72px]"
+                    />
+                    <div>
+                      <Label htmlFor="extraction-instructions-step">Instrucciones de extracción</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Explicale al sistema cómo interpretar estos documentos, qué significan los campos y qué debe ignorar.
+                      </p>
+                    </div>
+                    <Textarea
+                      id="extraction-instructions-step"
+                      value={newFolderExtractionInstructions}
+                      onChange={(e) => setNewFolderExtractionInstructions(e.target.value)}
+                      placeholder="El expediente puede aparecer como Expte., Nro. Expte o EX-2025..."
+                      className="min-h-[96px]"
                     />
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Columns - Show for all data input methods */}
+              {folderMode === "data" && folderEditorStep === 2 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Columnas de la tabla</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAddColumn}
-                    >
+                    <div>
+                      <Label>Columnas de la tabla</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Definí el resultado final que querés ver en todas las obras.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={handleAddColumn}>
                       <Plus className="h-4 w-4 mr-1" />
                       Agregar
                     </Button>
@@ -3299,12 +3153,9 @@ export default function ObraDefaultsPage() {
                       No hay columnas definidas. Agregá al menos una columna.
                     </div>
                   ) : (
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    <div className="space-y-2 max-h-[420px] overflow-y-auto">
                       {newFolderColumns.map((col) => (
-                        <div
-                          key={col.id}
-                          className="space-y-2 rounded-lg border bg-background p-2"
-                        >
+                        <div key={col.id} className="space-y-2 rounded-lg border bg-background p-2">
                           <div className="flex items-center gap-2">
                             <Input
                               value={col.label}
@@ -3336,7 +3187,7 @@ export default function ObraDefaultsPage() {
                               />
                               Req.
                             </label>
-                            {newFolderHasNested && (newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                            {newFolderHasNested && needsOcrTemplate && (
                               <Select
                                 value={col.scope}
                                 onValueChange={(value) => handleColumnChange(col.id, "scope", value)}
@@ -3363,7 +3214,7 @@ export default function ObraDefaultsPage() {
                           <Textarea
                             value={col.description ?? ""}
                             onChange={(e) => handleColumnChange(col.id, "description", e.target.value)}
-                            placeholder="Que significa este campo y como deberia interpretarse"
+                            placeholder="Qué significa este campo y cómo debería interpretarse"
                             className="min-h-[64px]"
                           />
                           <div className="grid gap-2 md:grid-cols-3">
@@ -3391,36 +3242,1230 @@ export default function ObraDefaultsPage() {
                     </div>
                   )}
                 </div>
-              </>
-            )}
+              )}
+
+              {isFolderReviewStep && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border bg-muted/20 p-4 space-y-4">
+                    <div>
+                      <p className="text-sm font-medium">Resumen</p>
+                      <p className="text-xs text-muted-foreground">
+                        Revisá el impacto antes de guardar.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border bg-background p-3">
+                        <p className="text-xs text-muted-foreground">Tipo</p>
+                        <p className="text-sm font-medium">
+                          {folderMode === "data" ? "Carpeta de datos" : "Carpeta normal"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-background p-3">
+                        <p className="text-xs text-muted-foreground">Ruta</p>
+                        <p className="text-sm font-medium font-mono">
+                          /{newFolderParentPath ? `${newFolderParentPath}/` : ""}{normalizeFolderName(newFolderName || "carpeta")}
+                        </p>
+                      </div>
+                      {folderMode === "data" && (
+                        <>
+                          <div className="rounded-lg border bg-background p-3">
+                            <p className="text-xs text-muted-foreground">Carga</p>
+                            <p className="text-sm font-medium">{getDataInputMethodLabel(newFolderDataInputMethod)}</p>
+                          </div>
+                          <div className="rounded-lg border bg-background p-3">
+                            <p className="text-xs text-muted-foreground">Columnas</p>
+                            <p className="text-sm font-medium">{newFolderColumns.length} definidas</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {folderMode === "data" && newFolderColumns.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">Campos finales</p>
+                        <div className="flex flex-wrap gap-2">
+                          {newFolderColumns.map((col) => (
+                            <Badge key={col.id} variant="secondary">{col.label || col.fieldKey || "Sin nombre"}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="hidden">
+              <div className="space-y-2">
+                <Label>Nombre de la acción</Label>
+                <Input
+                  value={newQuickActionName}
+                  onChange={(e) => setNewQuickActionName(e.target.value)}
+                  placeholder="Ej. Carga mensual"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Descripción (opcional)</Label>
+                <Textarea
+                  value={newQuickActionDescription}
+                  onChange={(e) => setNewQuickActionDescription(e.target.value)}
+                  placeholder="Ej. Subir certificados y facturas"
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label>Carpetas (orden de pasos)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Seleccioná las carpetas en el orden deseado.
+                  </p>
+                </div>
+
+                {folders.length === 0 ? (
+                  <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed text-center">
+                    No hay carpetas configuradas. Creá una carpeta primero.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {folders.map((folder) => {
+                      const orderIndex = newQuickActionFolders.indexOf(folder.path);
+                      const isSelected = orderIndex !== -1;
+
+                      return (
+                        <button
+                          key={folder.id}
+                          type="button"
+                          onClick={() => toggleQuickActionFolder(folder.path)}
+                          className={`w-full rounded-lg border p-3 flex items-center gap-3 text-left transition-colors ${isSelected ? "border-orange-500 bg-orange-50" : "hover:bg-accent/50"}`}
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                            {folder.isOcr ? <Table2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{folder.name}</p>
+                            <p className="text-xs text-muted-foreground font-mono">/{folder.path}</p>
+                          </div>
+                          {isSelected ? (
+                            <Badge variant="secondary" className="text-[10px]">
+                              Paso {orderIndex + 1}
+                            </Badge>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => {
-              setIsAddFolderOpen(false);
-              resetFolderForm();
+              setIsAddQuickActionOpen(false);
+              resetQuickActionForm();
             }}>
               Cancelar
             </Button>
             <Button
-              onClick={() => void handleSaveFolder()}
-              disabled={isSubmittingFolder || isCreateFolderDisabled}
-              className="bg-amber-500 hover:bg-amber-600"
+              onClick={() => void handleAddQuickAction()}
+              disabled={isSubmittingQuickAction || isCreateQuickActionDisabled}
+              className="bg-orange-500 hover:bg-orange-600"
             >
-              {isSubmittingFolder ? (
+              {isSubmittingQuickAction ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : folderMode === "data" ? (
-                <Table2 className="h-4 w-4 mr-2" />
               ) : (
-                <FolderPlus className="h-4 w-4 mr-2" />
+                <Zap className="h-4 w-4 mr-2" />
               )}
-              {editingFolderId
-                ? "Guardar cambios"
-                : folderMode === "data"
-                  ? "Crear carpeta de datos"
-                  : "Crear carpeta"}
+              Crear acción
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Folder Dialog */}
+      <Dialog open={isAddFolderOpen} onOpenChange={(open) => {
+        setIsAddFolderOpen(open);
+        if (!open) resetFolderForm();
+      }}>
+        <DialogContent className="aspect-[1.618/1] max-w-[80vw] max-h-[95vh] overflow-y-auto px-4 py-8">
+          <DialogTitle className="sr-only">{currentWizardTitle}</DialogTitle>
+
+          <div className="mx-auto max-w-xl space-y-8 py-4">
+            <div className="space-y-5 text-center">
+              <div className="flex items-center justify-center gap-2">
+                {folderEditorSteps.map((step, index) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() => {
+                      if (index <= folderEditorStep) {
+                        goToFolderEditorStep(index);
+                      }
+                    }}
+                    className={`h-1 w-6 rounded-full transition ${index === folderEditorStep ? "bg-orange-500" : "bg-stone-300"
+                      }`}
+                    aria-label={`Step ${index + 1}`}
+                  />
+                ))}
+                <span className="ml-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                  Step {folderEditorStep + 1} of {folderEditorSteps.length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-3xl font-semibold tracking-tight text-balance">
+                  {currentWizardTitle}
+                </h3>
+                <p className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
+                  {currentWizardDescription}
+                </p>
+              </div>
+            </div>
+
+            {folderEditorStep === 0 && (
+              <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setFolderMode("normal")}
+                    disabled={Boolean(editingFolderId)}
+                    className={`rounded-xl border p-5 text-left transition ${folderMode === "normal"
+                      ? "border-orange-500 bg-background"
+                      : "border-border bg-background"
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold">Carpeta normal</p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          Para contratos, notas, anexos y documentos de referencia.
+                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Solo guarda archivos
+                        </p>
+                      </div>
+                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${folderMode === "normal" ? "border-orange-500" : "border-stone-300"
+                        }`}>
+                        {folderMode === "normal" ? <div className="h-2 w-2 rounded-full bg-orange-500" /> : null}
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFolderMode("data")}
+                    disabled={Boolean(editingFolderId)}
+                    className={`rounded-xl border p-5 text-left transition ${folderMode === "data"
+                      ? "border-orange-500 bg-background"
+                      : "border-border bg-background"
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold">Carpeta de datos</p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          Para cuando los documentos subidos deben generar una tabla estructurada.
+                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                          Guarda archivos y captura datos
+                        </p>
+                      </div>
+                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${folderMode === "data" ? "border-orange-500" : "border-stone-300"
+                        }`}>
+                        {folderMode === "data" ? <div className="h-2 w-2 rounded-full bg-orange-500" /> : null}
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Carpeta padre</Label>
+                      <Select
+                        value={newFolderParentPath || "__root__"}
+                        onValueChange={(value) => setNewFolderParentPath(value === "__root__" ? "" : value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar carpeta..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__root__">Raiz</SelectItem>
+                          {parentFolderOptions.map((folder) => (
+                            <SelectItem key={folder.id} value={folder.path}>
+                              {folder.name} (/{folder.path})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">
+                        Nombre de carpeta <span className="text-orange-500">*</span>
+                      </Label>
+                      <Input
+                        value={newFolderName}
+                        onChange={(e) => setNewFolderName(e.target.value)}
+                        placeholder={folderMode === "data" ? "Certificados" : "Contratos"}
+                        data-testid="folder-name-input"
+                      />
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-muted/40 px-5 py-4">
+                    <p className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Ruta final</p>
+                    <p className="mt-2 font-mono text-lg">{folderPathPreview}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {folderMode === "data" && folderEditorStep === 1 && (
+              <div className="space-y-6">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                  <div className="rounded-3xl border bg-muted/20 p-5">
+                    <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Receta de carpeta</p>
+                    <h4 className="mt-2 text-lg font-semibold">Define los datasets que salen de esta carpeta</h4>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Ejemplo: carpeta <span className="font-medium text-foreground">certificados</span>,
+                      dataset <span className="font-medium text-foreground">resumen</span> con una fila por certificado
+                      y dataset <span className="font-medium text-foreground">items</span> con N filas por certificado.
+                    </p>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Para PDF o imagen define que paginas y que datos corresponden a cada dataset.
+                      Para XLSX / CSV elegi el script de planilla que debe correr.
+                    </p>
+                  </div>
+                  <div className="rounded-3xl border bg-background p-5">
+                    <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Arranque rapido</p>
+                    <h4 className="mt-2 text-base font-semibold">Preset Certificados</h4>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Crea dos datasets editables: <span className="font-medium text-foreground">resumen</span> e <span className="font-medium text-foreground">items</span>.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-4 w-full"
+                      data-testid="folder-recipe-certificados"
+                      onClick={handleApplyFolderRecipe}
+                    >
+                      Aplicar receta certificados
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Datasets a generar</p>
+                    <p className="text-sm text-muted-foreground">
+                      Cada dataset puede tener su propia cantidad de filas, columnas y formatos de entrada.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {newFolderExtractedTables.map((table, index) => {
+                        const isActive = table.id === activeExtractedTable?.id;
+                        return (
+                          <button
+                            key={table.id}
+                            type="button"
+                            onClick={() => handleSelectExtractedTable(table.id)}
+                            data-testid={`extracted-table-tab-${index}`}
+                            className={`rounded-full border px-4 py-1.5 text-sm transition ${isActive ? "border-orange-500 text-foreground" : "text-muted-foreground"
+                              }`}
+                          >
+                            {table.name || `Tabla ${index + 1}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <Button type="button" variant="link" onClick={handleAddExtractedTable} className="px-0 text-orange-500" data-testid="add-extracted-table">
+                    + Agregar dataset
+                  </Button>
+                </div>
+
+                {activeExtractedTable ? (
+                  <div className="space-y-5">
+                    <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_260px]">
+                      <div className="space-y-2">
+                        <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Nombre del dataset</Label>
+                        <Input
+                          value={activeExtractedTable.name}
+                          onChange={(e) => handleExtractedTableMetaChange(activeExtractedTable.id, "name", e.target.value)}
+                          data-testid="active-dataset-name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Forma del dataset</Label>
+                        <div className="grid grid-cols-2 overflow-hidden rounded-2xl border">
+                          <button
+                            type="button"
+                            onClick={() => handleExtractedTableMetaChange(activeExtractedTable.id, "rowMode", "single")}
+                            data-testid="dataset-rowmode-single"
+                            className={`px-4 py-3 text-sm font-medium ${activeExtractedTable.rowMode === "single" ? "bg-stone-900 text-white" : "bg-background"}`}
+                          >
+                            Una fila por documento
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExtractedTableMetaChange(activeExtractedTable.id, "rowMode", "multiple")}
+                            data-testid="dataset-rowmode-multiple"
+                            className={`px-4 py-3 text-sm font-medium ${activeExtractedTable.rowMode === "multiple" ? "bg-stone-900 text-white" : "bg-background"}`}
+                          >
+                            Múltiples filas
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border bg-background px-4 py-3 text-sm text-muted-foreground">
+                      {activeExtractedTable.rowMode === "single"
+                        ? "Usa este dataset para resumenes: una fila por certificado, factura o documento."
+                        : "Usa este dataset para detalles repetidos: items, rubros, hitos o renglones tabulares."}
+                    </div>
+
+                    <div className="space-y-3">
+                      <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Entradas aceptadas</p>
+
+                      <div className={`rounded-3xl border ${newFolderAcceptsPdfImage ? "border-orange-500" : "border-border"}`}>
+                        <div className="flex items-center justify-between gap-4 px-5 py-4">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-orange-50 text-orange-500">
+                              <FileText className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-base font-semibold">PDF / image</p>
+                              <p className="text-sm text-muted-foreground">
+                                Archivos escaneados o documentos visuales → datos estructurados
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={newFolderAcceptsPdfImage}
+                            onCheckedChange={(checked) => {
+                              setNewFolderAcceptsPdfImage(checked);
+                              if (!checked) {
+                                setNewFolderOcrTemplateId("");
+                                setNewFolderHasNested(false);
+                              }
+                            }}
+                          />
+                        </div>
+
+                        {newFolderAcceptsPdfImage ? (
+                          <div className="space-y-4 border-t px-5 py-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Plantilla OCR</Label>
+                              <Select
+                                value={newFolderOcrTemplateId || undefined}
+                                onValueChange={handleTemplateSelect}
+                              >
+                                <SelectTrigger data-testid="ocr-template-select">
+                                  <SelectValue placeholder="Seleccionar plantilla..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {ocrTemplates.map((template) => (
+                                    <SelectItem key={template.id} value={template.id}>
+                                      {template.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Tipos de documentos esperados</Label>
+                              <Textarea
+                                value={newFolderDocumentTypesText}
+                                onChange={(e) => setNewFolderDocumentTypesText(e.target.value)}
+                                placeholder="Certificado mensual, hoja de medición"
+                                className="min-h-[60px] resize-none"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Ayudá al extractor a reconocer qué tipo de documento está leyendo.
+                              </p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Notas de extracción</Label>
+                              <Textarea
+                                value={newFolderExtractionInstructions}
+                                onChange={(e) => setNewFolderExtractionInstructions(e.target.value)}
+                                placeholder="Explicá variantes de nombres, texto a ignorar y cómo interpretar los campos…"
+                                className="min-h-[72px] resize-none"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between rounded-2xl bg-muted/40 px-4 py-3">
+                              <div>
+                                <p className="text-sm font-medium">El documento tiene datos de cabecera e ítems repetidos</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Activá extracción anidada para certificados o facturas con ítems.
+                                </p>
+                              </div>
+                              <Switch
+                                checked={newFolderHasNested}
+                                onCheckedChange={setNewFolderHasNested}
+                                disabled={Boolean(newFolderOcrTemplateId)}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className={`rounded-3xl border ${newFolderAcceptsSpreadsheet ? "border-orange-500" : "border-border"}`}>
+                        <div className="flex items-center justify-between gap-4 px-5 py-4">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                              <Table2 className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-base font-semibold">XLSX / CSV</p>
+                              <p className="text-sm text-muted-foreground">
+                                Planillas subidas mapeadas a esta tabla
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={newFolderAcceptsSpreadsheet}
+                            onCheckedChange={(checked) => {
+                              setNewFolderAcceptsSpreadsheet(checked);
+                              if (!checked) {
+                                setNewFolderSpreadsheetTemplate("");
+                              }
+                            }}
+                          />
+                        </div>
+
+                        {newFolderAcceptsSpreadsheet ? (
+                          <div className="space-y-4 border-t px-5 py-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">Plantilla de planilla</Label>
+                              <Select
+                                value={newFolderSpreadsheetTemplate || undefined}
+                                onValueChange={(value) => handleSpreadsheetTemplateSelect(value as "auto" | "certificado")}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar plantilla..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="auto">Auto</SelectItem>
+                                  <SelectItem value="certificado">Certificado</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className={`rounded-3xl border ${newFolderAllowsManualEntry ? "border-orange-500" : "border-border"}`}>
+                        <div className="flex items-center justify-between gap-4 px-5 py-4">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                              <Pencil className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-base font-semibold">Carga manual</p>
+                              <p className="text-sm text-muted-foreground">
+                                Los usuarios agregan o editan filas directamente, sin subir archivos
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={newFolderAllowsManualEntry}
+                            onCheckedChange={setNewFolderAllowsManualEntry}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm uppercase tracking-[0.16em] text-muted-foreground">
+                          Importar definición de extracción
+                        </Label>
+                        <span className="text-xs text-muted-foreground">Optional</span>
+                      </div>
+                      <Textarea
+                        value={definitionImportText}
+                        onChange={(e) => setDefinitionImportText(e.target.value)}
+                        placeholder="Pegá el JSON de definición para precargar..."
+                        className="min-h-[92px]"
+                      />
+                      {definitionImportText.trim() ? (
+                        <Button type="button" variant="outline" onClick={handleImportDefinitionJson}>
+                          Importar definición
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {folderMode === "data" && folderEditorStep === 2 && (
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Fields</p>
+                    <Button type="button" variant="link" onClick={handleAddColumn} className="px-0 text-orange-500">
+                      + Agregar campo
+                    </Button>
+                  </div>
+
+                  {newFolderColumns.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
+                      Agrega al menos una columna para poder guardar la carpeta de datos.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_140px_110px_auto] gap-3 px-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        <span>Nombre del campo</span>
+                        <span>Tipo</span>
+                        <span>Requerido</span>
+                        <span />
+                      </div>
+                      {newFolderColumns.map((col) => (
+                        <div key={col.id} className="rounded-2xl border p-3">
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_140px_110px_auto]">
+                            <Input
+                              value={col.label}
+                              onChange={(e) => handleColumnChange(col.id, "label", e.target.value)}
+                              placeholder="Nombre del campo"
+                            />
+                            <Select
+                              value={col.dataType}
+                              onValueChange={(value) => handleColumnChange(col.id, "dataType", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DATA_TYPE_OPTIONS.map((type) => (
+                                  <SelectItem key={type.value} value={type.value}>
+                                    {type.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <div className="flex items-center">
+                              <Switch
+                                checked={col.required}
+                                onCheckedChange={(checked) => handleColumnChange(col.id, "required", checked)}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveColumn(col.id)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Aliases, ejemplos y columnas de planilla estarán disponibles después de guardar.
+                </p>
+              </div>
+            )}
+
+            {isFolderReviewStep && (
+              <div className="space-y-5">
+                <div className="overflow-hidden rounded-3xl border bg-background">
+                  <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
+                    <span className="uppercase tracking-[0.16em] text-muted-foreground">Tipo de carpeta</span>
+                    <span className="font-medium">{folderMode === "data" ? "Carpeta de datos" : "Carpeta normal"}</span>
+                  </div>
+                  <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
+                    <span className="uppercase tracking-[0.16em] text-muted-foreground">Path</span>
+                    <span className="font-mono">{folderPathPreview}</span>
+                  </div>
+                  {folderMode === "data" ? (
+                    <>
+                      <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
+                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Entradas aceptadas</span>
+                        <span className="font-medium">{acceptedInputLabels.join(", ")}</span>
+                      </div>
+                      <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
+                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Datasets</span>
+                        <span className="font-medium">{newFolderExtractedTables.length} datasets</span>
+                      </div>
+                      <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
+                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Fields</span>
+                        <div className="space-y-2">
+                          <p className="font-medium">{newFolderColumns.length} campos</p>
+                          <p className="text-muted-foreground">{newFolderColumns.map((column) => column.label).join(" · ")}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-[180px_1fr] px-5 py-4 text-sm">
+                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Detalle por dataset</span>
+                        <div className="space-y-3">
+                          {newFolderExtractedTables.map((table, index) => (
+                            <div key={table.id} className="flex items-center justify-between gap-3">
+                              <span className="font-medium">{table.name || `Tabla ${index + 1}`}</span>
+                              <Badge variant="outline">
+                                {table.rowMode === "single" ? "una fila" : "múltiples filas"}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col items-center gap-4 pt-4">
+              <p className="text-sm leading-7 text-muted-foreground">
+                {folderEditorStep === 0 && !isFolderBaseReady
+                  ? "Escribí un nombre de carpeta para continuar."
+                  : folderMode === "data" && folderEditorStep === 1 && !isFolderCaptureReady
+                    ? "Activá al menos una entrada y completá la configuración requerida."
+                    : folderMode === "data" && folderEditorStep === 2 && !isFolderColumnsReady
+                      ? "Agregá al menos un campo antes de continuar."
+                      : ""}
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-6">
+                {folderEditorStep > 0 ? (
+                  <Button variant="ghost" onClick={() => goToFolderEditorStep(folderEditorStep - 1)}>
+                    Volver
+                  </Button>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setIsAddFolderOpen(false);
+                    resetFolderForm();
+                  }}
+                >
+                  Cancelar
+                </Button>
+                {!isFolderReviewStep ? (
+                  <Button
+                    onClick={() => goToFolderEditorStep(folderEditorStep + 1)}
+                    disabled={!canAdvanceFolderStep}
+                    className="bg-orange-500 px-8 hover:bg-orange-600"
+                    data-testid="folder-wizard-continue"
+                  >
+                    Continuar
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => void handleSaveFolder()}
+                    disabled={isSubmittingFolder || isCreateFolderDisabled}
+                    className="bg-orange-500 px-8 hover:bg-orange-600"
+                    data-testid="folder-wizard-save"
+                  >
+                    {isSubmittingFolder ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {editingFolderId ? "Guardar cambios" : folderMode === "data" ? "Crear carpeta de datos" : "Crear carpeta"}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          <div className="hidden">
+            <div className="space-y-4 py-4">
+              {/* Explanation */}
+              <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <strong>Carpeta normal:</strong> Solo organiza archivos. <br />
+                  <strong>Carpeta de datos:</strong> Tiene una tabla asociada donde podés cargar datos manualmente o extraerlos de documentos. La tabla queda disponible para usar en Macro Tablas.
+                </p>
+              </div>
+
+              {/* Folder Type Toggle */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={folderMode === "normal" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFolderMode("normal")}
+                  className="flex-1"
+                  disabled={Boolean(editingFolderId)}
+                >
+                  <Folder className="h-4 w-4 mr-2" />
+                  Carpeta normal
+                </Button>
+                <Button
+                  type="button"
+                  variant={folderMode === "data" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFolderMode("data")}
+                  className="flex-1"
+                  disabled={Boolean(editingFolderId)}
+                >
+                  <Table2 className="h-4 w-4 mr-2" />
+                  Carpeta de datos
+                </Button>
+              </div>
+
+              {/* Folder Name */}
+              <div className="space-y-2">
+                <Label>Carpeta padre (opcional)</Label>
+                <Select
+                  value={newFolderParentPath || "__root__"}
+                  onValueChange={(value) => setNewFolderParentPath(value === "__root__" ? "" : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Raíz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__root__">Raíz</SelectItem>
+                    {parentFolderOptions.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.path}>
+                        {folder.name} (/{folder.path})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Folder Name */}
+              <div className="space-y-2">
+                <Label>Nombre de la carpeta</Label>
+                <Input
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder={folderMode === "data" ? "Ej. Órdenes de Compra" : "Ej. Documentos"}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ruta final: /{newFolderParentPath ? `${newFolderParentPath}/` : ""}{normalizeFolderName(newFolderName || "carpeta")}
+                </p>
+              </div>
+
+              {/* Data Folder Specific Fields */}
+              {folderMode === "data" && (
+                <>
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Label>Importar definicion JSON</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Pega el resultado del LLM y precargamos documentos esperados,
+                          instrucciones y columnas.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsDefinitionImportOpen((prev) => !prev)}
+                      >
+                        {isDefinitionImportOpen ? "Ocultar" : "Pegar JSON"}
+                      </Button>
+                    </div>
+
+                    {isDefinitionImportOpen && (
+                      <div className="space-y-3">
+                        <Textarea
+                          value={definitionImportText}
+                          onChange={(e) => setDefinitionImportText(e.target.value)}
+                          placeholder="Pegá acá el JSON completo de la definición de extracción"
+                          className="min-h-[220px] font-mono text-xs"
+                        />
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground">
+                            Si hay secciones tabulares, se activan como datos anidados.
+                          </p>
+                          <Button
+                            type="button"
+                            onClick={handleImportDefinitionJson}
+                            className="bg-amber-500 hover:bg-amber-600"
+                          >
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Importar definicion
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label>Tablas extraidas dentro de esta carpeta</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Cada tabla puede tener su propia cantidad de filas, tipos de documento y origen de extraccion.
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={handleAddExtractedTable}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Agregar tabla
+                      </Button>
+                    </div>
+
+                    <Accordion
+                      type="single"
+                      collapsible
+                      value={activeExtractedTableId ?? undefined}
+                      onValueChange={(value) => {
+                        if (value) {
+                          handleSelectExtractedTable(value);
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      {newFolderExtractedTables.map((table, index) => (
+                        <AccordionItem key={table.id} value={table.id} className="rounded-lg border bg-background px-3">
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex w-full items-center justify-between gap-3 pr-3 text-left">
+                              <div>
+                                <p className="text-sm font-medium">{table.name || `Tabla ${index + 1}`}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {table.rowMode === "single"
+                                    ? "Extrae 1 fila"
+                                    : `Extrae ${getEffectiveTableMaxRows(table) ?? "N"} filas`}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {table.ocrTemplateId && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    PDF / imagen
+                                  </Badge>
+                                )}
+                                {table.spreadsheetTemplate && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    Excel / CSV
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="space-y-3 pb-3">
+                            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px_auto]">
+                              <Input
+                                value={table.name}
+                                onChange={(e) => handleExtractedTableMetaChange(table.id, "name", e.target.value)}
+                                placeholder="Ej. Certificados resumen"
+                              />
+                              <Select
+                                value={table.rowMode}
+                                onValueChange={(value) => handleExtractedTableMetaChange(table.id, "rowMode", value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="single">1 fila</SelectItem>
+                                  <SelectItem value="multiple">Multiples filas</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={table.rowMode === "single" ? "1" : String(table.maxRows ?? "")}
+                                disabled={table.rowMode === "single"}
+                                onChange={(e) => handleExtractedTableMetaChange(table.id, "maxRows", e.target.value)}
+                                placeholder="N"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveExtractedTable(table.id)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="rounded-lg border p-3">
+                                <p className="text-sm font-medium">PDF e imagen</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {table.ocrTemplateName ?? "Usa una plantilla OCR para este tipo de documento"}
+                                </p>
+                              </div>
+                              <div className="rounded-lg border p-3">
+                                <p className="text-sm font-medium">Excel y CSV</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {table.spreadsheetTemplate
+                                    ? `Usa la extraccion ${table.spreadsheetTemplate}`
+                                    : "Sin extractor de planillas configurado"}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Selecciona esta tabla para editar sus columnas, documentos esperados y templates en los bloques siguientes.
+                            </p>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </div>
+
+                  {/* Data Input Method */}
+                  <div className="space-y-3">
+                    <Label>Método de carga de datos</Label>
+                    <RadioGroup
+                      value={newFolderDataInputMethod}
+                      onValueChange={(value) => setNewFolderDataInputMethod(value as DataInputMethod)}
+                      className="grid grid-cols-3 gap-3"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ocr" id="defaults-method-ocr" />
+                        <Label htmlFor="defaults-method-ocr" className="text-sm font-normal cursor-pointer">Solo OCR</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="manual" id="defaults-method-manual" />
+                        <Label htmlFor="defaults-method-manual" className="text-sm font-normal cursor-pointer">Solo manual</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="both" id="defaults-method-both" />
+                        <Label htmlFor="defaults-method-both" className="text-sm font-normal cursor-pointer">Ambos</Label>
+                      </div>
+                    </RadioGroup>
+                    <p className="text-xs text-muted-foreground">
+                      {newFolderDataInputMethod === 'ocr' && 'Los datos se extraerán automáticamente de documentos subidos.'}
+                      {newFolderDataInputMethod === 'manual' && 'Los datos se ingresarán manualmente en la tabla.'}
+                      {newFolderDataInputMethod === 'both' && 'Podés cargar datos manualmente o extraerlos de documentos.'}
+                    </p>
+                  </div>
+
+                  {/* Spreadsheet Template Selection - when manual input is allowed */}
+                  {newFolderDataInputMethod !== 'ocr' && (
+                    <div className="space-y-2">
+                      <Label>Plantilla de extracción XLSX/CSV</Label>
+                      <Select
+                        value={newFolderSpreadsheetTemplate || undefined}
+                        onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as "auto" | "certificado")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar plantilla XLSX..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Auto (detectar por columnas)</SelectItem>
+                          <SelectItem value="certificado">Certificado (certexampleplayground)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Template Selection - Only when OCR is needed */}
+                  {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                    <div className="space-y-2">
+                      <Label>Plantilla de extracción</Label>
+                      {ocrTemplates.length === 0 ? (
+                        <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
+                          No hay plantillas disponibles. Creá una primero.
+                        </div>
+                      ) : (
+                        <Select
+                          value={newFolderOcrTemplateId || undefined}
+                          onValueChange={handleTemplateSelect}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar plantilla..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ocrTemplates.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                <span className="flex items-center gap-2">
+                                  <ScanLine className="h-4 w-4 text-purple-500" />
+                                  {template.name} ({template.columns.length} campos)
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                    <div>
+                      <Label htmlFor="document-types">Tipos de documento esperados</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Separados por coma. Ejemplo: certificado mensual, certificado desacopio, curva de avance.
+                      </p>
+                    </div>
+                    <Textarea
+                      id="document-types"
+                      value={newFolderDocumentTypesText}
+                      onChange={(e) => setNewFolderDocumentTypesText(e.target.value)}
+                      placeholder="certificado mensual, certificado desacopio, curva de avance"
+                      className="min-h-[72px]"
+                    />
+                    <div>
+                      <Label htmlFor="extraction-instructions">Instrucciones de extraccion</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Explicale al sistema como interpretar estos documentos, que significan los campos y que debe ignorar.
+                      </p>
+                    </div>
+                    <Textarea
+                      id="extraction-instructions"
+                      value={newFolderExtractionInstructions}
+                      onChange={(e) => setNewFolderExtractionInstructions(e.target.value)}
+                      placeholder="Estos documentos pueden venir con encabezados distintos. El expediente puede aparecer como Expte., Nro. Expte o EX-2025..."
+                      className="min-h-[96px]"
+                    />
+                  </div>
+
+                  {/* Nested Data Toggle - Only when OCR is needed */}
+                  {(newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                      <div>
+                        <p className="text-sm font-medium">Datos anidados</p>
+                        <p className="text-xs text-muted-foreground">
+                          El documento tiene datos a nivel documento e items
+                        </p>
+                      </div>
+                      <Switch
+                        checked={newFolderHasNested}
+                        onCheckedChange={setNewFolderHasNested}
+                        disabled={Boolean(newFolderOcrTemplateId)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Columns - Show for all data input methods */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Columnas de la tabla</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddColumn}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Agregar
+                      </Button>
+                    </div>
+
+                    {newFolderColumns.length === 0 ? (
+                      <div className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed text-center">
+                        No hay columnas definidas. Agregá al menos una columna.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                        {newFolderColumns.map((col) => (
+                          <div
+                            key={col.id}
+                            className="space-y-2 rounded-lg border bg-background p-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={col.label}
+                                onChange={(e) => handleColumnChange(col.id, "label", e.target.value)}
+                                placeholder="Nombre columna"
+                                className="flex-1 h-8 text-sm"
+                              />
+                              <Select
+                                value={col.dataType}
+                                onValueChange={(value) => handleColumnChange(col.id, "dataType", value)}
+                              >
+                                <SelectTrigger className="w-28 h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DATA_TYPE_OPTIONS.map((type) => (
+                                    <SelectItem key={type.value} value={type.value}>
+                                      {type.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <label className="flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={col.required}
+                                  onChange={(e) => handleColumnChange(col.id, "required", e.target.checked)}
+                                  className="rounded border-stone-300"
+                                />
+                                Req.
+                              </label>
+                              {newFolderHasNested && (newFolderDataInputMethod === 'ocr' || newFolderDataInputMethod === 'both') && (
+                                <Select
+                                  value={col.scope}
+                                  onValueChange={(value) => handleColumnChange(col.id, "scope", value)}
+                                >
+                                  <SelectTrigger className="w-24 h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="parent">Doc</SelectItem>
+                                    <SelectItem value="item">Item</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveColumn(col.id)}
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <Textarea
+                              value={col.description ?? ""}
+                              onChange={(e) => handleColumnChange(col.id, "description", e.target.value)}
+                              placeholder="Que significa este campo y como deberia interpretarse"
+                              className="min-h-[64px]"
+                            />
+                            <div className="grid gap-2 md:grid-cols-3">
+                              <Input
+                                value={joinCommaSeparatedList(col.aliases)}
+                                onChange={(e) => handleColumnListChange(col.id, "aliases", e.target.value)}
+                                placeholder="Aliases / nombres alternativos"
+                                className="h-8 text-sm"
+                              />
+                              <Input
+                                value={joinCommaSeparatedList(col.examples)}
+                                onChange={(e) => handleColumnListChange(col.id, "examples", e.target.value)}
+                                placeholder="Ejemplos de valores"
+                                className="h-8 text-sm"
+                              />
+                              <Input
+                                value={joinCommaSeparatedList(col.excelKeywords)}
+                                onChange={(e) => handleColumnListChange(col.id, "excelKeywords", e.target.value)}
+                                placeholder="Encabezados / keywords Excel"
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setIsAddFolderOpen(false);
+                resetFolderForm();
+              }}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => void handleSaveFolder()}
+                disabled={isSubmittingFolder || isCreateFolderDisabled}
+                className="bg-amber-500 hover:bg-amber-600"
+              >
+                {isSubmittingFolder ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : folderMode === "data" ? (
+                  <Table2 className="h-4 w-4 mr-2" />
+                ) : (
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                )}
+                {editingFolderId
+                  ? "Guardar cambios"
+                  : folderMode === "data"
+                    ? "Crear carpeta de datos"
+                    : "Crear carpeta"}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

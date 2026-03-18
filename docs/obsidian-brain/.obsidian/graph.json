@@ -1,0 +1,65 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {
+      "query": "tag:#architecture",
+      "color": {
+        "a": 1,
+        "rgb": 14701138
+      }
+    },
+    {
+      "query": "tag:#obras",
+      "color": {
+        "a": 1,
+        "rgb": 16744272
+      }
+    },
+    {
+      "query": "tag:#admin",
+      "color": {
+        "a": 1,
+        "rgb": 16711680
+      }
+    },
+    {
+      "query": "tag:#notifications",
+      "color": {
+        "a": 1,
+        "rgb": 6684672
+      }
+    },
+    {
+      "query": "tag:#workflow",
+      "color": {
+        "a": 1,
+        "rgb": 6710886
+      }
+    },
+    {
+      "query": "tag:#security",
+      "color": {
+        "a": 1,
+        "rgb": 16724736
+      }
+    }
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 2.11614583333333,
+  "lineSizeMultiplier": 0.610416666666667,
+  "collapse-forces": false,
+  "centerStrength": 0.536458333333333,
+  "repelStrength": 12.7083333333333,
+  "linkStrength": 0.864583333333333,
+  "linkDistance": 133,
+  "scale": 0.2588386562181627,
+  "close": false
+}

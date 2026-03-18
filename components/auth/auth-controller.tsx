@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AuthModal from "@/components/auth/auth-modal";
+import dynamic from "next/dynamic";
+
+const AuthModal = dynamic(() => import("@/components/auth/auth-modal"), {
+  ssr: false,
+});
 
 export default function AuthController() {
   const [open, setOpen] = useState(false);
@@ -30,6 +34,8 @@ export default function AuthController() {
       setForcedOpen(false);
     }
   };
+
+  if (!open && !forcedOpen) return null;
 
   return <AuthModal open={open} onOpenChange={handleOpenChange} forcedOpen={forcedOpen} />;
 }
