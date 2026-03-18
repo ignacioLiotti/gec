@@ -1627,22 +1627,21 @@ function FileManagerContent({
   useEffect(() => {
     if (!obraId) return;
     const shouldRefetchTree = needsRefetch(obraId) || !fileTree;
-    const shouldRefetchOcr = ocrFolderLinks.length === 0;
 
-    // Skip if everything is already fresh
-    if (!shouldRefetchTree && !shouldRefetchOcr) {
+    // `buildFileTree` returns both the tree and OCR links. An empty links array is
+    // a valid steady state for new obras, not a signal that loading failed.
+    if (!shouldRefetchTree) {
       lastBootstrapObraIdRef.current = obraId;
       return;
     }
-    if (lastBootstrapObraIdRef.current === obraId && !shouldRefetchTree && !shouldRefetchOcr) {
+    if (lastBootstrapObraIdRef.current === obraId && !shouldRefetchTree) {
       return;
     }
     lastBootstrapObraIdRef.current = obraId;
 
     const bootstrap = async () => {
       try {
-        // Build once: this endpoint already returns tree + OCR links.
-        if (shouldRefetchTree || shouldRefetchOcr) {
+        if (shouldRefetchTree) {
           await buildFileTree({ skipCache: true });
         }
       } catch (error) {
@@ -1652,7 +1651,7 @@ function FileManagerContent({
 
     void bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [obraId, fileTree, ocrFolderLinks.length, buildFileTree]);
+  }, [obraId, fileTree, buildFileTree]);
 
   // OCR links are now fetched alongside the tree; no separate re-hydration loop needed.
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { obraSchema } from "@/app/excel/schema";
+import { applyObraDefaults } from "@/lib/obra-defaults";
 import {
 	getAuthContext,
 	loadTenantMainTableCustomColumnIds,
@@ -50,6 +51,11 @@ export async function PATCH(request: Request) {
 	}
 
 	const { updates } = parsed.data;
+	const existingNs = new Set(
+		updates
+			.filter((obra) => typeof obra.id === "string" && obra.id.trim().length > 0)
+			.map((obra) => obra.n)
+	);
 	const allowedCustomColumnIds = await loadTenantMainTableCustomColumnIds(
 		supabase,
 		tenantId
@@ -139,6 +145,60 @@ export async function PATCH(request: Request) {
 			{ error: "No se pudieron guardar las obras" },
 			{ status: 500 },
 		);
+	}
+
+	const newlyCreatedNs = updates
+		.filter((obra) => !existingNs.has(obra.n))
+		.map((obra) => obra.n);
+
+	if (newlyCreatedNs.length > 0) {
+		console.info("Obras PATCH bulk: detected newly created obras", {
+			count: newlyCreatedNs.length,
+			ns: newlyCreatedNs,
+		});
+
+		const { data: newObraRows, error: fetchNewError } = await supabase
+			.from("obras")
+			.select("id, n")
+			.eq("tenant_id", tenantId)
+			.in("n", newlyCreatedNs);
+
+		if (fetchNewError) {
+			console.error(
+				"Obras PATCH bulk: error fetching new obra IDs",
+				fetchNewError
+			);
+		} else if (newObraRows && newObraRows.length > 0) {
+			for (const obraRow of newObraRows) {
+				try {
+					const result = await applyObraDefaults(
+						supabase,
+						obraRow.id as string,
+						tenantId
+					);
+					if (result.success) {
+						console.info("Obras PATCH bulk: applied defaults to obra", {
+							obraId: obraRow.id,
+							n: obraRow.n,
+							foldersApplied: result.foldersApplied,
+							tablasApplied: result.tablasApplied,
+						});
+					} else {
+						console.warn("Obras PATCH bulk: failed to apply defaults", {
+							obraId: obraRow.id,
+							n: obraRow.n,
+							error: result.error,
+						});
+					}
+				} catch (defaultsError) {
+					console.error("Obras PATCH bulk: error applying defaults", {
+						obraId: obraRow.id,
+						n: obraRow.n,
+						error: defaultsError,
+					});
+				}
+			}
+		}
 	}
 
 	return NextResponse.json({
