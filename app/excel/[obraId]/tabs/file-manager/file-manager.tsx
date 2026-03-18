@@ -879,6 +879,7 @@ function FileManagerContent({
   const [selectedPdfPages, setSelectedPdfPages] = useState<number[]>([]);
   const pdfPageSelectionResolverRef = useRef<((pages: number[] | null) => void) | null>(null);
   const rateLimitUntilRef = useRef<number>(0);
+  const documentsTreeRequestRef = useRef<Promise<{ tree: FileSystemItem | null; links: OcrFolderLink[] } | null> | null>(null);
 
   useEffect(() => {
     if (!obraId) return;
@@ -1438,6 +1439,43 @@ function FileManagerContent({
     [findFolderInTreeById]
   );
 
+  const fetchDocumentsTreePayload = useCallback(async () => {
+    if (!obraId) return null;
+    if (Date.now() < rateLimitUntilRef.current) return null;
+    if (documentsTreeRequestRef.current) {
+      return documentsTreeRequestRef.current;
+    }
+
+    const request = (async () => {
+      const res = await fetch(`/api/obras/${obraId}/documents-tree?limit=500`, {
+        cache: 'no-store',
+      });
+      if (res.status === 429) {
+        rateLimitUntilRef.current = Date.now() + 30_000;
+        return null;
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || 'documents-tree');
+      }
+      const payload = await res.json().catch(() => ({}));
+      return {
+        tree: (payload?.tree ?? null) as FileSystemItem | null,
+        links: Array.isArray(payload?.links) ? (payload.links as OcrFolderLink[]) : [],
+      };
+    })();
+
+    documentsTreeRequestRef.current = request;
+
+    try {
+      return await request;
+    } finally {
+      if (documentsTreeRequestRef.current === request) {
+        documentsTreeRequestRef.current = null;
+      }
+    }
+  }, [obraId]);
+
   const refreshOcrFolderLinks = useCallback(async (options: { skipCache?: boolean } = {}) => {
     if (!obraId) return;
     if (Date.now() < rateLimitUntilRef.current) return;
@@ -1459,19 +1497,12 @@ function FileManagerContent({
     }
 
     try {
-      const res = await fetch(`/api/obras/${obraId}/documents-tree?limit=500`, { cache: 'no-store' });
-      if (res.status === 429) {
-        rateLimitUntilRef.current = Date.now() + 30_000;
+      const payload = await fetchDocumentsTreePayload();
+      if (!payload) {
         markDocumentsFetched();
         return;
       }
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || 'No se pudieron obtener las tablas OCR');
-      }
-      const payload = await res.json();
-      const links = Array.isArray(payload?.links) ? payload.links : [];
-      const tree = payload?.tree ?? null;
+      const { links, tree } = payload;
       if (tree) {
         rebuildParentMap(tree);
         setCachedFileTree(obraId, tree);
@@ -1508,7 +1539,7 @@ function FileManagerContent({
     } catch (error) {
       console.error('Error refreshing OCR folder links', error);
     }
-  }, [expandedFolderIds, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setSelectedFolder, sheetDocument]);
+  }, [expandedFolderIds, fetchDocumentsTreePayload, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setSelectedFolder, sheetDocument]);
 
   // Build file tree from storage
   const buildFileTree = useCallback(async (options: { skipCache?: boolean } = {}) => {
@@ -1531,16 +1562,12 @@ function FileManagerContent({
 
     setDocumentsLoading(true);
     try {
-      const res = await fetch(`/api/obras/${obraId}/documents-tree?limit=500`, { cache: 'no-store' });
-      if (res.status === 429) {
-        rateLimitUntilRef.current = Date.now() + 30_000;
+      const payload = await fetchDocumentsTreePayload();
+      if (!payload) {
         markDocumentsFetched();
         return;
       }
-      if (!res.ok) throw new Error('documents-tree');
-      const payload = await res.json();
-      const tree = payload?.tree ?? null;
-      const links = Array.isArray(payload?.links) ? payload.links : [];
+      const { tree, links } = payload;
       if (tree) {
         rebuildParentMap(tree);
         setCachedFileTree(obraId, tree);
@@ -1590,7 +1617,7 @@ function FileManagerContent({
     } finally {
       markDocumentsFetched();
     }
-  }, [expandedFolderIds, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
+  }, [expandedFolderIds, fetchDocumentsTreePayload, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
 
   const refreshFileTreeDerivedData = useCallback(async () => {
     await buildFileTree({ skipCache: true });
