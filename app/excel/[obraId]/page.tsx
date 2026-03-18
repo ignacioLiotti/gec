@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +9,7 @@ import { obraSchema, type Obra } from "../schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Tabs } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
@@ -30,10 +31,7 @@ import {
 	coerceMainColumnInputValue,
 	formatMainColumnValue,
 } from "@/lib/main-table-columns";
-import { ObraDocumentsTab } from "./tabs/documents-tab";
-import { ObraFlujoTab } from "./tabs/flujo-tab";
 import { ObraGeneralTab } from "./tabs/general-tab";
-import { prefetchDocuments } from "./tabs/file-manager/hooks/useDocumentsStore";
 import type { OcrFolderLink, OcrTablaColumn, TablaDataRow } from "./tabs/file-manager/types";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -50,6 +48,28 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+const ObraFlujoTab = dynamic(
+	() => import("./tabs/flujo-tab").then((mod) => mod.ObraFlujoTab),
+	{
+		loading: () => (
+			<TabsContent value="flujo" className="space-y-6">
+				<div className="p-4 text-sm text-muted-foreground">Cargando flujo...</div>
+			</TabsContent>
+		),
+	}
+);
+
+const ObraDocumentsTab = dynamic(
+	() => import("./tabs/documents-tab").then((mod) => mod.ObraDocumentsTab),
+	{
+		loading: () => (
+			<TabsContent value="documentos" className="space-y-6">
+				<div className="p-4 text-sm text-muted-foreground">Cargando documentos...</div>
+			</TabsContent>
+		),
+	}
+);
 
 import type {
 	Certificate,
@@ -174,10 +194,10 @@ async function fetchCertificates(obraId: string): Promise<{ certificates: Certif
 	return { certificates: data.certificates || [], total: data.total || 0 };
 }
 
-async function fetchDocumentsTreeLinks(obraId: string): Promise<OcrFolderLink[]> {
-	const response = await fetch(`/api/obras/${obraId}/documents-tree?limit=500`);
+async function fetchOcrLinks(obraId: string): Promise<OcrFolderLink[]> {
+	const response = await fetch(`/api/obras/${obraId}/tablas/ocr-links?limit=500`);
 	if (!response.ok) {
-		throw new Error("Failed to load document tree links");
+		throw new Error("Failed to load OCR links");
 	}
 	const data = await response.json().catch(() => ({}));
 	return Array.isArray(data?.links) ? (data.links as OcrFolderLink[]) : [];
@@ -1146,14 +1166,10 @@ function ObraDetailPageContent() {
 	const isValidObraId = Boolean(obraId && obraId !== "undefined");
 	const initialTab = searchParams?.get("tab") || "general";
 	const [activeTab, setActiveTab] = useState(initialTab);
-
-	// Prefetch documents in background when page loads (before user navigates to documents tab)
-	useEffect(() => {
-		if (obraId && obraId !== "undefined") {
-			// Fire and forget - don't block anything, just start loading in background
-			prefetchDocuments(obraId);
-		}
-	}, [obraId]);
+	const isGeneralTabActive = activeTab === "general";
+	const isDocumentsTabActive = activeTab === "documentos";
+	const isFlujoTabActive = activeTab === "flujo";
+	const isCertificatesTabActive = activeTab === "certificates";
 
 	// React Query hooks for cached data fetching
 	// Core obra data - always fetch
@@ -1177,7 +1193,7 @@ function ObraDetailPageContent() {
 	const materialsQuery = useQuery({
 		queryKey: ['obra', obraId, 'materials'],
 		queryFn: () => fetchMaterialOrders(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: isValidObraId && isDocumentsTabActive,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1185,7 +1201,7 @@ function ObraDetailPageContent() {
 	const certificatesQuery = useQuery({
 		queryKey: ['obra', obraId, 'certificates'],
 		queryFn: () => fetchCertificates(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: isValidObraId && isCertificatesTabActive,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1193,14 +1209,14 @@ function ObraDetailPageContent() {
 	const recipientsQuery = useQuery({
 		queryKey: ['obra', obraId, 'recipients'],
 		queryFn: () => fetchObraRecipients(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: isValidObraId && isFlujoTabActive,
 		staleTime: 10 * 60 * 1000, // Recipients change less often
 	});
 
-	const documentsTreeLinksQuery = useQuery({
-		queryKey: ['obra', obraId, 'documents-tree-links'],
-		queryFn: () => fetchDocumentsTreeLinks(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+	const ocrLinksQuery = useQuery({
+		queryKey: ['obra', obraId, 'ocr-links'],
+		queryFn: () => fetchOcrLinks(obraId!),
+		enabled: isValidObraId && isGeneralTabActive,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1208,7 +1224,7 @@ function ObraDetailPageContent() {
 	const flujoActionsQuery = useQuery({
 		queryKey: ['obra', obraId, 'flujo-actions'],
 		queryFn: () => fetchFlujoActions(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: isValidObraId && isFlujoTabActive,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1249,7 +1265,7 @@ function ObraDetailPageContent() {
 			return false;
 		}
 
-		const links = documentsTreeLinksQuery.data ?? [];
+		const links = ocrLinksQuery.data ?? [];
 		return links.some(
 			(link) =>
 				typeof link.folderName === "string" &&
@@ -1257,7 +1273,7 @@ function ObraDetailPageContent() {
 				isCertificadoResumenLink(link) &&
 				(Array.isArray(link.rows) ? link.rows : []).some(isMeaningfulCertificadoResumenRow)
 		);
-	}, [activeTab, documentsTreeLinksQuery.data, isValidObraId]);
+	}, [activeTab, isValidObraId, ocrLinksQuery.data]);
 
 	const certificadoContableMacroQuery = useQuery({
 		queryKey: ["obra-certificado-contable-macro", obraId],
@@ -1336,7 +1352,7 @@ function ObraDetailPageContent() {
 			certificadoTableRefs.curvaPlanId ?? "none",
 			certificadoTableRefs.pmcResumenId ?? "none",
 		],
-		enabled: isValidObraId,
+		enabled: isValidObraId && isGeneralTabActive,
 		queryFn: async () => {
 			const rulesConfig = await fetchRulesConfig(obraId!);
 			const rulesCurvePlanTableId = rulesConfig?.mappings?.curve?.planTableId ?? null;
@@ -1391,7 +1407,7 @@ function ObraDetailPageContent() {
 
 	const defaultsQuery = useQuery({
 		queryKey: ["obra-defaults", obraId],
-		enabled: isValidObraId,
+		enabled: isValidObraId && isGeneralTabActive,
 		queryFn: async () => {
 			const res = await fetch(
 				`/api/obra-defaults?obraId=${encodeURIComponent(String(obraId))}`
@@ -1418,7 +1434,7 @@ function ObraDetailPageContent() {
 	const flujoActions = flujoActionsQuery.data ?? [];
 	const isLoadingFlujoActions = flujoActionsQuery.isLoading;
 	const certificadosExtraidosRows = useMemo<TablaDataRow[]>(() => {
-		const links = documentsTreeLinksQuery.data ?? [];
+		const links = ocrLinksQuery.data ?? [];
 		return sortCertificadosExtraidosRows(
 			links
 				.filter(
@@ -1430,7 +1446,7 @@ function ObraDetailPageContent() {
 				.flatMap((link) => (Array.isArray(link.rows) ? link.rows : []))
 				.filter(isMeaningfulCertificadoResumenRow)
 		);
-	}, [documentsTreeLinksQuery.data]);
+	}, [ocrLinksQuery.data]);
 	const obraData = obraQuery.data;
 	const latestExtractedCertificadoALaFecha = useMemo(
 		() => getLatestCertificadoMontoAcumulado(certificadosExtraidosRows),
@@ -2933,25 +2949,27 @@ function ObraDetailPageContent() {
 								</motion.div>
 							) : null}
 
-							<ObraGeneralTab
-								form={form}
-								isGeneralTabEditMode={isGeneralTabEditMode}
-								hasUnsavedChanges={hasUnsavedChanges}
-								onSave={saveCurrentObra}
-								isSaving={isSavingObra}
-								isFieldDirty={isFieldDirty}
-								applyObraToForm={applyObraToForm}
-								initialFormValues={initialFormValues}
-								getErrorMessage={getErrorMessage}
-								quickActionsAllData={quickActionsAllData}
-								reportsData={generalReportsData}
-								mainTableColumns={activeMainTableColumns}
-								mainTableColumnValues={mainTableColumnValues}
-								setCustomMainColumnValue={setCustomMainColumnValue}
-								certificadosExtraidosRows={certificadosExtraidosRows}
-								certificadoContableMacro={certificadoContableMacroQuery.data ?? null}
-								derivedCertificadosNotice={derivedCertificadosNotice}
-							/>
+							{isGeneralTabActive ? (
+								<ObraGeneralTab
+									form={form}
+									isGeneralTabEditMode={isGeneralTabEditMode}
+									hasUnsavedChanges={hasUnsavedChanges}
+									onSave={saveCurrentObra}
+									isSaving={isSavingObra}
+									isFieldDirty={isFieldDirty}
+									applyObraToForm={applyObraToForm}
+									initialFormValues={initialFormValues}
+									getErrorMessage={getErrorMessage}
+									quickActionsAllData={quickActionsAllData}
+									reportsData={generalReportsData}
+									mainTableColumns={activeMainTableColumns}
+									mainTableColumnValues={mainTableColumnValues}
+									setCustomMainColumnValue={setCustomMainColumnValue}
+									certificadosExtraidosRows={certificadosExtraidosRows}
+									certificadoContableMacro={certificadoContableMacroQuery.data ?? null}
+									derivedCertificadosNotice={derivedCertificadosNotice}
+								/>
+							) : null}
 							{/* {activeTab === "general" && (
 								<section className="rounded-lg border bg-card shadow-sm overflow-hidden">
 									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
@@ -3039,26 +3057,28 @@ function ObraDetailPageContent() {
 								</section>
 							)} */}
 
-							<ObraFlujoTab
-								isAddingFlujoAction={isAddingFlujoAction}
-								setIsAddingFlujoAction={setIsAddingFlujoAction}
-								isSavingFlujoAction={isSavingFlujoAction}
-								newFlujoAction={newFlujoAction}
-								setNewFlujoAction={setNewFlujoAction}
-								selectedRecipientUserId={selectedRecipientUserId}
-								setSelectedRecipientUserId={setSelectedRecipientUserId}
-								selectedRecipientRoleId={selectedRecipientRoleId}
-								setSelectedRecipientRoleId={setSelectedRecipientRoleId}
-								obraUsers={obraUsers}
-								obraRoles={obraRoles}
-								obraUserRoles={obraUserRoles}
-								saveFlujoAction={saveFlujoAction}
-								toggleFlujoAction={toggleFlujoAction}
-								deleteFlujoAction={deleteFlujoAction}
-								updateFlujoAction={updateFlujoAction}
-								flujoActions={flujoActions}
-								isLoadingFlujoActions={isLoadingFlujoActions}
-							/>
+							{isFlujoTabActive ? (
+								<ObraFlujoTab
+									isAddingFlujoAction={isAddingFlujoAction}
+									setIsAddingFlujoAction={setIsAddingFlujoAction}
+									isSavingFlujoAction={isSavingFlujoAction}
+									newFlujoAction={newFlujoAction}
+									setNewFlujoAction={setNewFlujoAction}
+									selectedRecipientUserId={selectedRecipientUserId}
+									setSelectedRecipientUserId={setSelectedRecipientUserId}
+									selectedRecipientRoleId={selectedRecipientRoleId}
+									setSelectedRecipientRoleId={setSelectedRecipientRoleId}
+									obraUsers={obraUsers}
+									obraRoles={obraRoles}
+									obraUserRoles={obraUserRoles}
+									saveFlujoAction={saveFlujoAction}
+									toggleFlujoAction={toggleFlujoAction}
+									deleteFlujoAction={deleteFlujoAction}
+									updateFlujoAction={updateFlujoAction}
+									flujoActions={flujoActions}
+									isLoadingFlujoActions={isLoadingFlujoActions}
+								/>
+							) : null}
 
 							{/* <ObraCertificatesTab
 								certificates={certificates}
@@ -3073,11 +3093,13 @@ function ObraDetailPageContent() {
 								handleNewCertificateChange={handleNewCertificateChange}
 							/> */}
 
-							<ObraDocumentsTab
-								obraId={obraId}
-								materialOrders={materialOrders}
-								refreshMaterialOrders={refreshMaterialOrders}
-							/>
+							{isDocumentsTabActive ? (
+								<ObraDocumentsTab
+									obraId={obraId}
+									materialOrders={materialOrders}
+									refreshMaterialOrders={refreshMaterialOrders}
+								/>
+							) : null}
 
 						</Tabs>
 					</div>

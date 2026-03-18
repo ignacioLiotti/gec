@@ -1618,7 +1618,7 @@ function FileManagerContent({
 
   const refreshFileTreeDerivedData = useCallback(async () => {
     await buildFileTree({ skipCache: true });
-    await queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'documents-tree-links'] });
+    await queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'ocr-links'] });
   }, [buildFileTree, obraId, queryClient]);
 
   useEffect(() => {

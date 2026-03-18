@@ -28,10 +28,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AdvanceCurveChart } from "@/components/advance-curve-chart";
 import { QuickFormDialog, type QuickFormField } from "@/components/forms/quick-form-dialog";
 import { toast } from "sonner";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
-import { AdvanceCurveChart } from "../excel/[obraId]/tabs/general-tab";
 import { cn } from "@/lib/utils";
 
 type Obra = {
@@ -511,6 +511,7 @@ export default function Home() {
   });
   const [newlyAddedObraId, setNewlyAddedObraId] = useState<string | null>(null);
   const [selectedPreviewObraId, setSelectedPreviewObraId] = useState<string | null>(null);
+  const [previewCurveObraId, setPreviewCurveObraId] = useState<string | null>(null);
   const previousObrasRef = useRef<string[]>([]);
 
   // Use React Query for data fetching with caching
@@ -527,6 +528,17 @@ export default function Home() {
     () => recentObras.find((obra) => obra.id === selectedPreviewObraId) ?? recentObras[0] ?? null,
     [recentObras, selectedPreviewObraId]
   );
+
+  useEffect(() => {
+    setPreviewCurveObraId(null);
+    if (!selectedPreviewObra?.id) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setPreviewCurveObraId(selectedPreviewObra.id);
+    }, 200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [selectedPreviewObra?.id]);
 
   // Calculate statistics from the cached data
   const stats = useMemo<DashboardStats | null>(() => {
@@ -643,11 +655,15 @@ export default function Home() {
   }, [stats]);
 
   const selectedPreviewCurveQuery = useQuery({
-    queryKey: ["dashboard", "obra-preview-curve", selectedPreviewObra?.id ?? "none"],
-    enabled: Boolean(selectedPreviewObra?.id),
+    queryKey: ["dashboard", "obra-preview-curve", previewCurveObraId ?? "none"],
+    enabled: Boolean(previewCurveObraId),
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const obraId = selectedPreviewObra!.id;
+      const obraId = previewCurveObraId!;
+      const obraLabel =
+        recentObras.find((obra) => obra.id === obraId)?.designacionYUbicacion ??
+        selectedPreviewObra?.designacionYUbicacion ??
+        "";
       const [tablasRes, rulesConfig] = await Promise.all([
         fetch(`/api/obras/${obraId}/tablas`),
         fetchDashboardRulesConfig(obraId),
@@ -695,7 +711,7 @@ export default function Home() {
       }
 
       return {
-        points: buildDashboardCurvePoints(curvaRows, resumenRows, selectedPreviewObra!.designacionYUbicacion, {
+        points: buildDashboardCurvePoints(curvaRows, resumenRows, obraLabel, {
           curveStartPeriod: rulesConfig?.mappings?.curve?.plan?.startPeriod ?? null,
         }),
         hasCurvaRows,
