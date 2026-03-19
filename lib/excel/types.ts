@@ -60,4 +60,10 @@ export type ExcelPageObra = {
 export type ExcelPageClientProps = {
 	initialMainTableColumnsConfig: ExcelPageMainTableColumnConfig[] | null;
 	initialObras: ExcelPageObra[];
+	initialPreviewObras: ExcelPageObra[];
+	initialPreviewStats: {
+		totalCount: number;
+		completedCount: number;
+		averageProgress: number;
+	};
 };
