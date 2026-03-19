@@ -14,8 +14,9 @@ import {
 	createObrasDetalleConfig,
 	mapObraToDetailRow,
 	obrasDetalleConfig,
+	type MainTableColumnConfig,
 	type ObrasDetalleRow,
-} from "./obras-table-config";
+} from "@/components/form-table/configs/obras-detalle";
 import { Button } from "@/components/ui/button";
 import {
 	Sheet,
@@ -29,12 +30,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { NotchTail } from "@/components/ui/notch-tail";
-import type { ExcelPageClientProps, ExcelPageMainTableColumnConfig } from "@/lib/excel/types";
-
-type DesktopExcelPageClientProps = Pick<
-	ExcelPageClientProps,
-	"initialMainTableColumnsConfig" | "initialObras"
->;
+import type { ExcelPageClientProps } from "@/lib/excel/types";
 
 type CsvObra = {
 	n?: number | string | null;
@@ -160,11 +156,11 @@ const buildHeaders = (rows: CsvRow[], headerRows: number) => {
 export default function DesktopExcelPageClient({
 	initialMainTableColumnsConfig,
 	initialObras,
-}: DesktopExcelPageClientProps) {
+}: ExcelPageClientProps) {
 	const [isImporting, setIsImporting] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
-	const [mainTableColumnsConfig] = useState<ExcelPageMainTableColumnConfig[] | null>(
-		initialMainTableColumnsConfig
+	const [mainTableColumnsConfig] = useState<MainTableColumnConfig[] | null>(
+		initialMainTableColumnsConfig as MainTableColumnConfig[] | null
 	);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -172,7 +168,7 @@ export default function DesktopExcelPageClient({
 	const [pendingUpdates, setPendingUpdates] = useState<CsvObra[]>([]);
 	const [pendingFileName, setPendingFileName] = useState("");
 	const [hydratedRows, setHydratedRows] = useState<ObrasDetalleRow[] | null>(() =>
-		initialObras.length > 0 ? initialObras.map(mapObraToDetailRow) : null
+		initialObras.map(mapObraToDetailRow)
 	);
 
 	const tableConfig = useMemo(() => {
@@ -183,9 +179,9 @@ export default function DesktopExcelPageClient({
 		return hydratedRows == null
 			? baseConfig
 			: {
-				...baseConfig,
-				defaultRows: hydratedRows,
-			};
+					...baseConfig,
+					defaultRows: hydratedRows,
+				};
 	}, [hydratedRows, mainTableColumnsConfig]);
 
 	const headerAliases = useMemo(
@@ -514,7 +510,7 @@ export default function DesktopExcelPageClient({
 							}
 						>
 							<FormTableToolbar />
-							<NotchTail side="right" className="z-50 mb-[1px] h-[45px] !hidden xl:!block" />
+							<NotchTail side="right" className="z-100 mb-[1px] h-[45px] !hidden xl:!block" />
 						</div>
 						<div
 							className="relative -mr-[1px] flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0"
@@ -525,7 +521,7 @@ export default function DesktopExcelPageClient({
 								} as React.CSSProperties
 							}
 						>
-							<NotchTail side="left" className="z-50 mb-[1px] h-[45px] !hidden xl:!block" />
+							<NotchTail side="left" className="mb-[1px] h-[45px] !hidden xl:!block" />
 							<input
 								ref={inputRef}
 								type="file"
