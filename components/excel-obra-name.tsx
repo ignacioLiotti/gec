@@ -1,9 +1,17 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -11,6 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
 type ObraSummary = {
   id: string;
@@ -23,6 +32,7 @@ type HeaderObraState = {
   obraNumber: number | null;
   previousObra: ObraSummary | null;
   nextObra: ObraSummary | null;
+  obras: ObraSummary[];
 };
 
 const EMPTY_OBRA_STATE: HeaderObraState = {
@@ -30,9 +40,9 @@ const EMPTY_OBRA_STATE: HeaderObraState = {
   obraNumber: null,
   previousObra: null,
   nextObra: null,
+  obras: [],
 };
 
-// Map paths to custom display names
 const PAGE_NAME_MAP: Record<string, string> = {
   excel: "Detalle de las Obras en Ejecución",
   certificados: "Certificados",
@@ -50,13 +60,24 @@ function normalizeObraNumber(value: unknown): number | null {
   return null;
 }
 
+function getObraHref(obraId: string) {
+  return `/excel/${obraId}`;
+}
+
+function getObraLabel(obra: ObraSummary) {
+  const obraNumber = normalizeObraNumber(obra.n);
+  const obraName = obra.designacionYUbicacion?.trim() || "";
+  return [obraNumber != null ? String(obraNumber) : "", obraName].filter(Boolean).join(" ");
+}
+
 export function ExcelObraName() {
   const pathname = usePathname();
   const router = useRouter();
+  const { prefetchObra } = usePrefetchObra();
   const [obraState, setObraState] = useState<HeaderObraState>(EMPTY_OBRA_STATE);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
-  // Extract obraId from path /excel/[obraId]
   const match = pathname.match(/^\/excel\/([^/]+)$/);
   const obraId = match?.[1];
 
@@ -93,6 +114,7 @@ export function ExcelObraName() {
         const obraData = await obraResponse.json();
         const currentObra = obraData?.obra as ObraSummary | undefined;
 
+        let obras: ObraSummary[] = [];
         let previousObra: ObraSummary | null = null;
         let nextObra: ObraSummary | null = null;
 
@@ -103,9 +125,10 @@ export function ExcelObraName() {
 
           if (obrasResponse.ok) {
             const obrasData = await obrasResponse.json();
-            const obras = Array.isArray(obrasData?.detalleObras)
+            obras = Array.isArray(obrasData?.detalleObras)
               ? (obrasData.detalleObras as ObraSummary[])
               : [];
+
             const currentIndex = obras.findIndex((obra) => obra.id === obraId);
 
             if (currentIndex > 0) {
@@ -128,6 +151,7 @@ export function ExcelObraName() {
             obraNumber: normalizeObraNumber(currentObra?.n),
             previousObra,
             nextObra,
+            obras,
           });
         }
       } catch (error) {
@@ -151,6 +175,30 @@ export function ExcelObraName() {
     };
   }, [obraId]);
 
+  const prefetchObraRoute = useCallback(
+    (targetObra: ObraSummary | null | undefined) => {
+      if (!targetObra?.id) return;
+      router.prefetch(getObraHref(targetObra.id));
+      prefetchObra(targetObra.id);
+    },
+    [prefetchObra, router]
+  );
+
+  useEffect(() => {
+    if (!obraId) return;
+
+    [obraState.previousObra, obraState.nextObra].forEach((target) => {
+      prefetchObraRoute(target);
+    });
+  }, [obraId, obraState.nextObra, obraState.previousObra, prefetchObraRoute]);
+
+  const handleNavigateToObra = (targetObra: ObraSummary | null | undefined) => {
+    if (!targetObra?.id) return;
+    prefetchObraRoute(targetObra);
+    setIsSelectorOpen(false);
+    router.push(getObraHref(targetObra.id));
+  };
+
   const displayName = obraId ? obraState.obraName : pageName;
   const fullDisplayName = obraId
     ? [obraState.obraNumber != null ? String(obraState.obraNumber) : "", obraState.obraName]
@@ -168,10 +216,9 @@ export function ExcelObraName() {
           variant="ghost"
           size="icon-sm"
           className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            if (!obraState.previousObra?.id) return;
-            router.push(`/excel/${obraState.previousObra.id}`);
-          }}
+          onMouseEnter={() => prefetchObraRoute(obraState.previousObra)}
+          onFocus={() => prefetchObraRoute(obraState.previousObra)}
+          onClick={() => handleNavigateToObra(obraState.previousObra)}
           disabled={!obraState.previousObra?.id || isLoading}
           aria-label={
             obraState.previousObra?.n != null
@@ -208,15 +255,63 @@ export function ExcelObraName() {
       )}
 
       {obraId ? (
+        <Popover open={isSelectorOpen} onOpenChange={setIsSelectorOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-2 h-8 rounded-full border-[#eadfce] bg-white px-3 text-xs text-[#5a5248] hover:bg-[#fcfaf7] sm:text-sm"
+              disabled={isLoading || obraState.obras.length === 0}
+              aria-label="Seleccionar otra obra"
+            >
+              <Search className="h-4 w-4" />
+              <span className="hidden sm:inline">Ir a obra</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-[min(32rem,calc(100vw-2rem))] p-0">
+            <Command>
+              <CommandInput placeholder="Buscar por numero o nombre..." />
+              <CommandList className="max-h-[22rem]">
+                <CommandEmpty>No se encontro ninguna obra.</CommandEmpty>
+                {obraState.obras.map((obra) => {
+                  const obraNumber = normalizeObraNumber(obra.n);
+                  const isCurrentObra = obra.id === obraId;
+
+                  return (
+                    <CommandItem
+                      key={obra.id}
+                      value={getObraLabel(obra)}
+                      onSelect={() => handleNavigateToObra(obra)}
+                      className="gap-3 px-3 py-2"
+                    >
+                      <span className="min-w-10 shrink-0 text-sm font-semibold tabular-nums text-orange-primary">
+                        {obraNumber != null ? obraNumber : "-"}
+                      </span>
+                      <span className="truncate text-sm text-foreground">
+                        {obra.designacionYUbicacion || "Obra sin nombre"}
+                      </span>
+                      {isCurrentObra ? (
+                        <Check className="ml-auto h-4 w-4 text-primary" />
+                      ) : null}
+                    </CommandItem>
+                  );
+                })}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      ) : null}
+
+      {obraId ? (
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
           className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            if (!obraState.nextObra?.id) return;
-            router.push(`/excel/${obraState.nextObra.id}`);
-          }}
+          onMouseEnter={() => prefetchObraRoute(obraState.nextObra)}
+          onFocus={() => prefetchObraRoute(obraState.nextObra)}
+          onClick={() => handleNavigateToObra(obraState.nextObra)}
           disabled={!obraState.nextObra?.id || isLoading}
           aria-label={
             obraState.nextObra?.n != null

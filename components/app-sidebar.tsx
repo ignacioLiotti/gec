@@ -17,8 +17,6 @@ import {
 	Building2,
 	Loader2,
 	Table2,
-	FolderCogIcon,
-	TableIcon,
 	Columns3Cog,
 	Columns3,
 	Layers,
@@ -60,6 +58,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
 type NavItem = {
 	title: string;
@@ -204,6 +203,53 @@ type SidebarMacroTable = {
 	name: string;
 	position: number;
 };
+
+type SidebarPrefetchLinkProps = React.ComponentProps<typeof Link>;
+
+const SidebarPrefetchLink = React.forwardRef<HTMLAnchorElement, SidebarPrefetchLinkProps>(
+	function SidebarPrefetchLink(
+		{ href, onMouseEnter, onFocus, onTouchStart, ...props },
+		ref
+	) {
+		const router = useRouter();
+		const { prefetchObra } = usePrefetchObra();
+		const prefetchedRef = React.useRef(false);
+		const hrefValue = typeof href === "string" ? href : href.toString();
+
+		const runPrefetch = React.useCallback(() => {
+			if (prefetchedRef.current || !hrefValue.startsWith("/")) return;
+			prefetchedRef.current = true;
+
+			router.prefetch(hrefValue);
+
+			const obraMatch = hrefValue.match(/^\/excel\/([^/?#]+)$/);
+			if (obraMatch?.[1]) {
+				prefetchObra(obraMatch[1]);
+			}
+		}, [hrefValue, prefetchObra, router]);
+
+		return (
+			<Link
+				ref={ref}
+				href={href}
+				onMouseEnter={(event) => {
+					onMouseEnter?.(event);
+					runPrefetch();
+				}}
+				onFocus={(event) => {
+					onFocus?.(event);
+					runPrefetch();
+				}}
+				onTouchStart={(event) => {
+					onTouchStart?.(event);
+					runPrefetch();
+				}}
+				{...props}
+				prefetch={false}
+			/>
+		);
+	}
+);
 
 export function AppSidebar({
 	user,
@@ -376,7 +422,7 @@ export function AppSidebar({
 									asChild
 									className={state === "collapsed" ? "" : "min-w-0 flex-1"}
 								>
-									<Link href="/" className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5">
+									<SidebarPrefetchLink href="/" className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5">
 									{/* if sidebar is closed make logo smaller */}
 									<div
 										className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === "collapsed" ? "size-8" : "size-10"
@@ -388,7 +434,7 @@ export function AppSidebar({
 										</span>
 										<span className="truncate text-xs">Plataforma de gestión</span>
 									</div>
-								</Link>
+								</SidebarPrefetchLink>
 								</SidebarMenuButton>
 								<SidebarTrigger
 									className={`shrink-0 border bg-sidebar-accent/40 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground ${state === "collapsed" ? "mx-auto flex" : "mt-1"}`}
@@ -457,29 +503,29 @@ export function AppSidebar({
 										})}
 										<DropdownMenuSeparator />
 										<DropdownMenuItem asChild>
-											<Link href="/tenants/new" className="flex items-center gap-2">
+											<SidebarPrefetchLink href="/tenants/new" className="flex items-center gap-2">
 												<PlusCircle className="size-4" />
 												<span>Crear organización</span>
-											</Link>
+											</SidebarPrefetchLink>
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
 							) : (
 								state === "collapsed" ? (
-									<Link
+									<SidebarPrefetchLink
 										href="/tenants/new"
 										className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
 										title="Crear organización"
 									>
 										<PlusCircle className="size-5" />
-									</Link>
+									</SidebarPrefetchLink>
 								) : (
-									<Link
+									<SidebarPrefetchLink
 										href="/tenants/new"
 										className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
 									>
 										Crear organización
-									</Link>
+									</SidebarPrefetchLink>
 								)
 							)}
 						</div>
@@ -494,7 +540,7 @@ export function AppSidebar({
 						<SidebarGroupLabel>Principal</SidebarGroupLabel>
 						<SidebarGroupContent>
 							<SidebarMenu>
-								{filteredNavItems.map((item, index) => {
+								{filteredNavItems.map((item) => {
 									const isActive = pathname === item.href;
 									const showTablasBeforeThis =
 										item.href === "/notifications" && macroTables.length > 0;
@@ -522,13 +568,13 @@ export function AppSidebar({
 																		pathname === "/macro" && activeMacroTableId === table.id;
 																	return (
 																		<DropdownMenuItem key={table.id} asChild>
-																			<Link
+																			<SidebarPrefetchLink
 																				href={tableHref}
 																				className={isTableActive ? "font-semibold" : undefined}
 																			>
 																				<Columns3 className="size-4" />
 																				<span className="truncate">{table.name}</span>
-																			</Link>
+																			</SidebarPrefetchLink>
 																		</DropdownMenuItem>
 																	);
 																})}
@@ -556,10 +602,10 @@ export function AppSidebar({
 																		return (
 																			<SidebarMenuSubItem key={table.id}>
 																				<SidebarMenuSubButton asChild isActive={isTableActive}>
-																					<Link href={tableHref}>
+																					<SidebarPrefetchLink href={tableHref}>
 																						<Columns3 className="size-4" />
 																						{table.name}
-																					</Link>
+																					</SidebarPrefetchLink>
 																				</SidebarMenuSubButton>
 																			</SidebarMenuSubItem>
 																		);
@@ -572,10 +618,10 @@ export function AppSidebar({
 											)}
 											<SidebarMenuItem>
 												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-													<Link href={item.href}>
+													<SidebarPrefetchLink href={item.href}>
 														<item.icon className="size-4" />
 														<span>{item.title}</span>
-													</Link>
+													</SidebarPrefetchLink>
 												</SidebarMenuButton>
 											</SidebarMenuItem>
 
@@ -602,10 +648,10 @@ export function AppSidebar({
 										return (
 											<SidebarMenuItem key={item.title}>
 												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-													<Link href={item.href}>
+													<SidebarPrefetchLink href={item.href}>
 														<item.icon className="size-4" />
 														<span>{item.title}</span>
-													</Link>
+													</SidebarPrefetchLink>
 												</SidebarMenuButton>
 											</SidebarMenuItem>
 										);
@@ -630,10 +676,10 @@ export function AppSidebar({
 										return (
 											<SidebarMenuItem key={item.title}>
 												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-													<Link href={item.href}>
+													<SidebarPrefetchLink href={item.href}>
 														<item.icon className="size-4" />
 														<span>{item.title}</span>
-													</Link>
+													</SidebarPrefetchLink>
 												</SidebarMenuButton>
 											</SidebarMenuItem>
 										);
