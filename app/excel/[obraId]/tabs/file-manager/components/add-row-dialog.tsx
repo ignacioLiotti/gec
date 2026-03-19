@@ -89,22 +89,52 @@ const PERIOD_CELL_PATTERN = /^(?:[a-z]{3}|[a-z]{3,4})[-/.]?\d{2,4}$/i;
 
 const PERIOD_MONTH_MAP: Record<string, string> = {
   ene: "01",
+  enero: "01",
   feb: "02",
+  febrero: "02",
   mar: "03",
+  marzo: "03",
   abr: "04",
+  abril: "04",
   may: "05",
+  mayo: "05",
   jun: "06",
+  junio: "06",
   jul: "07",
+  julio: "07",
   ago: "08",
+  agosto: "08",
   sep: "09",
+  septiembre: "09",
   set: "09",
   oct: "10",
+  octubre: "10",
   nov: "11",
+  noviembre: "11",
   dic: "12",
+  diciembre: "12",
   jan: "01",
   apr: "04",
   aug: "08",
   dec: "12",
+};
+
+const detectPeriodValue = (row: string[]) => {
+  for (const cell of row) {
+    const trimmed = String(cell ?? "").trim();
+    if (!trimmed) continue;
+    const normalized = trimmed
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase();
+    if (PERIOD_CELL_PATTERN.test(trimmed)) {
+      return trimmed;
+    }
+    if (normalized in PERIOD_MONTH_MAP) {
+      return trimmed;
+    }
+  }
+  return "";
 };
 
 const periodToCertificationDate = (periodo: string) => {
@@ -140,7 +170,7 @@ function parseCertificadoSheetRows(
   if (!canMapResumen) return null;
 
   const markerIndex = rows.findIndex((row) =>
-    row.some((cell) => normalizeHeaderToken(String(cell ?? "")) === "certificadosdeobra")
+    row.some((cell) => normalizeHeaderToken(String(cell ?? "")).includes("certificadosdeobra"))
   );
 
   if (markerIndex < 0) return null;
@@ -166,8 +196,8 @@ function parseCertificadoSheetRows(
     }
 
     const certificado = String(row[2] ?? "").trim();
-    const periodIndex = row.findIndex((cell) => PERIOD_CELL_PATTERN.test(String(cell ?? "").trim()));
-    const periodo = periodIndex >= 0 ? String(row[periodIndex] ?? "").trim() : "";
+    const periodo = detectPeriodValue(row);
+    const periodIndex = periodo ? row.findIndex((cell) => String(cell ?? "").trim() === periodo) : -1;
 
     let montoCertificado: number | null = null;
     const amountSearchEnd = periodIndex >= 0 ? periodIndex : row.length;

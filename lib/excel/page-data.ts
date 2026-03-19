@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
+import type { ExcelPageMainTableColumnConfig } from "@/lib/excel/types";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 import { createClient } from "@/utils/supabase/server";
 
@@ -62,9 +62,9 @@ function mapDbRowToObra(row: DbObraRow) {
   };
 }
 
-function sanitizeColumns(raw: unknown): MainTableColumnConfig[] {
+function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
   if (!Array.isArray(raw)) return [];
-  const next: MainTableColumnConfig[] = [];
+  const next: ExcelPageMainTableColumnConfig[] = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
@@ -165,7 +165,7 @@ export async function getExcelPageInitialData() {
 
   if (!user || !tenantId) {
     return {
-      mainTableColumnsConfig: [] as MainTableColumnConfig[],
+      mainTableColumnsConfig: [] as ExcelPageMainTableColumnConfig[],
       obras: [],
     };
   }
