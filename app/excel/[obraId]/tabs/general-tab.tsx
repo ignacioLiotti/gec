@@ -22,6 +22,7 @@ import {
 	CartesianGrid,
 	Line,
 	LineChart,
+	ReferenceArea,
 	ReferenceLine,
 	ResponsiveContainer,
 	Tooltip,
@@ -32,6 +33,7 @@ import {
 import type { Obra } from "@/app/excel/schema";
 import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
 import type { OcrTablaColumn, TablaDataRow } from "./file-manager/types";
+import { CurveDataImportDialog } from "./curve-data-import-dialog";
 import { QuickActionsPanel } from "@/components/quick-actions/quick-actions-panel";
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -133,6 +135,14 @@ type GeneralTabProps = {
 	setCustomMainColumnValue?: (columnId: string, value: unknown) => void;
 	certificadosExtraidosRows?: TablaDataRow[];
 	certificadoContableMacro?: MacroCertificateData;
+	curveImportConfig?: {
+		obraId: string;
+		curvaPlanTableId: string | null;
+		curvaPlanTableName: string;
+		pmcResumenTableId: string | null;
+		pmcResumenTableName: string;
+		onImported?: () => Promise<void> | void;
+	};
 	derivedCertificadosNotice?: {
 		sourceLabel: string | null;
 		updatedFieldKeys: Array<"certificadoALaFecha" | "saldoACertificar" | "porcentaje">;
@@ -728,27 +738,18 @@ export const AdvanceCurveChart = ({
 		realPct: toPct100(point.realPct),
 	}));
 
-	// Hold-last-value to keep continuous execution curve when a month has no value.
-	const filledPoints = normalizedPoints.reduce<ReportCurvePoint[]>((acc, point, index) => {
-		const prev = acc[index - 1];
-		acc.push({
-			...point,
-			planPct: point.planPct ?? prev?.planPct ?? 0,
-			realPct: point.realPct ?? prev?.realPct ?? 0,
-		});
-		return acc;
-	}, []);
-
+	const hasRealData = normalizedPoints.some((point) => point.realPct != null);
 	const yMax = Math.max(
 		100,
-		...filledPoints.flatMap((point) => [point.planPct ?? 0, point.realPct ?? 0])
+		...normalizedPoints.flatMap((point) => [point.planPct ?? 0, point.realPct ?? 0])
 	);
-	const chartData = filledPoints.map((point, index) => ({
+	const chartData = normalizedPoints.map((point, index) => ({
 		x: point.sortOrder,
 		idx: index,
 		label: point.label,
 		planPct: point.planPct,
 		realPct: point.realPct,
+		missingReal: hasRealData && point.realPct == null,
 	}));
 	const now = new Date();
 	const currentMonthOrder = now.getFullYear() * 12 + now.getMonth();
@@ -771,6 +772,42 @@ export const AdvanceCurveChart = ({
 		.filter((_, index) => index % labelStep === 0 || index === chartData.length - 1)
 		.map((point) => point.x);
 	const labelByX = new Map(chartData.map((point) => [point.x, point.label] as const));
+	const pointByX = new Map(chartData.map((point) => [point.x, point] as const));
+	const formatTooltipValue = (value: number | null | undefined, emptyLabel: string) =>
+		value == null ? emptyLabel : `${Number(value).toFixed(2)}%`;
+	const renderTooltip = ({
+		active,
+		label,
+	}: {
+		active?: boolean;
+		label?: string | number;
+	}) => {
+		if (!active) return null;
+		const x = Number(label);
+		if (!Number.isFinite(x)) return null;
+		const point = pointByX.get(x);
+		if (!point) return null;
+
+		return (
+			<div className="min-w-[170px] rounded-md border border-[#d9d9d9] bg-white px-4 py-3 text-sm shadow-sm">
+				<div className="mb-2 font-medium text-[#1a1a1a]">{point.label}</div>
+				<div className="space-y-2">
+					<div className="flex items-center justify-between gap-3">
+						<span className="text-sky-500">Curva Plan</span>
+						<span className="font-medium text-sky-500">
+							{formatTooltipValue(point.planPct, "Sin dato")}
+						</span>
+					</div>
+					<div className="flex items-center justify-between gap-3">
+						<span className="text-[#ff5800]">PMC Resumen</span>
+						<span className="font-medium text-[#ff5800]">
+							{formatTooltipValue(point.realPct, "Sin certificado")}
+						</span>
+					</div>
+				</div>
+			</div>
+		);
+	};
 
 	return (
 		<div className="space-y-2 pt-4 ">
@@ -801,13 +838,20 @@ export const AdvanceCurveChart = ({
 								tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
 								tickFormatter={(value) => `${value}%`}
 							/>
-							<Tooltip
-								formatter={(value: number, name: string) => [
-									`${Number(value).toFixed(2)}%`,
-									name === "planPct" ? "Curva Plan" : "PMC Resumen",
-								]}
-								labelFormatter={(value) => labelByX.get(Number(value)) ?? ""}
-							/>
+							<Tooltip content={renderTooltip} />
+							{chartData
+								.filter((point) => point.missingReal)
+								.map((point) => (
+									<ReferenceArea
+										key={`missing-real-${point.x}`}
+										x1={point.x - 0.5}
+										x2={point.x + 0.5}
+										ifOverflow="extendDomain"
+										fill="#ffedd5"
+										fillOpacity={0.85}
+										strokeOpacity={0}
+									/>
+								))}
 							{markerX != null ? (
 								<ReferenceLine
 									x={markerX}
@@ -834,7 +878,6 @@ export const AdvanceCurveChart = ({
 								strokeWidth={2.5}
 								strokeDasharray="6 4"
 								dot={{ r: 3 }}
-								connectNulls
 								isAnimationActive={false}
 							/>
 							<Line
@@ -844,7 +887,6 @@ export const AdvanceCurveChart = ({
 								stroke="#ff5800"
 								strokeWidth={2.5}
 								dot={{ r: 3 }}
-								connectNulls
 								isAnimationActive={false}
 							/>
 						</LineChart>
@@ -862,6 +904,10 @@ export const AdvanceCurveChart = ({
 					<div className="flex items-center gap-2">
 						<span className="h-0.5 w-3 bg-amber-500" />
 						<span className="text-muted-foreground">Hoy (tiempo transcurrido)</span>
+					</div>
+					<div className="flex items-center gap-2">
+						<span className="h-2.5 w-3 rounded-sm bg-[#ffedd5]" />
+						<span className="text-muted-foreground">Mes sin certificados</span>
 					</div>
 				</div>
 			</div>
@@ -886,6 +932,7 @@ export function ObraGeneralTab({
 	setCustomMainColumnValue,
 	certificadosExtraidosRows = [],
 	certificadoContableMacro = null,
+	curveImportConfig,
 	derivedCertificadosNotice = null,
 }: GeneralTabProps) {
 	const extraMainTableColumns = mainTableColumns.filter((column) => {
@@ -1518,11 +1565,23 @@ export function ObraGeneralTab({
 										icon={LineChartIcon}
 										bodyClassName="p-4"
 										action={
-											reportsData?.curve ? (
-												<p className="text-[11px] text-[#bbb]">
-													{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
-												</p>
-											) : undefined
+											<div className="flex items-center gap-3">
+												{curveImportConfig ? (
+													<CurveDataImportDialog
+														obraId={curveImportConfig.obraId}
+														curvaPlanTableId={curveImportConfig.curvaPlanTableId}
+														curvaPlanTableName={curveImportConfig.curvaPlanTableName}
+														pmcResumenTableId={curveImportConfig.pmcResumenTableId}
+														pmcResumenTableName={curveImportConfig.pmcResumenTableName}
+														onImported={curveImportConfig.onImported}
+													/>
+												) : null}
+												{reportsData?.curve ? (
+													<p className="text-[11px] text-[#bbb]">
+														{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
+													</p>
+												) : null}
+											</div>
 										}
 									>
 										{reportsData?.curve ? (

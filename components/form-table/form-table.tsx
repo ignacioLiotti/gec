@@ -209,7 +209,7 @@ export function FormTableToolbar() {
 				/>
 				{config.toolbarActions}
 			</div>
-			<div className="flex flex-wrap items-center gap-2">
+			<div className="flex flex-wrap items-center gap-2 mr-[1px]">
 				<Button type="button" variant="outline" className="gap-2" onClick={() => void actions.exportCsv()}>
 					<Download className="h-4 w-4" />
 					Exportar tabla
@@ -346,7 +346,7 @@ export function FormTableContent({ className, innerClassName }: { className?: st
 					{serverError}
 				</div>
 			)}
-			<div className={cn("relative rounded-none overflow-x-auto w-full bg-white", className)}>
+			<div className={cn("relative rounded-none overflow-x-auto w-full bg-white flex-1", className)}>
 				{isServerPaging && isFetching && (
 					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm">
 						<Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -355,7 +355,7 @@ export function FormTableContent({ className, innerClassName }: { className?: st
 				)}
 				<div
 					ref={scrollParentRef}
-					className={cn("max-h-[60vh] overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
+					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
 					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
@@ -1909,7 +1909,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const content = (
 		<div
-			className="space-y-4 max-w-full overflow-hidden pt-6"
+			className="space-y-4 max-w-full overflow-hidden pt-6 flex flex-col h-full gap-4"
 		>
 			{(config.title || config.description) ? (
 				<div>
@@ -1921,7 +1921,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			) : null}
 			<FormTableToolbar />
 			<FormTableTabs />
-			<FormTableContent className={className} innerClassName={innerClassName} />
+			<div className="flex-1 shadow-card mx-[1px] flex">
+				<FormTableContent className={className} innerClassName={innerClassName} />
+			</div>
 			<FormTablePagination />
 		</div>
 	);

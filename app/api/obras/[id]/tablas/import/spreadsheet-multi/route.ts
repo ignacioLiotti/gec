@@ -727,6 +727,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const existingBucket = form.get("existingBucket");
     const existingPath = form.get("existingPath");
     const existingFileName = form.get("existingFileName");
+    const replaceExisting =
+      String(form.get("replaceExisting") ?? "")
+        .trim()
+        .toLowerCase() === "true" ||
+      String(form.get("replaceExisting") ?? "").trim() === "1";
 
     let sourceName = file?.name ?? "";
     let sheets: RawSheet[] = [];
@@ -1212,7 +1217,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
         continue;
       }
 
-      if (docMeta?.path) {
+      if (!previewMode && replaceExisting) {
+        const { error: deleteAllRowsError } = await supabase
+          .from("obra_tabla_rows")
+          .delete()
+          .eq("tabla_id", tablaId);
+        if (deleteAllRowsError) throw deleteAllRowsError;
+      } else if (docMeta?.path) {
         await supabase
           .from("obra_tabla_rows")
           .delete()

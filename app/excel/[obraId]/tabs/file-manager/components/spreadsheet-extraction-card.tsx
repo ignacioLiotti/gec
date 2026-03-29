@@ -17,6 +17,7 @@ type SpreadsheetExtractionCardProps = {
   table: SpreadsheetPreviewTable;
   excluded: boolean;
   expanded: boolean;
+  allowAdjust?: boolean;
   onExpandedChange: (open: boolean) => void;
   onAdjust: () => void;
   onToggleIncluded: () => void;
@@ -204,6 +205,7 @@ export function SpreadsheetExtractionCard({
   table,
   excluded,
   expanded,
+  allowAdjust = true,
   onExpandedChange,
   onAdjust,
   onToggleIncluded,
@@ -307,10 +309,12 @@ export function SpreadsheetExtractionCard({
               <Button type="button" variant="outline" size="sm" onClick={onToggleIncluded}>
                 {excluded ? "Volver a incluir" : "No importar"}
               </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={onAdjust}>
-                <Settings2 className="size-4" />
-                Ajustar
-              </Button>
+              {allowAdjust ? (
+                <Button type="button" variant="secondary" size="sm" onClick={onAdjust}>
+                  <Settings2 className="size-4" />
+                  Ajustar
+                </Button>
+              ) : null}
             </div>
           </CardFooter>
         </Collapsible>

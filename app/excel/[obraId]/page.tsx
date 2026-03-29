@@ -369,6 +369,7 @@ type GeneralReportCurvePoint = {
 	planPct: number | null;
 	realPct: number | null;
 	sortOrder: number;
+	periodKey?: string | null;
 };
 
 type GeneralTabReportsData = {
@@ -903,6 +904,14 @@ function periodLabel(periodKey: string): string {
 	return date.toLocaleDateString("es-AR", { month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+function curveSortOrderToPeriodKey(sortOrder: number): string | null {
+	if (!Number.isInteger(sortOrder) || sortOrder < 1000) return null;
+	const year = Math.floor(sortOrder / 12);
+	const monthIndex = sortOrder % 12;
+	if (!Number.isFinite(year) || monthIndex < 0 || monthIndex > 11) return null;
+	return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+}
+
 function normalizeFieldKey(value: string): string {
 	return normalizeText(value)
 		.replace(/[^a-z0-9]+/g, "_")
@@ -988,9 +997,16 @@ function buildCurvePoints(
 		const current = points.get(key);
 		if (current) {
 			current.planPct = avance;
+			current.periodKey = current.periodKey ?? periodKey;
 			current.sortOrder = Math.min(current.sortOrder, order);
 		} else {
-			points.set(key, { label, planPct: avance, realPct: null, sortOrder: order });
+			points.set(key, {
+				label,
+				planPct: avance,
+				realPct: null,
+				sortOrder: order,
+				periodKey,
+			});
 		}
 	});
 
@@ -1037,9 +1053,16 @@ function buildCurvePoints(
 		const current = points.get(key);
 		if (current) {
 			current.realPct = avance;
+			current.periodKey = current.periodKey ?? periodKey;
 			current.sortOrder = Math.min(current.sortOrder, order);
 		} else {
-			points.set(key, { label, planPct: null, realPct: avance, sortOrder: order });
+			points.set(key, {
+				label,
+				planPct: null,
+				realPct: avance,
+				sortOrder: order,
+				periodKey,
+			});
 		}
 	});
 
@@ -1058,11 +1081,46 @@ function buildCurvePoints(
 				planPct: null,
 				realPct: 0,
 				sortOrder: startOrder,
+				periodKey: curveStartPeriod,
 			});
 		}
 	}
 
-	return [...points.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+	const sortedPoints = [...points.values()]
+		.sort((a, b) => a.sortOrder - b.sortOrder)
+		.map((point) => ({
+			...point,
+			periodKey: point.periodKey ?? curveSortOrderToPeriodKey(point.sortOrder),
+		}));
+
+	const canFillMissingMonths =
+		sortedPoints.length > 1 && sortedPoints.every((point) => point.periodKey != null);
+	if (!canFillMissingMonths) {
+		return sortedPoints;
+	}
+
+	const pointsByOrder = new Map(sortedPoints.map((point) => [point.sortOrder, point] as const));
+	const minOrder = sortedPoints[0]?.sortOrder ?? 0;
+	const maxOrder = sortedPoints[sortedPoints.length - 1]?.sortOrder ?? minOrder;
+	const continuousPoints: GeneralReportCurvePoint[] = [];
+
+	for (let order = minOrder; order <= maxOrder; order += 1) {
+		const existing = pointsByOrder.get(order);
+		const periodKey = curveSortOrderToPeriodKey(order);
+		if (!periodKey) continue;
+
+		continuousPoints.push(
+			existing ?? {
+				label: periodLabel(periodKey),
+				planPct: null,
+				realPct: null,
+				sortOrder: order,
+				periodKey,
+			}
+		);
+	}
+
+	return continuousPoints;
 }
 
 const MAIN_FORMULA_REF_PATTERN = /\[([a-zA-Z0-9_]+)\]/g;
@@ -1457,6 +1515,13 @@ function ObraDetailPageContent() {
 		[certificadosExtraidosRows]
 	);
 	const generalReportsData = generalReportsQuery.data ?? { findings: [], curve: null };
+	const handleCurveDataImported = useCallback(async () => {
+		await Promise.all([
+			queryClient.invalidateQueries({ queryKey: ["obra", obraId, "general-reports"] }),
+			queryClient.invalidateQueries({ queryKey: ["obra", obraId, "ocr-links"] }),
+			queryClient.invalidateQueries({ queryKey: ["obra-certificado-contable-macro", obraId] }),
+		]);
+	}, [obraId, queryClient]);
 	const obraTimeProgress =
 		obraData && obraData.plazoTotal > 0
 			? (obraData.plazoTransc / obraData.plazoTotal) * 100
@@ -2967,6 +3032,18 @@ function ObraDetailPageContent() {
 									setCustomMainColumnValue={setCustomMainColumnValue}
 									certificadosExtraidosRows={certificadosExtraidosRows}
 									certificadoContableMacro={certificadoContableMacroQuery.data ?? null}
+									curveImportConfig={
+										obraId
+											? {
+												obraId,
+												curvaPlanTableId: certificadoTableRefs.curvaPlanId,
+												curvaPlanTableName: certificadoTableRefs.curvaPlanName,
+												pmcResumenTableId: certificadoTableRefs.pmcResumenId,
+												pmcResumenTableName: certificadoTableRefs.pmcResumenName,
+												onImported: handleCurveDataImported,
+											}
+											: undefined
+									}
 									derivedCertificadosNotice={derivedCertificadosNotice}
 								/>
 							) : null}

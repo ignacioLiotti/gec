@@ -45,8 +45,8 @@ export type SpreadsheetPreviewPayload = {
   sheetAssignments: Record<string, string | null>;
   columnMappings: Record<string, Record<string, string | null>>;
   manualValues: Record<string, Record<string, string>>;
-  existingBucket: string;
-  existingPath: string;
-  existingFileName: string;
+  existingBucket?: string;
+  existingPath?: string;
+  existingFileName?: string;
   tablaIds: string[];
 };

@@ -4,6 +4,7 @@ import {
 	CartesianGrid,
 	Line,
 	LineChart,
+	ReferenceArea,
 	ReferenceLine,
 	ResponsiveContainer,
 	Tooltip,
@@ -56,29 +57,18 @@ export function AdvanceCurveChart({
 		realPct: toPct100(point.realPct),
 	}));
 
-	const filledPoints = normalizedPoints.reduce<AdvanceCurvePoint[]>(
-		(acc, point, index) => {
-			const prev = acc[index - 1];
-			acc.push({
-				...point,
-				planPct: point.planPct ?? prev?.planPct ?? 0,
-				realPct: point.realPct ?? prev?.realPct ?? 0,
-			});
-			return acc;
-		},
-		[],
-	);
-
+	const hasRealData = normalizedPoints.some((point) => point.realPct != null);
 	const yMax = Math.max(
 		100,
-		...filledPoints.flatMap((point) => [point.planPct ?? 0, point.realPct ?? 0]),
+		...normalizedPoints.flatMap((point) => [point.planPct ?? 0, point.realPct ?? 0]),
 	);
-	const chartData = filledPoints.map((point, index) => ({
+	const chartData = normalizedPoints.map((point, index) => ({
 		x: point.sortOrder,
 		idx: index,
 		label: point.label,
 		planPct: point.planPct,
 		realPct: point.realPct,
+		missingReal: hasRealData && point.realPct == null,
 	}));
 	const now = new Date();
 	const currentMonthOrder = now.getFullYear() * 12 + now.getMonth();
@@ -101,6 +91,42 @@ export function AdvanceCurveChart({
 		.filter((_, index) => index % labelStep === 0 || index === chartData.length - 1)
 		.map((point) => point.x);
 	const labelByX = new Map(chartData.map((point) => [point.x, point.label] as const));
+	const pointByX = new Map(chartData.map((point) => [point.x, point] as const));
+	const formatTooltipValue = (value: number | null | undefined, emptyLabel: string) =>
+		value == null ? emptyLabel : `${Number(value).toFixed(2)}%`;
+	const renderTooltip = ({
+		active,
+		label,
+	}: {
+		active?: boolean;
+		label?: string | number;
+	}) => {
+		if (!active) return null;
+		const x = Number(label);
+		if (!Number.isFinite(x)) return null;
+		const point = pointByX.get(x);
+		if (!point) return null;
+
+		return (
+			<div className="min-w-[170px] rounded-md border border-[#d9d9d9] bg-white px-4 py-3 text-sm shadow-sm">
+				<div className="mb-2 font-medium text-[#1a1a1a]">{point.label}</div>
+				<div className="space-y-2">
+					<div className="flex items-center justify-between gap-3">
+						<span className="text-sky-500">Curva Plan</span>
+						<span className="font-medium text-sky-500">
+							{formatTooltipValue(point.planPct, "Sin dato")}
+						</span>
+					</div>
+					<div className="flex items-center justify-between gap-3">
+						<span className="text-[#ff5800]">PMC Resumen</span>
+						<span className="font-medium text-[#ff5800]">
+							{formatTooltipValue(point.realPct, "Sin certificado")}
+						</span>
+					</div>
+				</div>
+			</div>
+		);
+	};
 
 	return (
 		<div className="space-y-2 pt-4">
@@ -131,13 +157,20 @@ export function AdvanceCurveChart({
 								tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
 								tickFormatter={(value) => `${value}%`}
 							/>
-							<Tooltip
-								formatter={(value: number, name: string) => [
-									`${Number(value).toFixed(2)}%`,
-									name === "planPct" ? "Curva Plan" : "PMC Resumen",
-								]}
-								labelFormatter={(value) => labelByX.get(Number(value)) ?? ""}
-							/>
+							<Tooltip content={renderTooltip} />
+							{chartData
+								.filter((point) => point.missingReal)
+								.map((point) => (
+									<ReferenceArea
+										key={`missing-real-${point.x}`}
+										x1={point.x - 0.5}
+										x2={point.x + 0.5}
+										ifOverflow="extendDomain"
+										fill="#ffedd5"
+										fillOpacity={0.85}
+										strokeOpacity={0}
+									/>
+								))}
 							{markerX != null ? (
 								<ReferenceLine
 									x={markerX}
@@ -164,7 +197,6 @@ export function AdvanceCurveChart({
 								strokeWidth={2.5}
 								strokeDasharray="6 4"
 								dot={{ r: 3 }}
-								connectNulls
 								isAnimationActive={false}
 							/>
 							<Line
@@ -174,7 +206,6 @@ export function AdvanceCurveChart({
 								stroke="#ff5800"
 								strokeWidth={2.5}
 								dot={{ r: 3 }}
-								connectNulls
 								isAnimationActive={false}
 							/>
 						</LineChart>
@@ -192,6 +223,10 @@ export function AdvanceCurveChart({
 					<div className="flex items-center gap-2">
 						<span className="h-0.5 w-3 bg-amber-500" />
 						<span className="text-muted-foreground">Hoy (tiempo transcurrido)</span>
+					</div>
+					<div className="flex items-center gap-2">
+						<span className="h-2.5 w-3 rounded-sm bg-[#ffedd5]" />
+						<span className="text-muted-foreground">Mes sin certificados</span>
 					</div>
 				</div>
 			</div>

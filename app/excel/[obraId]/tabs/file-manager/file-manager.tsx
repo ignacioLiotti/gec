@@ -4707,7 +4707,7 @@ function FileManagerContent({
               </SelectContent>
             </Select>
           )}
-          <Button
+          {/* <Button
             type="button"
             variant="secondary"
             size="sm"
@@ -4716,8 +4716,8 @@ function FileManagerContent({
           >
             <Layers className="w-3.5 h-3.5" />
             Editar columnas
-          </Button>
-          <Button
+          </Button> */}
+          {/* <Button
             type="button"
             variant="secondary"
             size="sm"
@@ -4726,7 +4726,7 @@ function FileManagerContent({
           >
             <ClipboardList className="w-3.5 h-3.5" />
             Generar reporte
-          </Button>
+          </Button> */}
         </div>
       ) : null,
     };
@@ -5016,28 +5016,12 @@ function FileManagerContent({
               </div>
             )}
 
-            <Button type="button" variant="secondary" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
+            {/* <Button type="button" variant="secondary" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
               <Upload className="w-3.5 h-3.5" />
               Subir archivos
-            </Button>
+            </Button> */}
           </div>
         </div>
-
-        {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
-            <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
-              Filtrando: {ocrDocumentFilterName ?? 'Documento seleccionado'}
-            </Badge>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={clearOcrDocumentFilter}
-              className="h-6 px-2 text-amber-800 hover:text-amber-900"
-            >
-              Ver todos
-            </Button>
-          </div>
-        )}
       </div>
     );
 
@@ -5113,6 +5097,21 @@ function FileManagerContent({
               </div>
             ) : (
               <div className="flex flex-col h-full">
+                {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
+                    <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
+                      Filtrando: {ocrDocumentFilterName ?? 'Documento seleccionado'}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={clearOcrDocumentFilter}
+                      className="h-6 px-2 text-amber-800 hover:text-amber-900"
+                    >
+                      Ver todos
+                    </Button>
+                  </div>
+                )}
                 <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} innerClassName="max-h-[50vh]" />
               </div>
             )}

@@ -16,6 +16,7 @@ type SpreadsheetImportSummaryModalProps = {
   excludedTablaIds: string[];
   isLoading: boolean;
   isApplying: boolean;
+  allowAdjust?: boolean;
   onCancel: () => void;
   onConfirm: () => Promise<void> | void;
   onAdjust: (tablaId: string) => void;
@@ -50,6 +51,7 @@ export function SpreadsheetImportSummaryModal({
   excludedTablaIds,
   isLoading,
   isApplying,
+  allowAdjust = true,
   onCancel,
   onConfirm,
   onAdjust,
@@ -128,6 +130,7 @@ export function SpreadsheetImportSummaryModal({
                 table={table}
                 excluded={excludedTablaIds.includes(table.tablaId)}
                 expanded={Boolean(expandedTableIds[table.tablaId])}
+                allowAdjust={allowAdjust}
                 onExpandedChange={(open) =>
                   setExpandedTableIds((current) => ({ ...current, [table.tablaId]: open }))
                 }
