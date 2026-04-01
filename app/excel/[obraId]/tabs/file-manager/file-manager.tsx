@@ -5706,12 +5706,8 @@ function FileManagerContent({
                       )}
                       <div className="min-h-0 flex-1 overflow-hidden" data-wizard-target="wizard-grid-preview">
                         {(() => {
-                          if (
-                            !spreadsheetPreviewPayload ||
-                            typeof spreadsheetPreviewPayload.existingBucket !== 'string' ||
-                            typeof spreadsheetPreviewPayload.existingPath !== 'string' ||
-                            !table
-                          ) {
+                          const previewPayload = spreadsheetPreviewPayload;
+                          if (!previewPayload || !table) {
                             return (
                               <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
                                 Sin hoja seleccionada
@@ -5719,8 +5715,18 @@ function FileManagerContent({
                             );
                           }
 
-                          const resolvedPreviewBucket = spreadsheetPreviewPayload.existingBucket;
-                          const resolvedPreviewPath = spreadsheetPreviewPayload.existingPath;
+                          const resolvedPreviewBucket = previewPayload.existingBucket;
+                          const resolvedPreviewPath = previewPayload.existingPath;
+                          if (
+                            typeof resolvedPreviewBucket !== 'string' ||
+                            typeof resolvedPreviewPath !== 'string'
+                          ) {
+                            return (
+                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+                                Sin hoja seleccionada
+                              </div>
+                            );
+                          }
 
                           return (
                           <SpreadsheetGridPreview
