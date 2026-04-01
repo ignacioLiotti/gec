@@ -5705,12 +5705,21 @@ function FileManagerContent({
                         </div>
                       )}
                       <div className="min-h-0 flex-1 overflow-hidden" data-wizard-target="wizard-grid-preview">
-                        {spreadsheetPreviewPayload?.existingBucket &&
-                        spreadsheetPreviewPayload?.existingPath &&
-                        table ? (
+                        {(() => {
+                          const previewBucket = spreadsheetPreviewPayload?.existingBucket;
+                          const previewPath = spreadsheetPreviewPayload?.existingPath;
+                          if (!previewBucket || !previewPath || !table) {
+                            return (
+                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+                                Sin hoja seleccionada
+                              </div>
+                            );
+                          }
+
+                          return (
                           <SpreadsheetGridPreview
-                            bucket={spreadsheetPreviewPayload.existingBucket}
-                            storagePath={spreadsheetPreviewPayload.existingPath}
+                            bucket={previewBucket}
+                            storagePath={previewPath}
                             selectedSheetName={table.sheetName}
                             mappedExcelHeaders={mappings.map((m) => m.excelHeader).filter(Boolean) as string[]}
                             activeMappingLabel={
@@ -5728,11 +5737,8 @@ function FileManagerContent({
                             extractionMode={table.extractionMode}
                             fixedCellRefs={table.fixedCellRefs}
                           />
-                        ) : (
-                          <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
-                            Sin hoja seleccionada
-                          </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
