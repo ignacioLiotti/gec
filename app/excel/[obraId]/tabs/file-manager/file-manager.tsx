@@ -5706,9 +5706,12 @@ function FileManagerContent({
                       )}
                       <div className="min-h-0 flex-1 overflow-hidden" data-wizard-target="wizard-grid-preview">
                         {(() => {
-                          const previewBucket = spreadsheetPreviewPayload?.existingBucket;
-                          const previewPath = spreadsheetPreviewPayload?.existingPath;
-                          if (!previewBucket || !previewPath || !table) {
+                          if (
+                            !spreadsheetPreviewPayload ||
+                            typeof spreadsheetPreviewPayload.existingBucket !== 'string' ||
+                            typeof spreadsheetPreviewPayload.existingPath !== 'string' ||
+                            !table
+                          ) {
                             return (
                               <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
                                 Sin hoja seleccionada
@@ -5716,8 +5719,8 @@ function FileManagerContent({
                             );
                           }
 
-                          const resolvedPreviewBucket: string = previewBucket;
-                          const resolvedPreviewPath: string = previewPath;
+                          const resolvedPreviewBucket = spreadsheetPreviewPayload.existingBucket;
+                          const resolvedPreviewPath = spreadsheetPreviewPayload.existingPath;
 
                           return (
                           <SpreadsheetGridPreview
