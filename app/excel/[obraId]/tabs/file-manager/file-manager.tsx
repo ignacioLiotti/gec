@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
@@ -2710,11 +2710,18 @@ function FileManagerContent({
       nextManualValues: Record<string, Record<string, string>>
     ) => {
       if (!spreadsheetPreviewPayload) return;
+      if (!spreadsheetPreviewPayload.existingPath) {
+        toast.error('No hay un archivo almacenado para actualizar esta vista previa.');
+        return;
+      }
       try {
         setIsLoadingSpreadsheetPreview(true);
         const nextPayload = await fetchSpreadsheetPreview({
           existingPath: spreadsheetPreviewPayload.existingPath,
-          existingFileName: spreadsheetPreviewPayload.existingFileName,
+          existingFileName:
+            spreadsheetPreviewPayload.existingFileName ??
+            spreadsheetPreviewPayload.existingPath.split('/').pop() ??
+            'archivo',
           tablaIds: spreadsheetPreviewPayload.tablaIds,
           sheetAssignments: nextSheetAssignments,
           columnMappings: nextColumnMappings,
@@ -2741,6 +2748,10 @@ function FileManagerContent({
   const handleSpreadsheetPreviewSheetChange = useCallback(
     async (tablaId: string, sheetName: string | null) => {
       if (!spreadsheetPreviewPayload) return;
+      if (!spreadsheetPreviewPayload.existingPath) {
+        toast.error('No hay un archivo almacenado para actualizar esta vista previa.');
+        return;
+      }
       const nextSheetAssignments = {
         ...spreadsheetPreviewPayload.sheetAssignments,
         [tablaId]: sheetName,
@@ -2753,7 +2764,10 @@ function FileManagerContent({
         setIsLoadingSpreadsheetPreview(true);
         const nextPayload = await fetchSpreadsheetPreview({
           existingPath: spreadsheetPreviewPayload.existingPath,
-          existingFileName: spreadsheetPreviewPayload.existingFileName,
+          existingFileName:
+            spreadsheetPreviewPayload.existingFileName ??
+            spreadsheetPreviewPayload.existingPath.split('/').pop() ??
+            'archivo',
           tablaIds: spreadsheetPreviewPayload.tablaIds,
           sheetAssignments: nextSheetAssignments,
           columnMappings: nextColumnMappings,
@@ -7056,12 +7070,3 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
 const IS_SENTRY_ENABLED =
   process.env.NODE_ENV === 'production' &&
   process.env.NEXT_PUBLIC_VERCEL_ENV === 'production';
-
-
-
-
-
-
-
-
-
