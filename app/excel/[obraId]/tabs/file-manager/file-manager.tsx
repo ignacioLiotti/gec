@@ -5705,32 +5705,52 @@ function FileManagerContent({
                         </div>
                       )}
                       <div className="min-h-0 flex-1 overflow-hidden" data-wizard-target="wizard-grid-preview">
-                        {spreadsheetPreviewPayload && table ? (
-                          <SpreadsheetGridPreview
-                            bucket={spreadsheetPreviewPayload!.existingBucket}
-                            storagePath={spreadsheetPreviewPayload!.existingPath}
-                            selectedSheetName={table.sheetName}
-                            mappedExcelHeaders={mappings.map((m) => m.excelHeader).filter(Boolean) as string[]}
-                            activeMappingLabel={
-                              activeMappingDbColumn
-                                ? (mappings.find((m) => m.dbColumn === activeMappingDbColumn)?.label ?? activeMappingDbColumn)
-                                : null
-                            }
-                            onColumnSelect={(header) => {
-                              if (!activeMappingDbColumn || !table) return;
-                              void handleSpreadsheetPreviewMappingChange(table.tablaId, activeMappingDbColumn, header);
-                              setActiveMappingDbColumn(null);
-                            }}
-                            headerToColMap={headerToColMap}
-                            expectedRowCount={expectedRowCount}
-                            extractionMode={table.extractionMode}
-                            fixedCellRefs={table.fixedCellRefs}
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
-                            Sin hoja seleccionada
-                          </div>
-                        )}
+                        {(() => {
+                          const previewPayload = spreadsheetPreviewPayload;
+                          if (!table || !previewPayload) {
+                            return (
+                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+                                Sin hoja seleccionada
+                              </div>
+                            );
+                          }
+
+                          const resolvedPreviewBucket = previewPayload?.existingBucket;
+                          const resolvedPreviewPath = previewPayload?.existingPath;
+                          if (
+                            typeof resolvedPreviewBucket !== 'string' ||
+                            typeof resolvedPreviewPath !== 'string'
+                          ) {
+                            return (
+                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+                                Sin hoja seleccionada
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <SpreadsheetGridPreview
+                              bucket={resolvedPreviewBucket as string}
+                              storagePath={resolvedPreviewPath as string}
+                              selectedSheetName={table.sheetName}
+                              mappedExcelHeaders={mappings.map((m) => m.excelHeader).filter(Boolean) as string[]}
+                              activeMappingLabel={
+                                activeMappingDbColumn
+                                  ? (mappings.find((m) => m.dbColumn === activeMappingDbColumn)?.label ?? activeMappingDbColumn)
+                                  : null
+                              }
+                              onColumnSelect={(header) => {
+                                if (!activeMappingDbColumn || !table) return;
+                                void handleSpreadsheetPreviewMappingChange(table.tablaId, activeMappingDbColumn, header);
+                                setActiveMappingDbColumn(null);
+                              }}
+                              headerToColMap={headerToColMap}
+                              expectedRowCount={expectedRowCount}
+                              extractionMode={table.extractionMode}
+                              fixedCellRefs={table.fixedCellRefs}
+                            />
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
