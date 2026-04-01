@@ -5716,10 +5716,13 @@ function FileManagerContent({
                             );
                           }
 
+                          const resolvedPreviewBucket: string = previewBucket;
+                          const resolvedPreviewPath: string = previewPath;
+
                           return (
                           <SpreadsheetGridPreview
-                            bucket={previewBucket}
-                            storagePath={previewPath}
+                            bucket={resolvedPreviewBucket}
+                            storagePath={resolvedPreviewPath}
                             selectedSheetName={table.sheetName}
                             mappedExcelHeaders={mappings.map((m) => m.excelHeader).filter(Boolean) as string[]}
                             activeMappingLabel={
