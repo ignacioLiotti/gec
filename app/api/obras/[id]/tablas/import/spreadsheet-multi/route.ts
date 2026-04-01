@@ -1217,7 +1217,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         continue;
       }
 
-      if (!previewMode && replaceExisting) {
+      if (!previewMode && replaceExisting && extractedRows.length > 0) {
         const { error: deleteAllRowsError } = await supabase
           .from("obra_tabla_rows")
           .delete()
