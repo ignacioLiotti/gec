@@ -2839,6 +2839,14 @@ function FileManagerContent({
 
   const applySpreadsheetPreviewImport = useCallback(async () => {
     if (!spreadsheetPreviewPayload) return false;
+    if (
+      !spreadsheetPreviewPayload.existingBucket ||
+      !spreadsheetPreviewPayload.existingPath ||
+      !spreadsheetPreviewPayload.existingFileName
+    ) {
+      toast.error('No hay un archivo almacenado para completar esta importacion.');
+      return false;
+    }
     const selectedTablaIds = spreadsheetPreviewPayload.tablaIds.filter(
       (tablaId) => !excludedSpreadsheetPreviewTablaIds.includes(tablaId)
     );
