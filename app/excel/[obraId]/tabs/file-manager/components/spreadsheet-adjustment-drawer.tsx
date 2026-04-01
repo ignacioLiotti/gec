@@ -124,7 +124,7 @@ export function SpreadsheetAdjustmentDrawer({
                   </Select>
                 </div>
                 <div className="min-h-0 h-[calc(100vh-16rem)] overflow-hidden">
-                  {payload ? (
+                  {payload?.existingBucket && payload?.existingPath ? (
                     <SpreadsheetGridPreview
                       bucket={payload.existingBucket}
                       storagePath={payload.existingPath}
@@ -147,7 +147,7 @@ export function SpreadsheetAdjustmentDrawer({
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
-                      Sin hoja seleccionada
+                      Sin archivo disponible para previsualizar
                     </div>
                   )}
                 </div>
