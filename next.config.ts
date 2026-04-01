@@ -21,18 +21,18 @@ const nextConfig: NextConfig = {
 		serverActions: {
 			bodySizeLimit: "10mb", // Increased for PDF generation with large HTML payloads
 		},
-		serverComponentsExternalPackages: [
-			"node-fetch",
-			"undici",
-			"@react-email/components",
-			"@react-email/render",
-			"@react-email/tailwind",
-			"@supabase/node-fetch",
-			"puppeteer-core",
-			"@sparticuz/chromium",
-			"xlsx",
-		],
 	},
+	serverExternalPackages: [
+		"node-fetch",
+		"undici",
+		"@react-email/components",
+		"@react-email/render",
+		"@react-email/tailwind",
+		"@supabase/node-fetch",
+		"puppeteer-core",
+		"@sparticuz/chromium",
+		"xlsx",
+	],
 	// webpack: (config, { isServer }) => {
 	// 	if (isServer) {
 	// 		// Externalize Node.js built-ins for server-side code

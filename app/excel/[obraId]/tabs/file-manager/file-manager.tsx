@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
@@ -2710,18 +2710,11 @@ function FileManagerContent({
       nextManualValues: Record<string, Record<string, string>>
     ) => {
       if (!spreadsheetPreviewPayload) return;
-      if (!spreadsheetPreviewPayload.existingPath) {
-        toast.error('No hay un archivo almacenado para actualizar esta vista previa.');
-        return;
-      }
       try {
         setIsLoadingSpreadsheetPreview(true);
         const nextPayload = await fetchSpreadsheetPreview({
           existingPath: spreadsheetPreviewPayload.existingPath,
-          existingFileName:
-            spreadsheetPreviewPayload.existingFileName ??
-            spreadsheetPreviewPayload.existingPath.split('/').pop() ??
-            'archivo',
+          existingFileName: spreadsheetPreviewPayload.existingFileName,
           tablaIds: spreadsheetPreviewPayload.tablaIds,
           sheetAssignments: nextSheetAssignments,
           columnMappings: nextColumnMappings,
@@ -2748,10 +2741,6 @@ function FileManagerContent({
   const handleSpreadsheetPreviewSheetChange = useCallback(
     async (tablaId: string, sheetName: string | null) => {
       if (!spreadsheetPreviewPayload) return;
-      if (!spreadsheetPreviewPayload.existingPath) {
-        toast.error('No hay un archivo almacenado para actualizar esta vista previa.');
-        return;
-      }
       const nextSheetAssignments = {
         ...spreadsheetPreviewPayload.sheetAssignments,
         [tablaId]: sheetName,
@@ -2764,10 +2753,7 @@ function FileManagerContent({
         setIsLoadingSpreadsheetPreview(true);
         const nextPayload = await fetchSpreadsheetPreview({
           existingPath: spreadsheetPreviewPayload.existingPath,
-          existingFileName:
-            spreadsheetPreviewPayload.existingFileName ??
-            spreadsheetPreviewPayload.existingPath.split('/').pop() ??
-            'archivo',
+          existingFileName: spreadsheetPreviewPayload.existingFileName,
           tablaIds: spreadsheetPreviewPayload.tablaIds,
           sheetAssignments: nextSheetAssignments,
           columnMappings: nextColumnMappings,
@@ -2839,14 +2825,6 @@ function FileManagerContent({
 
   const applySpreadsheetPreviewImport = useCallback(async () => {
     if (!spreadsheetPreviewPayload) return false;
-    if (
-      !spreadsheetPreviewPayload.existingBucket ||
-      !spreadsheetPreviewPayload.existingPath ||
-      !spreadsheetPreviewPayload.existingFileName
-    ) {
-      toast.error('No hay un archivo almacenado para completar esta importacion.');
-      return false;
-    }
     const selectedTablaIds = spreadsheetPreviewPayload.tablaIds.filter(
       (tablaId) => !excludedSpreadsheetPreviewTablaIds.includes(tablaId)
     );
@@ -5705,33 +5683,10 @@ function FileManagerContent({
                         </div>
                       )}
                       <div className="min-h-0 flex-1 overflow-hidden" data-wizard-target="wizard-grid-preview">
-                        {(() => {
-                          const previewPayload = spreadsheetPreviewPayload;
-                          if (!previewPayload || !table) {
-                            return (
-                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
-                                Sin hoja seleccionada
-                              </div>
-                            );
-                          }
-
-                          const resolvedPreviewBucket = previewPayload.existingBucket;
-                          const resolvedPreviewPath = previewPayload.existingPath;
-                          if (
-                            typeof resolvedPreviewBucket !== 'string' ||
-                            typeof resolvedPreviewPath !== 'string'
-                          ) {
-                            return (
-                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
-                                Sin hoja seleccionada
-                              </div>
-                            );
-                          }
-
-                          return (
+                        {spreadsheetPreviewPayload && table ? (
                           <SpreadsheetGridPreview
-                            bucket={resolvedPreviewBucket}
-                            storagePath={resolvedPreviewPath}
+                            bucket={spreadsheetPreviewPayload!.existingBucket}
+                            storagePath={spreadsheetPreviewPayload!.existingPath}
                             selectedSheetName={table.sheetName}
                             mappedExcelHeaders={mappings.map((m) => m.excelHeader).filter(Boolean) as string[]}
                             activeMappingLabel={
@@ -5749,8 +5704,11 @@ function FileManagerContent({
                             extractionMode={table.extractionMode}
                             fixedCellRefs={table.fixedCellRefs}
                           />
-                          );
-                        })()}
+                        ) : (
+                          <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+                            Sin hoja seleccionada
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -7098,3 +7056,12 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
 const IS_SENTRY_ENABLED =
   process.env.NODE_ENV === 'production' &&
   process.env.NEXT_PUBLIC_VERCEL_ENV === 'production';
+
+
+
+
+
+
+
+
+
