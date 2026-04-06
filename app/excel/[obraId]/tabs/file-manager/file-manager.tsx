@@ -3927,6 +3927,42 @@ function FileManagerContent({
 
   const activeDocument = sheetDocument ?? displayedDocumentRef.current ?? null;
 
+  const selectedFolderFiles = useMemo(() => {
+    if (!selectedFolder || selectedFolder.type !== 'folder') return [] as FileSystemItem[];
+    return (selectedFolder.children ?? []).filter(
+      (item): item is FileSystemItem => item.type === 'file' && item.name !== '.keep'
+    );
+  }, [selectedFolder]);
+
+  const activeDocumentIndex = useMemo(() => {
+    if (!activeDocument) return -1;
+    return selectedFolderFiles.findIndex((item) => {
+      if (item.id === activeDocument.id) return true;
+      if (item.storagePath && activeDocument.storagePath) {
+        return item.storagePath === activeDocument.storagePath;
+      }
+      return false;
+    });
+  }, [activeDocument, selectedFolderFiles]);
+
+  const previousSheetDocument = useMemo(() => {
+    if (activeDocumentIndex <= 0) return null;
+    return selectedFolderFiles[activeDocumentIndex - 1] ?? null;
+  }, [activeDocumentIndex, selectedFolderFiles]);
+
+  const nextSheetDocument = useMemo(() => {
+    if (activeDocumentIndex < 0 || activeDocumentIndex >= selectedFolderFiles.length - 1) {
+      return null;
+    }
+    return selectedFolderFiles[activeDocumentIndex + 1] ?? null;
+  }, [activeDocumentIndex, selectedFolderFiles]);
+
+  const handleSheetDocumentPagination = useCallback((direction: 'previous' | 'next') => {
+    const target = direction === 'previous' ? previousSheetDocument : nextSheetDocument;
+    if (!target) return;
+    void handleDocumentClick(target, selectedFolder ?? undefined, { preserveFilter: true });
+  }, [handleDocumentClick, nextSheetDocument, previousSheetDocument, selectedFolder]);
+
   const activeDocumentOcrLinks = useMemo(
     () => (activeDocument ? resolveOcrLinksForDocument(activeDocument) : [] as OcrFolderLink[]),
     [activeDocument, resolveOcrLinksForDocument]
@@ -5685,6 +5721,13 @@ function FileManagerContent({
         onToggleDataSheet={toggleDocumentDataSheet}
         showDataToggle={hasAnyActiveDocumentData}
         isDataSheetOpen={isDocumentDataSheetOpen}
+        onPreviousDocument={previousSheetDocument ? () => handleSheetDocumentPagination('previous') : null}
+        onNextDocument={nextSheetDocument ? () => handleSheetDocumentPagination('next') : null}
+        documentPositionLabel={
+          activeDocumentIndex >= 0 && selectedFolderFiles.length > 0
+            ? `${activeDocumentIndex + 1} de ${selectedFolderFiles.length}`
+            : null
+        }
       />
 
       <Dialog

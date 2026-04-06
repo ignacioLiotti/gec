@@ -4,7 +4,7 @@ import { memo } from "react";
 import type { ReactNode } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Loader2 } from "lucide-react";
 import type { FileSystemItem } from "../types";
 import { DocumentPreview } from "./document-preview";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,9 @@ type DocumentSheetProps = {
 	showDataToggle?: boolean;
 	isDataSheetOpen?: boolean;
 	highlightRetryAction?: boolean;
+	onPreviousDocument?: (() => void) | null;
+	onNextDocument?: (() => void) | null;
+	documentPositionLabel?: string | null;
 };
 
 export const DocumentSheet = memo(function DocumentSheet({
@@ -39,6 +42,9 @@ export const DocumentSheet = memo(function DocumentSheet({
 	showDataToggle = false,
 	isDataSheetOpen = false,
 	highlightRetryAction = false,
+	onPreviousDocument = null,
+	onNextDocument = null,
+	documentPositionLabel = null,
 }: DocumentSheetProps) {
 	if (!isOpen || !document) {
 		return null;
@@ -54,10 +60,46 @@ export const DocumentSheet = memo(function DocumentSheet({
 		}).format(parsed);
 	})();
 	const uploadedByLabel = document.uploadedByLabel ?? document.uploadedByUserId ?? null;
+	const showDocumentPagination = Boolean(onPreviousDocument || onNextDocument);
+	const arePaginationButtonsDisabled = isDataSheetOpen;
 
 	return (
 		<Sheet open={isOpen} onOpenChange={onOpenChange} modal={false}>
 			<div className="z-30 bg-black/40 pointer-events-none fixed inset-0 backdrop-blur-xs" />
+			{showDocumentPagination ? (
+				<div className="pointer-events-none fixed inset-y-0 left-1 right-1 z-[55] flex items-center justify-around sm:left-2 sm:right-2">
+					<Button
+						type="button"
+						variant="outline"
+						size="icon-lg"
+						onClick={onPreviousDocument ?? undefined}
+						disabled={!onPreviousDocument || arePaginationButtonsDisabled}
+						aria-label="Documento anterior"
+						className={cn(
+							"pointer-events-auto h-10 w-10 rounded-full border-stone-200/80 bg-white/92 text-stone-700 shadow-[0_20px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5 hover:bg-white active:scale-[0.97] sm:h-12 sm:w-12",
+							"disabled:border-stone-200/70 disabled:bg-white/55 disabled:text-stone-300 disabled:shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+							arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed"
+						)}
+					>
+						<ChevronLeft className="h-5 w-5" />
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon-lg"
+						onClick={onNextDocument ?? undefined}
+						disabled={!onNextDocument || arePaginationButtonsDisabled}
+						aria-label="Documento siguiente"
+						className={cn(
+							"pointer-events-auto h-10 w-10 rounded-full border-stone-200/80 bg-white/92 text-stone-700 shadow-[0_20px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5 hover:bg-white active:scale-[0.97] sm:h-12 sm:w-12",
+							"disabled:border-stone-200/70 disabled:bg-white/55 disabled:text-stone-300 disabled:shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+							arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed"
+						)}
+					>
+						<ChevronRight className="h-5 w-5" />
+					</Button>
+				</div>
+			) : null}
 			<SheetContent
 				side="bottom"
 				showOverlay={false}
@@ -96,6 +138,11 @@ export const DocumentSheet = memo(function DocumentSheet({
 							</div>
 						</div>
 						<div className="flex flex-wrap items-center gap-2 mr-10">
+							{documentPositionLabel ? (
+								<div className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-stone-500 uppercase">
+									Documento {documentPositionLabel}
+								</div>
+							) : null}
 							{showDataToggle && (
 								<Button
 									variant="secondary"
