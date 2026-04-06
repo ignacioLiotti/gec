@@ -36,43 +36,39 @@ function normalizeStringList(value: unknown) {
 
 export function normalizeTemplateColumns(value: unknown): TemplateColumnDefinition[] {
 	if (!Array.isArray(value)) return [];
+	const normalized: TemplateColumnDefinition[] = [];
 
-	return value
-		.map((column, index) => {
-			const item =
-				typeof column === "object" && column !== null
-					? (column as Record<string, unknown>)
-					: null;
-			if (!item) return null;
+	for (const [index, column] of value.entries()) {
+		if (typeof column !== "object" || column === null) continue;
+		const item = column as Record<string, unknown>;
+		const label =
+			typeof item.label === "string" && item.label.trim().length > 0
+				? item.label.trim()
+				: `Columna ${index + 1}`;
+		const rawFieldKey =
+			typeof item.fieldKey === "string" && item.fieldKey.trim().length > 0
+				? item.fieldKey
+				: label;
 
-			const label =
-				typeof item.label === "string" && item.label.trim().length > 0
-					? item.label.trim()
-					: `Columna ${index + 1}`;
-			const rawFieldKey =
-				typeof item.fieldKey === "string" && item.fieldKey.trim().length > 0
-					? item.fieldKey
-					: label;
-			const scope = item.ocrScope === "parent" ? "parent" : "item";
+		normalized.push({
+			fieldKey: normalizeFieldKey(rawFieldKey),
+			label,
+			dataType: ensureTablaDataType(
+				typeof item.dataType === "string" ? item.dataType : undefined,
+			),
+			ocrScope: item.ocrScope === "parent" ? "parent" : "item",
+			description:
+				typeof item.description === "string" && item.description.trim().length > 0
+					? item.description.trim()
+					: undefined,
+			aliases: normalizeStringList(item.aliases),
+			examples: normalizeStringList(item.examples),
+			excelKeywords: normalizeStringList(item.excelKeywords),
+			required: Boolean(item.required),
+		});
+	}
 
-			return {
-				fieldKey: normalizeFieldKey(rawFieldKey),
-				label,
-				dataType: ensureTablaDataType(
-					typeof item.dataType === "string" ? item.dataType : undefined,
-				),
-				ocrScope: scope,
-				description:
-					typeof item.description === "string" && item.description.trim().length > 0
-						? item.description.trim()
-						: undefined,
-				aliases: normalizeStringList(item.aliases),
-				examples: normalizeStringList(item.examples),
-				excelKeywords: normalizeStringList(item.excelKeywords),
-				required: Boolean(item.required),
-			} satisfies TemplateColumnDefinition;
-		})
-		.filter((column): column is TemplateColumnDefinition => Boolean(column));
+	return normalized;
 }
 
 export function hasNestedTemplateColumns(columns: TemplateColumnDefinition[]) {

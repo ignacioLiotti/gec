@@ -642,6 +642,8 @@ function toPreviewSeriesRows(
 	if (!fieldMatch.xField || !fieldMatch.yField) {
 		return toTablaApiRows(rows);
 	}
+	const xField = fieldMatch.xField;
+	const yField = fieldMatch.yField;
 
 	return rows.map((row) => {
 		const data: Record<string, unknown> = {};
@@ -649,8 +651,8 @@ function toPreviewSeriesRows(
 			if (key === "id" || key === "source") continue;
 			data[key] = value;
 		}
-		const xValue = row[fieldMatch.xField];
-		const yValue = row[fieldMatch.yField];
+		const xValue = row[xField];
+		const yValue = row[yField];
 
 		if (editedSeries === "plan") {
 			return {

@@ -26,7 +26,10 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { OcrTemplateConfigurator } from "./_components/OcrTemplateConfigurator";
+import {
+  OcrTemplateConfigurator,
+  type OcrTemplate,
+} from "./_components/OcrTemplateConfigurator";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,21 +140,6 @@ type QuickAction = {
   description: string | null;
   folderPaths: string[];
   position: number;
-};
-
-type OcrTemplate = {
-  id: string;
-  name: string;
-  description: string | null;
-  template_file_name: string | null;
-  regions: Array<{
-    id: string;
-    label: string;
-    type: "single" | "table";
-    tableColumns?: string[];
-  }>;
-  columns: Array<{ fieldKey: string; label: string; dataType: string; ocrScope?: string; description?: string }>;
-  is_active: boolean;
 };
 
 type ImportedDefinitionField = {

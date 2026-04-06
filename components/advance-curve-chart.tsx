@@ -178,7 +178,9 @@ export function AdvanceCurveChart({
 			payload?: { x?: number; isHighlighted?: boolean };
 			value?: number | null;
 		}) {
-			if (props.value == null || props.cx == null || props.cy == null) return null;
+			if (props.value == null || props.cx == null || props.cy == null) {
+				return <circle cx={0} cy={0} r={0} fill="transparent" />;
+			}
 			const isHighlighted = Boolean(props.payload?.isHighlighted);
 			if (!isHighlighted) {
 				return <circle cx={props.cx} cy={props.cy} r={radius} fill={lineColor} stroke="none" />;

@@ -42,7 +42,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 // Types
 type RegionType = "single" | "table";
 
-interface Region {
+export interface Region {
 	id: string;
 	x: number;
 	y: number;
@@ -56,7 +56,7 @@ interface Region {
 	tableColumns?: string[];
 }
 
-interface OcrTemplate {
+export interface OcrTemplate {
 	id: string;
 	name: string;
 	description: string | null;
