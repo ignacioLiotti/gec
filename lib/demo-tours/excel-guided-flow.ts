@@ -10,6 +10,7 @@ export const GUIDED_EXCEL_STAGES = {
 	obraGoDocuments: "obra-go-documents",
 	documentsIntro: "documents-intro",
 	documentsOpenCertificados: "documents-open-certificados",
+	documentsSwitchToFiles: "documents-switch-to-files",
 	documentsUploadCertificado: "documents-upload-certificado",
 	documentsReviewCertificadoData: "documents-review-certificado-data",
 	documentsOpenCurva: "documents-open-curva",

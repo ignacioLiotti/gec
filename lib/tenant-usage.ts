@@ -31,6 +31,9 @@ type UsageRow = {
 	supabase_storage_bytes: number | string | null;
 	ai_tokens_used: number | string | null;
 	whatsapp_api_messages: number | string | null;
+	supabase_storage_limit_bytes?: number | string | null;
+	ai_token_budget?: number | string | null;
+	whatsapp_api_budget?: number | string | null;
 };
 
 function buildPeriodBounds(date: Date = new Date()): { start: string; end: string } {
@@ -89,6 +92,87 @@ export async function fetchTenantUsage(
 	return mapUsageRow((data as UsageRow | null) ?? null, period);
 }
 
+async function incrementTenantUsageDirect(
+	supabase: SupabaseClient,
+	tenantId: string,
+	delta: UsageDelta,
+	limits: SubscriptionPlanLimits
+): Promise<TenantUsageSnapshot> {
+	const period = buildPeriodBounds();
+	const { start, end } = period;
+	const { data, error } = await supabase
+		.from("tenant_api_expenses")
+		.select(
+			"id, tenant_id, billing_period_start, billing_period_end, supabase_storage_bytes, ai_tokens_used, whatsapp_api_messages, supabase_storage_limit_bytes, ai_token_budget, whatsapp_api_budget"
+		)
+		.eq("tenant_id", tenantId)
+		.eq("billing_period_start", start)
+		.eq("billing_period_end", end)
+		.maybeSingle();
+
+	if (error) {
+		throw error;
+	}
+
+	const current = (data as UsageRow | null) ?? null;
+	const nextStorage = Math.max(
+		0,
+		normalizeNumber(current?.supabase_storage_bytes) + Math.trunc(delta.storageBytes ?? 0)
+	);
+	const nextAi = Math.max(
+		0,
+		normalizeNumber(current?.ai_tokens_used) + Math.trunc(delta.aiTokens ?? 0)
+	);
+	const nextWhatsapp = Math.max(
+		0,
+		normalizeNumber(current?.whatsapp_api_messages) + Math.trunc(delta.whatsappMessages ?? 0)
+	);
+
+	if (limits.storageBytes != null && nextStorage > limits.storageBytes) {
+		const err = new Error("Superaste el limite de almacenamiento del plan.");
+		(err as Error & { code?: string }).code = "storage_limit_exceeded";
+		throw err;
+	}
+	if (limits.aiTokens != null && nextAi > limits.aiTokens) {
+		const err = new Error("Superaste el limite de tokens de IA del plan.");
+		(err as Error & { code?: string }).code = "ai_limit_exceeded";
+		throw err;
+	}
+	if (limits.whatsappMessages != null && nextWhatsapp > limits.whatsappMessages) {
+		const err = new Error("Superaste el limite de WhatsApp API del plan.");
+		(err as Error & { code?: string }).code = "whatsapp_limit_exceeded";
+		throw err;
+	}
+
+	const { data: upserted, error: upsertError } = await supabase
+		.from("tenant_api_expenses")
+		.upsert(
+			{
+				id: current?.id,
+				tenant_id: tenantId,
+				billing_period_start: start,
+				billing_period_end: end,
+				supabase_storage_bytes: nextStorage,
+				supabase_storage_limit_bytes: limits.storageBytes ?? 0,
+				ai_tokens_used: nextAi,
+				ai_token_budget: limits.aiTokens ?? 0,
+				whatsapp_api_messages: nextWhatsapp,
+				whatsapp_api_budget: limits.whatsappMessages ?? 0,
+			},
+			{ onConflict: "tenant_id,billing_period_start,billing_period_end" }
+		)
+		.select(
+			"id, tenant_id, billing_period_start, billing_period_end, supabase_storage_bytes, ai_tokens_used, whatsapp_api_messages"
+		)
+		.maybeSingle();
+
+	if (upsertError) {
+		throw upsertError;
+	}
+
+	return mapUsageRow((upserted as UsageRow | null) ?? null, period);
+}
+
 export async function incrementTenantUsage(
 	supabase: SupabaseClient,
 	tenantId: string,
@@ -119,6 +203,14 @@ export async function incrementTenantUsage(
 	);
 
 	if (error) {
+		if (error.message === "insufficient_privilege") {
+			try {
+				return await incrementTenantUsageDirect(supabase, tenantId, delta, limits);
+			} catch (directError) {
+				const err = directError as Error & { code?: string };
+				if (err.code) throw err;
+			}
+		}
 		const code = error.message ?? "usage_increment_failed";
 		const enriched = new Error(error.hint ?? error.message);
 		(enriched as Error & { code?: string }).code = code;

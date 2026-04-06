@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils";
 
 export type WizardStepPlacement = "auto" | "top" | "bottom" | "left" | "right";
 export type WizardStepRequiredAction = "click_target" | "condition";
+export type WizardStepAction = {
+  label: string;
+  onClick: () => void;
+  variant?: "default" | "secondary" | "outline" | "ghost" | "link";
+};
 
 export type WizardStep = {
   id: string;
@@ -24,6 +29,7 @@ export type WizardStep = {
   when?: () => boolean;
   isComplete?: () => boolean;
   incompleteHint?: string;
+  auxiliaryActions?: WizardStepAction[];
 };
 
 export type WizardFlow = {
@@ -344,6 +350,22 @@ export function ContextualWizard({
           <h4 className="text-sm font-semibold text-foreground">{step.title}</h4>
           <p className="mt-1 text-xs text-muted-foreground">{step.content}</p>
 
+          {step.auxiliaryActions?.length ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {step.auxiliaryActions.map((action) => (
+                <Button
+                  key={action.label}
+                  type="button"
+                  size="sm"
+                  variant={action.variant ?? "secondary"}
+                  onClick={action.onClick}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+
           {!targetReady && <p className="mt-2 text-xs text-amber-600">Esperando el elemento objetivo en pantalla...</p>}
 
           {step.requiredAction === "click_target" && !actionDone && (
@@ -398,4 +420,3 @@ export function ContextualWizard({
     </>
   );
 }
-

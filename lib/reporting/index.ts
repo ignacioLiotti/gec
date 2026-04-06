@@ -1,5 +1,9 @@
 import { createClient } from "@/utils/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+	hasAnyDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 import type {
 	ReportTable,
 	ReportTableColumn,
@@ -232,6 +236,37 @@ async function resolveTenantId(
 		.maybeSingle();
 
 	return membership?.tenant_id ?? null;
+}
+
+async function resolveReportingTenantAccess(obraId: string): Promise<{
+	supabase: SupabaseClient;
+	tenantId: string;
+} | null> {
+	const access = await resolveRequestAccessContext();
+	if (!access.user && access.actorType !== "demo") return null;
+	if (
+		access.actorType === "demo" &&
+		!hasAnyDemoCapability(access.demoSession, ["dashboard", "excel"])
+	) {
+		return null;
+	}
+
+	const tenantId = access.tenantId;
+	if (!tenantId) return null;
+
+	const supabase = access.supabase as SupabaseClient;
+	const { data: obra, error } = await supabase
+		.from("obras")
+		.select("id")
+		.eq("id", obraId)
+		.eq("tenant_id", tenantId)
+		.is("deleted_at", null)
+		.maybeSingle();
+
+	if (error) throw error;
+	if (!obra) return null;
+
+	return { supabase, tenantId };
 }
 
 type ObraRuleTableMeta = {
@@ -575,13 +610,9 @@ export async function getObraTables(obraId: string) {
 }
 
 export async function getRuleConfig(obraId: string) {
-	const supabase = await createClient();
-	const { data: auth } = await supabase.auth.getUser();
-	if (!auth.user) return DEFAULT_RULE_CONFIG;
-
-	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
-	if (!tenantId) return DEFAULT_RULE_CONFIG;
-	return loadRuleConfigForTenant(supabase, tenantId, obraId);
+	const access = await resolveReportingTenantAccess(obraId);
+	if (!access) return DEFAULT_RULE_CONFIG;
+	return loadRuleConfigForTenant(access.supabase, access.tenantId, obraId);
 }
 
 export async function saveRuleConfig(obraId: string, config: RuleConfig) {
@@ -1278,13 +1309,14 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 }
 
 export async function getSignalsSnapshot(obraId: string, periodKey?: string) {
-	const supabase = await createClient();
-	const { data: auth } = await supabase.auth.getUser();
-	if (!auth.user) return [] as SignalRow[];
-
-	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
-	if (!tenantId) return [] as SignalRow[];
-	return loadSignalsSnapshotForTenant(supabase, tenantId, obraId, periodKey);
+	const access = await resolveReportingTenantAccess(obraId);
+	if (!access) return [] as SignalRow[];
+	return loadSignalsSnapshotForTenant(
+		access.supabase,
+		access.tenantId,
+		obraId,
+		periodKey,
+	);
 }
 
 export async function evaluateFindings(obraId: string, periodKey?: string) {
@@ -1429,13 +1461,14 @@ export async function evaluateFindings(obraId: string, periodKey?: string) {
 }
 
 export async function listFindings(obraId: string, periodKey?: string) {
-	const supabase = await createClient();
-	const { data: auth } = await supabase.auth.getUser();
-	if (!auth.user) return [] as FindingRow[];
-
-	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
-	if (!tenantId) return [] as FindingRow[];
-	return loadFindingsForTenant(supabase, tenantId, obraId, periodKey);
+	const access = await resolveReportingTenantAccess(obraId);
+	if (!access) return [] as FindingRow[];
+	return loadFindingsForTenant(
+		access.supabase,
+		access.tenantId,
+		obraId,
+		periodKey,
+	);
 }
 
 export { getDefaultRuleConfig };

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
+import type { User } from "@supabase/supabase-js";
 
 import {
 	ACTIVE_TENANT_COOKIE,
@@ -57,7 +58,7 @@ export {
 export type RequestAccessContext = {
 	actorType: "anonymous" | "user" | "demo";
 	supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createSupabaseAdminClient>;
-	user: Awaited<ReturnType<Awaited<ReturnType<typeof createClient>>["auth"]["getUser"]>>["data"]["user"] | null;
+	user: User | null;
 	tenantId: string | null;
 	tenantName: string | null;
 	memberships: TenantMembershipRow[];
@@ -107,6 +108,35 @@ export function buildDemoSessionCookieValue(slug: string, token: string) {
 
 export function hashDemoToken(token: string) {
 	return createHash("sha256").update(token).digest("hex");
+}
+
+function createDemoUserId(seed: string) {
+	const hash = createHash("sha256").update(seed).digest("hex").slice(0, 32);
+	return [
+		hash.slice(0, 8),
+		hash.slice(8, 12),
+		`4${hash.slice(13, 16)}`,
+		`a${hash.slice(17, 20)}`,
+		hash.slice(20, 32),
+	].join("-");
+}
+
+function createDemoUser(session: DemoSession): User {
+	const id = createDemoUserId(`${session.id}:${session.tenantId}:${session.slug}`);
+	return {
+		id,
+		app_metadata: { provider: "demo", providers: ["demo"] },
+		user_metadata: {
+			is_demo_user: true,
+			demo_slug: session.slug,
+			demo_label: session.label,
+			tenant_id: session.tenantId,
+		},
+		aud: "authenticated",
+		created_at: session.expiresAt ?? new Date().toISOString(),
+		email: `demo+${session.slug}@syntesis.demo`,
+		role: "authenticated",
+	} as User;
 }
 
 export async function getDemoLinkBySlug(slug: string) {
@@ -218,6 +248,7 @@ export async function resolveRequestAccessContext(): Promise<RequestAccessContex
 	const demoSession = await resolveDemoSessionFromCookies();
 	if (demoSession) {
 		const admin = createSupabaseAdminClient();
+		const demoUser = createDemoUser(demoSession);
 		const demoMembership: TenantMembershipRow = {
 			tenant_id: demoSession.tenantId,
 			role: "member",
@@ -229,7 +260,7 @@ export async function resolveRequestAccessContext(): Promise<RequestAccessContex
 		return {
 			actorType: "demo",
 			supabase: admin,
-			user: null,
+			user: demoUser,
 			tenantId: demoSession.tenantId,
 			tenantName: demoSession.tenantName,
 			memberships: [demoMembership],

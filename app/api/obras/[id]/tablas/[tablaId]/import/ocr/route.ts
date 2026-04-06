@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/utils/supabase/server";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 import {
 	coerceValueForType,
 	ensureTablaDataType,
@@ -380,7 +385,7 @@ function buildAutoInstructions({
 }
 
 async function fetchTablaMeta(
-	supabase: Awaited<ReturnType<typeof createClient>>,
+	supabase: SupabaseClient,
 	obraId: string,
 	tablaId: string
 ) {
@@ -395,7 +400,7 @@ async function fetchTablaMeta(
 }
 
 async function fetchColumns(
-	supabase: Awaited<ReturnType<typeof createClient>>,
+	supabase: SupabaseClient,
 	tablaId: string
 ) {
 	const { data, error } = await supabase
@@ -417,7 +422,7 @@ async function fetchColumns(
 }
 
 async function fetchTemplatePromptContext(
-	supabase: Awaited<ReturnType<typeof createClient>>,
+	supabase: SupabaseClient,
 	settings: Record<string, unknown>,
 ) {
 	const templateId =
@@ -469,7 +474,7 @@ async function fetchTemplatePromptContext(
 }
 
 async function resolvePromptSettings(
-	supabase: Awaited<ReturnType<typeof createClient>>,
+	supabase: SupabaseClient,
 	settings: Record<string, unknown>,
 ) {
 	const defaultTablaId =
@@ -643,7 +648,7 @@ async function uploadSourceToStorage({
 	file,
 	imageDataUrl,
 }: {
-	supabase: Awaited<ReturnType<typeof createClient>>;
+	supabase: SupabaseClient;
 	obraId: string;
 	folderName: string;
 	file: File | null;
@@ -723,6 +728,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 	}
 	let resolvedTenantId: string | null = null;
 	let resolvedPlanLimits: SubscriptionPlanLimits | null = null;
+	let resolvedSupabase: SupabaseClient | null = null;
 	let reservedTokens = 0;
 	let reservationApplied = false;
 	let tokensSettled = false;
@@ -738,7 +744,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
 	} | null = null;
 
 	try {
-		const supabase = await createClient();
+		const access = await resolveRequestAccessContext();
+		const { supabase, user, tenantId: accessTenantId, actorType } = access;
+		resolvedSupabase = supabase;
+		if (!user && actorType !== "demo") {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		}
 		const tablaMeta = await fetchTablaMeta(supabase, id, tablaId);
 		if (!tablaMeta) {
 			return NextResponse.json(
@@ -754,6 +768,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			return NextResponse.json(
 				{ error: "No encontramos la organización de esta obra" },
 				{ status: 400 }
+			);
+		}
+
+		if (accessTenantId && tenantId !== accessTenantId) {
+			return NextResponse.json(
+				{ error: "Tabla no encontrada" },
+				{ status: 404 }
 			);
 		}
 
@@ -1481,8 +1502,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		// Track failed processing if we have file info
 		if (typeof storageInfoForError !== "undefined" && storageInfoForError) {
 			try {
-				const supabase = await createClient();
-				await supabase.from("ocr_document_processing").upsert(
+				const trackingSupabase = resolvedSupabase ?? (await createClient());
+				await trackingSupabase.from("ocr_document_processing").upsert(
 					{
 						tabla_id: tablaId,
 						obra_id: id,

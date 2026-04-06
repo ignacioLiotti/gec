@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 import {
 	coerceValueForType,
 	ensureTablaDataType,
@@ -7,7 +12,7 @@ import {
 } from "@/lib/tablas";
 
 async function fetchColumnMetas(
-	supabase: Awaited<ReturnType<typeof createClient>>,
+	supabase: SupabaseClient,
 	tablaId: string
 ) {
 	const { data, error } = await supabase
@@ -49,7 +54,31 @@ export async function GET(request: Request, context: RowsContext) {
 		const to = from + limit - 1;
 		const docPath = url.searchParams.get("docPath");
 
-		const supabase = await createClient();
+		const access = await resolveRequestAccessContext();
+		const { supabase, user, tenantId, actorType } = access;
+		if (!user && actorType !== "demo") {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		}
+		if (!tenantId) {
+			return NextResponse.json({ error: "No tenant" }, { status: 400 });
+		}
+
+		const { data: tabla, error: tablaError } = await supabase
+			.from("obra_tablas")
+			.select("id, obra_id, obras!inner(id, tenant_id, deleted_at)")
+			.eq("id", tablaId)
+			.eq("obra_id", id)
+			.eq("obras.tenant_id", tenantId)
+			.is("obras.deleted_at", null)
+			.maybeSingle();
+		if (tablaError) throw tablaError;
+		if (!tabla) {
+			return NextResponse.json({ error: "Tabla no encontrada" }, { status: 404 });
+		}
+
 		let rowsQuery = supabase
 			.from("obra_tabla_rows")
 			.select("id, tabla_id, data, source, created_at, updated_at")

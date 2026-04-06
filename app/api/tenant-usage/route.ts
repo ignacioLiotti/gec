@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/utils/supabase/server";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { fetchTenantPlan } from "@/lib/subscription-plans";
 import {
@@ -14,9 +18,10 @@ import {
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
 type MembershipRow = { tenant_id: string | null; role: string | null };
+type TenantSupabase = Awaited<ReturnType<typeof createClient>> | Awaited<ReturnType<typeof resolveRequestAccessContext>>["supabase"];
 
 type TenantContext =
-	| { user: User; tenantId: string; isSuperAdmin: boolean }
+	| { supabase: TenantSupabase; user: User; tenantId: string; isSuperAdmin: boolean }
 	| { error: { status: number; message: string } };
 
 async function resolveTenantContext(
@@ -59,12 +64,32 @@ async function resolveTenantContext(
 		};
 	}
 
-	return { user, tenantId, isSuperAdmin };
+	return { supabase, user, tenantId, isSuperAdmin };
+}
+
+async function resolveTenantContextWithDemo(): Promise<TenantContext> {
+	const access = await resolveRequestAccessContext();
+	if (access.actorType === "demo") {
+		if (!hasDemoCapability(access.demoSession, "excel")) {
+			return { error: { status: 403, message: "Esta demo no permite usar Excel." } };
+		}
+		if (!access.tenantId || !access.user) {
+			return { error: { status: 403, message: "No pudimos resolver la organizacion demo." } };
+		}
+		return {
+			supabase: access.supabase,
+			user: access.user,
+			tenantId: access.tenantId,
+			isSuperAdmin: false,
+		};
+	}
+
+	const supabase = await createClient();
+	return resolveTenantContext(supabase);
 }
 
 export async function GET() {
-	const supabase = await createClient();
-	const context = await resolveTenantContext(supabase);
+	const context = await resolveTenantContextWithDemo();
 
 	if ("error" in context) {
 		return NextResponse.json(
@@ -74,8 +99,8 @@ export async function GET() {
 	}
 
 	const [plan, usage] = await Promise.all([
-		fetchTenantPlan(supabase, context.tenantId),
-		fetchTenantUsage(supabase, context.tenantId),
+		fetchTenantPlan(context.supabase, context.tenantId),
+		fetchTenantUsage(context.supabase, context.tenantId),
 	]);
 
 	return NextResponse.json({
@@ -86,8 +111,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-	const supabase = await createClient();
-	const context = await resolveTenantContext(supabase);
+	const context = await resolveTenantContextWithDemo();
 
 	if ("error" in context) {
 		return NextResponse.json(
@@ -152,11 +176,11 @@ export async function POST(request: NextRequest) {
 		);
 	}
 
-	const plan = await fetchTenantPlan(supabase, context.tenantId);
+	const plan = await fetchTenantPlan(context.supabase, context.tenantId);
 
 	try {
 		const usage = await incrementTenantUsage(
-			supabase,
+			context.supabase,
 			context.tenantId,
 			deltas,
 			plan.limits
@@ -170,7 +194,7 @@ export async function POST(request: NextRequest) {
 			]
 				.filter((item) => (item.delta ?? 0) !== 0)
 				.map((item) =>
-					logTenantUsageEvent(supabase, {
+					logTenantUsageEvent(context.supabase, {
 						tenantId: context.tenantId,
 						kind: item.kind,
 						amount: item.delta ?? 0,

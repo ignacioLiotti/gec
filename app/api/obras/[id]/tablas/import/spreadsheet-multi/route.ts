@@ -11,6 +11,10 @@ import {
 } from "@/lib/spreadsheet-preview-summary";
 import { createClient } from "@/utils/supabase/server";
 import {
+  hasDemoCapability,
+  resolveRequestAccessContext,
+} from "@/lib/demo-session";
+import {
   coerceValueForType,
   ensureTablaDataType,
   normalizeFieldKey,
@@ -666,7 +670,28 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Parámetros incompletos" }, { status: 400 });
   }
   try {
-    const supabase = await createClient();
+    const access = await resolveRequestAccessContext();
+    const { supabase, user, tenantId, actorType } = access;
+    if (!user && actorType !== "demo") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantId) {
+      return NextResponse.json({ error: "No tenant" }, { status: 400 });
+    }
+    const { data: obraRow, error: obraError } = await supabase
+      .from("obras")
+      .select("id")
+      .eq("id", obraId)
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (obraError) throw obraError;
+    if (!obraRow) {
+      return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
+    }
     const form = await request.formData();
     const url = new URL(request.url);
     const previewMode =

@@ -3,6 +3,10 @@ import { z } from "zod";
 
 import { createClient } from "@/utils/supabase/server";
 import {
+  hasDemoCapability,
+  resolveRequestAccessContext,
+} from "@/lib/demo-session";
+import {
   coerceValueForType,
   ensureTablaDataType,
   MATERIALS_OCR_PROMPT,
@@ -880,9 +884,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
     | { bucket: string; path: string; fileName: string; uploadedBytes?: number }
     | null = null;
   let tablaDefs: TablaDef[] = [];
+  let resolvedSupabase: Awaited<ReturnType<typeof createClient>> | null = null;
 
   try {
-    const supabase = await createClient();
+    const access = await resolveRequestAccessContext();
+    const { supabase, user, tenantId, actorType } = access;
+    resolvedSupabase = supabase as Awaited<ReturnType<typeof createClient>>;
+    if (!user && actorType !== "demo") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantId) {
+      return NextResponse.json({ error: "No tenant" }, { status: 400 });
+    }
+    const { data: obraRow, error: obraError } = await supabase
+      .from("obras")
+      .select("id")
+      .eq("id", obraId)
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (obraError) throw obraError;
+    if (!obraRow) {
+      return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
+    }
     const url = new URL(request.url);
     const skipStorage =
       url.searchParams.get("skipStorage") === "1" ||
@@ -908,16 +935,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "No hay tablas OCR válidas para procesar." }, { status: 400 });
     }
 
-    const tenantId = tablaDefs[0].tenantId;
-    resolvedTenantId = tenantId;
-    const plan = await fetchTenantPlan(supabase, tenantId);
+    const processingTenantId = tablaDefs[0].tenantId;
+    resolvedTenantId = processingTenantId;
+    const plan = await fetchTenantPlan(supabase, processingTenantId);
     const planLimits = plan.limits;
     resolvedPlanLimits = planLimits;
     rollbackReservation = async (ctx: string) => {
       if (!reservationApplied || reservedTokens <= 0) return;
-      await incrementTenantUsage(supabase, tenantId, { aiTokens: -reservedTokens }, planLimits);
+      await incrementTenantUsage(supabase, processingTenantId, { aiTokens: -reservedTokens }, planLimits);
       await logTenantUsageEvent(supabase, {
-        tenantId,
+        tenantId: processingTenantId,
         kind: "ai_tokens",
         amount: -reservedTokens,
         context: ctx,
@@ -1012,9 +1039,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       : 0;
     if (enforceAiLimit && tokenReservationTarget > 0) {
       try {
-        await incrementTenantUsage(supabase, tenantId, { aiTokens: tokenReservationTarget }, planLimits);
+        await incrementTenantUsage(supabase, processingTenantId, { aiTokens: tokenReservationTarget }, planLimits);
         await logTenantUsageEvent(supabase, {
-          tenantId,
+          tenantId: processingTenantId,
           kind: "ai_tokens",
           amount: tokenReservationTarget,
           context: "ocr_reservation_multi",
@@ -1165,7 +1192,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       try {
         await incrementTenantUsage(
           supabase,
-          tenantId,
+          processingTenantId,
           { aiTokens: reservationApplied ? actualTokenUsage - reservedTokens : actualTokenUsage },
           planLimits
         );
@@ -1189,7 +1216,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const costUsd = actualTokenUsage > 0 ? estimateUsdForTokens(OCR_MODEL, actualTokenUsage) : null;
     await logTenantUsageEvent(supabase, {
-      tenantId,
+      tenantId: processingTenantId,
       kind: "ai_tokens",
       amount: actualTokenUsage > 0 ? actualTokenUsage : reservedTokens,
       context: "ocr_import_multi",
@@ -1321,10 +1348,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       await rollbackReservation("ocr_reservation_rollback_multi");
     }
 
-    if (storageInfoForError && tablaDefs.length > 0) {
-      const supabase = await createClient();
+    if (storageInfoForError && tablaDefs.length > 0 && resolvedSupabase) {
       for (const def of tablaDefs) {
-        await supabase.from("ocr_document_processing").upsert(
+        await resolvedSupabase.from("ocr_document_processing").upsert(
           {
             tabla_id: def.tablaId,
             obra_id: obraId,

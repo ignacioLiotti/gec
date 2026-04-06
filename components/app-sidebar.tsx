@@ -346,6 +346,16 @@ export function AppSidebar({
 		() => navItems.filter((item) => canAccessRoute(item.href)),
 		[canAccessRoute],
 	);
+	const macroTablesInsertionHref = React.useMemo(() => {
+		if (macroTables.length === 0 || filteredNavItems.length === 0) return null;
+		const notificationsItem = filteredNavItems.find(
+			(item) => item.href === "/notifications",
+		);
+		if (notificationsItem) return notificationsItem.href;
+		const excelItem = filteredNavItems.find((item) => item.href === "/excel");
+		if (excelItem) return excelItem.href;
+		return filteredNavItems[filteredNavItems.length - 1]?.href ?? null;
+	}, [filteredNavItems, macroTables]);
 
 	const filteredAdminItems = React.useMemo(
 		() =>
@@ -540,7 +550,7 @@ export function AppSidebar({
 								{filteredNavItems.map((item) => {
 									const isActive = pathname === item.href;
 									const showTablasBeforeThis =
-										item.href === "/notifications" && macroTables.length > 0;
+										item.href === macroTablesInsertionHref;
 
 									return (
 										<React.Fragment key={item.title}>

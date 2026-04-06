@@ -135,6 +135,7 @@ import {
   getGuidedExcelStage,
   isGuidedExcelTour,
 } from '@/lib/demo-tours/excel-guided-flow';
+import { downloadDemoCertificadoPdf } from '@/lib/demo-tours/demo-certificado-pdf';
 
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
@@ -364,7 +365,8 @@ type TenantUsageInfo = {
 
 type FileThumbnailProps = {
   item: FileSystemItem;
-  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  getDocumentSignedUrl: (storagePath: string, expiresIn?: number) => Promise<string | null>;
+  downloadStoredDocumentBytes: (storagePath: string) => Promise<Uint8Array>;
   getFileIcon: (mimetype?: string) => ReactNode;
   renderOcrStatusBadge: (item: FileSystemItem, context?: OcrStatusBadgeContext) => ReactNode;
 };
@@ -511,7 +513,8 @@ const pdfThumbnailCache = new Map<string, string>();
 
 const FileThumbnail = memo(function FileThumbnail({
   item,
-  supabase,
+  getDocumentSignedUrl,
+  downloadStoredDocumentBytes,
   getFileIcon,
   renderOcrStatusBadge,
 }: FileThumbnailProps) {
@@ -568,10 +571,8 @@ const FileThumbnail = memo(function FileThumbnail({
 
     (async () => {
       const getSignedUrl = async () => {
-        const { data, error } = await supabase.storage
-          .from('obra-documents')
-          .createSignedUrl(storagePath, 3600); // 1 hour
-        if (!isMounted || error || !data?.signedUrl) {
+        const signedUrl = await getDocumentSignedUrl(storagePath, 3600);
+        if (!isMounted || !signedUrl) {
           // Fresh uploads can take a short moment before signed URL is available.
           if (isMounted && retryCount < 5) {
             setTimeout(() => {
@@ -580,8 +581,7 @@ const FileThumbnail = memo(function FileThumbnail({
           }
           return null;
         }
-        setCachedSignedUrl(storagePath, data.signedUrl);
-        return data.signedUrl;
+        return signedUrl;
       };
 
       if (isPdfFile) {
@@ -600,12 +600,7 @@ const FileThumbnail = memo(function FileThumbnail({
           }
 
           if (!pdfBytes) {
-            const { data: fileBlob } = await supabase.storage
-              .from('obra-documents')
-              .download(storagePath);
-            if (fileBlob) {
-              pdfBytes = new Uint8Array(await fileBlob.arrayBuffer());
-            }
+            pdfBytes = await downloadStoredDocumentBytes(storagePath).catch(() => null);
           }
 
           if (!pdfBytes) {
@@ -670,7 +665,15 @@ const FileThumbnail = memo(function FileThumbnail({
     return () => {
       isMounted = false;
     };
-  }, [isImageFile, isPdfFile, isPreviewableFile, retryCount, storagePath, supabase]);
+  }, [
+    downloadStoredDocumentBytes,
+    getDocumentSignedUrl,
+    isImageFile,
+    isPdfFile,
+    isPreviewableFile,
+    retryCount,
+    storagePath,
+  ]);
 
   if (thumbUrl) {
     return (
@@ -762,6 +765,51 @@ function FileManagerContent({
       return null;
     }
   }, [mapUsagePayload]);
+
+  const getDocumentSignedUrl = useCallback(
+    async (storagePath: string, expiresIn = 3600) => {
+      const params = new URLSearchParams({
+        path: storagePath,
+        expiresIn: String(expiresIn),
+      });
+      const response = await fetch(
+        `/api/obras/${encodeURIComponent(obraId)}/documents/access?${params.toString()}`,
+        { cache: 'no-store' }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'No se pudo generar el acceso al documento.');
+      }
+      const signedUrl =
+        typeof payload?.signedUrl === 'string' && payload.signedUrl.length > 0
+          ? payload.signedUrl
+          : null;
+      if (signedUrl) {
+        setCachedSignedUrl(storagePath, signedUrl);
+      }
+      return signedUrl;
+    },
+    [obraId]
+  );
+
+  const downloadStoredDocumentBytes = useCallback(
+    async (storagePath: string) => {
+      const params = new URLSearchParams({
+        path: storagePath,
+        download: '1',
+      });
+      const response = await fetch(
+        `/api/obras/${encodeURIComponent(obraId)}/documents/access?${params.toString()}`,
+        { cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error || 'No se pudo descargar el documento.');
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    },
+    [obraId]
+  );
 
   const applyUsageDelta = useCallback(
     async (
@@ -1830,19 +1878,16 @@ function FileManagerContent({
           setPreviewUrl(cachedSignedUrl);
           preloadAndCacheFile(cachedSignedUrl, doc.storagePath).then(setPreviewUrl);
         } else {
-          const { data } = await supabase.storage
-            .from('obra-documents')
-            .createSignedUrl(doc.storagePath, 3600);
-          if (data?.signedUrl) {
-            setCachedSignedUrl(doc.storagePath, data.signedUrl);
-            setPreviewUrl(data.signedUrl);
-            preloadAndCacheFile(data.signedUrl, doc.storagePath).then(setPreviewUrl);
+          const signedUrl = await getDocumentSignedUrl(doc.storagePath, 3600).catch(() => null);
+          if (signedUrl) {
+            setPreviewUrl(signedUrl);
+            preloadAndCacheFile(signedUrl, doc.storagePath).then(setPreviewUrl);
           }
         }
       }
     }
     setSourceFileModal(doc);
-  }, [supabase]);
+  }, [getDocumentSignedUrl]);
 
   const handleFilterRowsByDocument = useCallback((docPath?: string | null, docName?: string | null) => {
     if (!docPath) {
@@ -1953,28 +1998,27 @@ function FileManagerContent({
       }
 
       setPreviewUrl(null);
-      const { data, error } = await supabase.storage
-        .from('obra-documents')
-        .createSignedUrl(document.storagePath, 3600);
-
-      if (error) {
+      const signedUrl = await getDocumentSignedUrl(document.storagePath, 3600).catch((error) => {
         console.error('Error creating signed URL:', error);
+        return null;
+      });
+
+      if (!signedUrl) {
         toast.error('Error loading document preview');
         return;
       }
 
-      if (data?.signedUrl && previewRequestIdRef.current === requestId) {
-        setCachedSignedUrl(document.storagePath, data.signedUrl);
+      if (previewRequestIdRef.current === requestId) {
         // Set signed URL immediately, then preload to blob
-        setPreviewUrl(data.signedUrl);
-        preloadAndCacheFile(data.signedUrl, document.storagePath).then((blobUrl) => {
-          if (previewRequestIdRef.current === requestId && blobUrl !== data.signedUrl) {
+        setPreviewUrl(signedUrl);
+        preloadAndCacheFile(signedUrl, document.storagePath).then((blobUrl) => {
+          if (previewRequestIdRef.current === requestId && blobUrl !== signedUrl) {
             setPreviewUrl(blobUrl);
           }
         });
       }
     }
-  }, [clearOcrDocumentFilter, ensureAncestorsExpanded, getPathSegments, ocrFolderMap, onSelectionChange, supabase]);
+  }, [clearOcrDocumentFilter, ensureAncestorsExpanded, getDocumentSignedUrl, getPathSegments, ocrFolderMap, onSelectionChange]);
 
   const handleOpenDocumentSheetByPath = useCallback(
     async (docPath?: string | null) => {
@@ -2002,13 +2046,7 @@ function FileManagerContent({
             resolvedPreviewUrl = cachedSignedUrl;
           } else {
             // Fetch the signed URL
-            const { data } = await supabase.storage
-              .from('obra-documents')
-              .createSignedUrl(doc.storagePath, 3600);
-            if (data?.signedUrl) {
-              setCachedSignedUrl(doc.storagePath, data.signedUrl);
-              resolvedPreviewUrl = data.signedUrl;
-            }
+            resolvedPreviewUrl = await getDocumentSignedUrl(doc.storagePath, 3600).catch(() => null);
           }
         }
       }
@@ -2029,7 +2067,7 @@ function FileManagerContent({
       displayedDocumentRef.current = doc;
       setIsDocumentSheetOpen(true);
     },
-    [ensureAncestorsExpanded, findDocumentByStoragePath, supabase]
+    [ensureAncestorsExpanded, findDocumentByStoragePath, getDocumentSignedUrl]
   );
 
   const handleDocumentViewModeChange = useCallback((mode: 'cards' | 'table') => {
@@ -2040,6 +2078,11 @@ function FileManagerContent({
       setSheetDocument(null);
       setPreviewUrl(null);
     }
+  }, []);
+
+  const handleDownloadGuidedCertificadoPdf = useCallback(() => {
+    downloadDemoCertificadoPdf();
+    toast.success('PDF demo descargado. Ahora subilo o arrastralo en la carpeta Certificados.');
   }, []);
 
   const closeDocumentPreview = useCallback(() => {
@@ -2137,12 +2180,9 @@ function FileManagerContent({
 
   const handleDownload = async (document: FileSystemItem) => {
     if (document.storagePath) {
-      const { data } = await supabase.storage
-        .from('obra-documents')
-        .createSignedUrl(document.storagePath, 60);
-
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
+      const signedUrl = await getDocumentSignedUrl(document.storagePath, 60).catch(() => null);
+      if (signedUrl) {
+        window.open(signedUrl, '_blank');
       }
     }
   };
@@ -2720,13 +2760,9 @@ function FileManagerContent({
 
   const loadStoredDocumentBytes = useCallback(
     async (storagePath: string) => {
-      const { data, error } = await supabase.storage.from('obra-documents').download(storagePath);
-      if (error || !data) {
-        throw new Error(error?.message || 'No se pudo descargar el PDF para OCR.');
-      }
-      return new Uint8Array(await data.arrayBuffer());
+      return downloadStoredDocumentBytes(storagePath);
     },
-    [supabase]
+    [downloadStoredDocumentBytes]
   );
 
   const openPdfPageSelectionDialog = useCallback(
@@ -3078,48 +3114,50 @@ function FileManagerContent({
         completedGuidedFolderKeys.add(folderKey);
       }
     };
+    const shouldCompleteGuidedStepOnUpload =
+      folderForUpload?.type === 'folder' && getFolderSegmentKey(folderForUpload) === 'certificados';
 
     try {
       for (const file of filesArray) {
         const baseStorageFileName = sanitizeStorageFileName(file.name);
         let storageFileName = baseStorageFileName;
         let filePath = `${folderPath}/${storageFileName}`;
-        let uploadError: unknown = null;
-
-        for (let attempt = 1; attempt <= 200; attempt += 1) {
-          storageFileName = withNumericSuffix(baseStorageFileName, attempt);
-          const lowerKey = storageFileName.toLowerCase();
-          if (reservedFileNames.has(lowerKey)) {
-            continue;
-          }
-
-          filePath = `${folderPath}/${storageFileName}`;
-          const { error } = await supabase.storage
-            .from('obra-documents')
-            .upload(filePath, file, { upsert: false });
-
-          if (!error) {
-            reservedFileNames.add(lowerKey);
-            uploadError = null;
-            break;
-          }
-
-          uploadError = error;
-          const message = String((error as any)?.message ?? '').toLowerCase();
-          const statusCode = Number((error as any)?.statusCode ?? 0);
-          const isAlreadyExists =
-            statusCode === 409 ||
-            message.includes('already exists') ||
-            message.includes('duplicate') ||
-            message.includes('resource already exists');
-          if (!isAlreadyExists) {
-            break;
-          }
-        }
-
-        if (uploadError) throw uploadError;
-
         if (currentUser?.id) {
+          let uploadError: unknown = null;
+
+          for (let attempt = 1; attempt <= 200; attempt += 1) {
+            storageFileName = withNumericSuffix(baseStorageFileName, attempt);
+            const lowerKey = storageFileName.toLowerCase();
+            if (reservedFileNames.has(lowerKey)) {
+              continue;
+            }
+
+            filePath = `${folderPath}/${storageFileName}`;
+            const { error } = await supabase.storage
+              .from('obra-documents')
+              .upload(filePath, file, { upsert: false });
+
+            if (!error) {
+              reservedFileNames.add(lowerKey);
+              uploadError = null;
+              break;
+            }
+
+            uploadError = error;
+            const message = String((error as any)?.message ?? '').toLowerCase();
+            const statusCode = Number((error as any)?.statusCode ?? 0);
+            const isAlreadyExists =
+              statusCode === 409 ||
+              message.includes('already exists') ||
+              message.includes('duplicate') ||
+              message.includes('resource already exists');
+            if (!isAlreadyExists) {
+              break;
+            }
+          }
+
+          if (uploadError) throw uploadError;
+
           const { error: trackingError } = await supabase
             .from('obra_document_uploads')
             .upsert({
@@ -3132,10 +3170,40 @@ function FileManagerContent({
           if (trackingError) {
             console.error('Error tracking uploaded document:', trackingError);
           }
+        } else {
+          const uploadForm = new FormData();
+          uploadForm.append('file', file);
+          uploadForm.append('folderPath', folderPath);
+
+          const uploadResponse = await fetch(`/api/obras/${obraId}/documents/upload`, {
+            method: 'POST',
+            body: uploadForm,
+          });
+          const uploadPayload = await uploadResponse.json().catch(() => ({} as {
+            error?: string;
+            path?: string;
+            fileName?: string;
+          }));
+          if (!uploadResponse.ok) {
+            throw new Error(uploadPayload.error || 'Error al subir archivos');
+          }
+
+          storageFileName =
+            typeof uploadPayload.fileName === 'string' && uploadPayload.fileName.length > 0
+              ? uploadPayload.fileName
+              : baseStorageFileName;
+          filePath =
+            typeof uploadPayload.path === 'string' && uploadPayload.path.length > 0
+              ? uploadPayload.path
+              : `${folderPath}/${storageFileName}`;
+          reservedFileNames.add(storageFileName.toLowerCase());
         }
 
         pendingUsageBytes += file.size ?? 0;
         uploadedFiles.push({ path: filePath, name: storageFileName });
+        if (shouldCompleteGuidedStepOnUpload) {
+          markGuidedImportCompleted();
+        }
         const ext = file.name.toLowerCase().split('.').pop() ?? '';
         const isImageFile =
           file.type.startsWith('image/') ||
@@ -4397,19 +4465,22 @@ function FileManagerContent({
     const stageOrder = [
       GUIDED_EXCEL_STAGES.documentsIntro,
       GUIDED_EXCEL_STAGES.documentsOpenCertificados,
+      GUIDED_EXCEL_STAGES.documentsSwitchToFiles,
       GUIDED_EXCEL_STAGES.documentsUploadCertificado,
       GUIDED_EXCEL_STAGES.documentsReviewCertificadoData,
-      GUIDED_EXCEL_STAGES.documentsOpenCurva,
-      GUIDED_EXCEL_STAGES.documentsUploadCurva,
       GUIDED_EXCEL_STAGES.documentsReturnGeneral,
     ] as const;
+    const normalizedGuidedStage =
+      guidedTourStage === GUIDED_EXCEL_STAGES.documentsOpenCurva ||
+      guidedTourStage === GUIDED_EXCEL_STAGES.documentsUploadCurva
+        ? GUIDED_EXCEL_STAGES.documentsReturnGeneral
+        : (guidedTourStage ?? GUIDED_EXCEL_STAGES.documentsIntro);
     const startIndex = stageOrder.indexOf(
-      (guidedTourStage ?? GUIDED_EXCEL_STAGES.documentsIntro) as (typeof stageOrder)[number]
+      normalizedGuidedStage as (typeof stageOrder)[number]
     );
     if (startIndex === -1) return null;
 
     const hasImportedCertificado = guidedImportedFolderKeys.has('certificados');
-    const hasImportedCurva = guidedImportedFolderKeys.has('curva-de-avance');
     const steps = [
       {
         id: GUIDED_EXCEL_STAGES.documentsIntro,
@@ -4433,6 +4504,18 @@ function FileManagerContent({
         waitForMs: 2800,
       },
       {
+        id: GUIDED_EXCEL_STAGES.documentsSwitchToFiles,
+        targetId: 'documents-view-mode-cards',
+        title: 'Pasate a Archivos',
+        content:
+          'Ahora mismo estas viendo la tabla extraida. Hace clic en Archivos, arriba a la derecha, para volver a la carpeta y poder cargar el PDF faltante.',
+        placement: 'left',
+        allowClickThrough: true,
+        requiredAction: 'click_target' as const,
+        skippable: false,
+        waitForMs: 2800,
+      },
+      {
         id: GUIDED_EXCEL_STAGES.documentsUploadCertificado,
         targetId: 'documents-dropzone',
         title: 'Subí el certificado faltante',
@@ -4440,45 +4523,28 @@ function FileManagerContent({
           'Usá esta zona para cargar el certificado. Si se abre la vista previa de importación, completala y confirmá la carga para seguir.',
         placement: 'top',
         allowClickThrough: true,
+        beforeShow: () => handleDocumentViewModeChange('cards'),
         requiredAction: 'condition' as const,
         isComplete: () => hasImportedCertificado,
         incompleteHint: 'Esperando a que completes la carga del certificado del mes actual.',
         skippable: false,
         waitForMs: 2800,
+        auxiliaryActions: [
+          {
+            label: 'Descargar PDF demo',
+            onClick: handleDownloadGuidedCertificadoPdf,
+            variant: 'secondary',
+          },
+        ],
       },
       {
         id: GUIDED_EXCEL_STAGES.documentsReviewCertificadoData,
         targetId: 'documents-extracted-data-table',
         title: 'Revisá los datos extraídos',
         content:
-          'Con el certificado cargado, acá podés revisar la información ya extraída antes de seguir con la curva de avance.',
+          'Con el certificado cargado, revisá acá la información extraída y confirmá que el nuevo mes ya aparece en la tabla.',
         placement: 'left',
-        skippable: false,
-        waitForMs: 2800,
-      },
-      {
-        id: GUIDED_EXCEL_STAGES.documentsOpenCurva,
-        targetId: 'documents-folder-curva-avance',
-        title: 'Ahora abrí Curva de Avance',
-        content:
-          'Seguimos con Curva de Avance para completar la carga manual y terminar de actualizar la obra.',
-        placement: 'right',
-        allowClickThrough: true,
-        requiredAction: 'click_target' as const,
-        skippable: false,
-        waitForMs: 2800,
-      },
-      {
-        id: GUIDED_EXCEL_STAGES.documentsUploadCurva,
-        targetId: 'documents-dropzone',
-        title: 'Importá la curva manualmente',
-        content:
-          'Subí la planilla de Curva de Avance y completá el asistente de importación manual para dejar la obra al día.',
-        placement: 'top',
-        allowClickThrough: true,
-        requiredAction: 'condition' as const,
-        isComplete: () => hasImportedCurva,
-        incompleteHint: 'Esperando a que completes la importación manual de la curva de avance.',
+        beforeShow: () => handleDocumentViewModeChange('table'),
         skippable: false,
         waitForMs: 2800,
       },
@@ -4487,7 +4553,7 @@ function FileManagerContent({
         targetId: 'obra-page-general-tab',
         title: 'Volvé a General',
         content:
-          'Con el certificado y la curva cargados, volvé a General para revisar la obra ya actualizada.',
+          'Volvé a General para revisar la obra actualizada con el nuevo certificado y sus datos consolidados.',
         placement: 'bottom',
         allowClickThrough: true,
         requiredAction: 'click_target' as const,
@@ -4501,7 +4567,13 @@ function FileManagerContent({
       title: 'Recorrido guiado',
       steps,
     };
-  }, [guidedImportedFolderKeys, guidedTourStage, isGuidedExcelFlow]);
+  }, [
+    guidedImportedFolderKeys,
+    guidedTourStage,
+    handleDocumentViewModeChange,
+    handleDownloadGuidedCertificadoPdf,
+    isGuidedExcelFlow,
+  ]);
   const handleGuidedDocumentsStepChange = useCallback(
     (step: WizardFlow['steps'][number]) => {
       if (!isGuidedExcelFlow) return;
@@ -4589,7 +4661,8 @@ function FileManagerContent({
             row={row}
             obraId={obraId}
             documentsByStoragePath={documentsByStoragePath}
-            supabase={supabase}
+            getDocumentSignedUrl={getDocumentSignedUrl}
+            downloadStoredDocumentBytes={downloadStoredDocumentBytes}
           />
         ),
       },
@@ -5225,6 +5298,7 @@ function FileManagerContent({
               <div className="inline-flex items-center rounded-md border border-[#d9d9d9] bg-stone-50 p-0.5">
                 <Button
                   type="button"
+                  data-wizard-target="documents-view-mode-cards"
                   variant={documentViewMode === "cards" ? "default" : "ghost"}
                   size="sm"
                   className="gap-1.5 h-8 px-3"
@@ -5483,7 +5557,8 @@ function FileManagerContent({
                         <div className="absolute inset-0 top-0 flex items-center justify-center">
                           <FileThumbnail
                             item={item}
-                            supabase={supabase}
+                            getDocumentSignedUrl={getDocumentSignedUrl}
+                            downloadStoredDocumentBytes={downloadStoredDocumentBytes}
                             getFileIcon={getFileIcon}
                             renderOcrStatusBadge={renderOcrStatusBadge}
                           />
@@ -7078,14 +7153,16 @@ type OcrDocumentSourceCellProps = {
   row: OcrDocumentTableRow;
   obraId?: string;
   documentsByStoragePath: Map<string, FileSystemItem>;
-  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  getDocumentSignedUrl: (storagePath: string, expiresIn?: number) => Promise<string | null>;
+  downloadStoredDocumentBytes: (storagePath: string) => Promise<Uint8Array>;
 };
 
 const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
   row,
   obraId,
   documentsByStoragePath,
-  supabase,
+  getDocumentSignedUrl,
+  downloadStoredDocumentBytes,
 }: OcrDocumentSourceCellProps) {
   const docPath: string | null =
     typeof (row as Record<string, unknown>).__docPath === 'string'
@@ -7138,12 +7215,9 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
 
     (async () => {
       const getSignedUrl = async () => {
-        const { data } = await supabase.storage
-          .from('obra-documents')
-          .createSignedUrl(storagePath, 3600);
-        if (!isMounted || !data?.signedUrl) return null;
-        setCachedSignedUrl(storagePath, data.signedUrl);
-        return data.signedUrl;
+        const signedUrl = await getDocumentSignedUrl(storagePath, 3600).catch(() => null);
+        if (!isMounted || !signedUrl) return null;
+        return signedUrl;
       };
 
       if (isPdf) {
@@ -7167,12 +7241,7 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
         }
 
         if (!pdfBytes) {
-          const { data: fileBlob } = await supabase.storage
-            .from('obra-documents')
-            .download(storagePath);
-          if (fileBlob) {
-            pdfBytes = new Uint8Array(await fileBlob.arrayBuffer());
-          }
+          pdfBytes = await downloadStoredDocumentBytes(storagePath).catch(() => null);
         }
 
         if (!isMounted || !pdfBytes) return;
@@ -7244,7 +7313,15 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
     return () => {
       isMounted = false;
     };
-  }, [hasRequestedPreview, isImage, isPdf, isPreviewable, storagePath, supabase]);
+  }, [
+    downloadStoredDocumentBytes,
+    getDocumentSignedUrl,
+    hasRequestedPreview,
+    isImage,
+    isPdf,
+    isPreviewable,
+    storagePath,
+  ]);
 
   if (!docPath) {
     return (
