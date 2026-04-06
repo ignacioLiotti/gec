@@ -190,6 +190,23 @@ function parseArgs(argv) {
 	return args;
 }
 
+function isDemoTenantRecord(tenant) {
+	const demoSettings =
+		tenant?.demo_settings && typeof tenant.demo_settings === "object"
+			? tenant.demo_settings
+			: {};
+	return demoSettings?.isDemo === true || typeof tenant?.demo_slug === "string";
+}
+
+function assertDemoTenantRecord(tenant, role, args) {
+	if (isDemoTenantRecord(tenant)) return;
+	if (args["allow-non-demo"] === "true") return;
+	throw new Error(
+		`Refusing to modify ${role} tenant "${tenant.name}" because it is not marked as a demo tenant. ` +
+			`Set tenants.demo_settings.isDemo=true or rerun with --allow-non-demo if this is intentional.`
+	);
+}
+
 function sanitizeFileName(fileName) {
 	return String(fileName)
 		.normalize("NFD")
@@ -431,7 +448,7 @@ async function listStorageFilesRecursive(adminClient, prefix) {
 async function getTenantByName(adminClient, name) {
 	const { data, error } = await adminClient
 		.from("tenants")
-		.select("id, name")
+		.select("id, name, demo_slug, demo_settings")
 		.eq("name", name)
 		.single();
 	if (error || !data) {
@@ -947,6 +964,8 @@ async function main() {
 
 	const tenant = await getTenantByName(adminClient, targetTenantName);
 	const sourceTenant = await getTenantByName(adminClient, sourceTenantName);
+	assertDemoTenantRecord(tenant, "target", args);
+	assertDemoTenantRecord(sourceTenant, "source", args);
 
 	const { data: membership, error: membershipError } = await adminClient
 		.from("memberships")

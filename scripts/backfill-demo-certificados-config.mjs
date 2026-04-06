@@ -88,6 +88,23 @@ function parseArgs(argv) {
 	return args;
 }
 
+function isDemoTenantRecord(tenant) {
+	const demoSettings =
+		tenant?.demo_settings && typeof tenant.demo_settings === "object"
+			? tenant.demo_settings
+			: {};
+	return demoSettings?.isDemo === true || typeof tenant?.demo_slug === "string";
+}
+
+function assertDemoTenantRecord(tenant, args) {
+	if (isDemoTenantRecord(tenant)) return;
+	if (args["allow-non-demo"] === "true") return;
+	throw new Error(
+		`Refusing to modify tenant "${tenant.name}" because it is not marked as a demo tenant. ` +
+			`Set tenants.demo_settings.isDemo=true or rerun with --allow-non-demo if this is intentional.`
+	);
+}
+
 function buildHistoricalCertCsv(rows) {
 	const header =
 		"periodo,nro_certificado,fecha_certificacion,monto_certificado,avance_fisico_acumulado_pct,monto_acumulado,n_expediente";
@@ -130,12 +147,13 @@ async function main() {
 
 	const { data: tenant, error: tenantError } = await adminClient
 		.from("tenants")
-		.select("id, name")
+		.select("id, name, demo_slug, demo_settings")
 		.eq("name", targetTenantName)
 		.single();
 	if (tenantError || !tenant) {
 		throw tenantError ?? new Error(`Tenant "${targetTenantName}" not found.`);
 	}
+	assertDemoTenantRecord(tenant, args);
 
 	const { data: firstObra, error: obraError } = await adminClient
 		.from("obras")

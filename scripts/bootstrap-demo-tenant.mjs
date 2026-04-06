@@ -843,7 +843,14 @@ async function assertTenantNameAvailable(adminClient, requestedName) {
 async function createTenant(adminClient, name) {
 	const { data, error } = await adminClient
 		.from("tenants")
-		.insert({ name })
+		.insert({
+			name,
+			demo_settings: {
+				isDemo: true,
+				createdBy: "bootstrap-demo-tenant",
+				createdAt: new Date().toISOString(),
+			},
+		})
 		.select("id, name")
 		.single();
 	if (error || !data) throw error ?? new Error("Failed to create tenant");

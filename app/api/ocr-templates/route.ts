@@ -4,36 +4,11 @@ import {
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
 import {
-	normalizeTemplateColumns,
+	deriveTemplateColumnsFromRegions,
 	propagateTemplateUpdate,
-	type TemplateColumnDefinition,
+	normalizeTemplateColumns,
+	validateTemplateRegions,
 } from "@/lib/ocr-template-sync";
-
-type Region = {
-	id: string;
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-	label: string;
-	description?: string;
-	color: string;
-	type: "single" | "table";
-	pageNumber?: number;
-	tableColumns?: string[];
-};
-
-type TemplateColumn = {
-	fieldKey: string;
-	label: string;
-	dataType: string;
-	ocrScope?: "parent" | "item";
-	description?: string;
-	aliases?: string[];
-	examples?: string[];
-	excelKeywords?: string[];
-	required?: boolean;
-};
 
 async function getAuthContext() {
 	const access = await resolveRequestAccessContext();
@@ -44,57 +19,6 @@ async function getAuthContext() {
 		actorType: access.actorType,
 		demoSession: access.demoSession,
 	};
-}
-
-function validateRegions(value: unknown): Region[] {
-	const regions = Array.isArray(value) ? (value as Region[]) : [];
-	return regions.filter(
-		(r) =>
-			typeof r.id === "string" &&
-			typeof r.label === "string" &&
-			typeof r.x === "number" &&
-			typeof r.y === "number" &&
-			typeof r.width === "number" &&
-			typeof r.height === "number" &&
-			(r.pageNumber === undefined ||
-				(typeof r.pageNumber === "number" && Number.isFinite(r.pageNumber) && r.pageNumber >= 1))
-	);
-}
-
-function deriveColumnsFromRegions(regions: Region[]): TemplateColumnDefinition[] {
-	const columns: TemplateColumn[] = [];
-	for (const region of regions) {
-		const regionDescription =
-			typeof region.description === "string"
-				? region.description.trim()
-				: "";
-		if (region.type === "single") {
-			columns.push({
-				fieldKey: region.label
-					.toLowerCase()
-					.replace(/[^a-z0-9]+/g, "_")
-					.replace(/^_|_$/g, "") || `field_${region.id}`,
-				label: region.label,
-				dataType: "text",
-				ocrScope: "parent",
-				description: regionDescription || undefined,
-			});
-		} else if (region.type === "table" && region.tableColumns) {
-			for (const col of region.tableColumns) {
-				columns.push({
-					fieldKey: col
-						.toLowerCase()
-						.replace(/[^a-z0-9]+/g, "_")
-						.replace(/^_|_$/g, "") || `col_${Math.random().toString(36).slice(2, 8)}`,
-					label: col,
-					dataType: "text",
-					ocrScope: "item",
-					description: regionDescription || undefined,
-				});
-			}
-		}
-	}
-	return normalizeTemplateColumns(columns);
 }
 
 export async function GET() {
@@ -153,7 +77,7 @@ export async function POST(request: Request) {
 		}
 
 		const description = typeof body.description === "string" ? body.description : null;
-		const validRegions = validateRegions(body.regions);
+		const validRegions = validateTemplateRegions(body.regions);
 
 		if (validRegions.length === 0) {
 			return NextResponse.json(
@@ -162,7 +86,7 @@ export async function POST(request: Request) {
 			);
 		}
 
-		const columns = deriveColumnsFromRegions(validRegions);
+		const columns = deriveTemplateColumnsFromRegions({ regions: validRegions });
 
 		// Store template info
 		const templateWidth = typeof body.templateWidth === "number" ? body.templateWidth : null;
@@ -253,7 +177,19 @@ export async function PUT(request: Request) {
 			return NextResponse.json({ error: "Template name required" }, { status: 400 });
 		}
 
-		const validRegions = validateRegions(body.regions);
+		const { data: existingTemplate, error: existingTemplateError } = await supabase
+			.from("ocr_templates")
+			.select("id, regions, columns")
+			.eq("id", id)
+			.eq("tenant_id", tenantId)
+			.eq("is_active", true)
+			.maybeSingle();
+		if (existingTemplateError) throw existingTemplateError;
+		if (!existingTemplate) {
+			return NextResponse.json({ error: "Template not found" }, { status: 404 });
+		}
+
+		const validRegions = validateTemplateRegions(body.regions);
 		if (validRegions.length === 0) {
 			return NextResponse.json(
 				{ error: "At least one valid region required" },
@@ -261,7 +197,13 @@ export async function PUT(request: Request) {
 			);
 		}
 
-		const columns = deriveColumnsFromRegions(validRegions);
+		const columns = deriveTemplateColumnsFromRegions({
+			regions: validRegions,
+			previousTemplate: {
+				regions: validateTemplateRegions(existingTemplate.regions),
+				columns: normalizeTemplateColumns(existingTemplate.columns),
+			},
+		});
 		const description = typeof body.description === "string" ? body.description : null;
 		const updatePayload: Record<string, unknown> = {
 			name,

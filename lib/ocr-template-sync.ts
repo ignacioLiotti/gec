@@ -7,6 +7,7 @@ import {
 } from "@/lib/tablas";
 
 export type TemplateColumnDefinition = {
+	id?: string;
 	fieldKey: string;
 	label: string;
 	dataType: string;
@@ -18,12 +19,38 @@ export type TemplateColumnDefinition = {
 	required?: boolean;
 };
 
+export type TemplateRegionDefinition = {
+	id: string;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	label: string;
+	description?: string;
+	type: "single" | "table";
+	pageNumber?: number;
+	tableColumns?: string[];
+};
+
 type PersistedColumn = {
 	id: string;
 	field_key: string;
+	label: string;
 	data_type: string;
+	required: boolean;
+	position: number;
 	config: Record<string, unknown> | null;
 };
+
+function buildTemplateColumnId(
+	scope: "parent" | "item",
+	regionId: string,
+	index?: number,
+) {
+	return scope === "parent"
+		? `parent:${regionId}`
+		: `item:${regionId}:${index ?? 0}`;
+}
 
 function normalizeStringList(value: unknown) {
 	return Array.isArray(value)
@@ -32,6 +59,23 @@ function normalizeStringList(value: unknown) {
 				.map((item) => item.trim())
 				.filter(Boolean)
 		: [];
+}
+
+export function validateTemplateRegions(value: unknown): TemplateRegionDefinition[] {
+	const regions = Array.isArray(value) ? (value as TemplateRegionDefinition[]) : [];
+	return regions.filter(
+		(region) =>
+			typeof region.id === "string" &&
+			typeof region.label === "string" &&
+			typeof region.x === "number" &&
+			typeof region.y === "number" &&
+			typeof region.width === "number" &&
+			typeof region.height === "number" &&
+			(region.pageNumber === undefined ||
+				(typeof region.pageNumber === "number" &&
+					Number.isFinite(region.pageNumber) &&
+					region.pageNumber >= 1)),
+	);
 }
 
 export function normalizeTemplateColumns(value: unknown): TemplateColumnDefinition[] {
@@ -51,6 +95,10 @@ export function normalizeTemplateColumns(value: unknown): TemplateColumnDefiniti
 				: label;
 
 		normalized.push({
+			id:
+				typeof item.id === "string" && item.id.trim().length > 0
+					? item.id.trim()
+					: undefined,
 			fieldKey: normalizeFieldKey(rawFieldKey),
 			label,
 			dataType: ensureTablaDataType(
@@ -71,6 +119,108 @@ export function normalizeTemplateColumns(value: unknown): TemplateColumnDefiniti
 	return normalized;
 }
 
+function buildPreviousTemplateColumnsByIdentity(
+	regions: TemplateRegionDefinition[],
+	columns: TemplateColumnDefinition[],
+) {
+	const previousParentColumns = columns.filter((column) => column.ocrScope === "parent");
+	const previousItemColumns = columns.filter((column) => column.ocrScope !== "parent");
+	const columnsByIdentity = new Map<string, TemplateColumnDefinition>();
+	let parentIndex = 0;
+	let itemIndex = 0;
+
+	for (const region of regions) {
+		if (region.type === "single") {
+			const column = previousParentColumns[parentIndex] ?? null;
+			parentIndex += 1;
+			if (column) {
+				columnsByIdentity.set(buildTemplateColumnId("parent", region.id), column);
+			}
+			continue;
+		}
+
+		const tableColumns = Array.isArray(region.tableColumns) ? region.tableColumns : [];
+		for (let index = 0; index < tableColumns.length; index += 1) {
+			const column = previousItemColumns[itemIndex] ?? null;
+			itemIndex += 1;
+			if (column) {
+				columnsByIdentity.set(buildTemplateColumnId("item", region.id, index), column);
+			}
+		}
+	}
+
+	return columnsByIdentity;
+}
+
+export function deriveTemplateColumnsFromRegions(params: {
+	regions: TemplateRegionDefinition[];
+	previousTemplate?: {
+		regions?: TemplateRegionDefinition[];
+		columns?: TemplateColumnDefinition[];
+	} | null;
+}) {
+	const { regions, previousTemplate } = params;
+	const previousColumnsByIdentity =
+		previousTemplate?.regions && previousTemplate?.columns
+			? buildPreviousTemplateColumnsByIdentity(
+					previousTemplate.regions,
+					previousTemplate.columns,
+				)
+			: new Map<string, TemplateColumnDefinition>();
+	const nextColumns: TemplateColumnDefinition[] = [];
+
+	for (const region of regions) {
+		const regionDescription =
+			typeof region.description === "string" ? region.description.trim() : "";
+		if (region.type === "single") {
+			const identity = buildTemplateColumnId("parent", region.id);
+			const previousColumn = previousColumnsByIdentity.get(identity);
+			nextColumns.push({
+				id: previousColumn?.id ?? identity,
+				fieldKey:
+					typeof previousColumn?.fieldKey === "string" &&
+					previousColumn.fieldKey.trim().length > 0
+						? previousColumn.fieldKey
+						: normalizeFieldKey(region.label),
+				label: region.label,
+				dataType: ensureTablaDataType(previousColumn?.dataType),
+				ocrScope: "parent",
+				description: regionDescription || previousColumn?.description,
+				aliases: previousColumn?.aliases ?? [],
+				examples: previousColumn?.examples ?? [],
+				excelKeywords: previousColumn?.excelKeywords ?? [],
+				required: previousColumn?.required ?? false,
+			});
+			continue;
+		}
+
+		const tableColumns = Array.isArray(region.tableColumns) ? region.tableColumns : [];
+		for (let index = 0; index < tableColumns.length; index += 1) {
+			const label = tableColumns[index];
+			const identity = buildTemplateColumnId("item", region.id, index);
+			const previousColumn = previousColumnsByIdentity.get(identity);
+			nextColumns.push({
+				id: previousColumn?.id ?? identity,
+				fieldKey:
+					typeof previousColumn?.fieldKey === "string" &&
+					previousColumn.fieldKey.trim().length > 0
+						? previousColumn.fieldKey
+						: normalizeFieldKey(label),
+				label,
+				dataType: ensureTablaDataType(previousColumn?.dataType),
+				ocrScope: "item",
+				description: regionDescription || previousColumn?.description,
+				aliases: previousColumn?.aliases ?? [],
+				examples: previousColumn?.examples ?? [],
+				excelKeywords: previousColumn?.excelKeywords ?? [],
+				required: previousColumn?.required ?? false,
+			});
+		}
+	}
+
+	return nextColumns;
+}
+
 export function hasNestedTemplateColumns(columns: TemplateColumnDefinition[]) {
 	const hasParent = columns.some((column) => column.ocrScope === "parent");
 	const hasItem = columns.some((column) => column.ocrScope !== "parent");
@@ -79,6 +229,7 @@ export function hasNestedTemplateColumns(columns: TemplateColumnDefinition[]) {
 
 function templateColumnToSettingsColumn(column: TemplateColumnDefinition) {
 	return {
+		id: column.id ?? column.fieldKey,
 		fieldKey: column.fieldKey,
 		label: column.label,
 		dataType: column.dataType,
@@ -96,6 +247,9 @@ function buildColumnConfig(
 	hasNestedData: boolean,
 ) {
 	const config: Record<string, unknown> = {};
+	if (column.id) {
+		config.templateColumnId = column.id;
+	}
 	if (hasNestedData) {
 		config.ocrScope = column.ocrScope === "parent" ? "parent" : "item";
 	}
@@ -161,31 +315,115 @@ function syncSettingsForTemplate(params: {
 	return nextSettings;
 }
 
-async function replaceDefaultTablaColumns(
+function getTemplateColumnIdentity(column: TemplateColumnDefinition) {
+	return typeof column.id === "string" && column.id.trim().length > 0
+		? column.id.trim()
+		: column.fieldKey;
+}
+
+function getPersistedTemplateColumnIdentity(column: PersistedColumn) {
+	const config = (column.config ?? {}) as Record<string, unknown>;
+	return typeof config.templateColumnId === "string" && config.templateColumnId.trim().length > 0
+		? config.templateColumnId.trim()
+		: column.field_key;
+}
+
+function buildPreviousFieldKeyByIdentity(columns: PersistedColumn[]) {
+	const previousFieldKeyByIdentity = new Map<string, string>();
+	for (const column of columns) {
+		previousFieldKeyByIdentity.set(getPersistedTemplateColumnIdentity(column), column.field_key);
+		previousFieldKeyByIdentity.set(column.field_key, column.field_key);
+	}
+	return previousFieldKeyByIdentity;
+}
+
+async function syncDefaultTablaColumns(
 	supabase: SupabaseClient,
 	defaultTablaId: string,
 	columns: TemplateColumnDefinition[],
 	hasNestedData: boolean,
 ) {
-	await supabase.from("obra_default_tabla_columns").delete().eq("default_tabla_id", defaultTablaId);
+	const { data: existingColumnsData, error: existingColumnsError } = await supabase
+		.from("obra_default_tabla_columns")
+		.select("id, field_key, label, data_type, required, position, config")
+		.eq("default_tabla_id", defaultTablaId)
+		.order("position", { ascending: true });
+	if (existingColumnsError) throw existingColumnsError;
 
-	if (columns.length === 0) return;
+	const existingColumns = (existingColumnsData ?? []) as PersistedColumn[];
+	const existingByIdentity = new Map(
+		existingColumns.map((column) => [getPersistedTemplateColumnIdentity(column), column]),
+	);
+	const existingByFieldKey = new Map(
+		existingColumns.map((column) => [column.field_key, column]),
+	);
+	const normalizedColumns = columns.map((column, index) => {
+		const existingColumn =
+			existingByIdentity.get(getTemplateColumnIdentity(column)) ??
+			existingByFieldKey.get(column.fieldKey) ??
+			null;
+		return {
+			id: existingColumn?.id,
+			field_key: column.fieldKey,
+			label: column.label,
+			data_type: ensureTablaDataType(column.dataType),
+			required: Boolean(column.required),
+			position: index,
+			config: buildColumnConfig(column, hasNestedData),
+		};
+	});
 
-	const payload = columns.map((column, index) => ({
-		default_tabla_id: defaultTablaId,
-		field_key: column.fieldKey,
-		label: column.label,
-		data_type: ensureTablaDataType(column.dataType),
-		required: Boolean(column.required),
-		position: index,
-		config: buildColumnConfig(column, hasNestedData),
-	}));
+	const incomingIds = new Set(
+		normalizedColumns
+			.map((column) => column.id)
+			.filter((id): id is string => typeof id === "string"),
+	);
+	const removedIds = existingColumns
+		.map((column) => column.id)
+		.filter((id) => !incomingIds.has(id));
 
-	const { error } = await supabase.from("obra_default_tabla_columns").insert(payload);
-	if (error) throw error;
+	for (const column of normalizedColumns.filter((item) => item.id)) {
+		const { error: updateError } = await supabase
+			.from("obra_default_tabla_columns")
+			.update({
+				field_key: column.field_key,
+				label: column.label,
+				data_type: column.data_type,
+				required: column.required,
+				position: column.position,
+				config: column.config,
+			})
+			.eq("id", column.id as string)
+			.eq("default_tabla_id", defaultTablaId);
+		if (updateError) throw updateError;
+	}
+
+	const newColumns = normalizedColumns.filter((item) => !item.id);
+	if (newColumns.length > 0) {
+		const { error: insertError } = await supabase.from("obra_default_tabla_columns").insert(
+			newColumns.map((column) => ({
+				default_tabla_id: defaultTablaId,
+				field_key: column.field_key,
+				label: column.label,
+				data_type: column.data_type,
+				required: column.required,
+				position: column.position,
+				config: column.config,
+			})),
+		);
+		if (insertError) throw insertError;
+	}
+
+	if (removedIds.length > 0) {
+		const { error: deleteError } = await supabase
+			.from("obra_default_tabla_columns")
+			.delete()
+			.in("id", removedIds);
+		if (deleteError) throw deleteError;
+	}
 }
 
-async function replaceObraTablaColumns(
+async function syncObraTablaColumns(
 	supabase: SupabaseClient,
 	tablaId: string,
 	columns: TemplateColumnDefinition[],
@@ -193,7 +431,7 @@ async function replaceObraTablaColumns(
 ) {
 	const { data: existingColumnsData, error: existingColumnsError } = await supabase
 		.from("obra_tabla_columns")
-		.select("id, field_key, data_type, config")
+		.select("id, field_key, label, data_type, required, position, config")
 		.eq("tabla_id", tablaId)
 		.order("position", { ascending: true });
 	if (existingColumnsError) throw existingColumnsError;
@@ -205,59 +443,136 @@ async function replaceObraTablaColumns(
 	if (existingRowsError) throw existingRowsError;
 
 	const existingColumns = (existingColumnsData ?? []) as PersistedColumn[];
-	const previousFieldKeyByIdentity = new Map(
-		existingColumns.map((column) => [column.field_key, column.field_key]),
+	const existingByIdentity = new Map(
+		existingColumns.map((column) => [getPersistedTemplateColumnIdentity(column), column]),
 	);
+	const existingByFieldKey = new Map(
+		existingColumns.map((column) => [column.field_key, column]),
+	);
+	const previousFieldKeyByIdentity = buildPreviousFieldKeyByIdentity(existingColumns);
+	const normalizedColumns = columns.map((column, index) => {
+		const existingColumn =
+			existingByIdentity.get(getTemplateColumnIdentity(column)) ??
+			existingByFieldKey.get(column.fieldKey) ??
+			null;
+		return {
+			id: existingColumn?.id,
+			identity: getTemplateColumnIdentity(column),
+			field_key: column.fieldKey,
+			label: column.label,
+			data_type: ensureTablaDataType(column.dataType),
+			required: Boolean(column.required),
+			position: index,
+			config: buildColumnConfig(column, hasNestedData),
+		};
+	});
 
-	const { error: deleteError } = await supabase
-		.from("obra_tabla_columns")
-		.delete()
-		.eq("tabla_id", tablaId);
-	if (deleteError) throw deleteError;
+	const incomingIds = new Set(
+		normalizedColumns
+			.map((column) => column.id)
+			.filter((id): id is string => typeof id === "string"),
+	);
+	const removedIds = existingColumns
+		.map((column) => column.id)
+		.filter((id) => !incomingIds.has(id));
 
-	if (columns.length === 0) return;
+	for (const column of normalizedColumns.filter((item) => item.id)) {
+		const { error: updateError } = await supabase
+			.from("obra_tabla_columns")
+			.update({
+				field_key: column.field_key,
+				label: column.label,
+				data_type: column.data_type,
+				required: column.required,
+				position: column.position,
+				config: column.config,
+			})
+			.eq("id", column.id as string)
+			.eq("tabla_id", tablaId);
+		if (updateError) throw updateError;
+	}
 
-	const payload = columns.map((column, index) => ({
-		tabla_id: tablaId,
-		field_key: column.fieldKey,
-		label: column.label,
-		data_type: ensureTablaDataType(column.dataType),
-		required: Boolean(column.required),
-		position: index,
-		config: buildColumnConfig(column, hasNestedData),
-	}));
+	let insertedColumns: PersistedColumn[] = [];
+	const newColumns = normalizedColumns.filter((item) => !item.id);
+	if (newColumns.length > 0) {
+		const { data: inserted, error: insertError } = await supabase
+			.from("obra_tabla_columns")
+			.insert(
+				newColumns.map((column) => ({
+					tabla_id: tablaId,
+					field_key: column.field_key,
+					label: column.label,
+					data_type: column.data_type,
+					required: column.required,
+					position: column.position,
+					config: column.config,
+				})),
+			)
+			.select("id, field_key, label, data_type, required, position, config");
+		if (insertError) throw insertError;
+		insertedColumns = (inserted ?? []) as PersistedColumn[];
+	}
+	if (columns.length === 0) {
+		if (removedIds.length > 0) {
+			const { error: deleteError } = await supabase
+				.from("obra_tabla_columns")
+				.delete()
+				.in("id", removedIds);
+			if (deleteError) throw deleteError;
+		}
+		return;
+	}
 
-	const { data: insertedColumns, error: insertError } = await supabase
-		.from("obra_tabla_columns")
-		.insert(payload)
-		.select("field_key, data_type, config");
-	if (insertError) throw insertError;
+	const insertedByPosition = new Map(
+		insertedColumns.map((column) => [column.position, column]),
+	);
+	const nextColumns = normalizedColumns.map((column) => {
+		if (column.id) {
+			return {
+				id: column.identity,
+				fieldKey: column.field_key,
+				dataType: column.data_type,
+				config: column.config,
+			};
+		}
+		const inserted = insertedByPosition.get(column.position);
+		if (!inserted) {
+			throw new Error("No se pudo persistir una columna OCR nueva");
+		}
+		return {
+			id: column.identity,
+			fieldKey: inserted.field_key as string,
+			dataType: inserted.data_type as string,
+			config: (inserted.config as Record<string, unknown> | null) ?? {},
+		};
+	});
 
-	if (!existingRows || existingRows.length === 0) return;
+	if (existingRows && existingRows.length > 0) {
+		const migratedRows = existingRows.map((row) => ({
+			id: row.id as string,
+			tabla_id: tablaId,
+			data: remapTablaRowDataToSchema({
+				previousData:
+					((row.data as Record<string, unknown> | null) ?? {}) as Record<string, unknown>,
+				nextColumns,
+				previousFieldKeyByColumnId: previousFieldKeyByIdentity,
+			}),
+			source: row.source ?? "manual",
+		}));
 
-	const nextColumns = (insertedColumns ?? []).map((column) => ({
-		id: column.field_key as string,
-		fieldKey: column.field_key as string,
-		dataType: column.data_type as string,
-		config: (column.config as Record<string, unknown> | null) ?? {},
-	}));
+		const { error: upsertError } = await supabase
+			.from("obra_tabla_rows")
+			.upsert(migratedRows, { onConflict: "id" });
+		if (upsertError) throw upsertError;
+	}
 
-	const migratedRows = existingRows.map((row) => ({
-		id: row.id as string,
-		tabla_id: tablaId,
-		data: remapTablaRowDataToSchema({
-			previousData:
-				((row.data as Record<string, unknown> | null) ?? {}) as Record<string, unknown>,
-			nextColumns,
-			previousFieldKeyByColumnId: previousFieldKeyByIdentity,
-		}),
-		source: row.source ?? "manual",
-	}));
-
-	const { error: upsertError } = await supabase
-		.from("obra_tabla_rows")
-		.upsert(migratedRows, { onConflict: "id" });
-	if (upsertError) throw upsertError;
+	if (removedIds.length > 0) {
+		const { error: deleteError } = await supabase
+			.from("obra_tabla_columns")
+			.delete()
+			.in("id", removedIds);
+		if (deleteError) throw deleteError;
+	}
 }
 
 export async function propagateTemplateUpdate(params: {
@@ -302,7 +617,7 @@ export async function propagateTemplateUpdate(params: {
 		if (updateError) throw updateError;
 
 		if (primaryMatches) {
-			await replaceDefaultTablaColumns(
+			await syncDefaultTablaColumns(
 				supabase,
 				tabla.id as string,
 				columns,
@@ -338,7 +653,7 @@ export async function propagateTemplateUpdate(params: {
 		if (updateError) throw updateError;
 
 		if (primaryMatches) {
-			await replaceObraTablaColumns(
+			await syncObraTablaColumns(
 				supabase,
 				tabla.id as string,
 				columns,

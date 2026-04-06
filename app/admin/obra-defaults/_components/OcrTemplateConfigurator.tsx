@@ -63,6 +63,7 @@ export interface OcrTemplate {
 	template_file_name: string | null;
 	regions: Region[];
 	columns: Array<{
+		id?: string;
 		fieldKey: string;
 		label: string;
 		dataType: string;
