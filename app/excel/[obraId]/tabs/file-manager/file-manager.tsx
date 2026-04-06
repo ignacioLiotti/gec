@@ -5299,6 +5299,7 @@ function FileManagerContent({
                 <Button
                   type="button"
                   data-wizard-target="documents-view-mode-cards"
+                  data-wizard-blocked={isGuidedExcelFlow && guidedTourStage === GUIDED_EXCEL_STAGES.documentsUploadCertificado ? "" : undefined}
                   variant={documentViewMode === "cards" ? "default" : "ghost"}
                   size="sm"
                   className="gap-1.5 h-8 px-3"
@@ -5310,6 +5311,7 @@ function FileManagerContent({
                 </Button>
                 <Button
                   type="button"
+                  data-wizard-blocked={isGuidedExcelFlow && guidedTourStage === GUIDED_EXCEL_STAGES.documentsUploadCertificado ? "" : undefined}
                   variant={documentViewMode === "table" ? "default" : "ghost"}
                   size="sm"
                   className="gap-1.5 h-8 px-3"

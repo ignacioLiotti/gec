@@ -299,6 +299,13 @@ export function ContextualWizard({
         body[${ACTIVE_BODY_ATTR}="true"] [${ACTIVE_OVERLAY_ATTR}="true"] * {
           pointer-events: auto !important;
         }
+
+        body[${ACTIVE_BODY_ATTR}="true"] [data-wizard-blocked],
+        body[${ACTIVE_BODY_ATTR}="true"] [data-wizard-blocked] * {
+          pointer-events: none !important;
+          opacity: 0.35;
+          cursor: not-allowed !important;
+        }
       `}</style>
 
       <div className="pointer-events-none fixed inset-0" style={{ zIndex: WIZARD_OVERLAY_Z_INDEX }}>
