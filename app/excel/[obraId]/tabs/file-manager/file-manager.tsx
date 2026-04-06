@@ -4905,7 +4905,23 @@ function FileManagerContent({
       defaultRows: ocrTableRows,
       emptyStateMessage: 'Sin datos disponibles para esta tabla.',
       showInlineSearch: true,
-      showToolbar: false,
+      toolbarActions: activeOcrTablaId && activeFolderLinks.length > 1 ? (
+        <Select
+          value={activeOcrTablaId}
+          onValueChange={(value) => setActiveOcrTablaIdOverride(value)}
+        >
+          <SelectTrigger className="h-8 w-[280px]">
+            <SelectValue placeholder="Seleccionar tabla" />
+          </SelectTrigger>
+          <SelectContent>
+            {activeFolderLinks.map((link) => (
+              <SelectItem key={link.tablaId} value={link.tablaId}>
+                {link.tablaName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null,
       rowClassName: (row) => {
         for (const col of tablaColumns) {
           const style = getConditionalClass(row[col.fieldKey], col.config);
@@ -5313,25 +5329,6 @@ function FileManagerContent({
               </div>
             ) : (
               <div className="flex flex-col h-full">
-                {/* {activeOcrTablaId && activeFolderLinks.length > 1 && (
-                  <div className="flex items-center gap-2 px-4 pb-2">
-                    <Select
-                      value={activeOcrTablaId}
-                      onValueChange={(value) => setActiveOcrTablaIdOverride(value)}
-                    >
-                      <SelectTrigger className="h-8 w-[280px]">
-                        <SelectValue placeholder="Seleccionar tabla" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeFolderLinks.map((link) => (
-                          <SelectItem key={link.tablaId} value={link.tablaId}>
-                            {link.tablaName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )} */}
                 {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
                     <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
@@ -7329,12 +7326,3 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
 const IS_SENTRY_ENABLED =
   process.env.NODE_ENV === 'production' &&
   process.env.NEXT_PUBLIC_VERCEL_ENV === 'production';
-
-
-
-
-
-
-
-
-
