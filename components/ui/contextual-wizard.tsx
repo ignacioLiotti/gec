@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type WizardStepPlacement = "auto" | "top" | "bottom" | "left" | "right";
-export type WizardStepRequiredAction = "click_target";
+export type WizardStepRequiredAction = "click_target" | "condition";
 
 export type WizardStep = {
   id: string;
@@ -22,6 +22,8 @@ export type WizardStep = {
   radius?: number;
   beforeShow?: () => void | Promise<void>;
   when?: () => boolean;
+  isComplete?: () => boolean;
+  incompleteHint?: string;
 };
 
 export type WizardFlow = {
@@ -38,21 +40,31 @@ type ContextualWizardProps = {
   onOpenChange: (open: boolean) => void;
   flow: WizardFlow;
   className?: string;
+  startAtStepId?: string | null;
   storageKey?: string;
   onComplete?: () => void;
   onSkip?: () => void;
+  onStepChange?: (step: WizardStep, index: number) => void;
+  showCloseButton?: boolean;
+  showBackButton?: boolean;
+  finishLabel?: string;
+  nextLabel?: string;
 };
 
 const QUERY_ATTR = "data-wizard-target";
+const ACTIVE_BODY_ATTR = "data-contextual-wizard-active";
+const ACTIVE_OVERLAY_ATTR = "data-contextual-wizard-overlay";
+const ACTIVE_TARGET_ATTR = "data-contextual-wizard-target-active";
+const WIZARD_OVERLAY_Z_INDEX = 10000020;
 
-function findTarget(scope: ParentNode, targetId: string): HTMLElement | null {
-  return scope.querySelector<HTMLElement>(`[${QUERY_ATTR}="${targetId}"]`);
+function findTarget(targetId: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[${QUERY_ATTR}="${targetId}"]`);
 }
 
-async function waitForTarget(scope: ParentNode, targetId: string, waitForMs: number): Promise<HTMLElement | null> {
+async function waitForTarget(targetId: string, waitForMs: number): Promise<HTMLElement | null> {
   const startedAt = Date.now();
   while (Date.now() - startedAt <= waitForMs) {
-    const el = findTarget(scope, targetId);
+    const el = findTarget(targetId);
     if (el) return el;
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
@@ -105,9 +117,15 @@ export function ContextualWizard({
   onOpenChange,
   flow,
   className,
+  startAtStepId,
   storageKey,
   onComplete,
   onSkip,
+  onStepChange,
+  showCloseButton = true,
+  showBackButton = true,
+  finishLabel = "Finalizar",
+  nextLabel = "Siguiente",
 }: ContextualWizardProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
@@ -116,19 +134,15 @@ export function ContextualWizard({
   const [actionDone, setActionDone] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ top: 16, left: 16 });
   const tooltipRef = useRef<HTMLDivElement | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
 
   const steps = useMemo(() => flow.steps.filter((s) => (s.when ? s.when() : true)), [flow]);
   const step = steps[stepIndex] ?? null;
 
-  const toLocalRect = (el: HTMLElement, padding: number): Rect | null => {
-    const container = rootRef.current?.parentElement;
-    if (!container) return null;
+  const toViewportRect = (el: HTMLElement, padding: number): Rect | null => {
     const r = el.getBoundingClientRect();
-    const base = container.getBoundingClientRect();
     return {
-      top: r.top - base.top - padding,
-      left: r.left - base.left - padding,
+      top: r.top - padding,
+      left: r.left - padding,
       width: r.width + padding * 2,
       height: r.height + padding * 2,
     };
@@ -136,10 +150,22 @@ export function ContextualWizard({
 
   useEffect(() => {
     if (!open) return;
+    const startIndex =
+      startAtStepId != null
+        ? Math.max(
+          0,
+          steps.findIndex((candidate) => candidate.id === startAtStepId),
+        )
+        : 0;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStepIndex(0);
+    setStepIndex(startIndex);
     setActionDone(false);
-  }, [open, flow.id]);
+  }, [open, flow.id, startAtStepId, steps]);
+
+  useEffect(() => {
+    if (!open || !step) return;
+    onStepChange?.(step, stepIndex);
+  }, [onStepChange, open, step, stepIndex]);
 
   useEffect(() => {
     if (!open || !step) return;
@@ -151,12 +177,9 @@ export function ContextualWizard({
       setTargetReady(false);
       setActionDone(false);
 
-      const scope = rootRef.current?.parentElement;
-      if (!scope) return;
-
       if (step.beforeShow) await step.beforeShow();
       const waitForMs = step.waitForMs ?? 2200;
-      const el = await waitForTarget(scope, step.targetId, waitForMs);
+      const el = await waitForTarget(step.targetId, waitForMs);
       if (cancelled) return;
 
       if (!el) {
@@ -169,7 +192,7 @@ export function ContextualWizard({
       setTarget(el);
       setTargetReady(true);
       el.scrollIntoView({ block: "center", behavior: "smooth", inline: "center" });
-      const local = toLocalRect(el, step.padding ?? 8);
+      const local = toViewportRect(el, step.padding ?? 8);
       if (local) setRect(local);
     };
 
@@ -184,7 +207,7 @@ export function ContextualWizard({
     if (!open || !target || !step) return;
 
     const update = () => {
-      const local = toLocalRect(target, step.padding ?? 8);
+      const local = toViewportRect(target, step.padding ?? 8);
       if (local) setRect(local);
     };
 
@@ -198,19 +221,34 @@ export function ContextualWizard({
   }, [open, target, step]);
 
   useEffect(() => {
+    if (!open) return;
+
+    document.body.setAttribute(ACTIVE_BODY_ATTR, "true");
+    return () => {
+      document.body.removeAttribute(ACTIVE_BODY_ATTR);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !target) return;
+
+    target.setAttribute(ACTIVE_TARGET_ATTR, "true");
+    return () => {
+      target.removeAttribute(ACTIVE_TARGET_ATTR);
+    };
+  }, [open, target]);
+
+  useEffect(() => {
     if (!open || !step || !tooltipRef.current) return;
-    const container = rootRef.current?.parentElement;
-    if (!container) return;
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
-    const rootRect = container.getBoundingClientRect();
     setTooltipPos(
       computeTooltipPosition(
         rect,
         step.placement ?? "auto",
         tooltipRect.width,
         tooltipRect.height,
-        rootRect.width,
-        rootRect.height,
+        window.innerWidth,
+        window.innerHeight,
       ),
     );
   }, [open, rect, step]);
@@ -224,8 +262,14 @@ export function ContextualWizard({
 
   if (!open || !step || typeof window === "undefined") return null;
 
-  const canGoNext = !step.requiredAction || actionDone;
-  const allowClickThrough = Boolean(step.allowClickThrough);
+  const conditionDone = step.requiredAction === "condition" ? Boolean(step.isComplete?.()) : true;
+  const canContinueWithoutTarget =
+    step.requiredAction === "click_target" &&
+    !targetReady &&
+    (step.fallback ?? "skip") === "continue";
+  const canGoNext =
+    !step.requiredAction ||
+    (step.requiredAction === "click_target" ? actionDone || canContinueWithoutTarget : conditionDone);
   const spotlightRadius = step.radius ?? 10;
 
   const finishWizard = () => {
@@ -237,102 +281,121 @@ export function ContextualWizard({
   };
 
   return (
-    <div ref={rootRef} className="absolute inset-0 z-[120]">
-      {rect && targetReady ? (
-        <>
-          <div
-            className={cn("absolute bg-black/45", allowClickThrough ? "pointer-events-none" : "pointer-events-auto")}
-            style={{ top: 0, left: 0, right: 0, height: Math.max(0, rect.top) }}
-          />
-          <div
-            className={cn("absolute bg-black/45", allowClickThrough ? "pointer-events-none" : "pointer-events-auto")}
-            style={{ top: rect.top + rect.height, left: 0, right: 0, bottom: 0 }}
-          />
-          <div
-            className={cn("absolute bg-black/45", allowClickThrough ? "pointer-events-none" : "pointer-events-auto")}
-            style={{ top: rect.top, left: 0, width: Math.max(0, rect.left), height: rect.height }}
-          />
-          <div
-            className={cn("absolute bg-black/45", allowClickThrough ? "pointer-events-none" : "pointer-events-auto")}
-            style={{ top: rect.top, left: rect.left + rect.width, right: 0, height: rect.height }}
-          />
-        </>
-      ) : (
-        <div
-          className={cn("absolute inset-0 bg-black/45", allowClickThrough ? "pointer-events-none" : "pointer-events-auto")}
-          onClick={(e) => {
-            if (!allowClickThrough) e.stopPropagation();
-          }}
-        />
-      )}
+    <>
+      <style jsx global>{`
+        body[${ACTIVE_BODY_ATTR}="true"] * {
+          pointer-events: none !important;
+        }
 
-      {rect && targetReady && (
-        <div
-          className="pointer-events-none absolute border-2 border-orange-400/90 bg-transparent transition-all duration-150"
-          style={{
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-            borderRadius: spotlightRadius,
-          }}
-        />
-      )}
+        body[${ACTIVE_BODY_ATTR}="true"] [${ACTIVE_TARGET_ATTR}="true"],
+        body[${ACTIVE_BODY_ATTR}="true"] [${ACTIVE_TARGET_ATTR}="true"] *,
+        body[${ACTIVE_BODY_ATTR}="true"] [${ACTIVE_OVERLAY_ATTR}="true"],
+        body[${ACTIVE_BODY_ATTR}="true"] [${ACTIVE_OVERLAY_ATTR}="true"] * {
+          pointer-events: auto !important;
+        }
+      `}</style>
 
-      <div
-        ref={tooltipRef}
-        className={cn("absolute w-[360px] max-w-[calc(100%-24px)] rounded-lg border bg-background p-4 shadow-xl", className)}
-        style={{ top: tooltipPos.top, left: tooltipPos.left }}
-      >
-        <div className="mb-1 text-xs font-medium text-muted-foreground">
-          {flow.title} - Paso {Math.min(stepIndex + 1, steps.length)} de {steps.length}
-        </div>
-        <h4 className="text-sm font-semibold text-foreground">{step.title}</h4>
-        <p className="mt-1 text-xs text-muted-foreground">{step.content}</p>
-
-        {!targetReady && <p className="mt-2 text-xs text-amber-600">Esperando el elemento objetivo en pantalla...</p>}
-
-        {step.requiredAction === "click_target" && !actionDone && (
-          <p className="mt-2 text-xs text-blue-600">Para continuar, hace clic en el elemento resaltado.</p>
+      <div className="pointer-events-none fixed inset-0" style={{ zIndex: WIZARD_OVERLAY_Z_INDEX }}>
+        {rect && targetReady ? (
+          <>
+            <div
+              className="fixed bg-black/45"
+              style={{ top: 0, left: 0, right: 0, height: Math.max(0, rect.top) }}
+            />
+            <div
+              className="fixed bg-black/45"
+              style={{ top: rect.top + rect.height, left: 0, right: 0, bottom: 0 }}
+            />
+            <div
+              className="fixed bg-black/45"
+              style={{ top: rect.top, left: 0, width: Math.max(0, rect.left), height: rect.height }}
+            />
+            <div
+              className="fixed bg-black/45"
+              style={{ top: rect.top, left: rect.left + rect.width, right: 0, height: rect.height }}
+            />
+          </>
+        ) : (
+          <div className="fixed inset-0 bg-black/45" />
         )}
 
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setStepIndex((prev) => Math.max(prev - 1, 0))} disabled={stepIndex === 0}>
-              Anterior
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Cerrar
-            </Button>
-          </div>
+        {rect && targetReady && (
+          <div
+            className="pointer-events-none fixed border-2 border-orange-400/90 bg-transparent transition-all duration-150"
+            style={{
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+              borderRadius: spotlightRadius,
+            }}
+          />
+        )}
 
-          <div className="flex items-center gap-2">
-            {step.skippable !== false && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  onSkip?.();
-                  finishWizard();
-                }}
-              >
-                Saltar guia
-              </Button>
-            )}
-            {stepIndex >= steps.length - 1 ? (
-              <Button type="button" size="sm" onClick={finishWizard}>
-                Finalizar
-              </Button>
-            ) : (
-              <Button type="button" size="sm" onClick={() => setStepIndex((prev) => Math.min(prev + 1, steps.length - 1))} disabled={!canGoNext}>
-                Siguiente
-              </Button>
-            )}
+        <div
+          ref={tooltipRef}
+          data-contextual-wizard-overlay="true"
+          className={cn("pointer-events-auto fixed w-[360px] max-w-[calc(100%-24px)] rounded-lg border bg-background p-4 shadow-xl", className)}
+          style={{ top: tooltipPos.top, left: tooltipPos.left }}
+        >
+          <div className="mb-1 text-xs font-medium text-muted-foreground">
+            {flow.title} - Paso {Math.min(stepIndex + 1, steps.length)} de {steps.length}
+          </div>
+          <h4 className="text-sm font-semibold text-foreground">{step.title}</h4>
+          <p className="mt-1 text-xs text-muted-foreground">{step.content}</p>
+
+          {!targetReady && <p className="mt-2 text-xs text-amber-600">Esperando el elemento objetivo en pantalla...</p>}
+
+          {step.requiredAction === "click_target" && !actionDone && (
+            <p className="mt-2 text-xs text-blue-600">Para continuar, hace clic en el elemento resaltado.</p>
+          )}
+
+          {step.requiredAction === "condition" && !conditionDone && step.incompleteHint ? (
+            <p className="mt-2 text-xs text-blue-600">{step.incompleteHint}</p>
+          ) : null}
+
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {showBackButton ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => setStepIndex((prev) => Math.max(prev - 1, 0))} disabled={stepIndex === 0}>
+                  Anterior
+                </Button>
+              ) : null}
+              {showCloseButton ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                  Cerrar
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {step.skippable !== false && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    onSkip?.();
+                    finishWizard();
+                  }}
+                >
+                  Saltar guia
+                </Button>
+              )}
+              {stepIndex >= steps.length - 1 ? (
+                <Button type="button" size="sm" onClick={finishWizard} disabled={!canGoNext}>
+                  {finishLabel}
+                </Button>
+              ) : (
+                <Button type="button" size="sm" onClick={() => setStepIndex((prev) => Math.min(prev + 1, steps.length - 1))} disabled={!canGoNext}>
+                  {nextLabel}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

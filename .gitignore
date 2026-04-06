@@ -49,4 +49,6 @@ next-env.d.ts
 
 # local artifacts
 Libro1.csv
+remotion/out/
+supabase/.temp/cli-latest
 CERT N° 3 JUL-25.xlsx

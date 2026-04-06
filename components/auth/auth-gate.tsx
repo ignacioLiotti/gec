@@ -13,17 +13,27 @@ import { useRouter, usePathname } from "next/navigation";
  *
  * This is a logic-only component that returns null (no UI)
  */
-export default function AuthGate() {
+export default function AuthGate({
+	allowAnonymous = false,
+}: {
+	allowAnonymous?: boolean;
+}) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const [isChecking, setIsChecking] = useState(true);
 
 	useEffect(() => {
+		if (allowAnonymous) {
+			setIsChecking(false);
+			return;
+		}
+
 		// Public/auth routes should not force-open auth modal.
 		if (
 			pathname === "/" ||
 			pathname === "/onboarding" ||
-			pathname.startsWith("/auth/")
+			pathname.startsWith("/auth/") ||
+			pathname.startsWith("/demo/")
 		) {
 			setIsChecking(false);
 			return;
@@ -32,15 +42,17 @@ export default function AuthGate() {
 		async function checkAuthAndTenant() {
 			try {
 				const supabase = createSupabaseBrowserClient();
-				const { data: { session } } = await supabase.auth.getSession();
+				const {
+					data: { session },
+				} = await supabase.auth.getSession();
 
 				// No session - trigger forced auth modal
 				if (!session) {
 					console.log("[AUTH-GATE] No session detected, opening forced auth modal");
 					window.dispatchEvent(
 						new CustomEvent("open-auth", {
-							detail: { forced: true }
-						})
+							detail: { forced: true },
+						}),
 					);
 					setIsChecking(false);
 					return;
@@ -60,7 +72,9 @@ export default function AuthGate() {
 				}
 
 				if (!memberships || memberships.length === 0) {
-					console.log("[AUTH-GATE] Session exists but no tenant, redirecting to onboarding");
+					console.log(
+						"[AUTH-GATE] Session exists but no tenant, redirecting to onboarding",
+					);
 					router.push("/onboarding");
 				}
 
@@ -72,7 +86,7 @@ export default function AuthGate() {
 		}
 
 		checkAuthAndTenant();
-	}, [pathname, router]);
+	}, [allowAnonymous, pathname, router]);
 
 	// This is a logic-only component - no UI
 	return null;

@@ -40,23 +40,48 @@ function mapColumn(record: any): OcrColumn {
   };
 }
 
+function getLegacyOrderString(data: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function getLegacyOrderNumber(data: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = data[key];
+    const parsed = Number(value ?? 0);
+    if (Number.isFinite(parsed) && parsed !== 0) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
 function mapTablaRowsToOrders(rows: any[], tablaId: string) {
   const groups = new Map<string, any>();
   rows.forEach((row: any) => {
     const data = (row?.data as Record<string, unknown>) ?? {};
     const fallbackId = randomUUID();
-    const rawKey = typeof (data as any).nroOrden === "string" && (data as any).nroOrden.trim().length > 0
-      ? (data as any).nroOrden.trim()
-      : String(row?.id ?? fallbackId);
+    const nroOrden = getLegacyOrderString(data, ["nroOrden", "nro"]);
+    const fecha = getLegacyOrderString(data, ["fecha"]);
+    const solicitante = getLegacyOrderString(data, ["solicitante"]);
+    const proveedor = getLegacyOrderString(data, ["proveedor"]);
+    const material = getLegacyOrderString(data, ["material", "detalle_descriptivo"]);
+    const precioUnitario = getLegacyOrderNumber(data, ["precioUnitario", "precio_unitario"]);
+    const rawKey = nroOrden || String(row?.id ?? fallbackId);
     if (!groups.has(rawKey)) {
       const docBucketValue = data && typeof (data as any).__docBucket === "string" ? (data as any).__docBucket : undefined;
       const docPathValue = data && typeof (data as any).__docPath === "string" ? (data as any).__docPath : undefined;
       groups.set(rawKey, {
         id: `${tablaId}-${rawKey}`,
-        nroOrden: typeof (data as any).nroOrden === "string" && (data as any).nroOrden.trim().length > 0 ? (data as any).nroOrden.trim() : "Sin número",
-        fecha: typeof (data as any).fecha === "string" ? (data as any).fecha : "",
-        solicitante: typeof (data as any).solicitante === "string" ? (data as any).solicitante : "",
-        proveedor: typeof (data as any).proveedor === "string" ? (data as any).proveedor : "",
+        nroOrden: nroOrden || "Sin número",
+        fecha,
+        solicitante,
+        proveedor,
         items: [],
         docBucket: docBucketValue || (docPathValue ? "obra-documents" : undefined),
         docPath: docPathValue,
@@ -67,8 +92,8 @@ function mapTablaRowsToOrders(rows: any[], tablaId: string) {
       id: String(row?.id ?? `${rawKey}-${order.items.length}`),
       cantidad: Number((data as any).cantidad ?? 0) || 0,
       unidad: typeof (data as any).unidad === "string" ? (data as any).unidad : "",
-      material: typeof (data as any).material === "string" ? (data as any).material : "",
-      precioUnitario: Number((data as any).precioUnitario ?? 0) || 0,
+      material,
+      precioUnitario,
     });
   });
   return Array.from(groups.values());

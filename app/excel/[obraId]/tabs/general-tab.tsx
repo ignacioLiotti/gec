@@ -305,7 +305,7 @@ function MiniField({
 	return (
 		<div
 			className={cn(
-				"rounded-lg border border-[#f0f0f0] p-3",
+				"rounded-lg border border-[#f0f0f0] p-3 flex-1",
 				highlighted && "border-[#f7b26a] bg-[#fff7ed]"
 			)}
 		>
@@ -1038,7 +1038,7 @@ export function ObraGeneralTab({
 													className={cn(
 														"rounded-lg border border-[#f0f0f0] p-3",
 														(isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
-															"border-[#f7b26a] bg-[#fffaf5]"
+														"border-[#f7b26a] bg-[#fffaf5]"
 													)}
 												>
 													<p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#aaa]">
@@ -1054,7 +1054,7 @@ export function ObraGeneralTab({
 															SURFACE_INPUT_CLASS,
 															"text-right",
 															(isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
-																"border-[#f7b26a] bg-white"
+															"border-[#f7b26a] bg-white"
 														)}
 													/>
 													{getErrorMessage(field.state.meta.errors) && (
@@ -1251,7 +1251,7 @@ export function ObraGeneralTab({
 															SURFACE_INPUT_CLASS,
 															"text-right font-mono",
 															isDerivedFieldHighlighted("certificadoALaFecha") &&
-																"border-[#f7b26a] bg-white"
+															"border-[#f7b26a] bg-white"
 														)}
 														placeholder="0.00"
 													/>
@@ -1263,7 +1263,7 @@ export function ObraGeneralTab({
 												<div className={cn(
 													"rounded-xl p-2 transition-colors",
 													(isDerivedFieldHighlighted("saldoACertificar") || isDerivedFieldBlocked("saldoACertificar")) &&
-														"border border-[#f7b26a] bg-[#fffaf5]"
+													"border border-[#f7b26a] bg-[#fffaf5]"
 												)}>
 													<label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
 														Saldo a certificar
@@ -1277,7 +1277,7 @@ export function ObraGeneralTab({
 															SURFACE_INPUT_CLASS,
 															"text-right font-mono",
 															(isDerivedFieldHighlighted("saldoACertificar") || isDerivedFieldBlocked("saldoACertificar")) &&
-																"border-[#f7b26a] bg-white"
+															"border-[#f7b26a] bg-white"
 														)}
 														placeholder="0.00"
 													/>
@@ -1491,7 +1491,7 @@ export function ObraGeneralTab({
 									className={cn(
 										"lg:col-span-4",
 										(isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
-											"rounded-xl"
+										"rounded-xl"
 									)}
 								>
 									<ShellCard
@@ -1500,7 +1500,7 @@ export function ObraGeneralTab({
 										className={cn(
 											"h-full",
 											(isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
-												"border-[#f7b26a] bg-[#fffaf5]"
+											"border-[#f7b26a] bg-[#fffaf5]"
 										)}
 										action={
 											isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje") ? (
@@ -1516,7 +1516,10 @@ export function ObraGeneralTab({
 											<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
 												<CircularProgress value={form.state.values.porcentaje ?? 0} />
 											</div>
-											<div className="w-full rounded-lg border border-[#f0f0f0] p-3">
+											<div
+												className="w-full rounded-lg border border-[#f0f0f0] p-3"
+												data-wizard-target="obra-general-findings"
+											>
 												<p className="text-[10px] font-semibold uppercase tracking-wide text-[#aaa]">
 													Alertas detectadas
 												</p>
@@ -1534,7 +1537,15 @@ export function ObraGeneralTab({
 																		? "border-amber-200 bg-amber-50 text-amber-700"
 																		: "border-sky-200 bg-sky-50 text-sky-700";
 															return (
-																<div key={finding.id} className={cn("rounded-md border px-3 py-2", tone)}>
+																<div
+																	key={finding.id}
+																	className={cn("rounded-md border px-3 py-2", tone)}
+																	data-wizard-target={
+																		finding.rule_key === "cert.missing_current_month"
+																			? "obra-general-missing-current-certificado"
+																			: undefined
+																	}
+																>
 																	<div className="flex items-start gap-2">
 																		<AlertTriangle className="mt-0.5 h-4 w-4" />
 																		<div>
@@ -1635,31 +1646,66 @@ export function ObraGeneralTab({
 												/>
 											</div>
 											<div className="h-px bg-[#f0f0f0]" />
-											<div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-												<MiniField
-													icon={FileText}
-													label="Según contrato"
-													value={`${formatNumber(form.state.values.segunContrato, " meses")}`}
-													highlighted={isFieldDirty("segunContrato")}
-												/>
-												<MiniField
-													icon={TrendingUp}
-													label="Prórrogas"
-													value={`${formatNumber(form.state.values.prorrogasAcordadas, " meses")}`}
-													highlighted={isFieldDirty("prorrogasAcordadas")}
-												/>
-												<MiniField
-													icon={Calendar}
-													label="Plazo total"
-													value={`${formatNumber(form.state.values.plazoTotal, " meses")}`}
-													highlighted={isFieldDirty("plazoTotal")}
-												/>
-												<MiniField
-													icon={Calendar}
-													label="Transcurrido"
-													value={`${formatNumber(form.state.values.plazoTransc, " meses")}`}
-													highlighted={isFieldDirty("plazoTransc")}
-												/>
+											<div className="space-y-3">
+												{/* Contract duration pills */}
+												<div className="flex flex-wrap gap-3">
+													<MiniField
+														icon={FileText}
+														label="Según contrato"
+														value={`${formatNumber(form.state.values.segunContrato, " meses")}`}
+														highlighted={isFieldDirty("segunContrato")}
+													/>
+													{Number(form.state.values.prorrogasAcordadas) > 0 && (
+														<MiniField
+															icon={TrendingUp}
+															label="Prórrogas"
+															value={`+${formatNumber(form.state.values.prorrogasAcordadas, " meses")}`}
+															highlighted={isFieldDirty("prorrogasAcordadas")}
+														/>
+													)}
+													{(() => {
+														const total = Number(form.state.values.plazoTotal ?? 0);
+														const elapsed = Number(form.state.values.plazoTransc ?? 0);
+														const pct = total > 0 ? Math.min(100, (elapsed / total) * 100) : 0;
+														const remaining = Math.max(0, total - elapsed);
+														const isDirty = isFieldDirty("plazoTotal") || isFieldDirty("plazoTransc");
+														return (
+															<div className={cn(
+																"rounded-lg border border-[#f0f0f0] p-3.5 flex flex-col flex-1",
+																isDirty && "border-[#f7b26a] bg-[#fff7ed]"
+															)}>
+																<div className="mb-2.5 flex items-center justify-between">
+																	<div className="flex items-center gap-1.5 text-[11px] text-[#aaa]">
+																		<Calendar className="size-3.5" />
+																		<span>Plazo de obra</span>
+																	</div>
+																	<span className="text-[12px] font-semibold tabular-nums text-[#1a1a1a]">
+																		{formatNumber(elapsed)}{" "}
+																		<span className="font-normal text-[#aaa]">/ {formatNumber(total)} meses</span>
+																	</span>
+																</div>
+																<div className="relative h-1.5 w-full overflow-hidden rounded-full bg-[#f0f0f0]">
+																	<motion.div
+																		className="absolute inset-y-0 left-0 rounded-full"
+																		style={{ backgroundColor: "var(--color-orange-primary)", opacity: 0.8 }}
+																		initial={{ width: "0%" }}
+																		animate={{ width: `${pct}%` }}
+																		transition={{ type: "spring", stiffness: 120, damping: 20 }}
+																	/>
+																</div>
+																<div className="mt-2 flex items-center justify-between">
+																	<span className="text-[11px] font-medium" style={{ color: "var(--color-orange-primary)" }}>
+																		{formatNumber(elapsed)} meses transcurridos
+																	</span>
+																	{remaining > 0 && (
+																		<span className="text-[11px] text-[#aaa]">{formatNumber(remaining)} restantes</span>
+																	)}
+																</div>
+															</div>
+														);
+													})()}
+												</div>
+												{/* Plazo timeline progress card */}
 											</div>
 										</div>
 									</ShellCard>

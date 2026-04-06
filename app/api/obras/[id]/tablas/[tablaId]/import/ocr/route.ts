@@ -7,7 +7,9 @@ import {
 	ensureTablaDataType,
 	MATERIALS_OCR_PROMPT,
 	normalizeFieldKey,
+	normalizeFolderPath,
 } from "@/lib/tablas";
+import { applyOcrExtractionRowPolicy } from "@/lib/ocr-row-policy";
 import {
 	fetchTenantPlan,
 	type SubscriptionPlanLimits,
@@ -37,6 +39,28 @@ type TemplatePromptContext = {
 		excelKeywords?: string[];
 	}>;
 };
+
+const LEGACY_ORDER_PARENT_FIELD_KEYS = new Set([
+	"nro",
+	"nroorden",
+	"fecha",
+	"solicitante",
+	"proveedor",
+	"totalorden",
+	"total_orden",
+]);
+
+const LEGACY_ORDER_ITEM_FIELD_KEYS = new Set([
+	"cantidad",
+	"unidad",
+	"material",
+	"detalle_descriptivo",
+	"detalle descriptivo",
+	"preciounitario",
+	"precio_unitario",
+	"preciototal",
+	"precio_total",
+]);
 
 const DOCUMENTS_BUCKET = "obra-documents";
 const OCR_MODEL = process.env.OCR_MODEL ?? "gemini-2.5-flash";
@@ -133,11 +157,106 @@ function normalizeLooseKey(value: string) {
 }
 
 function buildColumnCandidateKeys(column: ColumnMeta) {
-	return new Set([
+	const candidates = [
 		column.fieldKey,
 		column.label,
 		...readStringList(column.config?.aliases),
-	].map(normalizeLooseKey));
+	];
+	const normalizedFieldKey = normalizeLooseKey(column.fieldKey);
+	if (normalizedFieldKey === "nro" || normalizedFieldKey === "nroorden") {
+		candidates.push("nroOrden");
+	}
+	if (normalizedFieldKey === "totalorden" || normalizedFieldKey === "total_orden") {
+		candidates.push("totalOrden");
+	}
+	if (normalizedFieldKey === "detalle_descriptivo") {
+		candidates.push("material");
+	}
+	if (normalizedFieldKey === "preciounitario" || normalizedFieldKey === "precio_unitario") {
+		candidates.push("precioUnitario");
+	}
+	if (normalizedFieldKey === "preciototal" || normalizedFieldKey === "precio_total") {
+		candidates.push("precioTotal");
+	}
+	return new Set(candidates.map(normalizeLooseKey));
+}
+
+function isLegacyOrderTable(
+	tablaName: string,
+	settings: Record<string, unknown> | null | undefined,
+) {
+	const normalizedFolder = normalizeFolderPath(
+		typeof settings?.ocrFolder === "string" ? settings.ocrFolder : "",
+	);
+	if (normalizedFolder === "ordenes-de-compra") return true;
+	return normalizeLooseKey(tablaName).includes("ordenesdecompra");
+}
+
+function resolveColumnScope(
+	column: ColumnMeta,
+	tablaName: string,
+	settings: Record<string, unknown> | null | undefined,
+) {
+	const configuredScope =
+		typeof column.config?.ocrScope === "string" ? column.config.ocrScope : "";
+	if (configuredScope === "parent" || configuredScope === "item") {
+		return configuredScope;
+	}
+	if (!isLegacyOrderTable(tablaName, settings)) {
+		return "item";
+	}
+	const normalizedFieldKey = normalizeLooseKey(column.fieldKey);
+	if (LEGACY_ORDER_PARENT_FIELD_KEYS.has(normalizedFieldKey)) {
+		return "parent";
+	}
+	if (LEGACY_ORDER_ITEM_FIELD_KEYS.has(normalizedFieldKey)) {
+		return "item";
+	}
+	return "item";
+}
+
+function setCanonicalOrderAliases(
+	target: Record<string, unknown>,
+	fieldKey: string,
+	value: unknown,
+) {
+	if (value == null) return;
+	const normalizedFieldKey = normalizeLooseKey(fieldKey);
+	if (normalizedFieldKey === "nro") {
+		target.nroOrden = value;
+		return;
+	}
+	if (normalizedFieldKey === "total_orden") {
+		target.totalOrden = value;
+		return;
+	}
+	if (normalizedFieldKey === "detalle_descriptivo") {
+		target.material = value;
+		return;
+	}
+	if (normalizedFieldKey === "precio_unitario") {
+		target.precioUnitario = value;
+		return;
+	}
+	if (normalizedFieldKey === "precio_total") {
+		target.precioTotal = value;
+	}
+}
+
+function isBlankExtractionValue(value: unknown) {
+	return value == null || (typeof value === "string" && value.trim().length === 0);
+}
+
+function resolveRowValueWithTopLevelFallback(
+	item: Record<string, unknown>,
+	extraction: Record<string, unknown>,
+	fieldKey: string,
+) {
+	const itemValue = item[fieldKey];
+	if (!isBlankExtractionValue(itemValue)) {
+		return itemValue;
+	}
+	return extraction[fieldKey] ?? null;
 }
 
 function remapObjectToFieldKeys(
@@ -480,40 +599,11 @@ function estimateBase64Size(dataUrl: string | null): number {
 function applyExtractionRowPolicy(
 	items: Record<string, unknown>[],
 	settings: Record<string, unknown> | null | undefined,
+	options?: {
+		hasItemColumns?: boolean;
+	},
 ) {
-	if (settings?.ocrProfile === "materials") {
-		const maxRowsRaw = settings?.extractionMaxRows;
-		const maxRows =
-			typeof maxRowsRaw === "number"
-				? Math.floor(maxRowsRaw)
-				: Number.parseInt(String(maxRowsRaw ?? ""), 10);
-		if (Number.isFinite(maxRows) && maxRows > 0) {
-			return items.slice(0, maxRows);
-		}
-		return items;
-	}
-	const explicitRowMode =
-		settings?.extractionRowMode === "multiple" || settings?.extractionRowMode === "single"
-			? settings.extractionRowMode
-			: null;
-	const inferredRowMode =
-		settings?.ocrProfile === "materials" ||
-		settings?.spreadsheetPresetKey === "pmc_items"
-			? "multiple"
-			: "single";
-	const rowMode = explicitRowMode ?? inferredRowMode;
-	const maxRowsRaw = settings?.extractionMaxRows;
-	const maxRows =
-		typeof maxRowsRaw === "number"
-			? Math.floor(maxRowsRaw)
-			: Number.parseInt(String(maxRowsRaw ?? ""), 10);
-	if (rowMode === "single") {
-		return items.length > 0 ? [items[0]] : [];
-	}
-	if (Number.isFinite(maxRows) && maxRows > 0) {
-		return items.slice(0, maxRows);
-	}
-	return items;
+	return applyOcrExtractionRowPolicy(items, settings, options);
 }
 
 function estimateOcrTokenUsage(baseBytes: number): number {
@@ -765,7 +855,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			columns.map((column) => [column.fieldKey, column])
 		);
 		const parentColumns = columns.filter((column) => {
-			const scope = (column.config?.ocrScope as string) || "item";
+			const scope = resolveColumnScope(column, tablaMeta.name as string, settings);
 			return scope === "parent";
 		});
 		const parentKeys = new Set(parentColumns.map((column) => column.fieldKey));
@@ -1137,6 +1227,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		(extraction as any).items = applyExtractionRowPolicy(
 			(extraction as any).items as Record<string, unknown>[],
 			settings,
+			{ hasItemColumns: itemColumns.length > 0 },
 		);
 
 		const actualTokenUsage =
@@ -1318,11 +1409,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			(item: Record<string, unknown>) => {
 				const data: Record<string, unknown> = { ...baseMeta };
 				for (const column of itemColumns) {
-					const rawValue = item[column.fieldKey];
+					const rawValue = resolveRowValueWithTopLevelFallback(
+						item,
+						extraction as Record<string, unknown>,
+						column.fieldKey,
+					);
 					data[column.fieldKey] = coerceValueForType(
 						column.dataType,
 						rawValue ?? null
 					);
+					setCanonicalOrderAliases(data, column.fieldKey, data[column.fieldKey]);
+				}
+				for (const [fieldKey, fieldValue] of Object.entries(baseMeta)) {
+					setCanonicalOrderAliases(data, fieldKey, fieldValue);
 				}
 				return {
 					tabla_id: tablaId,

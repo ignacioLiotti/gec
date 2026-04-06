@@ -271,7 +271,7 @@ export function FormTableTabs({ className }: { className?: string }) {
 	);
 }
 
-export function FormTableContent({ className, innerClassName }: { className?: string, innerClassName?: string }) {
+export function FormTableContent({ className, innerClassName, tableHeight }: { className?: string, innerClassName?: string, tableHeight?: string }) {
 	const {
 		tableId,
 		config,
@@ -356,7 +356,7 @@ export function FormTableContent({ className, innerClassName }: { className?: st
 				<div
 					ref={scrollParentRef}
 					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
-					<table ref={tableRef} data-table-id={tableId} className="w-full table-fixed text-sm max-w-full overflow-hidden">
+					<table ref={tableRef} data-table-id={tableId} className={cn("w-full table-fixed text-sm max-w-full overflow-hidden", tableHeight)}>
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
 								<col
@@ -395,7 +395,7 @@ export function FormTableContent({ className, innerClassName }: { className?: st
 															rowSpan={2}
 															{...getStickyProps(
 																column.id,
-																"relative px-4 py-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker"
+																"relative px-4 py-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]"
 															)}
 														>
 															<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">

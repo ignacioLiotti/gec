@@ -1,0 +1,95 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Sparkles } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import {
+	ContextualWizard,
+	type WizardFlow,
+} from "@/components/ui/contextual-wizard";
+
+type DemoPageTourProps = {
+	flow: WizardFlow;
+	showButton?: boolean;
+	buttonLabel?: string;
+	buttonClassName?: string;
+	storageKey?: string;
+	preserveQueryOnComplete?: boolean;
+};
+
+export function DemoPageTour({
+	flow,
+	showButton = false,
+	buttonLabel = "Guia",
+	buttonClassName,
+	storageKey,
+	preserveQueryOnComplete = false,
+}: DemoPageTourProps) {
+	const pathname = usePathname();
+	const router = useRouter();
+	const searchParams = useSearchParams();
+	const [open, setOpen] = useState(false);
+	const preserveClearRef = useRef(false);
+	const activeTourId = searchParams.get("tour");
+
+	const clearTourQuery = useCallback(() => {
+		if (activeTourId !== flow.id) return;
+		const params = new URLSearchParams(searchParams.toString());
+		params.delete("tour");
+		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
+		router.replace(nextUrl, { scroll: false });
+	}, [activeTourId, flow.id, pathname, router, searchParams]);
+
+	useEffect(() => {
+		if (activeTourId === flow.id) {
+			setOpen(true);
+		}
+	}, [activeTourId, flow.id]);
+
+	const resolvedStorageKey = useMemo(
+		() => storageKey ?? `demo-tour-${flow.id}`,
+		[flow.id, storageKey],
+	);
+
+	return (
+		<>
+			{showButton ? (
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					className={buttonClassName}
+					onClick={() => setOpen(true)}
+				>
+					<Sparkles className="size-4" />
+					{buttonLabel}
+				</Button>
+			) : null}
+			<ContextualWizard
+				open={open}
+				onOpenChange={(nextOpen) => {
+					setOpen(nextOpen);
+					if (!nextOpen) {
+						if (preserveClearRef.current) {
+							preserveClearRef.current = false;
+							return;
+						}
+						clearTourQuery();
+					}
+				}}
+				flow={flow}
+				storageKey={resolvedStorageKey}
+				onComplete={() => {
+					if (preserveQueryOnComplete) {
+						preserveClearRef.current = true;
+						return;
+					}
+					clearTourQuery();
+				}}
+				onSkip={clearTourQuery}
+			/>
+		</>
+	);
+}

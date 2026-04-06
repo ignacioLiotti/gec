@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Upload } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import {
 	FormTable,
 	FormTableContent,
@@ -31,6 +32,12 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { NotchTail } from "@/components/ui/notch-tail";
 import type { ExcelPageClientProps } from "@/lib/excel/types";
+import { ContextualWizard, type WizardFlow } from "@/components/ui/contextual-wizard";
+import {
+	GUIDED_EXCEL_STAGES,
+	getGuidedExcelStage,
+	isGuidedExcelTour,
+} from "@/lib/demo-tours/excel-guided-flow";
 
 type CsvObra = {
 	n?: number | string | null;
@@ -157,6 +164,7 @@ export default function DesktopExcelPageClient({
 	initialMainTableColumnsConfig,
 	initialObras,
 }: ExcelPageClientProps) {
+	const searchParams = useSearchParams();
 	const [isImporting, setIsImporting] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [mainTableColumnsConfig] = useState<MainTableColumnConfig[] | null>(
@@ -170,6 +178,49 @@ export default function DesktopExcelPageClient({
 	const [hydratedRows, setHydratedRows] = useState<ObrasDetalleRow[] | null>(() =>
 		initialObras.map(mapObraToDetailRow)
 	);
+	const guidedTourStage = getGuidedExcelStage(searchParams);
+	const guidedExcelFlow = useMemo<WizardFlow | null>(() => {
+		if (!isGuidedExcelTour(searchParams) || guidedTourStage !== GUIDED_EXCEL_STAGES.excelIntro) {
+			return null;
+		}
+
+		return {
+			id: "guided-excel-landing",
+			title: "Recorrido guiado",
+			steps: [
+				{
+					id: "header",
+					targetId: "excel-page-header",
+					title: "Panel de obras precargado",
+					content:
+						"Este es el punto de entrada. Acá ya ves las obras cargadas y listas para explorar, sin necesidad de preparar datos antes de la demo.",
+					placement: "bottom",
+					skippable: false,
+				},
+				{
+					id: "table",
+					targetId: "excel-page-table",
+					title: "Las obras ya están listas",
+					content:
+						"La tabla resume la cartera operativa y te deja entrar directo en una obra real para seguir el caso de uso.",
+					placement: "top",
+					skippable: false,
+				},
+				{
+					id: "open-obra",
+					targetId: "excel-page-open-obra-cta",
+					title: "Abrí la primera obra",
+					content:
+						"Entrá a la obra para revisar lo que ya está cargado en General y detectar el certificado del mes que todavía falta.",
+					placement: "left",
+					allowClickThrough: true,
+					requiredAction: "click_target",
+					waitForMs: 2200,
+					skippable: false,
+				},
+			],
+		};
+	}, [guidedTourStage, searchParams]);
 
 	const tableConfig = useMemo(() => {
 		const baseConfig =
@@ -179,9 +230,9 @@ export default function DesktopExcelPageClient({
 		return hydratedRows == null
 			? baseConfig
 			: {
-					...baseConfig,
-					defaultRows: hydratedRows,
-				};
+				...baseConfig,
+				defaultRows: hydratedRows,
+			};
 	}, [hydratedRows, mainTableColumnsConfig]);
 
 	const headerAliases = useMemo(
@@ -415,7 +466,7 @@ export default function DesktopExcelPageClient({
 	}, []);
 
 	return (
-		<div className="min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#fafafa] px-4 py-4 md:px-8 md:py-8">
+		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#fafafa] px-4 py-4 md:px-8 md:py-8">
 			<Sheet open={isPreviewOpen} onOpenChange={(open) => !open && handleCancelPreview()}>
 				<SheetContent side="right" className="border-l-[#ece7df] bg-[#f6f2eb] p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:max-w-lg">
 					<div className="flex h-full flex-col rounded-[24px] border border-[#f3eee7] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(250,250,250,0.96)_100%)]">
@@ -487,7 +538,7 @@ export default function DesktopExcelPageClient({
 				<div className="relative space-y-5">
 					<div className="flex flex-col gap-4">
 						<div className="flex w-full flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-							<div>
+							<div data-wizard-target="excel-page-header">
 								<h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a] sm:text-4xl">
 									Panel de obras
 								</h1>
@@ -495,12 +546,15 @@ export default function DesktopExcelPageClient({
 									Filtra, busca y actualiza tus obras desde una vista unificada.
 								</p>
 							</div>
-							<FormTableTabs className={cn("flex h-11 justify-start rounded-lg p-1")} />
+							<div data-wizard-target="excel-page-tabs">
+								<FormTableTabs className={cn("flex h-11 justify-start rounded-lg p-1")} />
+							</div>
 						</div>
 					</div>
 
 					<div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:-mb-0">
 						<div
+							data-wizard-target="excel-page-toolbar"
 							className="relative -ml-[1px] flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
 							style={
 								{
@@ -551,11 +605,22 @@ export default function DesktopExcelPageClient({
 							</Button>
 						</div>
 					</div>
-					<div className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none">
+					<div
+						data-wizard-target="excel-page-table"
+						className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none "
+					>
 						<FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(98vw-var(--sidebar-current-width))]" />
 						<Separator className="bg-border" />
 						<FormTablePagination />
 					</div>
+					{guidedExcelFlow ? (
+						<ContextualWizard
+							open
+							onOpenChange={() => { }}
+							flow={guidedExcelFlow}
+							showCloseButton={false}
+						/>
+					) : null}
 				</div>
 			</FormTable>
 		</div>

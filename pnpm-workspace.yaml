@@ -1,0 +1,8 @@
+ignoredBuiltDependencies:
+  - '@sentry/cli'
+  - '@swc/core'
+  - esbuild
+  - puppeteer
+  - sharp
+  - supabase
+  - unrs-resolver

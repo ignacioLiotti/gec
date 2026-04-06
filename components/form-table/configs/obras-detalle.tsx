@@ -33,7 +33,13 @@ import {
 	ArrowUpRight,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
+import {
+	GUIDED_EXCEL_STAGE_PARAM,
+	GUIDED_EXCEL_STAGES,
+	GUIDED_EXCEL_TOUR_ID,
+} from "@/lib/demo-tours/excel-guided-flow";
 
 /**
  * Pure CSS tooltip for truncated text - no React state, no scroll listeners.
@@ -66,11 +72,17 @@ const ObraDetailLink = memo(function ObraDetailLink({
 	text: string;
 }) {
 	const { prefetchObra } = usePrefetchObra();
+	const searchParams = useSearchParams();
+	const isExcelOverviewTour = searchParams.get("tour") === GUIDED_EXCEL_TOUR_ID;
+	const href = isExcelOverviewTour
+		? `/excel/${obraId}?tour=${GUIDED_EXCEL_TOUR_ID}&${GUIDED_EXCEL_STAGE_PARAM}=${GUIDED_EXCEL_STAGES.obraIntro}`
+		: `/excel/${obraId}`;
 
 	return (
 		<Link
-			href={`/excel/${obraId}`}
+			href={href}
 			prefetch={false}
+			data-wizard-target="excel-page-open-obra"
 			className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2 "
 			onMouseEnter={() => prefetchObra(obraId)}
 		>

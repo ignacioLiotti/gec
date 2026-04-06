@@ -20,7 +20,7 @@ Instrucciones:
 - Cada ítem: cantidad (número), unidad (texto), material (texto), precioUnitario (número o null)
 - Detectá y normalizá números con separador decimal coma.
 - Encabezados posibles: "Cantidad", "Unidad", "Detalle Descriptivo del pedido", "Precio Unit", "Total".
-- Extraé también si aparecen: nroOrden, solicitante, gestor, proveedor.
+- Extraé también si aparecen: nroOrden, fecha, solicitante, proveedor.
 - No inventes ítems; solo lo legible.`;
 
 export function normalizeFolderName(value: string) {

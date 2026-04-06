@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import dynamic from "next/dynamic";
@@ -18,6 +18,8 @@ import { Pencil, Eye, StickyNote, X, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
+import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
+import { ContextualWizard, type WizardFlow } from "@/components/ui/contextual-wizard";
 import {
 	Select,
 	SelectContent,
@@ -32,6 +34,13 @@ import {
 	formatMainColumnValue,
 } from "@/lib/main-table-columns";
 import { ObraGeneralTab } from "./tabs/general-tab";
+import { obraOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
+import {
+	GUIDED_EXCEL_STAGE_PARAM,
+	GUIDED_EXCEL_STAGES,
+	getGuidedExcelStage,
+	isGuidedExcelTour,
+} from "@/lib/demo-tours/excel-guided-flow";
 import type { OcrFolderLink, OcrTablaColumn, TablaDataRow } from "./tabs/file-manager/types";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -151,21 +160,21 @@ async function fetchMaterialOrders(obraId: string): Promise<MaterialOrder[]> {
 	// Pre-normalize searchable fields at load time to avoid normalize() on every keystroke
 	return orders.map((o: any) => {
 		const nroOrden = String(o.nroOrden || o.id);
+		const fecha = String(o.fecha || "");
 		const solicitante = String(o.solicitante || "");
-		const gestor = String(o.gestor || "");
 		const proveedor = String(o.proveedor || "");
 		return {
 			id: String(o.id),
 			nroOrden,
+			fecha,
 			solicitante,
-			gestor,
 			proveedor,
 			docPath: o.docPath,
 			docBucket: o.docBucket,
 			// Pre-normalized for efficient filtering
 			_nroOrdenNorm: normalizeForSearch(nroOrden),
+			_fechaNorm: normalizeForSearch(fecha),
 			_solicitanteNorm: normalizeForSearch(solicitante),
-			_gestorNorm: normalizeForSearch(gestor),
 			_proveedorNorm: normalizeForSearch(proveedor),
 			items: (o.items || []).map((it: any, idx: number) => {
 				const unidad = String(it.unidad || "");
@@ -949,15 +958,6 @@ function getRowFieldValueByCandidates(
 	return null;
 }
 
-function buildCurvePoints(
-	curvaRows: TablaRowRecord[],
-	resumenRows: TablaRowRecord[],
-	options?: { curveStartPeriod?: string | null }
-): GeneralReportCurvePoint[] {
-	const points = new Map<string, GeneralReportCurvePoint>();
-	const curveStartPeriod =
-		typeof options?.curveStartPeriod === "string" && /^\d{4}-\d{2}$/.test(options.curveStartPeriod)
-			? options.curveStartPeriod
 function parseCertificateSequence(value: unknown): number | null {
 	if (typeof value === "number" && Number.isFinite(value)) {
 		return Math.trunc(value);
@@ -970,17 +970,17 @@ function parseCertificateSequence(value: unknown): number | null {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
+function buildCurvePoints(
+	curvaRows: TablaRowRecord[],
+	resumenRows: TablaRowRecord[],
+	options?: { curveStartPeriod?: string | null }
+): GeneralReportCurvePoint[] {
+	const points = new Map<string, GeneralReportCurvePoint>();
+	const curveStartPeriod =
+		typeof options?.curveStartPeriod === "string" && /^\d{4}-\d{2}$/.test(options.curveStartPeriod)
+			? options.curveStartPeriod
 			: null;
 	const curveMonthIndexBase = detectCurveMonthIndexBase(curvaRows);
-
-	curvaRows.forEach((row, index) => {
-		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
-		const periodo = getRowFieldValueByCandidates(
-			rowData,
-			["periodo", "periodo_key", "period", "mes"],
-			[["periodo"], ["period"], ["mes"]],
-		);
-		const avance = parsePercent(
 	const usesRelativePlanMonths =
 		curveStartPeriod != null &&
 		curvaRows.some((row) => {
@@ -992,6 +992,15 @@ function parseCertificateSequence(value: unknown): number | null {
 			);
 			return getCurveMonthNumber(periodo) != null;
 		});
+
+	curvaRows.forEach((row, index) => {
+		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+		const periodo = getRowFieldValueByCandidates(
+			rowData,
+			["periodo", "periodo_key", "period", "mes"],
+			[["periodo"], ["period"], ["mes"]],
+		);
+		const avance = parsePercent(
 			getRowFieldValueByCandidates(
 				rowData,
 				["avance_acumulado_pct", "avance_acum_pct", "avance_acumulado", "avance_pct"],
@@ -1176,6 +1185,12 @@ function parseCertificateSequence(value: unknown): number | null {
 	const minOrder = sortedPoints[0]?.sortOrder ?? 0;
 	const maxOrder = sortedPoints[sortedPoints.length - 1]?.sortOrder ?? minOrder;
 	const continuousPoints: GeneralReportCurvePoint[] = [];
+	const maxRealSortOrder = usesRelativePlanMonths
+		? sortedPoints.reduce<number | null>((max, point) => {
+				if (point.realPct == null) return max;
+				return max == null || point.sortOrder > max ? point.sortOrder : max;
+		  }, null)
+		: null;
 
 	for (let order = minOrder; order <= maxOrder; order += 1) {
 		const existing = pointsByOrder.get(order);
@@ -1185,12 +1200,6 @@ function parseCertificateSequence(value: unknown): number | null {
 		continuousPoints.push(
 			existing ?? {
 				label: periodLabel(periodKey),
-	const maxRealSortOrder = usesRelativePlanMonths
-		? sortedPoints.reduce<number | null>((max, point) => {
-				if (point.realPct == null) return max;
-				return max == null || point.sortOrder > max ? point.sortOrder : max;
-		  }, null)
-		: null;
 				planPct: null,
 				realPct:
 					maxRealSortOrder != null && order <= maxRealSortOrder ? 0 : null,
@@ -1476,15 +1485,6 @@ function ObraDetailPageContent() {
 		const tablas: ObraTabla[] = Array.isArray(tablasQuery.data) ? tablasQuery.data : [];
 		return new Map(tablas.map((tabla) => [tabla.id, tabla] as const));
 	}, [tablasQuery.data]);
-	const currentPeriodKey = useMemo(() => {
-		const now = new Date();
-		return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-	}, []);
-
-	const generalReportsQuery = useQuery({
-		queryKey: [
-			"obra",
-			obraId,
 	const curveRulesConfigQuery = useQuery({
 		queryKey: ["obra", obraId, "curve-rules-config"],
 		enabled: isValidObraId && isGeneralTabActive,
@@ -1512,6 +1512,17 @@ function ObraDetailPageContent() {
 				certificadoTableRefs.pmcResumenName,
 		};
 	}, [certificadoTableRefs, curveRulesConfigQuery.data, tablasById]);
+	const currentPeriodKey = useMemo(() => {
+		const now = new Date();
+		return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+	}, []);
+	const guidedTourStage = getGuidedExcelStage(searchParams);
+	const isGuidedExcelFlow = isGuidedExcelTour(searchParams);
+
+	const generalReportsQuery = useQuery({
+		queryKey: [
+			"obra",
+			obraId,
 			"general-reports",
 			currentPeriodKey,
 			selectedCurveTableRefs.curvaPlanId ?? "none",
@@ -1613,6 +1624,9 @@ function ObraDetailPageContent() {
 		[certificadosExtraidosRows]
 	);
 	const generalReportsData = generalReportsQuery.data ?? { findings: [], curve: null };
+	const hasMissingCurrentMonthFinding = generalReportsData.findings.some(
+		(finding) => finding.rule_key === "cert.missing_current_month",
+	);
 	const handleCurveDataImported = useCallback(async () => {
 		await Promise.all([
 			queryClient.invalidateQueries({ queryKey: ["obra", obraId, "general-reports"] }),
@@ -1759,9 +1773,31 @@ function ObraDetailPageContent() {
 
 	// Handle tab change: update local state immediately, sync URL in background
 	const handleTabChange = useCallback((value: string) => {
+		const activeTour = searchParams?.get("tour") ?? null;
+		const activeStage = searchParams?.get(GUIDED_EXCEL_STAGE_PARAM) ?? null;
 		setActiveTab(value); // Immediate state update
+		if (activeTour === "excel-overview") {
+			const nextStage =
+				value === "documentos" &&
+				(activeStage === GUIDED_EXCEL_STAGES.obraIntro ||
+					activeStage === GUIDED_EXCEL_STAGES.obraMissingCertificado ||
+					activeStage === GUIDED_EXCEL_STAGES.obraGoDocuments)
+					? GUIDED_EXCEL_STAGES.documentsIntro
+					: value === "general" && activeStage === GUIDED_EXCEL_STAGES.documentsReturnGeneral
+						? GUIDED_EXCEL_STAGES.generalReviewUpdatedData
+						: activeStage;
+			setQueryParams({
+				tab: value,
+				tourStage: nextStage,
+			});
+			return;
+		}
+		if (value === "documentos" && activeTour === "obra-overview") {
+			setQueryParams({ tab: value, tour: "documentos-overview" });
+			return;
+		}
 		setQueryParams({ tab: value }); // Background URL sync
-	}, [setQueryParams]);
+	}, [searchParams, setQueryParams]);
 
 	// Import OC from PDF
 	const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -1855,8 +1891,8 @@ function ObraDetailPageContent() {
 			const meta = out.meta || {};
 			setImportPreviewOrder({
 				nroOrden: meta.nroOrden ?? '',
+				fecha: meta.fecha ?? '',
 				solicitante: meta.solicitante ?? '',
-				gestor: meta.gestor ?? '',
 				proveedor: meta.proveedor ?? '',
 				items: extractedItems.length > 0 ? extractedItems : [{ cantidad: '', unidad: '', material: '', precioUnitario: '' }],
 			});
@@ -1883,16 +1919,16 @@ function ObraDetailPageContent() {
 
 	type NewOrderForm = {
 		nroOrden: string;
+		fecha: string;
 		solicitante: string;
-		gestor: string;
 		proveedor: string;
 		items: NewOrderItemForm[];
 	};
 
 	const emptyNewOrderForm: NewOrderForm = {
 		nroOrden: "",
+		fecha: "",
 		solicitante: "",
-		gestor: "",
 		proveedor: "",
 		items: [
 			{ cantidad: "", unidad: "", material: "", precioUnitario: "" },
@@ -1902,7 +1938,7 @@ function ObraDetailPageContent() {
 	const [newOrder, setNewOrder] = useState<NewOrderForm>(() => ({ ...emptyNewOrderForm }));
 
 	const updateNewOrderMeta = useCallback(
-		(field: "nroOrden" | "solicitante" | "gestor" | "proveedor", value: string) => {
+		(field: "nroOrden" | "fecha" | "solicitante" | "proveedor", value: string) => {
 			setNewOrder((prev) => ({ ...prev, [field]: value }));
 		},
 		[]
@@ -1952,21 +1988,21 @@ function ObraDetailPageContent() {
 			});
 
 		const nroOrden = newOrder.nroOrden.trim() || orderId;
+		const fecha = newOrder.fecha.trim();
 		const solicitante = newOrder.solicitante.trim();
-		const gestor = newOrder.gestor.trim();
 		const proveedor = newOrder.proveedor.trim();
 
 		const order: MaterialOrder = {
 			id: orderId,
 			nroOrden,
+			fecha,
 			solicitante,
-			gestor,
 			proveedor,
 			items: normalizedItems,
 			// Pre-normalize for filtering
 			_nroOrdenNorm: normalizeForSearch(nroOrden),
+			_fechaNorm: normalizeForSearch(fecha),
 			_solicitanteNorm: normalizeForSearch(solicitante),
-			_gestorNorm: normalizeForSearch(gestor),
 			_proveedorNorm: normalizeForSearch(proveedor),
 		};
 
@@ -2013,8 +2049,8 @@ function ObraDetailPageContent() {
 			.filter((order) =>
 				// Use pre-normalized fields (computed at data load time)
 				(order._nroOrdenNorm ?? "").includes(q) ||
+				(order._fechaNorm ?? "").includes(q) ||
 				(order._solicitanteNorm ?? "").includes(q) ||
-				(order._gestorNorm ?? "").includes(q) ||
 				(order._proveedorNorm ?? "").includes(q) ||
 				order.items.length > 0
 			);
@@ -2932,8 +2968,147 @@ function ObraDetailPageContent() {
 		</>
 	);
 
+	const guidedObraFlow = useMemo<WizardFlow | null>(() => {
+		if (!isGuidedExcelFlow) return null;
+		if (guidedTourStage === GUIDED_EXCEL_STAGES.generalReviewUpdatedData) {
+			return {
+				id: "guided-obra-review-updates",
+				title: "Recorrido guiado",
+				steps: [
+					{
+						id: "review-updated-data",
+						targetId: "obra-general-findings",
+						title: "Volviste a General con los datos actualizados",
+						content:
+							"Después de cargar el certificado y la curva, esta vista queda lista para revisar el estado actualizado de la obra. Desde acá ya podés explorar libremente el resto de la app.",
+						placement: "left",
+						skippable: false,
+					},
+				],
+			};
+		}
+
+		if (activeTab !== "general") return null;
+
+		if (guidedTourStage === GUIDED_EXCEL_STAGES.obraIntro) {
+			return {
+				id: "guided-obra-general",
+				title: "Recorrido guiado",
+				steps: [
+					{
+						id: "obra-general",
+						targetId: "obra-page-content",
+						title: "General ya viene con datos cargados",
+						content:
+							"En General ya se ve el contexto principal de la obra. El punto de la demo ahora es detectar el faltante del certificado del mes actual.",
+						placement: "top",
+						skippable: false,
+					},
+					{
+						id: "missing-certificado",
+						targetId: hasMissingCurrentMonthFinding
+							? "obra-general-missing-current-certificado"
+							: "obra-general-findings",
+						title: "Falta el certificado del mes actual",
+						content:
+							"Esta alerta marca que la obra tiene historial cargado, pero todavía no entró el certificado del período actual. Vamos a resolverlo desde Documentos.",
+						placement: "left",
+						skippable: false,
+						waitForMs: 2800,
+					},
+					{
+						id: "go-documents",
+						targetId: "obra-page-file-manager-tab",
+						title: "Seguimos por Documentos",
+						content:
+							"Andá a Documentos. Ahí vas a ver las carpetas de Certificados, Curva de Avance, Órdenes de Compra y Fotos de Obra, y vamos a completar la carga faltante.",
+						placement: "bottom",
+						allowClickThrough: true,
+						requiredAction: "click_target",
+						skippable: false,
+						waitForMs: 2200,
+					},
+				],
+			};
+		}
+
+		if (guidedTourStage === GUIDED_EXCEL_STAGES.obraMissingCertificado) {
+			return {
+				id: "guided-obra-missing-cert",
+				title: "Recorrido guiado",
+				steps: [
+					{
+						id: "missing-certificado",
+						targetId: hasMissingCurrentMonthFinding
+							? "obra-general-missing-current-certificado"
+							: "obra-general-findings",
+						title: "Falta el certificado del mes actual",
+						content:
+							"Esta obra ya tiene información consolidada, pero todavía falta el certificado del período actual. Lo vamos a cargar desde Documentos.",
+						placement: "left",
+						skippable: false,
+						waitForMs: 2800,
+					},
+					{
+						id: "go-documents",
+						targetId: "obra-page-file-manager-tab",
+						title: "Abrí Documentos",
+						content:
+							"Entrá a Documentos para completar la carga que falta y revisar los datos extraídos.",
+						placement: "bottom",
+						allowClickThrough: true,
+						requiredAction: "click_target",
+						skippable: false,
+						waitForMs: 2200,
+					},
+				],
+			};
+		}
+
+		if (guidedTourStage === GUIDED_EXCEL_STAGES.obraGoDocuments) {
+			return {
+				id: "guided-obra-go-documents",
+				title: "Recorrido guiado",
+				steps: [
+					{
+						id: "go-documents",
+						targetId: "obra-page-file-manager-tab",
+						title: "Abrí Documentos",
+						content:
+							"Seguimos en Documentos para cargar el certificado faltante y la curva de avance.",
+						placement: "bottom",
+						allowClickThrough: true,
+						requiredAction: "click_target",
+						skippable: false,
+						waitForMs: 2200,
+					},
+				],
+			};
+		}
+
+		return null;
+	}, [activeTab, guidedTourStage, hasMissingCurrentMonthFinding, isGuidedExcelFlow]);
+
+	const finishGuidedExcelFlow = useCallback(() => {
+		setQueryParams({
+			tour: null,
+			tourStage: null,
+		});
+	}, [setQueryParams]);
+
 	return (
-		<div className="container max-w-full mx-auto px-4 pt-2">
+		<div className="relative container max-w-full mx-auto px-4 pt-2">
+			<DemoPageTour flow={obraOverviewTour} />
+			{guidedObraFlow ? (
+				<ContextualWizard
+					open
+					onOpenChange={() => {}}
+					flow={guidedObraFlow}
+					showCloseButton={false}
+					finishLabel="Finalizar y explorar"
+					onComplete={finishGuidedExcelFlow}
+				/>
+			) : null}
 			{routeError ? (
 				<motion.div
 					initial={{ opacity: 0, scale: 0.95 }}
@@ -3003,7 +3178,10 @@ function ObraDetailPageContent() {
 							className="space-y-4"
 						>
 							{/* <p className="text-3xl font-normal">{obraData?.designacionYUbicacion ?? ""}</p> */}
-							<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2 bg-white shadow-card rounded-xl p-3">
+							<div
+								data-wizard-target="obra-page-tabs"
+								className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2 bg-white shadow-card rounded-xl p-3"
+							>
 								<div className="flex flex-wrap items-center gap-2">
 									<ExcelPageTabs
 										tabBadges={
@@ -3112,6 +3290,7 @@ function ObraDetailPageContent() {
 								</motion.div>
 							) : null}
 
+							<div data-wizard-target="obra-page-content">
 							{isGeneralTabActive ? (
 								<ObraGeneralTab
 									form={form}
@@ -3275,6 +3454,7 @@ function ObraDetailPageContent() {
 									refreshMaterialOrders={refreshMaterialOrders}
 								/>
 							) : null}
+							</div>
 
 						</Tabs>
 					</div>

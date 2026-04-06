@@ -57,8 +57,8 @@ export type MaterialItem = {
 export type MaterialOrder = {
 	id: string;
 	nroOrden: string;
+	fecha: string;
 	solicitante: string;
-	gestor: string;
 	proveedor: string;
 	items: MaterialItem[];
 	docUrl?: string;
@@ -66,8 +66,8 @@ export type MaterialOrder = {
 	docBucket?: string;
 	// Pre-normalized fields for efficient filtering
 	_nroOrdenNorm?: string;
+	_fechaNorm?: string;
 	_solicitanteNorm?: string;
-	_gestorNorm?: string;
 	_proveedorNorm?: string;
 };
 

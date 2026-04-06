@@ -30,7 +30,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { AdvanceCurveChart } from "@/components/advance-curve-chart";
 import { QuickFormDialog, type QuickFormField } from "@/components/forms/quick-form-dialog";
+import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import { toast } from "sonner";
+import { dashboardOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
 
@@ -929,10 +931,11 @@ export default function Home() {
 
   // Show dashboard for authenticated users
   return (
-    <div className={cn("min-h-screen", DS.page)}>
+    <div className={cn("relative min-h-screen", DS.page)}>
       <div className="mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-2 lg:pt-6">
         {/* Header */}
         <motion.div
+          data-wizard-target="dashboard-header"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
@@ -948,6 +951,10 @@ export default function Home() {
             </div>
             <div className="flex flex-col gap-3 lg:items-start">
               <div className="flex flex-wrap items-center gap-2">
+                <DemoPageTour
+                  flow={dashboardOverviewTour}
+                  buttonClassName="rounded-2xl border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                />
                 <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-50">
                     <Activity className="h-3.5 w-3.5 text-cyan-700" />
@@ -973,7 +980,7 @@ export default function Home() {
         </motion.div>
 
         {/* Main Grid — 3 equal columns */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div data-wizard-target="dashboard-stats" className="grid gap-6 lg:grid-cols-3">
 
           {/* Combined: Obras Recientes + Vista Previa */}
           <motion.div
@@ -1095,7 +1102,10 @@ export default function Home() {
                     </div>
                   ) : (
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                      <div className="rounded-xl border border-stone-200 bg-white">
+                      <div
+                        data-wizard-target="dashboard-recent-obras"
+                        className="rounded-xl border border-stone-200 bg-white"
+                      >
                         <div className="flex items-center justify-between border-b border-stone-200/70 px-4 py-3">
                           <div>
                             <p className="text-sm font-semibold text-stone-900">Obras Recientes</p>
@@ -1196,7 +1206,10 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-stone-200 bg-white">
+                      <div
+                        data-wizard-target="dashboard-preview"
+                        className="rounded-xl border border-stone-200 bg-white"
+                      >
                         <div className="border-b border-stone-200/70 px-4 py-3">
                           <p className="text-sm font-semibold text-stone-900">Vista Previa</p>
                           <p className="mt-0.5 truncate text-xs text-stone-500">

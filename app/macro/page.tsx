@@ -43,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import {
   countActiveMacroFilters,
   isMacroFilterActive,
@@ -57,6 +58,7 @@ import type {
   MacroTableRow as MacroRow,
   MacroTableSource,
 } from "@/lib/macro-tables";
+import { macroOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
 
@@ -554,6 +556,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       <div className="relative ">
         <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div
+            data-wizard-target="macro-page-toolbar"
             className="relative flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
             style={
               {
@@ -579,6 +582,10 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
             }
           >
             <NotchTail side="left" className="hidden h-[41px] mb-[1px] xl:!block" />
+            <DemoPageTour
+              flow={macroOverviewTour}
+              buttonClassName="gap-2 rounded-lg border-[#e8e1d8] bg-white px-3.5 text-[#5a5248] hover:bg-[#fcfaf7] hover:text-[#1f1a17]"
+            />
             <Button
               variant="outline"
               size="sm"
@@ -607,7 +614,10 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
             </Button>
           </div>
         </div>
-        <div className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none">
+        <div
+          data-wizard-target="macro-page-table"
+          className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none"
+        >
           <FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-0 overflow-hidden rounded-lg shadow-card" />
           <Separator className="bg-border" />
           <FormTablePagination />
@@ -713,11 +723,11 @@ function MacroTablesPageContent() {
     <Tabs
       value={selectedId ?? macroTables[0].id}
       onValueChange={handleTabChange}
-      className="p-4 md:p-8 max-w-[calc(100vw-var(--sidebar-current-width))] overflow-hidden"
+      className="relative p-4 md:p-8 max-w-[calc(100vw-var(--sidebar-current-width))] overflow-hidden"
     >
       <div className="relative">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
+          <div data-wizard-target="macro-page-header">
             <h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a] sm:text-4xl">
               Panel de macrotablas
             </h1>
@@ -725,13 +735,15 @@ function MacroTablesPageContent() {
               Filtra, busca y actualiza tus macrotablas desde una vista unificada.
             </p>
           </div>
-          <TabsList className={cn("flex justify-start rounded-lg p-1 h-11")}>
-            {macroTables.map((macroTable) => (
-              <TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
-                {macroTable.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <div data-wizard-target="macro-page-tabs">
+            <TabsList className={cn("flex justify-start rounded-lg p-1 h-11")}>
+              {macroTables.map((macroTable) => (
+                <TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
+                  {macroTable.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
         </div>
         {macroTables.map((macroTable) => (
           <TabsContent

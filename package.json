@@ -8,6 +8,8 @@
 		"build": "next build --turbopack",
 		"start": "next start",
 		"lint": "eslint",
+		"backfill:demo-template": "node scripts/backfill-demo-template.mjs",
+		"seed:demo-tenant": "node scripts/bootstrap-demo-tenant.mjs",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:e2e": "playwright test",
@@ -93,6 +95,7 @@
 		"sonner": "^2.0.7",
 		"tailwind-merge": "^3.3.1",
 		"three": "^0.182.0",
+		"undici": "6.22.0",
 		"workflow": "^4.0.1-beta.3",
 		"xlsx": "^0.18.5",
 		"zod": "^3.25.0"

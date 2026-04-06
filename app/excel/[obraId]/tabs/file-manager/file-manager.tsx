@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ContextualWizard, type WizardFlow } from '@/components/ui/contextual-wizard';
+import { DemoPageTour } from '@/components/demo-tours/demo-page-tour';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -127,6 +128,13 @@ import { HoverCardPortal } from '@radix-ui/react-hover-card';
 import { GlassyIcon } from '@/components/ui/glassy-icon';
 import { NotchTail } from "@/components/ui/notch-tail";
 import { resolveSpreadsheetSectionType } from '@/lib/spreadsheet-preview-summary';
+import { documentosOverviewTour } from '@/lib/demo-tours/screen-tour-flows';
+import {
+  GUIDED_EXCEL_STAGE_PARAM,
+  GUIDED_EXCEL_STAGES,
+  getGuidedExcelStage,
+  isGuidedExcelTour,
+} from '@/lib/demo-tours/excel-guided-flow';
 
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
@@ -216,6 +224,7 @@ type OcrDocumentTableFilters = {
 type OcrOrderItemRow = OcrDocumentTableRow & {
   orderId: string;
   nroOrden: string;
+  fecha: string;
   proveedor: string;
   solicitante: string;
   cantidad: number;
@@ -224,6 +233,33 @@ type OcrOrderItemRow = OcrDocumentTableRow & {
   precioUnitario: number;
   total: number;
 };
+
+function getLegacyOrderString(
+  data: Record<string, unknown>,
+  keys: string[],
+): string {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return '';
+}
+
+function getLegacyOrderNumber(
+  data: Record<string, unknown>,
+  keys: string[],
+): number {
+  for (const key of keys) {
+    const value = data[key];
+    const parsed = Number(value ?? 0);
+    if (Number.isFinite(parsed) && parsed !== 0) {
+      return parsed;
+    }
+  }
+  return 0;
+}
 
 type OcrOrderItemFilters = Record<string, never>;
 
@@ -349,6 +385,32 @@ function getFolderSegmentKey(folder: FileSystemItem): string {
     return normalizeFolderPath(folder.relativePath).split('/').filter(Boolean).pop() ?? '';
   }
   return normalizeFolderName(folder.name);
+}
+
+function getGuidedDocumentsFolderTargetId(folderName: string): string | undefined {
+  const normalized = normalizeFolderName(folderName);
+  if (normalized === 'certificados') return 'documents-folder-certificados';
+  if (normalized === 'curva-de-avance') return 'documents-folder-curva-avance';
+  if (normalized === 'ordenes-de-compra') return 'documents-folder-ordenes-compra';
+  if (normalized === 'fotos-de-obra') return 'documents-folder-fotos-obra';
+  return undefined;
+}
+
+function getAutoSelectedCertificadoOcrTablaIds(links: OcrFolderLink[]): string[] {
+  const uniqueLinks = Array.from(new Map(links.map((link) => [link.tablaId, link])).values());
+  if (uniqueLinks.length === 0) return [];
+
+  const pmcResumenLink = uniqueLinks.find((link) =>
+    normalizeFolderName(link.tablaName ?? '').includes('pmc-resumen')
+  );
+  if (!pmcResumenLink) return [];
+
+  const hasCertificadoCompanionTable = uniqueLinks.some((link) => {
+    const normalizedName = normalizeFolderName(link.tablaName ?? '');
+    return normalizedName.includes('pmc-items') || normalizedName.includes('curva-plan');
+  });
+
+  return hasCertificadoCompanionTable ? [pmcResumenLink.tablaId] : [];
 }
 
 function getOcrStatusMeta(item: FileSystemItem): OcrStatusMeta | null {
@@ -786,6 +848,11 @@ function FileManagerContent({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams?.toString() ?? '';
+  const guidedTourStage = getGuidedExcelStage(searchParams);
+  const isGuidedExcelFlow = isGuidedExcelTour(searchParams);
+  const [guidedImportedFolderKeys, setGuidedImportedFolderKeys] = useState<Set<string>>(
+    () => new Set()
+  );
 
   // State - using global store for persistence across tab switches
   const { state: documentsState, actions: documentsActions } = useDocumentsStore();
@@ -1324,18 +1391,22 @@ function FileManagerContent({
       const fallbackId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
         : `${tablaId}-${Date.now()}`;
-      const rawKey = typeof data.nroOrden === 'string' && data.nroOrden.trim().length > 0
-        ? data.nroOrden.trim()
-        : String(row?.id ?? fallbackId);
+      const nroOrden = getLegacyOrderString(data, ['nroOrden', 'nro']);
+      const fecha = getLegacyOrderString(data, ['fecha']);
+      const solicitante = getLegacyOrderString(data, ['solicitante']);
+      const proveedor = getLegacyOrderString(data, ['proveedor']);
+      const material = getLegacyOrderString(data, ['material', 'detalle_descriptivo']);
+      const precioUnitario = getLegacyOrderNumber(data, ['precioUnitario', 'precio_unitario']);
+      const rawKey = nroOrden || String(row?.id ?? fallbackId);
       if (!groups.has(rawKey)) {
         const docBucketValue = data && typeof (data as any).__docBucket === 'string' ? (data as any).__docBucket : undefined;
         const docPathValue = data && typeof (data as any).__docPath === 'string' ? (data as any).__docPath : undefined;
         groups.set(rawKey, {
           id: `${tablaId}-${rawKey}`,
-          nroOrden: typeof data.nroOrden === 'string' && data.nroOrden.trim().length > 0 ? data.nroOrden.trim() : 'Sin número',
-          solicitante: typeof data.solicitante === 'string' ? data.solicitante : '',
-          gestor: typeof data.gestor === 'string' ? data.gestor : '',
-          proveedor: typeof data.proveedor === 'string' ? data.proveedor : '',
+          nroOrden: nroOrden || 'Sin número',
+          fecha,
+          solicitante,
+          proveedor,
           items: [],
           docBucket: docBucketValue || (docPathValue ? 'obra-documents' : undefined),
           docPath: docPathValue,
@@ -1346,8 +1417,8 @@ function FileManagerContent({
         id: String(row?.id ?? `${rawKey}-${order.items.length}`),
         cantidad: Number((data as any).cantidad ?? 0) || 0,
         unidad: typeof (data as any).unidad === 'string' ? (data as any).unidad : '',
-        material: typeof (data as any).material === 'string' ? (data as any).material : '',
-        precioUnitario: Number((data as any).precioUnitario ?? 0) || 0,
+        material,
+        precioUnitario,
       });
     });
     return Array.from(groups.values());
@@ -1625,7 +1696,10 @@ function FileManagerContent({
 
   const refreshFileTreeDerivedData = useCallback(async () => {
     await buildFileTree({ skipCache: true });
-    await queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'ocr-links'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'ocr-links'] }),
+      queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'general-reports'] }),
+    ]);
   }, [buildFileTree, obraId, queryClient]);
 
   useEffect(() => {
@@ -2489,6 +2563,17 @@ function FileManagerContent({
   );
 
   const closeSpreadsheetPreview = useCallback((confirmed: boolean) => {
+    if (confirmed && spreadsheetPreviewPayload?.existingPath) {
+      const pathSegments = normalizeFolderPath(spreadsheetPreviewPayload.existingPath).split('/').filter(Boolean);
+      const folderKey = pathSegments.length >= 2 ? normalizeFolderName(pathSegments[pathSegments.length - 2] ?? '') : '';
+      if (folderKey) {
+        setGuidedImportedFolderKeys((current) => {
+          const next = new Set(current);
+          next.add(folderKey);
+          return next;
+        });
+      }
+    }
     setIsSpreadsheetPreviewOpen(false);
     setExcludedSpreadsheetPreviewTablaIds([]);
     setActiveSpreadsheetAdjustmentTablaId(null);
@@ -2498,7 +2583,7 @@ function FileManagerContent({
     const resolver = spreadsheetPreviewResolverRef.current;
     spreadsheetPreviewResolverRef.current = null;
     resolver?.(confirmed);
-  }, []);
+  }, [spreadsheetPreviewPayload]);
 
   const openTableSelectionDialog = useCallback(
     (params: { fileName: string; linkedTablas: OcrFolderLink[]; mode: 'ocr' | 'spreadsheet' }) =>
@@ -2710,11 +2795,18 @@ function FileManagerContent({
       nextManualValues: Record<string, Record<string, string>>
     ) => {
       if (!spreadsheetPreviewPayload) return;
+      if (!spreadsheetPreviewPayload.existingPath) {
+        toast.error('No hay un archivo almacenado para actualizar esta vista previa.');
+        return;
+      }
       try {
         setIsLoadingSpreadsheetPreview(true);
         const nextPayload = await fetchSpreadsheetPreview({
           existingPath: spreadsheetPreviewPayload.existingPath,
-          existingFileName: spreadsheetPreviewPayload.existingFileName,
+          existingFileName:
+            spreadsheetPreviewPayload.existingFileName ??
+            spreadsheetPreviewPayload.existingPath.split('/').pop() ??
+            'archivo',
           tablaIds: spreadsheetPreviewPayload.tablaIds,
           sheetAssignments: nextSheetAssignments,
           columnMappings: nextColumnMappings,
@@ -2741,6 +2833,10 @@ function FileManagerContent({
   const handleSpreadsheetPreviewSheetChange = useCallback(
     async (tablaId: string, sheetName: string | null) => {
       if (!spreadsheetPreviewPayload) return;
+      if (!spreadsheetPreviewPayload.existingPath) {
+        toast.error('No hay un archivo almacenado para actualizar esta vista previa.');
+        return;
+      }
       const nextSheetAssignments = {
         ...spreadsheetPreviewPayload.sheetAssignments,
         [tablaId]: sheetName,
@@ -2753,7 +2849,10 @@ function FileManagerContent({
         setIsLoadingSpreadsheetPreview(true);
         const nextPayload = await fetchSpreadsheetPreview({
           existingPath: spreadsheetPreviewPayload.existingPath,
-          existingFileName: spreadsheetPreviewPayload.existingFileName,
+          existingFileName:
+            spreadsheetPreviewPayload.existingFileName ??
+            spreadsheetPreviewPayload.existingPath.split('/').pop() ??
+            'archivo',
           tablaIds: spreadsheetPreviewPayload.tablaIds,
           sheetAssignments: nextSheetAssignments,
           columnMappings: nextColumnMappings,
@@ -2825,6 +2924,14 @@ function FileManagerContent({
 
   const applySpreadsheetPreviewImport = useCallback(async () => {
     if (!spreadsheetPreviewPayload) return false;
+    if (
+      !spreadsheetPreviewPayload.existingBucket ||
+      !spreadsheetPreviewPayload.existingPath ||
+      !spreadsheetPreviewPayload.existingFileName
+    ) {
+      toast.error('No hay un archivo almacenado para completar esta importacion.');
+      return false;
+    }
     const selectedTablaIds = spreadsheetPreviewPayload.tablaIds.filter(
       (tablaId) => !excludedSpreadsheetPreviewTablaIds.includes(tablaId)
     );
@@ -2943,6 +3050,7 @@ function FileManagerContent({
     setCurrentUploadFolder(folderForUpload ?? fileTree ?? null);
     let pendingUsageBytes = 0;
     const uploadedFiles: { path: string; name: string }[] = [];
+    const completedGuidedFolderKeys = new Set<string>();
     const {
       data: { user: currentUser },
     } = await supabase.auth.getUser();
@@ -2962,6 +3070,13 @@ function FileManagerContent({
       if (attempt <= 1) return name;
       const { stem, ext } = splitFileName(name);
       return `${stem} (${attempt})${ext}`;
+    };
+    const markGuidedImportCompleted = () => {
+      if (!folderForUpload || folderForUpload.type !== 'folder') return;
+      const folderKey = getFolderSegmentKey(folderForUpload);
+      if (folderKey) {
+        completedGuidedFolderKeys.add(folderKey);
+      }
     };
 
     try {
@@ -3140,8 +3255,11 @@ function FileManagerContent({
               continue;
             }
             const uniqueTablaIds = [...new Set(linkedTablas.map((tabla) => tabla.tablaId))];
+            const autoSelectedOcrTablaIds = getAutoSelectedCertificadoOcrTablaIds(linkedTablas);
             const selectedTablaIds =
-              uniqueTablaIds.length <= 1
+              autoSelectedOcrTablaIds.length > 0
+                ? autoSelectedOcrTablaIds
+                : uniqueTablaIds.length <= 1
                 ? uniqueTablaIds
                 : await openTableSelectionDialog({
                   fileName: storageFileName,
@@ -3191,6 +3309,7 @@ function FileManagerContent({
             } else {
               toast.success('Archivo procesado en tablas OCR');
             }
+            markGuidedImportCompleted();
           } catch (ocrError) {
             console.error('Error extracting materials', ocrError);
             toast.error('El archivo se subió pero no se pudo extraer la orden de materiales');
@@ -3212,6 +3331,13 @@ function FileManagerContent({
       }
 
       await refreshFileTreeDerivedData();
+      if (completedGuidedFolderKeys.size > 0) {
+        setGuidedImportedFolderKeys((current) => {
+          const next = new Set(current);
+          completedGuidedFolderKeys.forEach((folderKey) => next.add(folderKey));
+          return next;
+        });
+      }
     } catch (error) {
       console.error('Error uploading files:', error);
       toast.error('Error al subir archivos');
@@ -3557,6 +3683,7 @@ function FileManagerContent({
             }
             : undefined
           }
+          data-wizard-target={isFolder ? getGuidedDocumentsFolderTargetId(item.name) : undefined}
           className={`
             group w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-sm
             transition-all duration-150
@@ -4120,45 +4247,6 @@ function FileManagerContent({
     await refreshOcrFolderLinks({ skipCache: true });
   }, [refreshOcrFolderLinks]);
 
-  const handleOpenSchemaEditor = useCallback(() => {
-    const currentColumns = activeFolderLink?.columns ?? [];
-    if (!activeOcrTablaId || currentColumns.length === 0) {
-      toast.error('No hay columnas para editar en esta tabla.');
-      return;
-    }
-    const draft = currentColumns.map((column) => {
-      const config =
-        column.config && typeof column.config === 'object'
-          ? (column.config as Record<string, unknown>)
-          : {};
-      const conditional =
-        config.conditional && typeof config.conditional === 'object'
-          ? (config.conditional as Record<string, unknown>)
-          : {};
-      return {
-        localId: crypto.randomUUID(),
-        id: column.id,
-        label: column.label,
-        fieldKey: column.fieldKey,
-        dataType: ensureTablaDataType(column.dataType),
-        required: column.required,
-        formula: typeof config.formula === 'string' ? config.formula : '',
-        warnBelow: typeof conditional.warnBelow === 'number' ? String(conditional.warnBelow) : '',
-        warnAbove: typeof conditional.warnAbove === 'number' ? String(conditional.warnAbove) : '',
-        criticalBelow:
-          typeof conditional.criticalBelow === 'number'
-            ? String(conditional.criticalBelow)
-            : '',
-        criticalAbove:
-          typeof conditional.criticalAbove === 'number'
-            ? String(conditional.criticalAbove)
-            : '',
-      } satisfies TablaSchemaDraftColumn;
-    });
-    setSchemaDraftColumns(draft);
-    setIsSchemaDialogOpen(true);
-  }, [activeFolderLink?.columns, activeOcrTablaId]);
-
   const handleSaveSchema = useCallback(async () => {
     const tablaId = activeOcrTablaId;
     if (!tablaId) {
@@ -4267,6 +4355,127 @@ function FileManagerContent({
       return docPath === ocrDocumentFilterPath;
     }).length;
   }, [documentViewMode, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.ocrEnabled]);
+  const guidedDocumentsFlow = useMemo<WizardFlow | null>(() => {
+    if (!isGuidedExcelFlow) return null;
+
+    const stageOrder = [
+      GUIDED_EXCEL_STAGES.documentsIntro,
+      GUIDED_EXCEL_STAGES.documentsOpenCertificados,
+      GUIDED_EXCEL_STAGES.documentsUploadCertificado,
+      GUIDED_EXCEL_STAGES.documentsReviewCertificadoData,
+      GUIDED_EXCEL_STAGES.documentsOpenCurva,
+      GUIDED_EXCEL_STAGES.documentsUploadCurva,
+      GUIDED_EXCEL_STAGES.documentsReturnGeneral,
+    ] as const;
+    const startIndex = stageOrder.indexOf(
+      (guidedTourStage ?? GUIDED_EXCEL_STAGES.documentsIntro) as (typeof stageOrder)[number]
+    );
+    if (startIndex === -1) return null;
+
+    const hasImportedCertificado = guidedImportedFolderKeys.has('certificados');
+    const hasImportedCurva = guidedImportedFolderKeys.has('curva-de-avance');
+    const steps = [
+      {
+        id: GUIDED_EXCEL_STAGES.documentsIntro,
+        targetId: 'documents-sidebar',
+        title: 'Mapa documental de la obra',
+        content:
+          'Acá están las carpetas clave de la demo: Certificados, Curva de Avance, Ordenes de Compra y Fotos de Obra. Vamos a completar primero el certificado faltante.',
+        placement: 'right',
+        skippable: false,
+      },
+      {
+        id: GUIDED_EXCEL_STAGES.documentsOpenCertificados,
+        targetId: 'documents-folder-certificados',
+        title: 'Entrá en Certificados',
+        content:
+          'Abrí la carpeta Certificados. Ahí vamos a subir el archivo del mes que falta.',
+        placement: 'right',
+        allowClickThrough: true,
+        requiredAction: 'click_target' as const,
+        skippable: false,
+        waitForMs: 2800,
+      },
+      {
+        id: GUIDED_EXCEL_STAGES.documentsUploadCertificado,
+        targetId: 'documents-dropzone',
+        title: 'Subí el certificado faltante',
+        content:
+          'Usá esta zona para cargar el certificado. Si se abre la vista previa de importación, completala y confirmá la carga para seguir.',
+        placement: 'top',
+        allowClickThrough: true,
+        requiredAction: 'condition' as const,
+        isComplete: () => hasImportedCertificado,
+        incompleteHint: 'Esperando a que completes la carga del certificado del mes actual.',
+        skippable: false,
+        waitForMs: 2800,
+      },
+      {
+        id: GUIDED_EXCEL_STAGES.documentsReviewCertificadoData,
+        targetId: 'documents-extracted-data-table',
+        title: 'Revisá los datos extraídos',
+        content:
+          'Con el certificado cargado, acá podés revisar la información ya extraída antes de seguir con la curva de avance.',
+        placement: 'left',
+        skippable: false,
+        waitForMs: 2800,
+      },
+      {
+        id: GUIDED_EXCEL_STAGES.documentsOpenCurva,
+        targetId: 'documents-folder-curva-avance',
+        title: 'Ahora abrí Curva de Avance',
+        content:
+          'Seguimos con Curva de Avance para completar la carga manual y terminar de actualizar la obra.',
+        placement: 'right',
+        allowClickThrough: true,
+        requiredAction: 'click_target' as const,
+        skippable: false,
+        waitForMs: 2800,
+      },
+      {
+        id: GUIDED_EXCEL_STAGES.documentsUploadCurva,
+        targetId: 'documents-dropzone',
+        title: 'Importá la curva manualmente',
+        content:
+          'Subí la planilla de Curva de Avance y completá el asistente de importación manual para dejar la obra al día.',
+        placement: 'top',
+        allowClickThrough: true,
+        requiredAction: 'condition' as const,
+        isComplete: () => hasImportedCurva,
+        incompleteHint: 'Esperando a que completes la importación manual de la curva de avance.',
+        skippable: false,
+        waitForMs: 2800,
+      },
+      {
+        id: GUIDED_EXCEL_STAGES.documentsReturnGeneral,
+        targetId: 'obra-page-general-tab',
+        title: 'Volvé a General',
+        content:
+          'Con el certificado y la curva cargados, volvé a General para revisar la obra ya actualizada.',
+        placement: 'bottom',
+        allowClickThrough: true,
+        requiredAction: 'click_target' as const,
+        skippable: false,
+        waitForMs: 2200,
+      },
+    ] satisfies WizardFlow['steps'];
+
+    return {
+      id: 'guided-documents-flow',
+      title: 'Recorrido guiado',
+      steps,
+    };
+  }, [guidedImportedFolderKeys, guidedTourStage, isGuidedExcelFlow]);
+  const handleGuidedDocumentsStepChange = useCallback(
+    (step: WizardFlow['steps'][number]) => {
+      if (!isGuidedExcelFlow) return;
+      if (searchParams?.get(GUIDED_EXCEL_STAGE_PARAM) === step.id) return;
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      params.set(GUIDED_EXCEL_STAGE_PARAM, step.id);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [isGuidedExcelFlow, pathname, router, searchParams]
+  );
 
   const ocrOrderItemRows = useMemo<OcrOrderItemRow[]>(() => {
     if (!selectedFolder?.ocrEnabled) return [];
@@ -4276,6 +4485,7 @@ function FileManagerContent({
 
     orders.forEach(order => {
       const nroOrden = order.nroOrden || 'Sin número';
+      const fecha = order.fecha || '';
       const proveedor = order.proveedor || 'Sin proveedor';
       const solicitante = order.solicitante || 'Sin solicitante';
 
@@ -4284,6 +4494,7 @@ function FileManagerContent({
           id: `${order.id}-${item.id ?? idx}`,
           orderId: order.id,
           nroOrden,
+          fecha,
           proveedor,
           solicitante,
           cantidad: item.cantidad,
@@ -4296,6 +4507,7 @@ function FileManagerContent({
         const matchesQuery =
           !query ||
           row.nroOrden.toLowerCase().includes(query) ||
+          row.fecha.toLowerCase().includes(query) ||
           row.proveedor.toLowerCase().includes(query) ||
           row.solicitante.toLowerCase().includes(query) ||
           row.material.toLowerCase().includes(query);
@@ -4657,6 +4869,7 @@ function FileManagerContent({
       defaultRows: ocrTableRows,
       emptyStateMessage: 'Sin datos disponibles para esta tabla.',
       showInlineSearch: true,
+      showToolbar: false,
       rowClassName: (row) => {
         for (const col of tablaColumns) {
           const style = getConditionalClass(row[col.fieldKey], col.config);
@@ -4692,49 +4905,8 @@ function FileManagerContent({
           </Button>
         </div>
       ) : null,
-      toolbarActions: activeOcrTablaId ? (
-        <div className="flex items-center gap-2">
-          {activeFolderLinks.length > 1 && (
-            <Select
-              value={activeOcrTablaId}
-              onValueChange={(value) => setActiveOcrTablaIdOverride(value)}
-            >
-              <SelectTrigger className="h-8 w-[280px]">
-                <SelectValue placeholder="Seleccionar tabla" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeFolderLinks.map((link) => (
-                  <SelectItem key={link.tablaId} value={link.tablaId}>
-                    {link.tablaName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {/* <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={handleOpenSchemaEditor}
-            className="gap-1.5"
-          >
-            <Layers className="w-3.5 h-3.5" />
-            Editar columnas
-          </Button> */}
-          {/* <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => router.push(`/excel/${obraId}/tabla/${activeOcrTablaId}/reporte`)}
-            className="gap-1.5"
-          >
-            <ClipboardList className="w-3.5 h-3.5" />
-            Generar reporte
-          </Button> */}
-        </div>
-      ) : null,
     };
-  }, [activeFolderLink, activeFolderLinks, activeOcrTablaId, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleAddManualRow, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleOpenSchemaEditor, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, router, selectedFolder?.id, supabase]);
+  }, [activeFolderLink, activeFolderLinks, activeOcrTablaId, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleAddManualRow, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
 
   const handleRetryDocumentOcr = useCallback(
     async (doc: FileSystemItem | null) => {
@@ -4766,6 +4938,7 @@ function FileManagerContent({
           mimeLower === 'application/vnd.ms-excel' ||
           mimeLower === 'text/csv';
         const uniqueTablaIds = [...new Set(links.map((link) => link.tablaId))];
+        const autoSelectedOcrTablaIds = getAutoSelectedCertificadoOcrTablaIds(links);
 
         if (isSpreadsheet) {
           let previewPayload: SpreadsheetPreviewPayload;
@@ -4805,7 +4978,9 @@ function FileManagerContent({
         }
 
         const selectedTablaIds =
-          uniqueTablaIds.length <= 1
+          autoSelectedOcrTablaIds.length > 0
+            ? autoSelectedOcrTablaIds
+            : uniqueTablaIds.length <= 1
             ? uniqueTablaIds
             : await openTableSelectionDialog({
               fileName: doc.name,
@@ -4895,11 +5070,12 @@ function FileManagerContent({
       searchPlaceholder: 'Buscar ítems...',
       columns: [
         { id: 'nroOrden', label: 'N° de orden', field: 'nroOrden', editable: false, cellType: 'text' },
+        { id: 'fecha', label: 'Fecha', field: 'fecha', editable: false, cellType: 'text' },
         { id: 'proveedor', label: 'Proveedor', field: 'proveedor', editable: false, cellType: 'text' },
         { id: 'solicitante', label: 'Solicitante', field: 'solicitante', editable: false, cellType: 'text' },
         { id: 'cantidad', label: 'Cant.', field: 'cantidad', editable: false, cellType: 'number' },
         { id: 'unidad', label: 'Unidad', field: 'unidad', editable: false, cellType: 'text' },
-        { id: 'material', label: 'Material', field: 'material', editable: false, cellType: 'text' },
+        { id: 'material', label: 'Detalle Descriptivo', field: 'material', editable: false, cellType: 'text' },
         { id: 'precioUnitario', label: 'P. Unit.', field: 'precioUnitario', editable: false, cellType: 'currency' },
         { id: 'total', label: 'Total', field: 'total', editable: false, cellType: 'currency' },
       ],
@@ -4980,20 +5156,20 @@ function FileManagerContent({
           </div>
 
           {/* RIGHT TAB */}
-          <div
-            className="relative z-10 flex flex-wrap items-center gap-2 border border-b-0 -mb-[2px] border-[#d9d9d9] bg-white h-full px-4 pl-1 pt-3 pb-0 rounded-tl-md rounded-tr-xl overflow-visible"
-            style={
-              {
-                "--notch-bg": "white",
-                "--notch-stroke": "#d9d9d9", // stone-200
-              } as React.CSSProperties
-            }
-          >
-            {/* Tail on the left */}
-            <NotchTail side="left" className={cn(" mb-[2px]", activeFolderLink?.dataInputMethod === "manual" || !selectedFolder.ocrEnabled ? "h-[46px] mb-[1px]" : "h-[50px]")} />
+          {showArchivosTablaToggle && (
+            <div
+              className="relative z-10 flex flex-wrap items-center gap-2 border border-b-0 -mb-[2px] border-[#d9d9d9] bg-white h-full px-4 pl-1 pt-3 pb-0 rounded-tl-md rounded-tr-xl overflow-visible"
+              style={
+                {
+                  "--notch-bg": "white",
+                  "--notch-stroke": "#d9d9d9", // stone-200
+                } as React.CSSProperties
+              }
+            >
+              {/* Tail on the left */}
 
-            {/* Only show Archivos/Tabla toggle for OCR folders with tabla schema and file viewing */}
-            {showArchivosTablaToggle && (
+              {/* Only show Archivos/Tabla toggle for OCR folders with tabla schema and file viewing */}
+              <NotchTail side="left" className={cn(" mb-[2px]", activeFolderLink?.dataInputMethod === "manual" || !selectedFolder.ocrEnabled ? "h-[46px] mb-[1px]" : "h-[50px]")} />
               <div className="inline-flex items-center rounded-md border border-[#d9d9d9] bg-stone-50 p-0.5">
                 <Button
                   type="button"
@@ -5018,13 +5194,13 @@ function FileManagerContent({
                   Tabla
                 </Button>
               </div>
-            )}
 
-            {/* <Button type="button" variant="secondary" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
+              {/* <Button type="button" variant="secondary" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
               <Upload className="w-3.5 h-3.5" />
               Subir archivos
             </Button> */}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -5101,6 +5277,25 @@ function FileManagerContent({
               </div>
             ) : (
               <div className="flex flex-col h-full">
+                {/* {activeOcrTablaId && activeFolderLinks.length > 1 && (
+                  <div className="flex items-center gap-2 px-4 pb-2">
+                    <Select
+                      value={activeOcrTablaId}
+                      onValueChange={(value) => setActiveOcrTablaIdOverride(value)}
+                    >
+                      <SelectTrigger className="h-8 w-[280px]">
+                        <SelectValue placeholder="Seleccionar tabla" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeFolderLinks.map((link) => (
+                          <SelectItem key={link.tablaId} value={link.tablaId}>
+                            {link.tablaName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )} */}
                 {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
                     <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
@@ -5116,7 +5311,9 @@ function FileManagerContent({
                     </Button>
                   </div>
                 )}
-                <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} innerClassName="max-h-[50vh]" />
+                <div data-wizard-target="documents-extracted-data-table">
+                  <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} innerClassName="max-h-[50vh] min-h-[50vh]" />
+                </div>
               </div>
             )}
           </div>
@@ -5172,6 +5369,7 @@ function FileManagerContent({
                       <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center justify-end gap-2 shrink-0 h-[105px]">
                         <button
                           type="button"
+                          data-wizard-target={getGuidedDocumentsFolderTargetId(item.name)}
                           className={` flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors relative 
                             ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-6' : ''}
                             ${isOcrEnabled ? "bg-linear-to-b from-amber-500 to-amber-700" : "bg-linear-to-b from-stone-500 to-stone-700"}
@@ -5234,7 +5432,10 @@ function FileManagerContent({
                 <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 @min-[40rem]:grid-cols-4 @min-[48rem]:grid-cols-5 @min-[64rem]:grid-cols-7 @min-[80rem]:grid-cols-10 gap-4 rounded-lg">
+              <div
+                data-wizard-target="documents-loaded-files"
+                className="grid grid-cols-3 @min-[40rem]:grid-cols-4 @min-[48rem]:grid-cols-5 @min-[64rem]:grid-cols-7 @min-[80rem]:grid-cols-10 gap-4 rounded-lg"
+              >
                 {files.map((item) => (
                   <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center gap-2">
                     <button
@@ -5276,6 +5477,7 @@ function FileManagerContent({
 
     const folderContent = (
       <div
+        data-wizard-target="documents-dropzone"
         className={`h-full flex flex-col transition-colors ${isGlobalFileDragActive && !draggedFolderId ? 'ring-2 ring-amber-500 ring-offset-2 bg-amber-50/40' : ''}`}
         onDragEnter={handleDocumentAreaDragEnter}
         onDragOver={handleDocumentAreaDragOver}
@@ -5283,7 +5485,7 @@ function FileManagerContent({
         onDrop={handleDocumentAreaDrop}
       >
         {folderContentHeader}
-        <div className="flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9]">{folderBody}</div>
+        <div className={cn("flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9]", showArchivosTablaToggle ? 'rounded-t-none' : 'rounded-tr-lg')}>{folderBody}</div>
       </div>
     );
 
@@ -5328,6 +5530,17 @@ function FileManagerContent({
 
   return (
     <div className="relative min-h-[calc(100vh-9rem)] flex flex-col gap-4">
+      <DemoPageTour flow={documentosOverviewTour} />
+      {guidedDocumentsFlow ? (
+        <ContextualWizard
+          open
+          onOpenChange={() => { }}
+          flow={guidedDocumentsFlow}
+          startAtStepId={guidedTourStage ?? GUIDED_EXCEL_STAGES.documentsIntro}
+          onStepChange={handleGuidedDocumentsStepChange}
+          showCloseButton={false}
+        />
+      ) : null}
       {/* Upload animation overlay */}
       <AnimatePresence>
         {isUploadingOcrFolder && (
@@ -5421,20 +5634,22 @@ function FileManagerContent({
         : ''
         }`}>
         {/* Tree View Sidebar */}
-        <FileTreeSidebar
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          selectedFolder={selectedFolder}
-          documentViewMode={documentViewMode}
-          onDocumentViewModeChange={handleDocumentViewModeChange}
-          showDocumentToggle={Boolean(selectedFolder?.ocrEnabled && ocrViewMode === 'documents')}
-          onCreateFolderClick={(mode) => openCreateFolderDialog(mode, fileTree)}
-          fileTree={fileTree}
-          renderTreeItem={renderTreeItem}
-          loading={loading}
-          onRefresh={handleManualRefresh}
-          isRefreshing={isRefreshing}
-        />
+        <div data-wizard-target="documents-sidebar">
+          <FileTreeSidebar
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            selectedFolder={selectedFolder}
+            documentViewMode={documentViewMode}
+            onDocumentViewModeChange={handleDocumentViewModeChange}
+            showDocumentToggle={Boolean(selectedFolder?.ocrEnabled && ocrViewMode === 'documents')}
+            onCreateFolderClick={(mode) => openCreateFolderDialog(mode, fileTree)}
+            fileTree={fileTree}
+            renderTreeItem={renderTreeItem}
+            loading={loading}
+            onRefresh={handleManualRefresh}
+            isRefreshing={isRefreshing}
+          />
+        </div>
 
         {/* Main Content */}
         {(selectedFolder || selectedDocument) && (
@@ -5593,11 +5808,6 @@ function FileManagerContent({
                   onSheetChange={handleSpreadsheetPreviewSheetChange}
                   onMappingChange={handleSpreadsheetPreviewMappingChange}
                 />
-              </>
-            );
-
-            return (
-              <>
                 <div className="flex shrink-0 flex-col border-b">
                   <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-2" data-wizard-target="wizard-header">
                     <div>
@@ -5683,32 +5893,52 @@ function FileManagerContent({
                         </div>
                       )}
                       <div className="min-h-0 flex-1 overflow-hidden" data-wizard-target="wizard-grid-preview">
-                        {spreadsheetPreviewPayload && table ? (
-                          <SpreadsheetGridPreview
-                            bucket={spreadsheetPreviewPayload!.existingBucket}
-                            storagePath={spreadsheetPreviewPayload!.existingPath}
-                            selectedSheetName={table.sheetName}
-                            mappedExcelHeaders={mappings.map((m) => m.excelHeader).filter(Boolean) as string[]}
-                            activeMappingLabel={
-                              activeMappingDbColumn
-                                ? (mappings.find((m) => m.dbColumn === activeMappingDbColumn)?.label ?? activeMappingDbColumn)
-                                : null
-                            }
-                            onColumnSelect={(header) => {
-                              if (!activeMappingDbColumn || !table) return;
-                              void handleSpreadsheetPreviewMappingChange(table.tablaId, activeMappingDbColumn, header);
-                              setActiveMappingDbColumn(null);
-                            }}
-                            headerToColMap={headerToColMap}
-                            expectedRowCount={expectedRowCount}
-                            extractionMode={table.extractionMode}
-                            fixedCellRefs={table.fixedCellRefs}
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
-                            Sin hoja seleccionada
-                          </div>
-                        )}
+                        {(() => {
+                          const previewPayload = spreadsheetPreviewPayload;
+                          if (!previewPayload || !table) {
+                            return (
+                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+                                Sin hoja seleccionada
+                              </div>
+                            );
+                          }
+
+                          const resolvedPreviewBucket = previewPayload.existingBucket;
+                          const resolvedPreviewPath = previewPayload.existingPath;
+                          if (
+                            typeof resolvedPreviewBucket !== 'string' ||
+                            typeof resolvedPreviewPath !== 'string'
+                          ) {
+                            return (
+                              <div className="flex h-full items-center justify-center px-4 text-sm text-muted-foreground">
+                                Sin hoja seleccionada
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <SpreadsheetGridPreview
+                              bucket={resolvedPreviewBucket}
+                              storagePath={resolvedPreviewPath}
+                              selectedSheetName={table.sheetName}
+                              mappedExcelHeaders={mappings.map((m) => m.excelHeader).filter(Boolean) as string[]}
+                              activeMappingLabel={
+                                activeMappingDbColumn
+                                  ? (mappings.find((m) => m.dbColumn === activeMappingDbColumn)?.label ?? activeMappingDbColumn)
+                                  : null
+                              }
+                              onColumnSelect={(header) => {
+                                if (!activeMappingDbColumn || !table) return;
+                                void handleSpreadsheetPreviewMappingChange(table.tablaId, activeMappingDbColumn, header);
+                                setActiveMappingDbColumn(null);
+                              }}
+                              headerToColMap={headerToColMap}
+                              expectedRowCount={expectedRowCount}
+                              extractionMode={table.extractionMode}
+                              fixedCellRefs={table.fixedCellRefs}
+                            />
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

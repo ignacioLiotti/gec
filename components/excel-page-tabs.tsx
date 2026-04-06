@@ -30,6 +30,13 @@ export function ExcelPageTabs({
           <TabsTrigger
             key={tab.value}
             value={tab.value}
+            data-wizard-target={
+              tab.value === "documentos"
+                ? "obra-page-file-manager-tab"
+                : tab.value === "general"
+                  ? "obra-page-general-tab"
+                  : undefined
+            }
             className="gap-1.5 text-xs sm:text-sm cursor-pointer"
           >
             <Icon className="sm:h-4 sm:w-4 h-5 w-5" />

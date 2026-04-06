@@ -18,7 +18,7 @@ export type FileSystemItem = {
 	ocrFolderName?: string;
 	ocrTablaColumns?: OcrTablaColumn[];
 	ocrTablaRows?: TablaDataRow[];
-	extractedData?: any[];
+	extractedData?: Record<string, unknown>[];
 	size?: number;
 	mimetype?: string;
 	dataId?: string;
@@ -50,8 +50,8 @@ export type SelectionChangeOptions = {
 export type MaterialOrder = {
 	id: string;
 	nroOrden: string;
+	fecha: string;
 	solicitante: string;
-	gestor: string;
 	proveedor: string;
 	items: MaterialItem[];
 	docUrl?: string;
