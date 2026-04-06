@@ -2998,9 +2998,9 @@ function ObraDetailPageContent() {
 					{
 						id: "obra-general",
 						targetId: "obra-page-content",
-						title: "Todo lo de la obra, acá",
+						title: "El estado completo de la obra, en una sola pantalla",
 						content:
-							"Acá ves el avance actual, los importes del contrato, las fechas clave y las alertas. Si hay algo que falta o está fuera de plazo, el sistema te lo muestra.",
+							"Avance físico, importes del contrato, fechas clave y alertas activas. Todo lo que necesitás para entender el estado real de la obra sin abrir ninguna planilla.",
 						placement: "top",
 						skippable: false,
 					},
