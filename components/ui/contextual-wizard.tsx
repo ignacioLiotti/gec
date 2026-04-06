@@ -303,7 +303,7 @@ export function ContextualWizard({
         body[${ACTIVE_BODY_ATTR}="true"] [data-wizard-blocked],
         body[${ACTIVE_BODY_ATTR}="true"] [data-wizard-blocked] * {
           pointer-events: none !important;
-          opacity: 0.35;
+          opacity: 0.95;
           cursor: not-allowed !important;
         }
       `}</style>
