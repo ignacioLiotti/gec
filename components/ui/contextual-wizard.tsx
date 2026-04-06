@@ -341,17 +341,69 @@ export function ContextualWizard({
         <div
           ref={tooltipRef}
           data-contextual-wizard-overlay="true"
-          className={cn("pointer-events-auto fixed w-[360px] max-w-[calc(100%-24px)] rounded-lg border bg-background p-4 shadow-xl", className)}
+          className={cn(
+            "pointer-events-auto fixed w-[400px] max-w-[calc(100%-24px)] rounded-2xl border border-border/60 bg-background/98 p-5 text-foreground shadow-[0_24px_60px_-16px_rgba(15,23,42,0.28),0_0_0_1px_rgba(0,0,0,0.04)] backdrop-blur-sm animate-in fade-in-0 zoom-in-95 duration-150",
+            className,
+          )}
           style={{ top: tooltipPos.top, left: tooltipPos.left }}
         >
-          <div className="mb-1 text-xs font-medium text-muted-foreground">
-            {flow.title} - Paso {Math.min(stepIndex + 1, steps.length)} de {steps.length}
+          {/* Header: flow label + mini step indicator */}
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700">
+              {flow.title}
+            </div>
+
+            {/* Mini step dots — same 3-state language as the wizard modals, scaled for tooltip */}
+            <div className="flex items-center">
+              {steps.map((s, i) => {
+                const isActive = i === stepIndex;
+                const isComplete = i < stepIndex;
+                const isLast = i === steps.length - 1;
+                return (
+                  <div key={s.id} className="flex items-center">
+                    <div
+                      className={cn(
+                        "flex h-5 w-5 items-center justify-center rounded-full border-2 text-[9px] font-semibold transition-all duration-200",
+                        isComplete
+                          ? "border-orange-500 bg-orange-500 text-white"
+                          : isActive
+                            ? "border-orange-500 bg-background text-orange-500 ring-2 ring-orange-500/15"
+                            : "border-border bg-background text-muted-foreground/50",
+                      )}
+                    >
+                      {isComplete ? (
+                        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
+                          <path
+                            d="M2 6.5l2.5 2.5 5.5-5.5"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : (
+                        i + 1
+                      )}
+                    </div>
+                    {!isLast && (
+                      <div className="relative mx-1 h-[2px] w-3 overflow-hidden rounded-full bg-border">
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-full bg-orange-500 transition-[width] duration-300 ease-out"
+                          style={{ width: isComplete ? "100%" : "0%" }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <h4 className="text-sm font-semibold text-foreground">{step.title}</h4>
-          <p className="mt-1 text-xs text-muted-foreground">{step.content}</p>
+
+          <h4 className="text-base font-semibold tracking-tight">{step.title}</h4>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.content}</p>
 
           {step.auxiliaryActions?.length ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               {step.auxiliaryActions.map((action) => (
                 <Button
                   key={action.label}
@@ -366,25 +418,44 @@ export function ContextualWizard({
             </div>
           ) : null}
 
-          {!targetReady && <p className="mt-2 text-xs text-amber-600">Esperando el elemento objetivo en pantalla...</p>}
-
-          {step.requiredAction === "click_target" && !actionDone && (
-            <p className="mt-2 text-xs text-blue-600">Para continuar, hace clic en el elemento resaltado.</p>
+          {!targetReady && (
+            <p className="mt-3 rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-700">
+              Esperando el elemento objetivo en pantalla...
+            </p>
           )}
-
+          {step.requiredAction === "click_target" && !actionDone && (
+            <p className="mt-3 rounded-xl border border-sky-200/60 bg-sky-50/80 px-3 py-2 text-xs text-sky-700">
+              Para continuar, hace clic en el elemento resaltado.
+            </p>
+          )}
           {step.requiredAction === "condition" && !conditionDone && step.incompleteHint ? (
-            <p className="mt-2 text-xs text-blue-600">{step.incompleteHint}</p>
+            <p className="mt-3 rounded-xl border border-sky-200/60 bg-sky-50/80 px-3 py-2 text-xs text-sky-700">
+              {step.incompleteHint}
+            </p>
           ) : null}
 
-          <div className="mt-4 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+          {/* Navigation — secondary left, primary right */}
+          <div className="mt-5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
               {showBackButton ? (
-                <Button type="button" variant="outline" size="sm" onClick={() => setStepIndex((prev) => Math.max(prev - 1, 0))} disabled={stepIndex === 0}>
-                  Anterior
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStepIndex((prev) => Math.max(prev - 1, 0))}
+                  disabled={stepIndex === 0}
+                >
+                  ← Anterior
                 </Button>
               ) : null}
               {showCloseButton ? (
-                <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => onOpenChange(false)}
+                >
                   Cerrar
                 </Button>
               ) : null}
@@ -396,20 +467,33 @@ export function ContextualWizard({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="text-muted-foreground"
                   onClick={() => {
                     onSkip?.();
                     finishWizard();
                   }}
                 >
-                  Saltar guia
+                  Saltar
                 </Button>
               )}
               {stepIndex >= steps.length - 1 ? (
-                <Button type="button" size="sm" onClick={finishWizard} disabled={!canGoNext}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={finishWizard}
+                  disabled={!canGoNext}
+                  className="bg-orange-500 text-white hover:bg-orange-600 active:scale-[0.97] transition-transform"
+                >
                   {finishLabel}
                 </Button>
               ) : (
-                <Button type="button" size="sm" onClick={() => setStepIndex((prev) => Math.min(prev + 1, steps.length - 1))} disabled={!canGoNext}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setStepIndex((prev) => Math.min(prev + 1, steps.length - 1))}
+                  disabled={!canGoNext}
+                  className="bg-orange-500 text-white hover:bg-orange-600 active:scale-[0.97] transition-transform"
+                >
                   {nextLabel}
                 </Button>
               )}

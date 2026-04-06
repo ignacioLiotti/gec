@@ -9,6 +9,7 @@ import {
 	ContextualWizard,
 	type WizardFlow,
 } from "@/components/ui/contextual-wizard";
+import { cn } from "@/lib/utils";
 
 type DemoPageTourProps = {
 	flow: WizardFlow;
@@ -58,12 +59,14 @@ export function DemoPageTour({
 			{showButton ? (
 				<Button
 					type="button"
-					variant="outline"
 					size="sm"
-					className={buttonClassName}
+					className={cn(
+						"gap-1.5 border border-orange-200/80 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:border-orange-300 active:scale-[0.97] transition-all duration-150",
+						buttonClassName,
+					)}
 					onClick={() => setOpen(true)}
 				>
-					<Sparkles className="size-4" />
+					<Sparkles className="size-3.5" />
 					{buttonLabel}
 				</Button>
 			) : null}
