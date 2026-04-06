@@ -18,6 +18,10 @@ export type MacroReportFilters = {
 
 export type MacroTableWithColumns = MacroTable & { columns: MacroTableColumn[] };
 
+function isGroupableMacroColumn(columnId: string): boolean {
+	return columnId !== "id" && !columnId.startsWith("_source");
+}
+
 function mapColumnType(type: MacroTableDataType): ReportColumnType {
 	switch (type) {
 		case "number":
@@ -83,6 +87,7 @@ export function buildMacroReportConfig(
 		label: col.label,
 		accessor: (row: MacroTableRow) => row[col.id],
 		type: mapColumnType(col.dataType),
+		groupable: isGroupableMacroColumn(col.id),
 		align:
 			col.dataType === "number" || col.dataType === "currency"
 				? ("right" as const)
@@ -97,6 +102,7 @@ export function buildMacroReportConfig(
 			label: "Obra",
 			accessor: (row: MacroTableRow) => row._obraName,
 			type: "text",
+			groupable: true,
 			align: "left",
 		});
 	}
