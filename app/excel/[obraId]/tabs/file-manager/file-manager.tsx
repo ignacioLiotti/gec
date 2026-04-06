@@ -5543,6 +5543,7 @@ function FileManagerContent({
             ) : (
               <div
                 data-wizard-target="documents-loaded-files"
+                data-wizard-blocked={isGuidedExcelFlow && guidedTourStage === GUIDED_EXCEL_STAGES.documentsUploadCertificado ? "" : undefined}
                 className="grid grid-cols-3 @min-[40rem]:grid-cols-4 @min-[48rem]:grid-cols-5 @min-[64rem]:grid-cols-7 @min-[80rem]:grid-cols-10 gap-4 rounded-lg"
               >
                 {files.map((item) => (
