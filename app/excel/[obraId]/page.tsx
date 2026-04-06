@@ -958,6 +958,18 @@ function buildCurvePoints(
 	const curveStartPeriod =
 		typeof options?.curveStartPeriod === "string" && /^\d{4}-\d{2}$/.test(options.curveStartPeriod)
 			? options.curveStartPeriod
+function parseCertificateSequence(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return Math.trunc(value);
+	}
+	const raw = String(value ?? "").trim();
+	if (!raw) return null;
+	const match = raw.match(/-?\d+/);
+	if (!match) return null;
+	const parsed = Number.parseInt(match[0], 10);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
 			: null;
 	const curveMonthIndexBase = detectCurveMonthIndexBase(curvaRows);
 
@@ -969,6 +981,17 @@ function buildCurvePoints(
 			[["periodo"], ["period"], ["mes"]],
 		);
 		const avance = parsePercent(
+	const usesRelativePlanMonths =
+		curveStartPeriod != null &&
+		curvaRows.some((row) => {
+			const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+			const periodo = getRowFieldValueByCandidates(
+				rowData,
+				["periodo", "periodo_key", "period", "mes"],
+				[["periodo"], ["period"], ["mes"]],
+			);
+			return getCurveMonthNumber(periodo) != null;
+		});
 			getRowFieldValueByCandidates(
 				rowData,
 				["avance_acumulado_pct", "avance_acum_pct", "avance_acumulado", "avance_pct"],
@@ -1010,20 +1033,48 @@ function buildCurvePoints(
 		}
 	});
 
-	resumenRows.forEach((row, index) => {
+	const normalizedResumenRows = usesRelativePlanMonths
+		? [...resumenRows]
+				.map((row, index) => {
+					const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+					const explicitSequence = parseCertificateSequence(
+						getRowFieldValueByCandidates(
+							rowData,
+							["n_certificado", "nro_certificado", "numero_certificado", "certificado"],
+							[["certificado"], ["cert"]],
+						),
+					);
+					const periodSource =
+						getRowFieldValueByCandidates(
+							rowData,
+							["fecha_certificacion", "fecha", "issued_at", "date"],
+							[["fecha", "cert"], ["fecha"]],
+						) ??
+						getRowFieldValueByCandidates(
+							rowData,
+							["periodo", "periodo_key", "period", "mes"],
+							[["periodo"], ["period"], ["mes"]],
+						);
+					const parsedPeriod = parseMonthOrder(periodSource, index);
+					return { row, index, explicitSequence, parsedPeriod };
+				})
+				.sort((a, b) => {
+					if (a.explicitSequence != null && b.explicitSequence != null) {
+						return a.explicitSequence - b.explicitSequence;
+					}
+					if (a.explicitSequence != null) return -1;
+					if (b.explicitSequence != null) return 1;
+					return a.parsedPeriod.order - b.parsedPeriod.order;
+				})
+		: resumenRows.map((row, index) => ({
+				row,
+				index,
+				explicitSequence: null as number | null,
+				parsedPeriod: parseMonthOrder(null, index),
+		  }));
+
+	normalizedResumenRows.forEach(({ row, index, explicitSequence }, resumenIndex) => {
 		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
-		// Prefer explicit certification date to avoid wrong ordering from long period text.
-		const periodSource =
-			getRowFieldValueByCandidates(
-				rowData,
-				["fecha_certificacion", "fecha", "issued_at", "date"],
-				[["fecha", "cert"], ["fecha"]],
-			) ??
-			getRowFieldValueByCandidates(
-				rowData,
-				["periodo", "periodo_key", "period", "mes"],
-				[["periodo"], ["period"], ["mes"]],
-			);
 		const avance = parsePercent(
 			getRowFieldValueByCandidates(
 				rowData,
@@ -1037,11 +1088,33 @@ function buildCurvePoints(
 				[["avance", "fisico", "acum"], ["avance", "acum"]],
 			),
 		);
-		if (!periodSource || avance == null) return;
+		if (avance == null) return;
+		const periodSource =
+			getRowFieldValueByCandidates(
+				rowData,
+				["fecha_certificacion", "fecha", "issued_at", "date"],
+				[["fecha", "cert"], ["fecha"]],
+			) ??
+			getRowFieldValueByCandidates(
+				rowData,
+				["periodo", "periodo_key", "period", "mes"],
+				[["periodo"], ["period"], ["mes"]],
+			);
+		if (!periodSource && !usesRelativePlanMonths) return;
 		const parsed = parseMonthOrder(periodSource, index);
-		const periodKey = parsed.order >= 1000
-			? `${Math.floor(parsed.order / 12)}-${String((parsed.order % 12) + 1).padStart(2, "0")}`
-			: null;
+		const certSequence = explicitSequence ?? resumenIndex + 1;
+		const relativePeriodKey =
+			usesRelativePlanMonths && curveStartPeriod
+				? addMonths(
+						curveStartPeriod,
+						Math.max(0, certSequence - curveMonthIndexBase),
+				  )
+				: null;
+		const periodKey =
+			relativePeriodKey ??
+			(parsed.order >= 1000
+				? `${Math.floor(parsed.order / 12)}-${String((parsed.order % 12) + 1).padStart(2, "0")}`
+				: null);
 		const label = periodKey ? periodLabel(periodKey) : parsed.label;
 		const order = periodKey
 			? (() => {
@@ -1112,8 +1185,15 @@ function buildCurvePoints(
 		continuousPoints.push(
 			existing ?? {
 				label: periodLabel(periodKey),
+	const maxRealSortOrder = usesRelativePlanMonths
+		? sortedPoints.reduce<number | null>((max, point) => {
+				if (point.realPct == null) return max;
+				return max == null || point.sortOrder > max ? point.sortOrder : max;
+		  }, null)
+		: null;
 				planPct: null,
-				realPct: null,
+				realPct:
+					maxRealSortOrder != null && order <= maxRealSortOrder ? 0 : null,
 				sortOrder: order,
 				periodKey,
 			}
@@ -1405,27 +1485,45 @@ function ObraDetailPageContent() {
 		queryKey: [
 			"obra",
 			obraId,
+	const curveRulesConfigQuery = useQuery({
+		queryKey: ["obra", obraId, "curve-rules-config"],
+		enabled: isValidObraId && isGeneralTabActive,
+		queryFn: async () => fetchRulesConfig(obraId!),
+		staleTime: 60 * 1000,
+	});
+	const selectedCurveTableRefs = useMemo(() => {
+		const rulesConfig = curveRulesConfigQuery.data;
+		const rulesCurvePlanTableId = rulesConfig?.mappings?.curve?.planTableId ?? null;
+		const rulesResumenTableId =
+			rulesConfig?.mappings?.curve?.resumenTableId ??
+			rulesConfig?.mappings?.curve?.measurementTableId ??
+			null;
+		const curvaPlanId = rulesCurvePlanTableId ?? certificadoTableRefs.curvaPlanId;
+		const pmcResumenId = rulesResumenTableId ?? certificadoTableRefs.pmcResumenId;
+
+		return {
+			curvaPlanId,
+			curvaPlanName:
+				(curvaPlanId ? tablasById.get(curvaPlanId)?.name : null) ??
+				certificadoTableRefs.curvaPlanName,
+			pmcResumenId,
+			pmcResumenName:
+				(pmcResumenId ? tablasById.get(pmcResumenId)?.name : null) ??
+				certificadoTableRefs.pmcResumenName,
+		};
+	}, [certificadoTableRefs, curveRulesConfigQuery.data, tablasById]);
 			"general-reports",
 			currentPeriodKey,
-			certificadoTableRefs.curvaPlanId ?? "none",
-			certificadoTableRefs.pmcResumenId ?? "none",
+			selectedCurveTableRefs.curvaPlanId ?? "none",
+			selectedCurveTableRefs.pmcResumenId ?? "none",
 		],
 		enabled: isValidObraId && isGeneralTabActive,
 		queryFn: async () => {
-			const rulesConfig = await fetchRulesConfig(obraId!);
-			const rulesCurvePlanTableId = rulesConfig?.mappings?.curve?.planTableId ?? null;
-			const rulesResumenTableId =
-				rulesConfig?.mappings?.curve?.resumenTableId ??
-				rulesConfig?.mappings?.curve?.measurementTableId ??
-				null;
-			const curvaTableId = rulesCurvePlanTableId ?? certificadoTableRefs.curvaPlanId;
-			const resumenTableId = rulesResumenTableId ?? certificadoTableRefs.pmcResumenId;
-			const curvaTableName =
-				(curvaTableId ? tablasById.get(curvaTableId)?.name : null) ??
-				certificadoTableRefs.curvaPlanName;
-			const resumenTableName =
-				(resumenTableId ? tablasById.get(resumenTableId)?.name : null) ??
-				certificadoTableRefs.pmcResumenName;
+			const rulesConfig = curveRulesConfigQuery.data ?? (await fetchRulesConfig(obraId!));
+			const curvaTableId = selectedCurveTableRefs.curvaPlanId;
+			const resumenTableId = selectedCurveTableRefs.pmcResumenId;
+			const curvaTableName = selectedCurveTableRefs.curvaPlanName;
+			const resumenTableName = selectedCurveTableRefs.pmcResumenName;
 
 			const findingsPromise = (async () => {
 				const withPeriod = await fetchFindings(obraId!, currentPeriodKey);
@@ -3036,10 +3134,10 @@ function ObraDetailPageContent() {
 										obraId
 											? {
 												obraId,
-												curvaPlanTableId: certificadoTableRefs.curvaPlanId,
-												curvaPlanTableName: certificadoTableRefs.curvaPlanName,
-												pmcResumenTableId: certificadoTableRefs.pmcResumenId,
-												pmcResumenTableName: certificadoTableRefs.pmcResumenName,
+												curvaPlanTableId: selectedCurveTableRefs.curvaPlanId,
+												curvaPlanTableName: selectedCurveTableRefs.curvaPlanName,
+												pmcResumenTableId: selectedCurveTableRefs.pmcResumenId,
+												pmcResumenTableName: selectedCurveTableRefs.pmcResumenName,
 												onImported: handleCurveDataImported,
 											}
 											: undefined

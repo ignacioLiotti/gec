@@ -319,6 +319,7 @@ function LocalInput<Row extends FormTableRow>({
 	column,
 	row,
 	cellType,
+	syncOnChange = false,
 	...props
 }: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur" | "value"> & {
 	value: EditableCellValue;
@@ -329,6 +330,7 @@ function LocalInput<Row extends FormTableRow>({
 	column: ColumnDef<Row>;
 	row: Row;
 	cellType: NonNullable<ColumnDef<Row>["cellType"]> | "text";
+	syncOnChange?: boolean;
 }) {
 	// Convert external value to string for the input
 	const normalizedExternal =
@@ -361,9 +363,13 @@ function LocalInput<Row extends FormTableRow>({
 
 	const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
 		isTypingRef.current = true;
-		setDraftValue(e.target.value);
+		const nextValue = e.target.value;
+		setDraftValue(nextValue);
 		setIgnoredSuggestionKey(null);
-	}, []);
+		if (syncOnChange) {
+			syncToForm(nextValue);
+		}
+	}, [syncOnChange, syncToForm]);
 
 	const handleBlur = useCallback(() => {
 		isTypingRef.current = false;
@@ -682,6 +688,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					column={column}
 					row={row}
 					cellType="currency"
+					syncOnChange={config.syncOnChange}
 					placeholder="0.00"
 					required={column.required}
 				/>
@@ -705,6 +712,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					column={column}
 					row={row}
 					cellType="number"
+					syncOnChange={config.syncOnChange}
 					required={column.required}
 				/>
 			);
@@ -769,6 +777,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 						column={column}
 						row={row}
 						cellType="tags"
+						syncOnChange={config.syncOnChange}
 						placeholder="Ej: diseño, arquitectura"
 					/>
 					{tags.length > 0 && (
@@ -800,6 +809,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 						column={column}
 						row={row}
 						cellType="link"
+						syncOnChange={config.syncOnChange}
 						placeholder="https://..."
 						required={column.required}
 					/>
@@ -837,6 +847,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 						column={column}
 						row={row}
 						cellType="avatar"
+						syncOnChange={config.syncOnChange}
 						placeholder="https://..."
 					/>
 				</div>
@@ -863,6 +874,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 						column={column}
 						row={row}
 						cellType="image"
+						syncOnChange={config.syncOnChange}
 						placeholder="https://..."
 					/>
 				</div>
@@ -879,6 +891,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 						column={column}
 						row={row}
 						cellType="badge"
+						syncOnChange={config.syncOnChange}
 						className="z-10 w-full h-full rounded-none border-none bg-transparent text-right font-mono tabular-nums focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
 					/>
 				);
@@ -912,6 +925,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 						column={column}
 						row={row}
 						cellType="text-icon"
+						syncOnChange={config.syncOnChange}
 					/>
 					<div>{renderReadOnlyValue(value, row, column, highlightQuery)}</div>
 				</div>
@@ -927,6 +941,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					column={column}
 					row={row}
 					cellType="text"
+					syncOnChange={config.syncOnChange}
 					required={column.required}
 				/>
 			);

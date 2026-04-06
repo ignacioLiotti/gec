@@ -33,7 +33,7 @@ import {
 import type { Obra } from "@/app/excel/schema";
 import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
 import type { OcrTablaColumn, TablaDataRow } from "./file-manager/types";
-import { CurveDataImportDialog } from "./curve-data-import-dialog";
+import { CurveEditorDialog } from "./curve-editor-dialog";
 import { QuickActionsPanel } from "@/components/quick-actions/quick-actions-panel";
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -1566,20 +1566,20 @@ export function ObraGeneralTab({
 										bodyClassName="p-4"
 										action={
 											<div className="flex items-center gap-3">
+												{reportsData?.curve ? (
+													<p className="text-[11px] text-[#bbb]">
+														{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
+													</p>
+												) : null}
 												{curveImportConfig ? (
-													<CurveDataImportDialog
+													<CurveEditorDialog
 														obraId={curveImportConfig.obraId}
 														curvaPlanTableId={curveImportConfig.curvaPlanTableId}
 														curvaPlanTableName={curveImportConfig.curvaPlanTableName}
 														pmcResumenTableId={curveImportConfig.pmcResumenTableId}
 														pmcResumenTableName={curveImportConfig.pmcResumenTableName}
-														onImported={curveImportConfig.onImported}
+														onSaved={curveImportConfig.onImported}
 													/>
-												) : null}
-												{reportsData?.curve ? (
-													<p className="text-[11px] text-[#bbb]">
-														{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
-													</p>
 												) : null}
 											</div>
 										}

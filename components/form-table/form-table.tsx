@@ -1047,7 +1047,18 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		if (!filters) return;
 		setFiltersDraft((prev) => (prev === filters ? prev : filters));
 	}, [filters]);
-	const [sortState, setSortState] = useState<SortState>({ columnId: null, direction: "asc" });
+	const lockedSort = config.lockedSort ?? null;
+	const [sortState, setSortState] = useState<SortState>(() =>
+		lockedSort ?? { columnId: null, direction: "asc" }
+	);
+	useEffect(() => {
+		if (!lockedSort) return;
+		setSortState((prev) =>
+			prev.columnId === lockedSort.columnId && prev.direction === lockedSort.direction
+				? prev
+				: lockedSort
+		);
+	}, [lockedSort]);
 	const [colWidths, setColWidths] = useState<Record<number, number>>(() => {
 		const initialWidths: Record<number, number> = {};
 		config.columns.forEach((col, index) => {
@@ -1363,15 +1374,16 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [baseFilteredRows, activeTab, tabFilters, hasTabFilters]);
 
 
+	const effectiveSortState = lockedSort ?? sortState;
 	const enableClientSort = config.enableClientSort !== false;
 	const sortedRows = useMemo(() => {
-		if (!enableClientSort || !sortState.columnId) return tabFilteredRows;
-		const column = columns.find((col) => col.id === sortState.columnId);
+		if (!enableClientSort || !effectiveSortState.columnId) return tabFilteredRows;
+		const column = columns.find((col) => col.id === effectiveSortState.columnId);
 		if (!column) return tabFilteredRows;
 		const comparator = column.sortFn ?? defaultSortByField<Row>(column.field);
 		const sorted = [...tabFilteredRows].sort((a, b) => comparator(a, b));
-		return sortState.direction === "asc" ? sorted : sorted.reverse();
-	}, [tabFilteredRows, sortState, enableClientSort, columns]);
+		return effectiveSortState.direction === "asc" ? sorted : sorted.reverse();
+	}, [tabFilteredRows, effectiveSortState, enableClientSort, columns]);
 
 	const activeFilterCount = useMemo(() => {
 		if (!config.countActiveFilters || typeof filters === "undefined") return 0;
@@ -1535,6 +1547,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 
 	const toggleSort = useCallback((columnId: string) => {
+		if (lockedSort) return;
 		setSortState((prev) => {
 			if (prev.columnId !== columnId) {
 				return { columnId, direction: "asc" };
@@ -1544,15 +1557,17 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			}
 			return { columnId: null, direction: "asc" };
 		});
-	}, []);
+	}, [lockedSort]);
 
 	const applySortDirection = useCallback((columnId: string, direction: "asc" | "desc") => {
+		if (lockedSort) return;
 		setSortState({ columnId, direction });
-	}, []);
+	}, [lockedSort]);
 
 	const clearSort = useCallback(() => {
+		if (lockedSort) return;
 		setSortState({ columnId: null, direction: "asc" });
-	}, []);
+	}, [lockedSort]);
 
 	const clientTotalPages = useMemo(() => {
 		if (sortedRows.length === 0) return 1;
@@ -1843,7 +1858,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			enableResizing: enableColumnResizing,
 		},
 		sorting: {
-			state: sortState,
+			state: effectiveSortState,
 			toggle: toggleSort,
 			applyDirection: applySortDirection,
 			clear: clearSort,
@@ -1882,6 +1897,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		},
 		rows: {
 			table,
+			currentRows: rows,
 			FieldComponent,
 			highlightQuery,
 			getRowDirtyState,
@@ -1919,7 +1935,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 					)}
 				</div>
 			) : null}
-			<FormTableToolbar />
+			{(config.showToolbar ?? true) ? <FormTableToolbar /> : null}
 			<FormTableTabs />
 			<div className="flex-1 shadow-card mx-[1px] flex">
 				<FormTableContent className={className} innerClassName={innerClassName} />

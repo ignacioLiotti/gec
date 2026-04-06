@@ -5,7 +5,10 @@ export type FormTableRow = {
 	[key: string]: unknown;
 };
 
-export type ColumnField<Row extends FormTableRow> = Extract<keyof Omit<Row, "id">, string>;
+export type ColumnField<Row extends FormTableRow> = Extract<
+	keyof Omit<Row, "id">,
+	string
+>;
 
 export type FormValues<Row extends FormTableRow> = {
 	rowOrder: string[];
@@ -17,9 +20,20 @@ export type FieldValidators = {
 	onBlur?: (value: unknown) => string | undefined;
 };
 
+export type FormFieldRenderState = {
+	state: {
+		value: unknown;
+		meta?: {
+			errors?: unknown[];
+		};
+	};
+	handleChange: (value: unknown) => void;
+	handleBlur: () => void;
+};
+
 export type FormFieldComponent<Row extends FormTableRow> = (props: {
-	name: string;
-	children: (field: any) => ReactNode;
+	name: string | `rowsById.${string}.${Extract<keyof Row, string>}`;
+	children: (field: FormFieldRenderState) => ReactNode;
 	validators?: FieldValidators;
 }) => ReactNode;
 
@@ -65,11 +79,12 @@ export type CellSuggestionDetectorArgs<Row extends FormTableRow> = {
 };
 
 export type CellSuggestionDetector<Row extends FormTableRow> = (
-	args: CellSuggestionDetectorArgs<Row>
+	args: CellSuggestionDetectorArgs<Row>,
 ) => CellSuggestion<Row> | null;
 
 export type CellConfig<Row extends FormTableRow> = {
 	onToggle?: (value: boolean, row: Row) => void;
+	syncOnChange?: boolean;
 	currencyCode?: string;
 	currencyLocale?: string;
 	dateFormat?: "short" | "medium" | "long" | "custom";
@@ -86,7 +101,11 @@ export type CellConfig<Row extends FormTableRow> = {
 	badgeMap?: Record<string, { label: string; variant: string }>;
 	suggestionDetection?: CellSuggestionKind | "auto" | false;
 	suggestionDetectors?: Array<CellSuggestionDetector<Row>>;
-	renderReadOnly?: (args: { value: unknown; row: Row; highlightQuery: string }) => ReactNode;
+	renderReadOnly?: (args: {
+		value: unknown;
+		row: Row;
+		highlightQuery: string;
+	}) => ReactNode;
 	renderEditable?: (args: {
 		value: unknown;
 		row: Row;
@@ -97,7 +116,11 @@ export type CellConfig<Row extends FormTableRow> = {
 
 export type AccordionRowConfig<Row extends FormTableRow> = {
 	renderContent: (row: Row) => ReactNode;
-	renderTrigger?: (args: { row: Row; isOpen: boolean; toggle: () => void }) => ReactNode;
+	renderTrigger?: (args: {
+		row: Row;
+		isOpen: boolean;
+		toggle: () => void;
+	}) => ReactNode;
 	triggerLabel?: string;
 	defaultOpen?: (row: Row) => boolean;
 	contentClassName?: string;
@@ -185,7 +208,10 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	title?: string;
 	description?: string;
 	columns: ColumnDef<Row>[];
+	lockedSort?: { columnId: string; direction: "asc" | "desc" };
 	toolbarActions?: ReactNode;
+	/** When false, the top toolbar (search, filters, columns, export, toolbarActions) is not rendered. Defaults to true. */
+	showToolbar?: boolean;
 	headerGroups?: HeaderGroup[];
 	tabFilters?: TabFilterOption<Row>[];
 	searchPlaceholder?: string;
@@ -219,8 +245,12 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	/** Optional badges rendered on each row (for overlapping rule indicators, etc.). */
 	rowOverlayBadges?: (
 		row: Row,
-		rowIndex: number
-	) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>;
+		rowIndex: number,
+	) => Array<{
+		id: string;
+		label: string;
+		tone?: "amber" | "red" | "green" | "blue";
+	}>;
 };
 
 export type RowColorTone = "red" | "amber" | "green" | "blue";
@@ -229,8 +259,3 @@ export type RowColorInfo = {
 	tone: RowColorTone;
 	previewing: boolean;
 };
-
-
-
-
-

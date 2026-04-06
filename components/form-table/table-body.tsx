@@ -111,6 +111,7 @@ function TableRowInner<Row extends FormTableRow>({
 		<Fragment>
 			<tr
 				data-index={rowIndex}
+				data-row-id={rowData.id}
 				className={cn(
 					"border-b group relative",
 					rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",

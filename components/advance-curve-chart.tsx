@@ -35,8 +35,12 @@ const periodLabel = (period: string): string => {
 
 export function AdvanceCurveChart({
 	points,
+	focusedSeries,
+	highlightedSortOrder,
 }: {
 	points: AdvanceCurvePoint[];
+	focusedSeries?: "plan" | "real";
+	highlightedSortOrder?: number | null;
 }) {
 	if (points.length === 0) {
 		return (
@@ -69,6 +73,7 @@ export function AdvanceCurveChart({
 		planPct: point.planPct,
 		realPct: point.realPct,
 		missingReal: hasRealData && point.realPct == null,
+		isHighlighted: highlightedSortOrder != null && point.sortOrder === highlightedSortOrder,
 	}));
 	const now = new Date();
 	const currentMonthOrder = now.getFullYear() * 12 + now.getMonth();
@@ -94,6 +99,99 @@ export function AdvanceCurveChart({
 	const pointByX = new Map(chartData.map((point) => [point.x, point] as const));
 	const formatTooltipValue = (value: number | null | undefined, emptyLabel: string) =>
 		value == null ? emptyLabel : `${Number(value).toFixed(2)}%`;
+	const lineConfigs =
+		focusedSeries === "plan"
+			? [
+					{
+						key: "real" as const,
+						dataKey: "realPct",
+						name: "realPct",
+						stroke: "#ff5800",
+						strokeWidth: 2,
+						strokeDasharray: undefined,
+						dot: { r: 2.5 },
+						opacity: 0.45,
+					},
+					{
+						key: "plan" as const,
+						dataKey: "planPct",
+						name: "planPct",
+						stroke: "#0ea5e9",
+						strokeWidth: 3.5,
+						strokeDasharray: "6 4",
+						dot: { r: 3.5 },
+						opacity: 1,
+					},
+			  ]
+			: focusedSeries === "real"
+				? [
+						{
+							key: "plan" as const,
+							dataKey: "planPct",
+							name: "planPct",
+							stroke: "#0ea5e9",
+							strokeWidth: 2,
+							strokeDasharray: "6 4",
+							dot: { r: 2.5 },
+							opacity: 0.45,
+						},
+						{
+							key: "real" as const,
+							dataKey: "realPct",
+							name: "realPct",
+							stroke: "#ff5800",
+							strokeWidth: 3.5,
+							strokeDasharray: undefined,
+							dot: { r: 3.5 },
+							opacity: 1,
+						},
+				  ]
+				: [
+						{
+							key: "plan" as const,
+							dataKey: "planPct",
+							name: "planPct",
+							stroke: "#0ea5e9",
+							strokeWidth: 2.5,
+							strokeDasharray: "6 4",
+							dot: { r: 3 },
+							opacity: 1,
+						},
+						{
+							key: "real" as const,
+							dataKey: "realPct",
+							name: "realPct",
+							stroke: "#ff5800",
+							strokeWidth: 2.5,
+							strokeDasharray: undefined,
+							dot: { r: 3 },
+							opacity: 1,
+						},
+				  ];
+	const highlightColor =
+		focusedSeries === "real" ? "#ff5800" : focusedSeries === "plan" ? "#0ea5e9" : "#f59e0b";
+	const renderDot =
+		(lineColor: string, radius: number) =>
+		function AdvanceCurveDot(props: {
+			cx?: number;
+			cy?: number;
+			payload?: { x?: number; isHighlighted?: boolean };
+			value?: number | null;
+		}) {
+			if (props.value == null || props.cx == null || props.cy == null) return null;
+			const isHighlighted = Boolean(props.payload?.isHighlighted);
+			if (!isHighlighted) {
+				return <circle cx={props.cx} cy={props.cy} r={radius} fill={lineColor} stroke="none" />;
+			}
+
+			return (
+				<g>
+					<circle cx={props.cx} cy={props.cy} r={radius + 4} fill={lineColor} fillOpacity={0.15} />
+					<circle cx={props.cx} cy={props.cy} r={radius + 1.5} fill="#fff" stroke={lineColor} strokeWidth={2} />
+					<circle cx={props.cx} cy={props.cy} r={radius + 0.5} fill={lineColor} />
+				</g>
+			);
+		};
 	const renderTooltip = ({
 		active,
 		label,
@@ -189,25 +287,29 @@ export function AdvanceCurveChart({
 									}
 								/>
 							) : null}
-							<Line
-								type="monotone"
-								dataKey="planPct"
-								name="planPct"
-								stroke="#0ea5e9"
-								strokeWidth={2.5}
-								strokeDasharray="6 4"
-								dot={{ r: 3 }}
-								isAnimationActive={false}
-							/>
-							<Line
-								type="monotone"
-								dataKey="realPct"
-								name="realPct"
-								stroke="#ff5800"
-								strokeWidth={2.5}
-								dot={{ r: 3 }}
-								isAnimationActive={false}
-							/>
+							{highlightedSortOrder != null ? (
+								<ReferenceLine
+									x={highlightedSortOrder}
+									stroke={highlightColor}
+									strokeWidth={1.5}
+									strokeDasharray="4 4"
+									strokeOpacity={0.65}
+								/>
+							) : null}
+							{lineConfigs.map((line) => (
+								<Line
+									key={line.key}
+									type="monotone"
+									dataKey={line.dataKey}
+									name={line.name}
+									stroke={line.stroke}
+									strokeWidth={line.strokeWidth}
+									strokeDasharray={line.strokeDasharray}
+									dot={renderDot(line.stroke, line.dot.r)}
+									strokeOpacity={line.opacity}
+									isAnimationActive={false}
+								/>
+							))}
 						</LineChart>
 					</ResponsiveContainer>
 				</div>

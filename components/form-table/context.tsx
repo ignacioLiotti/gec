@@ -95,6 +95,7 @@ export type FormTableMetaState = {
 
 export type FormTableRowState<Row extends FormTableRow> = {
 	table: Table<Row>;
+	currentRows: Row[];
 	FieldComponent: FormFieldComponent<Row>;
 	highlightQuery: string;
 	getRowDirtyState: (rowId: string) => { dirty: boolean; cells: ColumnDef<Row>[] };
