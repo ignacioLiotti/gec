@@ -82,13 +82,18 @@ function parseNumericValue(value: unknown): number | null {
 	const hasDot = str.includes(".");
 
 	if (hasComma && hasDot) {
-		// Assume dot is thousands separator, comma is decimal
+		// Assume dot is thousands separator, comma is decimal (e.g. "39.738.522,50")
 		str = str.replace(/\./g, "").replace(",", ".");
 	} else if (hasComma && !hasDot) {
-		// Assume comma is decimal
+		// Assume comma is decimal (e.g. "522,50")
 		str = str.replace(",", ".");
-	} else {
-		// Only dot or only digits: keep as-is
+	} else if (hasDot && !hasComma) {
+		// Multiple dots = Argentine thousands separators with no decimal (e.g. "39.738.522")
+		// Single dot = regular decimal point (e.g. "41.20")
+		const dotCount = (str.match(/\./g) ?? []).length;
+		if (dotCount > 1) {
+			str = str.replace(/\./g, "");
+		}
 	}
 
 	const num = Number(str);
