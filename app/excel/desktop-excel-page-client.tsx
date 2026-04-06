@@ -191,28 +191,28 @@ export default function DesktopExcelPageClient({
 				{
 					id: "header",
 					targetId: "excel-page-header",
-					title: "Panel de obras precargado",
+					title: "Tu cartera de obras",
 					content:
-						"Este es el punto de entrada. Acá ya ves las obras cargadas y listas para explorar, sin necesidad de preparar datos antes de la demo.",
+						"Acá están todas las obras con sus datos actualizados. De un vistazo ya sabés cuántas tenés en ejecución, el avance y los importes más importantes.",
 					placement: "bottom",
 					skippable: false,
 				},
 				{
 					id: "table",
 					targetId: "excel-page-table",
-					title: "Las obras ya están listas",
+					title: "Todo de un vistazo",
 					content:
-						"La tabla resume la cartera operativa y te deja entrar directo en una obra real para seguir el caso de uso.",
+						"Cada fila es una obra activa. Las columnas muestran fechas, importes y avance para que en segundos conozcas el estado de tu cartera.",
 					placement: "top",
 					skippable: false,
 				},
 				{
 					id: "open-obra",
-					targetId: "excel-page-open-obra-cta",
-					title: "Abrí la primera obra",
+					targetId: "excel-page-open-obra",
+					title: "Entrá a ver el detalle",
 					content:
-						"Entrá a la obra para revisar lo que ya está cargado en General y detectar el certificado del mes que todavía falta.",
-					placement: "left",
+						"Hacé clic en el nombre de la obra para ver todos sus datos: avance, importes, alertas y documentos.",
+					placement: "right",
 					allowClickThrough: true,
 					requiredAction: "click_target",
 					waitForMs: 2200,

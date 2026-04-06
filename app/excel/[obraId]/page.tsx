@@ -1044,43 +1044,43 @@ function buildCurvePoints(
 
 	const normalizedResumenRows = usesRelativePlanMonths
 		? [...resumenRows]
-				.map((row, index) => {
-					const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
-					const explicitSequence = parseCertificateSequence(
-						getRowFieldValueByCandidates(
-							rowData,
-							["n_certificado", "nro_certificado", "numero_certificado", "certificado"],
-							[["certificado"], ["cert"]],
-						),
+			.map((row, index) => {
+				const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+				const explicitSequence = parseCertificateSequence(
+					getRowFieldValueByCandidates(
+						rowData,
+						["n_certificado", "nro_certificado", "numero_certificado", "certificado"],
+						[["certificado"], ["cert"]],
+					),
+				);
+				const periodSource =
+					getRowFieldValueByCandidates(
+						rowData,
+						["fecha_certificacion", "fecha", "issued_at", "date"],
+						[["fecha", "cert"], ["fecha"]],
+					) ??
+					getRowFieldValueByCandidates(
+						rowData,
+						["periodo", "periodo_key", "period", "mes"],
+						[["periodo"], ["period"], ["mes"]],
 					);
-					const periodSource =
-						getRowFieldValueByCandidates(
-							rowData,
-							["fecha_certificacion", "fecha", "issued_at", "date"],
-							[["fecha", "cert"], ["fecha"]],
-						) ??
-						getRowFieldValueByCandidates(
-							rowData,
-							["periodo", "periodo_key", "period", "mes"],
-							[["periodo"], ["period"], ["mes"]],
-						);
-					const parsedPeriod = parseMonthOrder(periodSource, index);
-					return { row, index, explicitSequence, parsedPeriod };
-				})
-				.sort((a, b) => {
-					if (a.explicitSequence != null && b.explicitSequence != null) {
-						return a.explicitSequence - b.explicitSequence;
-					}
-					if (a.explicitSequence != null) return -1;
-					if (b.explicitSequence != null) return 1;
-					return a.parsedPeriod.order - b.parsedPeriod.order;
-				})
+				const parsedPeriod = parseMonthOrder(periodSource, index);
+				return { row, index, explicitSequence, parsedPeriod };
+			})
+			.sort((a, b) => {
+				if (a.explicitSequence != null && b.explicitSequence != null) {
+					return a.explicitSequence - b.explicitSequence;
+				}
+				if (a.explicitSequence != null) return -1;
+				if (b.explicitSequence != null) return 1;
+				return a.parsedPeriod.order - b.parsedPeriod.order;
+			})
 		: resumenRows.map((row, index) => ({
-				row,
-				index,
-				explicitSequence: null as number | null,
-				parsedPeriod: parseMonthOrder(null, index),
-		  }));
+			row,
+			index,
+			explicitSequence: null as number | null,
+			parsedPeriod: parseMonthOrder(null, index),
+		}));
 
 	normalizedResumenRows.forEach(({ row, index, explicitSequence }, resumenIndex) => {
 		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
@@ -1115,9 +1115,9 @@ function buildCurvePoints(
 		const relativePeriodKey =
 			usesRelativePlanMonths && curveStartPeriod
 				? addMonths(
-						curveStartPeriod,
-						Math.max(0, certSequence - curveMonthIndexBase),
-				  )
+					curveStartPeriod,
+					Math.max(0, certSequence - curveMonthIndexBase),
+				)
 				: null;
 		const periodKey =
 			relativePeriodKey ??
@@ -1187,9 +1187,9 @@ function buildCurvePoints(
 	const continuousPoints: GeneralReportCurvePoint[] = [];
 	const maxRealSortOrder = usesRelativePlanMonths
 		? sortedPoints.reduce<number | null>((max, point) => {
-				if (point.realPct == null) return max;
-				return max == null || point.sortOrder > max ? point.sortOrder : max;
-		  }, null)
+			if (point.realPct == null) return max;
+			return max == null || point.sortOrder > max ? point.sortOrder : max;
+		}, null)
 		: null;
 
 	for (let order = minOrder; order <= maxOrder; order += 1) {
@@ -1779,9 +1779,9 @@ function ObraDetailPageContent() {
 		if (activeTour === "excel-overview") {
 			const nextStage =
 				value === "documentos" &&
-				(activeStage === GUIDED_EXCEL_STAGES.obraIntro ||
-					activeStage === GUIDED_EXCEL_STAGES.obraMissingCertificado ||
-					activeStage === GUIDED_EXCEL_STAGES.obraGoDocuments)
+					(activeStage === GUIDED_EXCEL_STAGES.obraIntro ||
+						activeStage === GUIDED_EXCEL_STAGES.obraMissingCertificado ||
+						activeStage === GUIDED_EXCEL_STAGES.obraGoDocuments)
 					? GUIDED_EXCEL_STAGES.documentsIntro
 					: value === "general" && activeStage === GUIDED_EXCEL_STAGES.documentsReturnGeneral
 						? GUIDED_EXCEL_STAGES.generalReviewUpdatedData
@@ -2977,11 +2977,11 @@ function ObraDetailPageContent() {
 				steps: [
 					{
 						id: "review-updated-data",
-						targetId: "obra-general-findings",
-						title: "Volviste a General con los datos actualizados",
+						targetId: "obra-curva-avance",
+						title: "El nuevo certificado ya está incorporado",
 						content:
-							"Después de cargar el certificado y la curva, esta vista queda lista para revisar el estado actualizado de la obra. Desde acá ya podés explorar libremente el resto de la app.",
-						placement: "left",
+							"La línea naranja muestra el avance real con el certificado que cargaste.",
+						placement: "bottom",
 						skippable: false,
 					},
 				],
@@ -2998,9 +2998,9 @@ function ObraDetailPageContent() {
 					{
 						id: "obra-general",
 						targetId: "obra-page-content",
-						title: "General ya viene con datos cargados",
+						title: "Todo lo de la obra, acá",
 						content:
-							"En General ya se ve el contexto principal de la obra. El punto de la demo ahora es detectar el faltante del certificado del mes actual.",
+							"Acá ves el avance actual, los importes del contrato, las fechas clave y las alertas. Si hay algo que falta o está fuera de plazo, el sistema te lo muestra.",
 						placement: "top",
 						skippable: false,
 					},
@@ -3011,17 +3011,17 @@ function ObraDetailPageContent() {
 							: "obra-general-findings",
 						title: "Falta el certificado del mes actual",
 						content:
-							"Esta alerta marca que la obra tiene historial cargado, pero todavía no entró el certificado del período actual. Vamos a resolverlo desde Documentos.",
-						placement: "left",
+							"El sistema detectó que la obra tiene certificados anteriores pero el del mes actual todavía no fue cargado. Lo subimos ahora desde Documentos.",
+						placement: "right",
 						skippable: false,
 						waitForMs: 2800,
 					},
 					{
 						id: "go-documents",
 						targetId: "obra-page-file-manager-tab",
-						title: "Seguimos por Documentos",
+						title: "Andá a Documentos",
 						content:
-							"Andá a Documentos. Ahí vas a ver las carpetas de Certificados, Curva de Avance, Órdenes de Compra y Fotos de Obra, y vamos a completar la carga faltante.",
+							"Hacé clic en la pestaña Documentos para cargar el certificado faltante. Subís el PDF y el sistema extrae los datos automáticamente.",
 						placement: "bottom",
 						allowClickThrough: true,
 						requiredAction: "click_target",
@@ -3044,7 +3044,7 @@ function ObraDetailPageContent() {
 							: "obra-general-findings",
 						title: "Falta el certificado del mes actual",
 						content:
-							"Esta obra ya tiene información consolidada, pero todavía falta el certificado del período actual. Lo vamos a cargar desde Documentos.",
+							"Esta obra tiene historial cargado pero le falta el certificado del período actual. Lo cargamos ahora desde Documentos.",
 						placement: "left",
 						skippable: false,
 						waitForMs: 2800,
@@ -3075,7 +3075,7 @@ function ObraDetailPageContent() {
 						targetId: "obra-page-file-manager-tab",
 						title: "Abrí Documentos",
 						content:
-							"Seguimos en Documentos para cargar el certificado faltante y la curva de avance.",
+							"Hacé clic acá para subir el certificado faltante.",
 						placement: "bottom",
 						allowClickThrough: true,
 						requiredAction: "click_target",
@@ -3094,7 +3094,8 @@ function ObraDetailPageContent() {
 			tour: null,
 			tourStage: null,
 		});
-	}, [setQueryParams]);
+		router.push("/macro?tour=macro-overview");
+	}, [setQueryParams, router]);
 
 	return (
 		<div className="relative container max-w-full mx-auto px-4 pt-2">
@@ -3102,10 +3103,10 @@ function ObraDetailPageContent() {
 			{guidedObraFlow ? (
 				<ContextualWizard
 					open
-					onOpenChange={() => {}}
+					onOpenChange={() => { }}
 					flow={guidedObraFlow}
 					showCloseButton={false}
-					finishLabel="Finalizar y explorar"
+					finishLabel="Ir a Macro Tablas →"
 					onComplete={finishGuidedExcelFlow}
 				/>
 			) : null}
@@ -3291,40 +3292,40 @@ function ObraDetailPageContent() {
 							) : null}
 
 							<div data-wizard-target="obra-page-content">
-							{isGeneralTabActive ? (
-								<ObraGeneralTab
-									form={form}
-									isGeneralTabEditMode={isGeneralTabEditMode}
-									hasUnsavedChanges={hasUnsavedChanges}
-									onSave={saveCurrentObra}
-									isSaving={isSavingObra}
-									isFieldDirty={isFieldDirty}
-									applyObraToForm={applyObraToForm}
-									initialFormValues={initialFormValues}
-									getErrorMessage={getErrorMessage}
-									quickActionsAllData={quickActionsAllData}
-									reportsData={generalReportsData}
-									mainTableColumns={activeMainTableColumns}
-									mainTableColumnValues={mainTableColumnValues}
-									setCustomMainColumnValue={setCustomMainColumnValue}
-									certificadosExtraidosRows={certificadosExtraidosRows}
-									certificadoContableMacro={certificadoContableMacroQuery.data ?? null}
-									curveImportConfig={
-										obraId
-											? {
-												obraId,
-												curvaPlanTableId: selectedCurveTableRefs.curvaPlanId,
-												curvaPlanTableName: selectedCurveTableRefs.curvaPlanName,
-												pmcResumenTableId: selectedCurveTableRefs.pmcResumenId,
-												pmcResumenTableName: selectedCurveTableRefs.pmcResumenName,
-												onImported: handleCurveDataImported,
-											}
-											: undefined
-									}
-									derivedCertificadosNotice={derivedCertificadosNotice}
-								/>
-							) : null}
-							{/* {activeTab === "general" && (
+								{isGeneralTabActive ? (
+									<ObraGeneralTab
+										form={form}
+										isGeneralTabEditMode={isGeneralTabEditMode}
+										hasUnsavedChanges={hasUnsavedChanges}
+										onSave={saveCurrentObra}
+										isSaving={isSavingObra}
+										isFieldDirty={isFieldDirty}
+										applyObraToForm={applyObraToForm}
+										initialFormValues={initialFormValues}
+										getErrorMessage={getErrorMessage}
+										quickActionsAllData={quickActionsAllData}
+										reportsData={generalReportsData}
+										mainTableColumns={activeMainTableColumns}
+										mainTableColumnValues={mainTableColumnValues}
+										setCustomMainColumnValue={setCustomMainColumnValue}
+										certificadosExtraidosRows={certificadosExtraidosRows}
+										certificadoContableMacro={certificadoContableMacroQuery.data ?? null}
+										curveImportConfig={
+											obraId
+												? {
+													obraId,
+													curvaPlanTableId: selectedCurveTableRefs.curvaPlanId,
+													curvaPlanTableName: selectedCurveTableRefs.curvaPlanName,
+													pmcResumenTableId: selectedCurveTableRefs.pmcResumenId,
+													pmcResumenTableName: selectedCurveTableRefs.pmcResumenName,
+													onImported: handleCurveDataImported,
+												}
+												: undefined
+										}
+										derivedCertificadosNotice={derivedCertificadosNotice}
+									/>
+								) : null}
+								{/* {activeTab === "general" && (
 								<section className="rounded-lg border bg-card shadow-sm overflow-hidden">
 									<div className="bg-muted/50 px-4 sm:px-6 py-4 border-b">
 										<h2 className="text-base sm:text-lg font-semibold">
@@ -3411,30 +3412,30 @@ function ObraDetailPageContent() {
 								</section>
 							)} */}
 
-							{isFlujoTabActive ? (
-								<ObraFlujoTab
-									isAddingFlujoAction={isAddingFlujoAction}
-									setIsAddingFlujoAction={setIsAddingFlujoAction}
-									isSavingFlujoAction={isSavingFlujoAction}
-									newFlujoAction={newFlujoAction}
-									setNewFlujoAction={setNewFlujoAction}
-									selectedRecipientUserId={selectedRecipientUserId}
-									setSelectedRecipientUserId={setSelectedRecipientUserId}
-									selectedRecipientRoleId={selectedRecipientRoleId}
-									setSelectedRecipientRoleId={setSelectedRecipientRoleId}
-									obraUsers={obraUsers}
-									obraRoles={obraRoles}
-									obraUserRoles={obraUserRoles}
-									saveFlujoAction={saveFlujoAction}
-									toggleFlujoAction={toggleFlujoAction}
-									deleteFlujoAction={deleteFlujoAction}
-									updateFlujoAction={updateFlujoAction}
-									flujoActions={flujoActions}
-									isLoadingFlujoActions={isLoadingFlujoActions}
-								/>
-							) : null}
+								{isFlujoTabActive ? (
+									<ObraFlujoTab
+										isAddingFlujoAction={isAddingFlujoAction}
+										setIsAddingFlujoAction={setIsAddingFlujoAction}
+										isSavingFlujoAction={isSavingFlujoAction}
+										newFlujoAction={newFlujoAction}
+										setNewFlujoAction={setNewFlujoAction}
+										selectedRecipientUserId={selectedRecipientUserId}
+										setSelectedRecipientUserId={setSelectedRecipientUserId}
+										selectedRecipientRoleId={selectedRecipientRoleId}
+										setSelectedRecipientRoleId={setSelectedRecipientRoleId}
+										obraUsers={obraUsers}
+										obraRoles={obraRoles}
+										obraUserRoles={obraUserRoles}
+										saveFlujoAction={saveFlujoAction}
+										toggleFlujoAction={toggleFlujoAction}
+										deleteFlujoAction={deleteFlujoAction}
+										updateFlujoAction={updateFlujoAction}
+										flujoActions={flujoActions}
+										isLoadingFlujoActions={isLoadingFlujoActions}
+									/>
+								) : null}
 
-							{/* <ObraCertificatesTab
+								{/* <ObraCertificatesTab
 								certificates={certificates}
 								certificatesTotal={certificatesTotal}
 								certificatesLoading={certificatesLoading}
@@ -3447,13 +3448,13 @@ function ObraDetailPageContent() {
 								handleNewCertificateChange={handleNewCertificateChange}
 							/> */}
 
-							{isDocumentsTabActive ? (
-								<ObraDocumentsTab
-									obraId={obraId}
-									materialOrders={materialOrders}
-									refreshMaterialOrders={refreshMaterialOrders}
-								/>
-							) : null}
+								{isDocumentsTabActive ? (
+									<ObraDocumentsTab
+										obraId={obraId}
+										materialOrders={materialOrders}
+										refreshMaterialOrders={refreshMaterialOrders}
+									/>
+								) : null}
 							</div>
 
 						</Tabs>

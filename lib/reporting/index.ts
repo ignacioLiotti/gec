@@ -1005,12 +1005,23 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 
 		if (certTableId && certIssuedAtColumnKey) {
 			const rows = await getRows(certTableId);
+			const certMonthIndexBase = detectCurveMonthIndexBase(rows);
 			const monthlyCounts = new Map<string, number>();
+			let periodFallbackCount = 0;
 
 			for (const row of rows) {
-				const issuedAt = parseDate(row.data?.[certIssuedAtColumnKey]);
-				if (!issuedAt) continue;
-				const key = toPeriodKey(issuedAt);
+				const rowData = (row.data as Record<string, any> | null) ?? null;
+				const issuedAt = parseDate(rowData?.[certIssuedAtColumnKey]);
+				const key =
+					issuedAt != null
+						? toPeriodKey(issuedAt)
+						: periodKeyFromCurveRow(
+								rowData,
+								config.mappings.curve?.plan?.startPeriod,
+								certMonthIndexBase,
+							);
+				if (!key) continue;
+				if (!issuedAt) periodFallbackCount += 1;
 				monthlyCounts.set(key, (monthlyCounts.get(key) ?? 0) + 1);
 			}
 
@@ -1050,7 +1061,11 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 				{
 					signal_key: "cert.historical_months_count",
 					inputs_json: { periodKey: currentPeriodKey },
-					outputs_json: { historicalMonthsCount },
+					outputs_json: {
+						historicalMonthsCount,
+						monthsSeen: Array.from(monthlyCounts.keys()).sort(),
+						periodFallbackCount,
+					},
 				},
 				{
 					signal_key: "cert.missing_current_month",

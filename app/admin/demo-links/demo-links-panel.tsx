@@ -44,7 +44,7 @@ export default function DemoLinksPanel({
 	const [label, setLabel] = useState("");
 	const [slug, setSlug] = useState("");
 	const [expiresInDays, setExpiresInDays] = useState("14");
-	const [capabilities, setCapabilities] = useState("dashboard, excel");
+	const [capabilities, setCapabilities] = useState("dashboard, excel, macro");
 	const [resultUrl, setResultUrl] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isCreating, startCreateTransition] = useTransition();

@@ -2,34 +2,23 @@ import type { DemoFlowDefinition } from "@/lib/demo-flows/types";
 
 const defaultOverviewFlow: DemoFlowDefinition = {
 	id: "default-overview",
-	eyebrow: "Recorrido recomendado",
-	title: "Explorar Sintesis",
+	eyebrow: "Recorrido guiado",
+	title: "Síntesis en acción",
 	description:
-		"Este flujo presenta la demo usando las pantallas reales del producto. Sirve como base para cualquier prospecto y se puede complementar con variantes por empresa.",
+		"En los próximos minutos vas a ver cómo Síntesis centraliza la gestión de obras de construcción. Todo lo que ves —obras, certificados, documentos y reportes— funciona igual en un entorno real.",
+	features: [
+		"Panel de obras con avance, importes y certificados al día",
+		"Carga de documentos con extracción automática de datos",
+		"Alertas automáticas cuando falta información",
+		"Tablas consolidadas y reportes exportables en PDF o Excel",
+	],
 	steps: [
 		{
-			id: "dashboard",
-			title: "Panorama general",
-			description:
-				"Empieza por el dashboard para ver la organizacion demo y los indicadores principales.",
-			ctaLabel: "Abrir dashboard guiado",
-			href: "/dashboard?tour=dashboard-overview",
-		},
-		{
 			id: "excel",
-			title: "Operacion en Excel",
-			description:
-				"Revisa obras, carpetas y la experiencia principal de trabajo en Excel con la configuracion del tenant.",
-			ctaLabel: "Abrir Excel guiado",
+			title: "Empezar el recorrido",
+			description: "",
+			ctaLabel: "Empezar",
 			href: "/excel?tour=excel-overview",
-		},
-		{
-			id: "macro",
-			title: "Macro tablas",
-			description:
-				"Consulta tablas consolidadas, filtros y reportes de datos agregados sin salir de la demo.",
-			ctaLabel: "Abrir Macro Tablas guiado",
-			href: "/macro?tour=macro-overview",
 		},
 	],
 };

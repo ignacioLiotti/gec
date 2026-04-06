@@ -11,6 +11,7 @@ export type DemoFlowDefinition = {
 	title: string;
 	description: string;
 	eyebrow?: string;
+	features?: string[];
 	steps: DemoFlowStep[];
 };
 

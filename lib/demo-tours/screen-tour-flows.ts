@@ -7,33 +7,33 @@ export const dashboardOverviewTour: WizardFlow = {
 		{
 			id: "header",
 			targetId: "dashboard-header",
-			title: "Resumen ejecutivo",
+			title: "Tu cartera de obras, de un vistazo",
 			content:
-				"Este bloque presenta el dashboard como punto de entrada para la demo. Desde aqui ubicas rapidamente el estado general de la cartera.",
+				"Acá ves el estado actual de toda la cartera: obras activas, alertas importantes y los números que más importan. Sin navegar ni abrir nada.",
 			placement: "bottom",
 		},
 		{
 			id: "stats",
 			targetId: "dashboard-stats",
-			title: "Metricas clave",
+			title: "Los indicadores que más usás",
 			content:
-				"Aqui se condensan los indicadores mas relevantes para validar si la organizacion tiene la visibilidad que necesita.",
+				"Obras activas, certificados del mes y avance promedio. Estos números te dicen en segundos si todo va bien o si hay algo que requiere atención.",
 			placement: "bottom",
 		},
 		{
 			id: "recent-obras",
 			targetId: "dashboard-recent-obras",
-			title: "Acceso rapido a obras",
+			title: "Tus obras más recientes",
 			content:
-				"La lista de obras recientes es la salida natural hacia el trabajo operativo dentro de Excel.",
+				"Las últimas obras que trabajaste aparecen acá. Hacé clic en cualquiera para entrar directo al detalle: datos financieros, avance, documentos y más.",
 			placement: "right",
 		},
 		{
 			id: "preview",
 			targetId: "dashboard-preview",
-			title: "Preview de una obra",
+			title: "El estado de una obra, sin entrar al detalle",
 			content:
-				"Esta vista previa mezcla avance, tiempo y curva para mostrar el valor del seguimiento sin entrar todavia al detalle.",
+				"Desde el dashboard ya ves el avance real vs el plan, los importes clave y el tiempo transcurrido. Suficiente para saber si la obra está encaminada.",
 			placement: "left",
 		},
 	],
@@ -46,34 +46,34 @@ export const excelOverviewTour: WizardFlow = {
 		{
 			id: "header",
 			targetId: "excel-page-header",
-			title: "Panel principal",
+			title: "Todas tus obras en un solo lugar",
 			content:
-				"Esta pantalla concentra la tabla principal configurable por tenant y sirve como entrada al trabajo diario.",
+				"Acá está la cartera completa. Cada fila es una obra y las columnas se configuran para cada empresa: mostrás solo lo que necesitás, en el orden que querés.",
 			placement: "bottom",
 		},
 		{
 			id: "toolbar",
 			targetId: "excel-page-toolbar",
-			title: "Busqueda y filtros",
+			title: "Buscá o filtrá lo que necesitás",
 			content:
-				"Desde la barra de herramientas se aplican filtros, busquedas y acciones sobre la tabla principal.",
+				"Filtrá por entidad, fechas o importes. También podés buscar una obra por nombre y exportar la tabla completa a Excel desde acá.",
 			placement: "bottom",
 		},
 		{
 			id: "content",
 			targetId: "excel-page-table",
-			title: "La tabla, sin complicarla",
+			title: "La vista de toda tu cartera",
 			content:
-				"Piensala como la vista operativa madre: cada fila es una obra y cada columna resume algo importante. En cada demo podemos precargar columnas, orden y reglas segun la empresa.",
+				"Una fila por obra, con las columnas más importantes a la vista. Ideal para controlar el estado de toda la cartera de un solo vistazo.",
 			placement: "top",
 			allowClickThrough: true,
 		},
 		{
 			id: "open-obra",
-			targetId: "excel-page-open-obra-cta",
-			title: "Entrar al detalle de una obra",
+			targetId: "excel-page-open-obra",
+			title: "Abrí una obra para ver el detalle",
 			content:
-				"Ahora entra a una obra concreta. Usa este acceso para abrir una obra y seguimos el recorrido dentro de su pagina de detalle.",
+				"Hacé clic en el nombre de cualquier obra para entrar a su página completa con todos sus datos, certificados y documentos.",
 			placement: "left",
 			requiredAction: "click_target",
 			waitForMs: 1500,
@@ -88,25 +88,25 @@ export const obraOverviewTour: WizardFlow = {
 		{
 			id: "tabs",
 			targetId: "obra-page-tabs",
-			title: "Secciones de la obra",
+			title: "General, Flujo y Documentos",
 			content:
-				"Desde estas tabs navegas entre General, Flujo y Documentos sin salir del contexto de esta obra.",
+				"Toda la información de esta obra está en tres pestañas. General tiene los datos y el avance. Flujo muestra el proceso. Documentos tiene todos los archivos cargados.",
 			placement: "bottom",
 		},
 		{
 			id: "content",
 			targetId: "obra-page-content",
-			title: "Espacio de trabajo",
+			title: "Todo lo de la obra, acá",
 			content:
-				"Aqui ves el detalle real de la obra. La pestaña activa define si estas revisando datos, flujo operativo o documentos.",
+				"Datos financieros, avance, curva y alertas activas. Lo que necesitás para tomar decisiones sobre esta obra, todo en un solo lugar.",
 			placement: "top",
 		},
 		{
 			id: "documents",
 			targetId: "obra-page-file-manager-tab",
-			title: "Continuar al flujo documental",
+			title: "Documentos: subí, procesá y revisá",
 			content:
-				"Para ver la parte de carga, OCR y extraccion, hace clic en Documentos. Ese es el mejor siguiente paso para la demo.",
+				"Hacé clic en Documentos para ver las carpetas de la obra, subir archivos y dejar que el sistema extraiga los datos automáticamente.",
 			placement: "bottom",
 			allowClickThrough: true,
 			requiredAction: "click_target",
@@ -123,17 +123,17 @@ export const documentosOverviewTour: WizardFlow = {
 		{
 			id: "sidebar",
 			targetId: "documents-sidebar",
-			title: "Mapa documental de la obra",
+			title: "Las carpetas de la obra",
 			content:
-				"Este panel organiza carpetas y tablas de datos. Desde aca se navega lo ya cargado y se entra al flujo documental sin salir de la obra.",
-			placement: "right",
+				"A la izquierda están todas las carpetas: Certificados, Curva de Avance, Órdenes de Compra y Fotos. Hacé clic en cualquiera para ver lo que ya tiene cargado.",
+			placement: "bottom",
 		},
 		{
 			id: "loaded-documents",
 			targetId: "documents-loaded-files",
-			title: "Documentos ya cargados",
+			title: "Estos archivos ya están procesados",
 			content:
-				"En esta zona se ven los archivos ya disponibles para la obra. La idea de la demo es que el prospecto vea que no parte de cero: ya hay documentacion lista para revisar.",
+				"Estos documentos ya fueron subidos y el sistema los procesó automáticamente. Podés abrirlos para ver los datos que extrajo.",
 			placement: "left",
 			fallback: "continue",
 			waitForMs: 1800,
@@ -141,9 +141,9 @@ export const documentosOverviewTour: WizardFlow = {
 		{
 			id: "dropzone",
 			targetId: "documents-dropzone",
-			title: "Carga rapida por arrastre",
+			title: "Cargá archivos nuevos acá",
 			content:
-				"Tambien podes arrastrar archivos aca o usar el selector de carga. Ese gesto dispara el flujo real de subida para seguir con OCR o gestion documental.",
+				"Arrastrá un PDF o imagen acá para subirlo. El sistema lo procesa, extrae los datos y los guarda en la tabla de la carpeta correspondiente.",
 			placement: "top",
 			allowClickThrough: true,
 		},
@@ -152,39 +152,54 @@ export const documentosOverviewTour: WizardFlow = {
 
 export const macroOverviewTour: WizardFlow = {
 	id: "macro-overview",
-	title: "Tour de macro tablas",
+	title: "Recorrido guiado",
 	steps: [
-		{
-			id: "header",
-			targetId: "macro-page-header",
-			title: "Panel consolidado",
-			content:
-				"Macro Tablas es la vista agregada para seguimiento transversal. Sirve para mostrar el valor del producto sin navegar obra por obra.",
-			placement: "bottom",
-		},
-		{
-			id: "tabs",
-			targetId: "macro-page-tabs",
-			title: "Cambio de macro tabla",
-			content:
-				"Cada tab representa una consolidacion distinta. En demos futuras podemos priorizar solo las que le importan al prospecto.",
-			placement: "bottom",
-		},
-		{
-			id: "toolbar",
-			targetId: "macro-page-toolbar",
-			title: "Filtros y acciones",
-			content:
-				"El toolbar concentra filtros, busqueda y acciones de lectura para explorar grandes volumenes de datos.",
-			placement: "bottom",
-		},
 		{
 			id: "table",
 			targetId: "macro-page-table",
-			title: "Lectura consolidada",
+			title: "Gastos de todas las obras, en una sola tabla",
 			content:
-				"Esta tabla unifica fuentes de multiples obras y permite bajar desde el consolidado hacia el detalle operativo.",
+				"Cada fila viene de una orden de compra distinta, de obras distintas. Esta tabla las reúne automáticamente para que puedas analizar el gasto total sin armar ninguna planilla.",
 			placement: "top",
+			skippable: false,
+		},
+		{
+			id: "generar-reporte",
+			targetId: "macro-generar-reporte",
+			title: "Convertilo en un reporte",
+			content:
+				"Hacé clic para ver estos mismos datos en formato reporte, listo para descargar como PDF o Excel y compartirlo con quien necesitás.",
+			placement: "left",
+			allowClickThrough: true,
+			requiredAction: "click_target",
+			skippable: false,
+		},
+	],
+};
+
+export const demoConclusionTour: WizardFlow = {
+	id: "demo-conclusion",
+	title: "Recorrido guiado",
+	steps: [
+		{
+			id: "dashboard-overview",
+			targetId: "dashboard-header",
+			title: "Tu cartera, siempre a la vista",
+			content:
+				"El dashboard muestra el estado de todas las obras en segundos: avance, alertas y certificados recientes, sin abrir nada. Es el punto de partida para el trabajo diario.",
+			placement: "bottom",
+			skippable: false,
+			waitForMs: 2000,
+		},
+		{
+			id: "conclusion",
+			targetId: "dashboard-stats",
+			title: "Eso fue lo más importante",
+			content:
+				"Viste la cartera de obras, la carga de documentos con extracción automática de datos y los reportes consolidados. Síntesis tiene mucho más: reglas de color personalizadas, roles de usuario, notificaciones y configuración por empresa. Cuando quieras profundizar, estamos.",
+			placement: "bottom",
+			skippable: false,
+			waitForMs: 1500,
 		},
 	],
 };

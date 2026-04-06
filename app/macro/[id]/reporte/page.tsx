@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReportPage } from "@/components/report";
@@ -11,6 +11,7 @@ import {
 	type MacroReportFilters,
 	type MacroTableWithColumns,
 } from "@/components/report/builders/macro-report-config";
+import { ContextualWizard, type WizardFlow } from "@/components/ui/contextual-wizard";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -37,11 +38,15 @@ function buildReportConfig(
 function MacroTableReportContent() {
 	const params = useParams();
 	const id = params?.id as string;
+	const router = useRouter();
+	const searchParams = useSearchParams();
 
 	const [macroTable, setMacroTable] =
 		useState<MacroTableResponse["macroTable"] | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+
+	const isMacroReportTour = searchParams.get("tour") === "macro-report";
 
 	useEffect(() => {
 		if (!id) return;
@@ -86,6 +91,53 @@ function MacroTableReportContent() {
 		return buildReportConfig(macroTable);
 	}, [macroTable]);
 
+	const macroReportFlow = useMemo<WizardFlow | null>(() => {
+		if (!isMacroReportTour) return null;
+		return {
+			id: "macro-report",
+			title: "Recorrido guiado",
+			steps: [
+				{
+					id: "report-preview",
+					targetId: "report-preview-area",
+					title: "Listo para exportar o compartir",
+					content:
+						"Los mismos datos de la tabla, ahora en formato reporte. Descargalo como PDF para enviárselo a alguien, o como Excel para seguir trabajando con los números.",
+					placement: "left",
+					skippable: false,
+					waitForMs: 3500,
+				},
+				{
+					id: "agrupar-obra",
+					targetId: "report-config-agrupar-obra",
+					title: "Organizá los gastos por obra",
+					content:
+						"Hacé clic en 'Agrupar' para separar los ítems de cada obra. En vez de una lista mezclada, cada obra va a aparecer con sus propios gastos agrupados.",
+					placement: "left",
+					allowClickThrough: true,
+					requiredAction: "click_target",
+					skippable: false,
+					waitForMs: 3000,
+				},
+				{
+					id: "sumar-precio-total",
+					targetId: "report-config-total-precio-total",
+					title: "Sumá el gasto total por obra",
+					content:
+						"Elegí 'Suma' en el menú de Precio Total. Cada grupo de obra va a mostrar el total gastado al final. Cuando lo hagas, hacé clic en Finalizar.",
+					placement: "left",
+					allowClickThrough: true,
+					skippable: false,
+					waitForMs: 2500,
+				},
+			],
+		};
+	}, [isMacroReportTour]);
+
+	const finishMacroReportTour = useCallback(() => {
+		router.push("/dashboard?tour=demo-conclusion");
+	}, [router]);
+
 	if (isLoading) {
 		return (
 			<div className="flex items-center justify-center h-[70vh]">
@@ -113,10 +165,22 @@ function MacroTableReportContent() {
 	}
 
 	return (
-		<ReportPage
-			config={reportConfig}
-			backUrl={`/macro?macroId=${macroTable?.id}`}
-		/>
+		<>
+			<ReportPage
+				config={reportConfig}
+				backUrl={`/macro?macroId=${macroTable?.id}`}
+			/>
+			{macroReportFlow ? (
+				<ContextualWizard
+					open
+					onOpenChange={() => {}}
+					flow={macroReportFlow}
+					showCloseButton={false}
+					finishLabel="Finalizar"
+					onComplete={finishMacroReportTour}
+				/>
+			) : null}
+		</>
 	);
 }
 

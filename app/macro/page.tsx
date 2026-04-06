@@ -318,6 +318,7 @@ function MacroFiltersContent({
 
 function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const columns = macroTable.columns ?? [];
   const hasObraColumn = columns.some(
@@ -590,7 +591,12 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
               variant="outline"
               size="sm"
               className={toolButtonClass}
-              onClick={() => router.push(`/macro/${macroTable.id}/reporte`)}
+              data-wizard-target="macro-generar-reporte"
+              onClick={() => {
+                const isTourActive = searchParams.get("tour") === "macro-overview";
+                const dest = `/macro/${macroTable.id}/reporte${isTourActive ? "?tour=macro-report" : ""}`;
+                router.push(dest);
+              }}
             >
               <FileText className="h-4 w-4" />
               Generar reporte

@@ -32,7 +32,7 @@ import { AdvanceCurveChart } from "@/components/advance-curve-chart";
 import { QuickFormDialog, type QuickFormField } from "@/components/forms/quick-form-dialog";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import { toast } from "sonner";
-import { dashboardOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
+import { dashboardOverviewTour, demoConclusionTour } from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
 
@@ -954,6 +954,10 @@ export default function Home() {
                 <DemoPageTour
                   flow={dashboardOverviewTour}
                   buttonClassName="rounded-2xl border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                />
+                <DemoPageTour
+                  flow={demoConclusionTour}
+                  finishLabel="¡Listo!"
                 />
                 <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-50">

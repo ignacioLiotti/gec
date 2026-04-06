@@ -699,7 +699,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					</div>
 
 					{/* Paper area */}
-					<div className="flex-1 overflow-auto flex justify-center py-8 px-4">
+					<div data-wizard-target="report-preview-area" className="flex-1 overflow-auto flex justify-center py-8 px-4">
 						<div ref={reportContentRef} className="flex flex-col gap-8">
 							{isLoading ? (
 								<div className="report-paper pdf-preview ">
@@ -921,6 +921,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 																<Button
 																	variant={isGrouped ? "default" : "outline"}
 																	size="sm"
+																	data-wizard-target={col.label.toLowerCase().replace(/\s+/g, "").trim() === "obra" ? "report-config-agrupar-obra" : undefined}
 																	className={`h-7 px-2 text-[11px] ${isGrouped
 																		? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
 																		: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
@@ -937,7 +938,14 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 																</Button>
 															)}
 														</div>
-														<div className="flex items-center gap-2">
+														<div
+															className="flex items-center gap-2"
+															data-wizard-target={
+																col.label.toLowerCase().replace(/\s+/g, "").trim() === "preciototal"
+																	? "report-config-total-precio-total"
+																	: undefined
+															}
+														>
 															<span className="text-[11px] text-[#5f6670] dark:text-zinc-400">
 																Total
 															</span>

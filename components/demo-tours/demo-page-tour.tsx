@@ -18,6 +18,7 @@ type DemoPageTourProps = {
 	buttonClassName?: string;
 	storageKey?: string;
 	preserveQueryOnComplete?: boolean;
+	finishLabel?: string;
 };
 
 export function DemoPageTour({
@@ -25,6 +26,7 @@ export function DemoPageTour({
 	showButton = false,
 	buttonLabel = "Guia",
 	buttonClassName,
+	finishLabel,
 	storageKey,
 	preserveQueryOnComplete = false,
 }: DemoPageTourProps) {
@@ -84,6 +86,7 @@ export function DemoPageTour({
 				}}
 				flow={flow}
 				storageKey={resolvedStorageKey}
+				finishLabel={finishLabel}
 				onComplete={() => {
 					if (preserveQueryOnComplete) {
 						preserveClearRef.current = true;

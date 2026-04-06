@@ -1570,6 +1570,7 @@ export function ObraGeneralTab({
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.25 }}
 									className="lg:col-span-8"
+									data-wizard-target="obra-curva-avance"
 								>
 									<ShellCard
 										title="Curva de avance"

@@ -318,6 +318,9 @@ export function AppSidebar({
 				if (href === "/excel" || href.startsWith("/excel/")) {
 					return hasDemoCapability(demoCapabilities, "excel");
 				}
+				if (href === "/macro" || href.startsWith("/macro/")) {
+					return hasDemoCapability(demoCapabilities, "macro");
+				}
 				if (href === "/notifications" || href === "/profile") {
 					return false;
 				}

@@ -22,7 +22,17 @@ function isGroupableMacroColumn(columnId: string): boolean {
 	return columnId !== "id" && !columnId.startsWith("_source");
 }
 
-function mapColumnType(type: MacroTableDataType): ReportColumnType {
+const CURRENCY_LABEL_PATTERNS = ["precio", "total", "importe", "monto", "costo", "valor", "subtotal", "honorario", "gasto"];
+const NUMBER_LABEL_PATTERNS = ["cantidad", "nro", "numero", "pct", "porcentaje", "avance", "plazo", "dias", "horas", "superficie", "m2"];
+
+function inferTypeFromLabel(label: string): ReportColumnType | null {
+	const n = label.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, "");
+	if (CURRENCY_LABEL_PATTERNS.some((p) => n.includes(p))) return "currency";
+	if (NUMBER_LABEL_PATTERNS.some((p) => n.includes(p))) return "number";
+	return null;
+}
+
+function mapColumnType(type: MacroTableDataType, label?: string): ReportColumnType {
 	switch (type) {
 		case "number":
 			return "number";
@@ -33,6 +43,12 @@ function mapColumnType(type: MacroTableDataType): ReportColumnType {
 		case "date":
 			return "date";
 		default:
+			// When data_type is missing or 'text', try to infer from the column label
+			// so that numeric/currency columns still get sum/average aggregation options.
+			if (label) {
+				const inferred = inferTypeFromLabel(label);
+				if (inferred) return inferred;
+			}
 			return "text";
 	}
 }
@@ -86,14 +102,16 @@ export function buildMacroReportConfig(
 		id: col.id,
 		label: col.label,
 		accessor: (row: MacroTableRow) => row[col.id],
-		type: mapColumnType(col.dataType),
+		type: mapColumnType(col.dataType, col.label),
 		groupable: isGroupableMacroColumn(col.id),
-		align:
-			col.dataType === "number" || col.dataType === "currency"
-				? ("right" as const)
-				: ("left" as const),
-		defaultAggregation:
-			col.dataType === "number" || col.dataType === "currency" ? "sum" : "none",
+		align: (() => {
+			const resolved = mapColumnType(col.dataType, col.label);
+			return resolved === "number" || resolved === "currency" ? ("right" as const) : ("left" as const);
+		})(),
+		defaultAggregation: (() => {
+			const resolved = mapColumnType(col.dataType, col.label);
+			return resolved === "number" || resolved === "currency" ? "sum" : "none";
+		})(),
 	}));
 
 	if (!hasNativeObraColumn && !reportColumns.some((col) => col.id === "_obraName")) {

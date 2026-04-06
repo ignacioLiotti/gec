@@ -97,7 +97,7 @@ export async function createDemoLinkAction(input: {
 		const capabilities =
 			Array.isArray(input.capabilities) && input.capabilities.length > 0
 				? input.capabilities
-				: ["dashboard", "excel"];
+				: ["dashboard", "excel", "macro"];
 
 		const { data: createdLink, error } = await admin
 			.from("tenant_demo_links")

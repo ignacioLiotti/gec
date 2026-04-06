@@ -2082,7 +2082,7 @@ function FileManagerContent({
 
   const handleDownloadGuidedCertificadoPdf = useCallback(() => {
     downloadDemoCertificadoPdf();
-    toast.success('PDF demo descargado. Ahora subilo o arrastralo en la carpeta Certificados.');
+    toast.success('Documento demo descargado. Ahora subilo o arrastralo en la carpeta Certificados.');
   }, []);
 
   const closeDocumentPreview = useCallback(() => {
@@ -3328,12 +3328,12 @@ function FileManagerContent({
               autoSelectedOcrTablaIds.length > 0
                 ? autoSelectedOcrTablaIds
                 : uniqueTablaIds.length <= 1
-                ? uniqueTablaIds
-                : await openTableSelectionDialog({
-                  fileName: storageFileName,
-                  linkedTablas,
-                  mode: 'ocr',
-                });
+                  ? uniqueTablaIds
+                  : await openTableSelectionDialog({
+                    fileName: storageFileName,
+                    linkedTablas,
+                    mode: 'ocr',
+                  });
             if (!selectedTablaIds || selectedTablaIds.length === 0) {
               toast.info(`Extracción OCR cancelada para ${file.name}`);
               continue;
@@ -4472,7 +4472,7 @@ function FileManagerContent({
     ] as const;
     const normalizedGuidedStage =
       guidedTourStage === GUIDED_EXCEL_STAGES.documentsOpenCurva ||
-      guidedTourStage === GUIDED_EXCEL_STAGES.documentsUploadCurva
+        guidedTourStage === GUIDED_EXCEL_STAGES.documentsUploadCurva
         ? GUIDED_EXCEL_STAGES.documentsReturnGeneral
         : (guidedTourStage ?? GUIDED_EXCEL_STAGES.documentsIntro);
     const startIndex = stageOrder.indexOf(
@@ -4485,18 +4485,18 @@ function FileManagerContent({
       {
         id: GUIDED_EXCEL_STAGES.documentsIntro,
         targetId: 'documents-sidebar',
-        title: 'Mapa documental de la obra',
+        title: 'Las carpetas de la obra',
         content:
-          'Acá están las carpetas clave de la demo: Certificados, Curva de Avance, Ordenes de Compra y Fotos de Obra. Vamos a completar primero el certificado faltante.',
-        placement: 'right',
+          'Acá están todas las carpetas de esta obra. Vamos a entrar en Certificados para subir el del mes que todavía falta.',
+        placement: 'bottom',
         skippable: false,
       },
       {
         id: GUIDED_EXCEL_STAGES.documentsOpenCertificados,
         targetId: 'documents-folder-certificados',
-        title: 'Entrá en Certificados',
+        title: 'Abrí la carpeta Certificados',
         content:
-          'Abrí la carpeta Certificados. Ahí vamos a subir el archivo del mes que falta.',
+          'Hacé clic para entrar. Vas a ver los certificados ya cargados y el espacio para subir el que falta.',
         placement: 'right',
         allowClickThrough: true,
         requiredAction: 'click_target' as const,
@@ -4506,9 +4506,9 @@ function FileManagerContent({
       {
         id: GUIDED_EXCEL_STAGES.documentsSwitchToFiles,
         targetId: 'documents-view-mode-cards',
-        title: 'Pasate a Archivos',
+        title: 'Cambiá a la vista de archivos',
         content:
-          'Ahora mismo estas viendo la tabla extraida. Hace clic en Archivos, arriba a la derecha, para volver a la carpeta y poder cargar el PDF faltante.',
+          'Hacé clic en Archivos para ver los PDFs cargados y poder subir el nuevo certificado.',
         placement: 'left',
         allowClickThrough: true,
         requiredAction: 'click_target' as const,
@@ -4518,9 +4518,9 @@ function FileManagerContent({
       {
         id: GUIDED_EXCEL_STAGES.documentsUploadCertificado,
         targetId: 'documents-dropzone',
-        title: 'Subí el certificado faltante',
+        title: 'Subí el certificado aquí',
         content:
-          'Usá esta zona para cargar el certificado. Si se abre la vista previa de importación, completala y confirmá la carga para seguir.',
+          '¿No tenés el archivo? Descargalo con el botón de abajo. Después arrastralo acá o hacé clic para seleccionarlo. El sistema lo procesa solo.',
         placement: 'top',
         allowClickThrough: true,
         beforeShow: () => handleDocumentViewModeChange('cards'),
@@ -4531,7 +4531,7 @@ function FileManagerContent({
         waitForMs: 2800,
         auxiliaryActions: [
           {
-            label: 'Descargar PDF demo',
+            label: 'Descargar documento demo',
             onClick: handleDownloadGuidedCertificadoPdf,
             variant: 'secondary',
           },
@@ -4540,9 +4540,9 @@ function FileManagerContent({
       {
         id: GUIDED_EXCEL_STAGES.documentsReviewCertificadoData,
         targetId: 'documents-extracted-data-table',
-        title: 'Revisá los datos extraídos',
+        title: 'Los datos, extraídos automáticamente',
         content:
-          'Con el certificado cargado, revisá acá la información extraída y confirmá que el nuevo mes ya aparece en la tabla.',
+          'El sistema leyó el PDF y volcó los datos acá. Revisá que el período y los importes sean correctos antes de continuar.',
         placement: 'left',
         beforeShow: () => handleDocumentViewModeChange('table'),
         skippable: false,
@@ -4551,9 +4551,9 @@ function FileManagerContent({
       {
         id: GUIDED_EXCEL_STAGES.documentsReturnGeneral,
         targetId: 'obra-page-general-tab',
-        title: 'Volvé a General',
+        title: 'Volvé a General para ver el resultado',
         content:
-          'Volvé a General para revisar la obra actualizada con el nuevo certificado y sus datos consolidados.',
+          'Hacé clic en General para ver cómo cambió la obra con el certificado cargado: la curva se actualiza y los importes también.',
         placement: 'bottom',
         allowClickThrough: true,
         requiredAction: 'click_target' as const,
@@ -5106,12 +5106,12 @@ function FileManagerContent({
           autoSelectedOcrTablaIds.length > 0
             ? autoSelectedOcrTablaIds
             : uniqueTablaIds.length <= 1
-            ? uniqueTablaIds
-            : await openTableSelectionDialog({
-              fileName: doc.name,
-              linkedTablas: links,
-              mode: 'ocr',
-            });
+              ? uniqueTablaIds
+              : await openTableSelectionDialog({
+                fileName: doc.name,
+                linkedTablas: links,
+                mode: 'ocr',
+              });
         if (!selectedTablaIds || selectedTablaIds.length === 0) {
           toast.info(`Reproceso cancelado para ${doc.name}`);
           return;
