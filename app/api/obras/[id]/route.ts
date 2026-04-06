@@ -13,6 +13,10 @@ import {
 	sanitizeCustomData,
 	executeFlujoActions,
 } from "../route";
+import {
+	hasAnyDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 
 type RouteContext = {
 	params: Promise<{
@@ -240,10 +244,18 @@ export async function GET(_request: Request, context: RouteContext) {
 		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
 	}
 
-	const { supabase, user, tenantId } = await getAuthContext();
+	const access = await resolveRequestAccessContext();
+	const { supabase, user, tenantId, actorType } = access;
+	const { demoSession } = access;
 
-	if (!user) {
+	if (!user && actorType !== "demo") {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	}
+	if (
+		actorType === "demo" &&
+		!hasAnyDemoCapability(demoSession, ["dashboard", "excel"])
+	) {
+		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	}
 
 	if (!tenantId) {

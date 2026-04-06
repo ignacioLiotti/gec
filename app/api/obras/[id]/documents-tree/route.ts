@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { createClient } from "@/utils/supabase/server";
 import { ensureTablaDataType, normalizeFolderName, normalizeFolderPath } from "@/lib/tablas";
+import {
+  hasDemoCapability,
+  resolveRequestAccessContext,
+} from "@/lib/demo-session";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -51,8 +54,8 @@ function mapTablaRowsToOrders(rows: any[], tablaId: string) {
       groups.set(rawKey, {
         id: `${tablaId}-${rawKey}`,
         nroOrden: typeof (data as any).nroOrden === "string" && (data as any).nroOrden.trim().length > 0 ? (data as any).nroOrden.trim() : "Sin número",
+        fecha: typeof (data as any).fecha === "string" ? (data as any).fecha : "",
         solicitante: typeof (data as any).solicitante === "string" ? (data as any).solicitante : "",
-        gestor: typeof (data as any).gestor === "string" ? (data as any).gestor : "",
         proveedor: typeof (data as any).proveedor === "string" ? (data as any).proveedor : "",
         items: [],
         docBucket: docBucketValue || (docPathValue ? "obra-documents" : undefined),
@@ -93,16 +96,27 @@ export async function GET(request: Request, context: RouteContext) {
     const limitParam = rawLimit ? Number(rawLimit) : Number.NaN;
     const rowsLimit = Math.min(500, Math.max(1, Number.isFinite(limitParam) ? limitParam : 500));
 
-    const supabase = await createClient();
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
+    const access = await resolveRequestAccessContext();
+    const { supabase, user: currentUser, tenantId, actorType } = access;
 
-    // Ensure obra exists (RLS will enforce tenant access)
+    if (!currentUser && actorType !== "demo") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!tenantId) {
+      return NextResponse.json({ error: "No tenant" }, { status: 400 });
+    }
+
+    // Ensure obra exists inside the current tenant.
     const { data: obraRow, error: obraError } = await supabase
       .from("obras")
       .select("id")
       .eq("id", obraId)
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (obraError) throw obraError;
     if (!obraRow) {

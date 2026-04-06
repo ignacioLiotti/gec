@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/utils/supabase/server";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 
 import { generateObject } from "ai";
 import { openai } from "@ai-sdk/openai";
@@ -14,13 +17,21 @@ const aiItemSchema = z.object({
 
 const aiExtractionSchema = z.object({
 	nroOrden: z.string().optional(),
+	fecha: z.string().optional(),
 	solicitante: z.string().optional(),
-	gestor: z.string().optional(),
 	proveedor: z.string().optional(),
 	items: z.array(aiItemSchema).min(1),
 });
 
 type AIExtraction = z.infer<typeof aiExtractionSchema>;
+
+type MaterialOrderInsertRow = {
+	id: string;
+	nro_orden: string | null;
+	fecha: string | null;
+	solicitante: string | null;
+	proveedor: string | null;
+};
 
 export async function POST(
 	req: NextRequest,
@@ -65,7 +76,7 @@ Instrucciones:
 - Cada ítem: cantidad (número), unidad (texto), material (texto), precioUnitario (número o null)
 - Detectá y normalizá números con separador decimal coma.
 - Encabezados posibles: "Cantidad", "Unidad", "Detalle Descriptivo del pedido", "Precio Unit", "Total".
-- Extraé también si aparecen: nroOrden, solicitante, gestor, proveedor.
+- Extraé también si aparecen: nroOrden, fecha, solicitante, proveedor.
 - No inventes ítems; solo lo legible.`,
 							},
 							{ type: "image", image: imageDataUrl },
@@ -142,21 +153,33 @@ Instrucciones:
 				items: extraction.items,
 				meta: {
 					nroOrden: extraction.nroOrden ?? null,
+					fecha: extraction.fecha ?? null,
 					solicitante: extraction.solicitante ?? null,
-					gestor: extraction.gestor ?? null,
 					proveedor: extraction.proveedor ?? null,
 				},
 			});
 		}
 
 		// Persist to DB
-		const supabase = await createClient();
+		const access = await resolveRequestAccessContext();
+		const { supabase, user, tenantId, actorType } = access;
+		if (!user && actorType !== "demo") {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		}
+		if (!tenantId) {
+			return NextResponse.json({ error: "No tenant" }, { status: 400 });
+		}
 
 		// Validate obra exists before inserting
 		const { data: obraExists, error: obraCheckError } = await supabase
 			.from("obras")
 			.select("id")
 			.eq("id", obraId)
+			.eq("tenant_id", tenantId)
+			.is("deleted_at", null)
 			.maybeSingle();
 		if (obraCheckError) throw obraCheckError;
 		if (!obraExists) {
@@ -169,8 +192,8 @@ Instrucciones:
 		const orderInsert = {
 			obra_id: obraId,
 			nro_orden: extraction.nroOrden ?? null,
+			fecha: extraction.fecha ?? null,
 			solicitante: extraction.solicitante ?? null,
-			gestor: extraction.gestor ?? null,
 			proveedor: extraction.proveedor ?? null,
 			// This import endpoint is currently only used in preview mode from the Excel UI.
 			// If in the future we support saving directly from here, doc info can be passed
@@ -208,11 +231,11 @@ Instrucciones:
 				size: file instanceof File ? file.size : null,
 			},
 			order: {
-				id: order.id,
-				nroOrden: order.nro_orden,
-				solicitante: order.solicitante,
-				gestor: order.gestor,
-				proveedor: order.proveedor,
+				id: (order as MaterialOrderInsertRow).id,
+				nroOrden: (order as MaterialOrderInsertRow).nro_orden,
+				fecha: (order as MaterialOrderInsertRow).fecha,
+				solicitante: (order as MaterialOrderInsertRow).solicitante,
+				proveedor: (order as MaterialOrderInsertRow).proveedor,
 			},
 			items: extraction.items,
 		});

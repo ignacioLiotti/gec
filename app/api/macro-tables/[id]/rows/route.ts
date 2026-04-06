@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import {
   matchesMacroFilters,
   matchesMacroSearch,
@@ -11,8 +10,10 @@ import {
   resolveMacroSourceTablas,
   type MacroSourceTablaRecord,
 } from "@/lib/macro-table-source-selection";
-import { createClient } from "@/utils/supabase/server";
-import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
+import {
+  hasDemoCapability,
+  resolveRequestAccessContext,
+} from "@/lib/demo-session";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -121,54 +122,10 @@ function resolveObraSourceValue(obraValues: Record<string, unknown>, sourceField
   return null;
 }
 
-async function getAuthContext() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { supabase, user: null, tenantId: null };
-  }
-
-  // Check for preferred tenant from cookie
-  const cookieStore = await cookies();
-  const preferredTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value;
-
-  let membership = null;
-
-  if (preferredTenantId) {
-    const preferredResult = await supabase
-      .from("memberships")
-      .select("tenant_id")
-      .eq("user_id", user.id)
-      .eq("tenant_id", preferredTenantId)
-      .limit(1)
-      .maybeSingle();
-
-    membership = preferredResult.data ?? null;
-  }
-
-  // Fallback to oldest membership if no preferred tenant
-  if (!membership) {
-    const fallbackResult = await supabase
-      .from("memberships")
-      .select("tenant_id")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    membership = fallbackResult.data ?? null;
-  }
-
-  const tenantId = membership?.tenant_id ?? null;
-  return { supabase, user, tenantId };
-}
-
 export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const { supabase, user, tenantId } = await getAuthContext();
+  const access = await resolveRequestAccessContext();
+  const { supabase, tenantId } = access;
   const url = new URL(request.url);
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
@@ -188,8 +145,11 @@ export async function GET(request: Request, context: RouteContext) {
       ? (parsedFilters as MacroTableFilters)
       : {};
 
-  if (!user) {
+  if (access.actorType === "anonymous") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.actorType === "demo" && !hasDemoCapability(access.demoSession, "macro")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   if (!tenantId) {
@@ -490,9 +450,10 @@ type CustomValueInput = {
 
 export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const { supabase, user, tenantId } = await getAuthContext();
+  const access = await resolveRequestAccessContext();
+  const { supabase, user, tenantId } = access;
 
-  if (!user) {
+  if (access.actorType !== "user" || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
 import {
 	ensureTablaDataType,
 	normalizeFieldKey,
 	normalizeFolderName,
 	normalizeFolderPath,
 } from "@/lib/tablas";
+import { createClient } from "@/utils/supabase/server";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -21,6 +25,10 @@ type ColumnInput = {
 const SOURCE_TYPES = new Set(["manual", "csv", "ocr"]);
 
 const MATERIALS_TEMPLATE_COLUMNS: ColumnInput[] = [
+	{ label: "N° Orden", fieldKey: "nroOrden", dataType: "text" },
+	{ label: "Fecha", fieldKey: "fecha", dataType: "text" },
+	{ label: "Solicitante", fieldKey: "solicitante", dataType: "text" },
+	{ label: "Proveedor", fieldKey: "proveedor", dataType: "text" },
 	{
 		label: "Cantidad",
 		fieldKey: "cantidad",
@@ -28,16 +36,14 @@ const MATERIALS_TEMPLATE_COLUMNS: ColumnInput[] = [
 		required: true,
 	},
 	{ label: "Unidad", fieldKey: "unidad", dataType: "text", required: true },
-	{ label: "Material", fieldKey: "material", dataType: "text", required: true },
+	{ label: "Detalle Descriptivo", fieldKey: "material", dataType: "text", required: true },
 	{
 		label: "Precio Unitario",
 		fieldKey: "precioUnitario",
 		dataType: "currency",
 	},
-	{ label: "Proveedor", fieldKey: "proveedor", dataType: "text" },
-	{ label: "N° Orden", fieldKey: "nroOrden", dataType: "text" },
-	{ label: "Solicitante", fieldKey: "solicitante", dataType: "text" },
-	{ label: "Gestor", fieldKey: "gestor", dataType: "text" },
+	{ label: "Precio Total", fieldKey: "precioTotal", dataType: "currency" },
+	{ label: "Total Orden", fieldKey: "totalOrden", dataType: "currency" },
 ];
 
 function toColumnResponse(record: any) {
@@ -61,7 +67,30 @@ export async function GET(_req: Request, context: RouteContext) {
 	}
 
 	try {
-		const supabase = await createClient();
+		const access = await resolveRequestAccessContext();
+		const { supabase, user, tenantId, actorType } = access;
+		if (!user && actorType !== "demo") {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		}
+		if (!tenantId) {
+			return NextResponse.json({ error: "No tenant" }, { status: 400 });
+		}
+
+		const { data: obra, error: obraError } = await supabase
+			.from("obras")
+			.select("id")
+			.eq("id", obraId)
+			.eq("tenant_id", tenantId)
+			.is("deleted_at", null)
+			.maybeSingle();
+		if (obraError) throw obraError;
+		if (!obra) {
+			return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
+		}
+
 		const { data: tablas, error: tablasError } = await supabase
 			.from("obra_tablas")
 			.select(

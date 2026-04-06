@@ -2,26 +2,26 @@
 
 import * as React from "react";
 import {
-	Home,
-	Users,
-	ShieldCheck,
+	Bell,
+	Building2,
+	Check,
 	ChevronDown,
 	ChevronRight,
-	FileText,
-	Bell,
-	Database,
-	KeyRound,
-	Settings2,
-	PlusCircle,
-	Check,
-	Building2,
-	Loader2,
-	Table2,
-	Columns3Cog,
 	Columns3,
-	Layers,
-	Wallet,
+	Columns3Cog,
+	Database,
+	FileText,
 	Globe2,
+	Home,
+	KeyRound,
+	Layers,
+	Loader2,
+	PlusCircle,
+	Settings2,
+	ShieldCheck,
+	Table2,
+	Users,
+	Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -58,42 +58,19 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { hasDemoCapability, type DemoCapability } from "@/lib/demo-capabilities";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
 type NavItem = {
 	title: string;
 	href: string;
 	icon: React.ComponentType<{ className?: string }>;
-	badge?: string;
 	items?: {
 		title: string;
 		href: string;
 	}[];
 };
 
-/**
- * ============================================================================
- * SIDEBAR NAVIGATION CONFIGURATION
- * ============================================================================
- * 
- * THIS IS WHERE YOU CONFIGURE THE SIDEBAR NAVIGATION ITEMS
- * 
- * File: components/app-sidebar.tsx
- * 
- * To add a new navigation item:
- * 1. Add a new entry to navItems, adminItems, or devItems array below
- * 2. The item will automatically be filtered based on user roles
- * 3. Make sure the route is also configured in lib/route-access.ts if it needs protection
- * 
- * Navigation Sections:
- * - navItems: Main navigation (shown to all users, filtered by role access)
- * - adminItems: Admin section (only shown to admins/superadmins)
- * - devItems: Development section (shown to all, typically for dev/testing)
- * 
- * ============================================================================
- */
-
-// Navigation structure for your multi-tenant app
 const navItems: NavItem[] = [
 	{
 		title: "Dashboard",
@@ -105,13 +82,11 @@ const navItems: NavItem[] = [
 		href: "/excel",
 		icon: Database,
 	},
-
 	{
 		title: "Notificaciones",
 		href: "/notifications",
 		icon: Bell,
 	},
-
 ];
 
 const adminItems: NavItem[] = [
@@ -126,7 +101,7 @@ const adminItems: NavItem[] = [
 		icon: ShieldCheck,
 	},
 	{
-		title: "Configuración de Obras",
+		title: "Configuracion de Obras",
 		href: "/admin/obra-defaults",
 		icon: Settings2,
 	},
@@ -135,9 +110,13 @@ const adminItems: NavItem[] = [
 		href: "/admin/main-table-config",
 		icon: Columns3Cog,
 	},
-
 	{
-		title: "Auditoría",
+		title: "Demo Links",
+		href: "/admin/demo-links",
+		icon: KeyRound,
+	},
+	{
+		title: "Auditoria",
 		href: "/admin/audit-log",
 		icon: FileText,
 	},
@@ -171,33 +150,6 @@ const ignacioItems: NavItem[] = [
 	},
 ];
 
-// const devItems: NavItem[] = [
-// 	{
-// 		title: "Bootstrap",
-// 		href: "/dev/bootstrap",
-// 		icon: Wrench,
-// 	},
-// 	{
-// 		title: "Prueba de Notificaciones",
-// 		href: "/dev/notifications-playground",
-// 		icon: Play,
-// 	},
-// 	{
-// 		title: "Demo de Permisos",
-// 		href: "/permissions-demo",
-// 		icon: ShieldCheck,
-// 	},
-// 	{
-// 		title: "Páginas de Prueba",
-// 		href: "#",
-// 		icon: FileText,
-// 		items: [
-// 			{ title: "Prueba 1", href: "/test" },
-// 			{ title: "Prueba 2", href: "/test2" },
-// 		],
-// 	},
-// ];
-
 type SidebarMacroTable = {
 	id: string;
 	name: string;
@@ -206,56 +158,60 @@ type SidebarMacroTable = {
 
 type SidebarPrefetchLinkProps = React.ComponentProps<typeof Link>;
 
-const SidebarPrefetchLink = React.forwardRef<HTMLAnchorElement, SidebarPrefetchLinkProps>(
-	function SidebarPrefetchLink(
-		{ href, onMouseEnter, onFocus, onTouchStart, ...props },
-		ref
-	) {
-		const router = useRouter();
-		const { prefetchObra } = usePrefetchObra();
-		const prefetchedRef = React.useRef(false);
-		const hrefValue = typeof href === "string" ? href : href.toString();
+const SidebarPrefetchLink = React.forwardRef<
+	HTMLAnchorElement,
+	SidebarPrefetchLinkProps
+>(function SidebarPrefetchLink(
+	{ href, onMouseEnter, onFocus, onTouchStart, ...props },
+	ref,
+) {
+	const router = useRouter();
+	const { prefetchObra } = usePrefetchObra();
+	const prefetchedRef = React.useRef(false);
+	const hrefValue = typeof href === "string" ? href : href.toString();
 
-		const runPrefetch = React.useCallback(() => {
-			if (prefetchedRef.current || !hrefValue.startsWith("/")) return;
-			prefetchedRef.current = true;
+	const runPrefetch = React.useCallback(() => {
+		if (prefetchedRef.current || !hrefValue.startsWith("/")) return;
+		prefetchedRef.current = true;
 
-			router.prefetch(hrefValue);
+		router.prefetch(hrefValue);
 
-			const obraMatch = hrefValue.match(/^\/excel\/([^/?#]+)$/);
-			if (obraMatch?.[1]) {
-				prefetchObra(obraMatch[1]);
-			}
-		}, [hrefValue, prefetchObra, router]);
+		const obraMatch = hrefValue.match(/^\/excel\/([^/?#]+)$/);
+		if (obraMatch?.[1]) {
+			prefetchObra(obraMatch[1]);
+		}
+	}, [hrefValue, prefetchObra, router]);
 
-		return (
-			<Link
-				ref={ref}
-				href={href}
-				onMouseEnter={(event) => {
-					onMouseEnter?.(event);
-					runPrefetch();
-				}}
-				onFocus={(event) => {
-					onFocus?.(event);
-					runPrefetch();
-				}}
-				onTouchStart={(event) => {
-					onTouchStart?.(event);
-					runPrefetch();
-				}}
-				{...props}
-				prefetch={false}
-			/>
-		);
-	}
-);
+	return (
+		<Link
+			ref={ref}
+			href={href}
+			onMouseEnter={(event) => {
+				onMouseEnter?.(event);
+				runPrefetch();
+			}}
+			onFocus={(event) => {
+				onFocus?.(event);
+				runPrefetch();
+			}}
+			onTouchStart={(event) => {
+				onTouchStart?.(event);
+				runPrefetch();
+			}}
+			{...props}
+			prefetch={false}
+		/>
+	);
+});
 
 export function AppSidebar({
 	user,
 	userRoles,
 	tenants,
 	sidebarMacroTables,
+	demoMode = false,
+	demoLabel = null,
+	demoCapabilities = [],
 	...props
 }: React.ComponentProps<typeof Sidebar> & {
 	user?: { email?: string } | null;
@@ -267,14 +223,19 @@ export function AppSidebar({
 	} | null;
 	tenants?: { id: string; name: string | null }[];
 	sidebarMacroTables?: SidebarMacroTable[];
+	demoMode?: boolean;
+	demoLabel?: string | null;
+	demoCapabilities?: DemoCapability[];
 }) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const router = useRouter();
 	const { state } = useSidebar();
-	const [switchingTenantId, setSwitchingTenantId] = React.useState<string | null>(null);
+	const [switchingTenantId, setSwitchingTenantId] = React.useState<
+		string | null
+	>(null);
 	const [macroTables, setMacroTables] = React.useState<SidebarMacroTable[]>(
-		sidebarMacroTables ?? []
+		sidebarMacroTables ?? [],
 	);
 	const tenantOptions = tenants ?? [];
 	const activeTenantId = userRoles?.tenantId ?? null;
@@ -314,7 +275,7 @@ export function AppSidebar({
 		return () => {
 			cancelled = true;
 		};
-	}, [sidebarMacroTables, userRoles?.tenantId]);
+	}, [demoMode, sidebarMacroTables, userRoles?.tenantId]);
 
 	const handleTenantSwitch = React.useCallback(
 		async (tenantId: string) => {
@@ -331,10 +292,12 @@ export function AppSidebar({
 			} catch (error) {
 				console.error("[tenant-switch] error", error);
 			} finally {
-				setSwitchingTenantId((current) => (current === tenantId ? null : current));
+				setSwitchingTenantId((current) =>
+					current === tenantId ? null : current,
+				);
 			}
 		},
-		[router]
+		[router],
 	);
 	const activeTenant =
 		tenantOptions.find((tenant) => tenant.id === activeTenantId) ??
@@ -342,73 +305,72 @@ export function AppSidebar({
 		null;
 	const isMacroTablesActive = Boolean(
 		pathname === "/macro" &&
-		activeMacroTableId &&
-		macroTables.some((table) => table.id === activeMacroTableId)
+			activeMacroTableId &&
+			macroTables.some((table) => table.id === activeMacroTableId),
 	);
 
-	// Helper function to check if user can access a route
 	const canAccessRoute = React.useCallback(
 		(href: string): boolean => {
-			// Admin and superadmin can access everything
+			if (demoMode) {
+				if (href === "/dashboard") {
+					return hasDemoCapability(demoCapabilities, "dashboard");
+				}
+				if (href === "/excel" || href.startsWith("/excel/")) {
+					return hasDemoCapability(demoCapabilities, "excel");
+				}
+				if (href === "/notifications" || href === "/profile") {
+					return false;
+				}
+			}
 			if (userRoles?.isAdmin || userRoles?.isSuperAdmin) {
 				return true;
 			}
 
-			// Check route access config
 			const config = getRouteAccessConfig(href);
-			console.log("config", config);
 			if (!config) {
-				// Route not protected, allow access
 				return true;
 			}
 
-			// If no roles required, allow access
 			if (config.allowedRoles.length === 0) {
 				return true;
 			}
 
-			// Check if user has any of the required roles
 			return config.allowedRoles.some((role) =>
-				userRoles?.roles.includes(role)
+				userRoles?.roles.includes(role),
 			);
 		},
-		[userRoles]
+		[demoCapabilities, demoMode, userRoles],
 	);
 
-	// Filter navigation items based on user roles
 	const filteredNavItems = React.useMemo(
 		() => navItems.filter((item) => canAccessRoute(item.href)),
-		[canAccessRoute]
+		[canAccessRoute],
 	);
-	console.log("NavItems", navItems);
-	console.log("filteredNavItems", filteredNavItems);
 
-	// Filter admin items (only show to admins)
 	const filteredAdminItems = React.useMemo(
 		() =>
-			userRoles?.isAdmin || userRoles?.isSuperAdmin
-				? adminItems
-				: [],
-		[userRoles]
+			userRoles?.isAdmin || userRoles?.isSuperAdmin ? adminItems : [],
+		[userRoles],
 	);
 
-	// Filter Ignacio items (only show to superadmin or ignacioliotti@gmail.com)
 	const filteredIgnacioItems = React.useMemo(
 		() =>
 			userRoles?.isSuperAdmin || user?.email === "ignacioliotti@gmail.com"
 				? ignacioItems
 				: [],
-		[userRoles, user?.email]
+		[userRoles, user?.email],
 	);
 
-	// Filter dev items (only show to admins)
-	// const filteredDevItems = React.useMemo(
-	// 	() =>
-	// 		userRoles?.isAdmin || userRoles?.isSuperAdmin
-	// 			? devItems
-	// 			: [],
-	// 	[userRoles]
-	// );
+	const handleEnterRealApp = React.useCallback(async () => {
+		try {
+			await fetch("/api/demo/session/exit", {
+				method: "POST",
+			});
+		} catch (error) {
+			console.error("[demo-exit] failed to clear demo session", error);
+		}
+		window.location.assign("/dashboard?returnTo=%2Fdashboard");
+	}, []);
 
 	return (
 		<Sidebar collapsible="icon" {...props}>
@@ -416,49 +378,84 @@ export function AppSidebar({
 				<SidebarMenu>
 					<SidebarMenuItem>
 						<div className={state === "collapsed" ? "space-y-2" : ""}>
-							<div className={state === "collapsed" ? "space-y-2" : "flex items-start gap-2"}>
+							<div
+								className={
+									state === "collapsed" ? "space-y-2" : "flex items-start gap-2"
+								}
+							>
 								<SidebarMenuButton
 									size="lg"
 									asChild
 									className={state === "collapsed" ? "" : "min-w-0 flex-1"}
 								>
-									<SidebarPrefetchLink href="/" className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5">
-									{/* if sidebar is closed make logo smaller */}
-									<div
-										className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === "collapsed" ? "size-8" : "size-10"
+									<SidebarPrefetchLink
+										href="/"
+										className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5"
+									>
+										<div
+											className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${
+												state === "collapsed" ? "size-8" : "size-10"
 											}`}
-									/>
-									<div className="grid flex-1 text-left text-sm leading-tight">
-										<span className="truncate font-semibold font-mono text-lg leading-[16px]">
-											Sintesis
-										</span>
-										<span className="truncate text-xs">Plataforma de gestión</span>
-									</div>
-								</SidebarPrefetchLink>
+										/>
+										<div className="grid flex-1 text-left text-sm leading-tight">
+											<span className="truncate font-mono text-lg font-semibold leading-[16px]">
+												Sintesis
+											</span>
+											<span className="truncate text-xs">
+												Plataforma de gestion
+											</span>
+										</div>
+									</SidebarPrefetchLink>
 								</SidebarMenuButton>
 								<SidebarTrigger
-									className={`shrink-0 border bg-sidebar-accent/40 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground ${state === "collapsed" ? "mx-auto flex" : "mt-1"}`}
+									className={`shrink-0 border bg-sidebar-accent/40 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground ${
+										state === "collapsed" ? "mx-auto flex" : "mt-1"
+									}`}
 								/>
 							</div>
-							{tenantOptions.length > 0 ? (
+							{demoMode && activeTenant ? (
+								state === "collapsed" ? (
+									<div
+										className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2.5"
+										title={activeTenant.name ?? "Demo"}
+									>
+										<Building2 className="size-5 text-muted-foreground" />
+									</div>
+								) : (
+									<div className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium">
+										<div className="min-w-0">
+											<p className="text-xs font-normal text-muted-foreground">
+												Demo
+											</p>
+											<p className="truncate">
+												{activeTenant.name ?? "Organizacion demo"}
+											</p>
+										</div>
+									</div>
+								)
+							) : tenantOptions.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										{state === "collapsed" ? (
 											<button
 												className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2.5"
 												type="button"
-												title={activeTenant?.name ?? "Seleccionar organización"}
+												title={activeTenant?.name ?? "Seleccionar organizacion"}
 											>
 												<Building2 className="size-5 text-muted-foreground" />
 											</button>
 										) : (
 											<button
-												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium "
+												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium"
 												type="button"
 											>
 												<div className="min-w-0">
-													<p className="text-xs font-normal text-muted-foreground">Organización</p>
-													<p className="truncate">{activeTenant?.name ?? "Seleccionar"}</p>
+													<p className="text-xs font-normal text-muted-foreground">
+														Organizacion
+													</p>
+													<p className="truncate">
+														{activeTenant?.name ?? "Seleccionar"}
+													</p>
 												</div>
 												<ChevronDown className="ml-2 size-4 text-muted-foreground" />
 											</button>
@@ -503,30 +500,31 @@ export function AppSidebar({
 										})}
 										<DropdownMenuSeparator />
 										<DropdownMenuItem asChild>
-											<SidebarPrefetchLink href="/tenants/new" className="flex items-center gap-2">
+											<SidebarPrefetchLink
+												href="/tenants/new"
+												className="flex items-center gap-2"
+											>
 												<PlusCircle className="size-4" />
-												<span>Crear organización</span>
+												<span>Crear organizacion</span>
 											</SidebarPrefetchLink>
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
+							) : state === "collapsed" ? (
+								<SidebarPrefetchLink
+									href="/tenants/new"
+									className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
+									title="Crear organizacion"
+								>
+									<PlusCircle className="size-5" />
+								</SidebarPrefetchLink>
 							) : (
-								state === "collapsed" ? (
-									<SidebarPrefetchLink
-										href="/tenants/new"
-										className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
-										title="Crear organización"
-									>
-										<PlusCircle className="size-5" />
-									</SidebarPrefetchLink>
-								) : (
-									<SidebarPrefetchLink
-										href="/tenants/new"
-										className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
-									>
-										Crear organización
-									</SidebarPrefetchLink>
-								)
+								<SidebarPrefetchLink
+									href="/tenants/new"
+									className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
+								>
+									Crear organizacion
+								</SidebarPrefetchLink>
 							)}
 						</div>
 					</SidebarMenuItem>
@@ -534,7 +532,6 @@ export function AppSidebar({
 			</SidebarHeader>
 
 			<SidebarContent>
-				{/* Main Navigation */}
 				{filteredNavItems.length > 0 && (
 					<SidebarGroup>
 						<SidebarGroupLabel>Principal</SidebarGroupLabel>
@@ -547,33 +544,47 @@ export function AppSidebar({
 
 									return (
 										<React.Fragment key={item.title}>
-											{/* Tablas dropdown - inserted before Notifications */}
-											{showTablasBeforeThis && (
-												state === "collapsed" ? (
+											{showTablasBeforeThis &&
+												(state === "collapsed" ? (
 													<SidebarMenuItem>
 														<DropdownMenu>
 															<DropdownMenuTrigger asChild>
-																<SidebarMenuButton asChild isActive={isMacroTablesActive} tooltip="Tablas">
+																<SidebarMenuButton
+																	asChild
+																	isActive={isMacroTablesActive}
+																	tooltip="Tablas"
+																>
 																	<button type="button">
 																		<Table2 className="size-4" />
 																	</button>
 																</SidebarMenuButton>
 															</DropdownMenuTrigger>
-															<DropdownMenuContent side="right" align="start" className="w-72">
-																<DropdownMenuLabel>Tablas</DropdownMenuLabel>
+															<DropdownMenuContent
+																side="right"
+																align="start"
+																className="w-72"
+															>
+																<DropdownMenuLabel>
+																	Tablas
+																</DropdownMenuLabel>
 																<DropdownMenuSeparator />
 																{macroTables.map((table) => {
 																	const tableHref = `/macro?macroId=${encodeURIComponent(table.id)}`;
 																	const isTableActive =
-																		pathname === "/macro" && activeMacroTableId === table.id;
+																		pathname === "/macro" &&
+																		activeMacroTableId === table.id;
 																	return (
 																		<DropdownMenuItem key={table.id} asChild>
 																			<SidebarPrefetchLink
 																				href={tableHref}
-																				className={isTableActive ? "font-semibold" : undefined}
+																				className={
+																					isTableActive ? "font-semibold" : undefined
+																				}
 																			>
 																				<Columns3 className="size-4" />
-																				<span className="truncate">{table.name}</span>
+																				<span className="truncate">
+																					{table.name}
+																				</span>
 																			</SidebarPrefetchLink>
 																		</DropdownMenuItem>
 																	);
@@ -582,10 +593,17 @@ export function AppSidebar({
 														</DropdownMenu>
 													</SidebarMenuItem>
 												) : (
-													<Collapsible defaultOpen className="group/collapsible">
+													<Collapsible
+														defaultOpen
+														className="group/collapsible"
+													>
 														<SidebarMenuItem>
 															<CollapsibleTrigger asChild>
-																<SidebarMenuButton asChild isActive={isMacroTablesActive} tooltip="Tablas">
+																<SidebarMenuButton
+																	asChild
+																	isActive={isMacroTablesActive}
+																	tooltip="Tablas"
+																>
 																	<button type="button">
 																		<Table2 className="size-4" />
 																		<span>Tablas</span>
@@ -598,10 +616,14 @@ export function AppSidebar({
 																	{macroTables.map((table) => {
 																		const tableHref = `/macro?macroId=${encodeURIComponent(table.id)}`;
 																		const isTableActive =
-																			pathname === "/macro" && activeMacroTableId === table.id;
+																			pathname === "/macro" &&
+																			activeMacroTableId === table.id;
 																		return (
 																			<SidebarMenuSubItem key={table.id}>
-																				<SidebarMenuSubButton asChild isActive={isTableActive}>
+																				<SidebarMenuSubButton
+																					asChild
+																					isActive={isTableActive}
+																				>
 																					<SidebarPrefetchLink href={tableHref}>
 																						<Columns3 className="size-4" />
 																						{table.name}
@@ -614,18 +636,19 @@ export function AppSidebar({
 															</CollapsibleContent>
 														</SidebarMenuItem>
 													</Collapsible>
-												)
-											)}
+												))}
 											<SidebarMenuItem>
-												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+												<SidebarMenuButton
+													asChild
+													isActive={isActive}
+													tooltip={item.title}
+												>
 													<SidebarPrefetchLink href={item.href}>
 														<item.icon className="size-4" />
 														<span>{item.title}</span>
 													</SidebarPrefetchLink>
 												</SidebarMenuButton>
 											</SidebarMenuItem>
-
-
 										</React.Fragment>
 									);
 								})}
@@ -637,17 +660,20 @@ export function AppSidebar({
 				{filteredAdminItems.length > 0 && (
 					<>
 						<Separator />
-
-						{/* Admin Navigation */}
 						<SidebarGroup>
-							<SidebarGroupLabel>Administración</SidebarGroupLabel>
+							<SidebarGroupLabel>Administracion</SidebarGroupLabel>
 							<SidebarGroupContent>
 								<SidebarMenu>
 									{filteredAdminItems.map((item) => {
-										const isActive = pathname === item.href || pathname.startsWith(item.href);
+										const isActive =
+											pathname === item.href || pathname.startsWith(item.href);
 										return (
 											<SidebarMenuItem key={item.title}>
-												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+												<SidebarMenuButton
+													asChild
+													isActive={isActive}
+													tooltip={item.title}
+												>
 													<SidebarPrefetchLink href={item.href}>
 														<item.icon className="size-4" />
 														<span>{item.title}</span>
@@ -665,17 +691,20 @@ export function AppSidebar({
 				{filteredIgnacioItems.length > 0 && (
 					<>
 						<Separator />
-
-						{/* Ignacio Navigation */}
-						<SidebarGroup className="bg-purple-500/20 rounded-lg p-2">
+						<SidebarGroup className="rounded-lg bg-purple-500/20 p-2">
 							<SidebarGroupLabel>Ignacio</SidebarGroupLabel>
 							<SidebarGroupContent>
 								<SidebarMenu>
 									{filteredIgnacioItems.map((item) => {
-										const isActive = pathname === item.href || pathname.startsWith(item.href);
+										const isActive =
+											pathname === item.href || pathname.startsWith(item.href);
 										return (
 											<SidebarMenuItem key={item.title}>
-												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+												<SidebarMenuButton
+													asChild
+													isActive={isActive}
+													tooltip={item.title}
+												>
 													<SidebarPrefetchLink href={item.href}>
 														<item.icon className="size-4" />
 														<span>{item.title}</span>
@@ -689,70 +718,19 @@ export function AppSidebar({
 						</SidebarGroup>
 					</>
 				)}
-
-				{/* {filteredDevItems.length > 0 && (
-					<>
-						<Separator />
-
-						
-						<SidebarGroup>
-							<SidebarGroupLabel>Desarrollo</SidebarGroupLabel>
-							<SidebarGroupContent>
-								<SidebarMenu>
-									{filteredDevItems.map((item) => {
-										const isActive = pathname === item.href;
-										const hasSubItems = item.items && item.items.length > 0;
-
-										if (hasSubItems) {
-											return (
-												<SidebarMenuItem key={item.title}>
-													<SidebarMenuButton tooltip={item.title}>
-														<item.icon className="size-4" />
-														<span>{item.title}</span>
-														<ChevronDown className="ml-auto size-4 transition-transform group-data-[state=open]:rotate-180" />
-													</SidebarMenuButton>
-													<SidebarMenuSub>
-														{item.items?.map((subItem) => {
-															const isSubActive = pathname === subItem.href;
-															return (
-																<SidebarMenuSubItem key={subItem.title}>
-																	<SidebarMenuSubButton asChild isActive={isSubActive}>
-																		<Link href={subItem.href}>{subItem.title}</Link>
-																	</SidebarMenuSubButton>
-																</SidebarMenuSubItem>
-															);
-														})}
-													</SidebarMenuSub>
-												</SidebarMenuItem>
-											);
-										}
-
-										return (
-											<SidebarMenuItem key={item.title}>
-												<SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-													<Link href={item.href}>
-														<item.icon className="size-4" />
-														<span>{item.title}</span>
-													</Link>
-												</SidebarMenuButton>
-											</SidebarMenuItem>
-										);
-									})}
-								</SidebarMenu>
-							</SidebarGroupContent>
-						</SidebarGroup>
-					</>
-				)} */}
 			</SidebarContent>
 
 			<SidebarFooter>
-				{user && (
+				{user ? (
 					<SidebarMenu>
 						<SidebarMenuItem>
-							<SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+							<SidebarMenuButton
+								size="lg"
+								className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+							>
 								<div className="bg-muted flex aspect-square size-8 items-center justify-center rounded-lg">
 									<span className="text-xs font-semibold">
-										{user.email?.[0].toUpperCase() || "U"}
+										{user.email?.[0]?.toUpperCase() || "U"}
 									</span>
 								</div>
 								<div className="grid flex-1 text-left text-sm leading-tight">
@@ -764,8 +742,37 @@ export function AppSidebar({
 							</SidebarMenuButton>
 						</SidebarMenuItem>
 					</SidebarMenu>
-				)}
+				) : demoMode ? (
+					<SidebarMenu>
+						<SidebarMenuItem>
+							<div className="space-y-2">
+								<SidebarMenuButton size="lg" className="pointer-events-none">
+									<div className="bg-orange-primary/15 flex aspect-square size-8 items-center justify-center rounded-lg text-orange-700">
+										<span className="text-xs font-semibold">D</span>
+									</div>
+									<div className="grid flex-1 text-left text-sm leading-tight">
+										<span className="truncate font-semibold">
+											{demoLabel ?? "Sesion demo"}
+										</span>
+										<span className="truncate text-xs">Acceso compartido</span>
+									</div>
+								</SidebarMenuButton>
+								<button
+									type="button"
+									onClick={handleEnterRealApp}
+									className={`flex w-full items-center justify-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent ${
+										state === "collapsed" ? "px-2" : ""
+									}`}
+									title="Ingresar a la app real"
+								>
+									<KeyRound className="size-4 shrink-0" />
+									{state === "collapsed" ? null : <span>Ingresar con mi cuenta</span>}
+								</button>
+							</div>
+						</SidebarMenuItem>
+					</SidebarMenu>
+				) : null}
 			</SidebarFooter>
-		</Sidebar >
+		</Sidebar>
 	);
 }

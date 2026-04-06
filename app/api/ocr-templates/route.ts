@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { resolveRequestAccessContext } from "@/lib/demo-session";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 import {
 	normalizeTemplateColumns,
 	propagateTemplateUpdate,
@@ -39,6 +42,7 @@ async function getAuthContext() {
 		user: access.user,
 		tenantId: access.tenantId,
 		actorType: access.actorType,
+		demoSession: access.demoSession,
 	};
 }
 
@@ -94,10 +98,14 @@ function deriveColumnsFromRegions(regions: Region[]): TemplateColumnDefinition[]
 }
 
 export async function GET() {
-	const { supabase, user, tenantId, actorType } = await getAuthContext();
+	const access = await getAuthContext();
+	const { supabase, user, tenantId, actorType } = access;
 
 	if (!user && actorType !== "demo") {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	}
+	if (actorType === "demo" && !hasDemoCapability(access.demoSession ?? null, "excel")) {
+		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	}
 
 	if (!tenantId) {

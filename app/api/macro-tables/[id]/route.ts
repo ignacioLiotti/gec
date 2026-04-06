@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/utils/supabase/server";
-import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 import {
   mapMacroTableToResponse,
   mapColumnToResponse,
@@ -13,6 +10,10 @@ import {
   resolveMacroSourceTablas,
   type MacroSourceTablaRecord,
 } from "@/lib/macro-table-source-selection";
+import {
+  hasDemoCapability,
+  resolveRequestAccessContext,
+} from "@/lib/demo-session";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -74,57 +75,16 @@ function mapSourceResponse(
   };
 }
 
-async function getAuthContext() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { supabase, user: null, tenantId: null };
-  }
-
-  // Check for preferred tenant from cookie
-  const cookieStore = await cookies();
-  const preferredTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value;
-
-  let membership = null;
-
-  if (preferredTenantId) {
-    const preferredResult = await supabase
-      .from("memberships")
-      .select("tenant_id")
-      .eq("user_id", user.id)
-      .eq("tenant_id", preferredTenantId)
-      .limit(1)
-      .maybeSingle();
-
-    membership = preferredResult.data ?? null;
-  }
-
-  // Fallback to oldest membership if no preferred tenant
-  if (!membership) {
-    const fallbackResult = await supabase
-      .from("memberships")
-      .select("tenant_id")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    membership = fallbackResult.data ?? null;
-  }
-
-  const tenantId = membership?.tenant_id ?? null;
-  return { supabase, user, tenantId };
-}
-
 export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const { supabase, user, tenantId } = await getAuthContext();
+  const access = await resolveRequestAccessContext();
+  const { supabase, tenantId } = access;
 
-  if (!user) {
+  if (access.actorType === "anonymous") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (access.actorType === "demo" && !hasDemoCapability(access.demoSession, "macro")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   if (!tenantId) {
@@ -237,9 +197,10 @@ type SourceInput = {
 
 export async function PATCH(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const { supabase, user, tenantId } = await getAuthContext();
+  const access = await resolveRequestAccessContext();
+  const { supabase, user, tenantId } = access;
 
-  if (!user) {
+  if (access.actorType !== "user" || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -464,9 +425,10 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const { supabase, user, tenantId } = await getAuthContext();
+  const access = await resolveRequestAccessContext();
+  const { supabase, user, tenantId } = access;
 
-  if (!user) {
+  if (access.actorType !== "user" || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

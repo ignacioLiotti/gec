@@ -1,27 +1,44 @@
-import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
 
 export async function GET() {
-	const supabase = await createClient();
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
+	const access = await resolveRequestAccessContext();
 
-	if (!user) {
+	if (access.actorType === "anonymous" || !access.tenantId) {
 		return NextResponse.json({ tables: [] });
 	}
-
-	// Get active tenant from cookie
-	const cookieStore = await cookies();
-	const tenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value;
-
-	if (!tenantId) {
+	if (access.actorType === "demo" && !hasDemoCapability(access.demoSession, "macro")) {
 		return NextResponse.json({ tables: [] });
 	}
+	const { supabase, tenantId } = access;
 
 	try {
+		if (access.actorType === "demo") {
+			const { data: demoTables, error: demoTablesError } = await supabase
+				.from("macro_tables")
+				.select("id, name")
+				.eq("tenant_id", tenantId)
+				.order("name");
+
+			if (demoTablesError) throw demoTablesError;
+
+			return NextResponse.json({
+				tables: (demoTables ?? []).map((table, index) => ({
+					id: table.id as string,
+					name: (table.name as string) ?? "Tabla",
+					position: index,
+				})),
+			});
+		}
+
+		const user = access.user;
+		if (!user) {
+			return NextResponse.json({ tables: [] });
+		}
+
 		// Check if user is admin/superadmin
 		const { data: membership } = await supabase
 			.from("memberships")
@@ -41,12 +58,6 @@ export async function GET() {
 
 		// If admin/superadmin, show all macro tables marked for sidebar
 		if (isAdmin || isSuperAdmin) {
-			const { data: allTables } = await supabase
-				.from("macro_tables")
-				.select("id, name")
-				.eq("tenant_id", tenantId)
-				.order("name");
-
 			// Get tables that have any sidebar assignment
 			const { data: sidebarTables } = await supabase
 				.from("sidebar_macro_tables")
