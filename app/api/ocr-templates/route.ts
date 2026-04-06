@@ -1,5 +1,10 @@
-import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
+import { resolveRequestAccessContext } from "@/lib/demo-session";
+import {
+	normalizeTemplateColumns,
+	propagateTemplateUpdate,
+	type TemplateColumnDefinition,
+} from "@/lib/ocr-template-sync";
 
 type Region = {
 	id: string;
@@ -21,33 +26,77 @@ type TemplateColumn = {
 	dataType: string;
 	ocrScope?: "parent" | "item";
 	description?: string;
+	aliases?: string[];
+	examples?: string[];
+	excelKeywords?: string[];
+	required?: boolean;
 };
 
 async function getAuthContext() {
-	const supabase = await createClient();
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
+	const access = await resolveRequestAccessContext();
+	return {
+		supabase: access.supabase,
+		user: access.user,
+		tenantId: access.tenantId,
+		actorType: access.actorType,
+	};
+}
 
-	if (!user) {
-		return { supabase, user: null, tenantId: null };
+function validateRegions(value: unknown): Region[] {
+	const regions = Array.isArray(value) ? (value as Region[]) : [];
+	return regions.filter(
+		(r) =>
+			typeof r.id === "string" &&
+			typeof r.label === "string" &&
+			typeof r.x === "number" &&
+			typeof r.y === "number" &&
+			typeof r.width === "number" &&
+			typeof r.height === "number" &&
+			(r.pageNumber === undefined ||
+				(typeof r.pageNumber === "number" && Number.isFinite(r.pageNumber) && r.pageNumber >= 1))
+	);
+}
+
+function deriveColumnsFromRegions(regions: Region[]): TemplateColumnDefinition[] {
+	const columns: TemplateColumn[] = [];
+	for (const region of regions) {
+		const regionDescription =
+			typeof region.description === "string"
+				? region.description.trim()
+				: "";
+		if (region.type === "single") {
+			columns.push({
+				fieldKey: region.label
+					.toLowerCase()
+					.replace(/[^a-z0-9]+/g, "_")
+					.replace(/^_|_$/g, "") || `field_${region.id}`,
+				label: region.label,
+				dataType: "text",
+				ocrScope: "parent",
+				description: regionDescription || undefined,
+			});
+		} else if (region.type === "table" && region.tableColumns) {
+			for (const col of region.tableColumns) {
+				columns.push({
+					fieldKey: col
+						.toLowerCase()
+						.replace(/[^a-z0-9]+/g, "_")
+						.replace(/^_|_$/g, "") || `col_${Math.random().toString(36).slice(2, 8)}`,
+					label: col,
+					dataType: "text",
+					ocrScope: "item",
+					description: regionDescription || undefined,
+				});
+			}
+		}
 	}
-
-	const { data: membership } = await supabase
-		.from("memberships")
-		.select("tenant_id")
-		.eq("user_id", user.id)
-		.order("created_at", { ascending: true })
-		.limit(1)
-		.maybeSingle();
-
-	return { supabase, user, tenantId: membership?.tenant_id ?? null };
+	return normalizeTemplateColumns(columns);
 }
 
 export async function GET() {
-	const { supabase, user, tenantId } = await getAuthContext();
+	const { supabase, user, tenantId, actorType } = await getAuthContext();
 
-	if (!user) {
+	if (!user && actorType !== "demo") {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
@@ -96,20 +145,7 @@ export async function POST(request: Request) {
 		}
 
 		const description = typeof body.description === "string" ? body.description : null;
-		const regions: Region[] = Array.isArray(body.regions) ? body.regions : [];
-		
-		// Validate regions have at least basic structure
-		const validRegions = regions.filter(
-			(r) =>
-				typeof r.id === "string" &&
-				typeof r.label === "string" &&
-				typeof r.x === "number" &&
-				typeof r.y === "number" &&
-				typeof r.width === "number" &&
-				typeof r.height === "number" &&
-				(r.pageNumber === undefined ||
-					(typeof r.pageNumber === "number" && Number.isFinite(r.pageNumber) && r.pageNumber >= 1))
-		);
+		const validRegions = validateRegions(body.regions);
 
 		if (validRegions.length === 0) {
 			return NextResponse.json(
@@ -118,39 +154,7 @@ export async function POST(request: Request) {
 			);
 		}
 
-		// Derive columns from regions
-		const columns: TemplateColumn[] = [];
-		for (const region of validRegions) {
-			const regionDescription =
-				typeof region.description === "string"
-					? region.description.trim()
-					: "";
-			if (region.type === "single") {
-				columns.push({
-					fieldKey: region.label
-						.toLowerCase()
-						.replace(/[^a-z0-9]+/g, "_")
-						.replace(/^_|_$/g, "") || `field_${region.id}`,
-					label: region.label,
-					dataType: "text",
-					ocrScope: "parent",
-					description: regionDescription || undefined,
-				});
-			} else if (region.type === "table" && region.tableColumns) {
-				for (const col of region.tableColumns) {
-					columns.push({
-						fieldKey: col
-							.toLowerCase()
-							.replace(/[^a-z0-9]+/g, "_")
-							.replace(/^_|_$/g, "") || `col_${Math.random().toString(36).slice(2, 8)}`,
-						label: col,
-						dataType: "text",
-						ocrScope: "item",
-						description: regionDescription || undefined,
-					});
-				}
-			}
-		}
+		const columns = deriveColumnsFromRegions(validRegions);
 
 		// Store template info
 		const templateWidth = typeof body.templateWidth === "number" ? body.templateWidth : null;
@@ -215,6 +219,103 @@ export async function POST(request: Request) {
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "Error creating template" },
 			{ status: 500 }
+		);
+	}
+}
+
+export async function PUT(request: Request) {
+	const { supabase, user, tenantId } = await getAuthContext();
+
+	if (!user) {
+		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	}
+
+	if (!tenantId) {
+		return NextResponse.json({ error: "No tenant found" }, { status: 400 });
+	}
+
+	try {
+		const body = await request.json().catch(() => ({}));
+		const id = typeof body.id === "string" ? body.id.trim() : "";
+		const name = typeof body.name === "string" ? body.name.trim() : "";
+		if (!id) {
+			return NextResponse.json({ error: "Template ID required" }, { status: 400 });
+		}
+		if (!name) {
+			return NextResponse.json({ error: "Template name required" }, { status: 400 });
+		}
+
+		const validRegions = validateRegions(body.regions);
+		if (validRegions.length === 0) {
+			return NextResponse.json(
+				{ error: "At least one valid region required" },
+				{ status: 400 },
+			);
+		}
+
+		const columns = deriveColumnsFromRegions(validRegions);
+		const description = typeof body.description === "string" ? body.description : null;
+		const updatePayload: Record<string, unknown> = {
+			name,
+			description,
+			regions: validRegions,
+			columns,
+		};
+		if (typeof body.templateWidth === "number") {
+			updatePayload.template_width = body.templateWidth;
+		}
+		if (typeof body.templateHeight === "number") {
+			updatePayload.template_height = body.templateHeight;
+		}
+		if (typeof body.templateFileName === "string") {
+			updatePayload.template_file_name = body.templateFileName;
+		}
+		if (typeof body.templateBucket === "string") {
+			updatePayload.template_bucket = body.templateBucket;
+		}
+		if (typeof body.templatePath === "string") {
+			updatePayload.template_path = body.templatePath;
+		}
+
+		const { data: template, error } = await supabase
+			.from("ocr_templates")
+			.update(updatePayload)
+			.eq("id", id)
+			.eq("tenant_id", tenantId)
+			.eq("is_active", true)
+			.select("id, name, description, template_file_name, regions, columns, is_active")
+			.single();
+
+		if (error) {
+			const typedError = error as { code?: string; message?: string } | null;
+			const code = typedError?.code;
+			const message = typedError?.message ?? "";
+			if (code === "23505" && message.includes("ocr_templates_name_unique")) {
+				return NextResponse.json(
+					{
+						error: "Ya existe una plantilla con ese nombre",
+						code: "template_name_exists",
+					},
+					{ status: 409 },
+				);
+			}
+			throw error;
+		}
+
+		await propagateTemplateUpdate({
+			supabase,
+			tenantId,
+			templateId: id,
+			templateName: template.name as string,
+			columns,
+		});
+
+		return NextResponse.json({ template });
+	} catch (error) {
+		console.error("[ocr-templates:put]", error);
+		return NextResponse.json(
+			{ error: error instanceof Error ? error.message : "Error updating template" },
+			{ status: 500 },
 		);
 	}
 }

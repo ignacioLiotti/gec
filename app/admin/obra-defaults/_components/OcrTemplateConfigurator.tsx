@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import NextImage from "next/image";
@@ -115,6 +115,7 @@ interface Props {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onTemplateCreated?: (template: OcrTemplate) => void;
+	onTemplateSaved?: (template: OcrTemplate) => void;
 	existingTemplate?: OcrTemplate | null;
 }
 
@@ -122,6 +123,7 @@ export function OcrTemplateConfigurator({
 	open,
 	onOpenChange,
 	onTemplateCreated,
+	onTemplateSaved,
 	existingTemplate,
 }: Props) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -156,10 +158,15 @@ export function OcrTemplateConfigurator({
 				setTemplateName(existingTemplate.name);
 				setTemplateDescription(existingTemplate.description ?? "");
 				setRegions(existingTemplate.regions);
+				setImage(null);
+				setImageSrc(null);
+				setFileName(existingTemplate.template_file_name ?? null);
 				setDocumentKind(null);
 				setPageCount(1);
 				setSelectedPageNumber(1);
-				// TODO: Load template image
+				pdfBytesRef.current = null;
+				setSelectedRegionId(existingTemplate.regions[0]?.id ?? null);
+				setScale(1);
 			} else {
 				setTemplateName("");
 				setTemplateDescription("");
@@ -574,9 +581,10 @@ export function OcrTemplateConfigurator({
 
 		try {
 			const res = await fetch("/api/ocr-templates", {
-				method: "POST",
+				method: existingTemplate ? "PUT" : "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
+					id: existingTemplate?.id,
 					name: templateName.trim(),
 					description: templateDescription.trim() || null,
 					regions,
@@ -599,8 +607,9 @@ export function OcrTemplateConfigurator({
 			}
 
 			const { template } = await res.json();
-			toast.success("Plantilla guardada");
+			toast.success(existingTemplate ? "Plantilla actualizada" : "Plantilla guardada");
 			onTemplateCreated?.(template);
+			onTemplateSaved?.(template);
 			onOpenChange(false);
 		} catch (error) {
 			console.error(error);
@@ -621,6 +630,8 @@ export function OcrTemplateConfigurator({
 		selectedPageNumber,
 		fileName,
 		onTemplateCreated,
+		existingTemplate,
+		onTemplateSaved,
 		onOpenChange,
 	]);
 
@@ -638,9 +649,9 @@ export function OcrTemplateConfigurator({
 				region.type === "single"
 					? [{ label: region.label || "Campo sin nombre", type: "Campo" }]
 					: (region.tableColumns ?? []).map((column) => ({
-							label: `${region.label || "Tabla"} > ${column}`,
-							type: "Tabla",
-					  }))
+						label: `${region.label || "Tabla"} > ${column}`,
+						type: "Tabla",
+					}))
 			),
 		[regions]
 	);
@@ -667,22 +678,29 @@ export function OcrTemplateConfigurator({
 					{steps.map((step, index) => {
 						const isActive = currentStep === index;
 						const isDone = currentStep > index;
+						const isStepSelectable = Boolean(existingTemplate);
 						return (
-							<div
+							<button
 								key={step}
-								className={`rounded-xl border px-3 py-2 ${
-									isActive
-										? "border-purple-500 bg-purple-50 dark:bg-purple-950/20"
-										: isDone
-											? "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20"
-											: "bg-muted/30"
-								}`}
+								type="button"
+								onClick={() => {
+									if (isStepSelectable) {
+										setCurrentStep(index);
+									}
+								}}
+								disabled={!isStepSelectable}
+								className={`rounded-xl border px-3 py-2 ${isActive
+									? "border-purple-500 bg-purple-50 dark:bg-purple-950/20"
+									: isDone
+										? "border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20"
+										: "bg-muted/30"
+									} ${isStepSelectable ? "text-left transition-colors hover:border-purple-300" : "text-left"}`}
 							>
 								<p className="text-[10px] uppercase tracking-wide text-muted-foreground">
 									Paso {index + 1}
 								</p>
 								<p className="text-sm font-medium">{step}</p>
-							</div>
+							</button>
 						);
 					})}
 				</div>
@@ -710,7 +728,7 @@ export function OcrTemplateConfigurator({
 									value={templateDescription}
 									onChange={(e) => setTemplateDescription(e.target.value)}
 									placeholder="Indicá variantes, señales visuales y diferencias importantes del documento."
-									className="min-h-[160px]"
+									className="min-h-[160px] max-h-[160px] overflow-y-auto"
 								/>
 							</div>
 						</div>
@@ -749,7 +767,7 @@ export function OcrTemplateConfigurator({
 								<Button asChild variant="outline" size="sm" className="relative">
 									<label>
 										<Upload className="h-4 w-4 mr-2" />
-										{image ? "Cambiar ejemplo" : "Subir documento ejemplo"}
+										{image ? "Cambiar ejemplo" : existingTemplate ? "Subir nuevo ejemplo" : "Subir documento ejemplo"}
 										<input
 											type="file"
 											accept="image/*,.pdf,application/pdf"
@@ -956,7 +974,7 @@ export function OcrTemplateConfigurator({
 				)}
 
 				{currentStep === 3 && (
-					<div className="grid gap-4 lg:grid-cols-[1fr_340px] my-4">
+					<div className="grid gap-4 lg:grid-cols-[1fr_340px] my-4 h-[560px] overflow-auto">
 						<div className="space-y-4">
 							<div className="rounded-xl border bg-muted/20 p-4">
 								<p className="text-sm font-medium">Resumen de publicación</p>
@@ -1233,7 +1251,7 @@ export function OcrTemplateConfigurator({
 							) : (
 								<Save className="h-4 w-4" />
 							)}
-							Guardar plantilla
+							{existingTemplate ? "Guardar cambios" : "Guardar plantilla"}
 						</Button>
 					)}
 				</DialogFooter>
@@ -1405,6 +1423,3 @@ function RegionItem({
 		</motion.div>
 	);
 }
-
-
-

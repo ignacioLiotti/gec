@@ -6,6 +6,7 @@ import {
 	coerceValueForType,
 	ensureTablaDataType,
 	MATERIALS_OCR_PROMPT,
+	normalizeFieldKey,
 } from "@/lib/tablas";
 import {
 	fetchTenantPlan,
@@ -23,6 +24,18 @@ type ColumnMeta = {
 	dataType: ReturnType<typeof ensureTablaDataType>;
 	required: boolean;
 	config: Record<string, unknown>;
+};
+
+type TemplatePromptContext = {
+	description: string | null;
+	columns: Array<{
+		fieldKey: string;
+		label: string;
+		description?: string;
+		aliases?: string[];
+		examples?: string[];
+		excelKeywords?: string[];
+	}>;
 };
 
 const DOCUMENTS_BUCKET = "obra-documents";
@@ -111,6 +124,49 @@ function buildEmptyExtraction(
 	};
 }
 
+function normalizeLooseKey(value: string) {
+	return value
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]/g, "");
+}
+
+function buildColumnCandidateKeys(column: ColumnMeta) {
+	return new Set([
+		column.fieldKey,
+		column.label,
+		...readStringList(column.config?.aliases),
+	].map(normalizeLooseKey));
+}
+
+function remapObjectToFieldKeys(
+	value: unknown,
+	columns: ColumnMeta[],
+) {
+	const source =
+		typeof value === "object" && value !== null
+			? (value as Record<string, unknown>)
+			: {};
+	const candidateMap = new Map<string, string>();
+	for (const column of columns) {
+		for (const candidate of buildColumnCandidateKeys(column)) {
+			candidateMap.set(candidate, column.fieldKey);
+		}
+	}
+
+	const remapped: Record<string, unknown> = {};
+	for (const [rawKey, rawValue] of Object.entries(source)) {
+		const targetKey = candidateMap.get(normalizeLooseKey(rawKey));
+		if (targetKey) {
+			remapped[targetKey] = rawValue;
+			continue;
+		}
+		remapped[rawKey] = rawValue;
+	}
+	return remapped;
+}
+
 function readStringList(value: unknown): string[] {
 	if (!Array.isArray(value)) return [];
 	return value
@@ -122,6 +178,8 @@ function readStringList(value: unknown): string[] {
 function getConfiguredDocumentTypes(settings: Record<string, unknown> | null | undefined) {
 	const configured = readStringList(settings?.extractionDocumentTypes);
 	if (configured.length > 0) return configured;
+	const direct = readStringList(settings?.documentTypes);
+	if (direct.length > 0) return direct;
 	const legacy =
 		typeof settings?.ocrDocType === "string" ? settings.ocrDocType.trim() : "";
 	return legacy ? [legacy] : [];
@@ -150,10 +208,12 @@ function describeColumn(column: ColumnMeta) {
 			: "";
 	const aliases = readStringList(column.config?.aliases);
 	const examples = readStringList(column.config?.examples);
+	const excelKeywords = readStringList(column.config?.excelKeywords);
 	const details = [`campo "${column.fieldKey}"`, `tipo ${column.dataType}`];
 	if (description) details.push(description);
 	if (aliases.length > 0) details.push(`aliases: ${aliases.join(", ")}`);
 	if (examples.length > 0) details.push(`ejemplos: ${examples.join(", ")}`);
+	if (excelKeywords.length > 0) details.push(`keywords: ${excelKeywords.join(", ")}`);
 	return `- ${label} (${details.join(" | ")})`;
 }
 
@@ -237,6 +297,142 @@ async function fetchColumns(
 	}));
 }
 
+async function fetchTemplatePromptContext(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	settings: Record<string, unknown>,
+) {
+	const templateId =
+		typeof settings.ocrTemplateId === "string" && settings.ocrTemplateId.trim().length > 0
+			? settings.ocrTemplateId.trim()
+			: null;
+	if (!templateId) return null;
+
+	const { data, error } = await supabase
+		.from("ocr_templates")
+		.select("description, columns")
+		.eq("id", templateId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!data) return null;
+
+	const rawColumns = Array.isArray((data as { columns?: unknown }).columns)
+		? ((data as { columns?: unknown }).columns as Array<Record<string, unknown>>)
+		: [];
+
+	const columns = rawColumns.map((column, index) => ({
+		fieldKey: normalizeFieldKey(
+			typeof column.fieldKey === "string" && column.fieldKey.trim().length > 0
+				? column.fieldKey
+				: typeof column.label === "string"
+					? column.label
+					: `campo_${index + 1}`,
+		),
+		label:
+			typeof column.label === "string" && column.label.trim().length > 0
+				? column.label.trim()
+				: `Campo ${index + 1}`,
+		description:
+			typeof column.description === "string" && column.description.trim().length > 0
+				? column.description.trim()
+				: undefined,
+		aliases: readStringList(column.aliases),
+		examples: readStringList(column.examples),
+		excelKeywords: readStringList(column.excelKeywords),
+	}));
+
+	return {
+		description:
+			typeof data.description === "string" && data.description.trim().length > 0
+				? data.description.trim()
+				: null,
+		columns,
+	} satisfies TemplatePromptContext;
+}
+
+async function resolvePromptSettings(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	settings: Record<string, unknown>,
+) {
+	const defaultTablaId =
+		typeof settings.defaultTablaId === "string" && settings.defaultTablaId.trim().length > 0
+			? settings.defaultTablaId.trim()
+			: null;
+	if (!defaultTablaId) return settings;
+
+	const { data, error } = await supabase
+		.from("obra_default_tablas")
+		.select("ocr_template_id, settings")
+		.eq("id", defaultTablaId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!data) return settings;
+
+	const defaultSettings =
+		((data.settings as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+	const merged = { ...defaultSettings, ...settings } as Record<string, unknown>;
+
+	if (typeof data.ocr_template_id === "string" && data.ocr_template_id.trim().length > 0) {
+		merged.ocrTemplateId = data.ocr_template_id;
+	}
+	if (Array.isArray(defaultSettings.extractedTables)) {
+		merged.extractedTables = defaultSettings.extractedTables;
+	}
+	if (typeof defaultSettings.extractionInstructions === "string") {
+		merged.extractionInstructions = defaultSettings.extractionInstructions;
+	}
+	if (Array.isArray(defaultSettings.documentTypes)) {
+		merged.documentTypes = defaultSettings.documentTypes;
+	}
+	if (Array.isArray(defaultSettings.extractionDocumentTypes)) {
+		merged.extractionDocumentTypes = defaultSettings.extractionDocumentTypes;
+	}
+
+	return merged;
+}
+
+function mergeColumnHints(
+	columns: ColumnMeta[],
+	templateContext: TemplatePromptContext | null,
+) {
+	if (!templateContext) return columns;
+
+	const templateColumnsByFieldKey = new Map(
+		templateContext.columns.map((column) => [column.fieldKey, column]),
+	);
+	const templateColumnsByLabel = new Map(
+		templateContext.columns.map((column) => [normalizeFieldKey(column.label), column]),
+	);
+
+	return columns.map((column) => {
+		const templateColumn =
+			templateColumnsByFieldKey.get(column.fieldKey) ??
+			templateColumnsByLabel.get(normalizeFieldKey(column.label));
+		if (!templateColumn) return column;
+
+		const config = { ...column.config };
+		if (
+			typeof config.ocrDescription !== "string" ||
+			config.ocrDescription.trim().length === 0
+		) {
+			config.ocrDescription = templateColumn.description ?? "";
+		}
+		if (!Array.isArray(config.aliases) || config.aliases.length === 0) {
+			config.aliases = templateColumn.aliases ?? [];
+		}
+		if (!Array.isArray(config.examples) || config.examples.length === 0) {
+			config.examples = templateColumn.examples ?? [];
+		}
+		if (!Array.isArray(config.excelKeywords) || config.excelKeywords.length === 0) {
+			config.excelKeywords = templateColumn.excelKeywords ?? [];
+		}
+
+		return {
+			...column,
+			config,
+		};
+	});
+}
+
 function sanitizeFileName(base: string) {
 	return base
 		.normalize("NFD")
@@ -285,7 +481,27 @@ function applyExtractionRowPolicy(
 	items: Record<string, unknown>[],
 	settings: Record<string, unknown> | null | undefined,
 ) {
-	const rowMode = settings?.extractionRowMode === "multiple" ? "multiple" : "single";
+	if (settings?.ocrProfile === "materials") {
+		const maxRowsRaw = settings?.extractionMaxRows;
+		const maxRows =
+			typeof maxRowsRaw === "number"
+				? Math.floor(maxRowsRaw)
+				: Number.parseInt(String(maxRowsRaw ?? ""), 10);
+		if (Number.isFinite(maxRows) && maxRows > 0) {
+			return items.slice(0, maxRows);
+		}
+		return items;
+	}
+	const explicitRowMode =
+		settings?.extractionRowMode === "multiple" || settings?.extractionRowMode === "single"
+			? settings.extractionRowMode
+			: null;
+	const inferredRowMode =
+		settings?.ocrProfile === "materials" ||
+		settings?.spreadsheetPresetKey === "pmc_items"
+			? "multiple"
+			: "single";
+	const rowMode = explicitRowMode ?? inferredRowMode;
 	const maxRowsRaw = settings?.extractionMaxRows;
 	const maxRows =
 		typeof maxRowsRaw === "number"
@@ -514,7 +730,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				{ status: 400 }
 			);
 		}
-		const settings = (tablaMeta.settings as Record<string, unknown>) ?? {};
+		const settings = await resolvePromptSettings(
+			supabase,
+			((tablaMeta.settings as Record<string, unknown>) ?? {}) as Record<string, unknown>,
+		);
+		const templatePromptContext = await fetchTemplatePromptContext(supabase, settings);
 		const ocrProfile =
 			typeof settings?.ocrProfile === "string"
 				? (settings.ocrProfile as string)
@@ -530,7 +750,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			);
 		}
 
-		const columns = await fetchColumns(supabase, tablaId);
+		const columns = mergeColumnHints(
+			await fetchColumns(supabase, tablaId),
+			templatePromptContext,
+		);
 		if (columns.length === 0) {
 			return NextResponse.json(
 				{ error: "No hay columnas configuradas" },
@@ -551,13 +774,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		);
 		const extractionSchema = buildExtractionSchema(parentColumns, itemColumns);
 		const documentTypes = getConfiguredDocumentTypes(settings);
-		const customInstructions = getConfiguredExtractionInstructions(settings);
+		const customInstructions = [
+			templatePromptContext?.description,
+			getConfiguredExtractionInstructions(settings),
+		]
+			.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+			.join("\n\n");
 		const instructions =
 			ocrProfile === "materials"
 				? [MATERIALS_OCR_PROMPT, customInstructions].filter(Boolean).join("\n\n")
 				: buildAutoInstructions({
 						docTypes: documentTypes,
-						customInstructions,
+						customInstructions: customInstructions || null,
 						parentColumns,
 						itemColumns,
 					});
@@ -742,7 +970,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			const b64 = Buffer.from(imageBytes).toString("base64");
 			const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${OCR_MODEL}:generateContent?key=${GOOGLE_API_KEY}`;
 
-			const callGeminiRaw = async (prompt: string) => {
+			const callGeminiRaw = async (
+				prompt: string,
+				attempt: "primary" | "repair",
+			) => {
+				console.log("[tabla-rows:ocr-import] AI prompt", {
+					obraId: id,
+					tablaId,
+					attempt,
+					model: OCR_MODEL,
+					mimeType,
+					prompt,
+				});
 				const body = {
 					contents: [{
 						parts: [
@@ -766,12 +1005,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					throw new Error(errBody?.error?.message ?? `Gemini API error ${res.status}`);
 				}
 				const json = await res.json();
-				return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+				const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+				console.log("[tabla-rows:ocr-import] AI raw response", {
+					obraId: id,
+					tablaId,
+					attempt,
+					model: OCR_MODEL,
+					response: rawText,
+				});
+				return rawText;
 			};
 
 			// First attempt
 			const raw = await callGeminiRaw(
 				`${instructions}\n\nResponde SOLO con JSON válido, sin explicaciones ni markdown.`
+				,
+				"primary"
 			);
 			console.log("[tabla-rows:ocr-import] generateText raw response", { length: raw.length });
 
@@ -795,6 +1044,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			const emptyTemplate = buildEmptyExtraction(parentColumns, itemColumns);
 			const repairRaw = await callGeminiRaw(
 				`${instructions}\n\nDevolvé SOLO JSON válido siguiendo este template. Si no podés leer un campo, dejalo vacío ("").\n\nTEMPLATE JSON:\n${JSON.stringify(emptyTemplate)}\n\nResponde SOLO con JSON válido.`
+				,
+				"repair"
 			);
 			if (!repairRaw.trim()) {
 				throw new Error("El modelo no pudo extraer datos de esta imagen.");
@@ -862,8 +1113,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				{ status: 422 }
 			);
 		}
+		extraction = remapObjectToFieldKeys(
+			extraction,
+			[...parentColumns, ...itemColumns],
+		) as Record<string, any>;
 		if (!Array.isArray((extraction as any).items)) {
-			(extraction as any).items = [];
+			const inlineItem = remapObjectToFieldKeys(extraction, itemColumns);
+			const hasInlineItemValue = itemColumns.some(
+				(column) => inlineItem[column.fieldKey] != null,
+			);
+			(extraction as any).items = hasInlineItemValue ? [inlineItem] : [];
+		} else {
+			(extraction as any).items = ((extraction as any).items as unknown[]).map((item) =>
+				remapObjectToFieldKeys(item, itemColumns),
+			);
 		}
 		if (itemColumns.length === 0) {
 			(extraction as any).items = [{}];

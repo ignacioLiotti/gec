@@ -1,4 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { applyDefaultFolderToExistingObras } from "@/lib/obra-defaults/apply-default-folder";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { normalizeFolderName, normalizeFolderPath, normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
@@ -528,6 +530,56 @@ async function getAuthContext() {
 	return { supabase, user, tenantId: membership?.tenant_id ?? null };
 }
 
+async function enqueueAndApplyDefaultFolderSync(params: {
+	supabase: Awaited<ReturnType<typeof createClient>>;
+	tenantId: string;
+	folderId: string;
+	forceSync?: boolean;
+	previousPath?: string | null;
+	logContext: string;
+}) {
+	const { supabase, tenantId, folderId, forceSync, previousPath, logContext } = params;
+	const payload: {
+		folderId: string;
+		forceSync?: boolean;
+		previousPath?: string;
+	} = { folderId };
+
+	if (forceSync === true) {
+		payload.forceSync = true;
+	}
+
+	if (typeof previousPath === "string" && previousPath.trim().length > 0) {
+		payload.previousPath = previousPath.trim();
+	}
+
+	const { error: jobError } = await supabase.from("background_jobs").insert({
+		tenant_id: tenantId,
+		type: "apply_default_folder",
+		payload,
+	});
+
+	if (jobError) {
+		console.error(`[${logContext}] job enqueue error:`, jobError);
+	}
+
+	try {
+		const admin = createSupabaseAdminClient();
+		const result = await applyDefaultFolderToExistingObras(admin, {
+			tenantId,
+			folderId,
+			forceSync,
+			previousPath: payload.previousPath,
+		});
+
+		if (!result.ok) {
+			console.warn(`[${logContext}] immediate folder sync skipped:`, result);
+		}
+	} catch (error) {
+		console.error(`[${logContext}] immediate folder sync error:`, error);
+	}
+}
+
 export async function GET(request: Request) {
 	const { supabase, user, tenantId } = await getAuthContext();
 
@@ -865,19 +917,12 @@ export async function POST(request: Request) {
 			const isOcr = body.isOcr === true;
 
 			if (!isOcr) {
-				const { error: jobError } = await supabase
-					.from("background_jobs")
-					.insert({
-						tenant_id: tenantId,
-						type: "apply_default_folder",
-						payload: { folderId: folder.id },
-					})
-					.select("id")
-					.single();
-
-				if (jobError) {
-					console.error("[obra-defaults:post] job enqueue error:", jobError);
-				}
+				await enqueueAndApplyDefaultFolderSync({
+					supabase,
+					tenantId,
+					folderId: folder.id,
+					logContext: "obra-defaults:post",
+				});
 				return NextResponse.json({ folder });
 			}
 
@@ -1098,19 +1143,12 @@ export async function POST(request: Request) {
 					extractedTables,
 				};
 
-			const { error: jobError } = await supabase
-				.from("background_jobs")
-				.insert({
-					tenant_id: tenantId,
-					type: "apply_default_folder",
-					payload: { folderId: folder.id },
-				})
-				.select("id")
-				.single();
-
-			if (jobError) {
-				console.error("[obra-defaults:post] job enqueue error:", jobError);
-			}
+			await enqueueAndApplyDefaultFolderSync({
+				supabase,
+				tenantId,
+				folderId: folder.id,
+				logContext: "obra-defaults:post",
+			});
 
 			return NextResponse.json({ folder: enrichedFolder });
 		}
@@ -1328,14 +1366,14 @@ export async function PUT(request: Request) {
 					.in("linked_folder_path", linkedPaths);
 			}
 
-			const { error: jobError } = await supabase.from("background_jobs").insert({
-				tenant_id: tenantId,
-				type: "apply_default_folder",
-				payload: { folderId: updatedFolder.id, forceSync: true, previousPath: existingFolder.path },
+			await enqueueAndApplyDefaultFolderSync({
+				supabase,
+				tenantId,
+				folderId: updatedFolder.id,
+				forceSync: true,
+				previousPath: existingFolder.path,
+				logContext: "obra-defaults:put",
 			});
-			if (jobError) {
-				console.error("[obra-defaults:put] job enqueue error:", jobError);
-			}
 
 			return NextResponse.json({ folder: updatedFolder });
 		}
@@ -1562,14 +1600,14 @@ export async function PUT(request: Request) {
 			extractedTables,
 		};
 
-		const { error: jobError } = await supabase.from("background_jobs").insert({
-			tenant_id: tenantId,
-			type: "apply_default_folder",
-			payload: { folderId: updatedFolder.id, forceSync: true, previousPath: existingFolder.path },
+		await enqueueAndApplyDefaultFolderSync({
+			supabase,
+			tenantId,
+			folderId: updatedFolder.id,
+			forceSync: true,
+			previousPath: existingFolder.path,
+			logContext: "obra-defaults:put",
 		});
-		if (jobError) {
-			console.error("[obra-defaults:put] job enqueue error:", jobError);
-		}
 
 		return NextResponse.json({ folder: enrichedFolder });
 	} catch (error) {

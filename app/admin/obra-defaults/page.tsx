@@ -1053,10 +1053,12 @@ function FolderRow({
 // OCR Template Card Component with expandable details
 function OcrTemplateCard({
   template,
+  onEdit,
   onDelete,
   index,
 }: {
   template: OcrTemplate;
+  onEdit: () => void;
   onDelete: () => void;
   index: number;
 }) {
@@ -1095,6 +1097,16 @@ function OcrTemplateCard({
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1279,6 +1291,7 @@ export default function ObraDefaultsPage() {
   // OCR Templates state
   const [ocrTemplates, setOcrTemplates] = useState<OcrTemplate[]>([]);
   const [isOcrConfigOpen, setIsOcrConfigOpen] = useState(false);
+  const [editingOcrTemplate, setEditingOcrTemplate] = useState<OcrTemplate | null>(null);
 
   const resetFolderForm = useCallback(() => {
     setEditingFolderId(null);
@@ -1412,6 +1425,21 @@ export default function ObraDefaultsPage() {
     ocrTemplates,
   ]);
 
+  const mapTemplateToOcrColumns = useCallback((template: OcrTemplate): OcrColumn[] => {
+    return template.columns.map((col) => ({
+      id: crypto.randomUUID(),
+      label: col.label,
+      fieldKey: col.fieldKey || normalizeFieldKey(col.label),
+      dataType: ensureTablaDataType(col.dataType),
+      required: false,
+      scope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
+      description: col.description,
+      aliases: [],
+      examples: [],
+      excelKeywords: [],
+    }));
+  }, []);
+
   // When template is selected, populate columns from template
   const handleTemplateSelect = useCallback((templateId: string) => {
     setNewFolderOcrTemplateId(templateId);
@@ -1425,18 +1453,7 @@ export default function ObraDefaultsPage() {
     const template = ocrTemplates.find(t => t.id === templateId);
     if (!template) return;
 
-    const mappedColumns: OcrColumn[] = template.columns.map((col) => ({
-      id: crypto.randomUUID(),
-      label: col.label,
-      fieldKey: col.fieldKey || normalizeFieldKey(col.label),
-      dataType: ensureTablaDataType(col.dataType),
-      required: false,
-      scope: (col.ocrScope === "parent" ? "parent" : "item") as "parent" | "item",
-      description: col.description,
-      aliases: [],
-      examples: [],
-      excelKeywords: [],
-    }));
+    const mappedColumns = mapTemplateToOcrColumns(template);
 
     setNewFolderColumns(mappedColumns);
 
@@ -1444,7 +1461,7 @@ export default function ObraDefaultsPage() {
     const hasParent = mappedColumns.some(c => c.scope === "parent");
     const hasItem = mappedColumns.some(c => c.scope === "item");
     setNewFolderHasNested(hasParent && hasItem);
-  }, [ocrTemplates]);
+  }, [mapTemplateToOcrColumns, ocrTemplates]);
 
   const handleSpreadsheetTemplateSelect = useCallback((template: "auto" | "certificado") => {
     setNewFolderSpreadsheetTemplate(template);
@@ -1478,9 +1495,28 @@ export default function ObraDefaultsPage() {
     }
   };
 
-  const handleTemplateCreated = (template: OcrTemplate) => {
-    setOcrTemplates((prev) => [...prev, template]);
-  };
+  const handleEditOcrTemplate = useCallback((template: OcrTemplate) => {
+    setEditingOcrTemplate(template);
+    setIsOcrConfigOpen(true);
+  }, []);
+
+  const handleTemplateSaved = useCallback((template: OcrTemplate) => {
+    setOcrTemplates((prev) => {
+      const exists = prev.some((item) => item.id === template.id);
+      return exists
+        ? prev.map((item) => (item.id === template.id ? template : item))
+        : [...prev, template];
+    });
+    setEditingOcrTemplate(template);
+
+    if (newFolderOcrTemplateId === template.id) {
+      const mappedColumns = mapTemplateToOcrColumns(template);
+      setNewFolderColumns(mappedColumns);
+      const hasParent = mappedColumns.some((column) => column.scope === "parent");
+      const hasItem = mappedColumns.some((column) => column.scope === "item");
+      setNewFolderHasNested(hasParent && hasItem);
+    }
+  }, [mapTemplateToOcrColumns, newFolderOcrTemplateId]);
 
   const openCreateFolder = useCallback((mode: "normal" | "data" = "normal") => {
     resetFolderForm();
@@ -2368,7 +2404,10 @@ export default function ObraDefaultsPage() {
               </p>
             </div>
             <Button
-              onClick={() => setIsOcrConfigOpen(true)}
+              onClick={() => {
+                setEditingOcrTemplate(null);
+                setIsOcrConfigOpen(true);
+              }}
               className="bg-purple-500 hover:bg-purple-600 text-white"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -2390,6 +2429,7 @@ export default function ObraDefaultsPage() {
                     key={template.id}
                     template={template}
                     index={index}
+                    onEdit={() => handleEditOcrTemplate(template)}
                     onDelete={() => handleDeleteOcrTemplate(template.id)}
                   />
                 ))}
@@ -2623,6 +2663,7 @@ export default function ObraDefaultsPage() {
                     key={template.id}
                     template={template}
                     index={index}
+                    onEdit={() => handleEditOcrTemplate(template)}
                     onDelete={() => handleDeleteOcrTemplate(template.id)}
                   />
                 ))}
@@ -3393,26 +3434,71 @@ export default function ObraDefaultsPage() {
           <DialogTitle className="sr-only">{currentWizardTitle}</DialogTitle>
 
           <div className="mx-auto max-w-xl space-y-8 py-4">
-            <div className="space-y-5 text-center">
-              <div className="flex items-center justify-center gap-2">
-                {folderEditorSteps.map((step, index) => (
-                  <button
-                    key={step}
-                    type="button"
-                    onClick={() => {
-                      if (index <= folderEditorStep) {
-                        goToFolderEditorStep(index);
-                      }
-                    }}
-                    className={`h-1 w-6 rounded-full transition ${index === folderEditorStep ? "bg-orange-500" : "bg-stone-300"
-                      }`}
-                    aria-label={`Step ${index + 1}`}
-                  />
-                ))}
-                <span className="ml-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-                  Step {folderEditorStep + 1} of {folderEditorSteps.length}
-                </span>
+            <div className="space-y-6 text-center">
+              {/* Step indicator */}
+              <div className="flex items-start justify-center">
+                {folderEditorStepMeta.map((step, index) => {
+                  const isActive = index === folderEditorStep;
+                  const isComplete = index < folderEditorStep;
+                  const isClickable = index <= folderEditorStep;
+                  const isLast = index === folderEditorStepMeta.length - 1;
+                  return (
+                    <div key={step.label} className="flex items-start">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isClickable) goToFolderEditorStep(index);
+                        }}
+                        disabled={!isClickable}
+                        className="flex flex-col items-center gap-1.5 disabled:cursor-default"
+                        aria-current={isActive ? "step" : undefined}
+                        aria-label={`Paso ${index + 1}: ${step.label}`}
+                      >
+                        <div
+                          className={[
+                            "flex h-7 w-7 items-center justify-center rounded-full border-2 text-[11px] font-semibold transition-all duration-200",
+                            isComplete
+                              ? "border-orange-500 bg-orange-500 text-white"
+                              : isActive
+                                ? "border-orange-500 bg-background text-orange-500 ring-4 ring-orange-500/10"
+                                : "border-border bg-background text-muted-foreground",
+                          ].join(" ")}
+                        >
+                          {isComplete ? (
+                            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                              <path d="M2 6.5l2.5 2.5 5.5-5.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          ) : (
+                            index + 1
+                          )}
+                        </div>
+                        <span
+                          className={[
+                            "text-[10px] font-medium tracking-[0.1em] uppercase transition-colors duration-200",
+                            isActive
+                              ? "text-orange-500"
+                              : isComplete
+                                ? "text-foreground/70"
+                                : "text-muted-foreground/60",
+                          ].join(" ")}
+                        >
+                          {step.label}
+                        </span>
+                      </button>
+
+                      {!isLast && (
+                        <div className="relative mx-2 mt-3 h-[2px] w-8 overflow-hidden rounded-full bg-border">
+                          <div
+                            className="absolute inset-y-0 left-0 rounded-full bg-orange-500 transition-[width] duration-300 ease-out"
+                            style={{ width: isComplete ? "100%" : "0%" }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+
               <div className="space-y-2">
                 <h3 className="text-3xl font-semibold tracking-tight text-balance">
                   {currentWizardTitle}
@@ -3430,9 +3516,9 @@ export default function ObraDefaultsPage() {
                     type="button"
                     onClick={() => setFolderMode("normal")}
                     disabled={Boolean(editingFolderId)}
-                    className={`rounded-xl border p-5 text-left transition ${folderMode === "normal"
-                      ? "border-orange-500 bg-background"
-                      : "border-border bg-background"
+                    className={`rounded-xl border p-5 text-left transition-all duration-150 active:scale-[0.98] disabled:pointer-events-none ${folderMode === "normal"
+                      ? "border-orange-500 bg-background shadow-[0_0_0_3px_rgba(249,115,22,0.08)]"
+                      : "border-border bg-background hover:border-orange-200 hover:bg-orange-50/20 dark:hover:border-orange-900/60"
                       }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -3445,7 +3531,7 @@ export default function ObraDefaultsPage() {
                           Solo guarda archivos
                         </p>
                       </div>
-                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${folderMode === "normal" ? "border-orange-500" : "border-stone-300"
+                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-150 ${folderMode === "normal" ? "border-orange-500" : "border-stone-300"
                         }`}>
                         {folderMode === "normal" ? <div className="h-2 w-2 rounded-full bg-orange-500" /> : null}
                       </div>
@@ -3455,9 +3541,9 @@ export default function ObraDefaultsPage() {
                     type="button"
                     onClick={() => setFolderMode("data")}
                     disabled={Boolean(editingFolderId)}
-                    className={`rounded-xl border p-5 text-left transition ${folderMode === "data"
-                      ? "border-orange-500 bg-background"
-                      : "border-border bg-background"
+                    className={`rounded-xl border p-5 text-left transition-all duration-150 active:scale-[0.98] disabled:pointer-events-none ${folderMode === "data"
+                      ? "border-orange-500 bg-background shadow-[0_0_0_3px_rgba(249,115,22,0.08)]"
+                      : "border-border bg-background hover:border-orange-200 hover:bg-orange-50/20 dark:hover:border-orange-900/60"
                       }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -3470,7 +3556,7 @@ export default function ObraDefaultsPage() {
                           Guarda archivos y captura datos
                         </p>
                       </div>
-                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${folderMode === "data" ? "border-orange-500" : "border-stone-300"
+                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-150 ${folderMode === "data" ? "border-orange-500" : "border-stone-300"
                         }`}>
                         {folderMode === "data" ? <div className="h-2 w-2 rounded-full bg-orange-500" /> : null}
                       </div>
@@ -3917,36 +4003,42 @@ export default function ObraDefaultsPage() {
               </div>
             )}
 
-            <div className="flex flex-col items-center gap-4 pt-4">
-              <p className="text-sm leading-7 text-muted-foreground">
-                {folderEditorStep === 0 && !isFolderBaseReady
-                  ? "Escribí un nombre de carpeta para continuar."
-                  : folderMode === "data" && folderEditorStep === 1 && !isFolderCaptureReady
-                    ? "Activá al menos una entrada y completá la configuración requerida."
-                    : folderMode === "data" && folderEditorStep === 2 && !isFolderColumnsReady
-                      ? "Agregá al menos un campo antes de continuar."
-                      : ""}
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-6">
-                {folderEditorStep > 0 ? (
-                  <Button variant="ghost" onClick={() => goToFolderEditorStep(folderEditorStep - 1)}>
-                    Volver
+            <div className="flex flex-col gap-3 border-t pt-5">
+              {!canAdvanceFolderStep && !isFolderReviewStep && (
+                <p className="text-center text-xs text-muted-foreground">
+                  {folderEditorStep === 0 && !isFolderBaseReady
+                    ? "Escribí un nombre de carpeta para continuar."
+                    : folderMode === "data" && folderEditorStep === 1 && !isFolderCaptureReady
+                      ? "Activá al menos una entrada y completá la configuración requerida."
+                      : folderMode === "data" && folderEditorStep === 2 && !isFolderColumnsReady
+                        ? "Agregá al menos un campo antes de continuar."
+                        : ""}
+                </p>
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-1">
+                  {folderEditorStep > 0 ? (
+                    <Button variant="ghost" size="sm" onClick={() => goToFolderEditorStep(folderEditorStep - 1)}>
+                      ← Volver
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground"
+                    onClick={() => {
+                      setIsAddFolderOpen(false);
+                      resetFolderForm();
+                    }}
+                  >
+                    Cancelar
                   </Button>
-                ) : null}
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setIsAddFolderOpen(false);
-                    resetFolderForm();
-                  }}
-                >
-                  Cancelar
-                </Button>
+                </div>
                 {!isFolderReviewStep ? (
                   <Button
                     onClick={() => goToFolderEditorStep(folderEditorStep + 1)}
                     disabled={!canAdvanceFolderStep}
-                    className="bg-orange-500 px-8 hover:bg-orange-600"
+                    className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
                     data-testid="folder-wizard-continue"
                   >
                     Continuar
@@ -3955,7 +4047,7 @@ export default function ObraDefaultsPage() {
                   <Button
                     onClick={() => void handleSaveFolder()}
                     disabled={isSubmittingFolder || isCreateFolderDisabled}
-                    className="bg-orange-500 px-8 hover:bg-orange-600"
+                    className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
                     data-testid="folder-wizard-save"
                   >
                     {isSubmittingFolder ? (
@@ -4472,8 +4564,14 @@ export default function ObraDefaultsPage() {
       {/* OCR Template Configurator */}
       <OcrTemplateConfigurator
         open={isOcrConfigOpen}
-        onOpenChange={setIsOcrConfigOpen}
-        onTemplateCreated={handleTemplateCreated}
+        onOpenChange={(open) => {
+          setIsOcrConfigOpen(open);
+          if (!open) {
+            setEditingOcrTemplate(null);
+          }
+        }}
+        onTemplateSaved={handleTemplateSaved}
+        existingTemplate={editingOcrTemplate}
       />
     </div >
   );
