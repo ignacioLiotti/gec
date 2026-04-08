@@ -575,7 +575,7 @@ export default function DesktopExcelPageClient({
 							<div data-wizard-target="excel-page-tabs">
 								<FormTableTabs className={cn("flex h-11 justify-start rounded-lg p-1")} />
 							</div>
-					</div>
+						</div>
 					</div>
 
 					<div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:-mb-0">
@@ -637,7 +637,7 @@ export default function DesktopExcelPageClient({
 						data-wizard-target="excel-page-table"
 						className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none "
 					>
-						<FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(98vw-var(--sidebar-current-width))]" />
+						<FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(98vw-var(--sidebar-current-width))]" innerClassName="max-h-[calc(100vh-400px)]" />
 						<Separator className="bg-border" />
 						<FormTablePagination />
 					</div>
