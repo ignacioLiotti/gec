@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, useRef, useTransition, startTransition } from "react";
+import { useState, useCallback, useDeferredValue, useEffect, useMemo, useRef, useTransition, startTransition } from "react";
 import type { ReactNode } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import {
@@ -9,15 +9,12 @@ import {
 	ColumnDef as TanStackColumnDef,
 	VisibilityState,
 } from "@tanstack/react-table";
-// Virtualization disabled - was causing scroll re-renders
-// import { useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
 	Sheet,
 	SheetContent,
-	SheetFooter,
 	SheetHeader,
 	SheetTitle,
 	SheetTrigger,
@@ -44,14 +41,11 @@ import { ColumnResizer, balanceTableColumns } from "@/components/ui/column-resiz
 import { ColumnVisibilityMenu } from "@/components/data-table/column-visibility-menu";
 import {
 	Filter,
-	Search as SearchIcon,
 	ArrowUp,
 	ArrowDown,
 	ArrowUpDown,
 	Minus,
 	Loader2,
-	ChevronsLeft,
-	ChevronsRight,
 	ChevronLeft,
 	ChevronRight,
 	Download,
@@ -303,6 +297,9 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		table,
 		FieldComponent,
 		highlightQuery,
+		editMode,
+		activeCell,
+		setActiveCell,
 		getRowDirtyState,
 		isCellDirty,
 		hasInitialRow,
@@ -319,10 +316,11 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		visibleDataColumnCount,
 	} = rows;
 	const accordionAlwaysOpen = Boolean(accordionRowConfig?.alwaysOpen);
+	const isReadOnly = config.readOnly === true;
 	const showActionsColumn = config.showActionsColumn !== false;
+	const canDeleteRows = !isReadOnly;
 	const { serverError } = meta;
 	const { isServerPaging, isFetching } = pagination;
-	const headerGroups = config.headerGroups ?? [];
 	const {
 		state: sortState,
 		toggle: toggleSort,
@@ -331,13 +329,22 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	} = sorting;
 	const scrollParentRef = useRef<HTMLDivElement | null>(null);
 	const tableRows = table.getRowModel().rows;
-
-	// Virtualization disabled for now - was causing scroll re-renders
-	// TODO: Re-enable with proper isolation when needed for very large datasets
-	const shouldVirtualize = false;
-	const virtualRows: { index: number; start: number; end: number }[] = [];
-	const paddingTop = 0;
-	const paddingBottom = 0;
+	const shouldVirtualize =
+		config.enableRowVirtualization === true &&
+		!hasAccordionRows &&
+		tableRows.length > 24;
+	const rowVirtualizer = useVirtualizer({
+		count: shouldVirtualize ? tableRows.length : 0,
+		getScrollElement: () => scrollParentRef.current,
+		estimateSize: () => 58,
+		overscan: config.virtualizationOverscan ?? 5,
+	});
+	const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : [];
+	const paddingTop = shouldVirtualize && virtualRows.length > 0 ? virtualRows[0]!.start : 0;
+	const paddingBottom =
+		shouldVirtualize && virtualRows.length > 0
+			? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1]!.end
+			: 0;
 
 	return (
 		<>
@@ -347,7 +354,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 				</div>
 			)}
 			<div className={cn("relative rounded-none overflow-x-auto w-full bg-white flex-1", className)}>
-				{isServerPaging && isFetching && (
+				{isServerPaging && isFetching && tableRows.length === 0 && (
 					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm">
 						<Loader2 className="h-6 w-6 animate-spin text-primary" />
 						<p className="text-sm font-medium text-muted-foreground">Sincronizando con el servidor…</p>
@@ -590,9 +597,12 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												rowColorInfo={rowColorInfo}
 												rowOverlayBadges={rowOverlayBadges}
 												FieldComponent={FieldComponent}
+												tableReadOnly={isReadOnly}
 												highlightQuery={highlightQuery}
+												editMode={editMode}
+												activeCell={activeCell}
+												setActiveCell={setActiveCell}
 												hasInitialSnapshot={hasInitialRow(rowId)}
-												hasAccordionRows={hasAccordionRows}
 												accordionRowConfig={accordionRowConfig}
 												accordionAlwaysOpen={accordionAlwaysOpen}
 												isExpanded={isRowExpanded(rowId)}
@@ -600,6 +610,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												dirtyCellIds={dirtyCellIds}
 												hiddenColumnIdsKey={hiddenColumnIdsKey}
 												showActionsColumn={showActionsColumn}
+												canDeleteRows={canDeleteRows}
 												isColumnHidden={isColumnHidden}
 												isCellDirty={isCellDirty}
 												getStickyProps={getStickyProps}
@@ -640,9 +651,12 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											rowColorInfo={rowColorInfo}
 											rowOverlayBadges={rowOverlayBadges}
 											FieldComponent={FieldComponent}
+											tableReadOnly={isReadOnly}
 											highlightQuery={highlightQuery}
+											editMode={editMode}
+											activeCell={activeCell}
+											setActiveCell={setActiveCell}
 											hasInitialSnapshot={hasInitialRow(rowId)}
-											hasAccordionRows={hasAccordionRows}
 											accordionRowConfig={accordionRowConfig}
 											accordionAlwaysOpen={accordionAlwaysOpen}
 											isExpanded={isRowExpanded(rowId)}
@@ -650,6 +664,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											dirtyCellIds={dirtyCellIds}
 											hiddenColumnIdsKey={hiddenColumnIdsKey}
 											showActionsColumn={showActionsColumn}
+											canDeleteRows={canDeleteRows}
 											isColumnHidden={isColumnHidden}
 											isCellDirty={isCellDirty}
 											getStickyProps={getStickyProps}
@@ -687,12 +702,13 @@ export function FormTablePagination() {
 		options,
 		totalRowCount,
 		visibleRowCount,
-		isServerPaging,
 		isFetching,
 		isTransitioning,
 	} = pagination;
 	const pageSizeLocked = typeof lockedPageSize === "number";
-	const allowAddRows = config.allowAddRows !== false;
+	const isReadOnly = config.readOnly === true;
+	const allowAddRows = !isReadOnly && config.allowAddRows !== false;
+	const canSave = !isReadOnly && typeof config.onSave === "function";
 	const isLoading = isFetching || isTransitioning;
 
 	return (
@@ -745,7 +761,7 @@ export function FormTablePagination() {
 						Agregar fila vacía
 					</Button>
 				)}
-				{meta.hasUnsavedChanges && (
+				{canSave && meta.hasUnsavedChanges && (
 					<Button
 						type="button"
 						onClick={actions.discard}
@@ -757,17 +773,19 @@ export function FormTablePagination() {
 						Descartar cambios
 					</Button>
 				)}
-				<Button
-					type="button"
-					onClick={actions.save}
-					disabled={!meta.hasUnsavedChanges || meta.isSaving}
-					data-testid="form-table-save"
+				{canSave ? (
+					<Button
+						type="button"
+						onClick={actions.save}
+						disabled={!meta.hasUnsavedChanges || meta.isSaving}
+						data-testid="form-table-save"
 
-					className="gap-2"
-				>
-					{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-					{meta.isSaving ? "Guardando..." : "Guardar cambios"}
-				</Button>
+						className="gap-2"
+					>
+						{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+						{meta.isSaving ? "Guardando..." : "Guardar cambios"}
+					</Button>
+				) : null}
 			</div>
 			<div className="flex items-center gap-2">
 				{/* <Button
@@ -827,7 +845,6 @@ import {
 	writePersistedArray,
 	writePersistedNumber,
 } from "./persistence";
-import { GlassyIcon } from "@/components/ui/glassy-icon";
 
 export { requiredValidator } from "./table-utils";
 
@@ -835,6 +852,25 @@ export { requiredValidator } from "./table-utils";
 const DEFAULT_COL_WIDTH = 160;
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const DEFAULT_PAGE_SIZE = 10;
+
+function buildFormSnapshot<Row extends FormTableRow>(rows: Row[] | undefined) {
+	const safeRows = Array.isArray(rows) ? rows : [];
+	const rowOrder = safeRows.map((row) => row.id);
+	const rowsById = safeRows.reduce<Record<string, Row>>((acc, row) => {
+		acc[row.id] = { ...row };
+		return acc;
+	}, {});
+	return { rowOrder, rowsById };
+}
+
+function hasSameRowIdentity<Row extends FormTableRow>(
+	nextRows: Row[] | undefined,
+	currentOrder: string[],
+) {
+	if (!Array.isArray(nextRows)) return currentOrder.length === 0;
+	if (nextRows.length !== currentOrder.length) return false;
+	return nextRows.every((row, index) => row.id === currentOrder[index]);
+}
 
 // cell renderers moved to components/form-table/cell-renderers.tsx
 
@@ -861,7 +897,14 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [externalRefreshVersion, setExternalRefreshVersion] = useState(0);
 	const enableColumnResizing = config.enableColumnResizing ?? false;
 	const fetchRowsFn = config.fetchRows ?? null;
+	const useServerDataMode = config.serverSideData === true && Boolean(fetchRowsFn);
 	const isEmbedded = variant === "embedded";
+	const isReadOnly = config.readOnly === true;
+	const initialSnapshot = useMemo(
+		() => buildFormSnapshot(config.defaultRows),
+		[config.defaultRows]
+	);
+	const [activeCell, setActiveCell] = useState<{ rowId: string; columnId: string } | null>(null);
 
 	// TanStack Form setup
 	const form = useForm<
@@ -879,8 +922,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		undefined
 	>({
 		defaultValues: {
-			rowOrder: [],
-			rowsById: {},
+			rowOrder: initialSnapshot.rowOrder,
+			rowsById: initialSnapshot.rowsById,
 		},
 	});
 	const setFormFieldValue = form.setFieldValue as (path: string, updater: unknown) => void;
@@ -954,14 +997,16 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		hasNextPage: false,
 		hasPreviousPage: false,
 	});
-	const initialValuesRef = useRef<FormValues<Row>>({ rowOrder: [], rowsById: {} });
+	const initialValuesRef = useRef<FormValues<Row>>(snapshotValues(initialSnapshot.rowOrder, initialSnapshot.rowsById));
 	const columns = config.columns;
-	const headerGroups = config.headerGroups ?? [];
+	const headerGroups = useMemo(() => config.headerGroups ?? [], [config.headerGroups]);
 	const defaultRows = config.defaultRows;
+	const fetchAfterDefaultRows = config.fetchAfterDefaultRows === true;
 	const hydratedServerRowsRef = useRef(false);
 
 	useEffect(() => {
 		if (!fetchRowsFn || !Array.isArray(defaultRows)) return;
+		if (hasSameRowIdentity(defaultRows, rowOrder)) return;
 		setFormRows(defaultRows);
 		setServerMeta((prev) => ({
 			page: 1,
@@ -971,7 +1016,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			hasNextPage: false,
 			hasPreviousPage: false,
 		}));
-	}, [defaultRows, fetchRowsFn, pageSize, setFormRows]);
+	}, [defaultRows, fetchRowsFn, pageSize, rowOrder, setFormRows]);
 
 	useEffect(() => {
 		const handleExternalRefresh = (event: Event) => {
@@ -1008,11 +1053,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		},
 		[onSearchQueryChange, searchQuery]
 	);
-	const searchRef = useRef(searchValue.trim());
+	const deferredSearchValue = useDeferredValue(searchValue);
+	const searchRequestKey = deferredSearchValue.trim();
+	const searchRef = useRef(searchRequestKey);
 	useEffect(() => {
-		searchRef.current = searchValue.trim();
-	}, [searchValue]);
-	const searchRequestKey = searchValue.trim();
+		searchRef.current = searchRequestKey;
+	}, [searchRequestKey]);
 	const [activeTab, setActiveTab] = useState<string | null>(tabFilters[0]?.id ?? null);
 	useEffect(() => {
 		setActiveTab((current) => {
@@ -1051,6 +1097,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [sortState, setSortState] = useState<SortState>(() =>
 		lockedSort ?? { columnId: null, direction: "asc" }
 	);
+	const effectiveSortState = lockedSort ?? sortState;
 	useEffect(() => {
 		if (!lockedSort) return;
 		setSortState((prev) =>
@@ -1146,7 +1193,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		});
 	}, [accordionAlwaysOpen, rows, accordionRowConfig, hasAccordionRows]);
 
-	const serverRequestIdentity = `${searchRequestKey}::${appliedFiltersKey}`;
+	const serverRequestIdentity = `${searchRequestKey}::${appliedFiltersKey}::${activeTab ?? "all"}::${sortState.columnId ?? "none"}::${sortState.direction}`;
 	const previousServerRequestIdentityRef = useRef<string | null>(null);
 	useEffect(() => {
 		if (!fetchRowsFn) {
@@ -1160,12 +1207,20 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [fetchRowsFn, serverRequestIdentity]);
 
 	useEffect(() => {
+		if (!activeCell) return;
+		if (!rowOrder.includes(activeCell.rowId)) {
+			setActiveCell(null);
+		}
+	}, [activeCell, rowOrder]);
+
+	useEffect(() => {
 		if (!fetchRowsFn) return;
 		if (
 			Array.isArray(defaultRows) &&
 			!hydratedServerRowsRef.current &&
 			page === 1 &&
-			searchRequestKey.length === 0
+			searchRequestKey.length === 0 &&
+			!fetchAfterDefaultRows
 		) {
 			hydratedServerRowsRef.current = true;
 			return;
@@ -1181,6 +1236,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 					limit: pageSize,
 					filters: filtersForRequest,
 					search: searchRef.current,
+					activeTab,
+					sort: effectiveSortState,
 				});
 				if (!isMounted) return;
 				setFormRows(result.rows);
@@ -1209,14 +1266,27 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		return () => {
 			isMounted = false;
 		};
-	}, [appliedFiltersKey, defaultRows, fetchRowsFn, page, pageSize, setFormRows, searchRequestKey]);
+	}, [
+		activeTab,
+		appliedFiltersKey,
+		defaultRows,
+		effectiveSortState,
+		externalRefreshVersion,
+		fetchAfterDefaultRows,
+		fetchRowsFn,
+		page,
+		pageSize,
+		setFormRows,
+		searchRequestKey,
+	]);
 
 	useEffect(() => {
 		if (fetchRowsFn) return;
 		if (Array.isArray(defaultRows)) {
+			if (hasSameRowIdentity(defaultRows, rowOrder)) return;
 			setFormRows(defaultRows);
 		}
-	}, [fetchRowsFn, defaultRows, setFormRows]);
+	}, [fetchRowsFn, defaultRows, rowOrder, setFormRows]);
 
 	const isCellDirty = useCallback(
 		(rowId: string, column: ColumnDef<Row>) =>
@@ -1314,19 +1384,31 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		[columns]
 	);
 
-	const normalizedSearch = searchValue.trim().toLowerCase();
+	const normalizedSearch = deferredSearchValue.trim().toLowerCase();
 	const highlightQuery = normalizedSearch;
 
-	// Combined filtering pipeline - single pass through rows for search + advanced filters
-	// Returns both the filtered rows (before tab filter) and tab counts in one computation
 	const { baseFilteredRows, tabCounts } = useMemo(() => {
+		if (useServerDataMode) {
+			const counts: Record<string, number> = {};
+			for (const tab of tabFilters) {
+				if (tab.predicate) {
+					let count = 0;
+					for (const row of rows) {
+						if (tab.predicate(row)) count++;
+					}
+					counts[tab.id] = count;
+				} else {
+					counts[tab.id] = rows.length;
+				}
+			}
+			return { baseFilteredRows: rows, tabCounts: counts };
+		}
+
 		const applyFilters = config.applyFilters;
 		const hasAdvancedFilters = applyFilters && typeof filters !== "undefined";
 
-		// Single pass: apply search + advanced filters together
 		const filtered: Row[] = [];
 		for (const row of rows) {
-			// Search filter
 			if (normalizedSearch) {
 				const matchesSearch = columns.some((column) => {
 					if (column.searchFn) {
@@ -1338,13 +1420,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 				if (!matchesSearch) continue;
 			}
 
-			// Advanced filter
 			if (hasAdvancedFilters && !applyFilters(row, filters)) continue;
 
 			filtered.push(row);
 		}
 
-		// Compute tab counts from the filtered rows (single iteration)
 		const counts: Record<string, number> = {};
 		for (const tab of tabFilters) {
 			if (tab.predicate) {
@@ -1359,7 +1439,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}
 
 		return { baseFilteredRows: filtered, tabCounts: counts };
-	}, [rows, normalizedSearch, columns, config.applyFilters, filters, tabFilters]);
+	}, [rows, normalizedSearch, columns, config.applyFilters, filters, tabFilters, useServerDataMode]);
 
 	// Apply the selected tab filter synchronously to avoid one-render lag.
 	const tabFilteredRows = useMemo(() => {
@@ -1374,16 +1454,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [baseFilteredRows, activeTab, tabFilters, hasTabFilters]);
 
 
-	const effectiveSortState = lockedSort ?? sortState;
 	const enableClientSort = config.enableClientSort !== false;
 	const sortedRows = useMemo(() => {
-		if (!enableClientSort || !effectiveSortState.columnId) return tabFilteredRows;
+		if (useServerDataMode || !enableClientSort || !effectiveSortState.columnId) return tabFilteredRows;
 		const column = columns.find((col) => col.id === effectiveSortState.columnId);
 		if (!column) return tabFilteredRows;
 		const comparator = column.sortFn ?? defaultSortByField<Row>(column.field);
 		const sorted = [...tabFilteredRows].sort((a, b) => comparator(a, b));
 		return effectiveSortState.direction === "asc" ? sorted : sorted.reverse();
-	}, [tabFilteredRows, effectiveSortState, enableClientSort, columns]);
+	}, [tabFilteredRows, effectiveSortState, enableClientSort, columns, useServerDataMode]);
 
 	const activeFilterCount = useMemo(() => {
 		if (!config.countActiveFilters || typeof filters === "undefined") return 0;
@@ -1582,16 +1661,20 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [clientTotalPages, page, useClientPagination]);
 
 	// Detect if server returned more rows than requested (server doesn't support pagination)
-	const serverReturnedAllRows = fetchRowsFn && sortedRows.length > pageSize && serverMeta.totalPages <= 1;
+	const serverReturnedAllRows =
+		!useServerDataMode && fetchRowsFn && sortedRows.length > pageSize && serverMeta.totalPages <= 1;
 
 	const processedRows = useMemo(() => {
+		if (useServerDataMode) {
+			return sortedRows;
+		}
 		// Client-side pagination when no fetchRowsFn OR when server returned all rows at once
 		if (!fetchRowsFn || serverReturnedAllRows) {
 			const start = (page - 1) * pageSize;
 			return sortedRows.slice(start, start + pageSize);
 		}
 		return sortedRows;
-	}, [page, pageSize, sortedRows, fetchRowsFn, serverReturnedAllRows]);
+	}, [page, pageSize, sortedRows, fetchRowsFn, serverReturnedAllRows, useServerDataMode]);
 
 	const processedRowsRef = useRef<Row[]>(processedRows);
 	useEffect(() => {
@@ -1599,7 +1682,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [processedRows]);
 
 	// Use client pagination values when server returned all rows at once
-	const useClientPaginationValues = useClientPagination || serverReturnedAllRows;
+	const useClientPaginationValues = !useServerDataMode && (useClientPagination || serverReturnedAllRows);
 
 	const datasetTotalCount = useClientPaginationValues
 		? sortedRows.length
@@ -1620,6 +1703,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const visibleRowCount = processedRows.length;
 
 	const FieldComponent = form.Field as FormFieldComponent<Row>;
+	const editMode = config.editMode ?? "always";
 	const isRowExpanded = useCallback(
 		(rowId: string) => (accordionAlwaysOpen ? true : expandedRowIds.has(rowId)),
 		[accordionAlwaysOpen, expandedRowIds]
@@ -1642,21 +1726,23 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const handleClearCell = useCallback(
 		(rowId: string, column: ColumnDef<Row>) => {
+			if (isReadOnly) return;
 			if (column.editable === false) return;
 			const clearedValue = getClearedValue(column);
 			setFormFieldValue(`rowsById.${rowId}.${column.field}` as const, () => clearedValue as Row[ColumnField<Row>]);
 		},
-		[setFormFieldValue]
+		[isReadOnly, setFormFieldValue]
 	);
 
 	const handleRestoreCell = useCallback(
 		(rowId: string, column: ColumnDef<Row>) => {
+			if (isReadOnly) return;
 			const initialRow = initialValuesRef.current.rowsById[rowId];
 			if (!initialRow) return;
 			const initialValue = initialRow[column.field];
 			setFormFieldValue(`rowsById.${rowId}.${column.field}` as const, () => initialValue as Row[ColumnField<Row>]);
 		},
-		[setFormFieldValue]
+		[isReadOnly, setFormFieldValue]
 	);
 
 	const handleCopyCell = useCallback(async (value: unknown) => {
@@ -1721,6 +1807,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const visibleDataColumnCount = table.getVisibleLeafColumns().length;
 
 	const handleAddRow = useCallback(() => {
+		if (isReadOnly) return;
 		const newRow = config.createRow ? config.createRow() : createRowFromColumns(columns);
 		setFormFieldValue("rowOrder", (prev: string[] = []) => [newRow.id, ...(prev ?? [])]);
 		setFormFieldValue("rowsById", (prev: Record<string, Row> = {}) => ({
@@ -1729,9 +1816,10 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		}));
 		setPage(1);
 		toast.success("Fila vacía agregada");
-	}, [columns, config, setFormFieldValue]);
+	}, [columns, config, isReadOnly, setFormFieldValue]);
 
 	const handleDelete = useCallback((id: string) => {
+		if (isReadOnly) return;
 		setFormFieldValue("rowOrder", (prev: string[] = []) => prev.filter((rowId) => rowId !== id));
 		setFormFieldValue("rowsById", (prev: Record<string, Row> = {}) => {
 			if (!(id in prev)) return prev;
@@ -1740,7 +1828,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return next;
 		});
 		// toast.success("Fila eliminada");
-	}, [setFormFieldValue]);
+	}, [isReadOnly, setFormFieldValue]);
 
 	const handleExportCsv = useCallback(async () => {
 		const exportColumns = columns.filter((column) => !isColumnHidden(column.id));
@@ -1771,6 +1859,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [TABLE_ID, columns, isColumnHidden, sortedRows]);
 
 	const handleSave = useCallback(async () => {
+		if (isReadOnly) return;
 		if (!hasUnsavedChanges) return;
 		setIsSaving(true);
 		setServerError(null);
@@ -1798,9 +1887,10 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		} finally {
 			setIsSaving(false);
 		}
-	}, [columns, config, hasUnsavedChanges, rowOrder, rows, rowsById]);
+	}, [columns, config, hasUnsavedChanges, isReadOnly, rowOrder, rows, rowsById]);
 
 	const handleDiscardChanges = useCallback(() => {
+		if (isReadOnly) return;
 		if (!hasUnsavedChanges) return;
 		const snapshot = snapshotValues(initialValuesRef.current.rowOrder, initialValuesRef.current.rowsById);
 		setFormFieldValue("rowOrder", snapshot.rowOrder);
@@ -1819,7 +1909,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return changed ? next : prev;
 		});
 		toast.info("Cambios descartados");
-	}, [hasUnsavedChanges, setFormFieldValue]);
+	}, [hasUnsavedChanges, isReadOnly, setFormFieldValue]);
 
 	const contextValue: FormTableContextValue<Row, Filters> = {
 		config,
@@ -1900,6 +1990,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			currentRows: rows,
 			FieldComponent,
 			highlightQuery,
+			editMode,
+			activeCell,
+			setActiveCell,
 			getRowDirtyState,
 			isCellDirty,
 			hasInitialRow,

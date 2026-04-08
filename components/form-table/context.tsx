@@ -98,6 +98,9 @@ export type FormTableRowState<Row extends FormTableRow> = {
 	currentRows: Row[];
 	FieldComponent: FormFieldComponent<Row>;
 	highlightQuery: string;
+	editMode: "always" | "active-cell";
+	activeCell: { rowId: string; columnId: string } | null;
+	setActiveCell: (cell: { rowId: string; columnId: string } | null) => void;
 	getRowDirtyState: (rowId: string) => { dirty: boolean; cells: ColumnDef<Row>[] };
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
 	hasInitialRow: (rowId: string) => boolean;

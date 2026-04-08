@@ -176,6 +176,8 @@ export type FetchRowsArgs<Filters> = {
 	limit: number;
 	filters: Filters;
 	search?: string;
+	activeTab?: string | null;
+	sort?: SortState;
 };
 
 export type FetchRowsResult<Row extends FormTableRow> = {
@@ -207,6 +209,7 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	tableId: string;
 	title?: string;
 	description?: string;
+	readOnly?: boolean;
 	columns: ColumnDef<Row>[];
 	lockedSort?: { columnId: string; direction: "asc" | "desc" };
 	toolbarActions?: ReactNode;
@@ -223,7 +226,11 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	applyFilters?: (row: Row, filters: Filters) => boolean;
 	countActiveFilters?: (filters: Filters) => number;
 	defaultRows?: Row[];
+	/** When true, renders defaultRows first and still fetches the full server dataset immediately after mount. */
+	fetchAfterDefaultRows?: boolean;
 	fetchRows?: (args: FetchRowsArgs<Filters>) => Promise<FetchRowsResult<Row>>;
+	/** When true, search, sorting and pagination are resolved by fetchRows instead of client-side pipelines. */
+	serverSideData?: boolean;
 	createRow?: () => Row;
 	onSave?: (args: SaveRowsArgs<Row>) => Promise<void>;
 	emptyStateMessage?: string;
@@ -238,6 +245,12 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	showActionsColumn?: boolean;
 	/** Controls whether the default toolbar should show the "Agregar fila" button. Defaults to true. */
 	allowAddRows?: boolean;
+	/** Mount editable field bindings only for the active cell to reduce subscription cost. */
+	editMode?: "always" | "active-cell";
+	/** Virtualize row rendering when datasets are large enough. */
+	enableRowVirtualization?: boolean;
+	/** Extra rows rendered above and below the viewport when virtualization is enabled. Defaults to 5. */
+	virtualizationOverscan?: number;
 	/** Optional row class resolver to support conditional row coloring. */
 	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
 	/** Structured row color info for rule-based coloring. Preferred over rowClassName. */

@@ -27,6 +27,7 @@ export default function ExcelPageClient({
 	initialMainTableColumnsConfig,
 	initialObras,
 	initialIsMobile,
+	initialLoadMode,
 }: ResponsiveExcelPageClientProps) {
 	const [isMobile, setIsMobile] = useState(initialIsMobile);
 
@@ -45,8 +46,10 @@ export default function ExcelPageClient({
 	return (
 		<div className="relative">
 			<DesktopExcelPageClient
+				key={initialLoadMode}
 				initialMainTableColumnsConfig={initialMainTableColumnsConfig}
 				initialObras={initialObras}
+				initialLoadMode={initialLoadMode}
 			/>
 		</div>
 	);

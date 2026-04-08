@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useCallback } from "react";
+import { memo, useState, useCallback, useEffect, useRef } from "react";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type {
 	ColumnDef,
+	FormFieldRenderState,
 	FormFieldComponent,
 	FormTableRow,
 } from "./types";
@@ -21,7 +22,11 @@ type TableCellProps<Row extends FormTableRow> = {
 	row: Row;
 	rowId: string;
 	FieldComponent: FormFieldComponent<Row>;
+	tableReadOnly: boolean;
 	highlightQuery: string;
+	editMode: "always" | "active-cell";
+	activeCell: { rowId: string; columnId: string } | null;
+	setActiveCell: (cell: { rowId: string; columnId: string } | null) => void;
 	isRowDirty: boolean;
 	isCellDirty: boolean;
 	hasInitialSnapshot: boolean;
@@ -34,7 +39,7 @@ type TableCellProps<Row extends FormTableRow> = {
 };
 
 type CellContentProps<Row extends FormTableRow> = {
-	field: any;
+	field: FormFieldRenderState;
 	column: ColumnDef<Row>;
 	row: Row;
 	rowId: string;
@@ -43,12 +48,23 @@ type CellContentProps<Row extends FormTableRow> = {
 	isCellDirty: boolean;
 	hasInitialSnapshot: boolean;
 	editable: boolean;
+	isActive: boolean;
+	onActivate: () => void;
 	onCopyCell: (value: unknown) => void;
 	onCopyColumn: () => void;
 	onCopyRow: () => void;
 	onClearValue?: () => void;
 	onRestoreValue?: () => void;
 	customMenuItems?: ColumnDef<Row>["cellMenuItems"];
+};
+
+type StaticReadOnlyCellContentProps<Row extends FormTableRow> = {
+	value: unknown;
+	column: ColumnDef<Row>;
+	row: Row;
+	highlightQuery: string;
+	isRowDirty: boolean;
+	isCellDirty: boolean;
 };
 
 /**
@@ -64,6 +80,8 @@ function CellContent<Row extends FormTableRow>({
 	isCellDirty,
 	hasInitialSnapshot,
 	editable,
+	isActive,
+	onActivate,
 	onCopyCell,
 	onCopyColumn,
 	onCopyRow,
@@ -73,7 +91,13 @@ function CellContent<Row extends FormTableRow>({
 }: CellContentProps<Row>) {
 	const fieldValue = field.state.value;
 	const setValue = useCallback((value: unknown) => field.handleChange(value), [field]);
-	const errorMessage = field.state.meta?.errors?.[0];
+	const rawErrorMessage = field.state.meta?.errors?.[0];
+	const errorMessage =
+		typeof rawErrorMessage === "string"
+			? rawErrorMessage
+			: rawErrorMessage == null
+				? null
+				: String(rawErrorMessage);
 
 	// Track if context menu has ever been opened (lazy mount)
 	const [menuOpened, setMenuOpened] = useState(false);
@@ -96,9 +120,22 @@ function CellContent<Row extends FormTableRow>({
 		: renderReadOnlyValue(fieldValue, row, column, highlightQuery);
 
 	const canRestore = isCellDirty && hasInitialSnapshot;
+	const contentRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (!isActive) return;
+		const frame = window.requestAnimationFrame(() => {
+			const target = contentRef.current?.querySelector<HTMLElement>(
+				'input, textarea, [role="combobox"], button'
+			);
+			target?.focus();
+		});
+		return () => window.cancelAnimationFrame(frame);
+	}, [isActive]);
 
 	const body = (
 		<div
+			ref={contentRef}
 			className={cn(
 				"absolute top-0 left-0 w-full h-full flex items-center justify-start pl-2",
 				isRowDirty ? "outline outline-amber-500/60 shadow-sm border-b border-amber-500" : "",
@@ -119,6 +156,26 @@ function CellContent<Row extends FormTableRow>({
 
 	if (DISABLE_CONTEXT_MENU) {
 		return body;
+	}
+
+	if (!isActive) {
+		return (
+			<button
+				type="button"
+				onClick={onActivate}
+				onDoubleClick={editable ? onActivate : undefined}
+				onKeyDown={(event) => {
+					if (!editable) return;
+					if (event.key === "Enter" || event.key === "F2") {
+						event.preventDefault();
+						onActivate();
+					}
+				}}
+				className="block h-full w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-orange-primary/40"
+			>
+				{body}
+			</button>
+		);
 	}
 
 	return (
@@ -163,12 +220,39 @@ function CellContent<Row extends FormTableRow>({
 	);
 }
 
+function StaticReadOnlyCellContent<Row extends FormTableRow>({
+	value,
+	column,
+	row,
+	highlightQuery,
+	isRowDirty,
+	isCellDirty,
+}: StaticReadOnlyCellContentProps<Row>) {
+	return (
+		<div
+			className={cn(
+				"absolute top-0 left-0 w-full h-full flex items-center justify-start pl-2",
+				isRowDirty ? "outline outline-amber-500/60 shadow-sm border-b border-amber-500" : "",
+				isCellDirty
+					? "bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--color-amber-200)_5px,var(--color-amber-200)_6px,transparent_6px)] bg-repeat border-2 border-l-1 border-t-0 border-amber-600/50"
+					: ""
+			)}
+		>
+			{renderReadOnlyValue(value, row, column, highlightQuery)}
+		</div>
+	);
+}
+
 function TableCellInner<Row extends FormTableRow>({
 	column,
 	row,
 	rowId,
 	FieldComponent,
+	tableReadOnly,
 	highlightQuery,
+	editMode,
+	activeCell,
+	setActiveCell,
 	isRowDirty,
 	isCellDirty,
 	hasInitialSnapshot,
@@ -183,12 +267,58 @@ function TableCellInner<Row extends FormTableRow>({
 	const isNewRow = !hasInitialSnapshot;
 	const forceEditableForNewObraNameCell =
 		isNewRow && String(column.field) === "designacionYUbicacion";
-	const editable = column.editable !== false || forceEditableForNewObraNameCell;
+	const editable =
+		!tableReadOnly && (column.editable !== false || forceEditableForNewObraNameCell);
+	const usesActiveCellEditing = editable && editMode === "active-cell";
+	const isActive =
+		usesActiveCellEditing &&
+		activeCell?.rowId === rowId &&
+		activeCell?.columnId === column.id;
 	const validators = column.validators;
+
+	if (!editable) {
+		return (
+			<StaticReadOnlyCellContent
+				value={row[column.field]}
+				column={column}
+				row={row}
+				highlightQuery={highlightQuery}
+				isRowDirty={isRowDirty}
+				isCellDirty={isCellDirty}
+			/>
+		);
+	}
+
+	if (usesActiveCellEditing && !isActive) {
+		return (
+			<div
+				role="button"
+				tabIndex={0}
+				onClick={() => setActiveCell({ rowId, columnId: column.id })}
+				onDoubleClick={() => setActiveCell({ rowId, columnId: column.id })}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" || event.key === "F2") {
+						event.preventDefault();
+						setActiveCell({ rowId, columnId: column.id });
+					}
+				}}
+				className="relative block h-full w-full cursor-text outline-none focus-visible:ring-2 focus-visible:ring-orange-primary/40"
+			>
+				<StaticReadOnlyCellContent
+					value={row[column.field]}
+					column={column}
+					row={row}
+					highlightQuery={highlightQuery}
+					isRowDirty={isRowDirty}
+					isCellDirty={isCellDirty}
+				/>
+			</div>
+		);
+	}
 
 	return (
 		<FieldComponent name={fieldPath} validators={validators}>
-			{(field: any) => (
+			{(field) => (
 				<CellContent
 					field={field}
 					column={column}
@@ -199,6 +329,8 @@ function TableCellInner<Row extends FormTableRow>({
 					isCellDirty={isCellDirty}
 					hasInitialSnapshot={hasInitialSnapshot}
 					editable={editable}
+					isActive={!usesActiveCellEditing || isActive}
+					onActivate={() => setActiveCell({ rowId, columnId: column.id })}
 					onCopyCell={onCopyCell}
 					onCopyColumn={onCopyColumn}
 					onCopyRow={onCopyRow}
@@ -212,12 +344,25 @@ function TableCellInner<Row extends FormTableRow>({
 }
 
 export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => {
-	// Compare row reference to detect data changes
-	// Row contains the actual data used by cell renderers
+	const prevIsActive =
+		prevProps.activeCell?.rowId === prevProps.rowId &&
+		prevProps.activeCell?.columnId === prevProps.column.id;
+	const nextIsActive =
+		nextProps.activeCell?.rowId === nextProps.rowId &&
+		nextProps.activeCell?.columnId === nextProps.column.id;
+	const activeStateChanged =
+		prevIsActive !== nextIsActive ||
+		(prevIsActive &&
+			nextIsActive &&
+			`${prevProps.activeCell?.rowId}:${prevProps.activeCell?.columnId}` !==
+				`${nextProps.activeCell?.rowId}:${nextProps.activeCell?.columnId}`);
 	return (
 		prevProps.rowId === nextProps.rowId &&
 		prevProps.column.id === nextProps.column.id &&
+		prevProps.tableReadOnly === nextProps.tableReadOnly &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&
+		prevProps.editMode === nextProps.editMode &&
+		!activeStateChanged &&
 		prevProps.isRowDirty === nextProps.isRowDirty &&
 		prevProps.isCellDirty === nextProps.isCellDirty &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&

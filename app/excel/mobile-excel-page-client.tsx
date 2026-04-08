@@ -61,18 +61,25 @@ function Framed({
 export default function MobileExcelPageClient({
 	initialObras,
 }: Pick<ExcelPageClientProps, "initialObras">) {
+	const hasPartialInitialObras = initialObras.some((obra) => obra.__isPartial === true);
 	const [obras, setObras] = useState<ObraListItem[]>(() =>
 		initialObras.map(mapObraToMobileObra)
 	);
 	const [isLoading, setIsLoading] = useState(false);
 
 	useEffect(() => {
-		if (initialObras.length > 0) return;
+		setObras(initialObras.map(mapObraToMobileObra));
+	}, [initialObras]);
+
+	useEffect(() => {
+		if (initialObras.length > 0 && !hasPartialInitialObras) return;
 		let cancelled = false;
 
 		const loadObras = async () => {
 			try {
-				setIsLoading(true);
+				if (initialObras.length === 0) {
+					setIsLoading(true);
+				}
 				const response = await fetch("/api/obras", { cache: "no-store" });
 				if (!response.ok) throw new Error("No se pudieron obtener las obras");
 				const payload = await response.json();
@@ -96,7 +103,7 @@ export default function MobileExcelPageClient({
 		return () => {
 			cancelled = true;
 		};
-	}, [initialObras]);
+	}, [hasPartialInitialObras, initialObras]);
 
 	return (
 		<div className={cn("flex-1 space-y-4 px-4 py-4", DS.page)}>

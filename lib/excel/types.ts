@@ -1,3 +1,5 @@
+import type { ExcelLoadMode } from "@/lib/excel/load-mode";
+
 export type ExcelMainTableColumnKind = "base" | "formula" | "custom";
 export type ExcelMainTableFormulaFormat = "currency" | "number";
 export type ExcelMainTableColumnCellType =
@@ -38,6 +40,7 @@ export type ExcelPageObra = {
 	id: string;
 	n?: number | null;
 	designacionYUbicacion?: string | null;
+	__isPartial?: boolean | null;
 	supDeObraM2?: number | null;
 	entidadContratante?: string | null;
 	mesBasicoDeContrato?: string | null;
@@ -60,4 +63,5 @@ export type ExcelPageObra = {
 export type ExcelPageClientProps = {
 	initialMainTableColumnsConfig: ExcelPageMainTableColumnConfig[] | null;
 	initialObras: ExcelPageObra[];
+	initialLoadMode: ExcelLoadMode;
 };

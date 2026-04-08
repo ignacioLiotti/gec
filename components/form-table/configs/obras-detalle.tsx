@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { memo, useMemo, useState } from "react";
 import {
 	FormTableConfig,
+	ColumnField,
 	ColumnDef,
 	TabFilterOption,
 	HeaderGroup,
@@ -12,6 +13,7 @@ import {
 	RowColorInfo,
 } from "@/components/form-table/types";
 import { requiredValidator } from "@/components/form-table/form-table";
+import { renderReadOnlyValue } from "@/components/form-table/cell-renderers";
 import { FilterSection, RangeInputGroup } from "@/components/form-table/filter-components";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -139,11 +141,53 @@ export type DetailAdvancedFilters = {
 	ptrMax: string;
 };
 
+const BUILT_IN_DETAIL_ROW_KEYS = new Set<string>([
+	"id",
+	"__isPartial",
+	"__pendingNavigation",
+	"n",
+	"designacionYUbicacion",
+	"supDeObraM2",
+	"entidadContratante",
+	"mesBasicoDeContrato",
+	"iniciacion",
+	"contratoMasAmpliaciones",
+	"certificadoALaFecha",
+	"saldoACertificar",
+	"segunContrato",
+	"prorrogasAcordadas",
+	"plazoTotal",
+	"plazoTransc",
+	"porcentaje",
+	"customData",
+	"onFinishFirstMessage",
+	"onFinishSecondMessage",
+	"onFinishSecondSendAt",
+]);
+
+const API_SORT_BY_COLUMN_ID: Record<string, string> = {
+	n: "n",
+	designacionYUbicacion: "designacion_y_ubicacion",
+	supDeObraM2: "sup_de_obra_m2",
+	entidadContratante: "entidad_contratante",
+	mesBasicoDeContrato: "mes_basico_de_contrato",
+	iniciacion: "iniciacion",
+	contratoMasAmpliaciones: "contrato_mas_ampliaciones",
+	certificadoALaFecha: "certificado_a_la_fecha",
+	saldoACertificar: "saldo_a_certificar",
+	segunContrato: "segun_contrato",
+	prorrogasAcordadas: "prorrogas_acordadas",
+	plazoTotal: "plazo_total",
+	plazoTransc: "plazo_transc",
+	porcentaje: "porcentaje",
+};
+
 type RangeFilterKey = Exclude<keyof DetailAdvancedFilters, "entidades">;
 
 export type ObrasDetalleRow = FormTableRow & {
 	n?: number | string | null;
 	designacionYUbicacion?: string | null;
+	__isPartial?: boolean;
 	supDeObraM2?: number | string | null;
 	entidadContratante?: string | null;
 	mesBasicoDeContrato?: string | null;
@@ -167,6 +211,8 @@ const currencyFormatter = new Intl.NumberFormat("es-AR", {
 	style: "currency",
 	currency: "ARS",
 });
+
+const PREVIEW_PLACEHOLDER = "...";
 
 const FALLBACK_ID = () => `row-${Date.now()}-${Math.random()}`;
 const generateRowId = () =>
@@ -197,6 +243,12 @@ const clampPercentage = (value: unknown): number => {
 	if (!Number.isFinite(pct)) return 0;
 	return Math.max(0, Math.min(100, pct));
 };
+
+const isPartialPreviewRow = (row: ObrasDetalleRow) => row.__isPartial === true;
+
+const renderPreviewPlaceholder = (className?: string) => (
+	<span className={cn("text-[#a69b8c]", className)}>{PREVIEW_PLACEHOLDER}</span>
+);
 
 const renderAvanceContent = (
 	value: unknown,
@@ -279,7 +331,7 @@ type LegacyRowColorRule = {
 
 const ROW_COLOR_RULES_KEY = "obras-detalle:row-color-rules";
 const ROW_COLOR_EVENT = "form-table:refresh";
-const ROW_COLOR_TABLE_ID = "form-table-obras-detalle";
+export const ROW_COLOR_TABLE_ID = "form-table-obras-detalle";
 let inMemoryRowColorRules: RowColorRule[] = [];
 let inMemoryCompiledRowColorRules: CompiledRowColorRule[] = [];
 let rowColorRulesLoaded = false;
@@ -593,6 +645,7 @@ const getMatchedRulesForRow = (row: ObrasDetalleRow) => {
 };
 
 const getRowColorInfo = (row: ObrasDetalleRow): RowColorInfo | undefined => {
+	if (isPartialPreviewRow(row)) return undefined;
 	const matched = getMatchedRulesForRow(row);
 	const first = matched[0];
 	if (!first) return undefined;
@@ -603,6 +656,7 @@ const getRowColorInfo = (row: ObrasDetalleRow): RowColorInfo | undefined => {
 };
 
 const rowOverlayBadgesFromRules = (row: ObrasDetalleRow) => {
+	if (isPartialPreviewRow(row)) return [];
 	const matched = getMatchedRulesForRow(row);
 	const badges: Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }> = [];
 
@@ -1449,7 +1503,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 
 				return <ObraDetailLink obraId={obraId} text={text} />;
 			},
-			renderEditable: ({ value, row, input }) => {
+			renderEditable: ({ row, input }) => {
 				const obraId = row.id;
 				const canNavigate = isValidObraId(obraId) && !row.__pendingNavigation;
 				return (
@@ -1540,6 +1594,10 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		cellConfig: {
 			currencyCode: "ARS",
 			currencyLocale: "es-AR",
+			renderReadOnly: ({ value, row }) =>
+				isPartialPreviewRow(row)
+					? renderPreviewPlaceholder("font-mono tabular-nums")
+					: formatCurrency(value as number | string | null | undefined),
 		},
 		sortFn: (a, b) => toNumber(a.contratoMasAmpliaciones) - toNumber(b.contratoMasAmpliaciones),
 		searchFn: (row, query) => String(row.contratoMasAmpliaciones ?? "").includes(query),
@@ -1557,7 +1615,10 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		cellConfig: {
 			currencyCode: "ARS",
 			currencyLocale: "es-AR",
-			renderReadOnly: ({ row }) => formatCurrency(computeCertificado(row)),
+			renderReadOnly: ({ row }) =>
+				isPartialPreviewRow(row)
+					? renderPreviewPlaceholder("font-mono tabular-nums")
+					: formatCurrency(computeCertificado(row)),
 		},
 		sortFn: (a, b) => computeCertificado(a) - computeCertificado(b),
 		searchFn: (row, query) => String(computeCertificado(row)).includes(query),
@@ -1575,7 +1636,10 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		cellConfig: {
 			currencyCode: "ARS",
 			currencyLocale: "es-AR",
-			renderReadOnly: ({ row }) => formatCurrency(computeSaldo(row)),
+			renderReadOnly: ({ row }) =>
+				isPartialPreviewRow(row)
+					? renderPreviewPlaceholder("font-mono tabular-nums")
+					: formatCurrency(computeSaldo(row)),
 		},
 		sortFn: (a, b) => computeSaldo(a) - computeSaldo(b),
 		searchFn: (row, query) => String(computeSaldo(row)).includes(query),
@@ -1635,7 +1699,8 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		cellType: "badge",
 		cellClassName: "group-hover:text-orange-primary group-hover:font-semibold",
 		cellConfig: {
-			renderReadOnly: ({ value }) => renderAvanceContent(value),
+			renderReadOnly: ({ value, row }) =>
+				isPartialPreviewRow(row) ? renderPreviewPlaceholder() : renderAvanceContent(value),
 			renderEditable: ({ value, input }) => (
 				<div className="group relative h-full w-full ">
 					<div className="pointer-events-none h-full w-full flex items-center group-focus-within:opacity-0">
@@ -1673,6 +1738,11 @@ export type MainTableColumnConfig = {
 	enablePin?: boolean;
 	enableSort?: boolean;
 	enableResize?: boolean;
+};
+
+type ObrasDetalleConfigOptions = {
+	readOnly?: boolean;
+	optimizationPreset?: "legacy" | "optimized";
 };
 
 export const MAIN_TABLE_BASE_COLUMN_OPTIONS = columns.map((column) => ({
@@ -1747,21 +1817,43 @@ const buildFormulaColumn = (
 	return {
 		id: config.id,
 		label: config.label || config.id,
-		field: config.id as any,
+		field: config.id as ColumnField<ObrasDetalleRow>,
 		enableHide: true,
 		enablePin: false,
 		editable: false,
 		cellType: resolvedCellType,
-		cellConfig:
-			resolvedCellType === "currency"
+		cellConfig: {
+			...(resolvedCellType === "currency"
 				? {
 					currencyCode: "ARS",
 					currencyLocale: "es-AR",
-					renderReadOnly: ({ row }) => formatCurrency(getValue(row)),
 				}
-				: {
-					renderReadOnly: ({ row }) => getValue(row).toLocaleString("es-AR"),
-				},
+				: {}),
+			renderReadOnly: ({ row, highlightQuery }) => {
+				if (isPartialPreviewRow(row)) {
+					return renderPreviewPlaceholder(
+						resolvedCellType === "currency" ? "font-mono tabular-nums" : undefined,
+					);
+				}
+				return renderReadOnlyValue(
+					getValue(row),
+					row,
+					{
+						id: config.id,
+						label: config.label || config.id,
+						field: config.id as ColumnField<ObrasDetalleRow>,
+						cellType: resolvedCellType,
+						cellConfig: resolvedCellType === "currency"
+							? {
+								currencyCode: "ARS",
+								currencyLocale: "es-AR",
+							}
+							: undefined,
+					},
+					highlightQuery,
+				);
+			},
+		},
 		sortFn: (a, b) => getValue(a) - getValue(b),
 		searchFn: (row, query) => String(getValue(row)).includes(query),
 		defaultValue: null,
@@ -1780,11 +1872,33 @@ const buildCustomColumn = (
 	return {
 		id: config.id,
 		label: config.label || config.id,
-		field: config.id as any,
+		field: config.id as ColumnField<ObrasDetalleRow>,
 		enableHide: config.enableHide ?? true,
 		enablePin: config.enablePin ?? false,
 		editable: config.editable ?? true,
 		cellType,
+		cellConfig: {
+			renderReadOnly: ({ row, highlightQuery }) => {
+				if (isPartialPreviewRow(row)) {
+					return renderPreviewPlaceholder(
+						cellType === "currency" || cellType === "number"
+							? "font-mono tabular-nums"
+							: undefined,
+					);
+				}
+				return renderReadOnlyValue(
+					readValue(row),
+					row,
+					{
+						id: config.id,
+						label: config.label || config.id,
+						field: config.id as ColumnField<ObrasDetalleRow>,
+						cellType,
+					},
+					highlightQuery,
+				);
+			},
+		},
 		defaultValue:
 			cellType === "number" || cellType === "currency"
 				? 0
@@ -2208,6 +2322,7 @@ type ObrasDetalleApiRow = {
 	id: string;
 	n?: number | null;
 	designacionYUbicacion?: string | null;
+	__isPartial?: boolean | null;
 	supDeObraM2?: number | null;
 	entidadContratante?: string | null;
 	mesBasicoDeContrato?: string | null;
@@ -2233,6 +2348,7 @@ export function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 			: {};
 	const row: ObrasDetalleRow = {
 		id: obra.id,
+		__isPartial: obra.__isPartial === true,
 		__pendingNavigation: false,
 		n: obra.n ?? null,
 		designacionYUbicacion: obra.designacionYUbicacion ?? "",
@@ -2253,19 +2369,74 @@ export function mapObraToDetailRow(obra: ObrasDetalleApiRow): ObrasDetalleRow {
 		onFinishSecondMessage: obra.onFinishSecondMessage ?? null,
 		onFinishSecondSendAt: obra.onFinishSecondSendAt ?? null,
 	};
-	for (const [key, value] of Object.entries(customData)) {
-		if (row[key] === undefined) {
-			row[key] = value;
-		}
+	for (const key of Object.keys(customData)) {
+		if (BUILT_IN_DETAIL_ROW_KEYS.has(key)) continue;
+		row[key] = customData[key];
 	}
-	row.certificadoALaFecha = computeCertificado(row);
-	row.saldoACertificar = computeSaldo(row);
+	if (!row.__isPartial) {
+		row.certificadoALaFecha = computeCertificado(row);
+		row.saldoACertificar = computeSaldo(row);
+	}
 	return row;
 }
 
 const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["fetchRows"] =
-	async () => {
-		const response = await fetch(`/api/obras`, {
+	async ({ page, limit, filters, search, activeTab, sort }) => {
+		const params = new URLSearchParams();
+		params.set("page", String(page));
+		params.set("limit", String(limit));
+
+		if (search?.trim()) {
+			params.set("q", search.trim());
+		}
+
+		if (activeTab && activeTab !== "all") {
+			params.set("status", activeTab);
+		}
+
+		const orderBy =
+			(sort?.columnId && API_SORT_BY_COLUMN_ID[sort.columnId]) || API_SORT_BY_COLUMN_ID.n;
+		params.set("orderBy", orderBy);
+		params.set("orderDir", sort?.direction === "desc" ? "desc" : "asc");
+
+		const appendFilterValue = (key: keyof DetailAdvancedFilters, queryKey = key) => {
+			const value = filters[key];
+			if (typeof value !== "string") return;
+			const normalized = value.trim();
+			if (!normalized) return;
+			params.set(queryKey, normalized);
+		};
+
+		appendFilterValue("supMin");
+		appendFilterValue("supMax");
+		appendFilterValue("mesYear");
+		appendFilterValue("mesContains");
+		appendFilterValue("iniYear");
+		appendFilterValue("iniContains");
+		appendFilterValue("cmaMin");
+		appendFilterValue("cmaMax");
+		appendFilterValue("cafMin");
+		appendFilterValue("cafMax");
+		appendFilterValue("sacMin");
+		appendFilterValue("sacMax");
+		appendFilterValue("scMin");
+		appendFilterValue("scMax");
+		appendFilterValue("paMin");
+		appendFilterValue("paMax");
+		appendFilterValue("ptMin");
+		appendFilterValue("ptMax");
+		appendFilterValue("ptrMin");
+		appendFilterValue("ptrMax");
+
+		if (Array.isArray(filters.entidades)) {
+			for (const entidad of filters.entidades) {
+				const normalized = entidad.trim();
+				if (!normalized) continue;
+				params.append("entidad", normalized);
+			}
+		}
+
+		const response = await fetch(`/api/obras?${params.toString()}`, {
 			cache: "no-store",
 		});
 		if (!response.ok) {
@@ -2280,14 +2451,7 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 		updateSequentialSeedFromRows(rows);
 		return {
 			rows,
-			pagination: {
-				page: 1,
-				limit: rows.length,
-				total: rows.length,
-				totalPages: 1,
-				hasNextPage: false,
-				hasPreviousPage: false,
-			},
+			pagination: payload.pagination,
 		};
 	};
 
@@ -2328,9 +2492,13 @@ const obrasDetalleBaseConfig: Omit<
 	tabFilters,
 	searchPlaceholder: "Buscar en columnas de obras",
 	// toolbarActions: <RowRulesDialogTrigger />,
-	defaultPageSize: 10,
+	defaultPageSize: 25,
 	showActionsColumn: false,
 	enableColumnResizing: true,
+	enableRowVirtualization: true,
+	virtualizationOverscan: 5,
+	editMode: "active-cell",
+	serverSideData: true,
 	createFilters,
 	renderFilters,
 	applyFilters,
@@ -2411,13 +2579,41 @@ const obrasDetalleBaseConfig: Omit<
 };
 
 export const createObrasDetalleConfig = (
-	columnConfig?: MainTableColumnConfig[] | null
+	columnConfig?: MainTableColumnConfig[] | null,
+	options?: ObrasDetalleConfigOptions,
 ): FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters> => {
-	const resolvedColumns = resolveColumnsFromConfig(columnConfig);
+	const readOnly = options?.readOnly === true;
+	const optimizationPreset = options?.optimizationPreset ?? "optimized";
+	const resolvedColumns = resolveColumnsFromConfig(columnConfig).map((column) =>
+		readOnly ? { ...column, editable: false } : column
+	);
 	return {
 		...obrasDetalleBaseConfig,
+		readOnly,
 		columns: resolvedColumns,
 		headerGroups: resolveHeaderGroupsFromColumns(resolvedColumns),
+		allowAddRows: readOnly ? false : obrasDetalleBaseConfig.allowAddRows,
+		onSave: readOnly ? undefined : obrasDetalleBaseConfig.onSave,
+		fetchRows:
+			optimizationPreset === "legacy" && !readOnly
+				? undefined
+				: obrasDetalleBaseConfig.fetchRows,
+		serverSideData:
+			optimizationPreset === "legacy" && !readOnly
+				? false
+				: obrasDetalleBaseConfig.serverSideData,
+		enableRowVirtualization:
+			optimizationPreset === "legacy" && !readOnly
+				? false
+				: obrasDetalleBaseConfig.enableRowVirtualization,
+		editMode:
+			optimizationPreset === "legacy" && !readOnly
+				? "always"
+				: obrasDetalleBaseConfig.editMode,
+		defaultPageSize:
+			optimizationPreset === "legacy" && !readOnly
+				? 10
+				: obrasDetalleBaseConfig.defaultPageSize,
 	};
 };
 

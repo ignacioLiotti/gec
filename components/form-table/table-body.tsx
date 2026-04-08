@@ -39,9 +39,12 @@ type TableRowProps<Row extends FormTableRow> = {
 		rowIndex: number
 	) => Array<{ id: string; label: string; tone?: "amber" | "red" | "green" | "blue" }>;
 	FieldComponent: FormFieldComponent<Row>;
+	tableReadOnly: boolean;
 	highlightQuery: string;
+	editMode: "always" | "active-cell";
+	activeCell: { rowId: string; columnId: string } | null;
+	setActiveCell: (cell: { rowId: string; columnId: string } | null) => void;
 	hasInitialSnapshot: boolean;
-	hasAccordionRows: boolean;
 	accordionRowConfig?: AccordionRowConfig<Row>;
 	accordionAlwaysOpen: boolean;
 	isExpanded: boolean;
@@ -49,6 +52,7 @@ type TableRowProps<Row extends FormTableRow> = {
 	dirtyCellIds: string;
 	hiddenColumnIdsKey: string;
 	showActionsColumn: boolean;
+	canDeleteRows: boolean;
 	isColumnHidden: (columnId: string) => boolean;
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
 	getStickyProps: (columnId: string, baseClassName?: string) => {
@@ -73,9 +77,12 @@ function TableRowInner<Row extends FormTableRow>({
 	rowColorInfo,
 	rowOverlayBadges,
 	FieldComponent,
+	tableReadOnly,
 	highlightQuery,
+	editMode,
+	activeCell,
+	setActiveCell,
 	hasInitialSnapshot,
-	hasAccordionRows,
 	accordionRowConfig,
 	accordionAlwaysOpen,
 	isExpanded,
@@ -83,6 +90,7 @@ function TableRowInner<Row extends FormTableRow>({
 	dirtyCellIds,
 	hiddenColumnIdsKey,
 	showActionsColumn,
+	canDeleteRows,
 	isColumnHidden,
 	isCellDirty,
 	getStickyProps,
@@ -163,7 +171,11 @@ function TableRowInner<Row extends FormTableRow>({
 								row={rowData}
 								rowId={rowData.id}
 								FieldComponent={FieldComponent}
+								tableReadOnly={tableReadOnly}
 								highlightQuery={highlightQuery}
+								editMode={editMode}
+								activeCell={activeCell}
+								setActiveCell={setActiveCell}
 								isRowDirty={isRowDirty}
 								hasInitialSnapshot={hasInitialSnapshot}
 								isCellDirty={cellDirty}
@@ -254,15 +266,17 @@ function TableRowInner<Row extends FormTableRow>({
 								)}
 							</div>
 						)}
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onClick={() => onDelete(rowData.id)}
-							className="text-destructive hover:text-destructive"
-						>
-							Eliminar
-						</Button>
+						{canDeleteRows ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								onClick={() => onDelete(rowData.id)}
+								className="text-destructive hover:text-destructive"
+							>
+								Eliminar
+							</Button>
+						) : null}
 					</td>
 				)}
 			</tr>
@@ -284,15 +298,23 @@ function TableRowInner<Row extends FormTableRow>({
 }
 
 export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
-	// Include the TanStack row object reference so table model changes repaint immediately.
+	const rowId = prevProps.row.original.id;
+	const prevAffectsRow =
+		prevProps.activeCell?.rowId === rowId || nextProps.activeCell?.rowId === rowId;
 	return (
 		prevProps.row === nextProps.row &&
 		prevProps.rowIndex === nextProps.rowIndex &&
 		prevProps.externalRefreshVersion === nextProps.externalRefreshVersion &&
+		prevProps.tableReadOnly === nextProps.tableReadOnly &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&
+		prevProps.editMode === nextProps.editMode &&
+		(!prevAffectsRow ||
+			(prevProps.activeCell?.rowId === nextProps.activeCell?.rowId &&
+				prevProps.activeCell?.columnId === nextProps.activeCell?.columnId)) &&
 		prevProps.isExpanded === nextProps.isExpanded &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
 		prevProps.showActionsColumn === nextProps.showActionsColumn &&
+		prevProps.canDeleteRows === nextProps.canDeleteRows &&
 		prevProps.isRowDirty === nextProps.isRowDirty &&
 		prevProps.dirtyCellIds === nextProps.dirtyCellIds &&
 		prevProps.hiddenColumnIdsKey === nextProps.hiddenColumnIdsKey

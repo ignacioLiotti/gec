@@ -9,6 +9,7 @@ const BASE_COLUMNS =
 const LEGACY_BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at";
 const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
+const PREVIEW_COLUMNS = "id, n, designacion_y_ubicacion";
 
 type DbObraRow = {
 	id: string;
@@ -33,11 +34,18 @@ type DbObraRow = {
 	on_finish_second_send_at?: string | null;
 };
 
+type DbObraPreviewRow = {
+	id: string;
+	n: number;
+	designacion_y_ubicacion: string;
+};
+
 function mapDbRowToObra(row: DbObraRow) {
 	return {
 		id: row.id,
 		n: row.n,
 		designacionYUbicacion: row.designacion_y_ubicacion,
+		__isPartial: false,
 		supDeObraM2: Number(row.sup_de_obra_m2) || 0,
 		entidadContratante: row.entidad_contratante,
 		mesBasicoDeContrato: row.mes_basico_de_contrato,
@@ -60,6 +68,15 @@ function mapDbRowToObra(row: DbObraRow) {
 		onFinishFirstMessage: row.on_finish_first_message ?? null,
 		onFinishSecondMessage: row.on_finish_second_message ?? null,
 		onFinishSecondSendAt: row.on_finish_second_send_at ?? null,
+	};
+}
+
+function mapDbPreviewRowToObra(row: DbObraPreviewRow) {
+	return {
+		id: row.id,
+		n: row.n,
+		designacionYUbicacion: row.designacion_y_ubicacion,
+		__isPartial: true,
 	};
 }
 
@@ -137,9 +154,12 @@ async function getTenantId() {
 	};
 }
 
-export async function getExcelPageInitialData() {
+export async function getExcelPageInitialData(options?: {
+	previewOnly?: boolean;
+}) {
 	const access = await resolveRequestAccessContext();
 	const { supabase, user, tenantId, actorType } = access;
+	const previewOnly = options?.previewOnly === true;
 
 	if ((!user && actorType !== "demo") || !tenantId) {
 		return {
@@ -160,13 +180,35 @@ export async function getExcelPageInitialData() {
 			.select("columns")
 			.eq("tenant_id", tenantId)
 			.maybeSingle(),
-		supabase
-			.from("obras")
-			.select(CONFIG_COLUMNS)
-			.eq("tenant_id", tenantId)
-			.is("deleted_at", null)
-			.order("n", { ascending: true }),
+		previewOnly
+			? supabase
+				.from("obras")
+				.select(PREVIEW_COLUMNS)
+				.eq("tenant_id", tenantId)
+				.is("deleted_at", null)
+				.order("n", { ascending: true })
+			: supabase
+				.from("obras")
+				.select(CONFIG_COLUMNS)
+				.eq("tenant_id", tenantId)
+				.is("deleted_at", null)
+				.order("n", { ascending: true }),
 	]);
+
+	if (previewOnly) {
+		if (obrasResult.error) {
+			console.error("[excel/page-data] failed to fetch obra preview", obrasResult.error);
+		}
+
+		return {
+			mainTableColumnsConfig: sanitizeColumns(
+				(configData as { columns?: unknown } | null)?.columns ?? [],
+			),
+			obras: (((obrasResult.data as DbObraPreviewRow[] | null) ?? []) as DbObraPreviewRow[]).map(
+				mapDbPreviewRowToObra,
+			),
+		};
+	}
 
 	let obrasData = (obrasResult.data as DbObraRow[] | null) ?? null;
 	let obrasError = obrasResult.error;
