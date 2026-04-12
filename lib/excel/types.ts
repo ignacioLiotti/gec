@@ -1,4 +1,5 @@
 import type { ExcelLoadMode } from "@/lib/excel/load-mode";
+import type { MainTableSelectOption } from "@/lib/main-table-select";
 
 export type ExcelMainTableColumnKind = "base" | "formula" | "custom";
 export type ExcelMainTableFormulaFormat = "currency" | "number";
@@ -16,7 +17,8 @@ export type ExcelMainTableColumnCellType =
 	| "image"
 	| "icon"
 	| "text-icon"
-	| "badge";
+	| "badge"
+	| "select";
 
 export type ExcelPageMainTableColumnConfig = {
 	id: string;
@@ -28,6 +30,7 @@ export type ExcelPageMainTableColumnConfig = {
 	formula?: string;
 	formulaFormat?: ExcelMainTableFormulaFormat;
 	cellType?: ExcelMainTableColumnCellType;
+	selectOptions?: MainTableSelectOption[];
 	required?: boolean;
 	editable?: boolean;
 	enableHide?: boolean;

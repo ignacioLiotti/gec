@@ -8,17 +8,57 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuTrigger,
 	ContextMenuSeparator,
 } from "@/components/ui/context-menu";
-import { CalendarDays, ExternalLink, Sparkles } from "lucide-react";
+import {
+	Ban,
+	AlertTriangle,
+	ArrowRight,
+	Bell,
+	Bookmark,
+	Calendar as CalendarIcon,
+	CalendarDays,
+	Check,
+	Circle,
+	Clock3,
+	ExternalLink,
+	FileText,
+	Flag,
+	Info,
+	Link2,
+	Package,
+	Pause,
+	Play,
+	Shield,
+	Sparkles,
+	Star,
+	Truck,
+	User,
+	Wrench,
+	X,
+} from "lucide-react";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import {
+	findClosestMainTableSelectOption,
+	getMainTableSelectOptionId,
+	resolveMainTableSelectOption,
+	type MainTableSelectOption,
+} from "@/lib/main-table-select";
+import {
 	formatDateAsIso,
+	formatDateAsDmy,
 	parseFlexibleDateValue,
 	parseLocalizedNumber,
 	toNumericValue,
@@ -82,27 +122,18 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 	if (!suggestion) return null;
 
 	return (
-		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
+		<Popover>
+			<PopoverTrigger >
 				<Button
 					type="button"
 					variant="outline"
 					size="sm"
-					onPointerDown={(event) => {
-						event.preventDefault();
-						event.stopPropagation();
-					}}
-					onClick={(event) => {
-						event.preventDefault();
-						event.stopPropagation();
-						setOpen((prev) => !prev);
-					}}
 					className={cn(
-						"pointer-events-auto relative z-20 h-6 rounded-full border-orange-200 bg-orange-50 px-2 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm hover:bg-orange-100",
+						"pointer-events-all absolute right-9 z-20 inline-flex h-6 items-center rounded-full border border-orange-200 bg-orange-50 px-1 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm",
 						className
 					)}
 				>
-					<Sparkles className="mr-1 h-3 w-3" />
+					<Sparkles className="-mr-1 -ml-1 h-3 w-3 py-0.5 font-normal" />
 					Sugerencia
 				</Button>
 			</PopoverTrigger>
@@ -111,17 +142,23 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 					<p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">
 						Sugerencia automática
 					</p>
-					<p className="mt-1 text-sm font-medium text-foreground">
-						{suggestion.suggestedDisplayValue}
-					</p>
+					<p className="mt-0.5 text-xs text-muted-foreground">{suggestion.description}</p>
 				</div>
 				<div className="space-y-3 px-4 py-3 text-sm">
-					<p className="text-muted-foreground">{suggestion.description}</p>
-					<div className="rounded-lg border bg-muted/30 px-3 py-2">
-						<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-							Valor detectado
-						</p>
-						<p className="mt-1 font-medium text-foreground">{suggestion.sourceInput}</p>
+					<div className="flex items-center gap-2">
+						<div className="min-w-0 flex-1 rounded-lg border bg-muted/30 px-3 py-2">
+							<p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+								Detectado
+							</p>
+							<p className="mt-0.5 truncate font-medium text-foreground">{suggestion.sourceInput}</p>
+						</div>
+						<ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+						<div className="min-w-0 flex-1 rounded-lg border-2 border-orange-300 bg-orange-50 px-3 py-2">
+							<p className="text-[10px] uppercase tracking-wide text-orange-600">
+								Sugerido
+							</p>
+							<p className="mt-0.5 truncate font-semibold text-orange-900">{suggestion.suggestedDisplayValue}</p>
+						</div>
 					</div>
 					<div className="flex items-center justify-end gap-2">
 						<Button
@@ -185,7 +222,7 @@ function DateCellEditor<Row extends FormTableRow>({
 	const selectedDate = parseDateValue(value ?? null);
 	const externalTypedValue = useMemo(() => {
 		if (!value) return "";
-		return selectedDate ? selectedDate.toLocaleDateString("es-AR") : String(value);
+		return selectedDate ? formatDateAsDmy(selectedDate) : String(value);
 	}, [value, selectedDate]);
 	const [draftValue, setDraftValue] = useState<string | null>(null);
 	const typedValue = draftValue ?? externalTypedValue;
@@ -477,6 +514,58 @@ function formatCurrencyInputDisplay(value: EditableCellValue): string {
 	}).format(parsed);
 }
 
+const SELECT_BADGE_CLASS_BY_COLOR: Record<string, string> = {
+	slate: "border-slate-300 bg-slate-100 text-slate-800",
+	blue: "border-blue-300 bg-blue-100 text-blue-800",
+	green: "border-emerald-300 bg-emerald-100 text-emerald-800",
+	amber: "border-amber-300 bg-amber-100 text-amber-800",
+	red: "border-red-300 bg-red-100 text-red-800",
+	violet: "border-violet-300 bg-violet-100 text-violet-800",
+};
+
+const SELECT_ICON_BY_NAME = {
+	dot: Circle,
+	check: Check,
+	clock: Clock3,
+	alert: AlertTriangle,
+	x: X,
+	pause: Pause,
+	play: Play,
+	flag: Flag,
+	star: Star,
+	bookmark: Bookmark,
+	bell: Bell,
+	wrench: Wrench,
+	shield: Shield,
+	info: Info,
+	ban: Ban,
+	package: Package,
+	truck: Truck,
+	calendar: CalendarIcon,
+	user: User,
+	file: FileText,
+	link: Link2,
+} as const;
+
+function renderSelectOptionBadge(
+	option: MainTableSelectOption,
+	highlightQuery: string
+) {
+	const IconComponent = option.icon ? SELECT_ICON_BY_NAME[option.icon] : null;
+	return (
+		<Badge
+			variant="outline"
+			className={cn(
+				"gap-1.5",
+				option.color ? SELECT_BADGE_CLASS_BY_COLOR[option.color] : null
+			)}
+		>
+			{IconComponent ? <IconComponent className="h-3 w-3" /> : null}
+			<HighlightedText text={option.text} query={highlightQuery} />
+		</Badge>
+	);
+}
+
 export function renderReadOnlyValue<Row extends FormTableRow>(
 	value: unknown,
 	row: Row,
@@ -510,16 +599,18 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		case "date": {
 			if (!value) return <span>-</span>;
 			const date = parseDateValue(value);
-			if (!date) return <span>-</span>;
+			if (!date) return <span>{String(value)}</span>;
 			if (config.dateFormat === "custom" && config.customDateFormat) {
 				return <span>{formatDateSafe(date, config.customDateFormat)}</span>;
 			}
-			const options: Intl.DateTimeFormatOptions =
+			const options: Intl.DateTimeFormatOptions | undefined =
 				config.dateFormat === "short"
-					? { dateStyle: "short" }
+					? { day: "numeric", month: "numeric", year: "numeric" }
 					: config.dateFormat === "long"
 						? { dateStyle: "long" }
-						: { dateStyle: "medium" };
+						: config.dateFormat === "medium"
+							? { dateStyle: "medium" }
+							: undefined;
 			return <span>{date.toLocaleDateString("es-AR", options)}</span>;
 		}
 		case "boolean":
@@ -614,6 +705,20 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 				</Badge>
 			);
 		}
+		case "select": {
+			const text = String(value || "").trim();
+			if (!text) return <span>-</span>;
+			const selectOptions = config.selectOptions ?? [];
+			const matched = resolveMainTableSelectOption(text, selectOptions, column.id);
+			if (matched) {
+				return renderSelectOptionBadge(matched, highlightQuery);
+			}
+			return (
+				<Badge variant="outline">
+					<HighlightedText text={text} query={highlightQuery} />
+				</Badge>
+			);
+		}
 		case "text-icon": {
 			const text = String(value || "");
 			if (!text) return <span>-</span>;
@@ -641,11 +746,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		}
 		default:
 			return (
-				<span
-					className={cn(
-						"w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden text-center flex items-center justify-center"
-					)}
-				>
+				<span>
 					<HighlightedText text={String(value || "-")} query={highlightQuery} />
 				</span>
 			);
@@ -668,14 +769,24 @@ export function renderEditableContent<Row extends FormTableRow>({
 		"data-row-id": rowId,
 		"data-field": String(column.field),
 	};
+	const hiddenInputClass =
+		"w-full h-full rounded-none border-none absolute top-0 left-0 children-input-hidden focus-visible:ring-[0px] focus-visible:ring-offset-0 focus-visible:outline-none focus-visible:shadow-none ";
+	const withReadOnlyLayer = (editor: ReactNode, className?: string) => (
+		<div className={cn("relative h-full w-full", className)}>
+			{editor}
+			<div className="children-input-shown pointer-events-none flex h-full w-full items-center">
+				{renderReadOnlyValue(value, row, column, highlightQuery)}
+			</div>
+		</div>
+	);
 
 	switch (cellType) {
 		case "currency":
-			return (
+			return withReadOnlyLayer(
 				<LocalInput
 					type="text"
 					inputMode="decimal"
-					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
+					className={hiddenInputClass}
 					{...inputDataProps}
 					value={value ?? ""}
 					onChange={setValue}
@@ -694,12 +805,12 @@ export function renderEditableContent<Row extends FormTableRow>({
 				/>
 			);
 		case "number":
-			return (
+			return withReadOnlyLayer(
 				<LocalInput
 					type="text"
 					inputMode="decimal"
 					pattern="[0-9.,\\-]*"
-					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden "
+					className={hiddenInputClass}
 					{...inputDataProps}
 					value={value ?? ""}
 					onChange={setValue}
@@ -717,7 +828,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 				/>
 			);
 		case "date":
-			return (
+			return withReadOnlyLayer(
 				<DateCellEditor
 					value={value ?? ""}
 					setValue={setValue}
@@ -730,8 +841,8 @@ export function renderEditableContent<Row extends FormTableRow>({
 			);
 		case "boolean":
 		case "checkbox":
-			return (
-				<div className="flex items-center gap-2 w-full h-full justify-center">
+			return withReadOnlyLayer(
+				<div className="children-input-hidden absolute inset-0 flex h-full w-full items-center justify-center gap-2">
 					<Checkbox
 						checked={Boolean(value)}
 						onCheckedChange={(checked) => {
@@ -739,14 +850,12 @@ export function renderEditableContent<Row extends FormTableRow>({
 							config.onToggle?.(Boolean(checked), row);
 						}}
 					/>
-					<span className="text-xs text-muted-foreground">
-						{Boolean(value) ? "Sí" : "No"}
-					</span>
+					<span className="text-xs text-muted-foreground">{Boolean(value) ? "S\u00ed" : "No"}</span>
 				</div>
 			);
 		case "toggle":
-			return (
-				<div className="flex items-center gap-2 children-input-shown justify-center h-full">
+			return withReadOnlyLayer(
+				<div className="children-input-hidden absolute inset-0 flex h-full w-full items-center justify-center gap-2">
 					<Switch
 						checked={Boolean(value)}
 						onCheckedChange={(checked) => {
@@ -754,186 +863,190 @@ export function renderEditableContent<Row extends FormTableRow>({
 							config.onToggle?.(checked, row);
 						}}
 					/>
-					<span className="text-xs text-muted-foreground">
-						{checkedLabel(Boolean(value))}
-					</span>
+					<span className="text-xs text-muted-foreground">{checkedLabel(Boolean(value))}</span>
 				</div>
 			);
-		case "tags": {
-			const tagsStr = String(value ?? "");
-			const tags = tagsStr
-				? (config.tagSeparator
-					? tagsStr.split(config.tagSeparator).map((t) => t.trim()).filter(Boolean)
-					: [tagsStr])
-				: [];
-			return (
-				<div className="space-y-1 w-full h-full">
-					<LocalInput
-						value={tagsStr}
-						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 focus-visible:opacity-100 opacity-0 peer children-input-hidden"
-						{...inputDataProps}
-						onChange={setValue}
-						onBlur={handleBlur}
-						column={column}
-						row={row}
-						cellType="tags"
-						syncOnChange={config.syncOnChange}
-						placeholder="Ej: diseño, arquitectura"
-					/>
-					{tags.length > 0 && (
-						<div className="flex flex-wrap gap-1 w-full h-full peer-focus:opacity-0 opacity-100 p-3">
-							{tags.map((tag) => (
-								<Badge key={tag} variant={config.tagVariant || "secondary"} className="max-h-6 children-input-shown">
-									<HighlightedText text={tag} query={highlightQuery} />
-								</Badge>
-							))}
-						</div>
-					)}
-				</div>
+		case "tags":
+			return withReadOnlyLayer(
+				<LocalInput
+					value={String(value ?? "")}
+					className={hiddenInputClass}
+					{...inputDataProps}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="tags"
+					syncOnChange={config.syncOnChange}
+					placeholder="Ej: diseño, arquitectura"
+				/>
 			);
-		}
-		case "link": {
-			const text = String(value ?? "");
-			const href =
-				typeof config.href === "function"
-					? config.href(row)
-					: text || config.href || "#";
-			return (
-				<div className="space-y-1 overflow-hidden">
-					<LocalInput
-						className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
-						{...inputDataProps}
-						value={text}
-						onChange={setValue}
-						onBlur={handleBlur}
-						column={column}
-						row={row}
-						cellType="link"
-						syncOnChange={config.syncOnChange}
-						placeholder="https://..."
-						required={column.required}
-					/>
-					{text && (
-						<a
-							href={href}
-							target={config.target || "_blank"}
-							rel={config.target === "_blank" ? "noopener noreferrer" : undefined}
-							className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline w-full h-full justify-center peer-focus:opacity-0 opacity-100 p-3 absolute top-0 left-0 overflow-hidden ring-offset-0 children-input-shown"
+		case "link":
+			return withReadOnlyLayer(
+				<LocalInput
+					className={hiddenInputClass}
+					{...inputDataProps}
+					value={String(value ?? "")}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="link"
+					syncOnChange={config.syncOnChange}
+					placeholder="https://..."
+					required={column.required}
+				/>
+			);
+		case "avatar":
+			return withReadOnlyLayer(
+				<LocalInput
+					{...inputDataProps}
+					value={String(value ?? "")}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="avatar"
+					syncOnChange={config.syncOnChange}
+					placeholder="https://..."
+					className={hiddenInputClass}
+				/>
+			);
+		case "image":
+			return withReadOnlyLayer(
+				<LocalInput
+					{...inputDataProps}
+					value={String(value ?? "")}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="image"
+					syncOnChange={config.syncOnChange}
+					placeholder="https://..."
+					className={hiddenInputClass}
+				/>
+			);
+		case "select": {
+			const selectOptions = config.selectOptions ?? [];
+			const currentText = String(value ?? "").trim();
+			const matched = resolveMainTableSelectOption(currentText, selectOptions, column.id);
+			const closest =
+				currentText && !matched
+					? findClosestMainTableSelectOption(currentText, selectOptions)
+					: null;
+			const matchedIndex = matched
+				? selectOptions.findIndex((option) => option.text === matched.text)
+				: -1;
+			const unresolvedValue = "__current__";
+			const clearValue = "__clear__";
+			const resolvedValue =
+				matched && matchedIndex >= 0
+					? getMainTableSelectOptionId(matched, column.id, matchedIndex)
+					: unresolvedValue;
+			return withReadOnlyLayer(
+				<div className="children-input-hidden absolute inset-0 flex h-full w-full items-center px-2">
+					<div className="flex w-full items-center gap-2">
+						<Select
+							value={resolvedValue}
+							onValueChange={(nextValue) => {
+								if (nextValue === unresolvedValue) return;
+								if (nextValue === clearValue) {
+									setValue(null);
+									handleBlur();
+									return;
+								}
+								setValue(nextValue);
+								handleBlur();
+							}}
 						>
-							<HighlightedText text={text} query={highlightQuery} />
-							<ExternalLink className="w-3 h-3" />
-						</a>
-					)}
-				</div>
-			);
-		}
-		case "avatar": {
-			const text = String(value ?? "");
-			const fallback =
-				typeof config.avatarFallback === "function"
-					? config.avatarFallback(row)
-					: config.avatarFallback || text.substring(0, 2).toUpperCase();
-			return (
-				<div className="flex items-center gap-3">
-					<Avatar className="w-8 h-8 shrink-0">
-						<AvatarImage src={text} alt={fallback} />
-						<AvatarFallback>{fallback}</AvatarFallback>
-					</Avatar>
-					<LocalInput
-						{...inputDataProps}
-						value={text}
-						onChange={setValue}
-						onBlur={handleBlur}
-						column={column}
-						row={row}
-						cellType="avatar"
-						syncOnChange={config.syncOnChange}
-						placeholder="https://..."
-					/>
-				</div>
-			);
-		}
-		case "image": {
-			const src = String(value ?? "");
-			return (
-				<div className="flex items-center gap-3">
-					<div className="h-10 w-10 overflow-hidden rounded border bg-muted">
-						{src ? (
-							<img src={src} alt="Vista previa" className="h-full w-full object-cover" />
-						) : (
-							<span className="text-[10px] text-muted-foreground block text-center leading-10">
-								Sin imagen
-							</span>
-						)}
+							<SelectTrigger className="h-8 w-full border border-orange-200 bg-white text-left">
+								<SelectValue placeholder="Seleccionar opción" />
+							</SelectTrigger>
+							<SelectContent>
+								{!column.required ? (
+									<SelectItem value={clearValue}>Sin definir</SelectItem>
+								) : null}
+								{!matched ? (
+									<SelectItem value={unresolvedValue} disabled>
+										{currentText ? `Actual: ${currentText}` : "Sin definir"}
+									</SelectItem>
+								) : null}
+								{selectOptions.map((option, optionIndex) => {
+									const IconComponent = option.icon
+										? SELECT_ICON_BY_NAME[option.icon]
+										: null;
+									const optionId = getMainTableSelectOptionId(
+										option,
+										column.id,
+										optionIndex
+									);
+									return (
+										<SelectItem key={optionId} value={optionId}>
+											<span className="inline-flex items-center gap-2">
+												{IconComponent ? <IconComponent className="h-3 w-3" /> : null}
+												<span>{option.text}</span>
+											</span>
+										</SelectItem>
+									);
+								})}
+							</SelectContent>
+						</Select>
+						{closest ? (
+							<Badge variant="outline" className="whitespace-nowrap border-orange-200 bg-orange-50 text-orange-700">
+								Sugerencia: {closest.option.text}
+							</Badge>
+						) : null}
 					</div>
-					<LocalInput
-						{...inputDataProps}
-						value={src}
-						onChange={setValue}
-						onBlur={handleBlur}
-						column={column}
-						row={row}
-						cellType="image"
-						syncOnChange={config.syncOnChange}
-						placeholder="https://..."
-					/>
 				</div>
 			);
 		}
-		case "badge":
-			{
-				const input = (
-					<LocalInput
-						{...inputDataProps}
-						value={value ?? ""}
-						onChange={setValue}
-						onBlur={handleBlur}
-						column={column}
-						row={row}
-						cellType="badge"
-						syncOnChange={config.syncOnChange}
-						className="z-10 w-full h-full rounded-none border-none bg-transparent text-right font-mono tabular-nums focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 peer opacity-0 focus-visible:opacity-100 children-input-hidden"
-					/>
-				);
+		case "badge": {
+			const input = (
+				<LocalInput
+					{...inputDataProps}
+					value={value ?? ""}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="badge"
+					syncOnChange={config.syncOnChange}
+					className={cn(hiddenInputClass, "z-10 bg-transparent text-right font-mono tabular-nums")}
+				/>
+			);
 
-				if (typeof config.renderEditable === "function") {
-					return config.renderEditable({
+			if (typeof config.renderEditable === "function") {
+				return withReadOnlyLayer(
+					config.renderEditable({
 						value,
 						row,
 						highlightQuery,
 						input,
-					});
-				}
-
-				return (
-					<div className="space-y-1">
-						{input}
-						<div className="opacity-100 p-3 children-input-shown">
-							{renderReadOnlyValue(value, row, column, highlightQuery)}
-						</div>
-					</div>
+					})
 				);
 			}
+
+			return withReadOnlyLayer(input);
+		}
 		case "text-icon":
-			return (
-				<div className="space-y-1 children-input-hidden">
-					<LocalInput
-						{...inputDataProps}
-						value={value ?? ""}
-						onChange={setValue}
-						onBlur={handleBlur}
-						column={column}
-						row={row}
-						cellType="text-icon"
-						syncOnChange={config.syncOnChange}
-					/>
-					<div>{renderReadOnlyValue(value, row, column, highlightQuery)}</div>
-				</div>
+			return withReadOnlyLayer(
+				<LocalInput
+					{...inputDataProps}
+					value={value ?? ""}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="text-icon"
+					syncOnChange={config.syncOnChange}
+					className={hiddenInputClass}
+				/>
 			);
 		default:
-			return (
+			return withReadOnlyLayer(
 				<LocalInput
-					className="w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 absolute top-0 left-0 focus-visible:ring-offset-1 children-input-hidden"
+					className={hiddenInputClass}
 					{...inputDataProps}
 					value={value ?? ""}
 					onChange={setValue}
@@ -947,7 +1060,6 @@ export function renderEditableContent<Row extends FormTableRow>({
 			);
 	}
 }
-
 export function renderCellByType<Row extends FormTableRow>({
 	column,
 	row,

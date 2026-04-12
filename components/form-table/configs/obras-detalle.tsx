@@ -24,6 +24,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+	type MainTableSelectOption,
+	cloneMainTableSelectOptions,
+	sanitizeMainTableSelectOptions,
+} from "@/lib/main-table-select";
 import type { Obra } from "@/app/excel/schema";
 import {
 	ExternalLink,
@@ -332,10 +337,115 @@ type LegacyRowColorRule = {
 const ROW_COLOR_RULES_KEY = "obras-detalle:row-color-rules";
 const ROW_COLOR_EVENT = "form-table:refresh";
 export const ROW_COLOR_TABLE_ID = "form-table-obras-detalle";
+const OBRAS_TABLE_QUERY_CACHE_PREFIX = "obras-detalle:query-cache:v1:";
+const OBRAS_TABLE_QUERY_CACHE_INDEX_KEY = "obras-detalle:query-cache:index:v1";
+
+type ObrasDetalleFetchRowsResult = Awaited<
+	ReturnType<NonNullable<FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["fetchRows"]>>
+>;
+
+type ObrasDetalleQueryCachePayload = {
+	detalleObras: ObrasDetalleApiRow[];
+	pagination: ObrasDetalleFetchRowsResult["pagination"];
+};
+
 let inMemoryRowColorRules: RowColorRule[] = [];
 let inMemoryCompiledRowColorRules: CompiledRowColorRule[] = [];
+const inMemoryObrasTableQueryCache = new Map<string, ObrasDetalleQueryCachePayload>();
 let rowColorRulesLoaded = false;
 let previewedRowColorRuleId: string | null = null;
+
+const getObrasTableQueryCacheStorageKey = (key: string) =>
+	`${OBRAS_TABLE_QUERY_CACHE_PREFIX}${key}`;
+
+const readObrasTableQueryCacheIndex = (): string[] => {
+	if (typeof window === "undefined") return [];
+	try {
+		const raw = window.sessionStorage.getItem(OBRAS_TABLE_QUERY_CACHE_INDEX_KEY);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw);
+		return Array.isArray(parsed)
+			? parsed.filter((item): item is string => typeof item === "string" && item.length > 0)
+			: [];
+	} catch {
+		return [];
+	}
+};
+
+const writeObrasTableQueryCacheIndex = (keys: string[]) => {
+	if (typeof window === "undefined") return;
+	try {
+		window.sessionStorage.setItem(
+			OBRAS_TABLE_QUERY_CACHE_INDEX_KEY,
+			JSON.stringify(Array.from(new Set(keys))),
+		);
+	} catch {
+		// Ignore storage write failures.
+	}
+};
+
+const clearObrasTableSessionCache = () => {
+	inMemoryObrasTableQueryCache.clear();
+	if (typeof window === "undefined") return;
+	const keys = readObrasTableQueryCacheIndex();
+	for (const key of keys) {
+		try {
+			window.sessionStorage.removeItem(getObrasTableQueryCacheStorageKey(key));
+		} catch {
+			// Ignore storage delete failures.
+		}
+	}
+	try {
+		window.sessionStorage.removeItem(OBRAS_TABLE_QUERY_CACHE_INDEX_KEY);
+	} catch {
+		// Ignore storage delete failures.
+	}
+};
+
+const getCachedObrasTableQueryPayload = (
+	key: string,
+): ObrasDetalleQueryCachePayload | null => {
+	const fromMemory = inMemoryObrasTableQueryCache.get(key);
+	if (fromMemory) return fromMemory;
+	if (typeof window === "undefined") return null;
+	try {
+		const raw = window.sessionStorage.getItem(
+			getObrasTableQueryCacheStorageKey(key),
+		);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as Partial<ObrasDetalleQueryCachePayload> | null;
+		if (!parsed || !Array.isArray(parsed.detalleObras)) return null;
+		const payload: ObrasDetalleQueryCachePayload = {
+			detalleObras: parsed.detalleObras as ObrasDetalleApiRow[],
+			pagination:
+				(parsed.pagination as ObrasDetalleFetchRowsResult["pagination"]) ??
+				undefined,
+		};
+		inMemoryObrasTableQueryCache.set(key, payload);
+		return payload;
+	} catch {
+		return null;
+	}
+};
+
+const setCachedObrasTableQueryPayload = (
+	key: string,
+	payload: ObrasDetalleQueryCachePayload,
+) => {
+	inMemoryObrasTableQueryCache.set(key, payload);
+	if (typeof window === "undefined") return;
+	try {
+		window.sessionStorage.setItem(
+			getObrasTableQueryCacheStorageKey(key),
+			JSON.stringify(payload),
+		);
+		const nextIndex = readObrasTableQueryCacheIndex();
+		nextIndex.push(key);
+		writeObrasTableQueryCacheIndex(nextIndex);
+	} catch {
+		// Ignore storage write failures.
+	}
+};
 
 const emitRowColorRefresh = () => {
 	if (typeof window === "undefined") return;
@@ -349,6 +459,15 @@ const emitRowColorRefresh = () => {
 		// ignore
 	}
 };
+
+export function invalidateObrasTableSessionCache(options?: {
+	refreshTable?: boolean;
+}) {
+	clearObrasTableSessionCache();
+	if (options?.refreshTable) {
+		emitRowColorRefresh();
+	}
+}
 
 const ROW_RULE_FIELD_OPTIONS: Array<{
 	field: keyof ObrasDetalleRow;
@@ -1703,7 +1822,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 				isPartialPreviewRow(row) ? renderPreviewPlaceholder() : renderAvanceContent(value),
 			renderEditable: ({ value, input }) => (
 				<div className="group relative h-full w-full ">
-					<div className="pointer-events-none h-full w-full flex items-center group-focus-within:opacity-0">
+					<div className="pointer-events-none h-full w-full flex items-center group-focus-within:opacity-0 group-hover:opacity-0 pl-4">
 						{renderAvanceContent(value, {
 							labelClassName: "transition-opacity",
 						})}
@@ -1732,6 +1851,7 @@ export type MainTableColumnConfig = {
 	formula?: string;
 	formulaFormat?: MainTableFormulaFormat;
 	cellType?: ColumnDef<ObrasDetalleRow>["cellType"];
+	selectOptions?: MainTableSelectOption[];
 	required?: boolean;
 	editable?: boolean;
 	enableHide?: boolean;
@@ -1774,6 +1894,10 @@ export const DEFAULT_MAIN_TABLE_COLUMN_CONFIG: MainTableColumnConfig[] = columns
 		formula,
 		formulaFormat: column.cellType === "currency" ? "currency" : "number",
 		cellType: column.cellType,
+		selectOptions:
+			column.cellType === "select" && Array.isArray(column.cellConfig?.selectOptions)
+				? cloneMainTableSelectOptions(column.cellConfig.selectOptions)
+				: undefined,
 		required: column.required,
 		editable: column.editable,
 		enableHide: column.enableHide,
@@ -1812,6 +1936,10 @@ const buildFormulaColumn = (
 	const resolvedCellType =
 		forcedCellType ??
 		(format === "currency" ? "currency" : ("text" as ColumnDef<ObrasDetalleRow>["cellType"]));
+	const selectOptions =
+		resolvedCellType === "select"
+			? sanitizeMainTableSelectOptions(config.selectOptions)
+			: [];
 	const getValue = (row: ObrasDetalleRow) => evaluateFormulaValue(row, formula);
 
 	return {
@@ -1827,6 +1955,11 @@ const buildFormulaColumn = (
 				? {
 					currencyCode: "ARS",
 					currencyLocale: "es-AR",
+				}
+				: {}),
+			...(resolvedCellType === "select"
+				? {
+					selectOptions,
 				}
 				: {}),
 			renderReadOnly: ({ row, highlightQuery }) => {
@@ -1848,7 +1981,11 @@ const buildFormulaColumn = (
 								currencyCode: "ARS",
 								currencyLocale: "es-AR",
 							}
-							: undefined,
+							: resolvedCellType === "select"
+								? {
+									selectOptions,
+								}
+								: undefined,
 					},
 					highlightQuery,
 				);
@@ -1868,6 +2005,10 @@ const buildCustomColumn = (
 	config: MainTableColumnConfig
 ): ColumnDef<ObrasDetalleRow> => {
 	const cellType = config.cellType ?? "text";
+	const selectOptions =
+		cellType === "select"
+			? sanitizeMainTableSelectOptions(config.selectOptions)
+			: [];
 	const readValue = (row: ObrasDetalleRow) => row[config.id];
 	return {
 		id: config.id,
@@ -1878,6 +2019,11 @@ const buildCustomColumn = (
 		editable: config.editable ?? true,
 		cellType,
 		cellConfig: {
+			...(cellType === "select"
+				? {
+					selectOptions,
+				}
+				: {}),
 			renderReadOnly: ({ row, highlightQuery }) => {
 				if (isPartialPreviewRow(row)) {
 					return renderPreviewPlaceholder(
@@ -1894,6 +2040,7 @@ const buildCustomColumn = (
 						label: config.label || config.id,
 						field: config.id as ColumnField<ObrasDetalleRow>,
 						cellType,
+						cellConfig: cellType === "select" ? { selectOptions } : undefined,
 					},
 					highlightQuery,
 				);
@@ -1952,12 +2099,26 @@ const resolveColumnsFromConfig = (
 		const preserveBaseCellType =
 			typeof baseColumn.cellConfig?.renderReadOnly === "function" ||
 			typeof baseColumn.cellConfig?.renderEditable === "function";
+		const nextCellType = preserveBaseCellType
+			? baseColumn.cellType
+			: (item.cellType ?? baseColumn.cellType);
+		const nextSelectOptions =
+			nextCellType === "select"
+				? sanitizeMainTableSelectOptions(item.selectOptions)
+				: undefined;
 		resolved.push({
 			...baseColumn,
 			id: item.id || baseColumn.id,
 			label: item.label || baseColumn.label,
 			width: typeof item.width === "number" ? item.width : baseColumn.width,
-			cellType: preserveBaseCellType ? baseColumn.cellType : (item.cellType ?? baseColumn.cellType),
+			cellType: nextCellType,
+			cellConfig:
+				!preserveBaseCellType && nextCellType === "select"
+					? {
+						...(baseColumn.cellConfig ?? {}),
+						selectOptions: nextSelectOptions,
+					}
+					: baseColumn.cellConfig,
 			required: item.required ?? baseColumn.required,
 			editable: item.editable ?? baseColumn.editable,
 			enableHide: item.enableHide ?? baseColumn.enableHide,
@@ -2436,6 +2597,17 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 			}
 		}
 
+		const queryCacheKey = params.toString();
+		const cachedPayload = getCachedObrasTableQueryPayload(queryCacheKey);
+		if (cachedPayload) {
+			const cachedRows = cachedPayload.detalleObras.map(mapObraToDetailRow);
+			updateSequentialSeedFromRows(cachedRows);
+			return {
+				rows: cachedRows,
+				pagination: cachedPayload.pagination,
+			};
+		}
+
 		const response = await fetch(`/api/obras?${params.toString()}`, {
 			cache: "no-store",
 		});
@@ -2447,6 +2619,12 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 		const detalle = Array.isArray(payload.detalleObras)
 			? (payload.detalleObras as ObrasDetalleApiRow[])
 			: [];
+		setCachedObrasTableQueryPayload(queryCacheKey, {
+			detalleObras: detalle,
+			pagination:
+				(payload.pagination as ObrasDetalleFetchRowsResult["pagination"]) ??
+				undefined,
+		});
 		const rows = detalle.map(mapObraToDetailRow);
 		updateSequentialSeedFromRows(rows);
 		return {
@@ -2480,6 +2658,7 @@ const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>[
 				uniqueDetailErrors.length > 0 ? uniqueDetailErrors.join(" · ") : null;
 			throw new Error(detailsMessage ? `${baseMessage}: ${detailsMessage}` : baseMessage);
 		}
+		invalidateObrasTableSessionCache();
 	};
 
 const obrasDetalleBaseConfig: Omit<
@@ -2606,10 +2785,7 @@ export const createObrasDetalleConfig = (
 			optimizationPreset === "legacy" && !readOnly
 				? false
 				: obrasDetalleBaseConfig.enableRowVirtualization,
-		editMode:
-			optimizationPreset === "legacy" && !readOnly
-				? "always"
-				: obrasDetalleBaseConfig.editMode,
+		editMode: obrasDetalleBaseConfig.editMode,
 		defaultPageSize:
 			optimizationPreset === "legacy" && !readOnly
 				? 10

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
+import { sanitizeMainTableSelectOptions } from "@/lib/main-table-select";
 
 async function getTenantContext() {
 	const supabase = await createClient();
@@ -64,6 +65,24 @@ function sanitizeColumns(raw: unknown): MainTableColumnConfig[] {
 			row.kind === "formula" || row.kind === "custom"
 				? row.kind
 				: "base";
+		const sanitizedCellType =
+			row.cellType === "text" ||
+			row.cellType === "number" ||
+			row.cellType === "currency" ||
+			row.cellType === "date" ||
+			row.cellType === "boolean" ||
+			row.cellType === "checkbox" ||
+			row.cellType === "toggle" ||
+			row.cellType === "tags" ||
+			row.cellType === "link" ||
+			row.cellType === "avatar" ||
+			row.cellType === "image" ||
+			row.cellType === "icon" ||
+			row.cellType === "text-icon" ||
+			row.cellType === "badge" ||
+			row.cellType === "select"
+				? row.cellType
+				: undefined;
 		next.push({
 			id,
 			kind,
@@ -80,22 +99,10 @@ function sanitizeColumns(raw: unknown): MainTableColumnConfig[] {
 				row.formulaFormat === "currency" || row.formulaFormat === "number"
 					? row.formulaFormat
 					: undefined,
-			cellType:
-				row.cellType === "text" ||
-				row.cellType === "number" ||
-				row.cellType === "currency" ||
-				row.cellType === "date" ||
-				row.cellType === "boolean" ||
-				row.cellType === "checkbox" ||
-				row.cellType === "toggle" ||
-				row.cellType === "tags" ||
-				row.cellType === "link" ||
-				row.cellType === "avatar" ||
-				row.cellType === "image" ||
-				row.cellType === "icon" ||
-				row.cellType === "text-icon" ||
-				row.cellType === "badge"
-					? row.cellType
+			cellType: sanitizedCellType,
+			selectOptions:
+				sanitizedCellType === "select"
+					? sanitizeMainTableSelectOptions(row.selectOptions)
 					: undefined,
 			required: typeof row.required === "boolean" ? row.required : undefined,
 			editable: typeof row.editable === "boolean" ? row.editable : undefined,

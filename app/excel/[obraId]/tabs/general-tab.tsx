@@ -49,6 +49,12 @@ import {
 	coerceMainColumnInputValue,
 	formatMainColumnValue,
 } from "@/lib/main-table-columns";
+import {
+	findClosestMainTableSelectOption,
+	getMainTableSelectOptionId,
+	resolveMainTableSelectOption,
+	sanitizeMainTableSelectOptions,
+} from "@/lib/main-table-select";
 import { cn } from "@/lib/utils";
 import { GlassyIcon } from "@/components/ui/glassy-icon";
 
@@ -1375,6 +1381,10 @@ export function ObraGeneralTab({
 												column.cellType === "boolean" ||
 												column.cellType === "checkbox" ||
 												column.cellType === "toggle";
+											const isSelectType = column.cellType === "select";
+											const selectOptions = isSelectType
+												? sanitizeMainTableSelectOptions(column.selectOptions)
+												: [];
 											const inputType =
 												column.cellType === "number" || column.cellType === "currency"
 													? "number"
@@ -1421,6 +1431,85 @@ export function ObraGeneralTab({
 																			<SelectItem value="false">No</SelectItem>
 																		</SelectContent>
 																	</Select>
+																) : isSelectType ? (
+																	<div className="space-y-1.5">
+																		{(() => {
+																			const liveSelectValue = String(liveValue ?? "").trim();
+																			const matchedSelectOption = resolveMainTableSelectOption(
+																				liveSelectValue,
+																				selectOptions,
+																				column.id
+																			);
+																			const matchedSelectIndex = matchedSelectOption
+																				? selectOptions.findIndex(
+																						(option) => option.text === matchedSelectOption.text
+																					)
+																				: -1;
+																			const matchedSelectId =
+																				matchedSelectOption && matchedSelectIndex >= 0
+																					? getMainTableSelectOptionId(
+																							matchedSelectOption,
+																							column.id,
+																							matchedSelectIndex
+																						)
+																					: null;
+																			const selectSuggestion =
+																				liveSelectValue && !matchedSelectOption
+																					? findClosestMainTableSelectOption(liveSelectValue, selectOptions)
+																					: null;
+																			const unresolvedValue = "__current__";
+																			const clearValue = "__clear__";
+																			return (
+																				<>
+																					<Select
+																						value={matchedSelectId ?? unresolvedValue}
+																						onValueChange={(value) => {
+																							if (value === unresolvedValue) return;
+																							if (value === clearValue) {
+																								setCustomMainColumnValue(column.id, null);
+																								return;
+																							}
+																							setCustomMainColumnValue(
+																								column.id,
+																								coerceMainColumnInputValue(value, column.cellType)
+																							);
+																						}}
+																					>
+																						<SelectTrigger className={SURFACE_INPUT_CLASS}>
+																							<SelectValue placeholder="Seleccionar opcion" />
+																						</SelectTrigger>
+																						<SelectContent>
+																							<SelectItem value={clearValue}>Sin definir</SelectItem>
+																							{!matchedSelectOption ? (
+																								<SelectItem value={unresolvedValue} disabled>
+																									{liveSelectValue
+																										? `Actual: ${liveSelectValue}`
+																										: "Sin definir"}
+																								</SelectItem>
+																							) : null}
+																							{selectOptions.map((option, optionIndex) => {
+																								const optionId = getMainTableSelectOptionId(
+																									option,
+																									column.id,
+																									optionIndex
+																								);
+																								return (
+																									<SelectItem key={optionId} value={optionId}>
+																										{option.text}
+																									</SelectItem>
+																								);
+																							})}
+																						</SelectContent>
+																					</Select>
+																					{selectSuggestion ? (
+																						<p className="text-[11px] text-amber-700">
+																							Sugerencia: {selectSuggestion.option.text}
+																						</p>
+																					) : null}
+																				</>
+																			);
+																		})()}
+																	</div>
 																) : (
 																	<Input
 																		type={inputType}
@@ -1441,7 +1530,7 @@ export function ObraGeneralTab({
 														</form.Subscribe>
 													) : (
 														<div className="rounded-lg border border-[#f0f0f0] p-3 text-sm text-[#1a1a1a]">
-															{formatMainColumnValue(rawValue, column.cellType)}
+															{formatMainColumnValue(rawValue, column.cellType, column)}
 														</div>
 													)}
 												</div>
@@ -1791,7 +1880,8 @@ export function ObraGeneralTab({
 													label={column.label}
 													value={formatMainColumnValue(
 														mainTableColumnValues[column.id],
-														column.cellType
+														column.cellType,
+														column
 													)}
 												/>
 											))}

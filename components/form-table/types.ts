@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { MainTableSelectOption } from "@/lib/main-table-select";
 
 export type FormTableRow = {
 	id: string;
@@ -51,14 +52,16 @@ export type CellType =
 	| "image"
 	| "icon"
 	| "text-icon"
-	| "badge";
+	| "badge"
+	| "select";
 
 export type CellSuggestionKind =
 	| "date"
 	| "number"
 	| "currency"
 	| "math"
-	| "text";
+	| "text"
+	| "select";
 
 export type CellSuggestion<Row extends FormTableRow> = {
 	kind: CellSuggestionKind;
@@ -99,6 +102,7 @@ export type CellConfig<Row extends FormTableRow> = {
 	iconPosition?: "left" | "right";
 	badgeVariant?: "default" | "secondary" | "outline" | "destructive";
 	badgeMap?: Record<string, { label: string; variant: string }>;
+	selectOptions?: MainTableSelectOption[];
 	suggestionDetection?: CellSuggestionKind | "auto" | false;
 	suggestionDetectors?: Array<CellSuggestionDetector<Row>>;
 	renderReadOnly?: (args: {
@@ -215,6 +219,8 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	toolbarActions?: ReactNode;
 	/** When false, the top toolbar (search, filters, columns, export, toolbarActions) is not rendered. Defaults to true. */
 	showToolbar?: boolean;
+	/** Collapses filters, columns, export and toolbarActions under a single "Extras" dropdown. */
+	toolbarMode?: "default" | "extras";
 	headerGroups?: HeaderGroup[];
 	tabFilters?: TabFilterOption<Row>[];
 	searchPlaceholder?: string;
@@ -245,6 +251,8 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	showActionsColumn?: boolean;
 	/** Controls whether the default toolbar should show the "Agregar fila" button. Defaults to true. */
 	allowAddRows?: boolean;
+	/** When true, clears view constraints (search/filters/sort/tab) after adding a row so the new row is visible immediately. */
+	revealNewRowOnAdd?: boolean;
 	/** Mount editable field bindings only for the active cell to reduce subscription cost. */
 	editMode?: "always" | "active-cell";
 	/** Virtualize row rendering when datasets are large enough. */

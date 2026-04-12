@@ -5,6 +5,11 @@ import {
 	parseFlexibleDateValue,
 	parseLooseDateInput,
 } from "@/lib/tablas";
+import {
+	findClosestMainTableSelectOption,
+	getMainTableSelectOptionId,
+	resolveMainTableSelectOption,
+} from "@/lib/main-table-select";
 import type {
 	CellSuggestion,
 	CellSuggestionDetectorArgs,
@@ -83,6 +88,38 @@ function buildDateSuggestion<Row extends FormTableRow>({
 	};
 }
 
+function buildSelectSuggestion<Row extends FormTableRow>({
+	rawValue,
+	column,
+	row,
+}: CellSuggestionDetectorArgs<Row>): CellSuggestion<Row> | null {
+	const sourceInput = rawValue.trim();
+	if (!sourceInput) return null;
+	const selectOptions = column.cellConfig?.selectOptions ?? [];
+	if (selectOptions.length === 0) return null;
+	if (resolveMainTableSelectOption(sourceInput, selectOptions, column.id)) return null;
+
+	const closest = findClosestMainTableSelectOption(sourceInput, selectOptions);
+	if (!closest) return null;
+	const optionIndex = selectOptions.findIndex(
+		(option) => option.text === closest.option.text
+	);
+	const suggestionValue =
+		optionIndex >= 0
+			? getMainTableSelectOptionId(closest.option, column.id, optionIndex)
+			: closest.option.text;
+
+	return {
+		kind: "select",
+		suggestedValue: suggestionValue,
+		suggestedDisplayValue: closest.option.text,
+		description: `Se parece a \"${closest.option.text}\".`,
+		sourceInput,
+		column,
+		row,
+	};
+}
+
 function getBuiltInSuggestionKinds<Row extends FormTableRow>(
 	column: ColumnDef<Row>,
 	cellType: CellType
@@ -92,6 +129,9 @@ function getBuiltInSuggestionKinds<Row extends FormTableRow>(
 	if (configured && configured !== "auto") return [configured];
 
 	const kinds: CellSuggestionKind[] = [];
+	if (cellType === "select") {
+		kinds.push("select");
+	}
 	if (shouldAutoDetectDate(column, cellType)) {
 		kinds.push("date");
 	}
@@ -108,6 +148,10 @@ export function resolveCellSuggestion<Row extends FormTableRow>(
 	}
 
 	for (const kind of getBuiltInSuggestionKinds(args.column, args.cellType)) {
+		if (kind === "select") {
+			const suggestion = buildSelectSuggestion(args);
+			if (suggestion) return suggestion;
+		}
 		if (kind === "date") {
 			const suggestion = buildDateSuggestion(args);
 			if (suggestion) return suggestion;

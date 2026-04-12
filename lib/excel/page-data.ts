@@ -1,4 +1,5 @@
 import type { ExcelPageMainTableColumnConfig } from "@/lib/excel/types";
+import { sanitizeMainTableSelectOptions } from "@/lib/main-table-select";
 import {
 	hasDemoCapability,
 	resolveRequestAccessContext,
@@ -91,6 +92,24 @@ function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
 		if (!id || !label) continue;
 		const kind =
 			row.kind === "formula" || row.kind === "custom" ? row.kind : "base";
+		const sanitizedCellType =
+			row.cellType === "text" ||
+			row.cellType === "number" ||
+			row.cellType === "currency" ||
+			row.cellType === "date" ||
+			row.cellType === "boolean" ||
+			row.cellType === "checkbox" ||
+			row.cellType === "toggle" ||
+			row.cellType === "tags" ||
+			row.cellType === "link" ||
+			row.cellType === "avatar" ||
+			row.cellType === "image" ||
+			row.cellType === "icon" ||
+			row.cellType === "text-icon" ||
+			row.cellType === "badge" ||
+			row.cellType === "select"
+				? row.cellType
+				: undefined;
 		next.push({
 			id,
 			kind,
@@ -110,22 +129,10 @@ function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
 				row.formulaFormat === "currency" || row.formulaFormat === "number"
 					? row.formulaFormat
 					: undefined,
-			cellType:
-				row.cellType === "text" ||
-				row.cellType === "number" ||
-				row.cellType === "currency" ||
-				row.cellType === "date" ||
-				row.cellType === "boolean" ||
-				row.cellType === "checkbox" ||
-				row.cellType === "toggle" ||
-				row.cellType === "tags" ||
-				row.cellType === "link" ||
-				row.cellType === "avatar" ||
-				row.cellType === "image" ||
-				row.cellType === "icon" ||
-				row.cellType === "text-icon" ||
-				row.cellType === "badge"
-					? row.cellType
+			cellType: sanitizedCellType,
+			selectOptions:
+				sanitizedCellType === "select"
+					? sanitizeMainTableSelectOptions(row.selectOptions)
 					: undefined,
 			required:
 				typeof row.required === "boolean" ? row.required : undefined,

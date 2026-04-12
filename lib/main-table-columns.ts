@@ -1,11 +1,21 @@
 import type { MainTableColumnConfig } from "@/components/form-table/configs/obras-detalle";
+import { resolveMainTableSelectOption } from "@/lib/main-table-select";
 import { parseLocalizedNumber, toNumericValue } from "@/lib/tablas";
 
 export const formatMainColumnValue = (
 	value: unknown,
-	cellType: MainTableColumnConfig["cellType"]
+	cellType: MainTableColumnConfig["cellType"],
+	column?: Pick<MainTableColumnConfig, "id" | "label" | "selectOptions">
 ) => {
 	if (value == null || value === "") return "—";
+	if (cellType === "select") {
+		const matched = resolveMainTableSelectOption(
+			value,
+			column?.selectOptions ?? [],
+			column?.id ?? column?.label ?? "select"
+		);
+		return matched?.text ?? String(value);
+	}
 	if (cellType === "currency") {
 		return new Intl.NumberFormat("es-AR", {
 			style: "currency",
@@ -27,6 +37,7 @@ export const coerceMainColumnInputValue = (
 ): unknown => {
 	const normalized = rawValue.trim();
 	if (!normalized) return null;
+	if (cellType === "select") return rawValue;
 	if (cellType === "number" || cellType === "currency") {
 		const parsed = parseLocalizedNumber(normalized);
 		return Number.isFinite(parsed) ? parsed : null;
