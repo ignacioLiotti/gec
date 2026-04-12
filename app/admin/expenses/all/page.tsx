@@ -10,6 +10,7 @@ import {
 	formatReadableBytes,
 	formatCompactNumber,
 } from "@/lib/tenant-expenses";
+import { canManageTenantLimits } from "@/lib/admin/tenant-limit-access";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { updateTenantLimitsAction } from "./actions";
@@ -44,10 +45,10 @@ export default async function GlobalTenantExpensesPage() {
 
 	const isSuperAdmin =
 		(profile?.is_superadmin ?? false) ||
-		user.id === SUPERADMIN_USER_ID ||
-		user.email === "ignacioliotti@gmail.com";
+		user.id === SUPERADMIN_USER_ID;
+	const canManageLimits = canManageTenantLimits(user.email);
 
-	if (!isSuperAdmin) {
+	if (!isSuperAdmin && !canManageLimits) {
 		return (
 			<div className="p-6 text-sm text-muted-foreground">
 				Esta vista solo está disponible para superadministradores.
@@ -278,6 +279,7 @@ export default async function GlobalTenantExpensesPage() {
 											type="number"
 											step="1"
 											name="storageLimitGb"
+											disabled={!canManageLimits}
 											defaultValue={
 												overrides?.storage != null
 													? (overrides.storage / (1024 * 1024 * 1024)).toString()
@@ -293,6 +295,7 @@ export default async function GlobalTenantExpensesPage() {
 											type="number"
 											step="1000"
 											name="aiTokenLimit"
+											disabled={!canManageLimits}
 											defaultValue={overrides?.aiTokens ?? ""}
 											className="w-full rounded-md border px-2 py-1 text-sm"
 										/>
@@ -304,6 +307,7 @@ export default async function GlobalTenantExpensesPage() {
 											type="number"
 											step="100"
 											name="whatsappLimit"
+											disabled={!canManageLimits}
 											defaultValue={overrides?.whatsapp ?? ""}
 											className="w-full rounded-md border px-2 py-1 text-sm"
 										/>
@@ -313,6 +317,7 @@ export default async function GlobalTenantExpensesPage() {
 								<div className="flex items-center gap-2">
 									<button
 										type="submit"
+										disabled={!canManageLimits}
 										className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800"
 									>
 										Guardar

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { getRouteAccessConfig, type Role } from "./lib/route-access";
+import { getRouteAccessConfig } from "./lib/route-access";
 import { getClientIp, rateLimitByIp } from "@/lib/security/rate-limit";
+import {
+	evaluateTenantSubscriptionAccess,
+	resolveSubscriptionGraceDays,
+	resolveSubscriptionPendingGraceMinutes,
+} from "@/lib/billing/subscription-access";
 
 const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
@@ -94,6 +99,20 @@ function isDomainSplitBypassPath(pathname: string) {
 		pathname.startsWith("/auth/callback") ||
 		pathname === "/favicon.ico" ||
 		pathname.startsWith("/.well-known")
+	);
+}
+
+function isBillingPaywallBypassPath(pathname: string) {
+	return (
+		pathname.startsWith("/billing") ||
+		pathname.startsWith("/api/billing") ||
+		pathname.startsWith("/api/tenants/") ||
+		pathname.startsWith("/auth/") ||
+		pathname.startsWith("/onboarding") ||
+		pathname.startsWith("/demo/") ||
+		pathname.startsWith("/_next") ||
+		pathname === "/" ||
+		pathname === "/favicon.ico"
 	);
 }
 
@@ -234,10 +253,6 @@ export async function proxy(req: NextRequest) {
 
 	const config = getRouteAccessConfig(pathname);
 
-	if (!config) {
-		return attachSecurityHeaders(res);
-	}
-
 	try {
 		let user = resolvedUser;
 		if (!userLookupDone) {
@@ -296,6 +311,76 @@ export async function proxy(req: NextRequest) {
 		const isAdmin =
 			membershipRole === "owner" || membershipRole === "admin" || isSuperAdmin;
 
+		if (!isSuperAdmin && tenantId && !isBillingPaywallBypassPath(pathname)) {
+			const { data: subscription, error: subscriptionError } = await supabase
+				.from("tenant_subscriptions")
+				.select("status, current_period_start, current_period_end, metadata")
+				.eq("tenant_id", tenantId)
+				.maybeSingle();
+			if (subscriptionError) {
+				console.error(
+					"[billing-paywall] failed to fetch tenant subscription",
+					{
+						tenantId,
+						error: subscriptionError,
+					},
+				);
+			} else {
+				const accessResult = evaluateTenantSubscriptionAccess(
+					{
+						status: subscription?.status ?? "active",
+						currentPeriodStart: subscription?.current_period_start ?? null,
+						currentPeriodEnd: subscription?.current_period_end ?? null,
+						cancelAtPeriodEnd:
+							subscription?.metadata &&
+							typeof subscription.metadata === "object" &&
+							(subscription.metadata as Record<string, unknown>).cancelAtPeriodEnd ===
+								true,
+						scheduledCancellationAt:
+							subscription?.metadata &&
+							typeof subscription.metadata === "object" &&
+							typeof (subscription.metadata as Record<string, unknown>)
+								.scheduledCancellationAt === "string"
+								? ((subscription.metadata as Record<string, unknown>)
+										.scheduledCancellationAt as string)
+								: null,
+					},
+					{
+						gracePeriodDays: resolveSubscriptionGraceDays(),
+						pendingGraceMinutes: resolveSubscriptionPendingGraceMinutes(),
+					},
+				);
+
+				if (accessResult.blocked) {
+					if (pathname.startsWith("/api")) {
+						return attachSecurityHeaders(
+							new NextResponse(
+								JSON.stringify({
+									error:
+										"Suscripcion inactiva. Regulariza el pago para continuar.",
+									reason: accessResult.reason,
+									billingPath: "/billing",
+								}),
+								{
+									status: 402,
+									headers: { "content-type": "application/json" },
+								},
+							),
+						);
+					}
+
+					const billingUrl = req.nextUrl.clone();
+					billingUrl.pathname = "/billing";
+					billingUrl.searchParams.set("blocked", "1");
+					billingUrl.searchParams.set("reason", accessResult.reason);
+					if (pathname !== "/billing") {
+						billingUrl.searchParams.set("returnTo", pathname);
+					}
+					return attachSecurityHeaders(NextResponse.redirect(billingUrl, 307));
+				}
+			}
+		}
+
 		if (isSuperAdmin || isAdmin) {
 			return attachSecurityHeaders(res);
 		}
@@ -305,7 +390,7 @@ export async function proxy(req: NextRequest) {
 		// Fine-grained access control is handled via:
 		// - sidebar_macro_tables for sidebar visibility
 		// - macro_table_permissions for per-table access
-		const hasAccess = config.allowedRoles.length === 0;
+		const hasAccess = !config || config.allowedRoles.length === 0;
 
 		if (!hasAccess) {
 			// Route requires specific roles but user is not admin - redirect to home

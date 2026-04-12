@@ -83,6 +83,11 @@ const navItems: NavItem[] = [
 		icon: Database,
 	},
 	{
+		title: "Facturacion",
+		href: "/billing",
+		icon: Wallet,
+	},
+	{
 		title: "Notificaciones",
 		href: "/notifications",
 		icon: Bell,
@@ -162,13 +167,14 @@ const SidebarPrefetchLink = React.forwardRef<
 	HTMLAnchorElement,
 	SidebarPrefetchLinkProps
 >(function SidebarPrefetchLink(
-	{ href, onMouseEnter, onFocus, onTouchStart, ...props },
+	{ href, onMouseEnter, onFocus, onTouchStart, onPointerDown, ...props },
 	ref,
 ) {
 	const router = useRouter();
 	const { prefetchObra } = usePrefetchObra();
 	const prefetchedRef = React.useRef(false);
 	const hrefValue = typeof href === "string" ? href : href.toString();
+	const shouldIdlePrefetchExcel = hrefValue === "/excel";
 
 	const runPrefetch = React.useCallback(() => {
 		if (prefetchedRef.current || !hrefValue.startsWith("/")) return;
@@ -181,6 +187,34 @@ const SidebarPrefetchLink = React.forwardRef<
 			prefetchObra(obraMatch[1]);
 		}
 	}, [hrefValue, prefetchObra, router]);
+
+	React.useEffect(() => {
+		if (!shouldIdlePrefetchExcel) return;
+		let cancelled = false;
+		let idleHandle: number | null = null;
+		let timeoutHandle: ReturnType<typeof window.setTimeout> | null = null;
+
+		const trigger = () => {
+			if (cancelled) return;
+			runPrefetch();
+		};
+
+		if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+			idleHandle = window.requestIdleCallback(trigger, { timeout: 1500 });
+		} else {
+			timeoutHandle = window.setTimeout(trigger, 250);
+		}
+
+		return () => {
+			cancelled = true;
+			if (idleHandle != null && typeof window !== "undefined" && "cancelIdleCallback" in window) {
+				window.cancelIdleCallback(idleHandle);
+			}
+			if (timeoutHandle != null) {
+				window.clearTimeout(timeoutHandle);
+			}
+		};
+	}, [runPrefetch, shouldIdlePrefetchExcel]);
 
 	return (
 		<Link
@@ -196,6 +230,10 @@ const SidebarPrefetchLink = React.forwardRef<
 			}}
 			onTouchStart={(event) => {
 				onTouchStart?.(event);
+				runPrefetch();
+			}}
+			onPointerDown={(event) => {
+				onPointerDown?.(event);
 				runPrefetch();
 			}}
 			{...props}

@@ -2,12 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 
+import { canManageTenantLimits } from "@/lib/admin/tenant-limit-access";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { createClient } from "@/utils/supabase/server";
 
 export async function updateTenantLimitsAction(formData: FormData) {
+	const supabase = await createClient();
+	const {
+		data: { user },
+	} = await supabase.auth.getUser();
+	if (!canManageTenantLimits(user?.email)) {
+		throw new Error("No tenes permisos para modificar limites.");
+	}
+
 	const tenantId = formData.get("tenantId");
 	if (typeof tenantId !== "string" || tenantId.length === 0) {
-		throw new Error("Falta el ID de la organización.");
+		throw new Error("Falta el ID de la organizacion.");
 	}
 
 	const parseNumber = (value: FormDataEntryValue | null): number | null => {
@@ -21,9 +31,12 @@ export async function updateTenantLimitsAction(formData: FormData) {
 	const aiTokenLimit = parseNumber(formData.get("aiTokenLimit"));
 	const whatsappLimit = parseNumber(formData.get("whatsappLimit"));
 
-	const storageBytes = storageLimitGb !== null ? Math.max(0, Math.trunc(storageLimitGb * 1024 * 1024 * 1024)) : null;
+	const storageBytes =
+		storageLimitGb !== null
+			? Math.max(0, Math.trunc(storageLimitGb * 1024 * 1024 * 1024))
+			: null;
 
-	const supabase = createSupabaseAdminClient();
+	const adminClient = createSupabaseAdminClient();
 	const payload = {
 		tenant_id: tenantId,
 		plan_key: formData.get("planKey") || undefined,
@@ -32,7 +45,7 @@ export async function updateTenantLimitsAction(formData: FormData) {
 		whatsapp_message_budget_override: whatsappLimit,
 	};
 	if (!payload.plan_key) {
-		const { data: existing } = await supabase
+		const { data: existing } = await adminClient
 			.from("tenant_subscriptions")
 			.select("plan_key")
 			.eq("tenant_id", tenantId)
@@ -40,7 +53,7 @@ export async function updateTenantLimitsAction(formData: FormData) {
 		payload.plan_key = existing?.plan_key ?? "starter";
 	}
 
-	const { error } = await supabase.from("tenant_subscriptions").upsert(payload, {
+	const { error } = await adminClient.from("tenant_subscriptions").upsert(payload, {
 		onConflict: "tenant_id",
 	});
 
