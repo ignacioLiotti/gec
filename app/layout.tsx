@@ -19,7 +19,10 @@ import { resolveRequestAccessContext } from "@/lib/demo-session";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
-const ENABLE_REACT_SCAN = process.env.NEXT_PUBLIC_ENABLE_REACT_SCAN === "true";
+const ENABLE_REACT_SCAN =
+	process.env.NODE_ENV === "development" &&
+	process.env.NEXT_PUBLIC_ENABLE_REACT_SCAN !== "false";
+const ENABLE_VERCEL_CLIENT_TELEMETRY = process.env.NODE_ENV === "production";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -215,18 +218,18 @@ export default async function RootLayout({
 	return (
 		<html lang="en">
 			<head>
-				{process.env.NODE_ENV === "development" && ENABLE_REACT_SCAN && (
+				{ENABLE_REACT_SCAN && (
 					<Script
 						crossOrigin="anonymous"
 						src="https://unpkg.com/react-scan/dist/auto.global.js"
-						strategy="lazyOnload"
+						strategy="beforeInteractive"
 					/>
 				)}
 			</head>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
 			>
-				<SpeedInsights />
+				{ENABLE_VERCEL_CLIENT_TELEMETRY && <SpeedInsights />}
 				<QueryClientProvider>
 					<DomainMigrationGuard />
 					<SupabaseAuthListener />
@@ -244,7 +247,7 @@ export default async function RootLayout({
 						{children}
 					</PathnameLayoutShell>
 				</QueryClientProvider>
-				<Analytics />
+				{ENABLE_VERCEL_CLIENT_TELEMETRY && <Analytics />}
 			</body>
 		</html>
 	);

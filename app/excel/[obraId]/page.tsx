@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
-import { Pencil, Eye, StickyNote, X, AlertTriangle } from "lucide-react";
+import { Pencil, Eye, StickyNote, X, AlertTriangle, RotateCcw, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
@@ -45,6 +45,7 @@ import type { OcrFolderLink, OcrTablaColumn, TablaDataRow } from "./tabs/file-ma
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
 	DEFAULT_MAIN_TABLE_COLUMN_CONFIG,
+	invalidateObrasTableSessionCache,
 	type MainTableColumnConfig,
 } from "@/components/form-table/configs/obras-detalle";
 import {
@@ -1696,6 +1697,7 @@ function ObraDetailPageContent() {
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
 	const [isSavingObra, setIsSavingObra] = useState(false);
+	const [isDeletingObra, setIsDeletingObra] = useState(false);
 	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
 	const [derivedCertificadosNotice, setDerivedCertificadosNotice] =
 		useState<DerivedCertificadosNotice | null>(null);
@@ -1735,6 +1737,7 @@ function ObraDetailPageContent() {
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
+	const [documentsRecoveryRequestToken, setDocumentsRecoveryRequestToken] = useState(0);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1798,6 +1801,19 @@ function ObraDetailPageContent() {
 		}
 		setQueryParams({ tab: value }); // Background URL sync
 	}, [searchParams, setQueryParams]);
+
+	const handleOpenDocumentsRecovery = useCallback(() => {
+		if (activeTab !== "documentos") {
+			setActiveTab("documentos");
+			setQueryParams({ tab: "documentos" });
+		}
+		setDocumentsRecoveryRequestToken((prev) => prev + 1);
+	}, [activeTab, setQueryParams]);
+
+	const handleOpenDocumentsTrashPage = useCallback(() => {
+		if (!obraId) return;
+		router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
+	}, [obraId, router]);
 
 	// Import OC from PDF
 	const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -2140,6 +2156,7 @@ function ObraDetailPageContent() {
 
 				queryClient.invalidateQueries({ queryKey: ['obra', obraId] });
 				queryClient.invalidateQueries({ queryKey: ['obras-dashboard'] });
+				invalidateObrasTableSessionCache();
 			} catch (error) {
 				console.error(error);
 				toast.error(
@@ -2174,6 +2191,43 @@ function ObraDetailPageContent() {
 		if (Object.keys(dirtyPayload).length === 0) return;
 		await persistObra(dirtyPayload, { method: "PATCH" });
 	}, [buildDirtyObraPayload, form.state.values, initialFormValues, persistObra]);
+
+	const handleDeleteObra = useCallback(async () => {
+		if (!obraId || obraId === "undefined") {
+			toast.error("Obra no encontrada");
+			return;
+		}
+
+		const confirmed = window.confirm(
+			"Esta accion eliminara la obra. ¿Querés continuar?",
+		);
+		if (!confirmed) return;
+
+		setIsDeletingObra(true);
+		try {
+			const response = await fetch(`/api/obras/${obraId}`, {
+				method: "DELETE",
+			});
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				throw new Error(payload.error ?? "No se pudo eliminar la obra");
+			}
+
+			invalidateObrasTableSessionCache();
+			queryClient.invalidateQueries({ queryKey: ["obras-dashboard"] });
+			toast.success("Obra eliminada");
+			router.push("/excel");
+		} catch (error) {
+			console.error(error);
+			toast.error(
+				error instanceof Error
+					? error.message
+					: "No se pudo eliminar la obra",
+			);
+		} finally {
+			setIsDeletingObra(false);
+		}
+	}, [obraId, queryClient, router]);
 
 	const activeMainTableColumns = useMemo(
 		() =>
@@ -3206,50 +3260,89 @@ function ObraDetailPageContent() {
 										</Tooltip>
 									)}
 								</div>
-								{activeTab === "general" && (
-									<div className="flex flex-wrap items-center gap-2 justify-end">
-										<motion.div
-											initial={{ opacity: 0 }}
-											animate={{ opacity: 1 }}
-											className="flex justify-end"
-										>
-											<div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-1">
-												<Button
-													type="button"
-													variant={!isGeneralTabEditMode ? "default" : "ghost"}
-													size="sm"
-													className="gap-2 h-8 px-3"
-													aria-pressed={!isGeneralTabEditMode}
-													onClick={() => setIsGeneralTabEditMode(false)}
-												>
-													<Eye className="h-4 w-4" />
-													<span className={cn("hidden sm:inline text-base md:text-sm", !isGeneralTabEditMode ? "inline" : "hidden")}>Vista previa</span>
-												</Button>
-												<Button
-													type="button"
-													variant={isGeneralTabEditMode ? "default" : "ghost"}
-													size="sm"
-													className="gap-2 h-8 px-3"
-													aria-pressed={isGeneralTabEditMode}
-													onClick={() => setIsGeneralTabEditMode(true)}
-												>
-													<Pencil className="h-4 w-4" />
-													<span className={cn("hidden sm:inline text-base md:text-sm", isGeneralTabEditMode ? "inline" : "hidden")}>Edición</span>
-												</Button>
-											</div>
-										</motion.div>
-										<Button
-											type="button"
-											variant={isMemoriaOpen ? "default" : "secondary"}
-											onClick={() => setIsMemoriaOpen((open) => !open)}
-											className="gap-2"
-											aria-label="Memoria"
-										>
-											<StickyNote className="h-4 w-4" />
-											<span className="hidden sm:inline">Memoria</span>
-										</Button>
-									</div>
-								)}
+								<div className="flex flex-wrap items-center gap-2 justify-end">
+									<Button
+										type="button"
+										variant="destructive"
+										size="sm"
+										className="h-8 gap-2"
+										onClick={() => void handleDeleteObra()}
+										disabled={isDeletingObra}
+									>
+										<Trash2 className="h-4 w-4" />
+										<span className="text-base md:text-sm">
+											{isDeletingObra ? "Eliminando..." : "Borrar obra"}
+										</span>
+									</Button>
+									{activeTab === "general" && (
+										<>
+											<motion.div
+												initial={{ opacity: 0 }}
+												animate={{ opacity: 1 }}
+												className="flex justify-end"
+											>
+												<div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-1">
+													<Button
+														type="button"
+														variant={!isGeneralTabEditMode ? "default" : "ghost"}
+														size="sm"
+														className="gap-2 h-8 px-3"
+														aria-pressed={!isGeneralTabEditMode}
+														onClick={() => setIsGeneralTabEditMode(false)}
+													>
+														<Eye className="h-4 w-4" />
+														<span className={cn("hidden sm:inline text-base md:text-sm", !isGeneralTabEditMode ? "inline" : "hidden")}>Vista previa</span>
+													</Button>
+													<Button
+														type="button"
+														variant={isGeneralTabEditMode ? "default" : "ghost"}
+														size="sm"
+														className="gap-2 h-8 px-3"
+														aria-pressed={isGeneralTabEditMode}
+														onClick={() => setIsGeneralTabEditMode(true)}
+													>
+														<Pencil className="h-4 w-4" />
+														<span className={cn("hidden sm:inline text-base md:text-sm", isGeneralTabEditMode ? "inline" : "hidden")}>Edición</span>
+													</Button>
+												</div>
+											</motion.div>
+											<Button
+												type="button"
+												variant={isMemoriaOpen ? "default" : "secondary"}
+												onClick={() => setIsMemoriaOpen((open) => !open)}
+												className="gap-2"
+												aria-label="Memoria"
+											>
+												<StickyNote className="h-4 w-4" />
+												<span className="hidden sm:inline">Memoria</span>
+											</Button>
+										</>
+									)}
+									{activeTab === "documentos" && (
+										<>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												className="h-8 gap-2"
+												onClick={handleOpenDocumentsRecovery}
+											>
+												<RotateCcw className="h-4 w-4" />
+												<span className="text-base md:text-sm">Recuperar</span>
+											</Button>
+											<Button
+												type="button"
+												variant="secondary"
+												size="sm"
+												className="h-8 gap-2"
+												onClick={handleOpenDocumentsTrashPage}
+											>
+												<Trash2 className="h-4 w-4" />
+												<span className="text-base md:text-sm">Papelera</span>
+											</Button>
+										</>
+									)}
+								</div>
 							</div>
 							{derivedCertificadosNotice && activeTab !== "general" ? (
 								<motion.div
@@ -3342,6 +3435,10 @@ function ObraDetailPageContent() {
 													column.cellType === "boolean" ||
 													column.cellType === "checkbox" ||
 													column.cellType === "toggle";
+												const isSelectType = column.cellType === "select";
+												const selectOptions = isSelectType
+													? sanitizeMainTableSelectOptions(column.selectOptions)
+													: [];
 
 												if (isGeneralTabEditMode && column.kind === "custom") {
 													const inputType =
@@ -3377,6 +3474,64 @@ function ObraDetailPageContent() {
 																		<SelectItem value="false">No</SelectItem>
 																	</SelectContent>
 																</Select>
+															) : isSelectType ? (
+																<div className="space-y-1.5">
+																	{(() => {
+																		const currentValue = String(rawValue ?? "").trim();
+																		const matchedSelectOption = resolveMainTableSelectOption(
+																			currentValue,
+																			selectOptions
+																		);
+																		const selectSuggestion =
+																			currentValue && !matchedSelectOption
+																				? findClosestMainTableSelectOption(currentValue, selectOptions)
+																				: null;
+																		const unresolvedValue = "__current__";
+																		const clearValue = "__clear__";
+																		return (
+																			<>
+																				<Select
+																					value={matchedSelectOption ? matchedSelectOption.value : unresolvedValue}
+																					onValueChange={(value) => {
+																						if (value === unresolvedValue) return;
+																						if (value === clearValue) {
+																							setCustomMainColumnValue(column.id, null);
+																							return;
+																						}
+																						setCustomMainColumnValue(
+																							column.id,
+																							coerceMainColumnInputValue(value, column.cellType)
+																						);
+																					}}
+																				>
+																					<SelectTrigger>
+																						<SelectValue placeholder="Seleccionar opcion" />
+																					</SelectTrigger>
+																					<SelectContent>
+																						<SelectItem value={clearValue}>Sin definir</SelectItem>
+																						{!matchedSelectOption ? (
+																							<SelectItem value={unresolvedValue} disabled>
+																								{currentValue
+																									? `Actual: ${currentValue}`
+																									: "Sin definir"}
+																							</SelectItem>
+																						) : null}
+																						{selectOptions.map((option) => (
+																							<SelectItem key={option.value} value={option.value}>
+																								{option.label}
+																							</SelectItem>
+																						))}
+																					</SelectContent>
+																				</Select>
+																				{selectSuggestion ? (
+																					<p className="text-xs text-amber-700">
+																						Sugerencia: {selectSuggestion.option.label}
+																					</p>
+																				) : null}
+																			</>
+																		);
+																	})()}
+																</div>
 															) : (
 																<Input
 																	type={inputType}
@@ -3403,7 +3558,7 @@ function ObraDetailPageContent() {
 													>
 														<p className="text-sm text-muted-foreground">{column.label}</p>
 														<p className="text-sm">
-															{formatMainColumnValue(rawValue, column.cellType)}
+															{formatMainColumnValue(rawValue, column.cellType, column)}
 														</p>
 													</div>
 												);
@@ -3453,6 +3608,7 @@ function ObraDetailPageContent() {
 										obraId={obraId}
 										materialOrders={materialOrders}
 										refreshMaterialOrders={refreshMaterialOrders}
+										recoveryRequestToken={documentsRecoveryRequestToken}
 									/>
 								) : null}
 							</div>

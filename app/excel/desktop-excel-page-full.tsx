@@ -14,10 +14,10 @@ import {
 } from "@/components/form-table/form-table";
 import {
 	createObrasDetalleConfig,
+	invalidateObrasTableSessionCache,
 	mapObraToDetailRow,
 	type MainTableColumnConfig,
 	type ObrasDetalleRow,
-	ROW_COLOR_TABLE_ID,
 } from "@/components/form-table/configs/obras-detalle";
 import { Button } from "@/components/ui/button";
 import {
@@ -186,8 +186,6 @@ export default function DesktopExcelPageClient({
 		initialObras.map(mapObraToDetailRow)
 	);
 	const guidedTourStage = getGuidedExcelStage(searchParams);
-	const selectedLoadMode = initialLoadMode;
-	const isBeforeMode = selectedLoadMode === "before";
 	const guidedExcelFlow = useMemo<WizardFlow | null>(() => {
 		if (!isGuidedExcelTour(searchParams) || guidedTourStage !== GUIDED_EXCEL_STAGES.excelIntro) {
 			return null;
@@ -231,10 +229,6 @@ export default function DesktopExcelPageClient({
 		};
 	}, [guidedTourStage, searchParams]);
 
-	const hasPartialInitialRows = useMemo(
-		() => hydratedRows?.some((row) => row.__isPartial === true) === true,
-		[hydratedRows]
-	);
 	useEffect(() => {
 		setHydratedRows(initialObras.map(mapObraToDetailRow));
 	}, [initialLoadMode, initialObras]);
@@ -242,16 +236,16 @@ export default function DesktopExcelPageClient({
 	const tableConfig = useMemo(() => {
 		const baseConfig = createObrasDetalleConfig(mainTableColumnsConfig, {
 			readOnly: false,
-			optimizationPreset: isBeforeMode ? "legacy" : "optimized",
+			optimizationPreset: "legacy",
 		});
 		return hydratedRows == null
 			? baseConfig
 			: {
 				...baseConfig,
 				defaultRows: hydratedRows,
-				fetchAfterDefaultRows: hasPartialInitialRows,
+				fetchAfterDefaultRows: true,
 			};
-	}, [hasPartialInitialRows, hydratedRows, isBeforeMode, mainTableColumnsConfig]);
+	}, [hydratedRows, mainTableColumnsConfig]);
 
 	const headerAliases = useMemo(
 		() => ({
@@ -463,13 +457,7 @@ export default function DesktopExcelPageClient({
 
 			toast.success(`Importadas ${pendingUpdates.length} obras`);
 			setHydratedRows(null);
-			if (typeof window !== "undefined") {
-				window.dispatchEvent(
-					new CustomEvent("form-table:refresh", {
-						detail: { tableId: ROW_COLOR_TABLE_ID },
-					})
-				);
-			}
+			invalidateObrasTableSessionCache({ refreshTable: true });
 			setIsPreviewOpen(false);
 			setPendingUpdates([]);
 			setPreviewRows([]);

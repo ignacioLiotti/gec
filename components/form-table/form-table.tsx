@@ -1680,10 +1680,18 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	useEffect(() => {
 		if (fetchRowsFn) return;
 		if (Array.isArray(defaultRows)) {
+			const hasLocalChanges = hasUnsavedChangesUtil(
+				rowOrder,
+				initialValuesRef.current.rowOrder,
+				rowsById,
+				columns,
+				initialValuesRef.current.rowsById
+			);
+			if (hasLocalChanges) return;
 			if (hasSameRowIdentity(defaultRows, rowOrder)) return;
 			setFormRows(defaultRows);
 		}
-	}, [fetchRowsFn, defaultRows, rowOrder, setFormRows]);
+	}, [fetchRowsFn, defaultRows, rowOrder, rowsById, columns, setFormRows]);
 
 	const isCellDirty = useCallback(
 		(rowId: string, column: ColumnDef<Row>) =>

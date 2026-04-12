@@ -4,6 +4,7 @@ import {
 	hasDemoCapability,
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
+import { normalizeFolderPath } from "@/lib/tablas";
 
 const DOCUMENTS_BUCKET = "obra-documents";
 
@@ -57,6 +58,39 @@ export async function GET(request: Request, context: RouteContext) {
 		if (obraError) throw obraError;
 		if (!obra) {
 			return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
+		}
+
+		const { data: deleteRows, error: deleteRowsError } = await supabase
+			.from("obra_document_deletes")
+			.select("storage_path, item_type")
+			.eq("tenant_id", tenantId)
+			.eq("obra_id", obraId)
+			.is("restored_at", null);
+		if (deleteRowsError) throw deleteRowsError;
+
+		const blocked = (deleteRows ?? []).some((row) => {
+			const deletedPath =
+				typeof row.storage_path === "string" ? row.storage_path : "";
+			if (!deletedPath) return false;
+			const legacyNormalizedStoragePath = normalizeFolderPath(storagePath);
+			if (row.item_type === "folder") {
+				return (
+					storagePath === deletedPath ||
+					storagePath.startsWith(`${deletedPath}/`) ||
+					legacyNormalizedStoragePath === deletedPath ||
+					legacyNormalizedStoragePath.startsWith(`${deletedPath}/`)
+				);
+			}
+			return (
+				storagePath === deletedPath ||
+				legacyNormalizedStoragePath === deletedPath
+			);
+		});
+		if (blocked) {
+			return NextResponse.json(
+				{ error: "Documento eliminado o fuera de la ventana de recuperación." },
+				{ status: 404 },
+			);
 		}
 
 		if (download) {

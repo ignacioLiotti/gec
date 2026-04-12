@@ -101,6 +101,39 @@ export type OcrTablaColumn = {
 export type TablaDataRow = {
 	id: string;
 	data: Record<string, unknown>;
+	source?: string;
 };
 
 export type OcrDocumentTableRow = FormTableRow & Record<string, unknown>;
+
+export type DeletedDocumentEntry = {
+	id: string;
+	itemType: "file" | "folder";
+	status: "deleted" | "restored" | "expired" | "purged";
+	storagePath: string;
+	fileName: string;
+	fileSizeBytes: number | null;
+	fileCount: number;
+	totalBytes: number;
+	deletedAt: string | null;
+	deletedByUserId?: string | null;
+	deletedByLabel?: string | null;
+	recoverUntil: string | null;
+	recoverable: boolean;
+	restoredAt?: string | null;
+	restoredByUserId?: string | null;
+	restoredByLabel?: string | null;
+	purgedAt?: string | null;
+	purgedByUserId?: string | null;
+	purgedByLabel?: string | null;
+	purgeReason?: string | null;
+	purgeJobId?: string | null;
+	nestedFolderCount?: number;
+	treeEntries?: Array<{
+		path: string;
+		name: string;
+		itemType: "file" | "folder";
+		depth: number;
+		fileSizeBytes?: number | null;
+	}>;
+};

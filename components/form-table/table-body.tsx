@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, Fragment } from "react";
+import { memo, Fragment, useCallback, useEffect, useRef } from "react";
 import type { Row as TanStackRow } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,8 @@ import type {
 } from "./types";
 import { MemoizedTableCell } from "./table-cell";
 
+const HOVER_INTENT_DELAY_MS = 60;
+
 const TONE_CELL_CLASSES: Record<RowColorTone, string> = {
 	red: "bg-red-50 border-red-500 outline-red-600/50 z-100",
 	amber: "bg-amber-50 border-amber-500 outline-amber-600/50 z-100",
@@ -31,6 +33,8 @@ type TableRowProps<Row extends FormTableRow> = {
 	row: TanStackRow<Row>;
 	rowIndex: number;
 	externalRefreshVersion: number;
+	hoveredCell: { rowId: string; columnId: string } | null;
+	setHoveredCell: (cell: { rowId: string; columnId: string } | null) => void;
 	columnsById: Record<string, ColumnDef<Row>>;
 	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
 	rowColorInfo?: (row: Row, rowIndex: number) => RowColorInfo | undefined;
@@ -72,6 +76,8 @@ function TableRowInner<Row extends FormTableRow>({
 	row,
 	rowIndex,
 	externalRefreshVersion,
+	hoveredCell,
+	setHoveredCell,
 	columnsById,
 	rowClassName,
 	rowColorInfo,
@@ -114,12 +120,32 @@ function TableRowInner<Row extends FormTableRow>({
 	const resolvedRowClassName = rowClassName?.(rowData, rowIndex);
 	const colorInfo = rowColorInfo?.(rowData, rowIndex);
 	const overlayBadges = rowOverlayBadges?.(rowData, rowIndex) ?? [];
+	const shouldTrackHover = editMode === "active-cell" && !tableReadOnly;
+	const hoverIntentTimeoutRef = useRef<number | null>(null);
+	const cancelHoverIntent = useCallback(() => {
+		if (hoverIntentTimeoutRef.current !== null) {
+			window.clearTimeout(hoverIntentTimeoutRef.current);
+			hoverIntentTimeoutRef.current = null;
+		}
+	}, []);
+	useEffect(() => {
+		return () => {
+			cancelHoverIntent();
+		};
+	}, [cancelHoverIntent]);
 
 	return (
 		<Fragment>
 			<tr
 				data-index={rowIndex}
 				data-row-id={rowData.id}
+				onPointerLeave={() => {
+					if (!shouldTrackHover) return;
+					cancelHoverIntent();
+					if (hoveredCell?.rowId === rowData.id) {
+						setHoveredCell(null);
+					}
+				}}
 				className={cn(
 					"border-b group relative",
 					rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
@@ -135,7 +161,7 @@ function TableRowInner<Row extends FormTableRow>({
 					if (!columnMeta) return null;
 
 					const baseClassName = cn(
-						"outline outline-border border-border relative px-4 py-4 group-hover:bg-[#fffaf5]",
+						"outline outline-border border-border relative h-8 group-hover:bg-[#fffaf5]",
 						rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
 						colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 						colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
@@ -146,7 +172,37 @@ function TableRowInner<Row extends FormTableRow>({
 					const cellDirty = isCellDirty(rowData.id, columnMeta);
 
 					return (
-						<td key={cell.id} {...getStickyProps(columnId, baseClassName)}>
+						<td
+							key={cell.id}
+							data-form-table-cell="true"
+							data-row-id={rowData.id}
+							data-column-id={columnMeta.id}
+							{...getStickyProps(columnId, baseClassName)}
+							onPointerEnter={() => {
+								if (!shouldTrackHover) return;
+								if (
+									hoveredCell?.rowId === rowData.id &&
+									hoveredCell?.columnId === columnMeta.id
+								) {
+									return;
+								}
+								cancelHoverIntent();
+								hoverIntentTimeoutRef.current = window.setTimeout(() => {
+									setHoveredCell({ rowId: rowData.id, columnId: columnMeta.id });
+									hoverIntentTimeoutRef.current = null;
+								}, HOVER_INTENT_DELAY_MS);
+							}}
+							onPointerLeave={() => {
+								if (!shouldTrackHover) return;
+								cancelHoverIntent();
+								if (
+									hoveredCell?.rowId === rowData.id &&
+									hoveredCell?.columnId === columnMeta.id
+								) {
+									setHoveredCell(null);
+								}
+							}}
+						>
 							{!showActionsColumn && cellIndex === filteredCells.length - 1 && overlayBadges.length > 0 && (
 								<div className="pointer-events-none absolute right-2 top-1 z-20 flex flex-wrap justify-end gap-1">
 									{overlayBadges.map((badge) => (
@@ -174,6 +230,10 @@ function TableRowInner<Row extends FormTableRow>({
 								tableReadOnly={tableReadOnly}
 								highlightQuery={highlightQuery}
 								editMode={editMode}
+								isHovered={
+									hoveredCell?.rowId === rowData.id &&
+									hoveredCell?.columnId === columnMeta.id
+								}
 								activeCell={activeCell}
 								setActiveCell={setActiveCell}
 								isRowDirty={isRowDirty}
@@ -301,6 +361,8 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 	const rowId = prevProps.row.original.id;
 	const prevAffectsRow =
 		prevProps.activeCell?.rowId === rowId || nextProps.activeCell?.rowId === rowId;
+	const prevHoveredAffectsRow =
+		prevProps.hoveredCell?.rowId === rowId || nextProps.hoveredCell?.rowId === rowId;
 	return (
 		prevProps.row === nextProps.row &&
 		prevProps.rowIndex === nextProps.rowIndex &&
@@ -311,6 +373,9 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		(!prevAffectsRow ||
 			(prevProps.activeCell?.rowId === nextProps.activeCell?.rowId &&
 				prevProps.activeCell?.columnId === nextProps.activeCell?.columnId)) &&
+		(!prevHoveredAffectsRow ||
+			(prevProps.hoveredCell?.rowId === nextProps.hoveredCell?.rowId &&
+				prevProps.hoveredCell?.columnId === nextProps.hoveredCell?.columnId)) &&
 		prevProps.isExpanded === nextProps.isExpanded &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
 		prevProps.showActionsColumn === nextProps.showActionsColumn &&

@@ -1233,6 +1233,56 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
       if (storageInfo) {
         storageInfoForError = storageInfo;
+        if (
+          typeof storageInfo.uploadedBytes === "number" &&
+          storageInfo.uploadedBytes > 0
+        ) {
+          try {
+            await incrementTenantUsage(
+              supabase,
+              processingTenantId,
+              { storageBytes: storageInfo.uploadedBytes },
+              planLimits
+            );
+            await logTenantUsageEvent(supabase, {
+              tenantId: processingTenantId,
+              kind: "storage_bytes",
+              amount: storageInfo.uploadedBytes,
+              context: "ocr_source_upload_multi",
+              metadata: {
+                obraId,
+                tablaIds,
+                path: storageInfo.path,
+                fileName: storageInfo.fileName,
+              },
+            });
+          } catch (storageLimitError) {
+            await supabase.storage
+              .from(storageInfo.bucket)
+              .remove([storageInfo.path])
+              .catch((removeError) =>
+                console.error(
+                  "[tablas:ocr-import-multi] failed to remove source file after limit error",
+                  removeError
+                )
+              );
+            const err = storageLimitError as Error & { code?: string };
+            const status =
+              err.code === "storage_limit_exceeded"
+                ? 402
+                : err.code === "insufficient_privilege"
+                  ? 403
+                  : 400;
+            return NextResponse.json(
+              {
+                error:
+                  err.message ||
+                  "Superaste el limite de almacenamiento disponible.",
+              },
+              { status }
+            );
+          }
+        }
       }
     }
 

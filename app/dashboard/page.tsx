@@ -854,7 +854,7 @@ export default function Home() {
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <Button asChild size="lg" className="gap-2 rounded-xl bg-stone-900 text-white hover:bg-stone-800">
-                      <Link href="/excel">
+                      <Link href="/excel" prefetch={false}>
                         Entrar al panel
                         <ArrowRight className="h-4 w-4" />
                       </Link>
@@ -1072,7 +1072,7 @@ export default function Home() {
                             )}
                           />
                           <Button asChild variant="outline" size="sm" className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
-                            <Link href="/excel">
+                            <Link href="/excel" prefetch={true}>
                               Ver Todas
                               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                             </Link>

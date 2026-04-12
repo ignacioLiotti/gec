@@ -4,6 +4,8 @@ import {
 	hasDemoCapability,
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
+import { fetchTenantPlan } from "@/lib/subscription-plans";
+import { incrementTenantUsage, logTenantUsageEvent } from "@/lib/tenant-usage";
 import { normalizeFolderPath } from "@/lib/tablas";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -44,6 +46,12 @@ function isAlreadyExistsError(error: unknown) {
 		message.includes("duplicate") ||
 		message.includes("resource already exists")
 	);
+}
+
+function usageErrorToStatus(code?: string) {
+	if (code === "storage_limit_exceeded") return 402;
+	if (code === "insufficient_privilege") return 403;
+	return 400;
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -105,6 +113,10 @@ export async function POST(request: Request, context: RouteContext) {
 
 		const baseStorageFileName = sanitizeFileName(file.name) || `archivo-${Date.now()}`;
 		const fileBytes = Buffer.from(await file.arrayBuffer());
+		const uploadedSize =
+			typeof fileBytes.length === "number" && fileBytes.length > 0 ? fileBytes.length : 0;
+		const plan = await fetchTenantPlan(supabase, tenantId);
+
 		let storageFileName = baseStorageFileName;
 		let storagePath = `${normalizedFolderPath}/${storageFileName}`;
 		let uploadError: unknown = null;
@@ -135,6 +147,43 @@ export async function POST(request: Request, context: RouteContext) {
 			throw uploadError;
 		}
 
+		if (uploadedSize > 0) {
+			try {
+				await incrementTenantUsage(
+					supabase,
+					tenantId,
+					{ storageBytes: uploadedSize },
+					plan.limits,
+				);
+				await logTenantUsageEvent(supabase, {
+					tenantId,
+					kind: "storage_bytes",
+					amount: uploadedSize,
+					context: "documents_upload",
+					metadata: {
+						obraId,
+						path: storagePath,
+						fileName: storageFileName,
+					},
+				});
+			} catch (usageError) {
+				await supabase.storage
+					.from(DOCUMENTS_BUCKET)
+					.remove([storagePath])
+					.catch((removeError) =>
+						console.error(
+							"[documents-upload] failed to rollback file after limit error",
+							removeError,
+						),
+					);
+				const err = usageError as Error & { code?: string };
+				return NextResponse.json(
+					{ error: err.message || "Superaste el limite de almacenamiento disponible." },
+					{ status: usageErrorToStatus(err.code) },
+				);
+			}
+		}
+
 		if (user?.id) {
 			const { error: trackingError } = await supabase
 				.from("obra_document_uploads")
@@ -158,6 +207,7 @@ export async function POST(request: Request, context: RouteContext) {
 			bucket: DOCUMENTS_BUCKET,
 			path: storagePath,
 			fileName: storageFileName,
+			uploadedBytes: uploadedSize,
 		});
 	} catch (error) {
 		console.error("[documents-upload]", error);

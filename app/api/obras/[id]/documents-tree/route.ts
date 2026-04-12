@@ -148,6 +148,53 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
     }
 
+    const { data: deleteRows, error: deleteRowsError } = await supabase
+      .from("obra_document_deletes")
+      .select("storage_path, item_type")
+      .eq("tenant_id", tenantId)
+      .eq("obra_id", obraId)
+      .is("restored_at", null);
+    if (deleteRowsError) throw deleteRowsError;
+
+    const deletedFilePaths = new Set<string>();
+    const deletedFolderPaths: string[] = [];
+
+    for (const row of deleteRows ?? []) {
+      const storagePath =
+        typeof row.storage_path === "string" ? row.storage_path.trim() : "";
+      if (!storagePath) continue;
+      if (row.item_type === "folder") {
+        deletedFolderPaths.push(storagePath);
+      } else {
+        deletedFilePaths.add(storagePath);
+      }
+    }
+
+    const isDeletedPath = (storagePath: string) => {
+      if (!storagePath) return false;
+      if (deletedFilePaths.has(storagePath)) return true;
+      const legacyNormalizedStoragePath = normalizeFolderPath(storagePath);
+      if (
+        legacyNormalizedStoragePath &&
+        deletedFilePaths.has(legacyNormalizedStoragePath)
+      ) {
+        return true;
+      }
+      for (const folderPath of deletedFolderPaths) {
+        if (storagePath === folderPath || storagePath.startsWith(`${folderPath}/`)) {
+          return true;
+        }
+        if (
+          legacyNormalizedStoragePath &&
+          (legacyNormalizedStoragePath === folderPath ||
+            legacyNormalizedStoragePath.startsWith(`${folderPath}/`))
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     // Fetch OCR tablas + columns + documents + rows (single batched approach)
     const { data: tablas, error: tablasError } = await supabase
       .from("obra_tablas")
@@ -188,6 +235,9 @@ export async function GET(request: Request, context: RouteContext) {
         .order("created_at", { ascending: false });
       if (documentsError) throw documentsError;
       for (const doc of documents ?? []) {
+        const sourcePath =
+          typeof doc.source_path === "string" ? doc.source_path : "";
+        if (sourcePath && isDeletedPath(sourcePath)) continue;
         const tablaId = doc.tabla_id as string;
         if (!documentsByTabla.has(tablaId)) documentsByTabla.set(tablaId, []);
         documentsByTabla.get(tablaId)?.push(doc);
@@ -211,6 +261,9 @@ export async function GET(request: Request, context: RouteContext) {
         console.error("[documents-tree:get] rows error:", rowsError);
       } else {
         for (const row of rows ?? []) {
+          const data = (row?.data as Record<string, unknown>) ?? {};
+          const docPath = typeof data.__docPath === "string" ? data.__docPath : "";
+          if (docPath && isDeletedPath(docPath)) continue;
           const tablaId = row.tabla_id as string;
           const bucket = rowsByTabla.get(tablaId);
           if (!bucket) continue;
@@ -405,6 +458,12 @@ export async function GET(request: Request, context: RouteContext) {
             ? `${currentRelative}/${item.name.replace(/\/$/, "")}`
             : item.name.replace(/\/$/, "");
           const normalizedChild = getNormalizedPath(childRelative);
+          const childStoragePath = normalizedChild
+            ? `${obraId}/${normalizedChild}`
+            : obraId;
+          if (isDeletedPath(childStoragePath)) {
+            continue;
+          }
           ensureFolderPath(normalizedChild);
           if (!seen.has(normalizedChild)) {
             seen.add(normalizedChild);
@@ -415,6 +474,9 @@ export async function GET(request: Request, context: RouteContext) {
         const storagePath = currentRelative
           ? `${obraId}/${currentRelative}/${item.name}`
           : `${obraId}/${item.name}`;
+        if (isDeletedPath(storagePath)) {
+          continue;
+        }
         const docStatus = docsByPath.get(storagePath);
         const trackedUpload = uploadTrackingByPath.get(storagePath);
         const storageOwner =

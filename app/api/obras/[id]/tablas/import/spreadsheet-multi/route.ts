@@ -46,6 +46,7 @@ type RawSheet = {
 };
 
 type CertTemplateTableId = "pmc_resumen" | "pmc_items" | "curva_plan";
+type PresupuestoTvTableId = "presupuesto_resumen" | "presupuesto_materiales";
 type CertTemplateColumnDef = {
   key: string;
   label: string;
@@ -99,6 +100,22 @@ const CERT_TEMPLATE_TABLE_DEFS: CertTemplateTableDef[] = [
     ],
   },
 ];
+
+type PresupuestoTvExtraction = {
+  presupuestoRows: Record<string, unknown>[];
+  materialesRows: Record<string, unknown>[];
+};
+
+const PRESUPUESTO_TV_IGNORED_LABELS = new Set([
+  "descripcion",
+  "materiales",
+  "mano de obra",
+  "equipos",
+  "subtotal materiales a",
+  "subtotal mano de obra b",
+  "subtotal equipos c",
+  "costo neto total d",
+]);
 
 function normalize(input: string): string {
   return input
@@ -298,6 +315,328 @@ function parseWorkbook(buffer: ArrayBuffer): RawSheet[] {
   return sheets;
 }
 
+function cleanSpreadsheetValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    const cleaned = value.replace(/\r?\n/g, " ").trim();
+    return cleaned.length > 0 ? cleaned : null;
+  }
+  if (value === "") return null;
+  return value ?? null;
+}
+
+function getRawSheetCell(sheet: RawSheet, rowIndex: number, colIndex: number): unknown {
+  const row = sheet.rawRows[rowIndex] ?? [];
+  return row[colIndex] ?? null;
+}
+
+function isBlankValueArray(values: unknown[]): boolean {
+  return values.every((value) => cleanSpreadsheetValue(value) === null);
+}
+
+function findPresupuestoTvMainHeaderRow(sheet: RawSheet): number {
+  for (let rowIndex = 0; rowIndex < sheet.rawRows.length; rowIndex++) {
+    const colE = normalize(String(cleanSpreadsheetValue(getRawSheetCell(sheet, rowIndex, 4)) ?? ""));
+    if (colE === "rubro") return rowIndex;
+  }
+  return -1;
+}
+
+function toPresupuestoTvMainFieldKey(header: string, columnIndex: number): string {
+  const normalized = normalize(header);
+  if (normalized.includes("rubro")) return "rubro";
+  if (normalized.includes("descr")) return "descripcion";
+  if (normalized === "u" || normalized === "un" || normalized.includes("unidad")) return "unidad";
+  if (normalized.includes("cant")) return "cantidad";
+  if (normalized.includes("precio")) return "precio";
+  if (normalized.includes("subtotal") || normalized.includes("total")) return "subtotal";
+  const inferred = normalizeFieldKey(header);
+  return inferred.length > 0 ? inferred : `col_${columnIndex + 1}`;
+}
+
+function dedupeKeys(rawKeys: string[]): string[] {
+  const seen = new Map<string, number>();
+  return rawKeys.map((key, index) => {
+    const base = key && key.trim().length > 0 ? key : `col_${index + 1}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count > 0 ? `${base}_${count + 1}` : base;
+  });
+}
+
+function extractPresupuestoTvRows(sheet: RawSheet): Record<string, unknown>[] {
+  const startRow = findPresupuestoTvMainHeaderRow(sheet);
+  if (startRow < 0) return [];
+
+  const rawHeaderKeys = Array.from({ length: 9 }, (_, offset) => {
+    const colIndex = 4 + offset;
+    const rawHeader = cleanSpreadsheetValue(getRawSheetCell(sheet, startRow, colIndex));
+    if (typeof rawHeader === "string" && rawHeader.trim().length > 0) {
+      return toPresupuestoTvMainFieldKey(rawHeader, offset);
+    }
+    return `col_${offset + 1}`;
+  });
+  const headerKeys = dedupeKeys(rawHeaderKeys);
+
+  const rows: Record<string, unknown>[] = [];
+  let blankStreak = 0;
+
+  for (let rowIndex = startRow + 1; rowIndex < sheet.rawRows.length; rowIndex++) {
+    const values = Array.from({ length: 9 }, (_, offset) =>
+      cleanSpreadsheetValue(getRawSheetCell(sheet, rowIndex, 4 + offset))
+    );
+
+    if (isBlankValueArray(values)) {
+      blankStreak += 1;
+      if (rows.length > 0 && blankStreak >= 5) break;
+      continue;
+    }
+    blankStreak = 0;
+
+    const first = normalize(String(values[0] ?? ""));
+    const second = normalize(String(values[1] ?? ""));
+    if (first === "rubro" && second === "descripcion") continue;
+
+    const row: Record<string, unknown> = {};
+    let hasAnyValue = false;
+    headerKeys.forEach((key, index) => {
+      const value = values[index];
+      row[key] = value;
+      if (value !== null && String(value).trim().length > 0) {
+        hasAnyValue = true;
+      }
+    });
+
+    if (hasAnyValue) rows.push(row);
+  }
+
+  if (rows.length === 0) return [];
+
+  const usedHeaders = headerKeys.filter((key) =>
+    rows.some((row) => row[key] !== null && String(row[key]).trim().length > 0)
+  );
+  if (usedHeaders.length === 0) return [];
+
+  return rows
+    .map((row) => {
+      const projected: Record<string, unknown> = {};
+      usedHeaders.forEach((header) => {
+        projected[header] = row[header] ?? null;
+      });
+      return projected;
+    })
+    .filter((row) =>
+      Object.values(row).some((value) => value !== null && String(value).trim().length > 0)
+    );
+}
+
+function isPresupuestoTvSectionLabel(raw: unknown): boolean {
+  const normalized = normalize(String(cleanSpreadsheetValue(raw) ?? ""));
+  return normalized === "materiales" || normalized === "mano de obra" || normalized === "equipos";
+}
+
+function classifyPresupuestoTvSection(raw: unknown): "materiales" | "mano_obra" | "equipos" | null {
+  const normalized = normalize(String(cleanSpreadsheetValue(raw) ?? ""));
+  if (normalized === "materiales") return "materiales";
+  if (normalized === "mano de obra") return "mano_obra";
+  if (normalized === "equipos") return "equipos";
+  return null;
+}
+
+function isPresupuestoTvTotalLabel(raw: unknown): boolean {
+  const normalized = normalize(String(cleanSpreadsheetValue(raw) ?? ""));
+  return (
+    normalized.startsWith("subtotal materiales") ||
+    normalized.startsWith("subtotal mano de obra") ||
+    normalized.startsWith("subtotal equipos") ||
+    normalized.startsWith("costo neto total")
+  );
+}
+
+function isPresupuestoTvIgnoredLabel(raw: unknown): boolean {
+  const normalized = normalize(String(cleanSpreadsheetValue(raw) ?? ""));
+  return PRESUPUESTO_TV_IGNORED_LABELS.has(normalized);
+}
+
+function findPresupuestoTvBlockHeaders(sheet: RawSheet, minCol = 15): Array<{ row: number; col: number }> {
+  const matches: Array<{ row: number; col: number }> = [];
+  const maxColumns = sheet.rawRows.reduce((max, row) => Math.max(max, row.length), 0);
+  if (maxColumns <= minCol + 4) return matches;
+
+  for (let row = 0; row < sheet.rawRows.length; row++) {
+    for (let col = minCol; col <= maxColumns - 5; col++) {
+      const c1 = normalize(String(cleanSpreadsheetValue(getRawSheetCell(sheet, row, col)) ?? ""));
+      const c2 = normalize(String(cleanSpreadsheetValue(getRawSheetCell(sheet, row, col + 1)) ?? ""));
+      const c3 = normalize(String(cleanSpreadsheetValue(getRawSheetCell(sheet, row, col + 2)) ?? ""));
+      const c4 = normalize(String(cleanSpreadsheetValue(getRawSheetCell(sheet, row, col + 3)) ?? ""));
+      const c5 = normalize(String(cleanSpreadsheetValue(getRawSheetCell(sheet, row, col + 4)) ?? ""));
+      if (c1 === "descripcion" && c2 === "unidad" && c3 === "cantidad" && c4 === "precio" && c5 === "subtotal") {
+        matches.push({ row, col });
+      }
+    }
+  }
+
+  return matches;
+}
+
+function extractPresupuestoTvBlockContext(sheet: RawSheet, headerRow: number, startCol: number) {
+  let item: unknown = null;
+  let rubro: unknown = null;
+  let itemUnidad: unknown = null;
+  let itemCantidad: unknown = null;
+
+  for (let row = headerRow - 1; row >= Math.max(0, headerRow - 6); row--) {
+    const firstCell = cleanSpreadsheetValue(getRawSheetCell(sheet, row, startCol));
+    if (firstCell !== null && !isPresupuestoTvIgnoredLabel(firstCell)) {
+      item = firstCell;
+      itemUnidad = cleanSpreadsheetValue(getRawSheetCell(sheet, row, startCol + 4));
+      itemCantidad = cleanSpreadsheetValue(getRawSheetCell(sheet, row, startCol + 5));
+      break;
+    }
+  }
+
+  for (let row = headerRow - 1; row >= Math.max(0, headerRow - 8); row--) {
+    const firstCell = cleanSpreadsheetValue(getRawSheetCell(sheet, row, startCol));
+    if (
+      typeof firstCell === "string" &&
+      !isPresupuestoTvIgnoredLabel(firstCell) &&
+      item !== null &&
+      normalize(firstCell) !== normalize(String(item))
+    ) {
+      rubro = firstCell;
+      break;
+    }
+  }
+
+  return {
+    rubro,
+    item,
+    item_unidad: itemUnidad,
+    item_cantidad: itemCantidad,
+  };
+}
+
+function extractPresupuestoTvMaterialesRows(sheet: RawSheet): Record<string, unknown>[] {
+  const blockHeaders = findPresupuestoTvBlockHeaders(sheet, 15);
+  if (blockHeaders.length === 0) return [];
+
+  const allRows: Record<string, unknown>[] = [];
+
+  for (const block of blockHeaders) {
+    const context = extractPresupuestoTvBlockContext(sheet, block.row, block.col);
+    let currentSection: "materiales" | "mano_obra" | "equipos" | null = null;
+
+    for (let row = block.row + 1; row < sheet.rawRows.length; row++) {
+      const first = cleanSpreadsheetValue(getRawSheetCell(sheet, row, block.col));
+      const second = cleanSpreadsheetValue(getRawSheetCell(sheet, row, block.col + 1));
+      const third = cleanSpreadsheetValue(getRawSheetCell(sheet, row, block.col + 2));
+      const fourth = cleanSpreadsheetValue(getRawSheetCell(sheet, row, block.col + 3));
+      const fifth = cleanSpreadsheetValue(getRawSheetCell(sheet, row, block.col + 4));
+
+      if (
+        normalize(String(first ?? "")) === "descripcion" &&
+        normalize(String(second ?? "")) === "unidad"
+      ) {
+        break;
+      }
+
+      const isMajorTitle =
+        typeof first === "string" &&
+        !isPresupuestoTvSectionLabel(first) &&
+        !isPresupuestoTvTotalLabel(first) &&
+        !isPresupuestoTvIgnoredLabel(first) &&
+        second === null &&
+        third === null &&
+        fourth === null &&
+        fifth === null &&
+        row > block.row + 1;
+      if (isMajorTitle) break;
+
+      const sectionCandidate = classifyPresupuestoTvSection(first);
+      if (sectionCandidate) {
+        currentSection = sectionCandidate;
+        continue;
+      }
+
+      if (isPresupuestoTvTotalLabel(first)) {
+        continue;
+      }
+
+      const hasData = [first, second, third, fourth, fifth].some(
+        (value) => value !== null && String(value).trim().length > 0
+      );
+      if (!hasData || currentSection === null) continue;
+
+      allRows.push({
+        rubro: context.rubro,
+        item: context.item,
+        item_unidad: context.item_unidad,
+        item_cantidad: context.item_cantidad,
+        seccion: currentSection,
+        descripcion: first,
+        unidad: second,
+        cantidad: third,
+        precio: fourth,
+        subtotal: fifth,
+      });
+    }
+  }
+
+  return allRows;
+}
+
+function extractPresupuestoTvTables(sheet: RawSheet): PresupuestoTvExtraction {
+  return {
+    presupuestoRows: extractPresupuestoTvRows(sheet),
+    materialesRows: extractPresupuestoTvMaterialesRows(sheet),
+  };
+}
+
+function buildVirtualSheetFromRows(name: string, rows: Record<string, unknown>[]): RawSheet | null {
+  if (rows.length === 0) return null;
+  const headers = Array.from(
+    new Set(
+      rows.flatMap((row) =>
+        Object.keys(row).filter((key) => key.trim().length > 0)
+      )
+    )
+  );
+  if (headers.length === 0) return null;
+
+  const dataRows = rows.map((row) =>
+    Object.fromEntries(headers.map((header) => [header, row[header] ?? null]))
+  );
+
+  return {
+    name,
+    headers,
+    rawRows: [headers, ...dataRows.map((row) => headers.map((header) => row[header] ?? null))],
+    dataRows,
+  };
+}
+
+function pickBestSheetForPresupuestoTv(sheets: RawSheet[]): RawSheet | null {
+  if (sheets.length === 0) return null;
+  let bestSheet: RawSheet | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const sheet of sheets) {
+    const normalizedSheetName = normalize(sheet.name);
+    let score = 0;
+    if (normalizedSheetName.includes("ppto") || normalizedSheetName.includes("presup")) score += 0.35;
+    if (normalizedSheetName.includes("estudio")) score += 0.2;
+    if (normalizedSheetName.includes("tv")) score += 0.15;
+    if (findPresupuestoTvMainHeaderRow(sheet) >= 0) score += 0.45;
+    score += Math.min(0.4, findPresupuestoTvBlockHeaders(sheet, 15).length * 0.1);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestSheet = sheet;
+    }
+  }
+
+  return bestSheet ?? sheets[0];
+}
+
 function a1ToRowCol(a1: string): { row: number; col: number } | null {
   const match = a1.trim().toUpperCase().match(/^([A-Z]+)(\d+)$/);
   if (!match) return null;
@@ -312,8 +651,14 @@ function a1ToRowCol(a1: string): { row: number; col: number } | null {
 function applyExtractionRowPolicy<T extends { data: Record<string, unknown> }>(
 	rows: T[],
 	settings: Record<string, unknown> | null | undefined,
+  defaultRowMode: "single" | "multiple" = "single",
 ) {
-	const rowMode = settings?.extractionRowMode === "multiple" ? "multiple" : "single";
+	const rowMode =
+    settings?.extractionRowMode === "multiple"
+      ? "multiple"
+      : settings?.extractionRowMode === "single"
+        ? "single"
+        : defaultRowMode;
 	const maxRowsRaw = settings?.extractionMaxRows;
 	const maxRows =
 		typeof maxRowsRaw === "number"
@@ -471,6 +816,24 @@ function coerceCertValue(raw: unknown, type: "text" | "numeric" | "date" | "int"
 }
 
 function getProfileKeywords(profile: string | null, column: TablaColumn): string[] {
+  if (profile === "presupuesto_estudio_tv") {
+    const label = normalize(column.label);
+    const key = normalize(column.fieldKey.replace(/_/g, " "));
+    const joined = `${label} ${key}`;
+    const candidates: string[] = [];
+
+    if (joined.includes("rubro")) candidates.push("rubro");
+    if (joined.includes("item")) candidates.push("item", "codigo");
+    if (joined.includes("descr")) candidates.push("descripcion", "detalle", "concepto");
+    if (joined.includes("unidad")) candidates.push("unidad", "und", "u");
+    if (joined.includes("cant")) candidates.push("cantidad", "cant");
+    if (joined.includes("precio")) candidates.push("precio", "unitario");
+    if (joined.includes("subtotal") || joined.includes("total")) candidates.push("subtotal", "total");
+    if (joined.includes("seccion")) candidates.push("materiales", "mano de obra", "equipos", "seccion");
+
+    return candidates;
+  }
+
   if (profile !== "certificado") return [];
   const label = normalize(column.label);
   const key = normalize(column.fieldKey.replace(/_/g, " "));
@@ -882,6 +1245,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }> = [];
 
     const uniqueTablaIds = [...new Set(tablaIds)];
+    const presupuestoTvExtractionCache = new Map<string, PresupuestoTvExtraction>();
 
     for (const tablaId of uniqueTablaIds) {
       const columns = columnsByTabla.get(tablaId) ?? [];
@@ -911,6 +1275,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const certTableDef = certTableId
         ? CERT_TEMPLATE_TABLE_DEFS.find((def) => def.id === certTableId) ?? null
         : null;
+      const presupuestoTvTableId: PresupuestoTvTableId | null = (() => {
+        if (profile !== "presupuesto_estudio_tv") return null;
+        const keys = new Set(columns.map((c) => c.fieldKey));
+        if (
+          keys.has("seccion") &&
+          keys.has("item") &&
+          keys.has("descripcion") &&
+          keys.has("subtotal")
+        ) {
+          return "presupuesto_materiales";
+        }
+        if (keys.has("rubro") && keys.has("descripcion")) {
+          return "presupuesto_resumen";
+        }
+        const normalizedName = normalize(tablaMeta?.name ?? "");
+        if (normalizedName.includes("material")) return "presupuesto_materiales";
+        if (normalizedName.includes("presupuesto")) return "presupuesto_resumen";
+        return null;
+      })();
       const sectionType = resolveSpreadsheetSectionType({
         certTableId,
         tablaName: tablaMeta?.name ?? "Tabla",
@@ -958,7 +1341,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
           : null;
       const bestSheet =
         assignedSheet ??
-        (certTableDef ? pickBestSheetForCertTable(sheets, certTableDef) : pickBestSheetForTable(sheets, columns, profile));
+        (certTableDef
+          ? pickBestSheetForCertTable(sheets, certTableDef)
+          : presupuestoTvTableId
+            ? pickBestSheetForPresupuestoTv(sheets)
+            : pickBestSheetForTable(sheets, columns, profile));
       if (!bestSheet) {
         const insight = buildSpreadsheetPreviewInsight({
           sectionType,
@@ -976,6 +1363,30 @@ export async function POST(request: NextRequest, context: RouteContext) {
           includedByDefault: insight.includedByDefault && !curvaPlanHasExistingRows,
         });
         continue;
+      }
+
+      let extractionSheet = bestSheet;
+      if (presupuestoTvTableId) {
+        const cacheKey = bestSheet.name;
+        const cachedExtraction = presupuestoTvExtractionCache.get(cacheKey);
+        const extracted =
+          cachedExtraction ??
+          (() => {
+            const value = extractPresupuestoTvTables(bestSheet);
+            presupuestoTvExtractionCache.set(cacheKey, value);
+            return value;
+          })();
+        const extractedRowsForTable =
+          presupuestoTvTableId === "presupuesto_materiales"
+            ? extracted.materialesRows
+            : extracted.presupuestoRows;
+        const virtualSheet = buildVirtualSheetFromRows(
+          `${bestSheet.name}::${presupuestoTvTableId}`,
+          extractedRowsForTable
+        );
+        if (virtualSheet) {
+          extractionSheet = virtualSheet;
+        }
       }
 
       const explicitMappingForTabla = columnMappings[tablaId];
@@ -1008,7 +1419,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               const isValid =
                 typeof selectedHeader === "string" &&
                 selectedHeader.length > 0 &&
-                bestSheet.headers.includes(selectedHeader);
+                extractionSheet.headers.includes(selectedHeader);
               const manualValue =
                 typeof manualValues?.[tablaId]?.[column.fieldKey] === "string"
                   ? manualValues[tablaId][column.fieldKey]
@@ -1034,7 +1445,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 manualValue,
               };
             })
-            : buildMappings(bestSheet, columns, profile).map((mapping) => ({
+            : buildMappings(extractionSheet, columns, profile).map((mapping) => ({
                 ...mapping,
                 confidence: mapping.excelHeader ? 1 : 0,
                 manualValue:
@@ -1110,7 +1521,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             tablaId,
             docMeta,
           })
-        : bestSheet.dataRows
+        : extractionSheet.dataRows
             .map((sourceRow) => {
               const data: Record<string, unknown> = {};
               for (const map of mappings) {
@@ -1145,7 +1556,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       if (extractedRows.length === 0 && certTableDef?.id !== "curva_plan") {
         // Fallback: direct normalized header->fieldKey/label matching without confidence threshold.
-        extractedRows = bestSheet.dataRows
+        extractedRows = extractionSheet.dataRows
           .map((sourceRow) => {
             const data: Record<string, unknown> = {};
             columns.forEach((column) => {
@@ -1204,7 +1615,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
         extractedRows = extractedRows.length > 0 ? [extractedRows[0]] : [];
       }
 
-      extractedRows = applyExtractionRowPolicy(extractedRows, tablaMeta?.settings);
+      const defaultRowModeForProfile: "single" | "multiple" =
+        profile === "presupuesto_estudio_tv" ? "multiple" : "single";
+      extractedRows = applyExtractionRowPolicy(
+        extractedRows,
+        tablaMeta?.settings,
+        defaultRowModeForProfile
+      );
 
       if (previewMode) {
         const mappedPreview = mappings.map((map) => ({

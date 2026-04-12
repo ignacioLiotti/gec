@@ -16,6 +16,7 @@ export type FormTableSearchState = {
 	value: string;
 	placeholder?: string;
 	showInline: boolean;
+	isProcessing: boolean;
 	onChange: (value: string) => void;
 };
 
@@ -25,6 +26,7 @@ export type FormTableFiltersState<Filters> = {
 	draft?: Filters;
 	setDraft: (updater: (prev: Filters | undefined) => Filters | undefined) => void;
 	activeCount: number;
+	isProcessing: boolean;
 	reset: () => void;
 	apply: () => void;
 };
@@ -53,6 +55,8 @@ export type FormTableColumnsState<Row extends FormTableRow> = {
 
 export type FormTableSortingState = {
 	state: SortState;
+	isProcessing: boolean;
+	pendingColumnId: string | null;
 	toggle: (columnId: string) => void;
 	applyDirection: (columnId: string, direction: "asc" | "desc") => void;
 	clear: () => void;
@@ -91,6 +95,9 @@ export type FormTableMetaState = {
 	variant: "page" | "embedded";
 	isEmbedded: boolean;
 	externalRefreshVersion: number;
+	isBusy: boolean;
+	isSlowOperation: boolean;
+	activityKind: "loading" | "sorting" | "search" | "filter" | "pagination" | null;
 };
 
 export type FormTableRowState<Row extends FormTableRow> = {

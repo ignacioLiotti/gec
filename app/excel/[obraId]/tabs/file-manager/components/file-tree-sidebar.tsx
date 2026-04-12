@@ -9,7 +9,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Folder, FolderPlus, Loader2, RefreshCw, Search, Table2 } from "lucide-react";
+import { Folder, FolderPlus, Loader2, RefreshCw, Search, Table2 } from "lucide-react";
 import type { FileSystemItem } from "../types";
 import type { MouseEvent, ReactNode } from "react";
 

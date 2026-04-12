@@ -12,9 +12,15 @@ type DocumentsTabProps = {
 	obraId?: string;
 	materialOrders: MaterialOrder[];
 	refreshMaterialOrders: () => void | Promise<void>;
+	recoveryRequestToken?: number;
 };
 
-function ObraDocumentsTabContent({ obraId, materialOrders, refreshMaterialOrders }: DocumentsTabProps) {
+function ObraDocumentsTabContent({
+	obraId,
+	materialOrders,
+	refreshMaterialOrders,
+	recoveryRequestToken = 0,
+}: DocumentsTabProps) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
@@ -64,6 +70,7 @@ function ObraDocumentsTabContent({ obraId, materialOrders, refreshMaterialOrders
 				selectedFolderPath={folderParam}
 				selectedFilePath={fileParam}
 				onSelectionChange={handleSelectionChange}
+				externalRecoveryRequestToken={recoveryRequestToken}
 			/>
 		</TabsContent>
 	);
