@@ -83,6 +83,7 @@ function buildReportColumns(
 		label: col.label,
 		accessor: (row: OcrTableRow) => row[col.fieldKey],
 		type: mapDataTypeToReportType(col.dataType),
+		groupable: true,
 		align:
 			col.dataType === "currency" || col.dataType === "number"
 				? ("right" as const)
@@ -98,6 +99,7 @@ function buildReportColumns(
 			label: "Documento",
 			accessor: (row: OcrTableRow) => row.__docFileName,
 			type: "text",
+			groupable: true,
 			align: "left",
 		});
 	}
@@ -158,12 +160,21 @@ export function buildOcrReportConfig(
 		],
 		defaultFilters: () => ({ search: "" }),
 		fetchData: async (filters: OcrReportFilters) => {
-			const rowsRes = await fetch(
-				`/api/obras/${obraId}/tablas/${tablaId}/rows?limit=200`
-			);
-			if (!rowsRes.ok) throw new Error("No se pudieron cargar las filas");
-			const rowsData = await rowsRes.json();
-			const tablaRows: TablaRow[] = rowsData.rows || [];
+			const tablaRows: TablaRow[] = [];
+			const pageSize = 200;
+			const maxPages = 1000;
+			let page = 1;
+			while (page <= maxPages) {
+				const rowsRes = await fetch(
+					`/api/obras/${obraId}/tablas/${tablaId}/rows?page=${page}&limit=${pageSize}`
+				);
+				if (!rowsRes.ok) throw new Error("No se pudieron cargar las filas");
+				const rowsData = await rowsRes.json();
+				tablaRows.push(...((rowsData.rows as TablaRow[]) ?? []));
+				const hasNextPage = Boolean(rowsData?.pagination?.hasNextPage);
+				if (!hasNextPage) break;
+				page += 1;
+			}
 
 			let rows: OcrTableRow[] = tablaRows.map((row) => {
 				const mapped: OcrTableRow = { id: row.id };

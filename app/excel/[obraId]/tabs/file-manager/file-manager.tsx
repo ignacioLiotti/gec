@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
@@ -21,6 +21,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import JSZip from 'jszip';
 import {
   ChevronRight,
   ChevronDown,
@@ -60,6 +61,7 @@ import {
   Clock,
   FolderIcon,
   Crosshair,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Sentry from '@sentry/nextjs';
@@ -71,7 +73,6 @@ import { DocumentSheet } from './components/document-sheet';
 import { SpreadsheetGridPreview } from './components/spreadsheet-grid-preview';
 import { DocumentDataSheet } from './components/document-data-sheet';
 import { FileTreeSidebar } from './components/file-tree-sidebar';
-import { AddRowDialog } from './components/add-row-dialog';
 import { SpreadsheetAdjustmentDrawer } from './components/spreadsheet-adjustment-drawer';
 import { SpreadsheetImportSummaryModal } from './components/spreadsheet-import-summary-modal';
 import type { SpreadsheetPreviewPayload, SpreadsheetPreviewTable } from './components/spreadsheet-preview-types';
@@ -90,7 +91,6 @@ import {
 } from '@/lib/tablas';
 import { cn } from '@/lib/utils';
 import { formatReadableBytes } from '@/lib/tenant-expenses';
-import type { UsageDelta } from '@/lib/tenant-usage';
 import type {
   FileSystemItem,
   FileManagerSelectionChange,
@@ -103,6 +103,7 @@ import type {
   OcrDocumentTableRow,
   SelectionChangeOptions,
   DataInputMethod,
+  DeletedDocumentEntry,
 } from './types';
 import {
   getCachedFileTree,
@@ -167,6 +168,8 @@ type DataFolderTablePreset = {
   columns: DataFolderColumnPayload[];
 };
 
+type SpreadsheetTemplateId = 'auto' | 'certificado' | 'presupuesto_estudio_tv';
+
 const CERTIFICADO_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] = [
   {
     name: 'PMC Resumen',
@@ -204,6 +207,37 @@ const CERTIFICADO_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] = [
       { label: 'Período', fieldKey: 'periodo', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['mes', 'periodo', 'month'] } },
       { label: 'Avance Mensual %', fieldKey: 'avance_mensual_pct', dataType: 'number', required: false, position: 1, config: { excelKeywords: ['avance', 'mensual', '%'] } },
       { label: 'Avance Acumulado %', fieldKey: 'avance_acumulado_pct', dataType: 'number', required: false, position: 2, config: { excelKeywords: ['acumulado', 'financiero', '%'] } },
+    ],
+  },
+];
+
+const PRESUPUESTO_ESTUDIO_TV_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] = [
+  {
+    name: 'Presupuesto',
+    description: 'Tabla principal del presupuesto detectada desde columnas E:M.',
+    columns: [
+      { label: 'Rubro', fieldKey: 'rubro', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['rubro'] } },
+      { label: 'Descripcion', fieldKey: 'descripcion', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['descripcion', 'detalle'] } },
+      { label: 'Unidad', fieldKey: 'unidad', dataType: 'text', required: false, position: 2, config: { excelKeywords: ['unidad', 'und', 'u'] } },
+      { label: 'Cantidad', fieldKey: 'cantidad', dataType: 'number', required: false, position: 3, config: { excelKeywords: ['cantidad', 'cant'] } },
+      { label: 'Precio', fieldKey: 'precio', dataType: 'currency', required: false, position: 4, config: { excelKeywords: ['precio', 'unitario'] } },
+      { label: 'Subtotal', fieldKey: 'subtotal', dataType: 'currency', required: false, position: 5, config: { excelKeywords: ['subtotal', 'total'] } },
+    ],
+  },
+  {
+    name: 'Materiales',
+    description: 'Detalle de materiales/mano de obra/equipos detectado en bloques desde columna P.',
+    columns: [
+      { label: 'Rubro', fieldKey: 'rubro', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['rubro'] } },
+      { label: 'Item', fieldKey: 'item', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['item', 'titulo'] } },
+      { label: 'Item Unidad', fieldKey: 'item_unidad', dataType: 'text', required: false, position: 2, config: { excelKeywords: ['item unidad', 'unidad item'] } },
+      { label: 'Item Cantidad', fieldKey: 'item_cantidad', dataType: 'number', required: false, position: 3, config: { excelKeywords: ['item cantidad', 'cantidad item'] } },
+      { label: 'Seccion', fieldKey: 'seccion', dataType: 'text', required: false, position: 4, config: { excelKeywords: ['seccion', 'materiales', 'mano de obra', 'equipos'] } },
+      { label: 'Descripcion', fieldKey: 'descripcion', dataType: 'text', required: false, position: 5, config: { excelKeywords: ['descripcion', 'detalle'] } },
+      { label: 'Unidad', fieldKey: 'unidad', dataType: 'text', required: false, position: 6, config: { excelKeywords: ['unidad', 'und', 'u'] } },
+      { label: 'Cantidad', fieldKey: 'cantidad', dataType: 'number', required: false, position: 7, config: { excelKeywords: ['cantidad', 'cant'] } },
+      { label: 'Precio', fieldKey: 'precio', dataType: 'currency', required: false, position: 8, config: { excelKeywords: ['precio', 'unitario'] } },
+      { label: 'Subtotal', fieldKey: 'subtotal', dataType: 'currency', required: false, position: 9, config: { excelKeywords: ['subtotal', 'total'] } },
     ],
   },
 ];
@@ -311,6 +345,25 @@ type TableSelectionEntry = {
 const buildPdfPageNumbers = (pageCount: number) =>
   Array.from({ length: Math.max(0, pageCount) }, (_, index) => index + 1);
 
+function formatDateTimeLabel(value: string | null | undefined) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString();
+}
+
+function formatRecoveryTimeLeft(value: string | null | undefined) {
+  if (!value) return 'Sin fecha';
+  const deadline = new Date(value).getTime();
+  if (!Number.isFinite(deadline)) return 'Sin fecha';
+  const diffMs = deadline - Date.now();
+  if (diffMs <= 0) return 'Expirada';
+  const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+  if (diffHours < 24) return `${diffHours}h restantes`;
+  const diffDays = Math.ceil(diffHours / 24);
+  return `${diffDays}d restantes`;
+}
+
 function getConditionalClass(
   value: unknown,
   config?: Record<string, unknown>
@@ -340,6 +393,7 @@ type FileManagerProps = {
   selectedFolderPath?: string | null;
   selectedFilePath?: string | null;
   onSelectionChange?: (selection: FileManagerSelectionChange) => void;
+  externalRecoveryRequestToken?: number;
 };
 
 type TenantPlanLimits = {
@@ -369,6 +423,8 @@ type FileThumbnailProps = {
   downloadStoredDocumentBytes: (storagePath: string) => Promise<Uint8Array>;
   getFileIcon: (mimetype?: string) => ReactNode;
   renderOcrStatusBadge: (item: FileSystemItem, context?: OcrStatusBadgeContext) => ReactNode;
+  /** When true, omit the filename strip on image/PDF previews (e.g. when the parent already shows the name). */
+  hideCaption?: boolean;
 };
 
 type OcrStatusBadgeContext = "tree" | "thumbnail" | "sheet";
@@ -517,6 +573,7 @@ const FileThumbnail = memo(function FileThumbnail({
   downloadStoredDocumentBytes,
   getFileIcon,
   renderOcrStatusBadge,
+  hideCaption = false,
 }: FileThumbnailProps) {
   const storagePath = item.storagePath;
   const fileExt = item.name.toLowerCase().split('.').pop() ?? '';
@@ -687,12 +744,14 @@ const FileThumbnail = memo(function FileThumbnail({
         <div className="absolute left-2 top-2 z-20">
           {renderOcrStatusBadge(item, "thumbnail")}
         </div>
-        <span
-          className="text-sm text-center truncate w-full text-stone-700 absolute bottom-0 left-0 right-0 px-2 py-1 bg-stone-200/50 backdrop-blur-sm"
-          title={item.name}
-        >
-          {item.name}
-        </span>
+        {hideCaption ? null : (
+          <span
+            className="text-sm text-center truncate w-full text-stone-700 absolute bottom-0 left-0 right-0 px-2 py-1 bg-stone-200/50 backdrop-blur-sm"
+            title={item.name}
+          >
+            {item.name}
+          </span>
+        )}
       </div>
     );
   }
@@ -714,6 +773,7 @@ function FileManagerContent({
   selectedFolderPath = null,
   selectedFilePath = null,
   onSelectionChange,
+  externalRecoveryRequestToken = 0,
 }: FileManagerProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const queryClient = useQueryClient();
@@ -811,51 +871,6 @@ function FileManagerContent({
     [obraId]
   );
 
-  const applyUsageDelta = useCallback(
-    async (
-      delta: UsageDelta,
-      options?: { reason?: string; metadata?: Record<string, unknown> }
-    ) => {
-      const storageDelta = Math.trunc(delta.storageBytes ?? 0);
-      const aiDelta = Math.trunc(delta.aiTokens ?? 0);
-      const whatsappDelta = Math.trunc(delta.whatsappMessages ?? 0);
-      if (storageDelta === 0 && aiDelta === 0 && whatsappDelta === 0) {
-        return;
-      }
-      try {
-        const response = await fetch('/api/tenant-usage', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            storageBytesDelta: storageDelta,
-            aiTokensDelta: aiDelta,
-            whatsappMessagesDelta: whatsappDelta,
-            reason: options?.reason,
-            metadata: options?.metadata,
-          }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const errorMessage =
-            typeof payload?.error === 'string'
-              ? payload.error
-              : 'No se pudo actualizar el uso del plan.';
-          toast.error(errorMessage);
-          return;
-        }
-        const mapped = mapUsagePayload(payload);
-        if (mapped) {
-          setUsageInfo(mapped);
-          usageInfoRef.current = mapped;
-        }
-      } catch (error) {
-        console.error('[file-manager] Failed to persist tenant usage', error);
-        toast.error('No se pudo registrar el uso de la organización.');
-      }
-    },
-    [mapUsagePayload]
-  );
-
   const ensureStorageCapacity = useCallback(
     async (bytesNeeded: number) => {
       if (bytesNeeded <= 0) return true;
@@ -936,7 +951,6 @@ function FileManagerContent({
   const loading = isStoreLoading || (needsRefetch(obraId) && !fileTree);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-  const [isAddRowDialogOpen, setIsAddRowDialogOpen] = useState(false);
   const [createFolderParent, setCreateFolderParent] = useState<FileSystemItem | null>(null);
   const [convertFolderTarget, setConvertFolderTarget] = useState<FileSystemItem | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
@@ -944,7 +958,7 @@ function FileManagerContent({
   const [createFolderMode, setCreateFolderMode] = useState<'normal' | 'data' | null>(null);
   const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>('both');
   const [newFolderOcrTemplateId, setNewFolderOcrTemplateId] = useState<string>('');
-  const [newFolderSpreadsheetTemplate, setNewFolderSpreadsheetTemplate] = useState<'' | 'auto' | 'certificado'>('');
+  const [newFolderSpreadsheetTemplate, setNewFolderSpreadsheetTemplate] = useState<'' | SpreadsheetTemplateId>('');
   const [newFolderDescription, setNewFolderDescription] = useState('');
   const [newFolderHasNested, setNewFolderHasNested] = useState(false);
   const [ocrTemplates, setOcrTemplates] = useState<OcrTemplateOption[]>([]);
@@ -967,6 +981,10 @@ function FileManagerContent({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FileSystemItem } | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<FileSystemItem | null>(null);
+  const [isRecoveryDialogOpen, setIsRecoveryDialogOpen] = useState(false);
+  const [deletedEntries, setDeletedEntries] = useState<DeletedDocumentEntry[]>([]);
+  const [loadingDeletedEntries, setLoadingDeletedEntries] = useState(false);
+  const [restoringDeleteId, setRestoringDeleteId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
   const [currentUploadFolder, setCurrentUploadFolder] = useState<FileSystemItem | null>(null);
   // ocrFolderLinks now comes from the global store (documentsState)
@@ -975,6 +993,10 @@ function FileManagerContent({
   const [isGlobalFileDragActive, setIsGlobalFileDragActive] = useState(false);
   const [isTemplateConfiguratorOpen, setIsTemplateConfiguratorOpen] = useState(false);
   const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
+  const [isReprocessingAll, setIsReprocessingAll] = useState(false);
+  const [reprocessAllProgress, setReprocessAllProgress] = useState<{ done: number; total: number; errors: number } | null>(null);
+  const [isReprocessAllConfirmOpen, setIsReprocessAllConfirmOpen] = useState(false);
+  const reprocessAllAbortRef = useRef(false);
   const [isSpreadsheetPreviewOpen, setIsSpreadsheetPreviewOpen] = useState(false);
   const [isSpreadsheetWizardOpen, setIsSpreadsheetWizardOpen] = useState(false);
   const [isSpreadsheetMappingVisible, setIsSpreadsheetMappingVisible] = useState(false);
@@ -1072,6 +1094,7 @@ function FileManagerContent({
   const [ocrViewMode, setOcrViewMode] = useState<'table' | 'documents'>('table');
   const [activeOcrTablaIdOverride, setActiveOcrTablaIdOverride] = useState<string | null>(null);
   const [activeDocumentTablaIdOverride, setActiveDocumentTablaIdOverride] = useState<string | null>(null);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const ITEMS_PER_PAGE = 24;
   const [folderPage, setFolderPage] = useState(1);
 
@@ -2187,6 +2210,113 @@ function FileManagerContent({
     }
   };
 
+  const collectFolderDownloadEntries = useCallback((folder: FileSystemItem | null) => {
+    if (!folder || folder.type !== 'folder') return [] as Array<{ storagePath: string; zipPath: string }>;
+
+    const entries: Array<{ storagePath: string; zipPath: string }> = [];
+
+    const walk = (node: FileSystemItem, currentPath: string[]) => {
+      for (const child of node.children ?? []) {
+        if (child.type === 'file') {
+          if (
+            child.name !== '.keep' &&
+            typeof child.storagePath === 'string' &&
+            child.storagePath.trim().length > 0
+          ) {
+            entries.push({
+              storagePath: child.storagePath,
+              zipPath: [...currentPath, child.name].join('/'),
+            });
+          }
+          continue;
+        }
+        walk(child, [...currentPath, child.name]);
+      }
+    };
+
+    walk(folder, []);
+    return entries;
+  }, []);
+
+  const triggerBlobDownload = useCallback(
+    (blob: Blob, fileName: string) => {
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    },
+    []
+  );
+
+  const handleDownloadAllFromFolder = useCallback(async () => {
+    if (isDownloadingAll) return;
+
+    const folder = selectedFolder?.type === 'folder' ? selectedFolder : null;
+    if (!folder) {
+      toast.error('Selecciona una carpeta para descargar sus archivos.');
+      return;
+    }
+
+    const filesToDownload = collectFolderDownloadEntries(folder);
+
+    if (filesToDownload.length === 0) {
+      toast.error('No hay archivos para descargar en esta carpeta.');
+      return;
+    }
+
+    setIsDownloadingAll(true);
+    let downloadedCount = 0;
+
+    try {
+      const zip = new JSZip();
+
+      for (const file of filesToDownload) {
+        try {
+          const fileBytes = await downloadStoredDocumentBytes(file.storagePath);
+          const normalizedBytes = new Uint8Array(fileBytes.byteLength);
+          normalizedBytes.set(fileBytes);
+          zip.file(file.zipPath, normalizedBytes);
+          downloadedCount += 1;
+        } catch (error) {
+          console.error('[file-manager] Error downloading file for zip', file.storagePath, error);
+        }
+      }
+
+      if (downloadedCount === 0) {
+        toast.error('No se pudo descargar ningun archivo de la carpeta.');
+        return;
+      }
+
+      const zipBlob = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+      });
+      const zipFileName = `${folder.id === 'root'
+        ? 'todos-los-documentos'
+        : normalizeFolderName(folder.name) || 'documentos'
+        }.zip`;
+      triggerBlobDownload(zipBlob, zipFileName);
+
+      if (downloadedCount < filesToDownload.length) {
+        toast.warning(
+          `ZIP generado con ${downloadedCount} de ${filesToDownload.length} archivos (algunos fallaron).`
+        );
+        return;
+      }
+
+      toast.success(
+        `ZIP generado con ${downloadedCount} archivo${downloadedCount === 1 ? '' : 's'}.`
+      );
+    } finally {
+      setIsDownloadingAll(false);
+    }
+  }, [collectFolderDownloadEntries, downloadStoredDocumentBytes, isDownloadingAll, selectedFolder, triggerBlobDownload]);
+
   const createFolderParentPath = useMemo(() => {
     if (!createFolderParent || createFolderParent.id === 'root') return '';
     return getPathSegments(createFolderParent).join('/');
@@ -2338,18 +2468,24 @@ function FileManagerContent({
             : undefined,
       }));
 
-      const tablesToCreate =
+      const templatePresets =
         newFolderSpreadsheetTemplate === 'certificado'
-          ? CERTIFICADO_SPREADSHEET_TABLE_PRESETS.map((preset) => ({
-            name: `${rawFolderName} · ${preset.name}`,
-            description: preset.description,
-            columns: preset.columns,
-          }))
-          : [{
-            name: rawFolderName,
-            description: newFolderDescription.trim() || undefined,
-            columns: defaultColumns,
-          }];
+          ? CERTIFICADO_SPREADSHEET_TABLE_PRESETS
+          : newFolderSpreadsheetTemplate === 'presupuesto_estudio_tv'
+            ? PRESUPUESTO_ESTUDIO_TV_SPREADSHEET_TABLE_PRESETS
+            : null;
+
+      const tablesToCreate = templatePresets
+        ? templatePresets.map((preset) => ({
+          name: `${rawFolderName} · ${preset.name}`,
+          description: preset.description,
+          columns: preset.columns,
+        }))
+        : [{
+          name: rawFolderName,
+          description: newFolderDescription.trim() || undefined,
+          columns: defaultColumns,
+        }];
 
       const createdTablaIds: string[] = [];
       for (const tableDef of tablesToCreate) {
@@ -3084,29 +3220,7 @@ function FileManagerContent({
 
     setUploadingFiles(true);
     setCurrentUploadFolder(folderForUpload ?? fileTree ?? null);
-    let pendingUsageBytes = 0;
-    const uploadedFiles: { path: string; name: string }[] = [];
     const completedGuidedFolderKeys = new Set<string>();
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
-    const reservedFileNames = new Set(
-      (folderForUpload?.children ?? [])
-        .filter((item) => item.type === 'file' && item.name !== '.keep')
-        .map((item) => item.name.toLowerCase())
-    );
-
-    const splitFileName = (name: string) => {
-      const dotIndex = name.lastIndexOf('.');
-      if (dotIndex <= 0) return { stem: name, ext: '' };
-      return { stem: name.slice(0, dotIndex), ext: name.slice(dotIndex) };
-    };
-
-    const withNumericSuffix = (name: string, attempt: number) => {
-      if (attempt <= 1) return name;
-      const { stem, ext } = splitFileName(name);
-      return `${stem} (${attempt})${ext}`;
-    };
     const markGuidedImportCompleted = () => {
       if (!folderForUpload || folderForUpload.type !== 'folder') return;
       const folderKey = getFolderSegmentKey(folderForUpload);
@@ -3122,85 +3236,32 @@ function FileManagerContent({
         const baseStorageFileName = sanitizeStorageFileName(file.name);
         let storageFileName = baseStorageFileName;
         let filePath = `${folderPath}/${storageFileName}`;
-        if (currentUser?.id) {
-          let uploadError: unknown = null;
+        const uploadForm = new FormData();
+        uploadForm.append('file', file);
+        uploadForm.append('folderPath', folderPath);
 
-          for (let attempt = 1; attempt <= 200; attempt += 1) {
-            storageFileName = withNumericSuffix(baseStorageFileName, attempt);
-            const lowerKey = storageFileName.toLowerCase();
-            if (reservedFileNames.has(lowerKey)) {
-              continue;
-            }
-
-            filePath = `${folderPath}/${storageFileName}`;
-            const { error } = await supabase.storage
-              .from('obra-documents')
-              .upload(filePath, file, { upsert: false });
-
-            if (!error) {
-              reservedFileNames.add(lowerKey);
-              uploadError = null;
-              break;
-            }
-
-            uploadError = error;
-            const message = String((error as any)?.message ?? '').toLowerCase();
-            const statusCode = Number((error as any)?.statusCode ?? 0);
-            const isAlreadyExists =
-              statusCode === 409 ||
-              message.includes('already exists') ||
-              message.includes('duplicate') ||
-              message.includes('resource already exists');
-            if (!isAlreadyExists) {
-              break;
-            }
-          }
-
-          if (uploadError) throw uploadError;
-
-          const { error: trackingError } = await supabase
-            .from('obra_document_uploads')
-            .upsert({
-              obra_id: obraId,
-              storage_bucket: 'obra-documents',
-              storage_path: filePath,
-              file_name: storageFileName,
-              uploaded_by: currentUser.id,
-            }, { onConflict: 'storage_path' });
-          if (trackingError) {
-            console.error('Error tracking uploaded document:', trackingError);
-          }
-        } else {
-          const uploadForm = new FormData();
-          uploadForm.append('file', file);
-          uploadForm.append('folderPath', folderPath);
-
-          const uploadResponse = await fetch(`/api/obras/${obraId}/documents/upload`, {
-            method: 'POST',
-            body: uploadForm,
-          });
-          const uploadPayload = await uploadResponse.json().catch(() => ({} as {
-            error?: string;
-            path?: string;
-            fileName?: string;
-          }));
-          if (!uploadResponse.ok) {
-            throw new Error(uploadPayload.error || 'Error al subir archivos');
-          }
-
-          storageFileName =
-            typeof uploadPayload.fileName === 'string' && uploadPayload.fileName.length > 0
-              ? uploadPayload.fileName
-              : baseStorageFileName;
-          filePath =
-            typeof uploadPayload.path === 'string' && uploadPayload.path.length > 0
-              ? uploadPayload.path
-              : `${folderPath}/${storageFileName}`;
-          reservedFileNames.add(storageFileName.toLowerCase());
+        const uploadResponse = await fetch(`/api/obras/${obraId}/documents/upload`, {
+          method: 'POST',
+          body: uploadForm,
+        });
+        const uploadPayload = await uploadResponse.json().catch(() => ({} as {
+          error?: string;
+          path?: string;
+          fileName?: string;
+        }));
+        if (!uploadResponse.ok) {
+          throw new Error(uploadPayload.error || 'Error al subir archivos');
         }
 
-        pendingUsageBytes += file.size ?? 0;
-        uploadedFiles.push({ path: filePath, name: storageFileName });
+        storageFileName =
+          typeof uploadPayload.fileName === 'string' && uploadPayload.fileName.length > 0
+            ? uploadPayload.fileName
+            : baseStorageFileName;
+        filePath =
+          typeof uploadPayload.path === 'string' && uploadPayload.path.length > 0
+            ? uploadPayload.path
+            : `${folderPath}/${storageFileName}`;
+
         if (shouldCompleteGuidedStepOnUpload) {
           markGuidedImportCompleted();
         }
@@ -3309,12 +3370,10 @@ function FileManagerContent({
                   toast.info(`Extracción OCR cancelada para ${file.name}`);
                   continue;
                 }
-                const dataUrl = await rasterizePdfPagesToDataUrl(array, selectedPages);
-                fd.append('imageDataUrl', dataUrl);
                 fd.append('selectedPages', JSON.stringify(selectedPages));
               } catch (pdfErr) {
-                console.error('PDF rasterization failed', pdfErr);
-                toast.error(`No se pudo preparar el PDF ${file.name} para OCR.`);
+                console.error('PDF page selection failed', pdfErr);
+                toast.error(`No se pudo preparar la selección de páginas para ${file.name}.`);
                 continue;
               }
             } else if (file.type.startsWith('image/')) {
@@ -3353,14 +3412,19 @@ function FileManagerContent({
             const out = await importRes.json().catch(() => ({} as any));
             if (!importRes.ok) {
               console.error('Tabla OCR import failed', out);
-              const limitMessage =
-                typeof out?.error === 'string'
-                  ? out.error
-                  : 'Superaste el límite de tokens de IA de tu plan.';
-              if (importRes.status === 402) {
-                toast.warning(limitMessage);
+              const serverMessage = typeof out?.error === 'string' ? out.error : null;
+              if (importRes.status === 413) {
+                toast.warning(
+                  serverMessage ??
+                  'El archivo o las páginas seleccionadas son demasiado grandes para OCR. Probá con menos páginas.'
+                );
+              } else if (importRes.status === 402) {
+                toast.warning(serverMessage ?? 'Superaste el límite de tokens de IA de tu plan.');
               } else {
-                toast.error('No se pudieron extraer datos para las tablas OCR');
+                toast.error(
+                  serverMessage ??
+                  `No se pudieron extraer datos para las tablas OCR (HTTP ${importRes.status}).`
+                );
               }
               continue;
             }
@@ -3387,18 +3451,8 @@ function FileManagerContent({
 
       toast.success(`${filesArray.length} archivo(s) subido(s) correctamente`);
 
-      if (pendingUsageBytes > 0) {
-        await applyUsageDelta(
-          { storageBytes: pendingUsageBytes },
-          {
-            reason: 'storage_upload',
-            metadata: { folderPath, files: uploadedFiles },
-          }
-        );
-        pendingUsageBytes = 0;
-      }
-
       await refreshFileTreeDerivedData();
+      void fetchUsageInfo();
       if (completedGuidedFolderKeys.size > 0) {
         setGuidedImportedFolderKeys((current) => {
           const next = new Set(current);
@@ -3413,7 +3467,7 @@ function FileManagerContent({
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
     }
-  }, [applyUsageDelta, buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, getAutoSelectedSpreadsheetTablaIds, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, sanitizeStorageFileName, selectedFolder, supabase]);
+  }, [buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, fetchUsageInfo, getAutoSelectedSpreadsheetTablaIds, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, sanitizeStorageFileName, selectedFolder]);
 
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
@@ -3576,52 +3630,104 @@ function FileManagerContent({
     setIsCreateFolderOpen(true);
   }, [fileTree]);
 
+  const fetchDeletedEntries = useCallback(async () => {
+    setLoadingDeletedEntries(true);
+    try {
+      const response = await fetch(`/api/obras/${obraId}/documents/deletes?view=active&limit=150`, {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => ({} as { error?: string; items?: DeletedDocumentEntry[] }));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No se pudo cargar la papelera');
+      }
+      setDeletedEntries(Array.isArray(payload.items) ? payload.items : []);
+    } catch (error) {
+      console.error('Error loading deleted entries:', error);
+      toast.error('No se pudo cargar la papelera');
+    } finally {
+      setLoadingDeletedEntries(false);
+    }
+  }, [obraId]);
+
+  const openRecoveryDialog = useCallback(() => {
+    setIsRecoveryDialogOpen(true);
+    void fetchDeletedEntries();
+  }, [fetchDeletedEntries]);
+
+  const openTrashPage = useCallback(() => {
+    router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
+  }, [obraId, router]);
+
+  const lastExternalRecoveryRequestTokenRef = useRef(externalRecoveryRequestToken);
+  useEffect(() => {
+    if (externalRecoveryRequestToken === lastExternalRecoveryRequestTokenRef.current) {
+      return;
+    }
+    lastExternalRecoveryRequestTokenRef.current = externalRecoveryRequestToken;
+    if (externalRecoveryRequestToken > 0) {
+      openRecoveryDialog();
+    }
+  }, [externalRecoveryRequestToken, openRecoveryDialog]);
+
+  const resolveItemStoragePath = useCallback((item: FileSystemItem) => {
+    if (item.type === 'file') return item.storagePath ?? '';
+    if (item.storagePath) return item.storagePath;
+    if (item.id === 'root') return obraId;
+    return `${obraId}/${getPathSegments(item).join('/')}`;
+  }, [obraId]);
+
+  const handleRestoreDeletedEntry = useCallback(async (entryId: string) => {
+    setRestoringDeleteId(entryId);
+    try {
+      const response = await fetch(`/api/obras/${obraId}/documents/deletes/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteId: entryId }),
+      });
+      const payload = await response.json().catch(() => ({} as {
+        error?: string;
+        bytesRestored?: number;
+      }));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No se pudo restaurar el elemento');
+      }
+
+      await refreshFileTreeDerivedData();
+      void fetchUsageInfo();
+      await fetchDeletedEntries();
+      toast.success('Elemento restaurado correctamente');
+    } catch (error) {
+      console.error('Error restoring deleted entry:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo restaurar el elemento');
+    } finally {
+      setRestoringDeleteId(null);
+    }
+  }, [fetchDeletedEntries, fetchUsageInfo, obraId, refreshFileTreeDerivedData]);
+
   const handleDelete = async (item: FileSystemItem) => {
     try {
-      const deletedPaths: string[] = [];
-      let bytesFreed = 0;
-      if (item.type === 'file') {
-        if (item.storagePath) {
-          bytesFreed = item.size ?? 0;
-          deletedPaths.push(item.storagePath);
-          const { error } = await supabase.storage
-            .from('obra-documents')
-            .remove([item.storagePath]);
+      const storagePath = resolveItemStoragePath(item);
+      if (!storagePath) {
+        toast.error('No se pudo resolver la ruta del elemento');
+        return;
+      }
 
-          if (error) throw error;
-          toast.success('Archivo eliminado correctamente');
-        }
-      } else {
-        const folderStoragePath = item.storagePath ?? (item.id === 'root' ? obraId : `${obraId}/${getPathSegments(item).join('/')}`);
-        const foldersToScan = [folderStoragePath];
-        const filesToDelete: string[] = [];
-        while (foldersToScan.length > 0) {
-          const currentFolder = foldersToScan.shift()!;
-          const { data: entries, error: listError } = await supabase.storage
-            .from('obra-documents')
-            .list(currentFolder, { limit: 1000 });
-          if (listError) throw listError;
-          for (const entry of entries ?? []) {
-            const isFolder = !entry.metadata;
-            const fullPath = `${currentFolder}/${entry.name}`;
-            if (isFolder) {
-              foldersToScan.push(fullPath);
-              continue;
-            }
-            deletedPaths.push(fullPath);
-            bytesFreed += entry.metadata?.size ?? 0;
-            filesToDelete.push(fullPath);
-          }
-        }
-
-        if (filesToDelete.length > 0) {
-          const { error: deleteError } = await supabase.storage
-            .from('obra-documents')
-            .remove(filesToDelete);
-          if (deleteError) throw deleteError;
-        }
-
-        toast.success('Carpeta y contenido eliminados correctamente');
+      const response = await fetch(`/api/obras/${obraId}/documents/deletes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemType: item.type,
+          storagePath,
+        }),
+      });
+      const payload = await response.json().catch(() => ({} as {
+        error?: string;
+        bytesDeleted?: number;
+        deletedPaths?: string[];
+        recoverUntil?: string;
+      }));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No se pudo enviar a papelera');
       }
 
       if (selectedFolder?.id === item.id) {
@@ -3636,44 +3742,26 @@ function FileManagerContent({
         setPreviewUrl(null);
       }
 
-      if (deletedPaths.length > 0) {
-        const { error: trackingDeleteError } = await supabase
-          .from('obra_document_uploads')
-          .delete()
-          .eq('obra_id', obraId)
-          .in('storage_path', deletedPaths);
-        if (trackingDeleteError) {
-          console.error('Error cleaning upload tracking rows:', trackingDeleteError);
-        }
-
-        const cleanupRes = await fetch(`/api/obras/${obraId}/extracted-data/cleanup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ docPaths: deletedPaths }),
-        });
-        if (!cleanupRes.ok) {
-          const out = await cleanupRes.json().catch(() => ({}));
-          throw new Error(out?.error || 'No se pudieron limpiar los datos extraídos');
-        }
-      }
-
       await refreshFileTreeDerivedData();
+      void fetchUsageInfo();
 
-      if (bytesFreed > 0) {
-        await applyUsageDelta(
-          { storageBytes: -bytesFreed },
-          {
-            reason: 'storage_delete',
-            metadata: { paths: deletedPaths, itemId: item.id },
-          }
-        );
+      if (isRecoveryDialogOpen) {
+        await fetchDeletedEntries();
       }
+
+      const recoverUntilLabel = formatDateTimeLabel(
+        typeof payload.recoverUntil === 'string' ? payload.recoverUntil : null
+      );
+      toast.success(
+        item.type === 'folder'
+          ? `Carpeta enviada a papelera. Recuperable hasta ${recoverUntilLabel}.`
+          : `Archivo enviado a papelera. Recuperable hasta ${recoverUntilLabel}.`
+      );
     } catch (error) {
       console.error('Error deleting:', error);
-      toast.error('Error al eliminar el elemento');
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar el elemento');
     }
   };
-
   const confirmDelete = useCallback((item: FileSystemItem) => {
     setItemToDelete(item);
     setIsDeleteDialogOpen(true);
@@ -3859,7 +3947,7 @@ function FileManagerContent({
                 event.stopPropagation();
                 confirmDelete(item);
               }}
-              aria-label={`Eliminar ${item.type === 'folder' ? 'carpeta' : 'archivo'}`}
+              aria-label={`Enviar a papelera ${item.type === 'folder' ? 'carpeta' : 'archivo'}`}
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -4055,6 +4143,9 @@ function FileManagerContent({
           link.columns.forEach((column) => {
             mapped[column.fieldKey] = data[column.fieldKey];
           });
+          if (typeof row.source === 'string') {
+            mapped.source = row.source;
+          }
           return mapped;
         });
       map.set(link.tablaId, rows);
@@ -4191,6 +4282,7 @@ function FileManagerContent({
       row.id = row.id || crypto.randomUUID();
       row.__docPath = activeDocument.storagePath ?? '';
       row.__docFileName = activeDocument.name ?? '';
+      row.source = 'manual';
       return row;
     };
 
@@ -4203,6 +4295,7 @@ function FileManagerContent({
 
     return {
       tableId: `ocr-doc-${obraId}-${activeDocument.id}-${activeDocumentOcrLink.tablaId}`,
+      editMode: 'active-cell',
       title: `Datos de ${activeDocument.name}${activeDocumentOcrLink?.tablaName ? ` · ${activeDocumentOcrLink.tablaName}` : ''}`,
       columns: tablaColumnDefs,
       defaultRows: activeDocumentOcrRows,
@@ -4295,6 +4388,13 @@ function FileManagerContent({
 
   const activeOcrTablaId = activeFolderLink?.tablaId ?? null;
 
+  const handleOpenOcrReport = useCallback(() => {
+    if (!obraId || !activeOcrTablaId) return;
+    router.push(
+      `/excel/${encodeURIComponent(obraId)}/tabla/${encodeURIComponent(activeOcrTablaId)}/reporte`
+    );
+  }, [activeOcrTablaId, obraId, router]);
+
   const handleSaveTablaRows = useCallback(
     async ({
       rows,
@@ -4329,27 +4429,10 @@ function FileManagerContent({
     [activeOcrTablaId, buildFileTree, obraId]
   );
 
-  const handleAddManualRow = useCallback(() => {
-    const tablaId = activeOcrTablaId;
-    if (!tablaId) {
-      toast.error('No se encontró la tabla asociada');
-      return;
-    }
-    if (!activeFolderLink?.columns || activeFolderLink.columns.length === 0) {
-      toast.error('La tabla no tiene columnas configuradas');
-      return;
-    }
-    setIsAddRowDialogOpen(true);
-  }, [activeFolderLink?.columns, activeOcrTablaId]);
-
   const handleQuickUploadClick = useCallback(() => {
     const input = document.getElementById('file-upload') as HTMLInputElement | null;
     input?.click();
   }, []);
-
-  const handleRowAdded = useCallback(async () => {
-    await refreshOcrFolderLinks({ skipCache: true });
-  }, [refreshOcrFolderLinks]);
 
   const handleSaveSchema = useCallback(async () => {
     const tablaId = activeOcrTablaId;
@@ -4442,6 +4525,9 @@ function FileManagerContent({
       }
       if (typeof data.__docFileName === 'string') {
         mapped.__docFileName = data.__docFileName;
+      }
+      if (typeof row.source === 'string') {
+        mapped.source = row.source;
       }
       return mapped;
     });
@@ -4696,6 +4782,25 @@ function FileManagerContent({
     const allColumns: ColumnDef<OcrDocumentTableRow>[] = includeDocSourceColumn
       ? [docSourceColumn, ...tablaColumnDefs]
       : [...tablaColumnDefs];
+    const allowInlineAddRows = canEditTabla && activeFolderLink?.dataInputMethod !== 'ocr';
+    const emptyStateMessage =
+      activeFolderLink?.dataInputMethod === 'manual'
+        ? 'Sin filas todavía. Usá "Agregar fila" para crear una fila vacía.'
+        : activeFolderLink?.dataInputMethod === 'both'
+          ? 'Sin datos todavía. Podés agregar una fila vacía o subir un documento.'
+          : 'Sin datos extraídos todavía. Subí documentos para extraer datos.';
+    const createInlineRow = () => {
+      const row = createRowFromColumns<OcrDocumentTableRow>(tablaColumnDefs);
+      row.id = row.id || crypto.randomUUID();
+      row.source = 'manual';
+      if (ocrDocumentFilterPath) {
+        row.__docPath = ocrDocumentFilterPath;
+        if (ocrDocumentFilterName) {
+          row.__docFileName = ocrDocumentFilterName;
+        }
+      }
+      return row;
+    };
 
     // Build initial empty column filters for all tabla columns
     const buildEmptyColumnFilters = (): Record<string, string | { min: string; max: string }> => {
@@ -4712,10 +4817,13 @@ function FileManagerContent({
 
     return {
       tableId: `ocr-orders-${obraId}-${selectedFolder?.id ?? 'none'}-${activeOcrTablaId ?? 'none'}`,
+      editMode: 'active-cell',
       // title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns: allColumns,
-      allowAddRows: false,
+      allowAddRows: allowInlineAddRows,
+      revealNewRowOnAdd: true,
+      createRow: allowInlineAddRows ? createInlineRow : undefined,
       enableColumnResizing: true,
       createFilters: (): OcrDocumentTableFilters => ({
         docPath: ocrDocumentFilterPath,
@@ -4976,25 +5084,40 @@ function FileManagerContent({
         return true;
       },
       defaultRows: ocrTableRows,
-      emptyStateMessage: 'Sin datos disponibles para esta tabla.',
+      emptyStateMessage,
       showInlineSearch: true,
-      toolbarActions: activeOcrTablaId && activeFolderLinks.length > 1 ? (
-        <Select
-          value={activeOcrTablaId}
-          onValueChange={(value) => setActiveOcrTablaIdOverride(value)}
-        >
-          <SelectTrigger className="h-8 w-[280px]">
-            <SelectValue placeholder="Seleccionar tabla" />
-          </SelectTrigger>
-          <SelectContent>
-            {activeFolderLinks.map((link) => (
-              <SelectItem key={link.tablaId} value={link.tablaId}>
-                {link.tablaName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : null,
+      toolbarMode: 'extras',
+      toolbarActions: (
+        <div className="space-y-2">
+          {activeOcrTablaId && activeFolderLinks.length > 1 ? (
+            <Select
+              value={activeOcrTablaId}
+              onValueChange={(value) => setActiveOcrTablaIdOverride(value)}
+            >
+              <SelectTrigger className="h-8 w-full">
+                <SelectValue placeholder="Seleccionar tabla" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeFolderLinks.map((link) => (
+                  <SelectItem key={link.tablaId} value={link.tablaId}>
+                    {link.tablaName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 w-full justify-start rounded-sm px-2 py-1.5 text-sm font-normal"
+            onClick={handleOpenOcrReport}
+            disabled={!activeOcrTablaId}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Generar reporte
+          </Button>
+        </div>
+      ),
       rowClassName: (row) => {
         for (const col of tablaColumns) {
           const style = getConditionalClass(row[col.fieldKey], col.config);
@@ -5004,25 +5127,13 @@ function FileManagerContent({
         return undefined;
       },
       onSave: canEditTabla ? handleSaveTablaRows : undefined,
-      footerActions: activeFolderLink ? (
+      footerActions: activeFolderLink && activeFolderLink.dataInputMethod !== 'manual' ? (
         <div className="flex items-center gap-2">
           <Button
             type="button"
             size="sm"
             variant="secondary"
-            onClick={handleAddManualRow}
-            disabled={activeFolderLink.dataInputMethod === 'ocr'}
-            className="gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Agregar fila
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
             onClick={handleQuickUploadClick}
-            disabled={activeFolderLink.dataInputMethod === 'manual'}
             className="gap-2"
           >
             <Upload className="w-4 h-4" />
@@ -5031,7 +5142,7 @@ function FileManagerContent({
         </div>
       ) : null,
     };
-  }, [activeFolderLink, activeFolderLinks, activeOcrTablaId, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleAddManualRow, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
+  }, [activeFolderLink, activeFolderLinks, activeOcrTablaId, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleOpenOcrReport, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
 
   const handleRetryDocumentOcr = useCallback(
     async (doc: FileSystemItem | null) => {
@@ -5134,12 +5245,10 @@ function FileManagerContent({
               toast.info(`Reproceso cancelado para ${doc.name}`);
               return;
             }
-            const imageDataUrl = await rasterizePdfPagesToDataUrl(pdfBytes, selectedPages);
-            formData.append('imageDataUrl', imageDataUrl);
             formData.append('selectedPages', JSON.stringify(selectedPages));
           } catch (error) {
-            console.error('Existing PDF rasterization failed', error);
-            toast.error(`No se pudo preparar el PDF ${doc.name} para OCR.`);
+            console.error('Existing PDF page selection failed', error);
+            toast.error(`No se pudo preparar la selección de páginas para ${doc.name}.`);
             return;
           }
         }
@@ -5154,14 +5263,18 @@ function FileManagerContent({
         );
         const payload = await response.json().catch(() => ({} as { error?: string }));
         if (!response.ok) {
-          const limitMessage =
-            typeof payload?.error === 'string'
-              ? payload.error
-              : 'Superaste el límite de tokens de IA de tu plan.';
-          if (response.status === 402) {
-            toast.warning(limitMessage);
+          const serverMessage = typeof payload?.error === 'string' ? payload.error : null;
+          if (response.status === 413) {
+            toast.warning(
+              serverMessage ??
+              'El archivo o las páginas seleccionadas son demasiado grandes para OCR. Probá con menos páginas.'
+            );
+          } else if (response.status === 402) {
+            toast.warning(serverMessage ?? 'Superaste el límite de tokens de IA de tu plan.');
           } else {
-            toast.error(limitMessage);
+            toast.error(
+              serverMessage ?? `No se pudo reprocesar el documento (HTTP ${response.status}).`
+            );
           }
           return;
         }
@@ -5188,9 +5301,105 @@ function FileManagerContent({
     [buildFileTree, fetchSpreadsheetPreview, getAutoSelectedSpreadsheetTablaIds, obraId, openSpreadsheetPreview, openTableSelectionDialog, resolveOcrLinksForDocument]
   );
 
+  // ── Bulk reprocess all documents in the current OCR folder ──
+  const reprocessableFiles = useMemo(() => {
+    if (!selectedFolder?.ocrEnabled) return [] as FileSystemItem[];
+    return selectedFolderFiles.filter((file) => {
+      if (!file.storagePath) return false;
+      const links = resolveOcrLinksForDocument(file);
+      return links.length > 0;
+    });
+  }, [selectedFolder?.ocrEnabled, selectedFolderFiles, resolveOcrLinksForDocument]);
+
+  const handleReprocessAll = useCallback(async () => {
+    const docs = reprocessableFiles;
+    if (docs.length === 0) {
+      toast.error('No hay documentos para reprocesar en esta carpeta.');
+      return;
+    }
+
+    setIsReprocessingAll(true);
+    reprocessAllAbortRef.current = false;
+    setReprocessAllProgress({ done: 0, total: docs.length, errors: 0 });
+
+    let errorCount = 0;
+    let successCount = 0;
+
+    for (let i = 0; i < docs.length; i++) {
+      if (reprocessAllAbortRef.current) {
+        toast.info('Reproceso masivo cancelado.');
+        break;
+      }
+      const doc = docs[i];
+      try {
+        const links = resolveOcrLinksForDocument(doc);
+        if (links.length === 0) continue;
+        const uniqueTablaIds = [...new Set(links.map((link) => link.tablaId))];
+
+        const formData = new FormData();
+        formData.append('existingBucket', 'obra-documents');
+        formData.append('existingPath', doc.storagePath!);
+        formData.append('existingFileName', doc.name);
+        formData.append('tablaIds', JSON.stringify(uniqueTablaIds));
+
+        const response = await fetch(
+          `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
+          { method: 'POST', body: formData }
+        );
+        const payload = await response.json().catch(() => ({} as { error?: string }));
+
+        if (!response.ok) {
+          errorCount++;
+          if (response.status === 413) {
+            const sizeMsg =
+              typeof payload?.error === 'string'
+                ? payload.error
+                : `El documento ${doc.name} es demasiado grande para OCR.`;
+            toast.warning(sizeMsg);
+            continue;
+          }
+          if (response.status === 402) {
+            // Token limit reached — stop the entire batch
+            const limitMsg = typeof payload?.error === 'string' ? payload.error : 'Superaste el límite de tokens de IA de tu plan.';
+            toast.warning(limitMsg);
+            break;
+          }
+          console.error(`Reprocess failed for ${doc.name}`, payload);
+        } else {
+          successCount++;
+        }
+      } catch (error) {
+        errorCount++;
+        console.error(`Error reprocessing ${doc.name}`, error);
+      }
+      setReprocessAllProgress({ done: i + 1, total: docs.length, errors: errorCount });
+    }
+
+    // Refresh data after bulk reprocess
+    try {
+      await refreshFileTreeDerivedData();
+    } catch { /* swallow */ }
+
+    if (successCount > 0) {
+      toast.success(`${successCount} documento${successCount !== 1 ? 's' : ''} reprocesado${successCount !== 1 ? 's' : ''} exitosamente.`);
+    }
+    if (errorCount > 0) {
+      toast.error(`${errorCount} documento${errorCount !== 1 ? 's' : ''} fallaron al reprocesar.`);
+    }
+
+    setIsReprocessingAll(false);
+    setReprocessAllProgress(null);
+    setIsReprocessAllConfirmOpen(false);
+  }, [reprocessableFiles, resolveOcrLinksForDocument, obraId, refreshFileTreeDerivedData]);
+
+  const handleCancelReprocessAll = useCallback(() => {
+    reprocessAllAbortRef.current = true;
+  }, []);
+
   const ocrOrderItemsTableConfig = useMemo<FormTableConfig<OcrOrderItemRow, OcrOrderItemFilters>>(() => {
     return {
       tableId: `ocr-order-items-${obraId}-${selectedFolder?.id ?? 'none'}`,
+      editMode: 'active-cell',
       title: 'Ítems OCR',
       searchPlaceholder: 'Buscar ítems...',
       columns: [
@@ -5249,6 +5458,7 @@ function FileManagerContent({
     const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
     const showArchivosTablaToggle = selectedFolder.ocrEnabled && hasTablaSchema && activeFolderLink?.dataInputMethod !== "manual";
     const folderLabel = selectedFolder.id === 'root' ? 'Todos los documentos' : selectedFolder.name;
+    const showDownloadAllButton = collectFolderDownloadEntries(selectedFolder).length > 0;
     const folderContentHeader = (
       <div className="mb-0">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -5263,7 +5473,7 @@ function FileManagerContent({
             }
           >
             {/* Tail on the right */}
-            <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? "h-[54px] mb-[1px]" : "")} />
+            <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[53px] mb-[2px]" : documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[54px] mb-[1px]")} />
 
             {selectedFolder.ocrEnabled ? (
               <Table2 className={`w-5 h-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
@@ -5278,6 +5488,50 @@ function FileManagerContent({
                 ? `(${ocrFilteredRowCount} filas)`
                 : `(${files.length} archivos)`}
             </span>
+            {showDownloadAllButton && documentViewMode === "cards" && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleDownloadAllFromFolder()}
+                disabled={isDownloadingAll}
+                className="ml-1 gap-1.5"
+              >
+                {isDownloadingAll ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Generando ZIP...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    Descargar todos
+                  </>
+                )}
+              </Button>
+            )}
+            {selectedFolder.ocrEnabled && reprocessableFiles.length > 0 && documentViewMode === "cards" && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsReprocessAllConfirmOpen(true)}
+                disabled={isReprocessingAll}
+                className="ml-1 gap-1.5"
+              >
+                {isReprocessingAll ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Reprocesando{reprocessAllProgress ? ` (${reprocessAllProgress.done}/${reprocessAllProgress.total})` : '...'}
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Reprocesar todos
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           {/* RIGHT TAB */}
@@ -5342,66 +5596,8 @@ function FileManagerContent({
             {!hasTablaSchema ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
                 <Table2 className="w-10 h-10 mb-3 text-stone-300" />
-                <p>Esta carpeta de datos todavía no tiene columnas configuradas.</p>
-                <p>Configuralas desde la pestaña Tablas para ver los datos acá.</p>
-              </div>
-            ) : ocrTableRows.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
-                <Table2 className="w-10 h-10 mb-3 text-stone-300" />
-                {activeFolderLink?.dataInputMethod === 'manual' ? (
-                  <>
-                    <p>Esta tabla no tiene filas todavía.</p>
-                    <p className="text-xs text-stone-400 mt-1">Agregá filas manualmente usando el botón de abajo.</p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleAddManualRow}
-                      className="mt-4 gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Agregar fila
-                    </Button>
-                  </>
-                ) : activeFolderLink?.dataInputMethod === 'ocr' ? (
-                  <>
-                    <p>No hay filas extraídas para esta tabla.</p>
-                    <p className="text-xs text-stone-400 mt-1">Subí documentos para extraer datos automáticamente.</p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => document.getElementById('file-upload')?.click()}
-                      className="mt-4 gap-2"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Subir documentos
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <p>Esta tabla no tiene filas todavía.</p>
-                    <p className="text-xs text-stone-400 mt-1">Agregá filas manualmente o subí documentos para extraer datos.</p>
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleAddManualRow}
-                        className="gap-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Agregar fila
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => document.getElementById('file-upload')?.click()}
-                        className="gap-2"
-                      >
-                        <Upload className="w-4 h-4" />
-                        Subir documentos
-                      </Button>
-                    </div>
-                  </>
-                )}
+                <p>Esta carpeta de datos todavia no tiene columnas configuradas.</p>
+                <p>Configuralas desde la pestana Tablas para ver los datos aca.</p>
               </div>
             ) : (
               <div className="flex flex-col h-full">
@@ -5429,7 +5625,6 @@ function FileManagerContent({
         </div>
       );
     }
-
     const folderBody = (() => {
       if (folders.length === 0 && files.length === 0) {
         return (
@@ -6594,7 +6789,7 @@ function FileManagerContent({
                   </div>
                   <Select
                     value={newFolderSpreadsheetTemplate || undefined}
-                    onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as 'auto' | 'certificado')}
+                    onValueChange={(value) => setNewFolderSpreadsheetTemplate(value as SpreadsheetTemplateId)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccioná una plantilla XLSX" />
@@ -6602,6 +6797,7 @@ function FileManagerContent({
                     <SelectContent>
                       <SelectItem value="auto">Auto (detectar por columnas)</SelectItem>
                       <SelectItem value="certificado">Certificado (certexampleplayground)</SelectItem>
+                      <SelectItem value="presupuesto_estudio_tv">Presupuesto Estudio TV (RUBRO + Materiales)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -6798,17 +6994,6 @@ function FileManagerContent({
         onOpenChange={setIsTemplateConfiguratorOpen}
         onTemplateCreated={handleTemplateConfiguratorCreated}
       />
-
-      {activeOcrTablaId && activeFolderLink?.columns && (
-        <AddRowDialog
-          open={isAddRowDialogOpen}
-          onOpenChange={setIsAddRowDialogOpen}
-          columns={activeFolderLink.columns}
-          tablaId={activeOcrTablaId}
-          obraId={obraId}
-          onRowAdded={handleRowAdded}
-        />
-      )}
 
       <Dialog open={isSchemaDialogOpen} onOpenChange={setIsSchemaDialogOpen}>
         <DialogContent className="max-w-5xl">
@@ -7013,21 +7198,173 @@ function FileManagerContent({
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={isRecoveryDialogOpen}
+        onOpenChange={(open) => {
+          setIsRecoveryDialogOpen(open);
+          if (open) {
+            void fetchDeletedEntries();
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Papelera de documentos</DialogTitle>
+            <DialogDescription>
+              Podes recuperar archivos y carpetas durante 30 dias.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto pr-1">
+            {loadingDeletedEntries ? (
+              <div className="py-10 text-sm text-stone-500 text-center">Cargando papelera...</div>
+            ) : deletedEntries.length === 0 ? (
+              <div className="py-10 text-sm text-stone-500 text-center">
+                No hay elementos en papelera.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {deletedEntries.map((entry) => {
+                  const visibleTreeEntries = (entry.treeEntries ?? []).filter((treeEntry) => {
+                    const lowerName = treeEntry.name.toLowerCase();
+                    const lowerPath = treeEntry.path.toLowerCase();
+                    return lowerName !== '.keep' && !lowerPath.endsWith('/.keep');
+                  });
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="rounded-lg border border-stone-200 bg-stone-50/40 p-3.5 flex items-start justify-between gap-3 relative"
+                    >
+                      <div className="min-w-0 flex items-end justify-between w-full">
+                        <div className="flex flex-wrap items-start gap-1.5 relative flex-col ml-2 mt-4 -mb-4">
+                          {entry.itemType === 'folder' && <FolderFront firstStopColor="#e2e8f0" secondStopColor="#cad5e2" className="w-[300px] h-[200px] shrink-0 absolute -left-3 -top-3 bg-slate-" />}
+                          <div className="z-10 flex flex-col w-[280px] h-[200px] overflow-hidden gap-1">
+
+                            <p className="text-md font-semibold text-stone-900 truncate z-10 shrink-0">
+                              {entry.fileName.toLocaleUpperCase()}
+                            </p>
+                            {entry.itemType === 'folder' && (
+                              <span className="z-10 ml-auto">
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
+                                  {entry.fileCount} archivos
+                                </Badge>
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
+                                  {entry.nestedFolderCount ?? 0} subcarpetas
+                                </Badge>
+                              </span>
+                            )}
+                            {entry.itemType === 'folder' && visibleTreeEntries.length > 0 ? (
+                              <div className=" z-10">
+                                <div className="max-h-40 space-y-0.5 overflow-y-auto p-2">
+                                  {visibleTreeEntries.map((treeEntry) => (
+                                    <div
+                                      key={`${entry.id}-${treeEntry.path}`}
+                                      className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-xs text-stone-600"
+                                      style={{ paddingLeft: `${Math.max(0, treeEntry.depth - 1) * 14 + 4}px` }}
+                                    >
+                                      {treeEntry.itemType === 'folder' ? (
+                                        <FolderIcon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                                      ) : (
+                                        <File className="h-3.5 w-3.5 shrink-0 text-stone-500" />
+                                      )}
+                                      <span className="truncate">{treeEntry.name}</span>
+                                      {treeEntry.itemType === 'file' &&
+                                        typeof treeEntry.fileSizeBytes === 'number' &&
+                                        treeEntry.fileSizeBytes > 0 ? (
+                                        <span className="shrink-0 text-[11px] text-stone-400">
+                                          {formatReadableBytes(treeEntry.fileSizeBytes)}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {entry.itemType !== 'folder' ? (
+                              <div className="relative min-h-0 flex-1 w-full overflow-hidden rounded-md border border-stone-200 bg-stone-100">
+                                <FileThumbnail
+                                  hideCaption
+                                  item={{
+                                    id: entry.id,
+                                    name: entry.fileName,
+                                    type: 'file',
+                                    storagePath: entry.storagePath,
+                                    size: entry.fileSizeBytes ?? undefined,
+                                  }}
+                                  getDocumentSignedUrl={getDocumentSignedUrl}
+                                  downloadStoredDocumentBytes={downloadStoredDocumentBytes}
+                                  getFileIcon={getFileIcon}
+                                  renderOcrStatusBadge={renderOcrStatusBadge}
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+
+                        </div>
+
+                        <div className="flex flex-col items-start justify-start text-xs text-stone-600">
+                          <span className="truncate">Eliminado por: {entry.deletedByLabel ?? entry.deletedByUserId ?? 'Sistema'}</span>
+                          <span className="truncate">Eliminado: {formatDateTimeLabel(entry.deletedAt)}</span>
+                          <span className="truncate sm:col-span-2">
+                            Recuperable hasta: {formatDateTimeLabel(entry.recoverUntil)} ({formatRecoveryTimeLeft(entry.recoverUntil)})
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="self-start absolute top-0 right-0"
+                        disabled={!entry.recoverable || restoringDeleteId === entry.id}
+                        onClick={() => void handleRestoreDeletedEntry(entry.id)}
+                      >
+                        {restoringDeleteId === entry.id
+                          ? 'Restaurando...'
+                          : entry.recoverable
+                            ? 'Restaurar'
+                            : 'Expirado'}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setIsRecoveryDialogOpen(false);
+                openTrashPage();
+              }}
+            >
+              Ver historial completo
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setIsRecoveryDialogOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar Eliminación</DialogTitle>
+            <DialogTitle>Confirmar envio a papelera</DialogTitle>
           </DialogHeader>
           <div className="p-4">
             <p className="text-sm text-stone-500">
-              ¿Estás seguro de que deseas eliminar{' '}
+              Queres mover a papelera{' '}
               <span className="font-semibold text-stone-800">{itemToDelete?.name}</span>?
               {itemToDelete?.type === 'folder' && (
                 <span className="block mt-2 text-red-600">
-                  Esto eliminará la carpeta y todo su contenido.
+                  Se movera la carpeta con todo su contenido.
                 </span>
               )}
+              <span className="block mt-2 text-stone-500">
+                Podes restaurarlo durante 30 dias desde la papelera.
+              </span>
             </p>
           </div>
           <DialogFooter>
@@ -7044,8 +7381,54 @@ function FileManagerContent({
                 }
               }}
             >
-              Eliminar
+              Enviar a papelera
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Reprocess All Confirmation Dialog */}
+      <Dialog open={isReprocessAllConfirmOpen} onOpenChange={(open) => { if (!isReprocessingAll) setIsReprocessAllConfirmOpen(open); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reprocesar todos los documentos</DialogTitle>
+            <DialogDescription>
+              {isReprocessingAll
+                ? 'Reprocesando documentos...'
+                : `Se van a reprocesar ${reprocessableFiles.length} documento${reprocessableFiles.length !== 1 ? 's' : ''} en la carpeta "${selectedFolder?.name ?? ''}". Los datos extraídos existentes se reemplazarán con los nuevos resultados.`}
+            </DialogDescription>
+          </DialogHeader>
+          {isReprocessingAll && reprocessAllProgress && (
+            <div className="px-4 pb-2 space-y-3">
+              <div className="flex items-center justify-between text-sm text-stone-600">
+                <span>{reprocessAllProgress.done} de {reprocessAllProgress.total} procesados</span>
+                {reprocessAllProgress.errors > 0 && (
+                  <span className="text-red-600">{reprocessAllProgress.errors} error{reprocessAllProgress.errors !== 1 ? 'es' : ''}</span>
+                )}
+              </div>
+              <div className="w-full h-2 rounded-full bg-stone-100 overflow-hidden">
+                <div
+                  className="h-full bg-amber-500 transition-all duration-300 ease-out rounded-full"
+                  style={{ width: `${Math.round((reprocessAllProgress.done / reprocessAllProgress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            {isReprocessingAll ? (
+              <Button variant="destructive" onClick={handleCancelReprocessAll}>
+                Cancelar
+              </Button>
+            ) : (
+              <>
+                <Button variant="secondary" onClick={() => setIsReprocessAllConfirmOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={() => void handleReprocessAll()} className="gap-1.5">
+                  <RefreshCw className="w-4 h-4" />
+                  Reprocesar {reprocessableFiles.length} documento{reprocessableFiles.length !== 1 ? 's' : ''}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -7133,7 +7516,7 @@ function FileManagerContent({
                   onClick={() => confirmDelete(contextMenu.item)}
                 >
                   <Trash2 className="w-4 h-4" />
-                  Eliminar {contextMenu.item.type === 'folder' ? 'Carpeta' : 'Archivo'}
+                  Enviar a papelera {contextMenu.item.type === 'folder' ? 'Carpeta' : 'Archivo'}
                 </button>
               )}
             </div>

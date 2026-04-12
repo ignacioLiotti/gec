@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useDeferredValue, useEffect, useMemo, useRef, useTransition, startTransition } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import {
 	useReactTable,
@@ -27,6 +27,13 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
@@ -50,6 +57,7 @@ import {
 	ChevronRight,
 	Download,
 	Search,
+	MoreHorizontal,
 } from "lucide-react";
 import type {
 	ColumnField,
@@ -79,8 +87,10 @@ import { MemoizedTableRow } from "./table-body";
 export const useFormTable = useFormTableContext;
 
 export function FormTableToolbar() {
-	const { config, search, filters, columns, sorting, actions } = useFormTable<FormTableRow, unknown>();
+	const { config, search, filters, columns, sorting, meta, actions } = useFormTable<FormTableRow, unknown>();
 	const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+	const isExtrasToolbar = config.toolbarMode === "extras";
+	const canShowFilters = filters.enabled && typeof filters.value !== "undefined";
 
 	const renderFiltersContent =
 		isFiltersOpen && typeof filters.draft !== "undefined" && config.renderFilters
@@ -94,12 +104,39 @@ export function FormTableToolbar() {
 				</p>
 			);
 
+	const columnVisibilityMenu = (
+		<ColumnVisibilityMenu
+			columns={columns.list.map((column) => ({
+				id: column.id,
+				label: column.label,
+				canHide: column.enableHide !== false,
+				canPin: column.enablePin !== false,
+			}))}
+			hiddenColumns={columns.hiddenIds}
+			setHiddenColumns={columns.setHiddenIds}
+			pinnedColumns={columns.pinnedIds}
+			togglePin={columns.togglePin}
+			onBalanceColumns={columns.handleBalance}
+			disabled={false}
+			triggerVariant={isExtrasToolbar ? "ghost" : "outline"}
+			triggerClassName={
+				isExtrasToolbar
+					? "h-8 w-full justify-start rounded-sm px-2 py-1.5 text-sm font-normal"
+					: "gap-2"
+			}
+		/>
+	);
+
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3">
 			<div className="flex flex-wrap items-center gap-2">
 				{search.showInline && (
 					<div className="relative ml-0.5 flex items-center gap-2 group">
-						<Search className="size-4 -mr-6 absolute left-2.5 top-2.5 z-10 text-muted-foreground" />
+						{search.isProcessing ? (
+							<Loader2 className="size-4 -mr-6 absolute left-2.5 top-2.5 z-10 animate-spin text-primary" />
+						) : (
+							<Search className="size-4 -mr-6 absolute left-2.5 top-2.5 z-10 text-muted-foreground" />
+						)}
 						<Input
 							type="search"
 							data-testid="form-table-search"
@@ -110,26 +147,32 @@ export function FormTableToolbar() {
 						/>
 					</div>
 				)}
-				{filters.enabled && typeof filters.value !== "undefined" && (
+				{canShowFilters && (
 					<Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-						<SheetTrigger asChild>
-							<Button
-								type="button"
-								variant={filters.activeCount > 0 ? "default" : "outline"}
-								className={cn(
-									"gap-2 transition-all",
-									filters.activeCount > 0 && "shadow-sm"
-								)}
-							>
-								<Filter className="h-4 w-4" />
-								<span>Filtros</span>
-								{filters.activeCount > 0 && (
-									<span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-[10px] font-semibold">
-										{filters.activeCount}
-									</span>
-								)}
-							</Button>
-						</SheetTrigger>
+						{!isExtrasToolbar && (
+							<SheetTrigger asChild>
+								<Button
+									type="button"
+									variant={filters.activeCount > 0 ? "default" : "outline"}
+									className={cn(
+										"gap-2 transition-all",
+										filters.activeCount > 0 && "shadow-sm"
+									)}
+								>
+									{filters.isProcessing ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : (
+										<Filter className="h-4 w-4" />
+									)}
+									<span>Filtros</span>
+									{filters.activeCount > 0 && (
+										<span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-[10px] font-semibold">
+											{filters.activeCount}
+										</span>
+									)}
+								</Button>
+							</SheetTrigger>
+						)}
 						<SheetContent
 							side="right"
 							className="!max-w-[420px] p-0 flex flex-col border-l-0 shadow-2xl"
@@ -187,27 +230,88 @@ export function FormTableToolbar() {
 						</SheetContent>
 					</Sheet>
 				)}
-				<ColumnVisibilityMenu
-					columns={columns.list.map((column) => ({
-						id: column.id,
-						label: column.label,
-						canHide: column.enableHide !== false,
-						canPin: column.enablePin !== false,
-					}))}
-					hiddenColumns={columns.hiddenIds}
-					setHiddenColumns={columns.setHiddenIds}
-					pinnedColumns={columns.pinnedIds}
-					togglePin={columns.togglePin}
-					onBalanceColumns={columns.handleBalance}
-					disabled={false}
-				/>
-				{config.toolbarActions}
+				{isExtrasToolbar ? (
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button type="button" variant="outline" className="gap-2">
+								<MoreHorizontal className="h-4 w-4" />
+								Extras
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="start" className="w-[320px]">
+							{canShowFilters && (
+								<>
+									<DropdownMenuItem
+										onSelect={(event) => {
+											event.preventDefault();
+											setIsFiltersOpen(true);
+										}}
+										className="gap-2"
+									>
+										{filters.isProcessing ? (
+											<Loader2 className="h-4 w-4 animate-spin" />
+										) : (
+											<Filter className="h-4 w-4" />
+										)}
+										<span>Filtros</span>
+										{filters.activeCount > 0 && (
+											<span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+												{filters.activeCount}
+											</span>
+										)}
+									</DropdownMenuItem>
+									<DropdownMenuSeparator />
+								</>
+							)}
+							<div className="px-1 py-1">{columnVisibilityMenu}</div>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								onSelect={(event) => {
+									event.preventDefault();
+									void actions.exportCsv();
+								}}
+								className="gap-2"
+							>
+								<Download className="h-4 w-4" />
+								Exportar tabla
+							</DropdownMenuItem>
+							{config.toolbarActions && (
+								<>
+									<DropdownMenuSeparator />
+									<div className="px-1 py-1">{config.toolbarActions}</div>
+								</>
+							)}
+						</DropdownMenuContent>
+					</DropdownMenu>
+				) : (
+					<>
+						{columnVisibilityMenu}
+						{config.toolbarActions}
+					</>
+				)}
 			</div>
 			<div className="flex flex-wrap items-center gap-2 mr-[1px]">
-				<Button type="button" variant="outline" className="gap-2" onClick={() => void actions.exportCsv()}>
-					<Download className="h-4 w-4" />
-					Exportar tabla
-				</Button>
+				{meta.isBusy && meta.activityKind && (
+					<div
+						role="status"
+						aria-live="polite"
+						className={cn(
+							"inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
+							meta.isSlowOperation
+								? "border-amber-300 bg-amber-50 text-amber-800"
+								: "border-primary/20 bg-primary/5 text-primary"
+						)}
+					>
+						<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						<span>{getTableActivityMessage(meta.activityKind, meta.isSlowOperation)}</span>
+					</div>
+				)}
+				{!isExtrasToolbar && (
+					<Button type="button" variant="outline" className="gap-2" onClick={() => void actions.exportCsv()}>
+						<Download className="h-4 w-4" />
+						Exportar tabla
+					</Button>
+				)}
 				{sorting.state.columnId && (
 					<Button type="button" variant="ghost" className="gap-1" onClick={sorting.clear}>
 						<Minus className="h-4 w-4" />
@@ -319,10 +423,12 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	const isReadOnly = config.readOnly === true;
 	const showActionsColumn = config.showActionsColumn !== false;
 	const canDeleteRows = !isReadOnly;
-	const { serverError } = meta;
+	const { serverError, activityKind, isBusy, isSlowOperation } = meta;
 	const { isServerPaging, isFetching } = pagination;
 	const {
 		state: sortState,
+		isProcessing: isSortProcessing,
+		pendingColumnId: pendingSortColumnId,
 		toggle: toggleSort,
 		applyDirection,
 		clear: clearSort,
@@ -345,6 +451,151 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		shouldVirtualize && virtualRows.length > 0
 			? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1]!.end
 			: 0;
+	const rowIds = useMemo(() => tableRows.map((row) => row.original.id), [tableRows]);
+	const [hoveredCell, setHoveredCell] = useState<{ rowId: string; columnId: string } | null>(null);
+	useEffect(() => {
+		if (editMode !== "active-cell" || isReadOnly) {
+			setHoveredCell(null);
+		}
+	}, [editMode, isReadOnly]);
+	useEffect(() => {
+		if (!hoveredCell) return;
+		if (!rowIds.includes(hoveredCell.rowId)) {
+			setHoveredCell(null);
+		}
+	}, [hoveredCell, rowIds]);
+	const visibleColumnIds = useMemo(
+		() => columnDefs.filter((column) => !isColumnHidden(column.id)).map((column) => column.id),
+		[columnDefs, isColumnHidden]
+	);
+	const focusCellControl = useCallback((rowId: string, columnId: string) => {
+		if (typeof window === "undefined") return;
+		const tableElement = tableRef.current;
+		if (!tableElement) return;
+
+		const locateCell = () => {
+			const cells = tableElement.querySelectorAll<HTMLElement>('[data-form-table-cell="true"]');
+			for (const cell of cells) {
+				if (cell.dataset.rowId === rowId && cell.dataset.columnId === columnId) {
+					return cell;
+				}
+			}
+			return null;
+		};
+		const attemptFocus = () => {
+			const cell = locateCell();
+			if (!cell) return false;
+			cell.scrollIntoView({ block: "nearest", inline: "nearest" });
+			const control = cell.querySelector<HTMLElement>(
+				'input:not([type="hidden"]), textarea, select, button, [role="combobox"], [role="switch"], [role="checkbox"], [contenteditable="true"]'
+			);
+			if (control) {
+				try {
+					control.focus({ preventScroll: true });
+				} catch {
+					control.focus();
+				}
+				return true;
+			}
+			const passiveCell = cell.querySelector<HTMLElement>('[data-form-table-passive-cell="true"]');
+			if (passiveCell) {
+				try {
+					passiveCell.focus({ preventScroll: true });
+				} catch {
+					passiveCell.focus();
+				}
+				return "passive";
+			}
+			cell.tabIndex = -1;
+			try {
+				cell.focus({ preventScroll: true });
+			} catch {
+				cell.focus();
+			}
+			return "cell";
+		};
+		const firstAttempt = attemptFocus();
+		if (firstAttempt === true || firstAttempt === "cell") return;
+		if (firstAttempt === "passive") {
+			window.requestAnimationFrame(() => {
+				window.requestAnimationFrame(() => {
+					void attemptFocus();
+				});
+			});
+			return;
+		}
+		window.requestAnimationFrame(() => {
+			const secondAttempt = attemptFocus();
+			if (secondAttempt) return;
+			window.requestAnimationFrame(() => {
+				void attemptFocus();
+			});
+		});
+	}, [tableRef]);
+	const handleArrowNavigation = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+		const key = event.key;
+		if (
+			key !== "ArrowUp" &&
+			key !== "ArrowDown" &&
+			key !== "ArrowLeft" &&
+			key !== "ArrowRight"
+		) {
+			return;
+		}
+		if (editMode !== "active-cell") return;
+		if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+		if (rowIds.length === 0 || visibleColumnIds.length === 0) return;
+
+		const target = event.target as HTMLElement | null;
+		if (!target) return;
+		const currentCellElement = target.closest<HTMLElement>('td[data-form-table-cell="true"]');
+		const currentRowId = activeCell?.rowId ?? currentCellElement?.dataset.rowId ?? rowIds[0];
+		const currentColumnId = activeCell?.columnId ?? currentCellElement?.dataset.columnId ?? visibleColumnIds[0];
+		let nextRowIndex = rowIds.indexOf(currentRowId);
+		let nextColumnIndex = visibleColumnIds.indexOf(currentColumnId);
+		if (nextRowIndex < 0) nextRowIndex = 0;
+		if (nextColumnIndex < 0) nextColumnIndex = 0;
+
+		switch (key) {
+			case "ArrowUp":
+				nextRowIndex = Math.max(0, nextRowIndex - 1);
+				break;
+			case "ArrowDown":
+				nextRowIndex = Math.min(rowIds.length - 1, nextRowIndex + 1);
+				break;
+			case "ArrowLeft":
+				nextColumnIndex = Math.max(0, nextColumnIndex - 1);
+				break;
+			case "ArrowRight":
+				nextColumnIndex = Math.min(visibleColumnIds.length - 1, nextColumnIndex + 1);
+				break;
+		}
+
+		const nextCell = {
+			rowId: rowIds[nextRowIndex]!,
+			columnId: visibleColumnIds[nextColumnIndex]!,
+		};
+		if (shouldVirtualize) {
+			rowVirtualizer.scrollToIndex(nextRowIndex, { align: "auto" });
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+		setActiveCell(nextCell);
+		focusCellControl(nextCell.rowId, nextCell.columnId);
+	}, [
+		activeCell,
+		editMode,
+		focusCellControl,
+		rowIds,
+		rowVirtualizer,
+		setActiveCell,
+		shouldVirtualize,
+		visibleColumnIds,
+	]);
+	const handleClearHoveredCell = useCallback(() => {
+		setHoveredCell(null);
+	}, []);
 
 	return (
 		<>
@@ -360,8 +611,27 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 						<p className="text-sm font-medium text-muted-foreground">Sincronizando con el servidor…</p>
 					</div>
 				)}
+				{isBusy && activityKind && tableRows.length > 0 && (
+					<div className="pointer-events-none absolute right-3 top-3 z-40">
+						<div
+							role="status"
+							aria-live="polite"
+							className={cn(
+								"inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium shadow-sm",
+								isSlowOperation
+									? "border-amber-300 bg-amber-50 text-amber-800"
+									: "border-primary/20 bg-background/90 text-primary"
+							)}
+						>
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+							<span>{getTableActivityMessage(activityKind, isSlowOperation)}</span>
+						</div>
+					</div>
+				)}
 				<div
 					ref={scrollParentRef}
+					onPointerLeave={handleClearHoveredCell}
+					onKeyDownCapture={handleArrowNavigation}
 					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
 					<table ref={tableRef} data-table-id={tableId} className={cn("w-full table-fixed text-sm max-w-full overflow-hidden", tableHeight)}>
 						<colgroup className="max-w-full overflow-hidden">
@@ -416,22 +686,16 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 																			>
 																				<span>{column.label.toUpperCase()}</span>
 																				<span className="text-muted-foreground flex items-center gap-2">
+																					{isSortProcessing &&
+																						(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
+																							<Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+																						)}
 																					{sortState.columnId === column.id ? (
-																						<>
-																							{pagination.isFetching && (
-																								<span className="relative inline-flex h-4 w-4 items-center justify-center">
-																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ left: 2, top: 2, animationDelay: "0ms" }} />
-																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ right: 2, top: 2, animationDelay: "120ms" }} />
-																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ left: 2, bottom: 2, animationDelay: "240ms" }} />
-																									<span className="absolute h-1 w-1 rounded-full bg-current animate-[pulse_1s_ease-in-out_infinite]" style={{ right: 2, bottom: 2, animationDelay: "360ms" }} />
-																								</span>
-																							)}
-																							{sortState.direction === "asc" ? (
-																								<ArrowUp className="h-3.5 w-3.5" />
-																							) : (
-																								<ArrowDown className="h-3.5 w-3.5" />
-																							)}
-																						</>
+																						sortState.direction === "asc" ? (
+																							<ArrowUp className="h-3.5 w-3.5" />
+																						) : (
+																							<ArrowDown className="h-3.5 w-3.5" />
+																						)
 																					) : (
 																						<ArrowUpDown className="h-3.5 w-3.5" />
 																					)}
@@ -521,11 +785,15 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 															>
 																<span>{column.label}</span>
 																<span className="text-muted-foreground">
+																	{isSortProcessing &&
+																		(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
+																			<Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin text-primary" />
+																		)}
 																	{sortState.columnId === column.id ? (
 																		sortState.direction === "asc" ? (
-																			<ArrowUp className="h-3.5 w-3.5" />
+																			<ArrowUp className="inline h-3.5 w-3.5" />
 																		) : (
-																			<ArrowDown className="h-3.5 w-3.5" />
+																			<ArrowDown className="inline h-3.5 w-3.5" />
 																		)
 																	) : (
 																		<ArrowUpDown className="h-3.5 w-3.5" />
@@ -592,6 +860,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												row={row}
 												rowIndex={virtualRow.index}
 												externalRefreshVersion={externalRefreshVersion}
+												hoveredCell={hoveredCell}
+												setHoveredCell={setHoveredCell}
 												columnsById={columnsById}
 												rowClassName={rowClassName}
 												rowColorInfo={rowColorInfo}
@@ -646,6 +916,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											row={row}
 											rowIndex={rowIndex}
 											externalRefreshVersion={externalRefreshVersion}
+											hoveredCell={hoveredCell}
+											setHoveredCell={setHoveredCell}
 											columnsById={columnsById}
 											rowClassName={rowClassName}
 											rowColorInfo={rowColorInfo}
@@ -849,9 +1121,44 @@ import {
 export { requiredValidator } from "./table-utils";
 
 
+type TableActivityKind = "loading" | "sorting" | "search" | "filter" | "pagination";
+
 const DEFAULT_COL_WIDTH = 160;
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const DEFAULT_PAGE_SIZE = 10;
+const SLOW_OPERATION_MS = 1200;
+
+function getTableActivityMessage(kind: TableActivityKind, isSlow: boolean) {
+	if (!isSlow) {
+		switch (kind) {
+			case "sorting":
+				return "Ordenando...";
+			case "search":
+				return "Filtrando por busqueda...";
+			case "filter":
+				return "Aplicando filtros...";
+			case "pagination":
+				return "Actualizando pagina...";
+			case "loading":
+			default:
+				return "Cargando datos...";
+		}
+	}
+
+	switch (kind) {
+		case "sorting":
+			return "Ordenando... esto esta tardando un poco mas de lo normal";
+		case "search":
+			return "Buscando... esto esta tardando un poco mas de lo normal";
+		case "filter":
+			return "Aplicando filtros... esto puede tomar unos segundos";
+		case "pagination":
+			return "Cambiando pagina... estamos procesando el resultado";
+		case "loading":
+		default:
+			return "Cargando datos... la respuesta del servidor viene lenta";
+	}
+}
 
 function buildFormSnapshot<Row extends FormTableRow>(rows: Row[] | undefined) {
 	const safeRows = Array.isArray(rows) ? rows : [];
@@ -894,6 +1201,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	children,
 }: FormTableProps<Row, Filters>) {
 	const TABLE_ID = config.tableId;
+	const isDev = process.env.NODE_ENV !== "production";
 	const [externalRefreshVersion, setExternalRefreshVersion] = useState(0);
 	const enableColumnResizing = config.enableColumnResizing ?? false;
 	const fetchRowsFn = config.fetchRows ?? null;
@@ -978,13 +1286,26 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const paginationOptions = lockedPageSize ? [lockedPageSize] : pageSizeOptions;
 	// Track if a page size change is in progress (for showing loading state)
 	const [isPageSizeTransitioning, startPageSizeTransition] = useTransition();
+	const [isSearchTransitioning, startSearchTransition] = useTransition();
+	const [isSortTransitioning, startSortTransition] = useTransition();
+	const [isFilterTransitioning, startFilterTransition] = useTransition();
+	const [activeActivityKind, setActiveActivityKind] = useState<TableActivityKind | null>(null);
+	const [activityRunId, setActivityRunId] = useState(0);
+	const [isSlowOperation, setIsSlowOperation] = useState(false);
+	const [pendingSortColumnId, setPendingSortColumnId] = useState<string | null>(null);
+	const sortStartRef = useRef<{ runId: number; columnId: string | null; startedAt: number } | null>(null);
+	const markActivityStart = useCallback((kind: TableActivityKind) => {
+		setActiveActivityKind(kind);
+		setActivityRunId((prev) => prev + 1);
+	}, []);
 	const handleSetPageSize = useCallback((size: number) => {
 		if (lockedPageSize) return;
+		markActivityStart("pagination");
 		startPageSizeTransition(() => {
 			setPageSizeState(size);
 			setPage(1);
 		});
-	}, [lockedPageSize]);
+	}, [lockedPageSize, markActivityStart]);
 	const [isServerPaging, setIsServerPaging] = useState(Boolean(fetchRowsFn));
 	const useClientPagination = !isServerPaging;
 	const [isFetchingServerRows, setIsFetchingServerRows] = useState(false);
@@ -1045,16 +1366,21 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const searchValue = typeof searchQuery === "string" ? searchQuery : internalSearchValue;
 	const handleSearchInputChange = useCallback(
 		(value: string) => {
-			if (typeof searchQuery === "string") {
-				onSearchQueryChange?.(value);
-			} else {
-				setInternalSearchValue(value);
-			}
+			if (value === searchValue) return;
+			markActivityStart("search");
+			startSearchTransition(() => {
+				if (typeof searchQuery === "string") {
+					onSearchQueryChange?.(value);
+				} else {
+					setInternalSearchValue(value);
+				}
+			});
 		},
-		[onSearchQueryChange, searchQuery]
+		[markActivityStart, onSearchQueryChange, searchQuery, searchValue, startSearchTransition]
 	);
 	const deferredSearchValue = useDeferredValue(searchValue);
 	const searchRequestKey = deferredSearchValue.trim();
+	const isSearchInputLag = searchValue.trim() !== searchRequestKey;
 	const searchRef = useRef(searchRequestKey);
 	useEffect(() => {
 		searchRef.current = searchRequestKey;
@@ -1106,6 +1432,77 @@ export function FormTable<Row extends FormTableRow, Filters>({
 				: lockedSort
 		);
 	}, [lockedSort]);
+	const isServerSortingFetch = isFetchingServerRows && activeActivityKind === "sorting";
+	const isServerSearchFetch = isFetchingServerRows && activeActivityKind === "search";
+	const isServerFilterFetch = isFetchingServerRows && activeActivityKind === "filter";
+	const isSearchProcessing = isSearchTransitioning || isSearchInputLag || isServerSearchFetch;
+	const isSortProcessing = isSortTransitioning || isServerSortingFetch;
+	const isFilterProcessing = isFilterTransitioning || isServerFilterFetch;
+	const isBusy =
+		isFetchingServerRows ||
+		isPageSizeTransitioning ||
+		isSearchProcessing ||
+		isSortProcessing ||
+		isFilterProcessing;
+	const activityKind: TableActivityKind | null = isBusy
+		? activeActivityKind ??
+			(isSearchProcessing
+				? "search"
+				: isFilterProcessing
+					? "filter"
+					: isSortProcessing
+						? "sorting"
+						: isPageSizeTransitioning
+							? "pagination"
+							: isFetchingServerRows
+								? "loading"
+								: "loading")
+		: null;
+
+	const prevSortProcessingRef = useRef(false);
+	useEffect(() => {
+		if (!isDev) return;
+		const wasProcessing = prevSortProcessingRef.current;
+		if (!wasProcessing && isSortProcessing) {
+			console.log("[FormTable][Sort] PROCESSING START", {
+				tableId: TABLE_ID,
+				runId: activityRunId,
+				columnId: pendingSortColumnId ?? effectiveSortState.columnId,
+				sortState: effectiveSortState,
+				ts: new Date().toISOString(),
+			});
+		}
+		if (wasProcessing && !isSortProcessing) {
+			const start = sortStartRef.current;
+			console.log("[FormTable][Sort] PROCESSING FINISH", {
+				tableId: TABLE_ID,
+				runId: start?.runId ?? activityRunId,
+				columnId: start?.columnId ?? effectiveSortState.columnId,
+				finalSortState: effectiveSortState,
+				durationMs: start ? Date.now() - start.startedAt : undefined,
+				ts: new Date().toISOString(),
+			});
+		}
+		prevSortProcessingRef.current = isSortProcessing;
+	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, isSortProcessing, pendingSortColumnId]);
+
+	useEffect(() => {
+		if (isBusy) return;
+		setActiveActivityKind((prev) => (prev === null ? prev : null));
+		setIsSlowOperation(false);
+		setPendingSortColumnId(null);
+	}, [isBusy]);
+
+	useEffect(() => {
+		if (!isBusy || !activityKind) return;
+		setIsSlowOperation(false);
+		const timeoutId = window.setTimeout(() => {
+			setIsSlowOperation(true);
+		}, SLOW_OPERATION_MS);
+		return () => {
+			window.clearTimeout(timeoutId);
+		};
+	}, [activityKind, activityRunId, isBusy]);
 	const [colWidths, setColWidths] = useState<Record<number, number>>(() => {
 		const initialWidths: Record<number, number> = {};
 		config.columns.forEach((col, index) => {
@@ -1613,40 +2010,103 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const handleApplyAdvancedFilters = useCallback(() => {
 		if (!hasFilters || typeof filtersDraft === "undefined") return;
-		setFilters(filtersDraft);
-	}, [filtersDraft, hasFilters]);
+		markActivityStart("filter");
+		startFilterTransition(() => {
+			setFilters(filtersDraft);
+		});
+	}, [filtersDraft, hasFilters, markActivityStart, startFilterTransition]);
 
 	const handleResetAdvancedFilters = useCallback(() => {
 		if (!hasFilters) return;
 		const initial = createFiltersRef.current?.();
 		if (typeof initial === "undefined") return;
-		setFilters(initial);
-		setFiltersDraft(initial);
-	}, [hasFilters]);
+		markActivityStart("filter");
+		startFilterTransition(() => {
+			setFilters(initial);
+			setFiltersDraft(initial);
+		});
+	}, [hasFilters, markActivityStart, startFilterTransition]);
 
 
 	const toggleSort = useCallback((columnId: string) => {
 		if (lockedSort) return;
-		setSortState((prev) => {
-			if (prev.columnId !== columnId) {
-				return { columnId, direction: "asc" };
-			}
-			if (prev.direction === "asc") {
-				return { columnId, direction: "desc" };
-			}
-			return { columnId: null, direction: "asc" };
+		setActiveCell(null);
+		if (isDev) {
+			console.log("[FormTable][Sort] HEADER CLICK", {
+				tableId: TABLE_ID,
+				action: "toggleSort",
+				columnId,
+				currentSortState: effectiveSortState,
+				ts: new Date().toISOString(),
+			});
+		}
+		setPendingSortColumnId(columnId);
+		markActivityStart("sorting");
+		sortStartRef.current = {
+			runId: activityRunId + 1,
+			columnId,
+			startedAt: Date.now(),
+		};
+		startSortTransition(() => {
+			setSortState((prev) => {
+				if (prev.columnId !== columnId) {
+					return { columnId, direction: "asc" };
+				}
+				if (prev.direction === "asc") {
+					return { columnId, direction: "desc" };
+				}
+				return { columnId: null, direction: "asc" };
+			});
 		});
-	}, [lockedSort]);
+	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, setActiveCell, startSortTransition]);
 
 	const applySortDirection = useCallback((columnId: string, direction: "asc" | "desc") => {
 		if (lockedSort) return;
-		setSortState({ columnId, direction });
-	}, [lockedSort]);
+		setActiveCell(null);
+		if (isDev) {
+			console.log("[FormTable][Sort] HEADER MENU CLICK", {
+				tableId: TABLE_ID,
+				action: "applySortDirection",
+				columnId,
+				direction,
+				currentSortState: effectiveSortState,
+				ts: new Date().toISOString(),
+			});
+		}
+		setPendingSortColumnId(columnId);
+		markActivityStart("sorting");
+		sortStartRef.current = {
+			runId: activityRunId + 1,
+			columnId,
+			startedAt: Date.now(),
+		};
+		startSortTransition(() => {
+			setSortState({ columnId, direction });
+		});
+	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, setActiveCell, startSortTransition]);
 
 	const clearSort = useCallback(() => {
 		if (lockedSort) return;
-		setSortState({ columnId: null, direction: "asc" });
-	}, [lockedSort]);
+		setActiveCell(null);
+		if (isDev) {
+			console.log("[FormTable][Sort] CLEAR CLICK", {
+				tableId: TABLE_ID,
+				action: "clearSort",
+				currentSortState: effectiveSortState,
+				ts: new Date().toISOString(),
+			});
+		}
+		setPendingSortColumnId(null);
+		markActivityStart("sorting");
+		sortStartRef.current = {
+			runId: activityRunId + 1,
+			columnId: null,
+			startedAt: Date.now(),
+		};
+		startSortTransition(() => {
+			setSortState({ columnId: null, direction: "asc" });
+		});
+	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, setActiveCell, startSortTransition]);
 
 	const clientTotalPages = useMemo(() => {
 		if (sortedRows.length === 0) return 1;
@@ -1814,9 +2274,40 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			...prev,
 			[newRow.id]: newRow,
 		}));
+		if (config.revealNewRowOnAdd) {
+			if (searchValue.trim().length > 0) {
+				handleSearchInputChange("");
+			}
+			if (hasFilters) {
+				const initialFilters = createFiltersRef.current?.();
+				if (typeof initialFilters !== "undefined") {
+					setFilters(initialFilters);
+					setFiltersDraft(initialFilters);
+				}
+			}
+			if (!lockedSort && effectiveSortState.columnId) {
+				setSortState({ columnId: null, direction: "asc" });
+			}
+			if (hasTabFilters && activeTab !== "all" && tabFilters.some((tab) => tab.id === "all")) {
+				setActiveTab("all");
+			}
+		}
 		setPage(1);
 		toast.success("Fila vacía agregada");
-	}, [columns, config, isReadOnly, setFormFieldValue]);
+	}, [
+		activeTab,
+		columns,
+		config,
+		effectiveSortState.columnId,
+		handleSearchInputChange,
+		hasFilters,
+		hasTabFilters,
+		isReadOnly,
+		lockedSort,
+		searchValue,
+		setFormFieldValue,
+		tabFilters,
+	]);
 
 	const handleDelete = useCallback((id: string) => {
 		if (isReadOnly) return;
@@ -1918,6 +2409,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			value: searchValue,
 			placeholder: searchPlaceholder,
 			showInline: showInlineSearch,
+			isProcessing: isSearchProcessing,
 			onChange: handleSearchInputChange,
 		},
 		filters: {
@@ -1926,6 +2418,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			draft: filtersDraft,
 			setDraft: (updater) => setFiltersDraft((prev) => updater(prev)),
 			activeCount: activeFilterCount,
+			isProcessing: isFilterProcessing,
 			reset: handleResetAdvancedFilters,
 			apply: handleApplyAdvancedFilters,
 		},
@@ -1949,6 +2442,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		},
 		sorting: {
 			state: effectiveSortState,
+			isProcessing: isSortProcessing,
+			pendingColumnId: pendingSortColumnId,
 			toggle: toggleSort,
 			applyDirection: applySortDirection,
 			clear: clearSort,
@@ -1984,6 +2479,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			variant,
 			isEmbedded,
 			externalRefreshVersion,
+			isBusy,
+			isSlowOperation,
+			activityKind,
 		},
 		rows: {
 			table,
@@ -2052,3 +2550,4 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		</FormTableProvider>
 	);
 }
+

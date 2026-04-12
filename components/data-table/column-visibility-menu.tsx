@@ -26,6 +26,8 @@ export type ColumnVisibilityMenuProps = {
 	togglePin: (columnId: string) => void;
 	onBalanceColumns?: () => void;
 	disabled?: boolean;
+	triggerVariant?: React.ComponentProps<typeof Button>["variant"];
+	triggerClassName?: string;
 };
 
 export function ColumnVisibilityMenu({
@@ -36,13 +38,15 @@ export function ColumnVisibilityMenu({
 	togglePin,
 	onBalanceColumns,
 	disabled,
+	triggerVariant = "outline",
+	triggerClassName,
 }: ColumnVisibilityMenuProps) {
 	if (disabled) return null;
 
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="outline" className="gap-2" disabled={disabled}>
+				<Button variant={triggerVariant} className={triggerClassName ?? "gap-2"} disabled={disabled}>
 					<Columns3 className="h-4 w-4" />
 					Columnas
 				</Button>
@@ -134,5 +138,4 @@ export function ColumnVisibilityMenu({
 		</DropdownMenu>
 	);
 }
-
 
