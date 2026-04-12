@@ -62,7 +62,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 	const uploadedByLabel = document.uploadedByLabel ?? document.uploadedByUserId ?? null;
 	const showDocumentPagination = Boolean(onPreviousDocument || onNextDocument);
 	const arePaginationButtonsDisabled = isDataSheetOpen;
-	const showOcrProcessingOverlay = true;
+	const showOcrProcessingOverlay = document.ocrDocumentStatus === "pending" || document.ocrDocumentStatus === "processing";
 	const processingOverlayLabel = retryingOcr
 		? "Reprocesando OCR..."
 		: document.ocrDocumentStatus === "pending"
