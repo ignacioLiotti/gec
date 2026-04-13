@@ -10,6 +10,7 @@ import {
 	hasAnyDemoCapability,
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
+import { softDeleteObraWithDocuments } from "@/lib/obras/delete-lifecycle";
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at, custom_data";
@@ -841,22 +842,43 @@ export async function PUT(request: Request) {
 	}
 
 	const newNs = new Set(payload.map((obra) => obra.n));
-	const toRemove =
-		existingRows?.filter((row) => !newNs.has(row.n)).map((row) => row.n) ?? [];
+	const rowsToRemove = (existingRows ?? []).filter((row) => !newNs.has(row.n));
 
-	if (toRemove.length) {
-		const { error: deleteError } = await supabase
-			.from("obras")
-			.delete()
-			.eq("tenant_id", tenantId)
-			.in("n", toRemove);
+	if (rowsToRemove.length) {
+		for (const rowToRemove of rowsToRemove) {
+			try {
+				const result = await softDeleteObraWithDocuments({
+					supabase,
+					tenantId,
+					obraId: rowToRemove.id as string,
+					actorUserId: user.id,
+					actorEmail: user.email ?? null,
+					deleteReason: "bulk_sync_remove",
+				});
 
-		if (deleteError) {
-			console.error("Error deleting removed obras", deleteError);
-			return NextResponse.json(
-				{ error: "No se pudieron eliminar algunas obras" },
-				{ status: 500 },
-			);
+				if (!result.ok && result.errorCode !== "obra_already_deleted") {
+					console.error("Error soft deleting removed obra", {
+						obraId: rowToRemove.id,
+						n: rowToRemove.n,
+						errorCode: result.errorCode,
+						errorMessage: result.errorMessage,
+					});
+					return NextResponse.json(
+						{ error: "No se pudieron eliminar algunas obras" },
+						{ status: 500 },
+					);
+				}
+			} catch (deleteError) {
+				console.error("Error soft deleting removed obra", {
+					obraId: rowToRemove.id,
+					n: rowToRemove.n,
+					error: deleteError,
+				});
+				return NextResponse.json(
+					{ error: "No se pudieron eliminar algunas obras" },
+					{ status: 500 },
+				);
+			}
 		}
 	}
 

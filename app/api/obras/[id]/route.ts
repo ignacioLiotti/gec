@@ -13,6 +13,7 @@ import {
 	sanitizeCustomData,
 	executeFlujoActions,
 } from "../route";
+import { softDeleteObraWithDocuments } from "@/lib/obras/delete-lifecycle";
 import {
 	hasAnyDemoCapability,
 	resolveRequestAccessContext,
@@ -625,39 +626,34 @@ export async function DELETE(
 		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
 	}
 
-	const { data: obra, error: fetchError } = await supabase
-		.from("obras")
-		.select("id")
-		.eq("id", obraId)
-		.eq("tenant_id", tenantId)
-		.is("deleted_at", null)
-		.maybeSingle();
+	try {
+		const result = await softDeleteObraWithDocuments({
+			supabase,
+			tenantId,
+			obraId,
+			actorUserId: user.id,
+			actorEmail: user.email ?? null,
+			deleteReason: "manual_delete",
+		});
 
-	if (fetchError) {
-		console.error("Obra DELETE: failed to fetch obra", fetchError);
-		return NextResponse.json(
-			{ error: "No se pudo verificar la obra" },
-			{ status: 500 }
-		);
-	}
+		if (!result.ok) {
+			if (result.errorCode === "obra_not_found") {
+				return NextResponse.json({ error: result.errorMessage }, { status: 404 });
+			}
+			return NextResponse.json({ error: result.errorMessage }, { status: 400 });
+		}
 
-	if (!obra) {
-		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
-	}
-
-	const { error: deleteError } = await supabase
-		.from("obras")
-		.delete()
-		.eq("id", obraId)
-		.eq("tenant_id", tenantId);
-
-	if (deleteError) {
-		console.error("Obra DELETE: failed to delete obra", deleteError);
+		return NextResponse.json({
+			success: true,
+			alreadyDeleted: result.alreadyDeleted,
+			deleteId: result.deleteId,
+			restoreDeadlineAt: result.restoreDeadlineAt,
+		});
+	} catch (error) {
+		console.error("Obra DELETE: failed to soft delete obra", error);
 		return NextResponse.json(
 			{ error: "No se pudo eliminar la obra" },
 			{ status: 500 }
 		);
 	}
-
-	return NextResponse.json({ success: true });
 }
