@@ -43,6 +43,7 @@ import {
 } from "@/lib/demo-tours/excel-guided-flow";
 import type { OcrFolderLink, OcrTablaColumn, TablaDataRow } from "./tabs/file-manager/types";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useTenantAdminStatus } from "@/hooks/use-tenant-admin-status";
 import {
 	DEFAULT_MAIN_TABLE_COLUMN_CONFIG,
 	invalidateObrasTableSessionCache,
@@ -1306,6 +1307,7 @@ function ObraDetailPageContent() {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const isMobile = useIsMobile();
+	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
 	const obraId = useMemo(() => {
 		const raw = (params as Record<string, string | string[] | undefined>)?.obraId;
 		if (Array.isArray(raw)) return raw[0];
@@ -1815,6 +1817,14 @@ function ObraDetailPageContent() {
 		router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
 	}, [obraId, router]);
 
+	const handleOpenObrasTrashPage = useCallback(() => {
+		if (!isTenantAdmin) {
+			toast.error("Solo administradores pueden ver la papelera de obras.");
+			return;
+		}
+		router.push("/excel/papelera-obras");
+	}, [isTenantAdmin, router]);
+
 	// Import OC from PDF
 	const importInputRef = useRef<HTMLInputElement | null>(null);
 	const [isImportingMaterials, setIsImportingMaterials] = useState(false);
@@ -2193,6 +2203,11 @@ function ObraDetailPageContent() {
 	}, [buildDirtyObraPayload, form.state.values, initialFormValues, persistObra]);
 
 	const handleDeleteObra = useCallback(async () => {
+		if (!isTenantAdmin) {
+			toast.error("Solo administradores pueden borrar obras.");
+			return;
+		}
+
 		if (!obraId || obraId === "undefined") {
 			toast.error("Obra no encontrada");
 			return;
@@ -2227,7 +2242,7 @@ function ObraDetailPageContent() {
 		} finally {
 			setIsDeletingObra(false);
 		}
-	}, [obraId, queryClient, router]);
+	}, [isTenantAdmin, obraId, queryClient, router]);
 
 	const activeMainTableColumns = useMemo(
 		() =>
@@ -3261,19 +3276,33 @@ function ObraDetailPageContent() {
 									)}
 								</div>
 								<div className="flex flex-wrap items-center gap-2 justify-end">
-									<Button
-										type="button"
-										variant="destructive"
-										size="sm"
-										className="h-8 gap-2"
-										onClick={() => void handleDeleteObra()}
-										disabled={isDeletingObra}
-									>
-										<Trash2 className="h-4 w-4" />
-										<span className="text-base md:text-sm">
-											{isDeletingObra ? "Eliminando..." : "Borrar obra"}
-										</span>
-									</Button>
+									{isTenantAdmin && (
+										<>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												className="h-8 gap-2"
+												onClick={handleOpenObrasTrashPage}
+											>
+												<Trash2 className="h-4 w-4" />
+												<span className="text-base md:text-sm">Papelera obras</span>
+											</Button>
+											<Button
+												type="button"
+												variant="destructive"
+												size="sm"
+												className="h-8 gap-2"
+												onClick={() => void handleDeleteObra()}
+												disabled={isDeletingObra}
+											>
+												<Trash2 className="h-4 w-4" />
+												<span className="text-base md:text-sm">
+													{isDeletingObra ? "Eliminando..." : "Borrar obra"}
+												</span>
+											</Button>
+										</>
+									)}
 									{activeTab === "general" && (
 										<>
 											<motion.div

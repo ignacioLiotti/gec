@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, Upload } from "lucide-react";
+import { FileText, Trash2, Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
 	FormTable,
@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { NotchTail } from "@/components/ui/notch-tail";
+import { useTenantAdminStatus } from "@/hooks/use-tenant-admin-status";
 import type { ExcelPageClientProps } from "@/lib/excel/types";
 import type { WizardFlow } from "@/components/ui/contextual-wizard";
 import {
@@ -173,6 +174,7 @@ export default function DesktopExcelPageClient({
 	initialLoadMode,
 }: ExcelPageClientProps) {
 	const searchParams = useSearchParams();
+	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
 	const [isImporting, setIsImporting] = useState(false);
 	const [mainTableColumnsConfig] = useState<MainTableColumnConfig[] | null>(
 		initialMainTableColumnsConfig as MainTableColumnConfig[] | null
@@ -619,6 +621,14 @@ export default function DesktopExcelPageClient({
 									Generar Reporte
 								</Link>
 							</Button>
+							{isTenantAdmin && (
+								<Button variant="outline" asChild>
+									<Link href="/excel/papelera-obras" prefetch={false} className="gap-2">
+										<Trash2 className="h-4 w-4" />
+										Papelera obras
+									</Link>
+								</Button>
+							)}
 						</div>
 					</div>
 					<div

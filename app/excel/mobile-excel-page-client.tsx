@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useTenantAdminStatus } from "@/hooks/use-tenant-admin-status";
 import type { ExcelPageClientProps, ExcelPageObra } from "@/lib/excel/types";
 
 type ObraListItem = {
@@ -61,6 +62,7 @@ function Framed({
 export default function MobileExcelPageClient({
 	initialObras,
 }: Pick<ExcelPageClientProps, "initialObras">) {
+	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
 	const hasPartialInitialObras = initialObras.some((obra) => obra.__isPartial === true);
 	const [obras, setObras] = useState<ObraListItem[]>(() =>
 		initialObras.map(mapObraToMobileObra)
@@ -114,12 +116,22 @@ export default function MobileExcelPageClient({
 							<h1 className="text-2xl font-semibold tracking-tight text-[#1a1a1a]">Panel de obras</h1>
 							<p className="text-xs text-[#999]">Vista rápida y acceso a cada obra</p>
 						</div>
-						<Button variant="outline" size="sm" asChild className={toolButtonClass}>
-							<Link href="/excel/reporte" prefetch={false} className="gap-2">
-								<FileText className="h-4 w-4" />
-								Reporte
-							</Link>
-						</Button>
+						<div className="flex items-center gap-2">
+							<Button variant="outline" size="sm" asChild className={toolButtonClass}>
+								<Link href="/excel/reporte" prefetch={false} className="gap-2">
+									<FileText className="h-4 w-4" />
+									Reporte
+								</Link>
+							</Button>
+							{isTenantAdmin && (
+								<Button variant="outline" size="sm" asChild className={toolButtonClass}>
+									<Link href="/excel/papelera-obras" prefetch={false} className="gap-2">
+										<Trash2 className="h-4 w-4" />
+										Papelera
+									</Link>
+								</Button>
+							)}
+						</div>
 					</div>
 					{isLoading ? (
 						<div className="rounded-xl border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-sm text-[#999]">
