@@ -6,6 +6,7 @@ import {
 	updateMercadoPagoPreapproval,
 } from "@/lib/billing/mercadopago";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type TenantSubscriptionRow = {
 	plan_key: string;
@@ -125,7 +126,8 @@ export async function POST() {
 			},
 		};
 
-		const { error: updateError } = await supabase
+		const admin = createSupabaseAdminClient();
+		const { error: updateError } = await admin
 			.from("tenant_subscriptions")
 			.upsert(
 				{

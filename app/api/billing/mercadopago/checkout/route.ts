@@ -7,6 +7,7 @@ import {
 	resolveMercadoPagoPlanConfig,
 } from "@/lib/billing/mercadopago";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type SubscriptionPlanRow = {
 	plan_key: string;
@@ -173,7 +174,8 @@ export async function POST(request: NextRequest) {
 			},
 		};
 
-		const { error: upsertError } = await supabase.from("tenant_subscriptions").upsert(
+		const admin = createSupabaseAdminClient();
+		const { error: upsertError } = await admin.from("tenant_subscriptions").upsert(
 			{
 				tenant_id: access.tenantId,
 				plan_key: persistedPlanKey,
