@@ -179,11 +179,11 @@ export function QuickActionsPanel({
   const createObraQuickAction = useCallback(async () => {
     const name = newActionName.trim();
     if (!name) {
-      toast.error("IngresÃƒÂ¡ un nombre para la acciÃƒÂ³n rÃƒÂ¡pida.");
+      toast.error("Ingresá un nombre para la acción rápida.");
       return;
     }
     if (newActionFolderPaths.length === 0) {
-      toast.error("SeleccionÃƒÂ¡ al menos una carpeta/paso.");
+      toast.error("Seleccioná al menos una carpeta/paso.");
       return;
     }
 
@@ -204,19 +204,19 @@ export function QuickActionsPanel({
         () => ({} as { error?: string; quickAction?: QuickAction })
       );
       if (!response.ok) {
-        throw new Error(payload?.error || "No se pudo crear la acciÃƒÂ³n rÃƒÂ¡pida");
+        throw new Error(payload?.error || "No se pudo crear la acción rápida");
       }
 
       const created = payload?.quickAction as QuickAction | undefined;
       if (created) {
         setLocalActions((prev) => [...prev, created]);
       }
-      toast.success("AcciÃƒÂ³n rÃƒÂ¡pida creada para esta obra.");
+      toast.success("Acción rápida creada para esta obra.");
       setIsCreateDialogOpen(false);
       resetCreateActionForm();
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "No se pudo crear la acciÃƒÂ³n rÃƒÂ¡pida");
+      toast.error(error instanceof Error ? error.message : "No se pudo crear la acción rápida");
     } finally {
       setIsCreatingAction(false);
     }
@@ -287,7 +287,7 @@ export function QuickActionsPanel({
     const mode = stepModes[stepId] ?? (folder.isOcr ? (folder.dataInputMethod === "manual" ? "manual" : "ocr") : "files");
 
     if (folder.isOcr && !tabla) {
-      toast.error("No se encontrÃƒÂ³ la tabla asociada a esta carpeta");
+      toast.error("No se encontró la tabla asociada a esta carpeta");
       return;
     }
 
@@ -296,7 +296,7 @@ export function QuickActionsPanel({
       if (!folder.isOcr || mode === "files") {
         const file = fileByStep[stepId];
         if (!file) {
-          toast.error("SeleccionÃƒÂ¡ un archivo");
+          toast.error("Seleccioná un archivo");
           return;
         }
         const normalizedFolderPath = folder.path
@@ -332,7 +332,7 @@ export function QuickActionsPanel({
       if (mode === "ocr") {
         const file = fileByStep[stepId];
         if (!file) {
-          toast.error("SeleccionÃƒÂ¡ un archivo");
+          toast.error("Seleccioná un archivo");
           return;
         }
         if (!tablasForStep.length) {
@@ -478,13 +478,13 @@ export function QuickActionsPanel({
               <GlassyIcon size={8} primaryVar="var(--color-orange-primary)" className="w-8">
                 <Zap className="size-4.5 text-primary" />
               </GlassyIcon>
-              <h2 className="text-[17px] font-semibold">Acciones rÃƒÂ¡pidas</h2>
+              <h2 className="text-[17px] font-semibold">Acciones rápidas</h2>
             </div>
           </div>
           {panelList}
           <Button type="button" size="sm" variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="size-4" />
-            Nueva acciÃƒÂ³n
+            Nueva acción
           </Button>
         </motion.aside>
       )}
@@ -506,7 +506,7 @@ export function QuickActionsPanel({
                 <div className="flex items-center justify-between gap-2">
                   <SheetTitle className="flex items-center gap-2 text-base">
                     <Zap className="h-4 w-4 text-primary" />
-                    Acciones rÃƒÂ¡pidasasdasdad
+                    Acciones rápidas
                   </SheetTitle>
                   <Button type="button" size="sm" variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
                     Crear
@@ -523,7 +523,7 @@ export function QuickActionsPanel({
         </>
       )}
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Workflow dialog (folder-tab style) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── Workflow dialog (folder-tab style) ── */}
       <DialogPrimitive.Root open={Boolean(activeAction)} onOpenChange={(open) => { if (!open) closeAction(); }}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-stone-900/30 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
@@ -632,7 +632,7 @@ export function QuickActionsPanel({
                   {!customRenderer && showModeToggle && !isDone && (
                     <div className="mt-5">
                       <p className="text-xs text-stone-500 mb-2 uppercase tracking-wide font-medium">
-                        MÃƒÂ©todo de entrada
+                        Método de entrada
                       </p>
                       <div className="inline-flex rounded-none border border-stone-200 p-1 bg-stone-50">
                         <button
@@ -685,7 +685,7 @@ export function QuickActionsPanel({
                           <p className="text-sm font-medium text-stone-700">Paso completado</p>
                           <p className="text-xs text-stone-400 mt-1">
                             {activeStepIndex < steps.length - 1
-                              ? "PodÃƒÂ©s continuar con el siguiente paso"
+                              ? "Podés continuar con el siguiente paso"
                               : "Todos los pasos fueron completados"}
                           </p>
                         </div>
@@ -850,7 +850,7 @@ export function QuickActionsPanel({
       >
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Nueva acciÃƒÂ³n rÃƒÂ¡pida para esta obra</DialogTitle>
+            <DialogTitle>Nueva acción rápida para esta obra</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 px-4">
             <div className="space-y-1.5">
@@ -858,11 +858,11 @@ export function QuickActionsPanel({
               <Input
                 value={newActionName}
                 onChange={(event) => setNewActionName(event.target.value)}
-                placeholder="Ej: Cargar documentaciÃƒÂ³n inicial"
+                placeholder="Ej: Cargar documentación inicial"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">DescripciÃƒÂ³n (opcional)</label>
+              <label className="text-sm font-medium">Descripción (opcional)</label>
               <Input
                 value={newActionDescription}
                 onChange={(event) => setNewActionDescription(event.target.value)}
@@ -871,7 +871,7 @@ export function QuickActionsPanel({
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">
-                SeleccionÃƒÂ¡ carpetas/tablas para los pasos
+                Seleccioná carpetas/tablas para los pasos
               </p>
               <div className="max-h-56 overflow-y-auto rounded-md border p-2 space-y-1">
                 {allActionFolders.map((folder) => {
@@ -913,7 +913,7 @@ export function QuickActionsPanel({
               Cancelar
             </Button>
             <Button type="button" onClick={createObraQuickAction} disabled={isCreatingAction}>
-              {isCreatingAction ? "Creando..." : "Crear acciÃƒÂ³n"}
+              {isCreatingAction ? "Creando..." : "Crear acción"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -922,7 +922,7 @@ export function QuickActionsPanel({
   );
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Dropzone file input Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ── Dropzone file input ── */
 
 function DropzoneFileInput({
   inputId,
@@ -995,7 +995,7 @@ function DropzoneFileInput({
 
         <div>
           <p className="text-sm text-stone-700">
-            {value ? value.name : "ArrastrÃƒÂ¡ un archivo o seleccionÃƒÂ¡ desde tu equipo"}
+            {value ? value.name : "Arrastrá un archivo o seleccioná desde tu equipo"}
           </p>
           <p className="mt-1 text-xs text-stone-400">PDF o imagen</p>
         </div>

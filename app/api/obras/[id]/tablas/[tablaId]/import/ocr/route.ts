@@ -1000,7 +1000,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 		if (!file && !effectiveImageDataUrl && !fetchedDocumentBytes) {
 			return NextResponse.json(
-				{ error: "Se requiere un archivo, imageDataUrl o existingPath vÃ¡lido" },
+				{ error: "Se requiere un archivo, imageDataUrl o existingPath válido" },
 				{ status: 400 }
 			);
 		}

@@ -968,7 +968,7 @@ function FolderRow({
 
               {folder.extractionInstructions && (
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-1">GuÃ­a de extracciÃ³n</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Guía de extracción</p>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                     {folder.extractionInstructions}
                   </p>
@@ -1601,12 +1601,12 @@ export default function ObraDefaultsPage() {
     }
 
     if (folderMode === "data" && !newFolderAcceptsPdfImage && !newFolderAcceptsSpreadsheet && !newFolderAllowsManualEntry) {
-      toast.error("ActivÃ¡ al menos un tipo de entrada");
+      toast.error("Activá al menos un tipo de entrada");
       return;
     }
 
     if (folderMode === "data" && newFolderAcceptsSpreadsheet && !effectiveSpreadsheetTemplate) {
-      toast.error("SeleccionÃ¡ una plantilla XLSX / CSV");
+      toast.error("Seleccioná una plantilla XLSX / CSV");
       return;
     }
 
@@ -2045,8 +2045,8 @@ export default function ObraDefaultsPage() {
   const folderEditorStepsLegacy = useMemo(
     () =>
       folderMode === "data"
-        ? ["Base", "Carga", "Campos", "RevisiÃ³n"]
-        : ["Base", "RevisiÃ³n"],
+        ? ["Base", "Carga", "Campos", "Revisión"]
+        : ["Base", "Revisión"],
     [folderMode]
   );
   void folderEditorStepsLegacy;

@@ -190,7 +190,7 @@ export function OcrTemplateConfigurator({
 		return new Promise<HTMLImageElement>((resolve, reject) => {
 			const img = new window.Image();
 			img.onload = () => resolve(img);
-			img.onerror = () => reject(new Error("No se pudo renderizar la previsualizaciÃ³n"));
+			img.onerror = () => reject(new Error("No se pudo renderizar la previsualización"));
 			img.src = src;
 		});
 	}, []);
@@ -257,7 +257,7 @@ export function OcrTemplateConfigurator({
 			file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
 		if (!isImage && !isPdf) {
-			toast.error("Solo se permiten imÃ¡genes o PDFs");
+			toast.error("Solo se permiten imágenes o PDFs");
 			return;
 		}
 
@@ -919,7 +919,7 @@ export function OcrTemplateConfigurator({
 										<p className="text-sm font-medium">Vista rápida</p>
 										<div className="mt-3 flex flex-wrap gap-2">
 											{documentKind === "pdf" && (
-												<Badge variant="secondary">{pageCount} pÃ¡ginas detectadas</Badge>
+												<Badge variant="secondary">{pageCount} páginas detectadas</Badge>
 											)}
 											<Badge variant="secondary">{singleRegions.length} campos únicos</Badge>
 											<Badge variant="secondary">{tableRegions.length} regiones tabla</Badge>
