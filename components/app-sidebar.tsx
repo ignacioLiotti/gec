@@ -192,14 +192,17 @@ const SidebarPrefetchLink = React.forwardRef<
 		if (!shouldIdlePrefetchExcel) return;
 		let cancelled = false;
 		let idleHandle: number | null = null;
-		let timeoutHandle: ReturnType<typeof window.setTimeout> | null = null;
+		let timeoutHandle: number | null = null;
 
 		const trigger = () => {
 			if (cancelled) return;
 			runPrefetch();
 		};
 
-		if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+		if (
+			typeof window !== "undefined" &&
+			typeof window.requestIdleCallback === "function"
+		) {
 			idleHandle = window.requestIdleCallback(trigger, { timeout: 1500 });
 		} else {
 			timeoutHandle = window.setTimeout(trigger, 250);
@@ -207,7 +210,11 @@ const SidebarPrefetchLink = React.forwardRef<
 
 		return () => {
 			cancelled = true;
-			if (idleHandle != null && typeof window !== "undefined" && "cancelIdleCallback" in window) {
+			if (
+				idleHandle != null &&
+				typeof window !== "undefined" &&
+				typeof window.cancelIdleCallback === "function"
+			) {
 				window.cancelIdleCallback(idleHandle);
 			}
 			if (timeoutHandle != null) {
@@ -343,8 +350,8 @@ export function AppSidebar({
 		null;
 	const isMacroTablesActive = Boolean(
 		pathname === "/macro" &&
-			activeMacroTableId &&
-			macroTables.some((table) => table.id === activeMacroTableId),
+		activeMacroTableId &&
+		macroTables.some((table) => table.id === activeMacroTableId),
 	);
 
 	const canAccessRoute = React.useCallback(
@@ -444,9 +451,8 @@ export function AppSidebar({
 										className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5"
 									>
 										<div
-											className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${
-												state === "collapsed" ? "size-8" : "size-10"
-											}`}
+											className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full ${state === "collapsed" ? "size-8" : "size-10"
+												}`}
 										/>
 										<div className="grid flex-1 text-left text-sm leading-tight">
 											<span className="truncate font-mono text-lg font-semibold leading-[16px]">
@@ -459,9 +465,8 @@ export function AppSidebar({
 									</SidebarPrefetchLink>
 								</SidebarMenuButton>
 								<SidebarTrigger
-									className={`shrink-0 border bg-sidebar-accent/40 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground ${
-										state === "collapsed" ? "mx-auto flex" : "mt-1"
-									}`}
+									className={`shrink-0 border bg-sidebar-accent/40 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground ${state === "collapsed" ? "mx-auto flex" : "mt-1"
+										}`}
 								/>
 							</div>
 							{demoMode && activeTenant ? (
@@ -811,9 +816,8 @@ export function AppSidebar({
 								<button
 									type="button"
 									onClick={handleEnterRealApp}
-									className={`flex w-full items-center justify-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent ${
-										state === "collapsed" ? "px-2" : ""
-									}`}
+									className={`flex w-full items-center justify-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent ${state === "collapsed" ? "px-2" : ""
+										}`}
 									title="Ingresar a la app real"
 								>
 									<KeyRound className="size-4 shrink-0" />

@@ -56,9 +56,13 @@ function getConfiguredAppUrl() {
 export async function GET() {
 	const access = await resolveRequestAccessContext();
 	if (!access.user && access.actorType !== "demo") {
-		return NextResponse.json({ error: "Inicia sesion para continuar." }, { status: 401 });
+		return NextResponse.json(
+			{ error: "Inicia sesion para continuar." },
+			{ status: 401 },
+		);
 	}
-	if (!access.tenantId) {
+	const tenantId = access.tenantId;
+	if (!tenantId) {
 		return NextResponse.json(
 			{ error: "No pudimos resolver la organizacion activa." },
 			{ status: 400 },
@@ -78,19 +82,28 @@ export async function GET() {
 			.select(
 				"tenant_id, plan_key, status, current_period_start, current_period_end, external_customer_id, external_subscription_id, metadata",
 			)
-			.eq("tenant_id", access.tenantId)
+			.eq("tenant_id", tenantId)
 			.maybeSingle(),
 	]);
 
 	if (plansResult.error) {
-		return NextResponse.json({ error: plansResult.error.message }, { status: 500 });
+		return NextResponse.json(
+			{ error: plansResult.error.message },
+			{ status: 500 },
+		);
 	}
 	if (subscriptionResult.error) {
-		return NextResponse.json({ error: subscriptionResult.error.message }, { status: 500 });
+		return NextResponse.json(
+			{ error: subscriptionResult.error.message },
+			{ status: 500 },
+		);
 	}
 
-	const subscription = (subscriptionResult.data as TenantSubscriptionRow | null) ?? null;
-	const cancellationMetadata = resolveCancellationMetadata(subscription?.metadata);
+	const subscription =
+		(subscriptionResult.data as TenantSubscriptionRow | null) ?? null;
+	const cancellationMetadata = resolveCancellationMetadata(
+		subscription?.metadata,
+	);
 	const accessResult = evaluateTenantSubscriptionAccess(
 		{
 			status: subscription?.status ?? "active",
@@ -127,7 +140,9 @@ export async function GET() {
 				planKey: typedPlan.plan_key,
 				planName: typedPlan.name,
 				canCheckout: false,
-				reason: !runtimeDebug.payerEmail ? "missing_payer_email" : "missing_app_url",
+				reason: !runtimeDebug.payerEmail
+					? "missing_payer_email"
+					: "missing_app_url",
 				planConfig,
 			};
 		}
@@ -136,7 +151,7 @@ export async function GET() {
 			const payload = buildMercadoPagoPreapprovalRequest({
 				planKey: typedPlan.plan_key,
 				planName: typedPlan.name,
-				tenantId: access.tenantId,
+				tenantId,
 				payerEmail: runtimeDebug.payerEmail,
 				notificationUrl: `${appUrl}/api/billing/mercadopago/webhook`,
 				backUrl: `${appUrl}/billing`,
@@ -161,7 +176,7 @@ export async function GET() {
 	});
 
 	return NextResponse.json({
-		tenantId: access.tenantId,
+		tenantId,
 		subscription,
 		plans: (plansResult.data ?? []) as SubscriptionPlanRow[],
 		paywall: accessResult,
