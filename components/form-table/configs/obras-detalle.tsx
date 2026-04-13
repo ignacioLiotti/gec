@@ -90,6 +90,7 @@ const ObraDetailLink = memo(function ObraDetailLink({
 			href={href}
 			prefetch={false}
 			data-wizard-target="excel-page-open-obra"
+			data-form-table-enter-navigate="true"
 			className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2 "
 			onMouseEnter={() => prefetchObra(obraId)}
 		>

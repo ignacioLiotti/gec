@@ -9,6 +9,7 @@ import {
 	useMemo,
 	type MouseEvent as ReactMouseEvent,
 	type FocusEvent as ReactFocusEvent,
+	type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
 	ContextMenu,
@@ -81,7 +82,20 @@ type StaticReadOnlyCellContentProps<Row extends FormTableRow> = {
 	highlightQuery: string;
 	isRowDirty: boolean;
 	isCellDirty: boolean;
+	/** When true, this cell receives programmatic focus (read-only columns) and Enter can activate nested links. */
+	focusAsPassiveCell?: boolean;
 };
+
+function handleFormTableEnterNavigateLink(event: ReactKeyboardEvent<HTMLElement>) {
+	if (event.key !== "Enter") return;
+	if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+	const navigateLink = event.currentTarget.querySelector<HTMLAnchorElement>(
+		'a[data-form-table-enter-navigate="true"]'
+	);
+	if (!navigateLink) return;
+	event.preventDefault();
+	navigateLink.click();
+}
 
 /**
  * Inner component that uses hooks safely (not inside a callback)
@@ -270,6 +284,7 @@ function StaticReadOnlyCellContent<Row extends FormTableRow>({
 	highlightQuery,
 	isRowDirty,
 	isCellDirty,
+	focusAsPassiveCell,
 }: StaticReadOnlyCellContentProps<Row>) {
 	const cellType = (column.cellType ?? "text") as NonNullable<ColumnDef<Row>["cellType"]> | "text";
 	// For date cells, use the formatted display value so ISO strings ("2023-05-03") don't
@@ -295,6 +310,13 @@ function StaticReadOnlyCellContent<Row extends FormTableRow>({
 
 	return (
 		<div
+			{...(focusAsPassiveCell
+				? {
+					"data-form-table-passive-cell": "true" as const,
+					tabIndex: -1,
+					onKeyDown: handleFormTableEnterNavigateLink,
+				}
+				: {})}
 			className={cn(
 				"absolute top-0 left-0 w-full h-full flex items-center justify-start pl-3 ",
 				isRowDirty ? "outline outline-amber-500/60 shadow-sm border-b border-amber-500" : "",
@@ -360,6 +382,7 @@ function TableCellInner<Row extends FormTableRow>({
 				highlightQuery={highlightQuery}
 				isRowDirty={isRowDirty}
 				isCellDirty={isCellDirty}
+				focusAsPassiveCell
 			/>
 		);
 	}
@@ -369,6 +392,7 @@ function TableCellInner<Row extends FormTableRow>({
 			<div
 				data-form-table-passive-cell="true"
 				tabIndex={-1}
+				onKeyDown={handleFormTableEnterNavigateLink}
 				onMouseDown={(event) => {
 					if (event.button !== 0) return;
 					setActiveCell({ rowId, columnId: column.id });
@@ -376,7 +400,7 @@ function TableCellInner<Row extends FormTableRow>({
 				onFocus={() => {
 					setActiveCell({ rowId, columnId: column.id });
 				}}
-				className="relative block h-full w-full cursor-text h-4! py-4!"
+				className="relative block h-full w-full cursor-text h-full! py-4!"
 			>
 				<StaticReadOnlyCellContent
 					value={row[column.field]}

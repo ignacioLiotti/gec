@@ -269,7 +269,19 @@ function DateCellEditor<Row extends FormTableRow>({
 					}
 					const parsed = parseDateValue(nextRaw);
 					setDraftValue(null);
-					setValue(parsed ? toIsoDateOnly(parsed) : nextRaw);
+					const nextValue = parsed ? toIsoDateOnly(parsed) : nextRaw;
+					// Avoid false-dirty: the DB may store dates in a different format
+					// (e.g. "2025-05-01T03:00:00+00:00" or "1/5/2025"). Normalise both
+					// sides to ISO and skip setValue when the date hasn't actually changed.
+					const currentParsed = parseDateValue(value ?? null);
+					const currentNormalized = currentParsed
+						? toIsoDateOnly(currentParsed)
+						: value != null
+							? String(value)
+							: null;
+					if (nextValue !== currentNormalized) {
+						setValue(nextValue);
+					}
 					handleBlur();
 				}}
 				className={cn(
