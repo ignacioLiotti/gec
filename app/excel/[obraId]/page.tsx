@@ -340,6 +340,7 @@ type DerivedCertificadosNotice = {
 	sourceLabel: string | null;
 	updatedFieldKeys: Array<"certificadoALaFecha" | "saldoACertificar" | "porcentaje">;
 	updatedFieldLabels: string[];
+	recommendedValues: Partial<Record<DerivedCertificadosField, number>>;
 	blockedFieldKeys: Array<"saldoACertificar" | "porcentaje">;
 	blockedFieldLabels: string[];
 	warningMessage: string | null;
@@ -394,6 +395,11 @@ type GeneralTabReportsData = {
 
 type CurveRuleConfig = {
 	mappings?: {
+		recommendations?: {
+			certTableId?: string;
+			montoAcumuladoColumnKey?: string;
+			dateOrPeriodColumnKey?: string;
+		};
 		curve?: {
 			planTableId?: string;
 			resumenTableId?: string;
@@ -401,6 +407,18 @@ type CurveRuleConfig = {
 			plan?: {
 				startPeriod?: string;
 			};
+		};
+		unpaidCerts?: {
+			certTableId?: string;
+			issuedAtColumnKey?: string;
+		};
+		inactivity?: {
+			certTableId?: string;
+			certIssuedAtColumnKey?: string;
+		};
+		monthlyMissingCert?: {
+			certTableId?: string;
+			certIssuedAtColumnKey?: string;
 		};
 	};
 };
@@ -576,24 +594,92 @@ function parseDateTimestamp(value: unknown): number | null {
 		: Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
 
-function getCertificadoRowSortValue(row: TablaDataRow, fallbackIndex: number): number {
-	const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
-	const fecha =
+type CertificadosRecommendationMapping = {
+	montoAcumuladoColumnKey?: string | null;
+	dateOrPeriodColumnKey?: string | null;
+};
+
+function normalizeOptionalMappingKey(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+function hasValue(value: unknown): boolean {
+	if (value == null) return false;
+	if (typeof value === "string") return value.trim().length > 0;
+	return true;
+}
+
+function getCertificadoDateOrPeriodValue(
+	rowData: Record<string, unknown> | null | undefined,
+	options?: CertificadosRecommendationMapping,
+): unknown {
+	const configuredColumnKey = normalizeOptionalMappingKey(options?.dateOrPeriodColumnKey);
+	if (configuredColumnKey) {
+		return getRowFieldValueByCandidates(rowData, [configuredColumnKey]);
+	}
+	return (
 		getRowFieldValueByCandidates(
 			rowData,
 			["fecha_certificacion", "fecha", "issued_at", "date"],
 			[["fecha", "cert"], ["fecha"]],
+		) ??
+		getRowFieldValueByCandidates(
+			rowData,
+			["periodo", "periodo_key", "period", "mes"],
+			[["periodo"], ["period"], ["mes"]],
+		)
+	);
+}
+
+function getCertificadoMontoAcumuladoValue(
+	rowData: Record<string, unknown> | null | undefined,
+	options?: CertificadosRecommendationMapping,
+): number | null {
+	const configuredColumnKey = normalizeOptionalMappingKey(options?.montoAcumuladoColumnKey);
+	if (configuredColumnKey) {
+		const configuredValue = parseCurrencyLike(
+			getRowFieldValueByCandidates(rowData, [configuredColumnKey]),
 		);
-	const fechaTs = parseDateTimestamp(fecha);
+		if (configuredValue != null) return configuredValue;
+	}
+	return parseCurrencyLike(
+		getRowFieldValueByCandidates(
+			rowData,
+			["monto_acumulado", "monto_acumulado_total", "acumulado", "total_acumulado"],
+			[["monto", "acumul"], ["acumulado"]],
+		),
+	);
+}
+
+function getCertificadoMontoValue(
+	rowData: Record<string, unknown> | null | undefined,
+	options?: CertificadosRecommendationMapping,
+): number | null {
+	const montoAcumulado = getCertificadoMontoAcumuladoValue(rowData, options);
+	if (montoAcumulado != null) return montoAcumulado;
+	return parseCurrencyLike(
+		getRowFieldValueByCandidates(
+			rowData,
+			["monto_certificado", "monto", "importe", "total"],
+			[["monto", "cert"], ["importe"]],
+		),
+	);
+}
+
+function getCertificadoRowSortValue(
+	row: TablaDataRow,
+	fallbackIndex: number,
+	options?: CertificadosRecommendationMapping,
+): number {
+	const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
+	const dateOrPeriod = getCertificadoDateOrPeriodValue(rowData, options);
+	const fechaTs = parseDateTimestamp(dateOrPeriod);
 	if (fechaTs != null) return fechaTs;
 
-	const periodo = getRowFieldValueByCandidates(
-		rowData,
-		["periodo", "periodo_key", "period", "mes"],
-		[["periodo"], ["period"], ["mes"]],
-	);
-	if (periodo != null) {
-		const parsed = parseMonthOrder(periodo, fallbackIndex);
+	if (hasValue(dateOrPeriod)) {
+		const parsed = parseMonthOrder(dateOrPeriod, fallbackIndex);
 		if (parsed.order >= 1000) {
 			const year = Math.floor(parsed.order / 12);
 			const month = parsed.order % 12;
@@ -605,12 +691,15 @@ function getCertificadoRowSortValue(row: TablaDataRow, fallbackIndex: number): n
 	return -fallbackIndex;
 }
 
-function sortCertificadosExtraidosRows(rows: TablaDataRow[]): TablaDataRow[] {
+function sortCertificadosExtraidosRows(
+	rows: TablaDataRow[],
+	options?: CertificadosRecommendationMapping,
+): TablaDataRow[] {
 	return rows
 		.map((row, index) => ({ row, index }))
 		.sort((a, b) => {
-			const sortA = getCertificadoRowSortValue(a.row, a.index);
-			const sortB = getCertificadoRowSortValue(b.row, b.index);
+			const sortA = getCertificadoRowSortValue(a.row, a.index, options);
+			const sortB = getCertificadoRowSortValue(b.row, b.index, options);
 			return sortB - sortA;
 		})
 		.map((entry) => entry.row);
@@ -739,103 +828,95 @@ type DerivedCertificadosMetrics = {
 	warningMessage: string | null;
 };
 
-function getLatestCertificadoMontoAcumulado(rows: TablaDataRow[]): number | null {
+function getLatestCertificadoMontoAcumulado(
+	rows: TablaDataRow[],
+	options?: CertificadosRecommendationMapping,
+): number | null {
 	const sorted = rows
 		.map((row, index) => ({ row, index }))
-		.sort((a, b) => getCertificadoRowSortValue(b.row, b.index) - getCertificadoRowSortValue(a.row, a.index))
+		.sort(
+			(a, b) =>
+				getCertificadoRowSortValue(b.row, b.index, options) -
+				getCertificadoRowSortValue(a.row, a.index, options),
+		)
 		.map((entry) => entry.row);
+
+	let latestAcumulado: number | null = null;
+	let acumuladoFallbackFromMontos = 0;
+	let hasMontoCertificado = false;
 
 	for (const row of sorted) {
 		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
-		const montoAcumulado = parseCurrencyLike(
+		if (latestAcumulado == null) {
+			const montoAcumulado = getCertificadoMontoAcumuladoValue(rowData, options);
+			if (montoAcumulado != null) {
+				latestAcumulado = roundDerivedValue(montoAcumulado);
+			}
+		}
+		const montoCertificado = parseCurrencyLike(
 			getRowFieldValueByCandidates(
 				rowData,
-				["monto_acumulado", "monto_acumulado_total", "acumulado", "total_acumulado"],
-				[["monto", "acumul"], ["acumulado"]],
+				["monto_certificado", "monto", "importe", "total"],
+				[["monto", "cert"], ["importe"]],
 			),
 		);
-		if (montoAcumulado != null) {
-			return roundDerivedValue(montoAcumulado);
+		if (montoCertificado != null) {
+			acumuladoFallbackFromMontos += montoCertificado;
+			hasMontoCertificado = true;
 		}
 	}
 
+	if (latestAcumulado != null) return latestAcumulado;
+	if (hasMontoCertificado) return roundDerivedValue(acumuladoFallbackFromMontos);
 	return null;
 }
 
-function getLatestCertificadoSourceLabel(rows: TablaDataRow[]): string | null {
+function getLatestCertificadoSourceLabel(
+	rows: TablaDataRow[],
+	options?: CertificadosRecommendationMapping,
+): string | null {
 	const sorted = rows
 		.map((row, index) => ({ row, index }))
-		.sort((a, b) => getCertificadoRowSortValue(b.row, b.index) - getCertificadoRowSortValue(a.row, a.index))
+		.sort(
+			(a, b) =>
+				getCertificadoRowSortValue(b.row, b.index, options) -
+				getCertificadoRowSortValue(a.row, a.index, options),
+		)
 		.map((entry) => entry.row);
 
 	for (const [index, row] of sorted.entries()) {
 		const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
-		const montoAcumulado = parseCurrencyLike(
-			getRowFieldValueByCandidates(
-				rowData,
-				["monto_acumulado", "monto_acumulado_total", "acumulado", "total_acumulado"],
-				[["monto", "acumul"], ["acumulado"]],
-			),
-		);
-		if (montoAcumulado == null) continue;
+		const monto = getCertificadoMontoValue(rowData, options);
+		if (monto == null) continue;
 
-		const fecha = getRowFieldValueByCandidates(
-			rowData,
-			["fecha_certificacion", "fecha", "issued_at", "date"],
-			[["fecha", "cert"], ["fecha"]],
-		);
-		if (typeof fecha === "string" && fecha.trim()) return fecha.trim();
-
-		const periodo = getRowFieldValueByCandidates(
-			rowData,
-			["periodo", "periodo_key", "period", "mes"],
-			[["periodo"], ["period"], ["mes"]],
-		);
-		if (periodo != null) return parseMonthOrder(periodo, index).label;
+		const dateOrPeriod = getCertificadoDateOrPeriodValue(rowData, options);
+		if (typeof dateOrPeriod === "string" && dateOrPeriod.trim()) return dateOrPeriod.trim();
+		if (hasValue(dateOrPeriod)) return parseMonthOrder(dateOrPeriod, index).label;
 	}
 
 	return null;
 }
 
-function isMeaningfulCertificadoResumenRow(row: TablaDataRow): boolean {
+function isMeaningfulCertificadoResumenRow(
+	row: TablaDataRow,
+	options?: CertificadosRecommendationMapping,
+): boolean {
 	const rowData = (row.data as Record<string, unknown> | null | undefined) ?? null;
-	const montoAcumulado = parseCurrencyLike(
-		getRowFieldValueByCandidates(
-			rowData,
-			["monto_acumulado", "monto_acumulado_total", "acumulado", "total_acumulado"],
-			[["monto", "acumul"], ["acumulado"]],
-		),
-	);
-	const montoCertificado = parseCurrencyLike(
-		getRowFieldValueByCandidates(
-			rowData,
-			["monto_certificado", "monto", "importe", "total"],
-			[["monto", "cert"], ["importe"]],
-		),
-	);
-	const periodoOFecha =
-		getRowFieldValueByCandidates(
-			rowData,
-			["fecha_certificacion", "fecha", "issued_at", "date"],
-			[["fecha", "cert"], ["fecha"]],
-		) ??
-		getRowFieldValueByCandidates(
-			rowData,
-			["periodo", "periodo_key", "period", "mes"],
-			[["periodo"], ["period"], ["mes"]],
-		);
+	const monto = getCertificadoMontoValue(rowData, options);
+	const dateOrPeriod = getCertificadoDateOrPeriodValue(rowData, options);
 
-	return Boolean(periodoOFecha) && (montoAcumulado != null || montoCertificado != null);
+	return hasValue(dateOrPeriod) && monto != null;
 }
 
 function computeDerivedCertificadosMetrics(
 	rows: TablaDataRow[],
 	contratoMasAmpliaciones: unknown,
+	options?: CertificadosRecommendationMapping,
 	certificadoOverride?: unknown,
 ): DerivedCertificadosMetrics | null {
 	const latestCertificado = certificadoOverride != null
 		? parseCurrencyLike(certificadoOverride)
-		: getLatestCertificadoMontoAcumulado(rows);
+		: getLatestCertificadoMontoAcumulado(rows, options);
 	if (latestCertificado == null) return null;
 
 	const contrato = parseCurrencyLike(contratoMasAmpliaciones) ?? Number(contratoMasAmpliaciones ?? 0) ?? 0;
@@ -1307,7 +1388,7 @@ function ObraDetailPageContent() {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const isMobile = useIsMobile();
-	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
+	const { isAdmin: isTenantAdmin, tenantId: activeTenantId } = useTenantAdminStatus();
 	const obraId = useMemo(() => {
 		const raw = (params as Record<string, string | string[] | undefined>)?.obraId;
 		if (Array.isArray(raw)) return raw[0];
@@ -1421,7 +1502,9 @@ function ObraDetailPageContent() {
 				typeof link.folderName === "string" &&
 				isCertificadosExtraidosFolder(link.folderName) &&
 				isCertificadoResumenLink(link) &&
-				(Array.isArray(link.rows) ? link.rows : []).some(isMeaningfulCertificadoResumenRow)
+				(Array.isArray(link.rows) ? link.rows : []).some((row) =>
+					isMeaningfulCertificadoResumenRow(row),
+				)
 		);
 	}, [activeTab, isValidObraId, ocrLinksQuery.data]);
 
@@ -1492,6 +1575,44 @@ function ObraDetailPageContent() {
 		queryKey: ["obra", obraId, "curve-rules-config"],
 		enabled: isValidObraId && isGeneralTabActive,
 		queryFn: async () => fetchRulesConfig(obraId!),
+		staleTime: 60 * 1000,
+	});
+	const certRecommendationsMapping = useMemo(() => {
+		const mappings = curveRulesConfigQuery.data?.mappings;
+		const certTableId = normalizeOptionalMappingKey(
+			mappings?.recommendations?.certTableId ??
+			mappings?.monthlyMissingCert?.certTableId ??
+			mappings?.unpaidCerts?.certTableId ??
+			mappings?.inactivity?.certTableId,
+		);
+		const montoAcumuladoColumnKey = normalizeOptionalMappingKey(
+			mappings?.recommendations?.montoAcumuladoColumnKey,
+		);
+		const dateOrPeriodColumnKey = normalizeOptionalMappingKey(
+			mappings?.recommendations?.dateOrPeriodColumnKey ??
+			mappings?.monthlyMissingCert?.certIssuedAtColumnKey ??
+			mappings?.unpaidCerts?.issuedAtColumnKey ??
+			mappings?.inactivity?.certIssuedAtColumnKey,
+		);
+		return {
+			certTableId,
+			montoAcumuladoColumnKey,
+			dateOrPeriodColumnKey,
+		} satisfies CertificadosRecommendationMapping & { certTableId: string | null };
+	}, [curveRulesConfigQuery.data]);
+	const configuredCertRowsQuery = useQuery({
+		queryKey: [
+			"obra",
+			obraId,
+			"recommendations-cert-table-rows",
+			certRecommendationsMapping.certTableId ?? "none",
+		],
+		enabled:
+			isValidObraId &&
+			isGeneralTabActive &&
+			Boolean(certRecommendationsMapping.certTableId),
+		queryFn: async () =>
+			fetchTablaRowsAll(obraId!, certRecommendationsMapping.certTableId ?? ""),
 		staleTime: 60 * 1000,
 	});
 	const selectedCurveTableRefs = useMemo(() => {
@@ -1604,6 +1725,19 @@ function ObraDetailPageContent() {
 	const flujoActions = flujoActionsQuery.data ?? [];
 	const isLoadingFlujoActions = flujoActionsQuery.isLoading;
 	const certificadosExtraidosRows = useMemo<TablaDataRow[]>(() => {
+		if (certRecommendationsMapping.certTableId) {
+			const rows = (configuredCertRowsQuery.data ?? []).map((row) => ({
+				id: row.id,
+				data: (row.data as Record<string, unknown>) ?? {},
+			})) as TablaDataRow[];
+			return sortCertificadosExtraidosRows(
+				rows.filter((row) =>
+					isMeaningfulCertificadoResumenRow(row, certRecommendationsMapping),
+				),
+				certRecommendationsMapping,
+			);
+		}
+
 		const links = ocrLinksQuery.data ?? [];
 		return sortCertificadosExtraidosRows(
 			links
@@ -1614,17 +1748,38 @@ function ObraDetailPageContent() {
 						isCertificadoResumenLink(link),
 				)
 				.flatMap((link) => (Array.isArray(link.rows) ? link.rows : []))
-				.filter(isMeaningfulCertificadoResumenRow)
+				.filter((row) => isMeaningfulCertificadoResumenRow(row))
 		);
-	}, [ocrLinksQuery.data]);
+	}, [
+		certRecommendationsMapping,
+		configuredCertRowsQuery.data,
+		ocrLinksQuery.data,
+	]);
 	const obraData = obraQuery.data;
 	const latestExtractedCertificadoALaFecha = useMemo(
-		() => getLatestCertificadoMontoAcumulado(certificadosExtraidosRows),
-		[certificadosExtraidosRows]
+		() =>
+			getLatestCertificadoMontoAcumulado(
+				certificadosExtraidosRows,
+				certRecommendationsMapping,
+			),
+		[certRecommendationsMapping, certificadosExtraidosRows]
 	);
 	const latestExtractedCertificadoSourceLabel = useMemo(
-		() => getLatestCertificadoSourceLabel(certificadosExtraidosRows),
-		[certificadosExtraidosRows]
+		() => {
+			const dateOrPeriodLabel = getLatestCertificadoSourceLabel(
+				certificadosExtraidosRows,
+				certRecommendationsMapping,
+			);
+			const configuredTableName =
+				certRecommendationsMapping.certTableId
+					? tablasById.get(certRecommendationsMapping.certTableId)?.name ?? null
+					: null;
+			if (configuredTableName && dateOrPeriodLabel) {
+				return `${dateOrPeriodLabel} - ${configuredTableName}`;
+			}
+			return configuredTableName ?? dateOrPeriodLabel;
+		},
+		[certRecommendationsMapping, certificadosExtraidosRows, tablasById]
 	);
 	const generalReportsData = generalReportsQuery.data ?? { findings: [], curve: null };
 	const hasMissingCurrentMonthFinding = generalReportsData.findings.some(
@@ -1740,6 +1895,45 @@ function ObraDetailPageContent() {
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
 	const [documentsRecoveryRequestToken, setDocumentsRecoveryRequestToken] = useState(0);
+	const [isIlagDemoTenant, setIsIlagDemoTenant] = useState(false);
+	const [isIlagMaterialsWizardOpen, setIsIlagMaterialsWizardOpen] = useState(false);
+
+	useEffect(() => {
+		let cancelled = false;
+		void (async () => {
+			try {
+				const response = await fetch("/api/tenant-marker", { cache: "no-store" });
+				if (!response.ok) {
+					if (!cancelled) {
+						setIsIlagDemoTenant(false);
+					}
+					return;
+				}
+				const payload = (await response.json().catch(() => ({}))) as {
+					isIlagDemoTenant?: unknown;
+				};
+				const isIlagDemo = payload.isIlagDemoTenant === true;
+
+				if (!cancelled) {
+					setIsIlagDemoTenant(isIlagDemo);
+				}
+			} catch (error) {
+				console.error("[obra-page] failed to resolve tenant marker", error);
+				if (!cancelled) {
+					setIsIlagDemoTenant(false);
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [activeTenantId]);
+
+	useEffect(() => {
+		if (isIlagDemoTenant) return;
+		setIsIlagMaterialsWizardOpen(false);
+	}, [isIlagDemoTenant]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1824,6 +2018,26 @@ function ObraDetailPageContent() {
 		}
 		router.push("/excel/papelera-obras");
 	}, [isTenantAdmin, router]);
+
+	const handleStartIlagMaterialsWizard = useCallback(() => {
+		setIsIlagMaterialsWizardOpen(true);
+		if (activeTab !== "documentos") {
+			setActiveTab("documentos");
+		}
+		setQueryParams({
+			tab: "documentos",
+			ilagMaterialsReportGuide: "1",
+		});
+	}, [activeTab, setQueryParams]);
+
+	const handleIlagMaterialsWizardOpenChange = useCallback(
+		(nextOpen: boolean) => {
+			setIsIlagMaterialsWizardOpen(nextOpen);
+			if (nextOpen) return;
+			setQueryParams({ ilagMaterialsReportGuide: null });
+		},
+		[setQueryParams],
+	);
 
 	// Import OC from PDF
 	const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -2387,14 +2601,21 @@ function ObraDetailPageContent() {
 		const savedMetrics = computeDerivedCertificadosMetrics(
 			certificadosExtraidosRows,
 			obraData.contratoMasAmpliaciones,
+			certRecommendationsMapping,
 			savedCertificadoIsManual ? obraData.certificadoALaFecha : undefined,
 		);
 		const currentMetrics = computeDerivedCertificadosMetrics(
 			certificadosExtraidosRows,
 			form.state.values.contratoMasAmpliaciones,
+			certRecommendationsMapping,
 			savedCertificadoIsManual || currentCertificadoIsDirty
 				? form.state.values.certificadoALaFecha
 				: undefined,
+		);
+		const extractedMetrics = computeDerivedCertificadosMetrics(
+			certificadosExtraidosRows,
+			form.state.values.contratoMasAmpliaciones,
+			certRecommendationsMapping,
 		);
 
 		if (!savedMetrics || !currentMetrics) return;
@@ -2422,6 +2643,7 @@ function ObraDetailPageContent() {
 		);
 
 		const updates: Partial<Record<DerivedCertificadosField, number>> = {};
+		const suggestedManualUpdates: Partial<Record<DerivedCertificadosField, number>> = {};
 		const blockedFieldLabels: Record<"saldoACertificar" | "porcentaje", string> = {
 			saldoACertificar: "Saldo a certificar",
 			porcentaje: "Porcentaje de avance",
@@ -2476,6 +2698,32 @@ function ObraDetailPageContent() {
 				savedManual: savedPorcentajeIsManual,
 			});
 		}
+		if (savedCertificadoIsManual && extractedMetrics) {
+			const maybeSuggestManualField = (
+				field: DerivedCertificadosField,
+				nextValue: number | null,
+				currentValue: unknown,
+			) => {
+				if (nextValue == null) return;
+				if (approximatelyEqual(currentValue, nextValue)) return;
+				suggestedManualUpdates[field] = nextValue;
+			};
+			maybeSuggestManualField(
+				"certificadoALaFecha",
+				extractedMetrics.certificadoALaFecha,
+				form.state.values.certificadoALaFecha,
+			);
+			maybeSuggestManualField(
+				"saldoACertificar",
+				extractedMetrics.saldoACertificar,
+				form.state.values.saldoACertificar,
+			);
+			maybeSuggestManualField(
+				"porcentaje",
+				extractedMetrics.porcentaje,
+				form.state.values.porcentaje,
+			);
+		}
 
 		const fieldLabels: Record<DerivedCertificadosField, string> = {
 			certificadoALaFecha: "Certificado a la fecha",
@@ -2484,6 +2732,7 @@ function ObraDetailPageContent() {
 		};
 		const blockedFieldKeys = currentMetrics.blockedFieldKeys;
 		const hasUpdates = Object.keys(updates).length > 0;
+		const hasManualSuggestions = Object.keys(suggestedManualUpdates).length > 0;
 		const hasBlockedFields = blockedFieldKeys.length > 0;
 
 		blockedFieldKeys.forEach((field) => {
@@ -2496,7 +2745,7 @@ function ObraDetailPageContent() {
 			pendingChanged = true;
 		});
 
-		if (!hasUpdates && !hasBlockedFields) {
+		if (!hasUpdates && !hasBlockedFields && !hasManualSuggestions) {
 			if (pendingChanged) {
 				setPendingDerivedFieldValues(nextPendingDerivedFieldValues);
 			}
@@ -2514,17 +2763,34 @@ function ObraDetailPageContent() {
 		if (pendingChanged) {
 			setPendingDerivedFieldValues(nextPendingDerivedFieldValues);
 		}
+		const effectiveUpdatedFieldKeys = hasUpdates
+			? (Object.keys(updates) as DerivedCertificadosField[])
+			: hasManualSuggestions
+				? (Object.keys(suggestedManualUpdates) as DerivedCertificadosField[])
+				: [];
+		const manualSuggestionMessage = hasManualSuggestions
+			? "Se detectaron nuevos valores desde Certificados Extraidos, pero los campos actuales parecen manuales. Revisalos y aplicalos si corresponde."
+			: null;
+		const recommendedValues: Partial<Record<DerivedCertificadosField, number>> = {
+			...(updates as Partial<Record<DerivedCertificadosField, number>>),
+			...(suggestedManualUpdates as Partial<Record<DerivedCertificadosField, number>>),
+		};
 		setDerivedCertificadosNotice({
 			sourceLabel: latestExtractedCertificadoSourceLabel,
-			updatedFieldKeys: Object.keys(updates) as DerivedCertificadosField[],
-			updatedFieldLabels: (Object.keys(updates) as DerivedCertificadosField[]).map(
+			updatedFieldKeys: effectiveUpdatedFieldKeys,
+			updatedFieldLabels: effectiveUpdatedFieldKeys.map(
 				(field) => fieldLabels[field],
 			),
+			recommendedValues,
 			blockedFieldKeys,
 			blockedFieldLabels: blockedFieldKeys.map((field) => blockedFieldLabels[field]),
-			warningMessage: currentMetrics.warningMessage,
+			warningMessage:
+				[currentMetrics.warningMessage, manualSuggestionMessage]
+					.filter((message): message is string => Boolean(message))
+					.join(" ") || null,
 		});
 	}, [
+		certRecommendationsMapping,
 		certificadosExtraidosRows,
 		form,
 		form.state.values.certificadoALaFecha,
@@ -3037,6 +3303,82 @@ function ObraDetailPageContent() {
 		</>
 	);
 
+	const ilagMaterialsReportFlow = useMemo<WizardFlow | null>(() => {
+		if (!isIlagDemoTenant) return null;
+		return {
+			id: "ilag-materials-analysis-report",
+			title: "Reporte de Analisis de Materiales",
+			steps: [
+				{
+					id: "intro",
+					targetId: "obra-page-ilag-material-report-button",
+					title: "Reporte de Analisis de Materiales",
+					content:
+						"Esta guia te muestra el flujo completo para cargar el Excel de materiales y generar el reporte.",
+					placement: "bottom",
+				},
+				{
+					id: "go-documents",
+					targetId: "obra-page-file-manager-tab",
+					title: "Abri Documentos",
+					content:
+						"Hace clic en la pestana Documentos para continuar con la carga del archivo.",
+					placement: "bottom",
+					allowClickThrough: true,
+					requiredAction: "click_target",
+					waitForMs: 2400,
+					fallback: "continue",
+				},
+				{
+					id: "open-target-folder",
+					targetId: "documents-folder-thumbnail-presupuesto-personalizado",
+					title: "Carpeta presupuesto-personalizado",
+					content:
+						"Entra en la carpeta presupuesto-personalizado. Si no existe, creala con ese nombre.",
+					placement: "bottom",
+					allowClickThrough: true,
+					requiredAction: "click_target",
+					waitForMs: 3000,
+					fallback: "continue",
+				},
+				{
+					id: "drop-excel",
+					targetId: "documents-dropzone",
+					title: "Carga el archivo Excel",
+					content:
+						"Arrastra y suelta el Excel en esa carpeta para importar los datos. Si ya está cargado, podes continuar.",
+					placement: "top",
+					waitForMs: 2600,
+					fallback: "continue",
+				},
+				{
+					id: "switch-to-table-mode",
+					targetId: "documents-view-mode-table",
+					title: "Pasa a vista Tabla",
+					content:
+						"Cambia a la vista Tabla para revisar que los datos se hayan cargado correctamente.",
+					placement: "left",
+					allowClickThrough: true,
+					requiredAction: "click_target",
+					waitForMs: 2600,
+					fallback: "continue",
+				},
+				{
+					id: "generate-report-from-table-view",
+					targetId: "documents-table-generate-report",
+					title: "Generar reporte desde Tabla",
+					content:
+						"En la vista Tabla, selecciona 'presupuesto personalizado - materiales' y hace clic en Generar reporte.",
+					placement: "left",
+					allowClickThrough: true,
+					requiredAction: "click_target",
+					waitForMs: 2600,
+					fallback: "continue",
+				},
+			],
+		};
+	}, [isIlagDemoTenant]);
+
 	const guidedObraFlow = useMemo<WizardFlow | null>(() => {
 		if (!isGuidedExcelFlow) return null;
 		if (guidedTourStage === GUIDED_EXCEL_STAGES.generalReviewUpdatedData) {
@@ -3071,7 +3413,7 @@ function ObraDetailPageContent() {
 						content:
 							"Avance físico, importes del contrato, fechas clave y alertas activas. Todo lo que necesitás para entender el estado real de la obra sin abrir ninguna planilla.",
 						placement: "top",
-						skippable: false,
+						skippable: true,
 					},
 					{
 						id: "missing-certificado",
@@ -3082,7 +3424,7 @@ function ObraDetailPageContent() {
 						content:
 							"El sistema detectó que la obra tiene certificados anteriores pero el del mes actual todavía no fue cargado. Lo subimos ahora desde Documentos.",
 						placement: "right",
-						skippable: false,
+						skippable: true,
 						waitForMs: 2800,
 					},
 					{
@@ -3094,7 +3436,7 @@ function ObraDetailPageContent() {
 						placement: "bottom",
 						allowClickThrough: true,
 						requiredAction: "click_target",
-						skippable: false,
+						skippable: true,
 						waitForMs: 2200,
 					},
 				],
@@ -3115,7 +3457,7 @@ function ObraDetailPageContent() {
 						content:
 							"Esta obra tiene historial cargado pero le falta el certificado del período actual. Lo cargamos ahora desde Documentos.",
 						placement: "left",
-						skippable: false,
+						skippable: true,
 						waitForMs: 2800,
 					},
 					{
@@ -3127,7 +3469,7 @@ function ObraDetailPageContent() {
 						placement: "bottom",
 						allowClickThrough: true,
 						requiredAction: "click_target",
-						skippable: false,
+						skippable: true,
 						waitForMs: 2200,
 					},
 				],
@@ -3148,7 +3490,7 @@ function ObraDetailPageContent() {
 						placement: "bottom",
 						allowClickThrough: true,
 						requiredAction: "click_target",
-						skippable: false,
+						skippable: true,
 						waitForMs: 2200,
 					},
 				],
@@ -3169,13 +3511,27 @@ function ObraDetailPageContent() {
 	return (
 		<div className="relative container max-w-full mx-auto px-4 pt-2">
 			<DemoPageTour flow={obraOverviewTour} />
+			{ilagMaterialsReportFlow ? (
+				<ContextualWizard
+					open={isIlagMaterialsWizardOpen}
+					onOpenChange={handleIlagMaterialsWizardOpenChange}
+					flow={ilagMaterialsReportFlow}
+					finishLabel="Entendido"
+				/>
+			) : null}
 			{guidedObraFlow ? (
 				<ContextualWizard
 					open
-					onOpenChange={() => { }}
+					onOpenChange={(nextOpen) => {
+						if (!nextOpen) {
+							setQueryParams({
+								tour: null,
+								tourStage: null,
+							});
+						}
+					}}
 					flow={guidedObraFlow}
-					showCloseButton={false}
-					finishLabel="Ir a Macro Tablas →"
+					showCloseButton={true}
 					onComplete={finishGuidedExcelFlow}
 				/>
 			) : null}
@@ -3260,6 +3616,18 @@ function ObraDetailPageContent() {
 												: undefined
 										}
 									/>
+									{isIlagDemoTenant ? (
+										<Button
+											type="button"
+											variant="default"
+											size="sm"
+											data-wizard-target="obra-page-ilag-material-report-button"
+											className="h-8 max-w-full text-xs md:text-sm"
+											onClick={handleStartIlagMaterialsWizard}
+										>
+											Guia de Presupuesto
+										</Button>
+									) : null}
 									{isObraAtRisk && (
 										<Tooltip>
 											<TooltipTrigger asChild>
@@ -3278,7 +3646,7 @@ function ObraDetailPageContent() {
 								<div className="flex flex-wrap items-center gap-2 justify-end">
 									{isTenantAdmin && (
 										<>
-											<Button
+											{/* <Button
 												type="button"
 												variant="outline"
 												size="sm"
@@ -3287,7 +3655,7 @@ function ObraDetailPageContent() {
 											>
 												<Trash2 className="h-4 w-4" />
 												<span className="text-base md:text-sm">Papelera obras</span>
-											</Button>
+											</Button> */}
 											<Button
 												type="button"
 												variant="destructive"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -2133,13 +2134,20 @@ export default function ObraDefaultsPage() {
   return (
     <div className="p-6 max-w-full mx-auto space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Configuración de Obras
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Definí la estructura predeterminada para cada nueva obra
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Configuración de Obras
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Definí la estructura predeterminada para cada nueva obra
+          </p>
+        </div>
+        <Button asChild variant="outline" className="shrink-0">
+          <Link href="/admin/obra-defaults/reporting">
+            Hub de defaults de reporting
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -4564,3 +4572,4 @@ export default function ObraDefaultsPage() {
     </div >
   );
 }
+

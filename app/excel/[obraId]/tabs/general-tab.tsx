@@ -153,6 +153,9 @@ type GeneralTabProps = {
 		sourceLabel: string | null;
 		updatedFieldKeys: Array<"certificadoALaFecha" | "saldoACertificar" | "porcentaje">;
 		updatedFieldLabels: string[];
+		recommendedValues: Partial<
+			Record<"certificadoALaFecha" | "saldoACertificar" | "porcentaje", number>
+		>;
 		blockedFieldKeys: Array<"saldoACertificar" | "porcentaje">;
 		blockedFieldLabels: string[];
 		warningMessage: string | null;
@@ -960,6 +963,39 @@ export function ObraGeneralTab({
 		field: "saldoACertificar" | "porcentaje"
 	) => blockedDerivedFieldSet.has(field);
 	const isContratoBlockingDerived = blockedDerivedFieldSet.size > 0;
+	const hasUnsavedValues = (values: Record<string, unknown>) =>
+		(Object.keys(initialFormValues) as Array<keyof Obra>).some((key) => {
+			const currentValue = values[key as string];
+			const initialValue = initialFormValues[key];
+			if (typeof currentValue === "object" && currentValue != null && typeof initialValue === "object" && initialValue != null) {
+				return JSON.stringify(currentValue) !== JSON.stringify(initialValue);
+			}
+			return currentValue !== initialValue;
+		});
+	const getRecommendedFieldValue = (
+		field: "certificadoALaFecha" | "saldoACertificar" | "porcentaje"
+	): number | null => {
+		const value = derivedCertificadosNotice?.recommendedValues?.[field];
+		return Number.isFinite(value) ? Number(value) : null;
+	};
+	const getRecommendedFieldText = (
+		field: "certificadoALaFecha" | "saldoACertificar" | "porcentaje"
+	): string | null => {
+		const value = getRecommendedFieldValue(field);
+		if (value == null) return null;
+		if (field === "porcentaje") return formatNumber(value, "%");
+		return formatCurrency(value);
+	};
+	const hasVisibleRecommendation = (
+		field: "certificadoALaFecha" | "saldoACertificar" | "porcentaje",
+		currentValue: unknown,
+	) => {
+		const recommended = getRecommendedFieldValue(field);
+		if (recommended == null) return false;
+		const current = Number(currentValue ?? 0);
+		if (!Number.isFinite(current)) return true;
+		return Math.abs(current - recommended) > 0.01;
+	};
 
 	return (
 		<TabsContent value="general" className="space-y-6 pt-4">
@@ -1068,6 +1104,26 @@ export function ObraGeneralTab({
 															{getErrorMessage(field.state.meta.errors)}
 														</p>
 													)}
+													{hasVisibleRecommendation("porcentaje", field.state.value) ? (
+														<div className="mt-2 flex items-center justify-between gap-2">
+															<p className="text-xs text-[#b45309]">
+																Valor recomendado: {getRecommendedFieldText("porcentaje")}
+															</p>
+															<Button
+																type="button"
+																size="sm"
+																variant="outline"
+																className="h-7 px-2 text-[11px]"
+																onClick={() => {
+																	const recommendedValue = getRecommendedFieldValue("porcentaje");
+																	if (recommendedValue == null) return;
+																	field.handleChange(recommendedValue);
+																}}
+															>
+																Aplicar recomendacion
+															</Button>
+														</div>
+													) : null}
 													{isDerivedFieldBlocked("porcentaje") && derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -1261,6 +1317,27 @@ export function ObraGeneralTab({
 														)}
 														placeholder="0.00"
 													/>
+													{hasVisibleRecommendation("certificadoALaFecha", field.state.value) ? (
+														<div className="mt-2 flex items-center justify-between gap-2">
+															<p className="text-xs text-[#b45309]">
+																Valor recomendado: {getRecommendedFieldText("certificadoALaFecha")}
+															</p>
+															<Button
+																type="button"
+																size="sm"
+																variant="outline"
+																className="h-7 px-2 text-[11px]"
+																onClick={() => {
+																	const recommendedValue =
+																		getRecommendedFieldValue("certificadoALaFecha");
+																	if (recommendedValue == null) return;
+																	field.handleChange(recommendedValue);
+																}}
+															>
+																Aplicar recomendacion
+															</Button>
+														</div>
+													) : null}
 												</div>
 											)}
 										</form.Field>
@@ -1287,6 +1364,27 @@ export function ObraGeneralTab({
 														)}
 														placeholder="0.00"
 													/>
+													{hasVisibleRecommendation("saldoACertificar", field.state.value) ? (
+														<div className="mt-2 flex items-center justify-between gap-2">
+															<p className="text-xs text-[#b45309]">
+																Valor recomendado: {getRecommendedFieldText("saldoACertificar")}
+															</p>
+															<Button
+																type="button"
+																size="sm"
+																variant="outline"
+																className="h-7 px-2 text-[11px]"
+																onClick={() => {
+																	const recommendedValue =
+																		getRecommendedFieldValue("saldoACertificar");
+																	if (recommendedValue == null) return;
+																	field.handleChange(recommendedValue);
+																}}
+															>
+																Aplicar recomendacion
+															</Button>
+														</div>
+													) : null}
 													{isDerivedFieldBlocked("saldoACertificar") && derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -1555,17 +1653,25 @@ export function ObraGeneralTab({
 						>
 							Cancelar
 						</Button>
-						<Button
-							type="button"
-							disabled={!hasUnsavedChanges() || isSaving}
-							className="min-w-[140px]"
-							onClick={(e) => {
-								e.preventDefault();
-								void onSave();
-							}}
+						<form.Subscribe
+							selector={(state: any) =>
+								hasUnsavedValues((state.values as Record<string, unknown>) ?? {})
+							}
 						>
-							{isSaving ? "Guardando..." : "Guardar cambios"}
-						</Button>
+							{(hasUnsaved: any) => (
+								<Button
+									type="button"
+									disabled={!Boolean(hasUnsaved) || isSaving}
+									className="min-w-[140px]"
+									onClick={(e) => {
+										e.preventDefault();
+										void onSave();
+									}}
+								>
+									{isSaving ? "Guardando..." : "Guardar cambios"}
+								</Button>
+							)}
+						</form.Subscribe>
 					</motion.div>
 				</>
 			) : (
@@ -1931,29 +2037,37 @@ export function ObraGeneralTab({
 										>
 											Descartar cambios
 										</Button>
-										<Button
-											onClick={(e) => {
-												e.preventDefault();
-												void onSave();
-											}}
-											disabled={!hasUnsavedChanges() || isSaving}
-											className="gap-2"
+										<form.Subscribe
+											selector={(state: any) =>
+												hasUnsavedValues((state.values as Record<string, unknown>) ?? {})
+											}
 										>
-											{isSaving ? (
-												<>
-													<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-														<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-														<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-													</svg>
-													Guardando...
-												</>
-											) : (
-												<>
-													<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-													Guardar cambios
-												</>
+											{(hasUnsaved: any) => (
+												<Button
+													onClick={(e) => {
+														e.preventDefault();
+														void onSave();
+													}}
+													disabled={!Boolean(hasUnsaved) || isSaving}
+													className="gap-2"
+												>
+													{isSaving ? (
+														<>
+															<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+																<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+																<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+															</svg>
+															Guardando...
+														</>
+													) : (
+														<>
+															<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+															Guardar cambios
+														</>
+													)}
+												</Button>
 											)}
-										</Button>
+										</form.Subscribe>
 									</div>
 								</motion.div>
 							)}

@@ -79,6 +79,8 @@ export type ReportState = {
 	hiddenColumnIds: string[];
 	sortColumnId: string | null;
 	sortDirection: "asc" | "desc";
+	groupSortColumnId: string | null;
+	groupSortDirection: "asc" | "desc";
 	aggregations: Record<string, AggregationType>;
 	summaryDisplay: "row" | "card";
 	showMiniCharts: boolean;

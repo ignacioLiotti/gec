@@ -8,7 +8,9 @@ export const DEFAULT_RULE_CONFIG: RuleConfig = {
     monthlyMissingCert: true,
     stageStalled: true,
   },
-  mappings: {},
+  mappings: {
+    recommendations: {},
+  },
   thresholds: {
     curve: { warnBelow: 10, criticalBelow: 20 },
     unpaidCerts: { severity: "warn" },

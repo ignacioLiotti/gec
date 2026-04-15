@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Trash2, Upload } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
 	FormTable,
 	FormTableContent,
@@ -173,6 +173,8 @@ export default function DesktopExcelPageClient({
 	initialObras,
 	initialLoadMode,
 }: ExcelPageClientProps) {
+	const router = useRouter();
+	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
 	const [isImporting, setIsImporting] = useState(false);
@@ -230,6 +232,14 @@ export default function DesktopExcelPageClient({
 			],
 		};
 	}, [guidedTourStage, searchParams]);
+
+	const closeGuidedExcelFlow = useCallback(() => {
+		const params = new URLSearchParams(searchParams?.toString() ?? "");
+		params.delete("tour");
+		params.delete("tourStage");
+		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
+		router.replace(nextUrl, { scroll: false });
+	}, [pathname, router, searchParams]);
 
 	useEffect(() => {
 		setHydratedRows(initialObras.map(mapObraToDetailRow));
@@ -642,9 +652,13 @@ export default function DesktopExcelPageClient({
 					{guidedExcelFlow ? (
 						<ContextualWizard
 							open
-							onOpenChange={() => { }}
+							onOpenChange={(nextOpen) => {
+								if (!nextOpen) {
+									closeGuidedExcelFlow();
+								}
+							}}
 							flow={guidedExcelFlow}
-							showCloseButton={false}
+							showCloseButton={true}
 						/>
 					) : null}
 				</div>

@@ -92,6 +92,10 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 
 	// === ADMIN ROUTES (admin/owner only) ===
 	{
+		path: "/billing",
+		allowedRoles: ["admin"],
+	},
+	{
 		path: "/admin",
 		allowedRoles: ["admin"],
 	},
@@ -133,6 +137,10 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	},
 	{
 		path: "/admin/obra-defaults",
+		allowedRoles: ["admin"],
+	},
+	{
+		path: "/admin/obra-defaults/reporting",
 		allowedRoles: ["admin"],
 	},
 	{

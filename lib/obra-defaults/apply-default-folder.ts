@@ -236,6 +236,529 @@ const CERTIFICADO_SPREADSHEET_PRESETS: SpreadsheetPreset[] = [
 	},
 ];
 
+const DOCUMENTS_BUCKET = "obra-documents";
+const STORAGE_LIST_PAGE_SIZE = 1000;
+const REFERENCE_UPDATE_CHUNK_SIZE = 200;
+
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+	if (chunkSize <= 0 || items.length === 0) return [];
+	const chunks: T[][] = [];
+	for (let i = 0; i < items.length; i += chunkSize) {
+		chunks.push(items.slice(i, i + chunkSize));
+	}
+	return chunks;
+}
+
+function getFileNameFromPath(path: string): string {
+	const segments = path.split("/").filter(Boolean);
+	return segments.length > 0 ? segments[segments.length - 1] : "";
+}
+
+function isUniqueViolation(error: unknown): boolean {
+	const code =
+		typeof error === "object" &&
+		error &&
+		"code" in error &&
+		typeof (error as { code?: unknown }).code === "string"
+			? (error as { code: string }).code
+			: null;
+	if (code === "23505") return true;
+	const message =
+		typeof error === "object" &&
+		error &&
+		"message" in error &&
+		typeof (error as { message?: unknown }).message === "string"
+			? (error as { message: string }).message.toLowerCase()
+			: "";
+	return message.includes("duplicate key") || message.includes("already exists");
+}
+
+function isStorageAlreadyExistsError(error: unknown): boolean {
+	const message =
+		typeof error === "object" &&
+		error &&
+		"message" in error &&
+		typeof (error as { message?: unknown }).message === "string"
+			? (error as { message: string }).message.toLowerCase()
+			: "";
+	const statusCode =
+		typeof error === "object" &&
+		error &&
+		"statusCode" in error &&
+		typeof (error as { statusCode?: unknown }).statusCode === "number"
+			? (error as { statusCode: number }).statusCode
+			: 0;
+	return (
+		statusCode === 409 ||
+		message.includes("already exists") ||
+		message.includes("duplicate")
+	);
+}
+
+function getStorageStatusCode(error: unknown): number | null {
+	const rawStatusCode =
+		typeof error === "object" &&
+		error &&
+		"statusCode" in error &&
+		(typeof (error as { statusCode?: unknown }).statusCode === "number" ||
+			typeof (error as { statusCode?: unknown }).statusCode === "string")
+			? Number((error as { statusCode: string | number }).statusCode)
+			: null;
+	if (rawStatusCode && Number.isFinite(rawStatusCode)) {
+		return rawStatusCode;
+	}
+	const rawStatus =
+		typeof error === "object" &&
+		error &&
+		"status" in error &&
+		(typeof (error as { status?: unknown }).status === "number" ||
+			typeof (error as { status?: unknown }).status === "string")
+			? Number((error as { status: string | number }).status)
+			: null;
+	return rawStatus && Number.isFinite(rawStatus) ? rawStatus : null;
+}
+
+function isStorageNotFoundError(error: unknown): boolean {
+	const statusCode = getStorageStatusCode(error);
+	if (statusCode === 404) return true;
+	const message =
+		typeof error === "object" &&
+		error &&
+		"message" in error &&
+		typeof (error as { message?: unknown }).message === "string"
+			? (error as { message: string }).message.toLowerCase()
+			: "";
+	return message.includes("not found") || message.includes("no such file");
+}
+
+function splitParentAndName(path: string) {
+	const lastSlash = path.lastIndexOf("/");
+	if (lastSlash < 0) {
+		return { parent: "", name: path };
+	}
+	return {
+		parent: path.slice(0, lastSlash),
+		name: path.slice(lastSlash + 1),
+	};
+}
+
+async function storageObjectExists(
+	supabase: SupabaseClient,
+	path: string,
+): Promise<boolean> {
+	const { parent, name } = splitParentAndName(path);
+	const { data, error } = await supabase.storage
+		.from(DOCUMENTS_BUCKET)
+		.list(parent, { limit: STORAGE_LIST_PAGE_SIZE, search: name });
+	if (error) {
+		if (isStorageNotFoundError(error)) return false;
+		throw error;
+	}
+	return (data ?? []).some(
+		(entry) => entry.name === name && Boolean(entry.metadata),
+	);
+}
+
+type StorageCopyFallbackResult =
+	| "copied"
+	| "destination_exists"
+	| "source_missing"
+	| "failed";
+
+async function copyStorageObjectFallback(
+	supabase: SupabaseClient,
+	params: { fromPath: string; toPath: string },
+): Promise<StorageCopyFallbackResult> {
+	const { data: downloaded, error: downloadError } = await supabase.storage
+		.from(DOCUMENTS_BUCKET)
+		.download(params.fromPath);
+	if (downloadError) {
+		if (isStorageNotFoundError(downloadError)) {
+			return "source_missing";
+		}
+		console.error(
+			"[apply-default-folder] Error downloading storage object for fallback copy",
+			{ fromPath: params.fromPath, toPath: params.toPath },
+			downloadError,
+		);
+		return "failed";
+	}
+
+	const uploadContentType =
+		typeof downloaded.type === "string" && downloaded.type.length > 0
+			? downloaded.type
+			: "application/octet-stream";
+	const { error: uploadError } = await supabase.storage
+		.from(DOCUMENTS_BUCKET)
+		.upload(params.toPath, downloaded, {
+			upsert: false,
+			contentType: uploadContentType,
+		});
+	if (uploadError) {
+		if (isStorageAlreadyExistsError(uploadError)) {
+			return "destination_exists";
+		}
+		console.error(
+			"[apply-default-folder] Error uploading storage object for fallback copy",
+			{ fromPath: params.fromPath, toPath: params.toPath },
+			uploadError,
+		);
+		return "failed";
+	}
+
+	const { error: removeError } = await supabase.storage
+		.from(DOCUMENTS_BUCKET)
+		.remove([params.fromPath]);
+	if (removeError && !isStorageNotFoundError(removeError)) {
+		console.error(
+			"[apply-default-folder] Error removing source object after fallback copy",
+			{ fromPath: params.fromPath, toPath: params.toPath },
+			removeError,
+		);
+	}
+
+	return "copied";
+}
+
+function deriveLegacyFolderCandidates(params: {
+	obraId: string;
+	targetPath: string;
+	sourcePaths: string[];
+}): string[] {
+	const { obraId, targetPath, sourcePaths } = params;
+	if (!targetPath) return [];
+	const prefix = `${obraId}/`;
+	const marker = `/${targetPath}/`;
+	const candidates = new Set<string>();
+
+	for (const sourcePath of sourcePaths) {
+		if (!sourcePath.startsWith(prefix)) continue;
+		const relativePath = sourcePath.slice(prefix.length);
+		const lastSlash = relativePath.lastIndexOf("/");
+		if (lastSlash <= 0) continue;
+		const sourceFolder = relativePath.slice(0, lastSlash);
+		if (
+			!sourceFolder ||
+			sourceFolder === targetPath ||
+			sourceFolder.startsWith(`${targetPath}/`)
+		) {
+			continue;
+		}
+
+		const wrapped = `/${sourceFolder}/`;
+		const markerIndex = wrapped.indexOf(marker);
+		if (markerIndex === -1) continue;
+
+		const legacyRoot = wrapped.slice(1, markerIndex + marker.length - 1);
+		if (legacyRoot && legacyRoot !== targetPath) {
+			candidates.add(legacyRoot);
+		}
+	}
+
+	return Array.from(candidates).sort((a, b) => b.length - a.length);
+}
+
+async function listFolderFilesRecursive(
+	supabase: SupabaseClient,
+	basePath: string,
+): Promise<string[]> {
+	const toScan = [basePath];
+	const files: string[] = [];
+
+	while (toScan.length > 0) {
+		const current = toScan.shift()!;
+		const { data, error } = await supabase.storage
+			.from(DOCUMENTS_BUCKET)
+			.list(current, { limit: STORAGE_LIST_PAGE_SIZE });
+		if (error) {
+			const lowerMessage =
+				typeof error.message === "string" ? error.message.toLowerCase() : "";
+			if (lowerMessage.includes("not found")) continue;
+			throw error;
+		}
+
+		for (const entry of data ?? []) {
+			const fullPath = `${current}/${entry.name}`;
+			if (!entry.metadata) {
+				toScan.push(fullPath);
+				continue;
+			}
+			files.push(fullPath);
+		}
+	}
+
+	return files;
+}
+
+async function moveFolderFilesForObra(
+	supabase: SupabaseClient,
+	params: {
+		obraId: string;
+		previousPath: string;
+		nextPath: string;
+	},
+) {
+	const oldFolderPrefix = `${params.obraId}/${params.previousPath}`;
+	const nextFolderPrefix = `${params.obraId}/${params.nextPath}`;
+	if (oldFolderPrefix === nextFolderPrefix) {
+		return new Map<string, string>();
+	}
+
+	const files = await listFolderFilesRecursive(supabase, oldFolderPrefix);
+	if (files.length === 0) {
+		return new Map<string, string>();
+	}
+
+	const movingIntoDescendant = nextFolderPrefix.startsWith(`${oldFolderPrefix}/`);
+	const movedPaths = new Map<string, string>();
+
+	for (const fromPath of files) {
+		if (
+			movingIntoDescendant &&
+			(fromPath === nextFolderPrefix || fromPath.startsWith(`${nextFolderPrefix}/`))
+		) {
+			continue;
+		}
+		const suffix = fromPath.slice(oldFolderPrefix.length);
+		if (!suffix.startsWith("/")) continue;
+		const toPath = `${nextFolderPrefix}${suffix}`;
+		if (toPath === fromPath) continue;
+
+		const { error: moveError } = await supabase.storage
+			.from(DOCUMENTS_BUCKET)
+			.move(fromPath, toPath);
+		if (moveError) {
+			if (isStorageAlreadyExistsError(moveError)) {
+				// If destination already exists from a previous partial run,
+				// delete stale source and continue by remapping references.
+				await supabase.storage.from(DOCUMENTS_BUCKET).remove([fromPath]);
+				movedPaths.set(fromPath, toPath);
+				continue;
+			}
+
+			let destinationExists = false;
+			try {
+				destinationExists = await storageObjectExists(supabase, toPath);
+			} catch (existsError) {
+				console.error(
+					"[apply-default-folder] Error checking destination existence during move fallback",
+					{ obraId: params.obraId, fromPath, toPath },
+					existsError,
+				);
+			}
+			if (destinationExists) {
+				await supabase.storage.from(DOCUMENTS_BUCKET).remove([fromPath]);
+				movedPaths.set(fromPath, toPath);
+				continue;
+			}
+
+			const statusCode = getStorageStatusCode(moveError);
+			if (statusCode === 500 || isStorageNotFoundError(moveError)) {
+				const fallback = await copyStorageObjectFallback(supabase, {
+					fromPath,
+					toPath,
+				});
+				if (fallback === "copied") {
+					movedPaths.set(fromPath, toPath);
+					continue;
+				}
+				if (fallback === "destination_exists") {
+					await supabase.storage.from(DOCUMENTS_BUCKET).remove([fromPath]);
+					movedPaths.set(fromPath, toPath);
+					continue;
+				}
+				if (fallback === "source_missing") {
+					// Migration edge case: metadata points to file path but blob is gone.
+					// Keep path references coherent with the new folder structure.
+					movedPaths.set(fromPath, toPath);
+					continue;
+				}
+			}
+
+			console.error(
+				"[apply-default-folder] Error moving storage object",
+				{ obraId: params.obraId, fromPath, toPath },
+				moveError,
+			);
+			continue;
+		}
+		movedPaths.set(fromPath, toPath);
+	}
+
+	return movedPaths;
+}
+
+async function syncMovedDocumentReferences(
+	supabase: SupabaseClient,
+	params: {
+		obraId: string;
+		movedPaths: Map<string, string>;
+		obraOcrTablaIds: string[];
+	},
+) {
+	if (params.movedPaths.size === 0) return;
+	const movedFromPaths = Array.from(params.movedPaths.keys());
+
+	for (const pathChunk of chunkArray(movedFromPaths, REFERENCE_UPDATE_CHUNK_SIZE)) {
+		const { data: uploads, error: uploadsError } = await supabase
+			.from("obra_document_uploads")
+			.select("id, storage_path")
+			.eq("obra_id", params.obraId)
+			.in("storage_path", pathChunk);
+		if (uploadsError) {
+			console.error("[apply-default-folder] Error loading upload references", uploadsError);
+			continue;
+		}
+		for (const upload of uploads ?? []) {
+			const id = typeof upload.id === "string" ? upload.id : null;
+			const currentPath =
+				typeof upload.storage_path === "string" ? upload.storage_path : null;
+			const nextPath = currentPath ? params.movedPaths.get(currentPath) : null;
+			if (!id || !currentPath || !nextPath || nextPath === currentPath) continue;
+
+			const { error: updateUploadError } = await supabase
+				.from("obra_document_uploads")
+				.update({
+					storage_path: nextPath,
+					file_name: getFileNameFromPath(nextPath),
+				})
+				.eq("id", id);
+			if (updateUploadError) {
+				if (isUniqueViolation(updateUploadError)) {
+					await supabase.from("obra_document_uploads").delete().eq("id", id);
+					continue;
+				}
+				console.error("[apply-default-folder] Error updating upload reference", updateUploadError);
+			}
+		}
+	}
+
+	for (const pathChunk of chunkArray(movedFromPaths, REFERENCE_UPDATE_CHUNK_SIZE)) {
+		const { data: processingRows, error: processingError } = await supabase
+			.from("ocr_document_processing")
+			.select("id, source_path")
+			.eq("obra_id", params.obraId)
+			.in("source_path", pathChunk);
+		if (processingError) {
+			console.error(
+				"[apply-default-folder] Error loading OCR document processing references",
+				processingError,
+			);
+			continue;
+		}
+		for (const row of processingRows ?? []) {
+			const id = typeof row.id === "string" ? row.id : null;
+			const currentPath =
+				typeof row.source_path === "string" ? row.source_path : null;
+			const nextPath = currentPath ? params.movedPaths.get(currentPath) : null;
+			if (!id || !currentPath || !nextPath || nextPath === currentPath) continue;
+
+			const { error: updateProcessingError } = await supabase
+				.from("ocr_document_processing")
+				.update({
+					source_path: nextPath,
+					source_file_name: getFileNameFromPath(nextPath),
+				})
+				.eq("id", id);
+			if (updateProcessingError) {
+				if (isUniqueViolation(updateProcessingError)) {
+					await supabase.from("ocr_document_processing").delete().eq("id", id);
+					continue;
+				}
+				console.error(
+					"[apply-default-folder] Error updating OCR document processing reference",
+					updateProcessingError,
+				);
+			}
+		}
+	}
+
+	for (const pathChunk of chunkArray(movedFromPaths, REFERENCE_UPDATE_CHUNK_SIZE)) {
+		const { data: apsRows, error: apsError } = await supabase
+			.from("aps_models")
+			.select("id, file_path")
+			.eq("obra_id", params.obraId)
+			.in("file_path", pathChunk);
+		if (apsError) {
+			console.error("[apply-default-folder] Error loading APS references", apsError);
+			continue;
+		}
+		for (const model of apsRows ?? []) {
+			const id = typeof model.id === "string" ? model.id : null;
+			const currentPath =
+				typeof model.file_path === "string" ? model.file_path : null;
+			const nextPath = currentPath ? params.movedPaths.get(currentPath) : null;
+			if (!id || !currentPath || !nextPath || nextPath === currentPath) continue;
+
+			const { error: updateApsError } = await supabase
+				.from("aps_models")
+				.update({ file_path: nextPath })
+				.eq("id", id);
+			if (updateApsError) {
+				if (isUniqueViolation(updateApsError)) {
+					await supabase.from("aps_models").delete().eq("id", id);
+					continue;
+				}
+				console.error("[apply-default-folder] Error updating APS reference", updateApsError);
+			}
+		}
+	}
+
+	const tablaIdChunks = chunkArray(params.obraOcrTablaIds, 50);
+	for (const tablaChunk of tablaIdChunks) {
+		let from = 0;
+		while (true) {
+			const to = from + STORAGE_LIST_PAGE_SIZE - 1;
+			const { data: rows, error: rowsError } = await supabase
+				.from("obra_tabla_rows")
+				.select("id, data")
+				.in("tabla_id", tablaChunk)
+				.order("id", { ascending: true })
+				.range(from, to);
+			if (rowsError) {
+				console.error(
+					"[apply-default-folder] Error loading OCR row references",
+					rowsError,
+				);
+				break;
+			}
+
+			if (!rows || rows.length === 0) break;
+
+			const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
+			for (const row of rows) {
+				const id = typeof row.id === "string" ? row.id : null;
+				const data =
+					row.data && typeof row.data === "object"
+						? (row.data as Record<string, unknown>)
+						: null;
+				if (!id || !data) continue;
+				const docPath =
+					typeof data.__docPath === "string" ? data.__docPath : null;
+				if (!docPath) continue;
+				const nextDocPath = params.movedPaths.get(docPath);
+				if (!nextDocPath || nextDocPath === docPath) continue;
+				updates.push({ id, data: { ...data, __docPath: nextDocPath } });
+			}
+
+			for (const updateChunk of chunkArray(updates, REFERENCE_UPDATE_CHUNK_SIZE)) {
+				const { error: upsertRowsError } = await supabase
+					.from("obra_tabla_rows")
+					.upsert(updateChunk, { onConflict: "id" });
+				if (upsertRowsError) {
+					console.error(
+						"[apply-default-folder] Error updating OCR row __docPath references",
+						upsertRowsError,
+					);
+				}
+			}
+
+			if (rows.length < STORAGE_LIST_PAGE_SIZE) break;
+			from += STORAGE_LIST_PAGE_SIZE;
+		}
+	}
+}
+
 type ExistingObraColumn = {
 	id: string;
 	field_key: string;
@@ -455,6 +978,33 @@ export async function applyDefaultFolderToExistingObras(
 			continue;
 		}
 
+		const obraOcrTablaIds = (obraOcrTablas ?? [])
+			.map((tabla) => (typeof tabla.id === "string" ? tabla.id : null))
+			.filter((tablaId): tablaId is string => Boolean(tablaId));
+
+		if (previousPath && previousPath !== bundle.path) {
+			try {
+				const movedPaths = await moveFolderFilesForObra(supabase, {
+					obraId,
+					previousPath,
+					nextPath: bundle.path,
+				});
+				if (movedPaths.size > 0) {
+					await syncMovedDocumentReferences(supabase, {
+						obraId,
+						movedPaths,
+						obraOcrTablaIds,
+					});
+				}
+			} catch (moveError) {
+				console.error(
+					"[apply-default-folder] Error moving folder files during default sync",
+					{ obraId, previousPath, nextPath: bundle.path },
+					moveError,
+				);
+			}
+		}
+
 		const matchingTabla = (obraOcrTablas ?? []).find((tabla) => {
 			const settings = (tabla.settings as Record<string, unknown>) ?? {};
 			const tablaFolder = typeof settings.ocrFolder === "string" ? settings.ocrFolder : null;
@@ -465,6 +1015,58 @@ export async function applyDefaultFolderToExistingObras(
 			if (previousPath && tablaFolder === previousPath) return true;
 			return bundle.tablaName ? tabla.name === bundle.tablaName : false;
 		});
+
+		if (bundle.isOcr && (previousPath === null || previousPath === bundle.path) && matchingTabla?.id) {
+			try {
+				const { data: processingDocs, error: processingDocsError } = await supabase
+					.from("ocr_document_processing")
+					.select("source_path")
+					.eq("obra_id", obraId)
+					.eq("tabla_id", matchingTabla.id);
+				if (processingDocsError) {
+					console.error(
+						"[apply-default-folder] Error loading OCR source paths for legacy-folder detection",
+						processingDocsError,
+					);
+				} else {
+					const legacyFolders = deriveLegacyFolderCandidates({
+						obraId,
+						targetPath: bundle.path,
+						sourcePaths: (processingDocs ?? [])
+							.map((row) =>
+								typeof row.source_path === "string" ? row.source_path : null,
+							)
+							.filter((path): path is string => Boolean(path)),
+					});
+					if (legacyFolders.length > 0) {
+						const movedPaths = new Map<string, string>();
+						for (const legacyFolder of legacyFolders) {
+							const movedForFolder = await moveFolderFilesForObra(supabase, {
+								obraId,
+								previousPath: legacyFolder,
+								nextPath: bundle.path,
+							});
+							for (const [fromPath, toPath] of movedForFolder.entries()) {
+								movedPaths.set(fromPath, toPath);
+							}
+						}
+						if (movedPaths.size > 0) {
+							await syncMovedDocumentReferences(supabase, {
+								obraId,
+								movedPaths,
+								obraOcrTablaIds,
+							});
+						}
+					}
+				}
+			} catch (legacyRepairError) {
+				console.error(
+					"[apply-default-folder] Error repairing legacy nested folder path",
+					{ obraId, targetPath: bundle.path },
+					legacyRepairError,
+				);
+			}
+		}
 
 		if (!bundle.isOcr || !bundle.tablaName || !bundle.settings) {
 			if (matchingTabla) {

@@ -140,6 +140,8 @@ export function ContextualWizard({
   const [actionDone, setActionDone] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ top: 16, left: 16 });
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const stepsScrollRef = useRef<HTMLDivElement | null>(null);
+  const stepItemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const steps = useMemo(() => flow.steps.filter((s) => (s.when ? s.when() : true)), [flow]);
   const step = steps[stepIndex] ?? null;
@@ -172,6 +174,15 @@ export function ContextualWizard({
     if (!open || !step) return;
     onStepChange?.(step, stepIndex);
   }, [onStepChange, open, step, stepIndex]);
+
+  useEffect(() => {
+    if (!open) return;
+    const container = stepsScrollRef.current;
+    const el = stepItemRefs.current[stepIndex];
+    if (!container || !el) return;
+    if (container.scrollWidth <= container.clientWidth + 1) return;
+    el.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+  }, [open, stepIndex, steps.length]);
 
   useEffect(() => {
     if (!open || !step) return;
@@ -355,54 +366,67 @@ export function ContextualWizard({
           style={{ top: tooltipPos.top, left: tooltipPos.left }}
         >
           {/* Header: flow label + mini step indicator */}
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="inline-flex items-center rounded-full border border-orange-200/80 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700">
+          <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+            <div className="inline-flex shrink-0 items-center rounded-full border border-orange-200/80 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700 min-w-fit">
               {flow.title}
             </div>
 
-            {/* Mini step dots — same 3-state language as the wizard modals, scaled for tooltip */}
-            <div className="flex items-center">
-              {steps.map((s, i) => {
-                const isActive = i === stepIndex;
-                const isComplete = i < stepIndex;
-                const isLast = i === steps.length - 1;
-                return (
-                  <div key={s.id} className="flex items-center">
-                    <div
-                      className={cn(
-                        "flex h-5 w-5 items-center justify-center rounded-full border-2 text-[9px] font-semibold transition-all duration-200",
-                        isComplete
-                          ? "border-orange-500 bg-orange-500 text-white"
-                          : isActive
-                            ? "border-orange-500 bg-background text-orange-500 ring-2 ring-orange-500/15"
-                            : "border-border bg-background text-muted-foreground/50",
-                      )}
-                    >
-                      {isComplete ? (
-                        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
-                          <path
-                            d="M2 6.5l2.5 2.5 5.5-5.5"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      ) : (
-                        i + 1
-                      )}
-                    </div>
-                    {!isLast && (
-                      <div className="relative mx-1 h-[2px] w-3 overflow-hidden rounded-full bg-border">
+            {/* Mini step dots — same 3-state language as the wizard modals, scaled for tooltip; horizontal scroll when overflow */}
+            <div
+              ref={stepsScrollRef}
+              className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              <div className="flex min-w-full items-center justify-end">
+                <div className="flex shrink-0 items-center">
+                  {steps.map((s, i) => {
+                    const isActive = i === stepIndex;
+                    const isComplete = i < stepIndex;
+                    const isLast = i === steps.length - 1;
+                    return (
+                      <div
+                        key={s.id}
+                        ref={(node) => {
+                          stepItemRefs.current[i] = node;
+                        }}
+                        className="flex shrink-0 items-center"
+                      >
                         <div
-                          className="absolute inset-y-0 left-0 rounded-full bg-orange-500 transition-[width] duration-300 ease-out"
-                          style={{ width: isComplete ? "100%" : "0%" }}
-                        />
+                          className={cn(
+                            "flex h-5 w-5 items-center justify-center rounded-full border-2 text-[9px] font-semibold transition-all duration-200",
+                            isComplete
+                              ? "border-orange-500 bg-orange-500 text-white"
+                              : isActive
+                                ? "border-orange-500 bg-background text-orange-500 ring-2 ring-orange-500/15"
+                                : "border-border bg-background text-muted-foreground/50",
+                          )}
+                        >
+                          {isComplete ? (
+                            <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
+                              <path
+                                d="M2 6.5l2.5 2.5 5.5-5.5"
+                                stroke="currentColor"
+                                strokeWidth="1.75"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : (
+                            i + 1
+                          )}
+                        </div>
+                        {!isLast && (
+                          <div className="relative mx-1 h-[2px] w-3 overflow-hidden rounded-full bg-border">
+                            <div
+                              className="absolute inset-y-0 left-0 rounded-full bg-orange-500 transition-[width] duration-300 ease-out"
+                              style={{ width: isComplete ? "100%" : "0%" }}
+                            />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 

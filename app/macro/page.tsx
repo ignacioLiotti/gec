@@ -83,6 +83,7 @@ type MacroDisplayColumn = {
   label: string;
   dataType: MacroTableDataType;
   columnType: "source" | "custom" | "computed";
+  config?: Record<string, unknown>;
 };
 
 const toolButtonClass =
@@ -332,6 +333,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       label: column.label,
       dataType: column.dataType,
       columnType: column.columnType,
+      config: column.config ?? {},
     }));
 
     if (!hasObraColumn) {
@@ -340,6 +342,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         label: "Obra",
         dataType: "text",
         columnType: "computed",
+        config: {},
       });
     }
 
@@ -352,6 +355,11 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         column.label.toLowerCase().includes("obra")),
     []
   );
+  const isManuallyEditableColumn = useCallback((column: MacroDisplayColumn) => {
+    if (column.columnType === "custom") return true;
+    const allowManualEdit = column.config?.allowManualEdit;
+    return allowManualEdit === true || allowManualEdit === "true" || allowManualEdit === 1;
+  }, []);
 
   const macroTableIdRef = useRef(macroTable.id);
   macroTableIdRef.current = macroTable.id;
@@ -409,8 +417,18 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
     async ({ dirtyRows }: { dirtyRows: MacroTableRowData[] }) => {
       const tableId = macroTableIdRef.current;
       const cols = columnsRef.current;
-      const customColumnIds = new Set(
-        cols.filter((column) => column.columnType === "custom").map((column) => column.id)
+      const editableColumnIds = new Set(
+        cols
+          .filter((column) => {
+            if (column.columnType === "custom") return true;
+            const allowManualEdit = column.config?.allowManualEdit;
+            return (
+              allowManualEdit === true ||
+              allowManualEdit === "true" ||
+              allowManualEdit === 1
+            );
+          })
+          .map((column) => column.id)
       );
       const customValues: Array<{
         sourceRowId: string;
@@ -419,7 +437,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       }> = [];
 
       for (const row of dirtyRows) {
-        for (const colId of customColumnIds) {
+        for (const colId of editableColumnIds) {
           customValues.push({
             sourceRowId: row.id,
             columnId: colId,
@@ -450,7 +468,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
     if (displayColumns.length === 0) return null;
 
     const columnDefs: ColumnDef<MacroTableRowData>[] = displayColumns.map((column) => {
-      const isEditable = column.columnType === "custom";
+      const isEditable = isManuallyEditableColumn(column);
       const cellType = mapDataTypeToCell(column.dataType);
       const renderAsObraLink = isObraRedirectColumn(column);
 
@@ -535,6 +553,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   }, [
     displayColumns,
     fetchRows,
+    isManuallyEditableColumn,
     isObraRedirectColumn,
     macroTable.description,
     macroTable.id,

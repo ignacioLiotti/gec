@@ -80,6 +80,15 @@ const toNumber = (value: unknown): number => {
 
 const clampPercent = (value: unknown): number => Math.max(0, Math.min(100, toNumber(value)));
 
+function isColumnManuallyEditable(column: {
+  columnType: string;
+  config?: Record<string, unknown> | null;
+}): boolean {
+  if (column.columnType === "custom") return true;
+  const allowManualEdit = column.config?.allowManualEdit;
+  return allowManualEdit === true || allowManualEdit === "true" || allowManualEdit === 1;
+}
+
 function mapObraRecord(record: ObraRecord | null | undefined): Record<string, unknown> {
   if (!record) return {};
   const contratoMasAmpliaciones = toNumber(record.contrato_mas_ampliaciones);
@@ -388,25 +397,29 @@ export async function GET(request: Request, context: RouteContext) {
 
       // Map columns
       for (const col of columns) {
+        let value: unknown = null;
         if (col.columnType === "source" && col.sourceFieldKey) {
           if (col.sourceFieldKey.startsWith("obra.")) {
-            mappedRow[col.id] = resolveObraSourceValue(tablaInfo?.obraValues ?? {}, col.sourceFieldKey);
+            value = resolveObraSourceValue(tablaInfo?.obraValues ?? {}, col.sourceFieldKey);
           } else {
             // Get value from source row data
-            mappedRow[col.id] = rowData[col.sourceFieldKey] ?? null;
+            value = rowData[col.sourceFieldKey] ?? null;
           }
         } else if (col.columnType === "custom") {
           // Get value from custom values
-          mappedRow[col.id] = rowCustomValues?.get(col.id) ?? null;
+          value = rowCustomValues?.get(col.id) ?? null;
         } else if (col.columnType === "computed") {
           // Handle computed columns based on config
           const computeType = col.config?.compute as string;
           if (computeType === "obra_name") {
-            mappedRow[col.id] = tablaInfo?.obraName ?? "";
+            value = tablaInfo?.obraName ?? "";
           } else if (computeType === "tabla_name") {
-            mappedRow[col.id] = tablaInfo?.name ?? "";
+            value = tablaInfo?.name ?? "";
           }
         }
+        const hasManualOverride =
+          isColumnManuallyEditable(col) && rowCustomValues?.has(col.id);
+        mappedRow[col.id] = hasManualOverride ? rowCustomValues?.get(col.id) ?? null : value;
       }
 
       return mappedRow;
@@ -485,23 +498,31 @@ export async function POST(request: Request, context: RouteContext) {
     const columnIds = [...new Set(customValues.map(cv => cv.columnId))];
     const { data: validColumns, error: colError } = await supabase
       .from("macro_table_columns")
-      .select("id, column_type")
+      .select("id, column_type, config")
       .eq("macro_table_id", id)
       .in("id", columnIds);
 
     if (colError) throw colError;
 
-    const validCustomColumnIds = new Set(
+    const validEditableColumnIds = new Set(
       (validColumns ?? [])
-        .filter((col) => col.column_type === "custom")
+        .filter((col) =>
+          isColumnManuallyEditable({
+            columnType: col.column_type as string,
+            config:
+              col.config && typeof col.config === "object" && !Array.isArray(col.config)
+                ? (col.config as Record<string, unknown>)
+                : {},
+          })
+        )
         .map((col) => col.id)
     );
 
-    // Filter to only valid custom columns
+    // Filter to only valid editable columns
     const validValues = customValues.filter(cv => 
       cv.sourceRowId && 
       cv.columnId && 
-      validCustomColumnIds.has(cv.columnId)
+      validEditableColumnIds.has(cv.columnId)
     );
 
     if (validValues.length === 0) {

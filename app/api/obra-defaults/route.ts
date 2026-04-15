@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { applyDefaultFolderToExistingObras } from "@/lib/obra-defaults/apply-default-folder";
+import { removeDefaultFolderFromExistingObras } from "@/lib/obra-defaults/remove-default-folder";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { normalizeFolderName, normalizeFolderPath, normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
@@ -553,30 +554,204 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 		payload.previousPath = previousPath.trim();
 	}
 
-	const { error: jobError } = await supabase.from("background_jobs").insert({
-		tenant_id: tenantId,
-		type: "apply_default_folder",
-		payload,
-	});
+	const { data: queuedJob, error: jobError } = await supabase
+		.from("background_jobs")
+		.insert({
+			tenant_id: tenantId,
+			type: "apply_default_folder",
+			payload,
+		})
+		.select("id")
+		.maybeSingle();
 
 	if (jobError) {
 		console.error(`[${logContext}] job enqueue error:`, jobError);
 	}
 
+	let immediateResult: Awaited<
+		ReturnType<typeof applyDefaultFolderToExistingObras>
+	> | null = null;
+	let immediateError: unknown = null;
+
 	try {
 		const admin = createSupabaseAdminClient();
-		const result = await applyDefaultFolderToExistingObras(admin, {
+		immediateResult = await applyDefaultFolderToExistingObras(admin, {
 			tenantId,
 			folderId,
 			forceSync,
 			previousPath: payload.previousPath,
 		});
-
-		if (!result.ok) {
-			console.warn(`[${logContext}] immediate folder sync skipped:`, result);
-		}
 	} catch (error) {
-		console.error(`[${logContext}] immediate folder sync error:`, error);
+		immediateError = error;
+		console.error(`[${logContext}] immediate folder sync error (admin):`, error);
+		try {
+			// Fallback: run with request-scoped client if admin credentials are missing/misconfigured.
+			immediateResult = await applyDefaultFolderToExistingObras(supabase, {
+				tenantId,
+				folderId,
+				forceSync,
+				previousPath: payload.previousPath,
+			});
+		} catch (fallbackError) {
+			immediateError = fallbackError;
+			console.error(
+				`[${logContext}] immediate folder sync error (request client fallback):`,
+				fallbackError,
+			);
+		}
+	}
+
+	if (immediateResult && !immediateResult.ok) {
+		console.warn(`[${logContext}] immediate folder sync skipped:`, immediateResult);
+	}
+
+	if (!queuedJob?.id) {
+		return;
+	}
+
+	if (immediateResult?.ok) {
+		const { error: doneError } = await supabase
+			.from("background_jobs")
+			.update({
+				status: "done",
+				attempts: 1,
+				last_error: null,
+			})
+			.eq("id", queuedJob.id);
+		if (doneError) {
+			console.error(`[${logContext}] unable to mark background job as done:`, doneError);
+		}
+		return;
+	}
+
+	if (immediateResult && !immediateResult.ok) {
+		const reason =
+			typeof immediateResult.reason === "string"
+				? immediateResult.reason
+				: "immediate sync skipped";
+		const { error: failedError } = await supabase
+			.from("background_jobs")
+			.update({
+				status: "failed",
+				attempts: 1,
+				last_error: reason,
+			})
+			.eq("id", queuedJob.id);
+		if (failedError) {
+			console.error(`[${logContext}] unable to mark background job as failed:`, failedError);
+		}
+		return;
+	}
+
+	if (immediateError) {
+		const message = immediateError instanceof Error ? immediateError.message : String(immediateError);
+		const { error: updateError } = await supabase
+			.from("background_jobs")
+			.update({
+				last_error: message,
+			})
+			.eq("id", queuedJob.id);
+		if (updateError) {
+			console.error(`[${logContext}] unable to update background job last_error:`, updateError);
+		}
+	}
+}
+
+async function enqueueAndApplyDefaultFolderRemoval(params: {
+	supabase: Awaited<ReturnType<typeof createClient>>;
+	tenantId: string;
+	folderPath: string;
+	defaultTablaIds?: string[];
+	logContext: string;
+}) {
+	const { supabase, tenantId, folderPath, defaultTablaIds, logContext } = params;
+	const payload = {
+		folderPath,
+		defaultTablaIds: Array.isArray(defaultTablaIds)
+			? defaultTablaIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+			: [],
+	};
+
+	const { data: queuedJob, error: jobError } = await supabase
+		.from("background_jobs")
+		.insert({
+			tenant_id: tenantId,
+			type: "remove_default_folder",
+			payload,
+		})
+		.select("id")
+		.maybeSingle();
+
+	if (jobError) {
+		console.error(`[${logContext}] removal job enqueue error:`, jobError);
+	}
+
+	let immediateResult: Awaited<
+		ReturnType<typeof removeDefaultFolderFromExistingObras>
+	> | null = null;
+	let immediateError: unknown = null;
+
+	try {
+		const admin = createSupabaseAdminClient();
+		immediateResult = await removeDefaultFolderFromExistingObras(admin, {
+			tenantId,
+			folderPath,
+			defaultTablaIds: payload.defaultTablaIds,
+		});
+	} catch (error) {
+		immediateError = error;
+		console.error(`[${logContext}] immediate folder removal error (admin):`, error);
+		try {
+			immediateResult = await removeDefaultFolderFromExistingObras(supabase, {
+				tenantId,
+				folderPath,
+				defaultTablaIds: payload.defaultTablaIds,
+			});
+		} catch (fallbackError) {
+			immediateError = fallbackError;
+			console.error(
+				`[${logContext}] immediate folder removal error (request client fallback):`,
+				fallbackError,
+			);
+		}
+	}
+
+	if (!queuedJob?.id) return;
+
+	if (immediateResult?.ok) {
+		const { error: doneError } = await supabase
+			.from("background_jobs")
+			.update({
+				status: "done",
+				attempts: 1,
+				last_error: null,
+			})
+			.eq("id", queuedJob.id);
+		if (doneError) {
+			console.error(
+				`[${logContext}] unable to mark removal background job as done:`,
+				doneError,
+			);
+		}
+		return;
+	}
+
+	if (immediateError) {
+		const message = immediateError instanceof Error ? immediateError.message : String(immediateError);
+		const { error: failedError } = await supabase
+			.from("background_jobs")
+			.update({
+				status: "failed",
+				attempts: 1,
+				last_error: message,
+			})
+			.eq("id", queuedJob.id);
+		if (failedError) {
+			console.error(
+				`[${logContext}] unable to mark removal background job as failed:`,
+				failedError,
+			);
+		}
 	}
 }
 
@@ -1677,17 +1852,13 @@ export async function DELETE(request: Request) {
 				if (error) throw error;
 
 				if (folder?.path) {
-					const { error: jobError } = await supabase.from("background_jobs").insert({
-						tenant_id: tenantId,
-						type: "remove_default_folder",
-						payload: {
-							folderPath: folder.path,
-							defaultTablaIds: linkedDefaultTablaIds,
-						},
+					await enqueueAndApplyDefaultFolderRemoval({
+						supabase,
+						tenantId,
+						folderPath: folder.path,
+						defaultTablaIds: linkedDefaultTablaIds,
+						logContext: "obra-defaults:delete",
 					});
-					if (jobError) {
-						console.error("[obra-defaults:delete] job enqueue error:", jobError);
-					}
 				}
 				} else if (type === "quick-action") {
 				const { error } = await supabase

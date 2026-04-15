@@ -8,6 +8,7 @@ import type {
 	ReportTable,
 	ReportTableColumn,
 	RuleConfig,
+	RuleConfigResolution,
 	SignalRow,
 	FindingRow,
 } from "./types";
@@ -442,6 +443,147 @@ async function loadObraRuleInference(
 	};
 }
 
+function normalizeConfigId(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : undefined;
+}
+
+async function resolveConfigTableReferencesForObra(
+	supabase: SupabaseClient,
+	tenantId: string,
+	obraId: string,
+	config: Partial<RuleConfig>,
+): Promise<Partial<RuleConfig>> {
+	const mappings = config.mappings;
+	if (!mappings) return config;
+
+	const requestedIds = new Set<string>();
+	const addId = (value: unknown) => {
+		const normalized = normalizeConfigId(value);
+		if (normalized) requestedIds.add(normalized);
+	};
+
+	addId(mappings.recommendations?.certTableId);
+	addId(mappings.curve?.planTableId);
+	addId(mappings.curve?.resumenTableId);
+	addId(mappings.curve?.measurementTableId);
+	addId(mappings.unpaidCerts?.certTableId);
+	addId(mappings.inactivity?.measurementTableId);
+	addId(mappings.inactivity?.certTableId);
+	addId(mappings.monthlyMissingCert?.certTableId);
+	addId(mappings.stageStalled?.stageTableId);
+
+	if (requestedIds.size === 0) return config;
+
+	const { data: obraTablas, error: obraTablasError } = await supabase
+		.from("obra_tablas")
+		.select("id,name,settings")
+		.eq("obra_id", obraId);
+	if (obraTablasError) throw obraTablasError;
+
+	const obraTableIdSet = new Set<string>();
+	const obraTableByName = new Map<string, string>();
+	const defaultTablaIdToObraId = new Map<string, string>();
+	for (const row of obraTablas ?? []) {
+		const obraTableId = normalizeConfigId((row as any).id);
+		if (!obraTableId) continue;
+		obraTableIdSet.add(obraTableId);
+		const obraTableName = normalizeText(String((row as any).name ?? ""));
+		if (obraTableName) {
+			obraTableByName.set(obraTableName, obraTableId);
+		}
+
+		const settings = ((row as any).settings ?? {}) as Record<string, unknown>;
+		const defaultTablaId = normalizeConfigId(settings.defaultTablaId);
+		if (defaultTablaId) {
+			defaultTablaIdToObraId.set(defaultTablaId, obraTableId);
+		}
+	}
+
+	const unresolvedTemplateIds = Array.from(requestedIds).filter(
+		(id) => !obraTableIdSet.has(id) && !defaultTablaIdToObraId.has(id),
+	);
+	if (unresolvedTemplateIds.length > 0) {
+		const { data: defaultTablas } = await supabase
+			.from("obra_default_tablas")
+			.select("id,name")
+			.eq("tenant_id", tenantId)
+			.in("id", unresolvedTemplateIds);
+		for (const row of defaultTablas ?? []) {
+			const defaultTablaId = normalizeConfigId((row as any).id);
+			if (!defaultTablaId) continue;
+			const name = normalizeText(String((row as any).name ?? ""));
+			const obraTableId = name ? obraTableByName.get(name) : undefined;
+			if (obraTableId) {
+				defaultTablaIdToObraId.set(defaultTablaId, obraTableId);
+			}
+		}
+	}
+
+	const resolveTableId = (value: unknown): string | undefined => {
+		const requestedId = normalizeConfigId(value);
+		if (!requestedId) return undefined;
+		if (obraTableIdSet.has(requestedId)) return requestedId;
+		const mapped = defaultTablaIdToObraId.get(requestedId);
+		if (mapped && obraTableIdSet.has(mapped)) return mapped;
+		return undefined;
+	};
+
+	const resolvedCurve = mappings.curve
+		? {
+				...mappings.curve,
+				planTableId: resolveTableId(mappings.curve.planTableId),
+				resumenTableId: resolveTableId(mappings.curve.resumenTableId),
+				measurementTableId: resolveTableId(mappings.curve.measurementTableId),
+			}
+		: undefined;
+	const resolvedUnpaid = mappings.unpaidCerts
+		? {
+				...mappings.unpaidCerts,
+				certTableId: resolveTableId(mappings.unpaidCerts.certTableId),
+			}
+		: undefined;
+	const resolvedInactivity = mappings.inactivity
+		? {
+				...mappings.inactivity,
+				measurementTableId: resolveTableId(mappings.inactivity.measurementTableId),
+				certTableId: resolveTableId(mappings.inactivity.certTableId),
+			}
+		: undefined;
+	const resolvedMonthlyMissing = mappings.monthlyMissingCert
+		? {
+				...mappings.monthlyMissingCert,
+				certTableId: resolveTableId(mappings.monthlyMissingCert.certTableId),
+			}
+		: undefined;
+	const resolvedStage = mappings.stageStalled
+		? {
+				...mappings.stageStalled,
+				stageTableId: resolveTableId(mappings.stageStalled.stageTableId),
+			}
+		: undefined;
+	const resolvedRecommendations = mappings.recommendations
+		? {
+				...mappings.recommendations,
+				certTableId: resolveTableId(mappings.recommendations.certTableId),
+			}
+		: undefined;
+
+	return {
+		...config,
+		mappings: {
+			...mappings,
+			recommendations: resolvedRecommendations,
+			curve: resolvedCurve,
+			unpaidCerts: resolvedUnpaid,
+			inactivity: resolvedInactivity,
+			monthlyMissingCert: resolvedMonthlyMissing,
+			stageStalled: resolvedStage,
+		},
+	};
+}
+
 function mergeRuleConfig(
 	stored: Partial<RuleConfig>,
 	inferred: Partial<RuleConfig> = {},
@@ -504,6 +646,87 @@ function mergeRuleConfig(
 	} as RuleConfig;
 }
 
+function mergePartialRuleConfig(
+	base: Partial<RuleConfig>,
+	overlay: Partial<RuleConfig>,
+): Partial<RuleConfig> {
+	const baseCurve = base.mappings?.curve;
+	const overlayCurve = overlay.mappings?.curve;
+	const basePlan = baseCurve?.plan;
+	const overlayPlan = overlayCurve?.plan;
+
+	return {
+		...base,
+		...overlay,
+		enabledPacks: {
+			...(base.enabledPacks ?? {}),
+			...(overlay.enabledPacks ?? {}),
+		},
+		mappings: {
+			...(base.mappings ?? {}),
+			...(overlay.mappings ?? {}),
+			recommendations: {
+				...(base.mappings?.recommendations ?? {}),
+				...(overlay.mappings?.recommendations ?? {}),
+			},
+			curve:
+				baseCurve || overlayCurve
+					? {
+							...(baseCurve ?? {}),
+							...(overlayCurve ?? {}),
+							plan:
+								basePlan || overlayPlan
+									? {
+											...(basePlan ?? {}),
+											...(overlayPlan ?? {}),
+										}
+									: undefined,
+						}
+					: undefined,
+			unpaidCerts: {
+				...(base.mappings?.unpaidCerts ?? {}),
+				...(overlay.mappings?.unpaidCerts ?? {}),
+			},
+			inactivity: {
+				...(base.mappings?.inactivity ?? {}),
+				...(overlay.mappings?.inactivity ?? {}),
+			},
+			monthlyMissingCert: {
+				...(base.mappings?.monthlyMissingCert ?? {}),
+				...(overlay.mappings?.monthlyMissingCert ?? {}),
+			},
+			stageStalled: {
+				...(base.mappings?.stageStalled ?? {}),
+				...(overlay.mappings?.stageStalled ?? {}),
+			},
+		},
+		thresholds: {
+			...(base.thresholds ?? {}),
+			...(overlay.thresholds ?? {}),
+			curve: {
+				...(base.thresholds?.curve ?? {}),
+				...(overlay.thresholds?.curve ?? {}),
+			},
+			unpaidCerts: {
+				...(base.thresholds?.unpaidCerts ?? {}),
+				...(overlay.thresholds?.unpaidCerts ?? {}),
+			},
+			inactivity: {
+				...(base.thresholds?.inactivity ?? {}),
+				...(overlay.thresholds?.inactivity ?? {}),
+			},
+			monthlyMissingCert: {
+				...(base.thresholds?.monthlyMissingCert ?? {}),
+				...(overlay.thresholds?.monthlyMissingCert ?? {}),
+			},
+			stageStalled: {
+				...(base.thresholds?.stageStalled ?? {}),
+				...(overlay.thresholds?.stageStalled ?? {}),
+			},
+		},
+	} as Partial<RuleConfig>;
+}
+
 function needsCurveInference(config: Partial<RuleConfig>): boolean {
 	const curve = config.mappings?.curve;
 	return !curve?.planTableId ||
@@ -517,6 +740,10 @@ async function loadRuleConfigForTenant(
 	tenantId: string,
 	obraId: string,
 ): Promise<RuleConfig> {
+	const tenantDefaultStored = await loadTenantDefaultRuleConfigStored(
+		supabase,
+		tenantId,
+	);
 	const { data } = await supabase
 		.from("obra_rule_config")
 		.select("config_json")
@@ -524,11 +751,81 @@ async function loadRuleConfigForTenant(
 		.eq("obra_id", obraId)
 		.maybeSingle();
 
-	const stored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
-	const inferred = needsCurveInference(stored)
+	const obraStored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
+	const mergedStored = mergePartialRuleConfig(tenantDefaultStored, obraStored);
+	const resolvedStored = await resolveConfigTableReferencesForObra(
+		supabase,
+		tenantId,
+		obraId,
+		mergedStored,
+	);
+	const inferred = needsCurveInference(resolvedStored)
 		? await loadObraRuleInference(supabase, obraId)
 		: {};
-	return mergeRuleConfig(stored, inferred);
+	return mergeRuleConfig(resolvedStored, inferred);
+}
+
+async function loadTenantDefaultRuleConfigStored(
+	supabase: SupabaseClient,
+	tenantId: string,
+): Promise<Partial<RuleConfig>> {
+	const { data, error } = await supabase
+		.from("tenant_reporting_config")
+		.select("config_json")
+		.eq("tenant_id", tenantId)
+		.maybeSingle();
+	if (error) {
+		if (error.code === "42P01") {
+			return {};
+		}
+		throw error;
+	}
+	return ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
+}
+
+async function loadRuleConfigResolutionForTenant(
+	supabase: SupabaseClient,
+	tenantId: string,
+	obraId: string,
+): Promise<RuleConfigResolution> {
+	const tenantDefaultStored = await loadTenantDefaultRuleConfigStored(
+		supabase,
+		tenantId,
+	);
+	const { data: obraConfigData, error: obraConfigError } = await supabase
+		.from("obra_rule_config")
+		.select("config_json")
+		.eq("tenant_id", tenantId)
+		.eq("obra_id", obraId)
+		.maybeSingle();
+	if (obraConfigError) throw obraConfigError;
+	const obraStored = ((obraConfigData?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
+
+	const mergedStored = mergePartialRuleConfig(tenantDefaultStored, obraStored);
+	const resolvedStored = await resolveConfigTableReferencesForObra(
+		supabase,
+		tenantId,
+		obraId,
+		mergedStored,
+	);
+	const inferred = needsCurveInference(resolvedStored)
+		? await loadObraRuleInference(supabase, obraId)
+		: {};
+
+	const hasObraOverride = Boolean(obraConfigData?.config_json);
+	const hasTenantDefault = Object.keys(tenantDefaultStored).length > 0;
+	const source: RuleConfigResolution["source"] = hasObraOverride
+		? "obra_override"
+		: hasTenantDefault
+			? "tenant_default"
+			: "system_default";
+
+	return {
+		config: mergeRuleConfig(resolvedStored, inferred),
+		hasObraOverride,
+		hasTenantDefault,
+		source,
+	};
 }
 
 async function loadSignalsSnapshotForTenant(
@@ -615,6 +912,19 @@ export async function getRuleConfig(obraId: string) {
 	return loadRuleConfigForTenant(access.supabase, access.tenantId, obraId);
 }
 
+export async function getRuleConfigResolution(obraId: string): Promise<RuleConfigResolution> {
+	const access = await resolveReportingTenantAccess(obraId);
+	if (!access) {
+		return {
+			config: DEFAULT_RULE_CONFIG,
+			hasObraOverride: false,
+			hasTenantDefault: false,
+			source: "system_default",
+		};
+	}
+	return loadRuleConfigResolutionForTenant(access.supabase, access.tenantId, obraId);
+}
+
 export async function saveRuleConfig(obraId: string, config: RuleConfig) {
 	const supabase = await createClient();
 	const { data: auth } = await supabase.auth.getUser();
@@ -630,6 +940,83 @@ export async function saveRuleConfig(obraId: string, config: RuleConfig) {
 		updated_at: new Date().toISOString(),
 	});
 
+	if (error) throw error;
+}
+
+export async function clearRuleConfigOverride(obraId: string) {
+	const supabase = await createClient();
+	const { data: auth } = await supabase.auth.getUser();
+	if (!auth.user) throw new Error("Unauthorized");
+
+	const tenantId = await resolveTenantId(supabase, auth.user.id, obraId);
+	if (!tenantId) throw new Error("No tenant");
+
+	const { error } = await supabase
+		.from("obra_rule_config")
+		.delete()
+		.eq("tenant_id", tenantId)
+		.eq("obra_id", obraId);
+
+	if (error) throw error;
+}
+
+async function resolveTenantAccessContext() {
+	const access = await resolveRequestAccessContext();
+	if (!access.user && access.actorType !== "demo") {
+		throw new Error("Unauthorized");
+	}
+	if (!access.tenantId) {
+		throw new Error("No tenant");
+	}
+	return access;
+}
+
+function hasTenantReportingAdminAccess(
+	access: Awaited<ReturnType<typeof resolveRequestAccessContext>>,
+) {
+	if (access.actorType !== "user") return false;
+	return (
+		access.isSuperAdmin ||
+		access.membershipRole === "owner" ||
+		access.membershipRole === "admin"
+	);
+}
+
+export async function getTenantDefaultRuleConfig(): Promise<{
+	config: RuleConfig;
+	hasTenantDefault: boolean;
+}> {
+	const access = await resolveTenantAccessContext();
+	const supabase = access.supabase as SupabaseClient;
+	const stored = await loadTenantDefaultRuleConfigStored(supabase, access.tenantId as string);
+	return {
+		config: mergeRuleConfig(stored, {}),
+		hasTenantDefault: Object.keys(stored).length > 0,
+	};
+}
+
+export async function saveTenantDefaultRuleConfig(config: RuleConfig) {
+	const access = await resolveTenantAccessContext();
+	if (!access.user) throw new Error("Unauthorized");
+	if (!hasTenantReportingAdminAccess(access)) throw new Error("Forbidden");
+	const supabase = access.supabase as SupabaseClient;
+	const { error } = await supabase.from("tenant_reporting_config").upsert({
+		tenant_id: access.tenantId,
+		config_json: config,
+		updated_at: new Date().toISOString(),
+		updated_by: access.user.id,
+	});
+	if (error) throw error;
+}
+
+export async function clearTenantDefaultRuleConfig() {
+	const access = await resolveTenantAccessContext();
+	if (!hasTenantReportingAdminAccess(access)) throw new Error("Forbidden");
+	const supabase = access.supabase as SupabaseClient;
+	const { error } = await supabase
+		.from("tenant_reporting_config")
+		.delete()
+		.eq("tenant_id", access.tenantId);
 	if (error) throw error;
 }
 

@@ -318,7 +318,7 @@ export default function DesktopExcelPagePreview({
 				{guidedExcelFlow ? (
 					<ContextualWizard
 						open
-						onOpenChange={() => {}}
+						onOpenChange={() => { }}
 						flow={guidedExcelFlow}
 						showCloseButton={false}
 					/>

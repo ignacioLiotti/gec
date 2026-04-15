@@ -83,11 +83,6 @@ const navItems: NavItem[] = [
 		icon: Database,
 	},
 	{
-		title: "Facturacion",
-		href: "/billing",
-		icon: Wallet,
-	},
-	{
 		title: "Notificaciones",
 		href: "/notifications",
 		icon: Bell,
@@ -104,6 +99,11 @@ const adminItems: NavItem[] = [
 		title: "Roles y Permisos",
 		href: "/admin/roles",
 		icon: ShieldCheck,
+	},
+	{
+		title: "Facturacion",
+		href: "/billing",
+		icon: Wallet,
 	},
 	{
 		title: "Configuracion de Obras",

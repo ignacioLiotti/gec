@@ -44,11 +44,12 @@ La pantalla transmite tres ideas:
 2. `Como se van a capturar datos`
 3. `Como se van a acelerar tareas repetitivas`
 
-Visualmente, eso se reparte en tres bloques:
+Visualmente, eso se reparte en cuatro bloques:
 
 - `Carpetas Predeterminadas`
 - `Acciones rapidas`
 - `Plantillas de Extraccion`
+- `Defaults de Reporting`
 
 Cada bloque tiene que responder una pregunta concreta:
 
@@ -69,6 +70,12 @@ Pregunta que responde:
 Pregunta que responde:
 
 > "Como sabe el sistema que leer de cada documento?"
+
+### Defaults de Reporting
+
+Pregunta que responde:
+
+> "Con que tablas y columnas se calculan alertas, hallazgos y recomendaciones de todas las obras?"
 
 ---
 

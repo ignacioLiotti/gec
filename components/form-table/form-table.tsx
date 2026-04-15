@@ -147,6 +147,7 @@ export function FormTableToolbar() {
 						/>
 					</div>
 				)}
+				{search.showInline && config.toolbarSearchEnd}
 				{canShowFilters && (
 					<Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
 						{!isExtrasToolbar && (
@@ -263,7 +264,7 @@ export function FormTableToolbar() {
 									<DropdownMenuSeparator />
 								</>
 							)}
-							<div className="px-1 py-1">{columnVisibilityMenu}</div>
+							<div className="">{columnVisibilityMenu}</div>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem
 								onSelect={(event) => {
@@ -278,7 +279,7 @@ export function FormTableToolbar() {
 							{config.toolbarActions && (
 								<>
 									<DropdownMenuSeparator />
-									<div className="px-1 py-1">{config.toolbarActions}</div>
+									<div className="">{config.toolbarActions}</div>
 								</>
 							)}
 						</DropdownMenuContent>
@@ -982,50 +983,64 @@ export function FormTablePagination() {
 	const allowAddRows = !isReadOnly && config.allowAddRows !== false;
 	const canSave = !isReadOnly && typeof config.onSave === "function";
 	const isLoading = isFetching || isTransitioning;
+	const hideFooterPaginationSummary = config.hideFooterPaginationSummary === true;
 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground px-3 pb-4">
-			<div className="flex items-center gap-2 text-foreground">
-				<span>Filas por página</span>
-				{pageSizeLocked ? (
-					<span className="font-medium text-foreground">{pageSize}</span>
-				) : (
-					<Select
-						value={String(pageSize)}
-						onValueChange={(value) => {
-							setPageSize(Number(value));
-						}}
-						disabled={isLoading}
-					>
-						<SelectTrigger className={cn("h-9 w-[90px] rounded-lg border-[#e8e8e8] bg-white", isLoading && "opacity-50")}>
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{options.map((size) => (
-								<SelectItem key={size} value={String(size)}>
-									{size}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				)}
-				{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-				<div className="flex flex-wrap items-center justify-between gap-3">
-					{totalRowCount > 0 && (
-						<div className="flex items-center text-sm text-muted-foreground gap-4">
-							<p>
-								Mostrando <span className="font-medium text-foreground">{visibleRowCount}</span> de{" "}
-								<span className="font-medium text-foreground">{totalRowCount}</span> filas
+			{hideFooterPaginationSummary ? (
+				(isLoading || filters.activeCount > 0) && (
+					<div className="flex items-center gap-4 text-foreground">
+						{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+						{filters.activeCount > 0 && (
+							<p className="text-xs text-muted-foreground">
+								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
 							</p>
-							{filters.activeCount > 0 && (
-								<p className="text-xs">
-									Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
-								</p>
-							)}
-						</div>
+						)}
+					</div>
+				)
+			) : (
+				<div className="flex items-center gap-2 text-foreground">
+					<span>Filas por página</span>
+					{pageSizeLocked ? (
+						<span className="font-medium text-foreground">{pageSize}</span>
+					) : (
+						<Select
+							value={String(pageSize)}
+							onValueChange={(value) => {
+								setPageSize(Number(value));
+							}}
+							disabled={isLoading}
+						>
+							<SelectTrigger className={cn("h-9 w-[90px] rounded-lg border-[#e8e8e8] bg-white", isLoading && "opacity-50")}>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{options.map((size) => (
+									<SelectItem key={size} value={String(size)}>
+										{size}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 					)}
+					{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						{totalRowCount > 0 && (
+							<div className="flex items-center text-sm text-muted-foreground gap-4">
+								<p>
+									Mostrando <span className="font-medium text-foreground">{visibleRowCount}</span> de{" "}
+									<span className="font-medium text-foreground">{totalRowCount}</span> filas
+								</p>
+								{filters.activeCount > 0 && (
+									<p className="text-xs">
+										Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+									</p>
+								)}
+							</div>
+						)}
+					</div>
 				</div>
-			</div>
+			)}
 			<div className="flex items-center gap-2">
 				{config.footerActions}
 				{allowAddRows && (
@@ -1446,17 +1461,17 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		isFilterProcessing;
 	const activityKind: TableActivityKind | null = isBusy
 		? activeActivityKind ??
-			(isSearchProcessing
-				? "search"
-				: isFilterProcessing
-					? "filter"
-					: isSortProcessing
-						? "sorting"
-						: isPageSizeTransitioning
-							? "pagination"
-							: isFetchingServerRows
-								? "loading"
-								: "loading")
+		(isSearchProcessing
+			? "search"
+			: isFilterProcessing
+				? "filter"
+				: isSortProcessing
+					? "sorting"
+					: isPageSizeTransitioning
+						? "pagination"
+						: isFetchingServerRows
+							? "loading"
+							: "loading")
 		: null;
 
 	const prevSortProcessingRef = useRef(false);

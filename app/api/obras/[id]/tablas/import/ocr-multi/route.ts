@@ -14,6 +14,7 @@ import {
   normalizeFieldKey,
 } from "@/lib/tablas";
 import { applyOcrExtractionRowPolicy } from "@/lib/ocr-row-policy";
+import { localizeOcrProviderErrorMessage } from "@/lib/ocr-error-message";
 import {
   fetchTenantPlan,
   type SubscriptionPlanLimits,
@@ -1106,7 +1107,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
         );
         if (!res.ok) {
           const errBody = await res.json().catch(() => ({}));
-          throw new Error(errBody?.error?.message ?? `Gemini API error ${res.status}`);
+          const providerMessage =
+            typeof errBody?.error?.message === "string"
+              ? errBody.error.message
+              : `Gemini API error ${res.status}`;
+          throw new Error(localizeOcrProviderErrorMessage(providerMessage));
         }
         const rawText = (await res.json())?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
         console.log("[tablas:ocr-import-multi] AI raw response", {
@@ -1386,7 +1391,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       file: storageInfo ? { bucket: storageInfo.bucket, path: storageInfo.path } : null,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Error desconocido";
+    const message = localizeOcrProviderErrorMessage(
+      error instanceof Error ? error.message : "Error desconocido"
+    );
     if (
       rollbackReservation &&
       reservationApplied &&

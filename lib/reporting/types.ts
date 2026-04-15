@@ -20,6 +20,11 @@ export type RuleConfig = {
     stageStalled: boolean;
   };
   mappings: {
+    recommendations?: {
+      certTableId?: string;
+      montoAcumuladoColumnKey?: string;
+      dateOrPeriodColumnKey?: string;
+    };
     curve?: {
       planTableId?: string;
       resumenTableId?: string;
@@ -61,6 +66,13 @@ export type RuleConfig = {
     monthlyMissingCert: { severity: "warn" | "critical" };
     stageStalled: { severity: "warn" | "critical" };
   };
+};
+
+export type RuleConfigResolution = {
+  config: RuleConfig;
+  hasObraOverride: boolean;
+  hasTenantDefault: boolean;
+  source: "obra_override" | "tenant_default" | "system_default";
 };
 
 export type SignalRow = {

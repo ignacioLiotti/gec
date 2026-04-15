@@ -1,9 +1,24 @@
 -- Create storage bucket for obra documents and permissive auth policies
 
--- Create bucket if it does not exist (compatible with older local storage versions)
-insert into storage.buckets (id, name, public)
-values ('obra-documents', 'obra-documents', false)
-on conflict (id) do nothing;
+-- Create bucket if it does not exist (compatible with old/new storage schemas)
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'storage'
+      and table_name = 'buckets'
+      and column_name = 'public'
+  ) then
+    insert into storage.buckets (id, name, public)
+    values ('obra-documents', 'obra-documents', false)
+    on conflict (id) do nothing;
+  else
+    insert into storage.buckets (id, name)
+    values ('obra-documents', 'obra-documents')
+    on conflict (id) do nothing;
+  end if;
+end $$;
 
 -- Policies on storage.objects for this bucket
 -- Allow authenticated users to list/read/upload/delete within the bucket

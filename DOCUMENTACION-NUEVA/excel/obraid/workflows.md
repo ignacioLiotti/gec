@@ -287,3 +287,32 @@ Mantener los KPI financieros alineados con la tabla OCR de certificados sin pisa
 2. La pagina carga metadata de columnas.
 3. Construye un `ReportConfig` dinamico.
 4. Renderiza `ReportPage`.
+
+## 18. Defaults de reporting y override por obra
+
+### Flujo admin (tenant)
+
+1. El admin abre `/admin/obra-defaults/reporting`.
+2. Configura tablas, columnas, packs y umbrales en `RuleConfigHub`.
+3. Guarda via `PUT /api/reporting/defaults`.
+4. Se persiste en `tenant_reporting_config`.
+
+### Flujo obra (override)
+
+1. El usuario abre `/excel/[obraId]/report`.
+2. El backend resuelve config efectiva:
+   - `obra_rule_config` (si existe)
+   - si no, `tenant_reporting_config`
+   - si no, `DEFAULT_RULE_CONFIG`
+3. Si guarda en obra, se crea/actualiza `obra_rule_config`.
+4. Si resetea override, se elimina `obra_rule_config` y vuelve a heredar tenant.
+
+### Reglas de resolucion de tablas
+
+Al resolver `*_table_id` de mappings:
+
+1. intenta match directo por `obra_tablas.id`
+2. intenta match por `settings.defaultTablaId`
+3. fallback por nombre de tabla default
+
+Esto evita que un mapping quede apuntando a IDs de template no existentes en la obra.

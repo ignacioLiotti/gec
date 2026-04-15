@@ -249,9 +249,27 @@ Archivo:
 - configurar mappings de reglas
 - recomputar signals
 - evaluar findings
-- guardar config JSON
+- guardar override de configuracion de obra
+- resetear override para volver al default del tenant
 
-## 10. Reporte de tabla OCR
+## 10. Hub de defaults de reporting (admin)
+
+Ruta:
+
+- `/admin/obra-defaults/reporting`
+
+Archivo:
+
+- `app/admin/obra-defaults/reporting/page.tsx`
+
+### Funcionalidad
+
+- editar default de reglas a nivel tenant
+- usar el mismo wizard `RuleConfigHub` que en obra
+- guardar o resetear default del tenant
+- definir el baseline que heredaran obras sin override
+
+## 11. Reporte de tabla OCR
 
 Ruta:
 

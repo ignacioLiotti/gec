@@ -175,10 +175,22 @@ export async function GET() {
 		}
 	});
 
+	const plansWithResolvedAmount = (plansResult.data ?? []).map((plan) => {
+		const typedPlan = plan as SubscriptionPlanRow;
+		const planConfig = resolveMercadoPagoPlanConfig(
+			typedPlan.plan_key,
+			typedPlan.metadata,
+		);
+		return {
+			...typedPlan,
+			resolvedAmountArs: planConfig?.amountArs ?? null,
+		};
+	});
+
 	return NextResponse.json({
 		tenantId,
 		subscription,
-		plans: (plansResult.data ?? []) as SubscriptionPlanRow[],
+		plans: plansWithResolvedAmount,
 		paywall: accessResult,
 		mercadoPagoDebug: {
 			appUrl,

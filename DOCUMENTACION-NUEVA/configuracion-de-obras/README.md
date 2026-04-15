@@ -4,11 +4,12 @@
 
 `Configuracion de Obras` es el modulo administrativo que define la estructura base que va a heredar cada nueva obra del tenant.
 
-Desde esta pantalla se configuran tres cosas:
+Desde esta pantalla se configuran cuatro cosas:
 
 1. `Carpetas Predeterminadas`
 2. `Acciones rapidas`
 3. `Plantillas de extraccion`
+4. `Defaults de reporting`
 
 Este modulo no trabaja aislado. Lo que se configura aca impacta en:
 
@@ -23,7 +24,7 @@ Este modulo no trabaja aislado. Lo que se configura aca impacta en:
 
 ## 2. Vista general de la pantalla
 
-La pantalla principal de `Configuracion de Obras` esta dividida en tres columnas visuales:
+La pantalla principal de `Configuracion de Obras` esta dividida en tres bloques visuales, mas un acceso al hub de reporting:
 
 ### 2.1. Carpetas Predeterminadas
 
@@ -67,6 +68,20 @@ Cada plantilla guarda:
 - columnas derivadas desde esas regiones
 
 Estas plantillas luego se usan cuando se crea o edita una `carpeta de datos`.
+
+### 2.4. Defaults de reporting
+
+Desde el boton `Hub de defaults de reporting` se abre:
+
+- ruta: `/admin/obra-defaults/reporting`
+
+Ese hub define reglas base para todas las obras del tenant:
+
+- que tablas alimentan cada pack
+- que columnas usa cada calculo
+- que umbrales usa cada hallazgo
+
+Si una obra no tiene override propio en `/excel/[obraId]/report`, hereda esta configuracion.
 
 ---
 
@@ -781,6 +796,24 @@ Guarda filas manuales.
 ### `POST /api/obras/:id/tablas/:tablaId/import/ocr`
 
 Importa OCR de un documento.
+
+## 13.5. Runtime de reporting (tenant y obra)
+
+### `GET/PUT/DELETE /api/reporting/defaults`
+
+Administra el default de reporting del tenant (`tenant_reporting_config`).
+
+### `GET/POST/DELETE /api/obras/:id/rules`
+
+Lee, guarda o limpia override de reporting para una obra (`obra_rule_config`).
+
+### `POST /api/obras/:id/signals/recompute`
+
+Recalcula señales para la obra y persiste en `obra_signals`.
+
+### `POST /api/obras/:id/findings/evaluate`
+
+Evalua hallazgos abiertos usando señales + config efectiva.
 
 ---
 

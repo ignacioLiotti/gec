@@ -13,7 +13,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileDown, ChevronLeft, Filter, Settings, Loader2, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
-import type { ReportConfig, ReportState, AggregationType } from "./types";
+import type {
+	ReportConfig,
+	ReportState,
+	AggregationType,
+	ReportColumn,
+	ReportColumnType,
+} from "./types";
 import { ReportTable } from "./report-table";
 import { generatePdf } from "@/lib/pdf/generate-pdf";
 import { exportToCsv, exportToXlsx } from "@/lib/report/export";
@@ -26,6 +32,159 @@ type ReportPageProps<Row, Filters> = {
 	backUrl?: string;
 	readOnly?: boolean;
 };
+
+function normalizeWizardLabel(value: string): string {
+	return value
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase()
+		.replace(/\s+/g, "")
+		.trim();
+}
+
+const naturalSortCollator = new Intl.Collator("es", {
+	numeric: true,
+	sensitivity: "base",
+});
+
+function parseNumericValue(value: unknown): number | null {
+	if (value == null) return null;
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value === "boolean") return value ? 1 : 0;
+	if (typeof value !== "string") {
+		const num = Number(value);
+		return Number.isFinite(num) ? num : null;
+	}
+
+	let str = value.trim();
+	if (!str) return null;
+
+	let isNegative = false;
+	if (str.startsWith("(") && str.endsWith(")")) {
+		isNegative = true;
+		str = str.slice(1, -1).trim();
+	}
+
+	str = str.replace(/[^\d,.-]/g, "");
+	const hasComma = str.includes(",");
+	const hasDot = str.includes(".");
+
+	if (hasComma && hasDot) {
+		str = str.replace(/\./g, "").replace(",", ".");
+	} else if (hasComma && !hasDot) {
+		str = str.replace(",", ".");
+	} else if (hasDot && !hasComma) {
+		const dotCount = (str.match(/\./g) ?? []).length;
+		if (dotCount > 1) {
+			str = str.replace(/\./g, "");
+		}
+	}
+
+	const num = Number(str);
+	if (!Number.isFinite(num)) return null;
+	return isNegative ? -num : num;
+}
+
+function parseDateValue(value: unknown): number | null {
+	if (value == null) return null;
+	if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getTime();
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value !== "string") return null;
+
+	const raw = value.trim();
+	if (!raw) return null;
+	const native = Date.parse(raw);
+	if (!Number.isNaN(native)) return native;
+
+	const match = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})(?:\s+.*)?$/);
+	if (!match) return null;
+
+	const day = Number(match[1]);
+	const month = Number(match[2]) - 1;
+	const year = Number(match[3]);
+	const date = new Date(year, month, day);
+	const ts = date.getTime();
+	return Number.isNaN(ts) ? null : ts;
+}
+
+function resolveDefaultGroupAggregation(type: ReportColumnType): AggregationType {
+	switch (type) {
+		case "number":
+		case "currency":
+			return "sum";
+		case "boolean":
+			return "count-checked";
+		case "date":
+			return "max";
+		default:
+			return "count";
+	}
+}
+
+function resolveGroupSortValue<Row>(
+	rows: Row[],
+	column: ReportColumn<Row>,
+	configuredAggregation: AggregationType | undefined
+): string | number | null {
+	const aggregation =
+		configuredAggregation && configuredAggregation !== "none"
+			? configuredAggregation
+			: resolveDefaultGroupAggregation(column.type);
+	const values = rows.map((row) => column.accessor(row));
+
+	if (aggregation === "count") {
+		return values.filter((value) => value != null && value !== "").length;
+	}
+	if (aggregation === "count-checked") {
+		return values.filter((value) => value === true).length;
+	}
+
+	if (column.type === "date") {
+		const timestamps = values
+			.map((value) => parseDateValue(value))
+			.filter((value): value is number => value != null && Number.isFinite(value));
+		if (timestamps.length === 0) return null;
+		if (aggregation === "min") return Math.min(...timestamps);
+		if (aggregation === "average") {
+			return timestamps.reduce((acc, value) => acc + value, 0) / timestamps.length;
+		}
+		return Math.max(...timestamps);
+	}
+
+	const numericValues = values
+		.map((value) => parseNumericValue(value))
+		.filter((value): value is number => value != null && Number.isFinite(value));
+
+	if (numericValues.length > 0) {
+		if (aggregation === "min") return Math.min(...numericValues);
+		if (aggregation === "max") return Math.max(...numericValues);
+		if (aggregation === "average") {
+			return numericValues.reduce((acc, value) => acc + value, 0) / numericValues.length;
+		}
+		return numericValues.reduce((acc, value) => acc + value, 0);
+	}
+
+	const textValues = values
+		.map((value) => String(value ?? "").trim())
+		.filter((value) => value.length > 0);
+	if (textValues.length === 0) return null;
+	return [...textValues].sort((left, right) => naturalSortCollator.compare(left, right))[0];
+}
+
+function compareGroupSortValues(
+	left: string | number | null,
+	right: string | number | null,
+	direction: "asc" | "desc"
+): number {
+	const dir = direction === "asc" ? 1 : -1;
+	if (left == null && right == null) return 0;
+	if (left == null) return dir;
+	if (right == null) return -dir;
+	if (typeof left === "number" && typeof right === "number") {
+		return dir * (left - right);
+	}
+	return dir * naturalSortCollator.compare(String(left), String(right));
+}
 
 export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	config,
@@ -112,6 +271,8 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 			hiddenColumnIds: [],
 			sortColumnId: null,
 			sortDirection: "asc",
+			groupSortColumnId: null,
+			groupSortDirection: "asc",
 			aggregations: config.columns.reduce<Record<string, AggregationType>>(
 				(acc, col) => {
 					acc[col.id] = col.defaultAggregation || "none";
@@ -600,13 +761,50 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 				}
 			}
 
-			// Sort group keys only (not the full entries)
-			const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
-				a.localeCompare(b)
-			);
-			return sortedKeys.map((key) => ({ key, data: groups.get(key)! }));
+			const grouped = Array.from(groups.entries()).map(([key, data]) => ({
+				key,
+				data,
+			}));
+			const groupSortColumn = reportState.groupSortColumnId
+				? columns.find((column) => column.id === reportState.groupSortColumnId) ?? null
+				: null;
+
+			if (!groupSortColumn) {
+				return grouped.sort((left, right) =>
+					naturalSortCollator.compare(left.key, right.key)
+				);
+			}
+
+			const configuredAggregation = reportState.aggregations[groupSortColumn.id];
+			const metricByKey = new Map<string, string | number | null>();
+			for (const group of grouped) {
+				metricByKey.set(
+					group.key,
+					resolveGroupSortValue(group.data, groupSortColumn, configuredAggregation)
+				);
+			}
+
+			return grouped.sort((left, right) => {
+				const leftMetric = metricByKey.get(left.key) ?? null;
+				const rightMetric = metricByKey.get(right.key) ?? null;
+				const metricDiff = compareGroupSortValues(
+					leftMetric,
+					rightMetric,
+					reportState.groupSortDirection
+				);
+				if (metricDiff !== 0) return metricDiff;
+				return naturalSortCollator.compare(left.key, right.key);
+			});
 		},
-		[reportState.viewMode, groupByOptions, config.title]
+		[
+			columns,
+			config.title,
+			groupByOptions,
+			reportState.aggregations,
+			reportState.groupSortColumnId,
+			reportState.groupSortDirection,
+			reportState.viewMode,
+		]
 	);
 
 	// Group data
@@ -657,7 +855,10 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 							<ChevronLeft className="h-4 w-4" />
 							Volver
 						</Button>
-						<div className="ml-auto flex items-center gap-2">
+						<div
+							className="ml-auto flex items-center gap-2"
+							data-wizard-target="report-export-actions"
+						>
 							<Button
 								variant="outline"
 								size="sm"
@@ -773,11 +974,19 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					<Tabs defaultValue="settings" className="flex-1 flex flex-col">
 						<div className="px-4 pt-4 pb-3 border-b border-[#d5d8df] dark:border-zinc-700 ">
 							<TabsList className="flex w-full flex-wrap gap-1 bg-[#e2e5eb] dark:bg-zinc-700">
-								<TabsTrigger value="settings" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
+								<TabsTrigger
+									value="settings"
+									data-wizard-target="report-tab-settings"
+									className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600"
+								>
 									<Settings className="h-3.5 w-3.5" />
 									Configuracion
 								</TabsTrigger>
-								<TabsTrigger value="filters" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
+								<TabsTrigger
+									value="filters"
+									data-wizard-target="report-tab-filters"
+									className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600"
+								>
 									<Filter className="h-3.5 w-3.5" />
 									Filtros
 								</TabsTrigger>
@@ -795,7 +1004,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 							<ScrollArea className="h-full max-h-[calc(100vh-10rem)]">
 								<div className="p-4 space-y-5">
 									{/* Header fields */}
-									<div className="space-y-3">
+									<div className="space-y-3" data-wizard-target="report-config-columns">
 										<h3 className="text-[11px] font-semibold text-[#7b828c] dark:text-zinc-400 uppercase tracking-widest">
 											Encabezado
 										</h3>
@@ -878,9 +1087,91 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												</Button>
 											)}
 										</div>
+										{reportState.viewMode !== "full" && (
+											<div className="rounded border border-[#d5d8df] dark:border-zinc-700 bg-[#f7f7f8] dark:bg-zinc-800/70 p-2.5 space-y-2">
+												<div className="space-y-1">
+													<Label className="text-xs text-[#5f6670] dark:text-zinc-400">
+														Orden global de grupos
+													</Label>
+													<Select
+														value={reportState.groupSortColumnId ?? "__group_key__"}
+														disabled={readOnly}
+														onValueChange={(value) =>
+															setReportState((prev) => ({
+																...prev,
+																groupSortColumnId: value === "__group_key__" ? null : value,
+															}))
+														}
+													>
+														<SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600">
+															<SelectValue placeholder="Nombre del grupo" />
+														</SelectTrigger>
+														<SelectContent>
+															<SelectItem value="__group_key__">Nombre del grupo</SelectItem>
+															{columns.map((col) => (
+																<SelectItem key={`group-sort-${col.id}`} value={col.id}>
+																	{col.label}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+												<div className="grid grid-cols-2 gap-2">
+													<Button
+														variant={
+															reportState.groupSortDirection === "asc" ? "default" : "outline"
+														}
+														size="sm"
+														className={`h-7 text-[11px] ${
+															reportState.groupSortDirection === "asc"
+																? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
+																: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
+														}`}
+														onClick={() =>
+															setReportState((prev) => ({
+																...prev,
+																groupSortDirection: "asc",
+															}))
+														}
+														disabled={readOnly}
+													>
+														Ascendente
+													</Button>
+													<Button
+														variant={
+															reportState.groupSortDirection === "desc" ? "default" : "outline"
+														}
+														size="sm"
+														className={`h-7 text-[11px] ${
+															reportState.groupSortDirection === "desc"
+																? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
+																: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
+														}`}
+														onClick={() =>
+															setReportState((prev) => ({
+																...prev,
+																groupSortDirection: "desc",
+															}))
+														}
+														disabled={readOnly}
+													>
+														Descendente
+													</Button>
+												</div>
+											</div>
+										)}
 										<div className="space-y-2.5 max-h-[calc(90vh-22rem)] overflow-y-auto">
 											{columns.map((col) => {
 												const isVisible = !reportState.hiddenColumnIds.includes(col.id);
+												const normalizedLabel = normalizeWizardLabel(col.label);
+												const checkboxWizardTarget =
+													normalizedLabel.includes("documento")
+														? "report-config-toggle-documento"
+														: normalizedLabel.includes("unidad")
+															? "report-config-toggle-unidad"
+															: normalizedLabel.includes("cantidad")
+																? "report-config-toggle-cantidad"
+																: undefined;
 												const groupOption =
 													groupByOptions.find((opt) => opt.id === `col-${col.id}`) ??
 													groupByOptions.find((opt) =>
@@ -906,6 +1197,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 															<div className="flex items-center gap-2 min-w-0">
 																<Checkbox
 																	id={`col-${col.id}`}
+																	data-wizard-target={checkboxWizardTarget}
 																	checked={isVisible}
 																	onCheckedChange={() => toggleColumnVisibility(col.id)}
 																	disabled={readOnly}
@@ -921,7 +1213,14 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 																<Button
 																	variant={isGrouped ? "default" : "outline"}
 																	size="sm"
-																	data-wizard-target={col.label.toLowerCase().replace(/\s+/g, "").trim() === "obra" ? "report-config-agrupar-obra" : undefined}
+																	data-wizard-target={
+																		normalizedLabel === "obra"
+																			? "report-config-agrupar-obra"
+																			: normalizedLabel.includes("descripcion") ||
+																				  normalizedLabel.includes("descriptivo")
+																				? "report-config-agrupar-descripcion"
+																				: undefined
+																	}
 																	className={`h-7 px-2 text-[11px] ${isGrouped
 																		? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
 																		: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
@@ -941,7 +1240,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														<div
 															className="flex items-center gap-2"
 															data-wizard-target={
-																col.label.toLowerCase().replace(/\s+/g, "").trim() === "preciototal"
+																normalizedLabel === "preciototal"
 																	? "report-config-total-precio-total"
 																	: undefined
 															}
@@ -988,7 +1287,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 						{/* FILTERS TAB */}
 						<TabsContent value="filters" className="flex-1 p-0 m-0 overflow-hidden">
 							<ScrollArea className="h-full">
-								<div className="p-4 space-y-5">
+								<div className="p-4 space-y-5" data-wizard-target="report-filters-panel">
 									{!readOnly && (
 										<div className="space-y-2 rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 p-2.5">
 											<Label className="text-xs text-[#5f6670] dark:text-zinc-400">
@@ -1036,11 +1335,22 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									)}
 									<div className="flex flex-col gap-2 max-h-[calc(100vh-20rem)] overflow-y-auto">
 
-										{filterFields?.map((field) => (
+										{filterFields?.map((field) => {
+											const fieldId = String(field.id);
+											const fieldIdNormalized = normalizeWizardLabel(fieldId);
+											const fieldLabelNormalized = normalizeWizardLabel(field.label);
+											const isDescripcionField =
+												fieldIdNormalized.includes("descripcion") ||
+												fieldLabelNormalized.includes("descripcion") ||
+												fieldLabelNormalized.includes("descriptivo");
+											return (
 											<div key={String(field.id)} className="space-y-1.5">
 												<Label className="text-xs text-[#5f6670] dark:text-zinc-400">{field.label}</Label>
 												{field.type === "text" && (
 													<Input
+														data-wizard-target={
+															isDescripcionField ? "report-filter-input-descripcion" : undefined
+														}
 														placeholder={field.placeholder}
 														value={String(draftFilters[field.id] || "")}
 														onChange={(e) =>
@@ -1168,12 +1478,13 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 													</div>
 												)}
 											</div>
-										))}
+										)})}
 									</div>
 
 									<div className="pt-3">
 										<div className="flex gap-2">
 											<Button
+												data-wizard-target="report-apply-filters-button"
 												size="sm"
 												className="flex-1 bg-[#2b2f36] hover:bg-[#1f2328] text-[#f7f7f8] text-xs"
 												onClick={() => setFilters(draftFilters)}

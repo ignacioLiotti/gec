@@ -346,6 +346,48 @@ Usa:
 - `/api/obras/:id/signals/recompute`
 - `/api/obras/:id/findings/evaluate`
 
+### Defaults de reporting del tenant
+
+Pantalla:
+
+- `/admin/obra-defaults/reporting`
+
+APIs:
+
+- `GET /api/reporting/defaults`
+- `PUT /api/reporting/defaults`
+- `DELETE /api/reporting/defaults`
+
+Persistencia:
+
+- `tenant_reporting_config`
+
+### Resolucion de config final por obra
+
+El backend compone la configuracion en este orden:
+
+1. `tenant_reporting_config` (base)
+2. `obra_rule_config` (overlay)
+3. inferencias faltantes de curva (si aplica)
+4. merge final con defaults del sistema
+
+Adicionalmente, normaliza referencias de tabla para que el config apunte a `obra_tablas.id` validos:
+
+- match directo por id
+- fallback por `settings.defaultTablaId`
+- fallback por nombre de tabla default
+
+### Recomendaciones en tab General (no findings)
+
+Las recomendaciones de:
+
+- `certificadoALaFecha`
+- `saldoACertificar`
+- `porcentaje`
+
+se calculan en `app/excel/[obraId]/page.tsx` usando certificados extraidos y mapping de `recommendations`.
+Cuando un campo parece manual, no se pisa automaticamente, pero se muestra sugerencia y boton para aplicar.
+
 ### Reporte de tabla OCR
 
 Usa:

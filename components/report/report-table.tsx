@@ -34,6 +34,10 @@ type ReportTableProps<Row> = {
 /* ------------------------------------------------------------------ */
 
 const formatterCache = new Map<string, Intl.NumberFormat>();
+const naturalSortCollator = new Intl.Collator("es", {
+	numeric: true,
+	sensitivity: "base",
+});
 
 function getNumberFormatter(locale: string, currency?: string): Intl.NumberFormat {
 	const key = currency ? `${locale}:currency:${currency}` : `${locale}:number`;
@@ -310,17 +314,35 @@ function sortData<Row>(
 		if (aVal == null) return dir;
 		if (bVal == null) return -dir;
 
-		if (typeof aVal === "string" && typeof bVal === "string") {
-			return dir * aVal.localeCompare(bVal);
+		if (sortColumn.type === "date") {
+			const aDate = parseDateValue(aVal);
+			const bDate = parseDateValue(bVal);
+			if (aDate != null && bDate != null) {
+				return dir * (aDate - bDate);
+			}
 		}
 
-		const aNum = Number(aVal);
-		const bNum = Number(bVal);
-		if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
+		if (sortColumn.type === "number" || sortColumn.type === "currency") {
+			const aNum = parseNumericValue(aVal);
+			const bNum = parseNumericValue(bVal);
+			if (aNum != null && bNum != null) {
+				return dir * (aNum - bNum);
+			}
+		}
+
+		if (typeof aVal === "boolean" && typeof bVal === "boolean") {
+			return dir * (Number(aVal) - Number(bVal));
+		}
+
+		const aNum = typeof aVal === "string" ? null : Number(aVal);
+		const bNum = typeof bVal === "string" ? null : Number(bVal);
+		if (aNum != null && bNum != null && !Number.isNaN(aNum) && !Number.isNaN(bNum)) {
 			return dir * (aNum - bNum);
 		}
 
-		return dir * String(aVal).localeCompare(String(bVal));
+		const aText = String(aVal).trim();
+		const bText = String(bVal).trim();
+		return dir * naturalSortCollator.compare(aText, bText);
 	});
 
 	return sorted;

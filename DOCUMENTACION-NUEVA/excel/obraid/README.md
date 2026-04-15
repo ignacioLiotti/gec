@@ -31,6 +31,10 @@ El objetivo es dejar claro:
   - `/excel/[obraId]/report`
   - archivo: `app/excel/[obraId]/report/report-client.tsx`
 
+- Defaults de reporting del tenant (admin):
+  - `/admin/obra-defaults/reporting`
+  - archivo: `app/admin/obra-defaults/reporting/page.tsx`
+
 - Reporte de una tabla OCR:
   - `/excel/[obraId]/tabla/[tablaId]/reporte`
   - archivo: `app/excel/[obraId]/tabla/[tablaId]/reporte/page.tsx`
@@ -242,3 +246,4 @@ Encapsula formateo y coercion para los campos configurados de la tabla principal
 - `workflows.md`
 - `data-flows-y-apis.md`
 - `reglas-y-gotchas.md`
+- `reporting-defaults-y-overrides.md`

@@ -217,6 +217,8 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	columns: ColumnDef<Row>[];
 	lockedSort?: { columnId: string; direction: "asc" | "desc" };
 	toolbarActions?: ReactNode;
+	/** Rendered inline after the search field when showInlineSearch is true (e.g. primary actions next to “Buscar…”). */
+	toolbarSearchEnd?: ReactNode;
 	/** When false, the top toolbar (search, filters, columns, export, toolbarActions) is not rendered. Defaults to true. */
 	showToolbar?: boolean;
 	/** Collapses filters, columns, export and toolbarActions under a single "Extras" dropdown. */
@@ -245,6 +247,8 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	enableColumnResizing?: boolean;
 	/** When true, applies client-side sorting on the currently loaded rows. Defaults to true. */
 	enableClientSort?: boolean;
+	/** When true, hides the footer page-size control and the "Mostrando X de Y filas" line. */
+	hideFooterPaginationSummary?: boolean;
 	/** Custom actions rendered next to the footer buttons (save/discard). */
 	footerActions?: ReactNode;
 	/** Whether to show the actions column (delete button, accordion toggle). Defaults to true. */

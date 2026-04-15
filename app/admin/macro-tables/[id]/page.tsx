@@ -150,6 +150,7 @@ type ColumnConfig = {
   sourceFieldKey: string | null;
   label: string;
   dataType: MacroTableDataType;
+  config: Record<string, unknown>;
 };
 
 type AvailableSourceColumn = {
@@ -378,6 +379,10 @@ export default function EditMacroTablePage() {
         sourceFieldKey: c.sourceFieldKey,
         label: c.label,
         dataType: c.dataType,
+        config:
+          c.config && typeof c.config === "object" && !Array.isArray(c.config)
+            ? (c.config as Record<string, unknown>)
+            : {},
       }));
       setColumns(cols);
     } catch (error) {
@@ -687,6 +692,7 @@ export default function EditMacroTablePage() {
           sourceFieldKey: fieldKey,
           label: info.label,
           dataType: info.dataType,
+          config: {},
         };
       });
 
@@ -749,6 +755,7 @@ export default function EditMacroTablePage() {
       sourceFieldKey: null,
       label: "",
       dataType: "text",
+      config: {},
     };
 
     setColumns((prev) => [...prev, newColumn]);
@@ -763,6 +770,7 @@ export default function EditMacroTablePage() {
       sourceFieldKey: availableFieldKeys[0] ?? null,
       label: "",
       dataType: "text",
+      config: {},
     };
 
     setColumns((prev) => [...prev, newColumn]);
@@ -890,7 +898,21 @@ export default function EditMacroTablePage() {
           sourceFieldKey: c.sourceFieldKey,
           label: c.label.trim(),
           dataType: c.dataType,
-          config: c.columnType === "computed" ? { compute: "obra_name" } : {},
+          config: (() => {
+            const nextConfig: Record<string, unknown> = { ...(c.config ?? {}) };
+            if (c.columnType === "computed" && typeof nextConfig.compute !== "string") {
+              nextConfig.compute = "obra_name";
+            }
+            if (c.columnType === "source" || c.columnType === "computed") {
+              nextConfig.allowManualEdit =
+                nextConfig.allowManualEdit === true ||
+                nextConfig.allowManualEdit === "true" ||
+                nextConfig.allowManualEdit === 1;
+            } else {
+              delete nextConfig.allowManualEdit;
+            }
+            return nextConfig;
+          })(),
         })),
       };
 
@@ -1657,10 +1679,33 @@ export default function EditMacroTablePage() {
                             </Select>
                           </div>
 
+                          {selectedColumn.columnType !== "custom" && (
+                            <div className="space-y-2">
+                              <Label className="text-sm">Edición manual</Label>
+                              <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3">
+                                <Checkbox
+                                  checked={selectedColumn.config.allowManualEdit === true}
+                                  onCheckedChange={(checked) => {
+                                    updateColumn(selectedColumn.id, {
+                                      config: {
+                                        ...(selectedColumn.config ?? {}),
+                                        allowManualEdit: checked === true,
+                                      },
+                                    });
+                                  }}
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  Permitir editar esta columna en MacroTablas, guardando un valor
+                                  manual por fila que reemplaza el derivado.
+                                </span>
+                              </label>
+                            </div>
+                          )}
+
                           {selectedColumn.columnType === "computed" && (
                             <p className="text-xs text-amber-600">
-                              Las columnas calculadas se generan automáticamente y no pueden editarse
-                              manualmente.
+                              Las columnas calculadas se generan automáticamente. Si activás
+                              edición manual, podés sobreescribir ese valor por fila.
                             </p>
                           )}
                         </div>
@@ -1676,8 +1721,8 @@ export default function EditMacroTablePage() {
 
               <p className="mt-4 text-xs text-muted-foreground">
                 <span className="text-purple-500">● Personalizadas</span> son editables.{" "}
-                <span className="text-amber-500">● Calculadas</span> se generan automáticamente.{" "}
-                <span>● Fuente</span> provienen de las tablas seleccionadas (solo lectura).
+                <span className="text-amber-500">● Calculadas</span> y <span>● Fuente</span>{" "}
+                son solo lectura por defecto, pero podés habilitar edición manual por columna.
               </p>
             </CardContent>
           </Card>

@@ -159,9 +159,12 @@ function TableRowInner<Row extends FormTableRow>({
 					const columnId = cell.column.id;
 					const columnMeta = columnsById[columnId];
 					if (!columnMeta) return null;
+					const isEditableColumn = !tableReadOnly && columnMeta.editable !== false;
 
 					const baseClassName = cn(
-						"outline outline-border border-border relative h-8 group-hover:bg-[#fffaf5]",
+						"outline outline-border border-border relative h-8",
+						"focus-within:border-red-500 focus-within:after:w-full focus-within:after:h-full focus-within:after:border-orange-primary focus-within:after:border-2 focus-within:after:absolute focus-within:after:top-0 focus-within:after:pointer-events-none",
+						isEditableColumn && "group-hover:bg-[#fffaf5]",
 						rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
 						colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 						colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
@@ -179,7 +182,7 @@ function TableRowInner<Row extends FormTableRow>({
 							data-column-id={columnMeta.id}
 							{...getStickyProps(columnId, baseClassName)}
 							onPointerEnter={() => {
-								if (!shouldTrackHover) return;
+								if (!shouldTrackHover || !isEditableColumn) return;
 								if (
 									hoveredCell?.rowId === rowData.id &&
 									hoveredCell?.columnId === columnMeta.id
@@ -193,7 +196,7 @@ function TableRowInner<Row extends FormTableRow>({
 								}, HOVER_INTENT_DELAY_MS);
 							}}
 							onPointerLeave={() => {
-								if (!shouldTrackHover) return;
+								if (!shouldTrackHover || !isEditableColumn) return;
 								cancelHoverIntent();
 								if (
 									hoveredCell?.rowId === rowData.id &&
@@ -231,6 +234,7 @@ function TableRowInner<Row extends FormTableRow>({
 								highlightQuery={highlightQuery}
 								editMode={editMode}
 								isHovered={
+									isEditableColumn &&
 									hoveredCell?.rowId === rowData.id &&
 									hoveredCell?.columnId === columnMeta.id
 								}
