@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -360,14 +361,25 @@ export function ContextualWizard({
           ref={tooltipRef}
           data-contextual-wizard-overlay="true"
           className={cn(
-            "pointer-events-auto fixed w-[400px] max-w-[calc(100%-24px)] rounded-2xl border border-border/60 bg-background/98 p-5 text-foreground shadow-[0_24px_60px_-16px_rgba(15,23,42,0.28),0_0_0_1px_rgba(0,0,0,0.04)] backdrop-blur-sm animate-in fade-in-0 zoom-in-95 duration-150",
+            "pointer-events-auto fixed relative w-[400px] max-w-[calc(100%-24px)] rounded-2xl border border-border/60 bg-background/98 p-5 text-foreground shadow-[0_24px_60px_-16px_rgba(15,23,42,0.28),0_0_0_1px_rgba(0,0,0,0.04)] backdrop-blur-sm animate-in fade-in-0 zoom-in-95 duration-150",
             className,
           )}
           style={{ top: tooltipPos.top, left: tooltipPos.left }}
         >
+          {showCloseButton ? (
+            <button
+              type="button"
+              aria-label="Cerrar"
+              className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-white transition-colors hover:bg-black/30 hover:text-white bg-black/70 border border-black/50 cursor-pointer"
+              onClick={() => onOpenChange(false)}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+
           {/* Header: flow label + mini step indicator */}
           <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
-            <div className="inline-flex shrink-0 items-center rounded-full border border-orange-200/80 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700 min-w-fit">
+            <div className="inline-flex shrink-0 items-center rounded-full border border-orange-200/80 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700 min-w-[35%] max-w-[50%]">
               {flow.title}
             </div>
 
@@ -477,17 +489,6 @@ export function ContextualWizard({
                   disabled={stepIndex === 0}
                 >
                   ← Anterior
-                </Button>
-              ) : null}
-              {showCloseButton ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Cerrar
                 </Button>
               ) : null}
             </div>
