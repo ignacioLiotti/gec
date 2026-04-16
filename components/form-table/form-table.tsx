@@ -1143,6 +1143,15 @@ const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const DEFAULT_PAGE_SIZE = 10;
 const SLOW_OPERATION_MS = 1200;
 
+function shallowEqualStringArrays(a: string[], b: string[]) {
+	if (a === b) return true;
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i += 1) {
+		if (a[i] !== b[i]) return false;
+	}
+	return true;
+}
+
 function getTableActivityMessage(kind: TableActivityKind, isSlow: boolean) {
 	if (!isSlow) {
 		switch (kind) {
@@ -1752,8 +1761,14 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [pinnedColumnIds, setPinnedColumnIds] = useState<string[]>([]);
 	const [columnOffsets, setColumnOffsets] = useState<Record<string, number>>({});
 	useEffect(() => {
-		setHiddenColumnIds(readPersistedArray(`${TABLE_ID}:hidden`));
-		setPinnedColumnIds(readPersistedArray(`${TABLE_ID}:pinned`));
+		const persistedHidden = readPersistedArray(`${TABLE_ID}:hidden`);
+		const persistedPinned = readPersistedArray(`${TABLE_ID}:pinned`);
+		setHiddenColumnIds((prev) =>
+			shallowEqualStringArrays(prev, persistedHidden) ? prev : persistedHidden
+		);
+		setPinnedColumnIds((prev) =>
+			shallowEqualStringArrays(prev, persistedPinned) ? prev : persistedPinned
+		);
 	}, [TABLE_ID]);
 	const tableRef = useRef<HTMLTableElement | null>(null);
 	const attachColumnResizeListener = useCallback(
@@ -1910,7 +1925,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 				const indexB = columnIndexMap[b] ?? Number.MAX_SAFE_INTEGER;
 				return indexA - indexB;
 			});
-			return next;
+			return shallowEqualStringArrays(prev, next) ? prev : next;
 		});
 	}, [pinnableColumns, columnIndexMap]);
 
@@ -2284,7 +2299,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		onColumnVisibilityChange: (updater) => {
 			const newVisibility = typeof updater === 'function' ? updater(columnVisibility) : updater;
 			const hidden = Object.keys(newVisibility).filter((key) => !newVisibility[key]);
-			setHiddenColumnIds(hidden);
+			setHiddenColumnIds((prev) =>
+				shallowEqualStringArrays(prev, hidden) ? prev : hidden
+			);
 		},
 		enableColumnResizing: false, // We handle resizing manually
 		columnResizeMode: 'onChange',
