@@ -1280,14 +1280,20 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [page, setPage] = useState(1);
 	const pageSizeOptions = config.pageSizeOptions ?? PAGE_SIZE_OPTIONS;
 	const lockedPageSize = config.lockedPageSize;
-	const persistedPageSize = readPersistedNumber(`${TABLE_ID}:pageSize`);
 	const initialPageSize =
 		typeof lockedPageSize === "number"
 			? lockedPageSize
-			: persistedPageSize && pageSizeOptions.includes(persistedPageSize)
-				? persistedPageSize
-				: config.defaultPageSize ?? DEFAULT_PAGE_SIZE;
+			: config.defaultPageSize ?? DEFAULT_PAGE_SIZE;
 	const [pageSize, setPageSizeState] = useState(initialPageSize);
+	useEffect(() => {
+		if (lockedPageSize) return;
+		const persistedPageSize = readPersistedNumber(`${TABLE_ID}:pageSize`);
+		if (!persistedPageSize) return;
+		if (!pageSizeOptions.includes(persistedPageSize)) return;
+		setPageSizeState((prev) =>
+			prev === persistedPageSize ? prev : persistedPageSize
+		);
+	}, [TABLE_ID, lockedPageSize, pageSizeOptions]);
 	useEffect(() => {
 		if (lockedPageSize && pageSize !== lockedPageSize) {
 			setPageSizeState(lockedPageSize);
@@ -1720,16 +1726,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		[rowsById, columns]
 	);
 
-	const hasUnsavedChanges = useMemo(
-		() =>
-			hasUnsavedChangesUtil(
-				rowOrder,
-				initialValuesRef.current.rowOrder,
-				rowsById,
-				columns,
-				initialValuesRef.current.rowsById
-			),
-		[rowOrder, rowsById, columns]
+	const hasUnsavedChanges = hasUnsavedChangesUtil(
+		rowOrder,
+		initialValuesRef.current.rowOrder,
+		rowsById,
+		columns,
+		initialValuesRef.current.rowsById
 	);
 
 	useEffect(() => {
@@ -1746,13 +1748,13 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [TABLE_ID, enableColumnResizing]);
 
 	// Column management state
-	const [hiddenColumnIds, setHiddenColumnIds] = useState<string[]>(() =>
-		readPersistedArray(`${TABLE_ID}:hidden`)
-	);
-	const [pinnedColumnIds, setPinnedColumnIds] = useState<string[]>(() =>
-		readPersistedArray(`${TABLE_ID}:pinned`)
-	);
+	const [hiddenColumnIds, setHiddenColumnIds] = useState<string[]>([]);
+	const [pinnedColumnIds, setPinnedColumnIds] = useState<string[]>([]);
 	const [columnOffsets, setColumnOffsets] = useState<Record<string, number>>({});
+	useEffect(() => {
+		setHiddenColumnIds(readPersistedArray(`${TABLE_ID}:hidden`));
+		setPinnedColumnIds(readPersistedArray(`${TABLE_ID}:pinned`));
+	}, [TABLE_ID]);
 	const tableRef = useRef<HTMLTableElement | null>(null);
 	const attachColumnResizeListener = useCallback(
 		(listener: EventListener) => {
@@ -2573,4 +2575,3 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		</FormTableProvider>
 	);
 }
-

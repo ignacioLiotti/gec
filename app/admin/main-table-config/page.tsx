@@ -171,6 +171,7 @@ const FLAG_CONFIGS: Array<{
 		{ key: "enablePin", label: "Fijar", defaultOn: false },
 		{ key: "enableSort", label: "Ordenar", defaultOn: true },
 		{ key: "enableResize", label: "Resize", defaultOn: true },
+		{ key: "enableSuggestions", label: "Suger.", defaultOn: true },
 	];
 
 type ConfigTableRowProps = {
@@ -728,7 +729,15 @@ export default function AdminMainTableConfigPage() {
 		if (!option) return;
 		setColumns((prev) => [
 			...prev,
-			{ id: option.id, kind: "base", baseColumnId: option.id, label: option.label, enabled: true, width: option.defaultWidth },
+			{
+				id: option.id,
+				kind: "base",
+				baseColumnId: option.id,
+				label: option.label,
+				enabled: true,
+				width: option.defaultWidth,
+				enableSuggestions: true,
+			},
 		]);
 		setNewBaseColumnId("");
 	};
@@ -748,7 +757,16 @@ export default function AdminMainTableConfigPage() {
 		}
 		setColumns((prev) => [
 			...prev,
-			{ id: formulaId, kind: "formula", label: cleanLabel, enabled: true, formula: cleanFormula, formulaFormat, width: 180 },
+			{
+				id: formulaId,
+				kind: "formula",
+				label: cleanLabel,
+				enabled: true,
+				formula: cleanFormula,
+				formulaFormat,
+				width: 180,
+				enableSuggestions: true,
+			},
 		]);
 		setFormulaLabel(""); setFormulaExpr(""); setFormulaFormat("number");
 	};
@@ -779,6 +797,7 @@ export default function AdminMainTableConfigPage() {
 				enableHide: true,
 				enableSort: true,
 				enableResize: true,
+				enableSuggestions: true,
 			},
 		]);
 		setCustomLabel(""); setCustomId(""); setCustomType("text");

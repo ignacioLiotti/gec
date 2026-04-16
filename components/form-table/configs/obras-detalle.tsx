@@ -1859,6 +1859,7 @@ export type MainTableColumnConfig = {
 	enablePin?: boolean;
 	enableSort?: boolean;
 	enableResize?: boolean;
+	enableSuggestions?: boolean;
 };
 
 type ObrasDetalleConfigOptions = {
@@ -1905,11 +1906,32 @@ export const DEFAULT_MAIN_TABLE_COLUMN_CONFIG: MainTableColumnConfig[] = columns
 		enablePin: column.enablePin,
 		enableSort: column.enableSort,
 		enableResize: column.enableResize,
+		enableSuggestions: true,
 	};
 });
 
 const BASE_COLUMNS_BY_ID = new Map(columns.map((column) => [column.id, column]));
 const FORMULA_REF_PATTERN = /\[([a-zA-Z0-9_]+)\]/g;
+
+const resolveSuggestionDetectionOverride = (
+	enabled: boolean | undefined
+): NonNullable<ColumnDef<ObrasDetalleRow>["cellConfig"]>["suggestionDetection"] | undefined => {
+	if (enabled === false) return false;
+	if (enabled === true) return "auto";
+	return undefined;
+};
+
+const applySuggestionDetectionOverride = (
+	cellConfig: ColumnDef<ObrasDetalleRow>["cellConfig"],
+	enabled: boolean | undefined
+): ColumnDef<ObrasDetalleRow>["cellConfig"] => {
+	const suggestionDetection = resolveSuggestionDetectionOverride(enabled);
+	if (suggestionDetection === undefined) return cellConfig;
+	return {
+		...(cellConfig ?? {}),
+		suggestionDetection,
+	};
+};
 
 const evaluateFormulaValue = (row: ObrasDetalleRow, formula: string): number => {
 	if (!formula.trim()) return 0;
@@ -1951,47 +1973,50 @@ const buildFormulaColumn = (
 		enablePin: false,
 		editable: false,
 		cellType: resolvedCellType,
-		cellConfig: {
-			...(resolvedCellType === "currency"
-				? {
-					currencyCode: "ARS",
-					currencyLocale: "es-AR",
-				}
-				: {}),
-			...(resolvedCellType === "select"
-				? {
-					selectOptions,
-				}
-				: {}),
-			renderReadOnly: ({ row, highlightQuery }) => {
-				if (isPartialPreviewRow(row)) {
-					return renderPreviewPlaceholder(
-						resolvedCellType === "currency" ? "font-mono tabular-nums" : undefined,
-					);
-				}
-				return renderReadOnlyValue(
-					getValue(row),
-					row,
-					{
-						id: config.id,
-						label: config.label || config.id,
-						field: config.id as ColumnField<ObrasDetalleRow>,
-						cellType: resolvedCellType,
-						cellConfig: resolvedCellType === "currency"
-							? {
-								currencyCode: "ARS",
-								currencyLocale: "es-AR",
-							}
-							: resolvedCellType === "select"
+		cellConfig: applySuggestionDetectionOverride(
+			{
+				...(resolvedCellType === "currency"
+					? {
+						currencyCode: "ARS",
+						currencyLocale: "es-AR",
+					}
+					: {}),
+				...(resolvedCellType === "select"
+					? {
+						selectOptions,
+					}
+					: {}),
+				renderReadOnly: ({ row, highlightQuery }) => {
+					if (isPartialPreviewRow(row)) {
+						return renderPreviewPlaceholder(
+							resolvedCellType === "currency" ? "font-mono tabular-nums" : undefined,
+						);
+					}
+					return renderReadOnlyValue(
+						getValue(row),
+						row,
+						{
+							id: config.id,
+							label: config.label || config.id,
+							field: config.id as ColumnField<ObrasDetalleRow>,
+							cellType: resolvedCellType,
+							cellConfig: resolvedCellType === "currency"
 								? {
-									selectOptions,
+									currencyCode: "ARS",
+									currencyLocale: "es-AR",
 								}
-								: undefined,
-					},
-					highlightQuery,
-				);
+								: resolvedCellType === "select"
+									? {
+										selectOptions,
+									}
+									: undefined,
+						},
+						highlightQuery,
+					);
+				},
 			},
-		},
+			config.enableSuggestions
+		),
 		sortFn: (a, b) => getValue(a) - getValue(b),
 		searchFn: (row, query) => String(getValue(row)).includes(query),
 		defaultValue: null,
@@ -2019,34 +2044,37 @@ const buildCustomColumn = (
 		enablePin: config.enablePin ?? false,
 		editable: config.editable ?? true,
 		cellType,
-		cellConfig: {
-			...(cellType === "select"
-				? {
-					selectOptions,
-				}
-				: {}),
-			renderReadOnly: ({ row, highlightQuery }) => {
-				if (isPartialPreviewRow(row)) {
-					return renderPreviewPlaceholder(
-						cellType === "currency" || cellType === "number"
-							? "font-mono tabular-nums"
-							: undefined,
+		cellConfig: applySuggestionDetectionOverride(
+			{
+				...(cellType === "select"
+					? {
+						selectOptions,
+					}
+					: {}),
+				renderReadOnly: ({ row, highlightQuery }) => {
+					if (isPartialPreviewRow(row)) {
+						return renderPreviewPlaceholder(
+							cellType === "currency" || cellType === "number"
+								? "font-mono tabular-nums"
+								: undefined,
+						);
+					}
+					return renderReadOnlyValue(
+						readValue(row),
+						row,
+						{
+							id: config.id,
+							label: config.label || config.id,
+							field: config.id as ColumnField<ObrasDetalleRow>,
+							cellType,
+							cellConfig: cellType === "select" ? { selectOptions } : undefined,
+						},
+						highlightQuery,
 					);
-				}
-				return renderReadOnlyValue(
-					readValue(row),
-					row,
-					{
-						id: config.id,
-						label: config.label || config.id,
-						field: config.id as ColumnField<ObrasDetalleRow>,
-						cellType,
-						cellConfig: cellType === "select" ? { selectOptions } : undefined,
-					},
-					highlightQuery,
-				);
+				},
 			},
-		},
+			config.enableSuggestions
+		),
 		defaultValue:
 			cellType === "number" || cellType === "currency"
 				? 0
@@ -2107,19 +2135,23 @@ const resolveColumnsFromConfig = (
 			nextCellType === "select"
 				? sanitizeMainTableSelectOptions(item.selectOptions)
 				: undefined;
+		const nextCellConfig =
+			!preserveBaseCellType && nextCellType === "select"
+				? {
+					...(baseColumn.cellConfig ?? {}),
+					selectOptions: nextSelectOptions,
+				}
+				: baseColumn.cellConfig;
 		resolved.push({
 			...baseColumn,
 			id: item.id || baseColumn.id,
 			label: item.label || baseColumn.label,
 			width: typeof item.width === "number" ? item.width : baseColumn.width,
 			cellType: nextCellType,
-			cellConfig:
-				!preserveBaseCellType && nextCellType === "select"
-					? {
-						...(baseColumn.cellConfig ?? {}),
-						selectOptions: nextSelectOptions,
-					}
-					: baseColumn.cellConfig,
+			cellConfig: applySuggestionDetectionOverride(
+				nextCellConfig,
+				item.enableSuggestions
+			),
 			required: item.required ?? baseColumn.required,
 			editable: item.editable ?? baseColumn.editable,
 			enableHide: item.enableHide ?? baseColumn.enableHide,

@@ -37,6 +37,7 @@ export type ExcelPageMainTableColumnConfig = {
 	enablePin?: boolean;
 	enableSort?: boolean;
 	enableResize?: boolean;
+	enableSuggestions?: boolean;
 };
 
 export type ExcelPageObra = {

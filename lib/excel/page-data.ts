@@ -146,6 +146,10 @@ function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
 				typeof row.enableSort === "boolean" ? row.enableSort : undefined,
 			enableResize:
 				typeof row.enableResize === "boolean" ? row.enableResize : undefined,
+			enableSuggestions:
+				typeof row.enableSuggestions === "boolean"
+					? row.enableSuggestions
+					: undefined,
 		});
 	}
 	return next;
