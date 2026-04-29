@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
-import { Pencil, Eye, StickyNote, X, AlertTriangle, RotateCcw, Trash2 } from "lucide-react";
+import { Pencil, Eye, StickyNote, X, AlertTriangle, RotateCcw, Trash2, Layers } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
@@ -2011,6 +2011,11 @@ function ObraDetailPageContent() {
 		router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
 	}, [obraId, router]);
 
+	const handleOpenDataFlowPage = useCallback(() => {
+		if (!obraId) return;
+		router.push(`/excel/${encodeURIComponent(obraId)}/data-flow`);
+	}, [obraId, router]);
+
 	const handleOpenObrasTrashPage = useCallback(() => {
 		if (!isTenantAdmin) {
 			toast.error("Solo administradores pueden ver la papelera de obras.");
@@ -3644,6 +3649,16 @@ function ObraDetailPageContent() {
 									)}
 								</div>
 								<div className="flex flex-wrap items-center gap-2 justify-end">
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-8 gap-2"
+										onClick={handleOpenDataFlowPage}
+									>
+										<Layers className="h-4 w-4" />
+										<span className="text-base md:text-sm">Flujo de datos</span>
+									</Button>
 									{isTenantAdmin && (
 										<>
 											{/* <Button
@@ -3784,6 +3799,7 @@ function ObraDetailPageContent() {
 							<div data-wizard-target="obra-page-content">
 								{isGeneralTabActive ? (
 									<ObraGeneralTab
+										obraId={obraId}
 										form={form}
 										isGeneralTabEditMode={isGeneralTabEditMode}
 										hasUnsavedChanges={hasUnsavedChanges}

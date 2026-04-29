@@ -22,6 +22,7 @@ import {
 	Table2,
 	Users,
 	Wallet,
+	Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -81,6 +82,11 @@ const navItems: NavItem[] = [
 		title: "Excel",
 		href: "/excel",
 		icon: Database,
+	},
+	{
+		title: "Data-flow general",
+		href: "/excel/data-flow",
+		icon: Waypoints,
 	},
 	{
 		title: "Notificaciones",

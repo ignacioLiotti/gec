@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import "@xyflow/react/dist/style.css";
+import "react-grid-layout/css/styles.css";
 import SupabaseAuthListener from "@/components/auth/auth-listener";
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
@@ -16,6 +18,7 @@ import { Analytics } from "@vercel/analytics/next";
 import DomainMigrationGuard from "@/components/domain-migration-guard";
 import { PathnameLayoutShell } from "@/components/pathname-layout-shell";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import type { Role } from "@/lib/route-access";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
@@ -52,7 +55,7 @@ export const metadata: Metadata = {
 };
 
 type LayoutUserRoles = {
-	roles: string[];
+	roles: Role[];
 	roleIds: string[];
 	isAdmin: boolean;
 	isSuperAdmin: boolean;
@@ -107,7 +110,7 @@ export default async function RootLayout({
 		const membershipRole = access.membershipRole;
 		const isAdmin =
 			membershipRole === "owner" || membershipRole === "admin" || isSuperAdmin;
-		const roles: string[] = [];
+		const roles: Role[] = [];
 		const roleIds: string[] = [];
 
 		if (isAdmin || isSuperAdmin) {
@@ -239,7 +242,7 @@ export default async function RootLayout({
 					<NotificationsListener />
 					<PathnameLayoutShell
 						user={user}
-						userRoles={userRoles as any}
+						userRoles={userRoles}
 						tenants={tenants}
 						demoSession={access.demoSession}
 						demoCapabilities={access.demoSession?.allowedCapabilities}
