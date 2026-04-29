@@ -566,7 +566,7 @@ export default function DesktopExcelPageClient({
 						<div className="flex w-full flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 							<div data-wizard-target="excel-page-header">
 								<h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a] sm:text-4xl">
-									Panel de obras
+									Construction Workspace
 								</h1>
 								<p className="mt-1 text-sm text-[#999]">
 									Filtra, busca y actualiza tus obras desde una vista unificada.

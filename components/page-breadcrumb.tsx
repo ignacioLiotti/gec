@@ -94,6 +94,7 @@ export function PageBreadcrumb() {
               ) : (
                 <Link
                   href={crumb.href}
+                  prefetch={false}
                   className="hover:text-foreground transition-colors underline-offset-4 hover:underline"
                 >
                   {crumb.label}

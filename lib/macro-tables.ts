@@ -42,20 +42,55 @@ export type MacroTable = {
 };
 
 export type MacroTableRow = {
-  id: string; // source_row_id
+  id: string; // source_row_id (technical, mutable)
   _sourceTablaId: string;
   _sourceTablaName: string;
   _obraId: string;
   _obraName: string;
+  _businessIdentity?: string | null;
+  _lineageRowKey?: string | null;
+  _extractionId?: string | null;
+  _materializationVersion?: number | null;
+  _docPath?: string | null;
+  _docFileName?: string | null;
+  _overrideBindingStatus?: MacroTableOverrideBindingStatus | null;
+  _overrideConflictCount?: number;
   [key: string]: unknown;
 };
+
+export type MacroTableOverrideBindingStatus = 'legacy' | 'stable' | 'conflict';
 
 export type MacroTableCustomValue = {
   id: string;
   macroTableId: string;
   sourceRowId: string;
+  sourceTablaId?: string | null;
+  lineageRowKey?: string | null;
   columnId: string;
   value: unknown;
+  bindingStatus?: MacroTableOverrideBindingStatus | null;
+  bindingError?: Record<string, unknown> | null;
+};
+
+export type MacroTableOverrideConflict = {
+  code: 'LINEAGE_OVERRIDE_REATTACH_CONFLICT';
+  macroTableId: string;
+  rowId: string;
+  sourceTablaId: string | null;
+  lineageRowKey: string | null;
+  columnId: string;
+  candidateOverrideIds: string[];
+  candidateSourceRowIds: string[];
+  detail: string;
+};
+
+export type MacroTableOverrideSummary = {
+  totalRecords: number;
+  appliedStable: number;
+  appliedLegacy: number;
+  conflicts: number;
+  rowsWithOverrides: number;
+  rowsWithConflicts: number;
 };
 
 // Valid data types for macro table columns

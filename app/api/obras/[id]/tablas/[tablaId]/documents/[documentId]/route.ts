@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const { data: document, error: documentError } = await supabase
       .from("ocr_document_processing")
       .select(
-        "id, obra_id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at"
+        "id, obra_id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, error_code, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at"
       )
       .eq("id", documentId)
       .eq("tabla_id", tablaId)

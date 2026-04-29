@@ -228,7 +228,7 @@ export async function GET(request: Request, context: RouteContext) {
       const { data: documents, error: documentsError } = await supabase
         .from("ocr_document_processing")
         .select(
-          "id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at"
+          "id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, error_code, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at, extraction_id, file_fingerprint, content_fingerprint_normalized, fingerprint_status, fingerprint_error"
         )
         .eq("obra_id", obraId)
         .in("tabla_id", tablaIds)
@@ -253,7 +253,7 @@ export async function GET(request: Request, context: RouteContext) {
       );
       const { data: rows, error: rowsError } = await supabase
         .from("obra_tabla_rows")
-        .select("id, tabla_id, data, source, created_at, updated_at")
+        .select("id, tabla_id, lineage_row_key, extraction_id, materialization_version, data, source, created_at, updated_at")
         .in("tabla_id", tablaIds)
         .order("created_at", { ascending: false })
         .limit(scanLimit);
@@ -335,6 +335,8 @@ export async function GET(request: Request, context: RouteContext) {
 
     const folderNodeByPath = new Map<string, any>();
     folderNodeByPath.set("", root);
+    const fileNodeByPath = new Map<string, any>();
+    const storageWarnings: string[] = [];
 
     const buildFolderNode = (relativeFolderPath: string) => {
       const normalizedRelative = getNormalizedPath(relativeFolderPath);
@@ -380,6 +382,66 @@ export async function GET(request: Request, context: RouteContext) {
       }
       folderNodeByPath.set(normalizedRelative, folderNode);
       return folderNode;
+    };
+
+    const buildFileNode = (
+      storagePath: string,
+      parentNode: any,
+      options?: {
+        fileName?: string | null;
+        size?: number | null;
+        mimetype?: string | null;
+      },
+    ) => {
+      if (fileNodeByPath.has(storagePath)) {
+        return fileNodeByPath.get(storagePath);
+      }
+      const docStatus = docsByPath.get(storagePath);
+      const trackedUpload = uploadTrackingByPath.get(storagePath);
+      const fileName =
+        options?.fileName ??
+        (typeof docStatus?.source_file_name === "string" ? docStatus.source_file_name : null) ??
+        storagePath.split("/").pop() ??
+        "archivo";
+      const fileItem: any = {
+        id: `file-${storagePath}`,
+        name: fileName,
+        type: "file",
+        storagePath,
+        apsUrn: apsUrnByPath.get(storagePath) ?? undefined,
+        size: options?.size ?? undefined,
+        mimetype: options?.mimetype ?? undefined,
+        ocrDocumentStatus: docStatus
+          ? docStatus.status
+          : parentNode?.ocrEnabled
+            ? "unprocessed"
+            : undefined,
+        ocrDocumentId: docStatus?.id,
+        ocrDocumentError: docStatus?.error_message ?? null,
+        ocrErrorCode:
+          typeof docStatus?.error_code === "string" ? docStatus.error_code : null,
+        ocrRowsExtracted: docStatus?.rows_extracted ?? null,
+        ocrExtractionId: docStatus?.extraction_id ?? null,
+        ocrFileFingerprint: docStatus?.file_fingerprint ?? null,
+        ocrContentFingerprintNormalized:
+          docStatus?.content_fingerprint_normalized ?? null,
+        ocrFingerprintStatus: docStatus?.fingerprint_status ?? null,
+        ocrFingerprintError:
+          docStatus && typeof docStatus.fingerprint_error === "object"
+            ? (docStatus.fingerprint_error as Record<string, unknown>)
+            : null,
+        uploadedAt: trackedUpload?.uploadedAt ?? null,
+        uploadedByUserId: trackedUpload?.uploadedBy ?? null,
+        uploadedByLabel:
+          trackedUpload?.uploadedBy &&
+          currentUser?.id &&
+          trackedUpload.uploadedBy === currentUser.id
+            ? "Vos"
+            : trackedUpload?.uploadedBy ?? null,
+      };
+      parentNode.children?.push(fileItem);
+      fileNodeByPath.set(storagePath, fileItem);
+      return fileItem;
     };
 
     const docsByPath = new Map<string, any>();
@@ -447,6 +509,9 @@ export async function GET(request: Request, context: RouteContext) {
           sortBy: { column: "name", order: "asc" },
         });
       if (folderError) {
+        storageWarnings.push(
+          `${storagePrefix}: ${typeof folderError.message === "string" ? folderError.message : "storage_list_failed"}`,
+        );
         continue;
       }
 
@@ -477,8 +542,22 @@ export async function GET(request: Request, context: RouteContext) {
         if (isDeletedPath(storagePath)) {
           continue;
         }
-        const docStatus = docsByPath.get(storagePath);
-        const trackedUpload = uploadTrackingByPath.get(storagePath);
+        const fallbackUploadedAt =
+          typeof (item as any)?.created_at === "string"
+            ? ((item as any).created_at as string)
+            : typeof (item as any)?.updated_at === "string"
+              ? ((item as any).updated_at as string)
+              : typeof (item as any)?.last_accessed_at === "string"
+                ? ((item as any).last_accessed_at as string)
+                : null;
+        const fileNode = buildFileNode(storagePath, parentNode, {
+          fileName: item.name,
+          size: item.metadata?.size ?? null,
+          mimetype: item.metadata?.mimetype ?? null,
+        });
+        if (!fileNode.uploadedAt && fallbackUploadedAt) {
+          fileNode.uploadedAt = fallbackUploadedAt;
+        }
         const storageOwner =
           typeof (item as any)?.owner === "string"
             ? ((item as any).owner as string)
@@ -487,46 +566,38 @@ export async function GET(request: Request, context: RouteContext) {
               : typeof (item as any)?.user_id === "string"
                 ? ((item as any).user_id as string)
                 : null;
-        const storageCreatedAt =
-          typeof (item as any)?.created_at === "string"
-            ? ((item as any).created_at as string)
-            : typeof (item as any)?.updated_at === "string"
-              ? ((item as any).updated_at as string)
-              : typeof (item as any)?.last_accessed_at === "string"
-                ? ((item as any).last_accessed_at as string)
-                : null;
-        const fileItem: any = {
-          id: `file-${storagePath}`,
-          name: item.name,
-          type: "file",
-          storagePath,
-          apsUrn: apsUrnByPath.get(storagePath) ?? undefined,
-          size: item.metadata?.size,
-          mimetype: item.metadata?.mimetype,
-          ocrDocumentStatus: docStatus
-            ? docStatus.status
-            : parentNode?.ocrEnabled
-              ? "unprocessed"
-              : undefined,
-          ocrDocumentId: docStatus?.id,
-          ocrDocumentError: docStatus?.error_message ?? null,
-          ocrRowsExtracted: docStatus?.rows_extracted ?? null,
-          uploadedAt: trackedUpload?.uploadedAt ?? storageCreatedAt,
-          uploadedByUserId: trackedUpload?.uploadedBy ?? storageOwner,
-          uploadedByLabel:
-            (trackedUpload?.uploadedBy ?? storageOwner) &&
-            currentUser?.id &&
-            (trackedUpload?.uploadedBy ?? storageOwner) === currentUser.id
-              ? "Vos"
-              : trackedUpload?.uploadedBy ?? storageOwner,
-        };
-        parentNode.children?.push(fileItem);
+        if (!fileNode.uploadedByUserId && storageOwner) {
+          fileNode.uploadedByUserId = storageOwner;
+          fileNode.uploadedByLabel =
+            currentUser?.id && storageOwner === currentUser.id ? "Vos" : storageOwner;
+        }
       }
+    }
+
+    const fallbackPaths = new Set<string>([
+      ...docsByPath.keys(),
+      ...uploadTrackingByPath.keys(),
+      ...apsUrnByPath.keys(),
+    ]);
+    for (const storagePath of fallbackPaths) {
+      if (!storagePath || !storagePath.startsWith(`${obraId}/`) || isDeletedPath(storagePath)) {
+        continue;
+      }
+      if (fileNodeByPath.has(storagePath)) continue;
+      const relativePath = storagePath.slice(`${obraId}/`.length);
+      if (!relativePath) continue;
+      const segments = relativePath.split("/").filter(Boolean);
+      if (segments.length === 0) continue;
+      const fileName = segments.pop() ?? relativePath;
+      const folderPath = segments.join("/");
+      const parentNode = ensureFolderPath(folderPath);
+      buildFileNode(storagePath, parentNode, { fileName });
     }
 
     return NextResponse.json({
       tree: root,
       links: ocrLinks ?? [],
+      warnings: storageWarnings,
     });
   } catch (error) {
     console.error("[documents-tree:get]", error);

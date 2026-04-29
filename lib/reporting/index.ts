@@ -668,6 +668,10 @@ function mergePartialRuleConfig(
 			recommendations: {
 				...(base.mappings?.recommendations ?? {}),
 				...(overlay.mappings?.recommendations ?? {}),
+				// TODO(domain-model): Enforce canonical recommendation policy merge semantics
+				// (non-blocking default, blocking only by explicit rule/severity/tenant policy).
+				// TODO(domain-model): Recommendation rule config should also carry lifecycle
+				// behavior contracts (for example auto-expire/supersede criteria).
 			},
 			curve:
 				baseCurve || overlayCurve
@@ -1031,6 +1035,8 @@ async function fetchRows(
 		updated_at: string;
 	}>
 > {
+	// TODO(domain-model): Extend row fetch for lineage-aware calculations once schema is ready:
+	// include lineage_row_key, extraction_id, materialization_version as first-class fields.
 	const { data } = await supabase
 		.from("obra_tabla_rows")
 		.select("id,data,created_at,updated_at")
@@ -1242,6 +1248,8 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 							source: actualSource,
 							periodKey: actualPeriodUsed,
 							rowId: actualRowId,
+							// TODO(domain-model): Persist lineage references for explainability:
+							// lineage_row_key / extraction_id / materialization_version.
 						},
 					},
 				{
@@ -1653,6 +1661,8 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 	}
 
 	const computedAt = new Date().toISOString();
+	// TODO(domain-model): Add composite calculation version metadata to snapshots/logs:
+	// engine_version + rule_pack_version + effective_rule_hash.
 	const upserts = signals.map((signal) => ({
 		tenant_id: tenantId,
 		obra_id: obraId,
@@ -1684,6 +1694,10 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 		.single();
 	const runId = (runRow as any)?.id as string | undefined;
 	if (runId && logs.length > 0) {
+		// TODO(domain-model): Logs should carry stable lineage references for each source input,
+		// not only technical row ids embedded ad-hoc in outputs_json.
+		// TODO(domain-model): Persist the same composite calculation version tuple
+		// (engine_version, rule_pack_version, effective_rule_hash) per log entry.
 		const { error: logError } = await supabase
 			.from("obra_signal_logs")
 			.insert(
@@ -1707,6 +1721,8 @@ export async function recomputeSignals(obraId: string, periodKey?: string) {
 		obraId,
 		periodKey,
 	);
+	// TODO(domain-model): Publish `calculo_recalculado` as a first-class domain event
+	// (with lineage/calculation version metadata) for downstream recommendation workflows.
 	return { snapshot, runId, logs };
 }
 

@@ -192,6 +192,18 @@ _Avoid_: diagrama decorativo
 Entidad visual del canvas que representa una fuente, tabla, campo de obra, calculo o resultado con estado y metadatos inspeccionables.
 _Avoid_: tooltip como fuente de verdad
 
+**Nodo Real de Trazabilidad**:
+Nodo cuyo backing sale de entidades persistidas del dominio, como tablas, filas materializadas, macrotablas o configuraciones tenant/obra reales.
+_Avoid_: asumir que todo nodo del canvas existe fisicamente en storage o DB
+
+**Nodo Projected de Trazabilidad**:
+Nodo inferido desde reporting, hallazgos, consumers o wiring de UI cuando todavia no existe como entidad persistida general.
+_Avoid_: presentarlo como si tuviera el mismo grado de verdad que un nodo real
+
+**Modo Simplificado de Trazabilidad**:
+Vista por defecto que prioriza tablas, macrotablas y resultados visibles, ocultando capas projected mas tecnicas hasta que el usuario pida mas detalle.
+_Avoid_: mostrar todo el grafo completo siempre
+
 **Flujo Documental**:
 Configuracion tenant que conecta carpetas, tipos documentales, estrategia de extraccion, tablas destino, politica de lineage y consumidores.
 _Avoid_: carpeta OCR aislada
@@ -235,6 +247,7 @@ _Avoid_: chat stateless sin contexto tenant
 - Una **Configuracion Efectiva de Data-flow** produce **Resultados Generales** y **Bloques de Layout General** para el **Detalle de Obra**.
 - Un **Calculo Base** puede depender de **Campos de Obra como Fuente**, tablas, macrotablas u otros calculos.
 - El **Canvas de Trazabilidad** debe respetar la direccion canonica **Documento -> Tabla de Extraccion/Macrotabla/Campo de Obra -> Calculo -> Resultado General**.
+- Un **Canvas de Trazabilidad** puede mezclar **Nodos Reales de Trazabilidad** y **Nodos Projected de Trazabilidad**, pero debe distinguirlos explicitamente.
 - Un **Flujo Documental** define el contrato de un **Pipeline de Extraccion** antes de que existan documentos concretos.
 - Un **Override Estable de Macrotabla** referencia un **Lineage Row Key**, no solamente una **Version de Materializacion**.
 - Un **Asistente Conversacional de Tenant** pertenece a un usuario dentro de un tenant y sus herramientas solo consultan datos autorizados para ese tenant.
@@ -258,6 +271,9 @@ _Avoid_: chat stateless sin contexto tenant
   - `schema_version_before`, `schema_version_after` (o equivalente de identidad estructural)
 
 ### Reglas operativas obligatorias
+
+- Toda vista de trazabilidad debe degradar primero las capas projected antes de romper la capa real.
+- Un **Nodo Projected de Trazabilidad** nunca puede mostrarse como equivalente a un **Nodo Real de Trazabilidad** sin soporte status visible.
 
 - Ningun `force sync` destructivo se ejecuta sin preview de `impacto_estimado`.
 - Ningun `force sync` puede quedar sin resultado auditable final, incluso con falla parcial.

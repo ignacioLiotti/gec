@@ -40,6 +40,7 @@ import type {
   FilterRendererProps,
 } from "@/components/form-table/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,6 +56,8 @@ import type {
   MacroTable,
   MacroTableColumn,
   MacroTableDataType,
+  MacroTableOverrideConflict,
+  MacroTableOverrideSummary,
   MacroTableRow as MacroRow,
   MacroTableSource,
 } from "@/lib/macro-tables";
@@ -83,8 +86,92 @@ type MacroDisplayColumn = {
   label: string;
   dataType: MacroTableDataType;
   columnType: "source" | "custom" | "computed";
+  sourceFieldKey?: string | null;
   config?: Record<string, unknown>;
 };
+
+const MACRO_BUSINESS_ID_COLUMN_ID = "_businessIdentityDisplay";
+const MACRO_DOCUMENT_COLUMN_ID = "_documentRef";
+const MACRO_CONTINUITY_COLUMN_ID = "_continuity";
+const MACRO_VERSION_COLUMN_ID = "_versionLabel";
+
+function normalizeMacroFieldKey(value: string | null | undefined) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function shortTechnicalId(value: string | null | undefined, length = 8) {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized.slice(0, length) : null;
+}
+
+function getContinuityBadges(row: MacroTableRowData) {
+  const badges: Array<{
+    key: string;
+    label: string;
+    className: string;
+  }> = [];
+
+  if (row._overrideBindingStatus === "conflict" || (row._overrideConflictCount ?? 0) > 0) {
+    badges.push({
+      key: "override-conflict",
+      label: "conflict",
+      className: "border-red-200 bg-red-50 text-red-700",
+    });
+  }
+
+  if (typeof row._lineageRowKey === "string" && row._lineageRowKey.startsWith("legacy:")) {
+    badges.push({
+      key: "lineage-legacy",
+      label: "legacy",
+      className: "border-stone-200 bg-stone-100 text-stone-700",
+    });
+  } else if (typeof row._lineageRowKey === "string" && row._lineageRowKey.length > 0) {
+    badges.push({
+      key: "lineage-stable",
+      label: "estable",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    });
+  }
+
+  if (typeof row._materializationVersion === "number" && row._materializationVersion > 1) {
+    badges.push({
+      key: "rematerialized",
+      label: "rematerializada",
+      className: "border-sky-200 bg-sky-50 text-sky-700",
+    });
+  }
+
+  if (row._overrideBindingStatus === "stable") {
+    badges.push({
+      key: "override-stable",
+      label: "override estable",
+      className: "border-teal-200 bg-teal-50 text-teal-700",
+    });
+  } else if (row._overrideBindingStatus === "legacy") {
+    badges.push({
+      key: "override-legacy",
+      label: "override legacy",
+      className: "border-amber-200 bg-amber-50 text-amber-700",
+    });
+  }
+
+  return badges;
+}
+
+function getActiveMacroFilters(filters: MacroTableFilters | undefined): MacroTableFilters {
+  if (!filters) return {};
+
+  return Object.entries(filters).reduce<MacroTableFilters>((acc, [columnId, filter]) => {
+    if (isMacroFilterActive(filter)) {
+      acc[columnId] = filter;
+    }
+    return acc;
+  }, {});
+}
 
 const toolButtonClass =
   "gap-2 rounded-lg border-[#e8e1d8] bg-white px-3.5 text-[#5a5248] hover:bg-[#fcfaf7] hover:text-[#1f1a17]";
@@ -321,6 +408,16 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const [overrideSummary, setOverrideSummary] = useState<MacroTableOverrideSummary>({
+    totalRecords: 0,
+    appliedStable: 0,
+    appliedLegacy: 0,
+    conflicts: 0,
+    rowsWithOverrides: 0,
+    rowsWithConflicts: 0,
+  });
+  const [overrideConflicts, setOverrideConflicts] = useState<MacroTableOverrideConflict[]>([]);
+  const [overrideBanner, setOverrideBanner] = useState<string | null>(null);
   const columns = macroTable.columns ?? [];
   const hasObraColumn = columns.some(
     (column) =>
@@ -333,6 +430,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       label: column.label,
       dataType: column.dataType,
       columnType: column.columnType,
+      sourceFieldKey: column.sourceFieldKey,
       config: column.config ?? {},
     }));
 
@@ -342,9 +440,61 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         label: "Obra",
         dataType: "text",
         columnType: "computed",
+        sourceFieldKey: null,
         config: {},
       });
     }
+
+    const hasBusinessIdentityColumn = next.some((column) => {
+      const sourceFieldKey = normalizeMacroFieldKey(column.sourceFieldKey);
+      const label = normalizeMacroFieldKey(column.label);
+      return (
+        sourceFieldKey === "nro" ||
+        sourceFieldKey === "numero" ||
+        sourceFieldKey === "nro_orden" ||
+        sourceFieldKey === "numero_orden" ||
+        label === "nro" ||
+        label === "numero"
+      );
+    });
+
+    if (!hasBusinessIdentityColumn) {
+      next.splice(hasObraColumn ? 0 : 1, 0, {
+        id: MACRO_BUSINESS_ID_COLUMN_ID,
+        label: "NRO",
+        dataType: "text",
+        columnType: "computed",
+        sourceFieldKey: null,
+        config: {},
+      });
+    }
+
+    next.push(
+      {
+        id: MACRO_DOCUMENT_COLUMN_ID,
+        label: "Documento",
+        dataType: "text",
+        columnType: "computed",
+        sourceFieldKey: null,
+        config: {},
+      },
+      {
+        id: MACRO_CONTINUITY_COLUMN_ID,
+        label: "Continuidad",
+        dataType: "text",
+        columnType: "computed",
+        sourceFieldKey: null,
+        config: {},
+      },
+      {
+        id: MACRO_VERSION_COLUMN_ID,
+        label: "Version",
+        dataType: "text",
+        columnType: "computed",
+        sourceFieldKey: null,
+        config: {},
+      }
+    );
 
     return next;
   }, [columns, hasObraColumn]);
@@ -387,15 +537,32 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         params.set("q", search.trim());
       }
 
-      if (countActiveMacroFilters(filters) > 0) {
-        params.set("filters", JSON.stringify(filters));
+      const activeFilters = getActiveMacroFilters(filters);
+      if (countActiveMacroFilters(activeFilters) > 0) {
+        params.set("filters", JSON.stringify(activeFilters));
       }
 
       const res = await fetch(`/api/macro-tables/${tableId}/rows?${params.toString()}`, {
         cache: "no-store",
       });
-      if (!res.ok) throw new Error("Failed to fetch rows");
       const data = await res.json();
+      if (!res.ok) {
+        const message = data?.error ?? "Failed to fetch rows";
+        setOverrideConflicts(Array.isArray(data?.overrideConflicts) ? data.overrideConflicts : []);
+        throw new Error(message);
+      }
+      setOverrideSummary(
+        data.overrideSummary ?? {
+          totalRecords: 0,
+          appliedStable: 0,
+          appliedLegacy: 0,
+          conflicts: 0,
+          rowsWithOverrides: 0,
+          rowsWithConflicts: 0,
+        }
+      );
+      setOverrideConflicts(Array.isArray(data.overrideConflicts) ? data.overrideConflicts : []);
+      setOverrideBanner(null);
       const rows: MacroTableRowData[] = (data.rows ?? []).map((row: MacroRow) => ({
         ...row,
         id: row.id,
@@ -403,6 +570,40 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         _sourceTablaName: row._sourceTablaName,
         _obraId: row._obraId,
         _obraName: row._obraName,
+        _businessIdentity: row._businessIdentity,
+        _lineageRowKey: row._lineageRowKey,
+        _extractionId: row._extractionId,
+        _materializationVersion: row._materializationVersion,
+        _docPath: row._docPath,
+        _docFileName: row._docFileName,
+        _overrideBindingStatus: row._overrideBindingStatus,
+        _overrideConflictCount: row._overrideConflictCount,
+        [MACRO_BUSINESS_ID_COLUMN_ID]: row._businessIdentity ?? null,
+        [MACRO_DOCUMENT_COLUMN_ID]: row._docFileName ?? row._docPath ?? null,
+        [MACRO_CONTINUITY_COLUMN_ID]: [
+          typeof row._lineageRowKey === "string" && row._lineageRowKey.startsWith("legacy:")
+            ? "legacy"
+            : row._lineageRowKey
+              ? "estable"
+              : null,
+          typeof row._materializationVersion === "number" && row._materializationVersion > 1
+            ? "rematerializada"
+            : null,
+          row._overrideBindingStatus === "stable"
+            ? "override estable"
+            : row._overrideBindingStatus === "legacy"
+              ? "override legacy"
+              : row._overrideBindingStatus === "conflict"
+                ? "override conflict"
+                : null,
+          row._extractionId ? `ext ${shortTechnicalId(row._extractionId)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        [MACRO_VERSION_COLUMN_ID]:
+          typeof row._materializationVersion === "number"
+            ? `v${row._materializationVersion}`
+            : null,
       }));
 
       return {
@@ -456,9 +657,23 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 409 && Array.isArray(data.conflicts)) {
+          setOverrideConflicts(data.conflicts);
+          setOverrideBanner(
+            "Se detecto un conflicto de reattach por lineage. El override no se guardo hasta resolver la ambiguedad."
+          );
+        }
         throw new Error(data.error ?? "Error guardando cambios");
       }
 
+      const data = await res.json().catch(() => ({}));
+      const stableWrites = Number(data?.bindingSummary?.stable ?? 0);
+      const legacyWrites = Number(data?.bindingSummary?.legacy ?? 0);
+      setOverrideBanner(
+        stableWrites > 0
+          ? `Override guardado con binding estable${legacyWrites > 0 ? " (con fallback legacy parcial)." : "."}`
+          : "Override guardado con binding legacy."
+      );
       queryClient.invalidateQueries({ queryKey: ["macro-table-rows", tableId] });
     },
     [queryClient]
@@ -502,6 +717,113 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
                 return <MacroObraLink obraId={String(row._obraId ?? "")} text={text} />;
               },
             }
+            : column.id === MACRO_BUSINESS_ID_COLUMN_ID
+              ? {
+                renderReadOnly: ({ value, row }: { value: unknown; row: MacroTableRowData }) => {
+                  const text = String(value ?? "").trim();
+                  if (!text) {
+                    return <span className="text-muted-foreground">-</span>;
+                  }
+
+                  return (
+                    <div className="flex min-w-0 flex-col px-2 py-1">
+                      <span className="truncate font-semibold text-stone-900" title={text}>
+                        {text}
+                      </span>
+                      {typeof row._sourceTablaName === "string" && row._sourceTablaName.trim().length > 0 ? (
+                        <span className="truncate text-[11px] text-stone-500" title={row._sourceTablaName}>
+                          {row._sourceTablaName}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                },
+              }
+              : column.id === MACRO_DOCUMENT_COLUMN_ID
+                ? {
+                  renderReadOnly: ({ row }: { value: unknown; row: MacroTableRowData }) => {
+                    const fileName = String(row._docFileName ?? "").trim();
+                    const docPath = String(row._docPath ?? "").trim();
+                    if (!fileName && !docPath) {
+                      return <span className="text-muted-foreground">-</span>;
+                    }
+
+                    return (
+                      <div className="flex min-w-0 flex-col px-2 py-1">
+                        <span
+                          className="truncate font-medium text-stone-800"
+                          title={fileName || docPath}
+                        >
+                          {fileName || docPath}
+                        </span>
+                        {docPath ? (
+                          <span className="truncate text-[11px] text-stone-500" title={docPath}>
+                            {docPath}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  },
+                }
+                : column.id === MACRO_CONTINUITY_COLUMN_ID
+                  ? {
+                    renderReadOnly: ({ row }: { value: unknown; row: MacroTableRowData }) => {
+                      const badges = getContinuityBadges(row);
+                      const extractionId = shortTechnicalId(
+                        typeof row._extractionId === "string" ? row._extractionId : null
+                      );
+                      const lineagePreview =
+                        typeof row._lineageRowKey === "string" && row._lineageRowKey.length > 0
+                          ? row._lineageRowKey.slice(0, 18)
+                          : null;
+
+                      return (
+                        <div className="flex min-w-0 flex-col gap-1 px-2 py-1">
+                          <div className="flex flex-wrap gap-1">
+                            {badges.length > 0 ? (
+                              badges.map((badge) => (
+                                <Badge
+                                  key={badge.key}
+                                  variant="outline"
+                                  className={cn("rounded-full px-2 py-0.5 text-[11px]", badge.className)}
+                                >
+                                  {badge.label}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-muted-foreground">sin estado</span>
+                            )}
+                          </div>
+                          {(extractionId || lineagePreview) ? (
+                            <div className="flex min-w-0 flex-col text-[11px] text-stone-500">
+                              {extractionId ? <span title={String(row._extractionId ?? "")}>ext {extractionId}</span> : null}
+                              {lineagePreview ? (
+                                <span title={String(row._lineageRowKey ?? "")}>
+                                  lineage {lineagePreview}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    },
+                  }
+                  : column.id === MACRO_VERSION_COLUMN_ID
+                    ? {
+                      renderReadOnly: ({ row }: { value: unknown; row: MacroTableRowData }) => {
+                        if (typeof row._materializationVersion !== "number") {
+                          return <span className="text-muted-foreground">-</span>;
+                        }
+
+                        return (
+                          <div className="flex items-center px-2 py-1">
+                            <Badge variant="outline" className="rounded-full border-sky-200 bg-sky-50 text-sky-700">
+                              v{row._materializationVersion}
+                            </Badge>
+                          </div>
+                        );
+                      },
+                    }
             : cellType === "currency"
               ? { currencyCode: "ARS", currencyLocale: "es-AR" }
               : cellType === "text"
@@ -533,11 +855,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       searchPlaceholder: "Buscar certificados, obras o estados...",
       defaultPageSize: 50,
       pageSizeOptions: [25, 50, 100],
-      createFilters: () =>
-        displayColumns.reduce<MacroTableFilters>((acc, column) => {
-          acc[column.id] = { state: "all" };
-          return acc;
-        }, {}),
+      createFilters: () => ({}),
       renderFilters: (props: FilterRendererProps<MacroTableFilters>) => (
         <MacroFiltersContent {...props} columns={displayColumns} />
       ),
@@ -643,6 +961,54 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
           data-wizard-target="macro-page-table"
           className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none"
         >
+          <div className="grid gap-3 lg:grid-cols-4">
+            <div className="rounded-lg border border-stone-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Overrides estables</p>
+              <p className="mt-2 text-2xl font-semibold text-stone-900">{overrideSummary.appliedStable}</p>
+              <p className="mt-1 text-xs text-stone-500">Se reatachan por `lineage_row_key` tras reimport.</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Fallback legacy</p>
+              <p className="mt-2 text-2xl font-semibold text-stone-900">{overrideSummary.appliedLegacy}</p>
+              <p className="mt-1 text-xs text-stone-500">Siguen atados a `source_row_id` mientras dura la transicion.</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Conflictos</p>
+              <p className="mt-2 text-2xl font-semibold text-red-700">{overrideSummary.conflicts}</p>
+              <p className="mt-1 text-xs text-stone-500">Si hay ambiguedad, no se reaplica el override automaticamente.</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Filas con continuidad</p>
+              <p className="mt-2 text-2xl font-semibold text-stone-900">{overrideSummary.rowsWithOverrides}</p>
+              <p className="mt-1 text-xs text-stone-500">Incluye rows reimportadas donde el override siguio vivo.</p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+            La macrotabla esta mostrando vista historica completa. Usa `NRO`, `Documento`, `Continuidad` y `Version` para distinguir entidades de negocio distintas de rematerializaciones mas nuevas.
+          </div>
+          {overrideBanner ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {overrideBanner}
+            </div>
+          ) : null}
+          {overrideConflicts.length > 0 ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-sm font-semibold text-red-800">Conflictos de reattach visibles</p>
+              <div className="mt-2 space-y-2">
+                {overrideConflicts.slice(0, 5).map((conflict) => (
+                  <div
+                    key={`${conflict.rowId}:${conflict.columnId}:${conflict.candidateOverrideIds.join(",")}`}
+                    className="rounded-md border border-red-200 bg-white/80 p-2"
+                  >
+                    <p className="text-xs font-medium text-red-800">
+                      columna {conflict.columnId} · lineage {conflict.lineageRowKey ?? "legacy"}
+                    </p>
+                    <p className="mt-1 text-xs text-red-700">{conflict.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-0 overflow-hidden rounded-lg shadow-card" />
           <Separator className="bg-border" />
           <FormTablePagination />

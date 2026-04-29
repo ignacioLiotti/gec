@@ -48,6 +48,26 @@ function isAlreadyExistsError(error: unknown) {
 	);
 }
 
+function isStorageUnavailableError(error: unknown) {
+	const message = String((error as { message?: string })?.message ?? "").toLowerCase();
+	return (
+		message.includes("name resolution failed") ||
+		message.includes("getaddrinfo") ||
+		message.includes("failed to send request") ||
+		message.includes("dns") ||
+		message.includes("storage") && message.includes("unavailable")
+	);
+}
+
+function isStorageUpstreamTimeoutError(error: unknown) {
+	const message = String((error as { message?: string })?.message ?? "").toLowerCase();
+	return (
+		message.includes("upstream server is timing out") ||
+		message.includes("timed out") ||
+		message.includes("timeout")
+	);
+}
+
 function usageErrorToStatus(code?: string) {
 	if (code === "storage_limit_exceeded") return 402;
 	if (code === "insufficient_privilege") return 403;
@@ -112,9 +132,10 @@ export async function POST(request: Request, context: RouteContext) {
 		}
 
 		const baseStorageFileName = sanitizeFileName(file.name) || `archivo-${Date.now()}`;
-		const fileBytes = Buffer.from(await file.arrayBuffer());
 		const uploadedSize =
-			typeof fileBytes.length === "number" && fileBytes.length > 0 ? fileBytes.length : 0;
+			typeof file.size === "number" && Number.isFinite(file.size) && file.size > 0
+				? file.size
+				: 0;
 		const plan = await fetchTenantPlan(supabase, tenantId);
 
 		let storageFileName = baseStorageFileName;
@@ -127,7 +148,7 @@ export async function POST(request: Request, context: RouteContext) {
 
 			const { error } = await supabase.storage
 				.from(DOCUMENTS_BUCKET)
-				.upload(storagePath, fileBytes, {
+				.upload(storagePath, file, {
 					contentType: file.type || "application/octet-stream",
 					upsert: false,
 				});
@@ -211,6 +232,26 @@ export async function POST(request: Request, context: RouteContext) {
 		});
 	} catch (error) {
 		console.error("[documents-upload]", error);
+		if (isStorageUnavailableError(error)) {
+			return NextResponse.json(
+				{
+					error:
+						"El servicio de storage local no está disponible. No se puede subir el archivo hasta que Storage vuelva a estar activo.",
+					code: "STORAGE_UNAVAILABLE",
+				},
+				{ status: 503 },
+			);
+		}
+		if (isStorageUpstreamTimeoutError(error)) {
+			return NextResponse.json(
+				{
+					error:
+						"Storage esta tardando demasiado en responder. Reintenta la subida; si persiste, reduce el tamano del archivo o revisa el servicio local de Storage.",
+					code: "STORAGE_UPSTREAM_TIMEOUT",
+				},
+				{ status: 504 },
+			);
+		}
 		const message = error instanceof Error ? error.message : "Error al subir archivos";
 		return NextResponse.json({ error: message }, { status: 500 });
 	}

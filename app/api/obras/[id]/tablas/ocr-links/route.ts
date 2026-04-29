@@ -68,7 +68,7 @@ export async function GET(request: Request, context: RouteContext) {
     const { data: documents, error: documentsError } = await supabase
       .from("ocr_document_processing")
       .select(
-        "id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at"
+        "id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, error_code, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at, extraction_id, file_fingerprint, content_fingerprint_normalized, fingerprint_status, fingerprint_error"
       )
       .eq("obra_id", obraId)
       .in("tabla_id", tablaIds)
@@ -89,7 +89,7 @@ export async function GET(request: Request, context: RouteContext) {
     const scanLimit = Math.min(100_000, Math.max(rowsLimit * tablaIds.length * 8, rowsLimit));
     const { data: rows, error: rowsError } = await supabase
       .from("obra_tabla_rows")
-      .select("id, tabla_id, data, source, created_at, updated_at")
+      .select("id, tabla_id, lineage_row_key, extraction_id, materialization_version, data, source, created_at, updated_at")
       .in("tabla_id", tablaIds)
       .order("created_at", { ascending: false })
       .limit(scanLimit);

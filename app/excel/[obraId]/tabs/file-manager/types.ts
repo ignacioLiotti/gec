@@ -28,7 +28,13 @@ export type FileSystemItem = {
 	ocrDocumentStatus?: "pending" | "processing" | "completed" | "failed" | "unprocessed";
 	ocrDocumentId?: string;
 	ocrDocumentError?: string | null;
+	ocrErrorCode?: string | null;
 	ocrRowsExtracted?: number | null;
+	ocrExtractionId?: string | null;
+	ocrFileFingerprint?: string | null;
+	ocrContentFingerprintNormalized?: string | null;
+	ocrFingerprintStatus?: "pending" | "completed" | "degraded" | "failed" | null;
+	ocrFingerprintError?: Record<string, unknown> | null;
 	uploadedAt?: string | null;
 	uploadedByUserId?: string | null;
 	uploadedByLabel?: string | null;
@@ -75,7 +81,13 @@ export type OcrDocumentStatus = {
 	source_file_name: string;
 	status: "pending" | "processing" | "completed" | "failed";
 	error_message: string | null;
+	error_code?: string | null;
 	rows_extracted: number | null;
+	extraction_id?: string | null;
+	file_fingerprint?: string | null;
+	content_fingerprint_normalized?: string | null;
+	fingerprint_status?: "pending" | "completed" | "degraded" | "failed" | null;
+	fingerprint_error?: Record<string, unknown> | null;
 };
 
 export type OcrFolderLink = {
@@ -102,9 +114,74 @@ export type TablaDataRow = {
 	id: string;
 	data: Record<string, unknown>;
 	source?: string;
+	lineage_row_key?: string | null;
+	extraction_id?: string | null;
+	materialization_version?: number | null;
 };
 
 export type OcrDocumentTableRow = FormTableRow & Record<string, unknown>;
+
+export type LineageSupportStatus =
+	| "implemented"
+	| "partial"
+	| "planned"
+	| "not_supported";
+
+export type LineageGraphNode = {
+	id: string;
+	type:
+		| "document"
+		| "extraction"
+		| "table"
+		| "row"
+		| "macro_table"
+		| "override"
+		| "event";
+	label: string;
+	status: string;
+	supportStatus: LineageSupportStatus;
+	data: Record<string, unknown>;
+};
+
+export type LineageGraphEdge = {
+	id: string;
+	source: string;
+	target: string;
+	type: string;
+	label?: string;
+};
+
+export type LineageCoverageItem = {
+	id: string;
+	label: string;
+	status: LineageSupportStatus;
+	detail: string;
+};
+
+export type LineageGraphPayload = {
+	selection: {
+		obraId: string;
+		tablaId: string | null;
+		docPath: string | null;
+		scope: "document" | "table" | "obra";
+	};
+	summary: {
+		documents: number;
+		extractions: number;
+		tables: number;
+		rows: number;
+		macroTables: number;
+		overrides: number;
+		events: number;
+	};
+	coverage: {
+		pipeline: LineageCoverageItem;
+		backing: LineageCoverageItem;
+		items: LineageCoverageItem[];
+	};
+	nodes: LineageGraphNode[];
+	edges: LineageGraphEdge[];
+};
 
 export type DeletedDocumentEntry = {
 	id: string;

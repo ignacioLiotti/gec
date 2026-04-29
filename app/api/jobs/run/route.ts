@@ -19,6 +19,9 @@ export async function POST(request: Request) {
 
 	const admin = createSupabaseAdminClient();
 	const MAX_JOBS_PER_RUN = 25;
+	// TODO(domain-model): This runner operates only on `background_jobs` technical state.
+	// Introduce `migration_runs` with formal lifecycle:
+	// planned -> validated -> running -> completed/failed/rolled_back.
 	const { data: jobs, error: fetchError } = await admin
 		.from("background_jobs")
 		.select("id, tenant_id, type, payload, attempts")
@@ -67,6 +70,18 @@ export async function POST(request: Request) {
 					if (!folderId) {
 						throw new Error("folderId missing in payload");
 					}
+					// TODO(domain-model): For destructive force sync, block execution unless an
+					// approved impact preview already exists in migration validation state.
+					// TODO(domain-model): Enforce deterministic compatibility class in payload/result.
+					// If class is unknown or unverifiable, escalate to `destructiva` and block run
+					// until preview + explicit approval are present.
+					// TODO(domain-model): Validate approval token one-shot (owner/admin only),
+					// bound to migration_run + frozen preview snapshot, and not expired.
+					// TODO(domain-model): Verify canonical snapshot integrity before execution:
+					// canonical_snapshot_hash + snapshot_hmac_signature + classification_rules_version.
+					// Reject if recomputed snapshot differs from approved snapshot.
+					// TODO(domain-model): Enforce matching `snapshot_canonicalization_version`
+					// and recompute with JCS/RFC 8785 + domain array identity rules.
 					await applyDefaultFolderToExistingObras(admin, {
 						tenantId: job.tenant_id,
 						folderId,
@@ -97,12 +112,19 @@ export async function POST(request: Request) {
 						throw new Error(`Unknown job type: ${job.type}`);
 				}
 
+			// TODO(domain-model): Mirror this technical completion into a domain migration
+			// record with impact_real counters and schema identity after execution.
+			// TODO(domain-model): Persist approval token consumption to prevent unauthorized reruns.
 			await admin
 				.from("background_jobs")
 				.update({ status: "done", last_error: null })
 				.eq("id", job.id);
 			processed += 1;
 		} catch (error: any) {
+			// TODO(domain-model): Even partial failures must close with a final auditable
+			// migration outcome, including rollback_reference when compensation is triggered.
+			// TODO(domain-model): Define retry policy for destructive runs: by default require
+			// revalidation and fresh approval token before another execution attempt.
 			await admin
 				.from("background_jobs")
 				.update({

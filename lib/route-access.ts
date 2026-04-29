@@ -140,6 +140,14 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
+		path: "/admin/document-flows",
+		allowedRoles: ["admin"],
+	},
+	{
+		path: "/admin/document-flows-2",
+		allowedRoles: ["admin"],
+	},
+	{
 		path: "/admin/obra-defaults/reporting",
 		allowedRoles: ["admin"],
 	},

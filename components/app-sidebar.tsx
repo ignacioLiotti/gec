@@ -117,6 +117,16 @@ const adminItems: NavItem[] = [
 		icon: Settings2,
 	},
 	{
+		title: "Flujos documentales",
+		href: "/admin/document-flows",
+		icon: Table2,
+	},
+	{
+		title: "Document Flow 2",
+		href: "/admin/document-flows-2",
+		icon: Waypoints,
+	},
+	{
 		title: "Tabla Principal",
 		href: "/admin/main-table-config",
 		icon: Columns3Cog,
@@ -168,6 +178,7 @@ type SidebarMacroTable = {
 };
 
 type SidebarPrefetchLinkProps = React.ComponentProps<typeof Link>;
+const prefetchedSidebarHrefs = new Set<string>();
 
 const SidebarPrefetchLink = React.forwardRef<
 	HTMLAnchorElement,
@@ -183,8 +194,13 @@ const SidebarPrefetchLink = React.forwardRef<
 	const shouldIdlePrefetchExcel = hrefValue === "/excel";
 
 	const runPrefetch = React.useCallback(() => {
-		if (prefetchedRef.current || !hrefValue.startsWith("/")) return;
+		if (
+			prefetchedRef.current ||
+			prefetchedSidebarHrefs.has(hrefValue) ||
+			!hrefValue.startsWith("/")
+		) return;
 		prefetchedRef.current = true;
+		prefetchedSidebarHrefs.add(hrefValue);
 
 		router.prefetch(hrefValue);
 

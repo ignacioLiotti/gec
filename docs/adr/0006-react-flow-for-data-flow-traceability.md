@@ -1,7 +1,7 @@
 # React Flow for data-flow traceability
 
-Status: accepted
+Status: superseded by 0010
 
-The traceability canvas uses React Flow instead of a custom SVG layout. Nodes represent documents, tables, macrotables, obra fields, calculations and results; edges flow from sources toward the final result; inspectors open from node clicks, while KPI cards only focus the selected result.
+This ADR captured an intermediate direction where obra traceability would standardize on React Flow. The production-facing visualizer later moved to a layered custom canvas because the shipped experience needed a tighter result-first reading order, explicit real-vs-projected coverage and drilldown affordances that were easier to control in a purpose-built layout.
 
-React Flow adds a dependency, but it gives stable node rendering, handles, fit-view, minimap/controls and a cleaner path for future interaction than maintaining custom canvas geometry by hand.
+Keep this ADR only as historical context for the abandoned direction.

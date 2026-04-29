@@ -343,6 +343,8 @@ async function syncDefaultTablaColumns(
 	columns: TemplateColumnDefinition[],
 	hasNestedData: boolean,
 ) {
+	// TODO(domain-model): Template-driven schema updates must also advance baseline schema
+	// version for the affected default tabla, so migration/audit can compare before/after.
 	const { data: existingColumnsData, error: existingColumnsError } = await supabase
 		.from("obra_default_tabla_columns")
 		.select("id, field_key, label, data_type, required, position, config")

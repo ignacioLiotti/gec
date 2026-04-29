@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 
@@ -19,6 +20,13 @@ import {
   ensureTablaDataType,
   normalizeFieldKey,
 } from "@/lib/tablas";
+import {
+  buildContentFingerprintSource,
+  computeContentFingerprintNormalized,
+  computeFileFingerprint,
+  deriveLineageRowKeys,
+  LineageReconciliationConflictError,
+} from "@/lib/lineage";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -125,6 +133,23 @@ function normalize(input: string): string {
     .replace(/[^a-z0-9 ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function resolveUnknownErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const maybeMessage = Reflect.get(error, "message");
+    if (typeof maybeMessage === "string" && maybeMessage.trim().length > 0) {
+      return maybeMessage;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Error desconocido";
+    }
+  }
+  return "Error desconocido";
 }
 
 function scoreRow(row: unknown[]): number {
@@ -1032,9 +1057,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!obraId) {
     return NextResponse.json({ error: "Parámetros incompletos" }, { status: 400 });
   }
+  let resolvedSupabase: Awaited<ReturnType<typeof createClient>> | null = null;
+  let trackedDocMeta: { bucket: string; path: string; fileName: string } | null = null;
+  let extractionIdForAudit: string | null = null;
+  let fileFingerprintForAudit: string | null = null;
+  let targetTablaIdsForAudit: string[] = [];
   try {
     const access = await resolveRequestAccessContext();
     const { supabase, user, tenantId, actorType } = access;
+    resolvedSupabase = supabase as Awaited<ReturnType<typeof createClient>>;
     if (!user && actorType !== "demo") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -1124,14 +1155,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
     let sourceName = file?.name ?? "";
     let sheets: RawSheet[] = [];
     let docMeta: { bucket: string; path: string; fileName: string } | null = null;
+    let sourceDocumentBytes: Uint8Array | null = null;
 
     if (file) {
       const ext = file.name.toLowerCase().split(".").pop() ?? "";
       sourceName = file.name;
       if (ext === "csv") {
-        sheets = parseCsv(await file.text());
+        const bytes = new Uint8Array(Buffer.from(await file.arrayBuffer()));
+        sourceDocumentBytes = bytes;
+        sheets = parseCsv(Buffer.from(bytes).toString("utf8"));
       } else if (ext === "xlsx" || ext === "xls") {
-        sheets = parseWorkbook(await file.arrayBuffer());
+        const arrayBuffer = await file.arrayBuffer();
+        sourceDocumentBytes = new Uint8Array(arrayBuffer);
+        sheets = parseWorkbook(arrayBuffer);
       } else {
         return NextResponse.json({ error: "Solo se soportan CSV/XLSX/XLS." }, { status: 400 });
       }
@@ -1158,9 +1194,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
           : existingPath.split("/").pop() ?? "archivo";
       const ext = sourceName.toLowerCase().split(".").pop() ?? "";
       if (ext === "csv") {
-        sheets = parseCsv(await blob.text());
+        const text = await blob.text();
+        sourceDocumentBytes = new Uint8Array(Buffer.from(text, "utf8"));
+        sheets = parseCsv(text);
       } else if (ext === "xlsx" || ext === "xls") {
-        sheets = parseWorkbook(await blob.arrayBuffer());
+        const arrayBuffer = await blob.arrayBuffer();
+        sourceDocumentBytes = new Uint8Array(arrayBuffer);
+        sheets = parseWorkbook(arrayBuffer);
       } else {
         return NextResponse.json({ error: "El archivo no es CSV/XLSX/XLS." }, { status: 400 });
       }
@@ -1172,6 +1212,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (sheets.length === 0) {
       return NextResponse.json({ error: "No se encontraron hojas o filas válidas." }, { status: 400 });
     }
+    trackedDocMeta = docMeta;
 
     const { data: columnsData, error: columnsError } = await supabase
       .from("obra_tabla_columns")
@@ -1243,8 +1284,34 @@ export async function POST(request: NextRequest, context: RouteContext) {
       sourceLabel?: string;
       warnings?: string[];
     }> = [];
+    const extractionId = randomUUID();
+    const fileFingerprint = sourceDocumentBytes
+      ? computeFileFingerprint(sourceDocumentBytes)
+      : null;
+    extractionIdForAudit = extractionId;
+    fileFingerprintForAudit = fileFingerprint;
+    const processingTimestamp = new Date().toISOString();
+    const preparedWrites: Array<{
+      tablaId: string;
+      tablaName: string;
+      rowsPayload: Array<{
+        tabla_id: string;
+        lineage_row_key: string;
+        extraction_id: string;
+        materialization_version: number;
+        data: Record<string, unknown>;
+        source: "spreadsheet";
+      }>;
+      lineageRowKeys: string[];
+      contentFingerprintNormalized: string | null;
+      fingerprintStatus: "completed" | "degraded";
+      fingerprintError: Record<string, unknown> | null;
+      replaceExisting: boolean;
+      docPath: string | null;
+    }> = [];
 
     const uniqueTablaIds = [...new Set(tablaIds)];
+    targetTablaIdsForAudit = uniqueTablaIds;
     const presupuestoTvExtractionCache = new Map<string, PresupuestoTvExtraction>();
 
     for (const tablaId of uniqueTablaIds) {
@@ -1659,40 +1726,81 @@ export async function POST(request: NextRequest, context: RouteContext) {
         continue;
       }
 
-      if (!previewMode && replaceExisting && extractedRows.length > 0) {
-        const { error: deleteAllRowsError } = await supabase
+      const lineageParentData = parentColumns.reduce<Record<string, unknown>>((acc, column) => {
+        const firstRowData = extractedRows[0]?.data ?? {};
+        if (firstRowData[column.fieldKey] != null) {
+          acc[column.fieldKey] = firstRowData[column.fieldKey];
+        }
+        return acc;
+      }, {});
+      const lineageItemRows = extractedRows.map((row) => row.data);
+      const contentFingerprintNormalized = computeContentFingerprintNormalized(
+        buildContentFingerprintSource({
+          parentData: lineageParentData,
+          itemRows: lineageItemRows,
+        }),
+      );
+      const fingerprintStatus =
+        fileFingerprint && contentFingerprintNormalized ? "completed" : "degraded";
+      const fingerprintError =
+        fingerprintStatus === "completed"
+          ? null
+          : {
+              fileFingerprint: fileFingerprint ? null : "missing_source_bytes",
+              contentFingerprintNormalized: contentFingerprintNormalized
+                ? null
+                : "missing_semantic_fingerprint",
+            };
+      const lineageRowKeys =
+        lineageItemRows.length > 0
+          ? deriveLineageRowKeys({
+              tableIdentity: tablaId,
+              parentData: lineageParentData,
+              itemRows: lineageItemRows,
+              parentColumns,
+              itemColumns,
+              fileFingerprint,
+              contentFingerprintNormalized,
+              disableStructuralFallback: true,
+            })
+          : [];
+      let existingRowVersionMap = new Map<string, number>();
+      if (lineageRowKeys.length > 0) {
+        const { data: existingRows, error: existingRowsError } = await supabase
           .from("obra_tabla_rows")
-          .delete()
-          .eq("tabla_id", tablaId);
-        if (deleteAllRowsError) throw deleteAllRowsError;
-      } else if (docMeta?.path) {
-        await supabase
-          .from("obra_tabla_rows")
-          .delete()
+          .select("lineage_row_key, materialization_version")
           .eq("tabla_id", tablaId)
-          .contains("data", { __docPath: docMeta.path });
-      }
+          .in("lineage_row_key", lineageRowKeys);
+        if (existingRowsError) throw existingRowsError;
 
-      if (extractedRows.length > 0) {
-        const { error: insertError } = await supabase.from("obra_tabla_rows").insert(extractedRows);
-        if (insertError) throw insertError;
-      }
-
-      if (docMeta) {
-        await supabase.from("ocr_document_processing").upsert(
-          {
-            tabla_id: tablaId,
-            obra_id: obraId,
-            source_bucket: docMeta.bucket,
-            source_path: docMeta.path,
-            source_file_name: docMeta.fileName,
-            status: "completed",
-            rows_extracted: extractedRows.length,
-            processed_at: new Date().toISOString(),
-          },
-          { onConflict: "tabla_id,source_path" }
+        existingRowVersionMap = new Map(
+          (existingRows ?? []).map((row) => [
+            row.lineage_row_key as string,
+            Number(row.materialization_version ?? 0),
+          ]),
         );
       }
+      const rowsPayload = extractedRows.map((row, rowIndex) => ({
+        tabla_id: tablaId,
+        lineage_row_key: lineageRowKeys[rowIndex],
+        extraction_id: extractionId,
+        materialization_version:
+          (existingRowVersionMap.get(lineageRowKeys[rowIndex]) ?? 0) + 1,
+        data: row.data,
+        source: "spreadsheet" as const,
+      }));
+
+      preparedWrites.push({
+        tablaId,
+        tablaName: tablaMeta?.name ?? "Tabla",
+        rowsPayload,
+        lineageRowKeys,
+        contentFingerprintNormalized,
+        fingerprintStatus,
+        fingerprintError,
+        replaceExisting,
+        docPath: docMeta?.path ?? null,
+      });
 
       perTable.push({
         tablaId,
@@ -1702,19 +1810,127 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
+    for (const prepared of preparedWrites) {
+      if (prepared.replaceExisting) {
+        const { error: deleteAllRowsError } = await supabase
+          .from("obra_tabla_rows")
+          .delete()
+          .eq("tabla_id", prepared.tablaId);
+        if (deleteAllRowsError) throw deleteAllRowsError;
+      }
+
+      if (prepared.rowsPayload.length > 0) {
+        const { error: upsertError } = await supabase
+          .from("obra_tabla_rows")
+          .upsert(prepared.rowsPayload, { onConflict: "tabla_id,lineage_row_key" });
+        if (upsertError) throw upsertError;
+      }
+
+      if (prepared.docPath) {
+        const { data: existingDocRows, error: existingDocRowsError } = await supabase
+          .from("obra_tabla_rows")
+          .select("id, lineage_row_key")
+          .eq("tabla_id", prepared.tablaId)
+          .contains("data", { __docPath: prepared.docPath });
+        if (existingDocRowsError) throw existingDocRowsError;
+
+        const currentLineageSet = new Set(prepared.lineageRowKeys);
+        const staleRowIds = (existingDocRows ?? [])
+          .filter((row) => !currentLineageSet.has(row.lineage_row_key as string))
+          .map((row) => row.id as string);
+
+        if (staleRowIds.length > 0) {
+          const { error: staleDeleteError } = await supabase
+            .from("obra_tabla_rows")
+            .delete()
+            .in("id", staleRowIds);
+          if (staleDeleteError) throw staleDeleteError;
+        }
+      }
+
+      if (docMeta) {
+        const { error: processingError } = await supabase
+          .from("ocr_document_processing")
+          .upsert(
+            {
+              tabla_id: prepared.tablaId,
+              obra_id: obraId,
+              source_bucket: docMeta.bucket,
+              source_path: docMeta.path,
+              source_file_name: docMeta.fileName,
+              extraction_id: extractionId,
+              status: "completed",
+              error_code: null,
+              error_message: null,
+              rows_extracted: prepared.rowsPayload.length,
+              processed_at: processingTimestamp,
+              file_fingerprint: fileFingerprint,
+              content_fingerprint_normalized: prepared.contentFingerprintNormalized,
+              fingerprint_status: prepared.fingerprintStatus,
+              fingerprint_error: prepared.fingerprintError,
+            },
+            { onConflict: "tabla_id,source_path" }
+          );
+        if (processingError) throw processingError;
+      }
+    }
+
     const summary = buildSpreadsheetPreviewSummary(perTable);
 
     return NextResponse.json({
       ok: true,
       preview: previewMode,
       sourceName,
+      extractionId,
       inserted: perTable.reduce((acc, row) => acc + row.inserted, 0),
       perTable,
       summary,
     });
   } catch (error) {
     console.error("[tablas:spreadsheet-multi]", error);
-    const message = error instanceof Error ? error.message : "Error desconocido";
+    const message = resolveUnknownErrorMessage(error);
+    const isLineageConflict = error instanceof LineageReconciliationConflictError;
+    const errorCode = isLineageConflict ? error.code : null;
+
+    if (resolvedSupabase && trackedDocMeta && targetTablaIdsForAudit.length > 0) {
+      for (const tablaId of targetTablaIdsForAudit) {
+        await resolvedSupabase
+          .from("ocr_document_processing")
+          .upsert(
+            {
+              tabla_id: tablaId,
+              obra_id: obraId,
+              source_bucket: trackedDocMeta.bucket,
+              source_path: trackedDocMeta.path,
+              source_file_name: trackedDocMeta.fileName,
+              extraction_id: extractionIdForAudit,
+              status: "failed",
+              error_code: errorCode,
+              error_message: message,
+              file_fingerprint: fileFingerprintForAudit,
+              processed_at: new Date().toISOString(),
+            },
+            { onConflict: "tabla_id,source_path" }
+          );
+      }
+    }
+
+    if (isLineageConflict) {
+      return NextResponse.json(
+        {
+          error: message,
+          code: error.code,
+          context: {
+            obraId,
+            tablaIds: targetTablaIdsForAudit,
+            extractionId: extractionIdForAudit,
+            ...error.context,
+          },
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -81,7 +81,9 @@ export async function GET(request: Request, context: RowsContext) {
 
 		let rowsQuery = supabase
 			.from("obra_tabla_rows")
-			.select("id, tabla_id, data, source, created_at, updated_at")
+			.select(
+				"id, tabla_id, lineage_row_key, extraction_id, materialization_version, data, source, created_at, updated_at"
+			)
 			.eq("tabla_id", tablaId)
 			.order("created_at", { ascending: false })
 			.range(from, to);

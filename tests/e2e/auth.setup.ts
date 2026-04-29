@@ -44,9 +44,7 @@ setup("authenticate e2e user", async ({ page }) => {
 		);
 	}
 
-	await expect(
-		page.getByRole("heading", { name: /panel de obras/i }),
-	).toBeVisible();
+	await expect(page.getByRole("searchbox", { name: /buscar en columnas de obras/i })).toBeVisible();
 
 	fs.mkdirSync(path.dirname(authFile), { recursive: true });
 	await page.context().storageState({ path: authFile });

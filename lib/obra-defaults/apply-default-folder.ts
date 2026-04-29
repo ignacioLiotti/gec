@@ -941,6 +941,21 @@ export async function applyDefaultFolderToExistingObras(
 	if (obrasError) throw obrasError;
 
 	const shouldForceSync = params.forceSync === true;
+	// TODO(domain-model): `forceSync` currently toggles behavior at runtime without a
+	// persisted migration contract. Require a validated migration_run with:
+	// actor/justification, compatibility class, impact_estimated and schema_before/after.
+	// TODO(domain-model): This function should receive an evaluated diff classification.
+	// Execution path must respect deterministic rules and never infer `no destructiva`
+	// when compatibility/remap safety cannot be proven automatically.
+	// TODO(domain-model): For `destructiva`, require prevalidated authorization inputs
+	// (approved_by/role, frozen preview snapshot id/hash, one-shot token id) so execution
+	// cannot run with stale or missing approval context.
+	// TODO(domain-model): Require snapshot integrity context (canonical hash + HMAC +
+	// classification_rules_version) so lower-level execution can assert approved diff identity.
+	// TODO(domain-model): Require `snapshot_canonicalization_version` so verification uses
+	// the same canonicalization contract that was approved.
+	// TODO(domain-model): `schema_version_before/after` must support double-level versioning:
+	// baseline (default tabla) + effective (obra tabla), not a single flat version value.
 	const previousPath =
 		typeof params.previousPath === "string" && params.previousPath.trim()
 			? params.previousPath.trim()
@@ -1256,6 +1271,9 @@ export async function applyDefaultFolderToExistingObras(
 				);
 				continue;
 			}
+			// TODO(domain-model): This is potentially destructive schema replacement.
+			// Emit explicit migration impact metrics (columns dropped/recreated) and keep
+			// rollback metadata so operators can compensate if remap quality is poor.
 		} else {
 			const { data: tabla, error: tablaError } = await supabase
 				.from("obra_tablas")
@@ -1308,6 +1326,8 @@ export async function applyDefaultFolderToExistingObras(
 		}
 
 		if (tablaId && shouldForceSync && existingRows && existingRows.length > 0) {
+			// TODO(domain-model): Recompute and persist effective schema version for this obra tabla
+			// after remap/rewrite, preserving reference to baseline version used for the migration.
 			const previousFieldKeyByIdentity = buildPreviousFieldKeyByIdentity(previousColumns);
 			const nextColumns = (insertedColumns ?? []).map((column) => {
 				const config =
@@ -1338,6 +1358,9 @@ export async function applyDefaultFolderToExistingObras(
 			const { error: upsertRowsError } = await supabase
 				.from("obra_tabla_rows")
 				.upsert(migratedRows, { onConflict: "id" });
+			// TODO(domain-model): Persist remap impact in migration audit:
+			// rows_scanned, rows_remapped, rows_with_data_loss_risk, rows_failed.
+			// Current implementation only logs errors, so final domain outcome is incomplete.
 			if (upsertRowsError) {
 				console.error(
 					"[apply-default-folder] Error migrating existing rows",

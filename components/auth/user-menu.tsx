@@ -34,12 +34,6 @@ export default function UserMenu({
 	demoMode = false,
 	userRoles,
 }: UserMenuProps) {
-	console.log("[USER-MENU] Rendering with:", {
-		email,
-		userRoles,
-		timestamp: new Date().toISOString(),
-	});
-
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [notifications, setNotifications] = useState<

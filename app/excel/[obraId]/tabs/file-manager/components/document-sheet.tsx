@@ -68,6 +68,33 @@ export const DocumentSheet = memo(function DocumentSheet({
 		: document.ocrDocumentStatus === "pending"
 			? "OCR en cola..."
 			: "Procesando OCR...";
+	const ocrFailureFollowUpMessage =
+		document.ocrErrorCode === "LINEAGE_RECONCILIATION_CONFLICT"
+			? "Impacto: este documento no se reconcilio automaticamente con su materializacion anterior. Siguiente paso: revisa Lineage o reprocesa el documento."
+			: document.ocrErrorCode === "OCR_PROVIDER_HIGH_DEMAND"
+				? "Impacto: la extraccion no pudo completarse por saturacion temporal del proveedor OCR. Siguiente paso: intenta reprocesar el documento mas tarde."
+				: "Impacto: la extraccion no pudo completarse. Siguiente paso: reprocesa el documento o revisa el detalle del error.";
+	const ocrConflictMessage =
+		document.ocrErrorCode === "LINEAGE_RECONCILIATION_CONFLICT"
+			? {
+					title: "Conflicto de continuidad detectado",
+					detail:
+						document.ocrDocumentError ??
+						"No pudimos reconciliar automaticamente la identidad estable del documento. El contenido no se aplico con continuidad y requiere revision.",
+				}
+			: document.ocrErrorCode === "OCR_PROVIDER_HIGH_DEMAND"
+				? {
+						title: "El proveedor OCR esta saturado",
+						detail:
+							document.ocrDocumentError ??
+							"El proveedor OCR devolvio una saturacion temporal. Intenta de nuevo mas tarde.",
+					}
+			: document.ocrDocumentStatus === "failed" && document.ocrDocumentError
+				? {
+						title: "La extraccion OCR fallo",
+						detail: document.ocrDocumentError,
+					}
+				: null;
 
 	return (
 		<Sheet open={isOpen} onOpenChange={onOpenChange} modal={false}>
@@ -185,6 +212,17 @@ export const DocumentSheet = memo(function DocumentSheet({
 							</Button> */}
 						</div>
 					</div>
+					{ocrConflictMessage ? (
+						<div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+							<p className="font-semibold">{ocrConflictMessage.title}</p>
+							<p className="mt-1 text-xs leading-5 text-rose-800">
+								{ocrConflictMessage.detail}
+							</p>
+							<p className="mt-1 text-xs leading-5 text-rose-700">
+								{ocrFailureFollowUpMessage}
+							</p>
+						</div>
+					) : null}
 				</SheetHeader>
 				<div className="relative flex-1 min-h-[50dvh] sm:min-h-[60vh] overflow-hidden bg-white">
 					<DocumentPreview document={document} previewUrl={previewUrl} onDownload={onDownload} />

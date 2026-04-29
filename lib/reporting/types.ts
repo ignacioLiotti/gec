@@ -24,6 +24,8 @@ export type RuleConfig = {
       certTableId?: string;
       montoAcumuladoColumnKey?: string;
       dateOrPeriodColumnKey?: string;
+      // TODO(domain-model): Add recommendation policy fields as first-class config:
+      // default_mode (non_blocking), blocking_severity_threshold, tenant overrides.
     };
     curve?: {
       planTableId?: string;
@@ -93,3 +95,21 @@ export type FindingRow = {
   status: "open" | "resolved";
   created_at: string;
 };
+
+// TODO(domain-model): Adopt this canonical recommendation lifecycle in domain storage/API.
+export type RecommendationStatus =
+  | "proposed"
+  | "surfaced"
+  | "accepted"
+  | "rejected"
+  | "applied"
+  | "failed"
+  | "expired"
+  | "superseded";
+
+// TODO(domain-model): Model recommendation subject identity explicitly:
+// recommendation_subject_key = obra_id + rule_key + subject_ref.
+// TODO(domain-model): Enforce canonical subject_ref contract:
+// subject_ref = <kind>:<id>[:<scope>] with parser/validator + versioning.
+// TODO(domain-model): Blocking recommendation permissions must be tenant-configurable
+// (minimum owner/admin), not hardcoded in route/UI conditionals.

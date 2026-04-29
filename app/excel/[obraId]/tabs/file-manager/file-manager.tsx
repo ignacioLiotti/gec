@@ -73,6 +73,8 @@ import { DocumentSheet } from './components/document-sheet';
 import { SpreadsheetGridPreview } from './components/spreadsheet-grid-preview';
 import { DocumentDataSheet } from './components/document-data-sheet';
 import { FileTreeSidebar } from './components/file-tree-sidebar';
+import { LineagePanel } from './components/lineage-panel';
+import { FolderExtractionEditor } from './components/folder-extraction-editor';
 import { SpreadsheetAdjustmentDrawer } from './components/spreadsheet-adjustment-drawer';
 import { SpreadsheetImportSummaryModal } from './components/spreadsheet-import-summary-modal';
 import type { SpreadsheetPreviewPayload, SpreadsheetPreviewTable } from './components/spreadsheet-preview-types';
@@ -364,6 +366,23 @@ function formatRecoveryTimeLeft(value: string | null | undefined) {
   return `${diffDays}d restantes`;
 }
 
+function extractRequestError(error: unknown): { message: string; code: string | null } {
+  if (error && typeof error === 'object') {
+    const maybeError = error as { message?: unknown; code?: unknown };
+    return {
+      message:
+        typeof maybeError.message === 'string' && maybeError.message.trim().length > 0
+          ? maybeError.message
+          : 'Error desconocido',
+      code: typeof maybeError.code === 'string' ? maybeError.code : null,
+    };
+  }
+  if (error instanceof Error) {
+    return { message: error.message, code: null };
+  }
+  return { message: 'Error desconocido', code: null };
+}
+
 function getConditionalClass(
   value: unknown,
   config?: Record<string, unknown>
@@ -525,6 +544,17 @@ function getOcrStatusMeta(item: FileSystemItem): OcrStatusMeta | null {
         toneClassName: 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-[0_8px_18px_rgba(5,150,105,0.14)]',
       };
     case 'failed':
+      if (item.ocrErrorCode === 'LINEAGE_RECONCILIATION_CONFLICT') {
+        return {
+          icon: AlertCircle,
+          label: 'Conflicto de lineage',
+          shortLabel: 'Conflicto',
+          tooltip:
+            item.ocrDocumentError?.trim() ||
+            'No se pudo reconciliar la identidad estable del documento. Revisá filas duplicadas o reprocesá con otra configuración.',
+          toneClassName: 'border-rose-300 bg-rose-50 text-rose-800 shadow-[0_8px_18px_rgba(225,29,72,0.14)]',
+        };
+      }
       return {
         icon: AlertCircle,
         label: 'Error de OCR',
@@ -559,6 +589,41 @@ function getOcrStatusMeta(item: FileSystemItem): OcrStatusMeta | null {
     default:
       return null;
   }
+}
+
+function notifyOcrImportFailure({
+  status,
+  code,
+  serverMessage,
+  fallbackMessage,
+}: {
+  status: number;
+  code?: string | null;
+  serverMessage?: string | null;
+  fallbackMessage: string;
+}) {
+  if (code === 'LINEAGE_RECONCILIATION_CONFLICT') {
+    toast.error(
+      serverMessage ??
+        'Hubo un conflicto de continuidad. El documento no se reconcilio automaticamente con la materializacion anterior. Revisá Lineage o corregí la identidad antes de reprocesar.'
+    );
+    return;
+  }
+
+  if (status === 413) {
+    toast.warning(
+      serverMessage ??
+        'El archivo o las paginas seleccionadas son demasiado grandes para OCR. Probá con menos paginas.'
+    );
+    return;
+  }
+
+  if (status === 402) {
+    toast.warning(serverMessage ?? 'Superaste el limite de tokens de IA de tu plan.');
+    return;
+  }
+
+  toast.error(serverMessage ?? fallbackMessage);
 }
 
 function renderOcrStatusBadge(item: FileSystemItem, context: OcrStatusBadgeContext = 'tree') {
@@ -859,7 +924,13 @@ function FileManagerContent({
       );
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo generar el acceso al documento.');
+        const error = new Error(payload?.error || 'No se pudo generar el acceso al documento.') as Error & {
+          code?: string;
+        };
+        if (typeof payload?.code === 'string') {
+          error.code = payload.code;
+        }
+        throw error;
       }
       const signedUrl =
         typeof payload?.signedUrl === 'string' && payload.signedUrl.length > 0
@@ -2050,12 +2121,17 @@ function FileManagerContent({
 
       setPreviewUrl(null);
       const signedUrl = await getDocumentSignedUrl(document.storagePath, 3600).catch((error) => {
+        const resolved = extractRequestError(error);
+        if (resolved.code === 'DOCUMENT_STORAGE_MISSING') {
+          toast.error('Este documento existe en metadata pero ya no esta disponible en Storage.');
+          return null;
+        }
         console.error('Error creating signed URL:', error);
         return null;
       });
 
       if (!signedUrl) {
-        toast.error('Error loading document preview');
+        toast.error('No se pudo cargar la previsualizacion del documento.');
         return;
       }
 
@@ -2229,7 +2305,14 @@ function FileManagerContent({
 
   const handleDownload = async (document: FileSystemItem) => {
     if (document.storagePath) {
-      const signedUrl = await getDocumentSignedUrl(document.storagePath, 60).catch(() => null);
+      const signedUrl = await getDocumentSignedUrl(document.storagePath, 60).catch((error) => {
+        const resolved = extractRequestError(error);
+        if (resolved.code === 'DOCUMENT_STORAGE_MISSING') {
+          toast.error('No se puede descargar: el archivo ya no existe en Storage.');
+          return null;
+        }
+        return null;
+      });
       if (signedUrl) {
         window.open(signedUrl, '_blank');
       }
@@ -3438,6 +3521,16 @@ function FileManagerContent({
             const out = await importRes.json().catch(() => ({} as any));
             if (!importRes.ok) {
               console.error('Tabla OCR import failed', out);
+              notifyOcrImportFailure({
+                status: importRes.status,
+                code: typeof out?.code === 'string' ? out.code : null,
+                serverMessage: typeof out?.error === 'string' ? out.error : null,
+                fallbackMessage: `No se pudieron extraer datos para las tablas OCR (HTTP ${importRes.status}).`,
+              });
+              continue;
+            }
+            if (!importRes.ok) {
+              console.error('Tabla OCR import failed', out);
               const serverMessage = typeof out?.error === 'string' ? out.error : null;
               if (importRes.status === 413) {
                 toast.warning(
@@ -3488,7 +3581,11 @@ function FileManagerContent({
       }
     } catch (error) {
       console.error('Error uploading files:', error);
-      toast.error('Error al subir archivos');
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Error al subir archivos'
+      );
     } finally {
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
@@ -4172,6 +4269,15 @@ function FileManagerContent({
           link.columns.forEach((column) => {
             mapped[column.fieldKey] = data[column.fieldKey];
           });
+          if (typeof row.lineage_row_key === 'string') {
+            mapped.lineage_row_key = row.lineage_row_key;
+          }
+          if (typeof row.extraction_id === 'string') {
+            mapped.extraction_id = row.extraction_id;
+          }
+          if (typeof row.materialization_version === 'number') {
+            mapped.materialization_version = row.materialization_version;
+          }
           if (typeof row.source === 'string') {
             mapped.source = row.source;
           }
@@ -4411,6 +4517,39 @@ function FileManagerContent({
 
   const activeOcrTablaId = activeFolderLink?.tablaId ?? null;
 
+  const lineageSelectedDocument = activeDocument ?? selectedDocument ?? null;
+  const lineageSelectedDocPath = useMemo(() => {
+    return typeof lineageSelectedDocument?.storagePath === 'string'
+      ? lineageSelectedDocument.storagePath
+      : null;
+  }, [lineageSelectedDocument]);
+
+  const lineageSelectedTablaId = useMemo(() => {
+    if (activeDocumentOcrLink?.tablaId) return activeDocumentOcrLink.tablaId;
+    if (activeFolderLink?.tablaId) return activeFolderLink.tablaId;
+    if (selectedFolder?.ocrTablaId) return selectedFolder.ocrTablaId;
+    return null;
+  }, [activeDocumentOcrLink?.tablaId, activeFolderLink?.tablaId, selectedFolder?.ocrTablaId]);
+
+  const extractionEditorFolderPath = useMemo(() => {
+    if (!selectedFolder?.ocrEnabled) return null;
+    return normalizeFolderPath(
+      selectedFolder.relativePath ?? selectedFolder.ocrFolderName ?? selectedFolder.name
+    ) || null;
+  }, [selectedFolder]);
+
+  const shouldShowExtractionEditor = useMemo(() => {
+    return Boolean(selectedFolder?.ocrEnabled && extractionEditorFolderPath);
+  }, [extractionEditorFolderPath, selectedFolder?.ocrEnabled]);
+
+  const shouldShowLineagePanel = useMemo(() => {
+    return Boolean(
+      lineageSelectedTablaId ||
+      selectedFolder?.ocrEnabled ||
+      activeDocumentOcrLinks.length > 0
+    );
+  }, [activeDocumentOcrLinks.length, lineageSelectedTablaId, selectedFolder?.ocrEnabled]);
+
   const handleOpenOcrReport = useCallback(() => {
     if (!obraId || !activeOcrTablaId) return;
     const shouldOpenMaterialsGuide =
@@ -4555,6 +4694,15 @@ function FileManagerContent({
       }
       if (typeof data.__docFileName === 'string') {
         mapped.__docFileName = data.__docFileName;
+      }
+      if (typeof row.lineage_row_key === 'string') {
+        mapped.lineage_row_key = row.lineage_row_key;
+      }
+      if (typeof row.extraction_id === 'string') {
+        mapped.extraction_id = row.extraction_id;
+      }
+      if (typeof row.materialization_version === 'number') {
+        mapped.materialization_version = row.materialization_version;
       }
       if (typeof row.source === 'string') {
         mapped.source = row.source;
@@ -5311,6 +5459,15 @@ function FileManagerContent({
         );
         const payload = await response.json().catch(() => ({} as { error?: string }));
         if (!response.ok) {
+          notifyOcrImportFailure({
+            status: response.status,
+            code: typeof (payload as { code?: string })?.code === 'string' ? (payload as { code?: string }).code ?? null : null,
+            serverMessage: typeof payload?.error === 'string' ? payload.error : null,
+            fallbackMessage: `No se pudo reprocesar el documento (HTTP ${response.status}).`,
+          });
+          return;
+        }
+        if (!response.ok) {
           const serverMessage = typeof payload?.error === 'string' ? payload.error : null;
           if (response.status === 413) {
             toast.warning(
@@ -5639,7 +5796,7 @@ function FileManagerContent({
     if (isOcrDocumentsMode && documentViewMode === 'table') {
       const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
       return (
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col gap-4">
           {folderContentHeader}
           <div className="flex-1 rounded-lg border rounded-t-none border-[#d9d9d9] bg-white shadow-sm overflow-hidden pt-0 px-4">
             {!hasTablaSchema ? (
@@ -5671,6 +5828,22 @@ function FileManagerContent({
               </div>
             )}
           </div>
+          {shouldShowExtractionEditor ? (
+            <FolderExtractionEditor
+              obraId={obraId}
+              folderPath={extractionEditorFolderPath}
+              refreshKey={lastFetchedAt ?? undefined}
+              onSaved={refreshFileTreeDerivedData}
+            />
+          ) : null}
+          {shouldShowLineagePanel ? (
+            <LineagePanel
+              obraId={obraId}
+              tablaId={lineageSelectedTablaId}
+              docPath={lineageSelectedDocPath}
+              refreshKey={lastFetchedAt ?? undefined}
+            />
+          ) : null}
         </div>
       );
     }
@@ -5835,16 +6008,34 @@ function FileManagerContent({
     })();
 
     const folderContent = (
-      <div
-        data-wizard-target="documents-dropzone"
-        className={`h-full flex flex-col transition-colors ${isGlobalFileDragActive && !draggedFolderId ? 'ring-2 ring-amber-500 ring-offset-2 bg-amber-50/40' : ''}`}
-        onDragEnter={handleDocumentAreaDragEnter}
-        onDragOver={handleDocumentAreaDragOver}
-        onDragLeave={handleDocumentAreaDragLeave}
-        onDrop={handleDocumentAreaDrop}
-      >
-        {folderContentHeader}
-        <div className={cn("flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9]", showArchivosTablaToggle ? 'rounded-t-none' : 'rounded-tr-lg')}>{folderBody}</div>
+      <div className="h-full flex flex-col gap-4">
+        <div
+          data-wizard-target="documents-dropzone"
+          className={`flex-1 flex flex-col transition-colors ${isGlobalFileDragActive && !draggedFolderId ? 'ring-2 ring-amber-500 ring-offset-2 bg-amber-50/40' : ''}`}
+          onDragEnter={handleDocumentAreaDragEnter}
+          onDragOver={handleDocumentAreaDragOver}
+          onDragLeave={handleDocumentAreaDragLeave}
+          onDrop={handleDocumentAreaDrop}
+        >
+          {folderContentHeader}
+          <div className={cn("flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9]", showArchivosTablaToggle ? 'rounded-t-none' : 'rounded-tr-lg')}>{folderBody}</div>
+        </div>
+        {shouldShowExtractionEditor ? (
+          <FolderExtractionEditor
+            obraId={obraId}
+            folderPath={extractionEditorFolderPath}
+            refreshKey={lastFetchedAt ?? undefined}
+            onSaved={refreshFileTreeDerivedData}
+          />
+        ) : null}
+        {shouldShowLineagePanel ? (
+          <LineagePanel
+            obraId={obraId}
+            tablaId={lineageSelectedTablaId}
+            docPath={lineageSelectedDocPath}
+            refreshKey={lastFetchedAt ?? undefined}
+          />
+        ) : null}
       </div>
     );
 

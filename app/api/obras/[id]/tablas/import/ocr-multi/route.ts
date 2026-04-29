@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { createClient } from "@/utils/supabase/server";
@@ -14,13 +15,23 @@ import {
   normalizeFieldKey,
 } from "@/lib/tablas";
 import { applyOcrExtractionRowPolicy } from "@/lib/ocr-row-policy";
-import { localizeOcrProviderErrorMessage } from "@/lib/ocr-error-message";
+import {
+  isHighDemandOcrProviderMessage,
+  localizeOcrProviderErrorMessage,
+} from "@/lib/ocr-error-message";
 import {
   fetchTenantPlan,
   type SubscriptionPlanLimits,
 } from "@/lib/subscription-plans";
 import { incrementTenantUsage, logTenantUsageEvent } from "@/lib/tenant-usage";
 import { estimateUsdForTokens } from "@/lib/ai-pricing";
+import {
+  buildContentFingerprintSource,
+  computeContentFingerprintNormalized,
+  computeFileFingerprint,
+  deriveLineageRowKeys,
+  LineageReconciliationConflictError,
+} from "@/lib/lineage";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -86,6 +97,32 @@ const MIN_OCR_TOKEN_RESERVE = 1_500;
 const MAX_OCR_TOKEN_RESERVE = 8_000;
 const DEFAULT_OCR_TOKEN_RESERVE = 2_000;
 const OCR_TIMEOUT_MS = Number(process.env.OCR_TIMEOUT_MS) || 90_000;
+const OCR_PROVIDER_HIGH_DEMAND_ERROR_CODE = "OCR_PROVIDER_HIGH_DEMAND" as const;
+
+function resolveUnknownErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const maybeMessage = Reflect.get(error, "message");
+    if (typeof maybeMessage === "string" && maybeMessage.trim().length > 0) {
+      return maybeMessage;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Error desconocido";
+    }
+  }
+  return "Error desconocido";
+}
+
+function resolveOcrProcessingErrorCode(error: unknown): string | null {
+  const message = resolveUnknownErrorMessage(error);
+  if (isHighDemandOcrProviderMessage(message)) {
+    return OCR_PROVIDER_HIGH_DEMAND_ERROR_CODE;
+  }
+  return error instanceof LineageReconciliationConflictError ? error.code : null;
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
   return Promise.race([
@@ -867,12 +904,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!obraId) {
     return NextResponse.json({ error: "Parámetros incompletos" }, { status: 400 });
   }
-  if (!GOOGLE_API_KEY) {
-    return NextResponse.json(
-      { error: "Falta configurar GOOGLE_GENERATIVE_AI_API_KEY en el servidor." },
-      { status: 500 }
-    );
-  }
 
   let resolvedTenantId: string | null = null;
   let resolvedPlanLimits: SubscriptionPlanLimits | null = null;
@@ -886,6 +917,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     | null = null;
   let tablaDefs: TablaDef[] = [];
   let resolvedSupabase: Awaited<ReturnType<typeof createClient>> | null = null;
+  let extractionIdForAudit: string | null = null;
+  let fileFingerprint: string | null = null;
 
   try {
     const access = await resolveRequestAccessContext();
@@ -962,6 +995,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const existingPath = form.get("existingPath");
     const existingFileName = form.get("existingFileName");
     const selectedPages = parseSelectedPages(form.get("selectedPages"));
+    const e2eExtractionJson = form.get("e2eExtractionJson");
+    const e2eForceLineageConflict = form.get("e2eForceLineageConflict");
+    const useE2eOcrStub =
+      process.env.NODE_ENV !== "production" &&
+      request.headers.get("x-e2e-ocr-stub") === "true" &&
+      typeof e2eExtractionJson === "string" &&
+      e2eExtractionJson.trim().length > 0;
+
+    if (!useE2eOcrStub && !GOOGLE_API_KEY) {
+      return NextResponse.json(
+        { error: "Falta configurar GOOGLE_GENERATIVE_AI_API_KEY en el servidor." },
+        { status: 500 }
+      );
+    }
 
     const folderNames = Array.from(
       new Set(
@@ -997,6 +1044,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     let fetchedDocumentBytes: Uint8Array | null = null;
     let fetchedDocumentMime: string | null = null;
+    let sourceDocumentBytes: Uint8Array | null = null;
     if (!file && typeof imageDataUrl !== "string" && storageInfo) {
       const { data: fileData, error: downloadError } = await supabase.storage
         .from(storageInfo.bucket)
@@ -1019,6 +1067,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
         fetchedDocumentBytes = new Uint8Array(arrayBuffer);
         fetchedDocumentMime = mime;
+        sourceDocumentBytes = fetchedDocumentBytes;
       }
     }
 
@@ -1153,9 +1202,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     let extraction: Record<string, any> | null = null;
     let rawExtractionResult: unknown = null;
-    if (effectiveImageDataUrl && effectiveImageDataUrl.startsWith("data:")) {
+    if (useE2eOcrStub) {
+      extraction = extractionSchema.parse(JSON.parse(e2eExtractionJson)) as Record<string, any>;
+      rawExtractionResult = extraction;
+      if (effectiveImageDataUrl && effectiveImageDataUrl.startsWith("data:")) {
+        const { buffer } = dataUrlToBuffer(effectiveImageDataUrl);
+        sourceDocumentBytes = new Uint8Array(buffer);
+      } else if (file) {
+        sourceDocumentBytes = new Uint8Array(Buffer.from(await file.arrayBuffer()));
+      }
+    } else if (effectiveImageDataUrl && effectiveImageDataUrl.startsWith("data:")) {
       const { buffer, mime } = dataUrlToBuffer(effectiveImageDataUrl);
-      const parsed = await runGenerateTextFallback(new Uint8Array(buffer), mime);
+      const imageBytes = new Uint8Array(buffer);
+      sourceDocumentBytes = imageBytes;
+      const parsed = await runGenerateTextFallback(imageBytes, mime);
       extraction = parsed as Record<string, any>;
       rawExtractionResult = parsed;
     } else if (file) {
@@ -1167,8 +1227,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!isOcrSupportedMime(fileMime)) {
         return NextResponse.json({ error: "Tipo de archivo no soportado (PDF o imagen)" }, { status: 400 });
       }
+      const fileBytes = new Uint8Array(Buffer.from(await file.arrayBuffer()));
+      sourceDocumentBytes = fileBytes;
       const parsed = await runGenerateTextFallback(
-        new Uint8Array(Buffer.from(await file.arrayBuffer())),
+        fileBytes,
         fileMime
       );
       extraction = parsed as Record<string, any>;
@@ -1291,9 +1353,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
 
+    extractionIdForAudit = randomUUID();
+    if (sourceDocumentBytes) {
+      fileFingerprint = computeFileFingerprint(sourceDocumentBytes);
+    }
+
     const tablesExtraction = ((extraction as any).tables ?? {}) as Record<string, any>;
     const perTable: Array<{ tablaId: string; tablaName: string; inserted: number }> = [];
     const processingDuration = Date.now() - startTime;
+    const preparedWrites: Array<{
+      def: TablaDef;
+      rowsPayload: Array<{
+        tabla_id: string;
+        lineage_row_key: string;
+        extraction_id: string;
+        materialization_version: number;
+        data: Record<string, unknown>;
+        source: "ocr";
+      }>;
+      lineageRowKeys: string[];
+      contentFingerprintNormalized: string | null;
+      fingerprintStatus: "completed" | "degraded";
+      fingerprintError: Record<string, unknown> | null;
+    }> = [];
 
     for (const def of tablaDefs) {
       const rawTableExtraction = resolveTableExtraction(
@@ -1329,15 +1411,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         baseMeta.__docSelectedPages = selectedPages;
       }
 
-      if (storageInfo?.path) {
-        await supabase
-          .from("obra_tabla_rows")
-          .delete()
-          .eq("tabla_id", def.tablaId)
-          .contains("data", { __docPath: storageInfo.path });
-      }
-
-      const rowsPayload = items.map((item: Record<string, unknown>) => {
+      const itemRows = items.map((item: Record<string, unknown>) => {
         const data: Record<string, unknown> = { ...baseMeta };
         for (const column of def.itemColumns) {
           const resolvedValue = resolveRowValueWithTopLevelFallback(
@@ -1354,46 +1428,168 @@ export async function POST(request: NextRequest, context: RouteContext) {
         for (const [fieldKey, fieldValue] of Object.entries(baseMeta)) {
           setCanonicalOrderAliases(data, fieldKey, fieldValue);
         }
-        return {
-          tabla_id: def.tablaId,
-          data,
-          source: "ocr",
-        };
+        return data;
       });
-      if (rowsPayload.length > 0) {
-        const { error: insertError } = await supabase.from("obra_tabla_rows").insert(rowsPayload);
-        if (insertError) throw insertError;
+
+      const contentFingerprintNormalized = computeContentFingerprintNormalized(
+        buildContentFingerprintSource({
+          parentData: baseMeta,
+          itemRows,
+        }),
+      );
+      const fingerprintStatus =
+        fileFingerprint && contentFingerprintNormalized ? "completed" : "degraded";
+      const fingerprintError =
+        fingerprintStatus === "completed"
+          ? null
+          : {
+              fileFingerprint: fileFingerprint ? null : "missing_source_bytes",
+              contentFingerprintNormalized: contentFingerprintNormalized
+                ? null
+                : "missing_semantic_fingerprint",
+            };
+
+      if (
+        useE2eOcrStub &&
+        typeof e2eForceLineageConflict === "string" &&
+        e2eForceLineageConflict === "true"
+      ) {
+        throw new LineageReconciliationConflictError(
+          "No se pudo reconciliar la identidad estable de una o más filas.",
+          {
+            tableIdentity: def.tablaId,
+            duplicates: [
+              {
+                lineageRowKey: "e2e:forced-conflict",
+                rowPositions: [0, 1],
+              },
+            ],
+          },
+        );
+      }
+
+      const lineageRowKeys =
+        itemRows.length > 0
+          ? deriveLineageRowKeys({
+              tableIdentity: def.tablaId,
+              parentData: baseMeta,
+              itemRows,
+              parentColumns: def.parentColumns,
+              itemColumns: def.itemColumns,
+              fileFingerprint,
+              contentFingerprintNormalized,
+            })
+          : [];
+
+      let existingRowVersionMap = new Map<string, number>();
+      if (lineageRowKeys.length > 0) {
+        const { data: existingRows, error: existingRowsError } = await supabase
+          .from("obra_tabla_rows")
+          .select("lineage_row_key, materialization_version")
+          .eq("tabla_id", def.tablaId)
+          .in("lineage_row_key", lineageRowKeys);
+        if (existingRowsError) throw existingRowsError;
+
+        existingRowVersionMap = new Map(
+          (existingRows ?? []).map((row) => [
+            row.lineage_row_key as string,
+            Number(row.materialization_version ?? 0),
+          ]),
+        );
+      }
+
+      const rowsPayload = itemRows.map((data, itemPosition) => ({
+        tabla_id: def.tablaId,
+        lineage_row_key: lineageRowKeys[itemPosition],
+        extraction_id: extractionIdForAudit as string,
+        materialization_version:
+          (existingRowVersionMap.get(lineageRowKeys[itemPosition]) ?? 0) + 1,
+        data,
+        source: "ocr" as const,
+      }));
+
+      preparedWrites.push({
+        def,
+        rowsPayload,
+        lineageRowKeys,
+        contentFingerprintNormalized,
+        fingerprintStatus,
+        fingerprintError,
+      });
+      perTable.push({ tablaId: def.tablaId, tablaName: def.tablaName, inserted: rowsPayload.length });
+    }
+
+    for (const prepared of preparedWrites) {
+      const currentLineageSet = new Set(prepared.lineageRowKeys);
+      if (prepared.rowsPayload.length > 0) {
+        const { error: upsertError } = await supabase
+          .from("obra_tabla_rows")
+          .upsert(prepared.rowsPayload, { onConflict: "tabla_id,lineage_row_key" });
+        if (upsertError) throw upsertError;
+      }
+
+      if (storageInfo?.path) {
+        const { data: existingDocRows, error: existingDocRowsError } = await supabase
+          .from("obra_tabla_rows")
+          .select("id, lineage_row_key")
+          .eq("tabla_id", prepared.def.tablaId)
+          .contains("data", { __docPath: storageInfo.path });
+        if (existingDocRowsError) throw existingDocRowsError;
+
+        const staleRowIds = (existingDocRows ?? [])
+          .filter((row) => !currentLineageSet.has(row.lineage_row_key as string))
+          .map((row) => row.id as string);
+
+        if (staleRowIds.length > 0) {
+          const { error: staleDeleteError } = await supabase
+            .from("obra_tabla_rows")
+            .delete()
+            .in("id", staleRowIds);
+          if (staleDeleteError) throw staleDeleteError;
+        }
       }
 
       if (storageInfo) {
-        await supabase.from("ocr_document_processing").upsert(
-          {
-            tabla_id: def.tablaId,
-            obra_id: obraId,
-            source_bucket: storageInfo.bucket,
-            source_path: storageInfo.path,
-            source_file_name: storageInfo.fileName,
-            status: "completed",
-            rows_extracted: rowsPayload.length,
-            processed_at: new Date().toISOString(),
-            processing_duration_ms: processingDuration,
-          },
-          { onConflict: "tabla_id,source_path" }
-        );
+        const { error: processingError } = await supabase
+          .from("ocr_document_processing")
+          .upsert(
+            {
+              tabla_id: prepared.def.tablaId,
+              obra_id: obraId,
+              source_bucket: storageInfo.bucket,
+              source_path: storageInfo.path,
+              source_file_name: storageInfo.fileName,
+              extraction_id: extractionIdForAudit,
+              status: "completed",
+              error_code: null,
+              error_message: null,
+              rows_extracted: prepared.rowsPayload.length,
+              processed_at: new Date().toISOString(),
+              processing_duration_ms: processingDuration,
+              file_fingerprint: fileFingerprint,
+              content_fingerprint_normalized: prepared.contentFingerprintNormalized,
+              fingerprint_status: prepared.fingerprintStatus,
+              fingerprint_error: prepared.fingerprintError,
+            },
+            { onConflict: "tabla_id,source_path" }
+          );
+        if (processingError) throw processingError;
       }
-      perTable.push({ tablaId: def.tablaId, tablaName: def.tablaName, inserted: rowsPayload.length });
     }
 
     return NextResponse.json({
       ok: true,
       inserted: perTable.reduce((acc, t) => acc + t.inserted, 0),
+      extractionId: extractionIdForAudit,
       perTable,
       file: storageInfo ? { bucket: storageInfo.bucket, path: storageInfo.path } : null,
     });
   } catch (error) {
     const message = localizeOcrProviderErrorMessage(
-      error instanceof Error ? error.message : "Error desconocido"
+      resolveUnknownErrorMessage(error)
     );
+    const isLineageConflict = error instanceof LineageReconciliationConflictError;
+    const errorCode = resolveOcrProcessingErrorCode(error);
     if (
       rollbackReservation &&
       reservationApplied &&
@@ -1414,14 +1610,38 @@ export async function POST(request: NextRequest, context: RouteContext) {
             source_bucket: storageInfoForError.bucket,
             source_path: storageInfoForError.path,
             source_file_name: storageInfoForError.fileName,
+            extraction_id: extractionIdForAudit,
             status: "failed",
+            error_code: errorCode,
             error_message: message,
+            file_fingerprint: fileFingerprint,
             processed_at: new Date().toISOString(),
           },
           { onConflict: "tabla_id,source_path" }
         );
       }
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (isLineageConflict) {
+      return NextResponse.json(
+        {
+          error: message,
+          code: error.code,
+          context: {
+            obraId,
+            tablaIds: tablaDefs.map((def) => def.tablaId),
+            extractionId: extractionIdForAudit,
+            ...error.context,
+          },
+        },
+        { status: 409 }
+      );
+    }
+    if (errorCode === OCR_PROVIDER_HIGH_DEMAND_ERROR_CODE) {
+      return NextResponse.json(
+        { error: message, code: errorCode },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: message, code: errorCode }, { status: 500 });
   }
 }

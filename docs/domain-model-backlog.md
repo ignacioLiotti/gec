@@ -1,7 +1,7 @@
 # Domain Model Backlog (Consolidado)
 
 Estado consolidado de decisiones de dominio vs brechas de implementacion.
-Fecha de corte: 2026-04-27.
+Fecha de corte: 2026-04-29.
 
 ## Avance actual
 
@@ -21,10 +21,11 @@ Fecha de corte: 2026-04-27.
   - lineage fisico inicial para filas extraidas
   - overrides de macrotabla con binding estable por lineage
   - flujos documentales como contrato tenant de extraccion
+  - trazabilidad de obra con separacion explicita entre nodos reales y nodos projected
   - chat persistido por usuario y tenant
 - Temas aun abiertos: eventos de dominio, permisos finos por tenant, dato critico configurable, cierre tecnico de canonicalizacion y rollout de implementacion.
 
-## Estado no commiteado relevante (2026-04-27)
+## Estado no commiteado relevante (2026-04-29)
 
 - Data-flow:
   - `tenant_data_flow_config` como persistencia tenant de calculos/resultados/layout.
@@ -43,12 +44,18 @@ Fecha de corte: 2026-04-27.
   - Utilidad `lib/lineage.ts` para fingerprint y derivacion deterministica de claves.
   - Import OCR simple/multiple/spreadsheet prepara filas con identidad estable y errores clasificados.
   - Panel y API de lineage para navegar documento, extraccion, tabla, fila, macrotabla y override.
+  - Ticket 1.1 cerrado para OCR simple + macrotablas; partial a nivel plataforma general.
+  - Ticket 1.2A extendido a OCR multi / spreadsheet multi con contrato de continuidad y errores clasificados.
 - Macrotablas:
   - Overrides con `source_tabla_id`, `lineage_row_key`, `binding_status` y `binding_error`.
   - Resolucion dual stable/legacy y deteccion de conflictos de reattach.
 - Flujos documentales:
   - Pantallas admin para configurar carpetas, tablas extraidas, templates, instrucciones, metodos de entrada y consumidores.
   - Editor por carpeta en file manager para inspeccionar pipeline y conflictos.
+  - Ruta comparativa `document-flows-2` para contrastar la implementacion del tenant editor contra el handoff de diseo.
+- Trazabilidad de obra:
+  - `/excel/[obraId]/data-flow` como visualizador standalone con barra de resultados, canvas por capas, inspector flotante y drilldown real.
+  - `/api/obras/[id]/data-flow-graph` separa `implemented` vs `partial` y degrada projected sin romper tablas/macrotablas reales.
 - Chat:
   - Migracion de conversaciones/mensajes.
   - Panel global lazy-loaded para usuarios no demo.
@@ -108,6 +115,7 @@ Fecha de corte: 2026-04-27.
 - Centro de recomendaciones en UI (detalle accionable + vista resumida global/macrotabla).
 - Flujo de aprobacion/ejecucion destructiva con preview congelado visible y evidencia auditable.
 - Explainability de calculos: ver fuentes, lineage, versiones de reglas y motor usadas en cada snapshot.
+- Resolver si `document-flows-2` reemplaza a `document-flows` o queda como ruta comparativa temporal antes del cleanup final.
 - Editor de policies tenant para recomendaciones:
   - no-blocking/blocking por regla/severidad
   - permisos de aceptacion/rechazo

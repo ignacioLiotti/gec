@@ -19,7 +19,7 @@ export async function GET(_request: Request, context: RouteContext) {
 		const { data: documents, error } = await supabase
 			.from("ocr_document_processing")
 			.select(
-				"id, source_bucket, source_path, source_file_name, status, error_message, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at"
+				"id, source_bucket, source_path, source_file_name, status, error_message, error_code, rows_extracted, processed_at, processing_duration_ms, retry_count, created_at"
 			)
 			.eq("tabla_id", tablaId)
 			.eq("obra_id", obraId)
@@ -70,6 +70,7 @@ export async function POST(request: Request, context: RouteContext) {
 				.update({
 					status: "pending",
 					error_message: null,
+					error_code: null,
 					retry_count: (doc.retry_count || 0) + 1,
 				})
 				.eq("id", documentId);

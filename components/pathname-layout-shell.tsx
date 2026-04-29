@@ -112,36 +112,38 @@ export function PathnameLayoutShell({
 	}
 
 	return (
-		<SidebarProvider>
-			<DeferredAppSidebar
-				user={normalizedUser}
-				userRoles={userRoles}
-				tenants={tenants}
-				sidebarMacroTables={sidebarMacroTables}
-				demoMode={isDemoMode}
-				demoLabel={demoSession?.label ?? demoSession?.tenantName ?? null}
-				demoCapabilities={demoCapabilities}
-			/>
-			<SidebarInset>
-				<header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b bg-[#fafafa] px-3 py-2 sm:px-4">
-					<div className="flex min-w-0 flex-1 items-center gap-3">
-						<SidebarTrigger className="-ml-1 block sm:hidden" />
-						<ExcelObraName />
-					</div>
-					<div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
-						<DeferredImpersonateBanner />
-						<DeferredUserMenu
-							email={normalizedUser?.email}
-							demoMode={isDemoMode}
-							demoLabel={demoSession?.label ?? demoSession?.tenantName ?? null}
-							userRoles={userRoles ?? undefined}
-						/>
-					</div>
-				</header>
-				<main className="flex flex-1 flex-col gap-4 bg-[#fafafa]">
-					{children}
-				</main>
-			</SidebarInset>
-		</SidebarProvider>
+		<div className="notranslate" translate="no">
+			<SidebarProvider>
+				<DeferredAppSidebar
+					user={normalizedUser}
+					userRoles={userRoles}
+					tenants={tenants}
+					sidebarMacroTables={sidebarMacroTables}
+					demoMode={isDemoMode}
+					demoLabel={demoSession?.label ?? demoSession?.tenantName ?? null}
+					demoCapabilities={demoCapabilities}
+				/>
+				<SidebarInset>
+					<header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b bg-[#fafafa] px-3 py-2 sm:px-4">
+						<div className="flex min-w-0 flex-1 items-center gap-3">
+							<SidebarTrigger className="-ml-1 block sm:hidden" />
+							<ExcelObraName />
+						</div>
+						<div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
+							<DeferredImpersonateBanner />
+							<DeferredUserMenu
+								email={normalizedUser?.email}
+								demoMode={isDemoMode}
+								demoLabel={demoSession?.label ?? demoSession?.tenantName ?? null}
+								userRoles={userRoles ?? undefined}
+							/>
+						</div>
+					</header>
+					<main className="flex flex-1 flex-col gap-4 bg-[#fafafa]">
+						{children}
+					</main>
+				</SidebarInset>
+			</SidebarProvider>
+		</div>
 	);
 }

@@ -48,6 +48,10 @@ export async function removeDefaultFolderFromExistingObras(
 	params: RemoveDefaultFolderParams,
 ) {
 	const normalizedPath = normalizeFolderPath(params.folderPath);
+	// TODO(domain-model): Folder removal is destructive and should be gated by an
+	// approved preview phase with impact_estimated before execution starts.
+	// TODO(domain-model): Require owner/admin approval tied to frozen preview snapshot
+	// and one-shot approval token before deleting tablas/files.
 	if (!normalizedPath) return { ok: true, removedTablas: 0, removedFiles: 0 } as const;
 
 	const { data: obras, error: obrasError } = await supabase
@@ -104,6 +108,8 @@ export async function removeDefaultFolderFromExistingObras(
 				.eq("obra_id", obraId)
 				.in("id", tablaIdsToDelete);
 			if (deleteTablasError) throw deleteTablasError;
+			// TODO(domain-model): Capture deleted_table_ids and affected_rows/doc_links into
+			// migration impact_real so audit can reconcile estimated vs final.
 			removedTablas += tablaIdsToDelete.length;
 		}
 
@@ -114,6 +120,8 @@ export async function removeDefaultFolderFromExistingObras(
 				.from("obra-documents")
 				.remove(files);
 			if (deleteFilesError) throw deleteFilesError;
+			// TODO(domain-model): Persist per-obra file deletion counters and any partial
+			// failures in final migration outcome (completed/failed/rolled_back).
 			removedFiles += files.length;
 		}
 	}

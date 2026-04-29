@@ -12,6 +12,10 @@ type RouteContext = {
 	params: Promise<{ id: string }>;
 };
 
+function isStorageObjectMissing(message: string | null | undefined) {
+	return typeof message === "string" && /object not found/i.test(message);
+}
+
 export async function GET(request: Request, context: RouteContext) {
 	const { id: obraId } = await context.params;
 	if (!obraId) {
@@ -98,6 +102,16 @@ export async function GET(request: Request, context: RouteContext) {
 				.from(DOCUMENTS_BUCKET)
 				.download(storagePath);
 			if (error || !data) {
+				if (isStorageObjectMissing(error?.message)) {
+					return NextResponse.json(
+						{
+							error:
+								"El documento figura en metadata pero el archivo ya no existe en Storage.",
+							code: "DOCUMENT_STORAGE_MISSING",
+						},
+						{ status: 404 },
+					);
+				}
 				return NextResponse.json(
 					{ error: error?.message ?? "No se pudo descargar el documento" },
 					{ status: 400 },
@@ -119,6 +133,16 @@ export async function GET(request: Request, context: RouteContext) {
 			.from(DOCUMENTS_BUCKET)
 			.createSignedUrl(storagePath, expiresIn);
 		if (error || !data?.signedUrl) {
+			if (isStorageObjectMissing(error?.message)) {
+				return NextResponse.json(
+					{
+						error:
+							"El documento figura en metadata pero el archivo ya no existe en Storage.",
+						code: "DOCUMENT_STORAGE_MISSING",
+					},
+					{ status: 404 },
+				);
+			}
 			return NextResponse.json(
 				{ error: error?.message ?? "No se pudo generar el acceso al documento" },
 				{ status: 400 },

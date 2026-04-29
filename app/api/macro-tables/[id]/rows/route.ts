@@ -4,7 +4,13 @@ import {
   matchesMacroSearch,
   type MacroTableFilters,
 } from "@/lib/macro-table-filters";
-import { mapColumnToResponse, type MacroTableRow } from "@/lib/macro-tables";
+import {
+  mapColumnToResponse,
+  type MacroTableOverrideBindingStatus,
+  type MacroTableOverrideConflict,
+  type MacroTableOverrideSummary,
+  type MacroTableRow,
+} from "@/lib/macro-tables";
 import {
   buildMacroSourceSelectionSettings,
   resolveMacroSourceTablas,
@@ -16,6 +22,40 @@ import {
 } from "@/lib/demo-session";
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+const LINEAGE_OVERRIDE_REATTACH_CONFLICT = "LINEAGE_OVERRIDE_REATTACH_CONFLICT" as const;
+
+type SourceRowRecord = {
+  id: string;
+  tabla_id: string;
+  lineage_row_key: string | null;
+  extraction_id: string | null;
+  materialization_version: number | null;
+  data: Record<string, unknown> | null;
+  created_at: string | null;
+};
+
+type CustomValueRecord = {
+  id: string;
+  macro_table_id: string;
+  source_row_id: string;
+  source_tabla_id: string | null;
+  lineage_row_key: string | null;
+  column_id: string;
+  value: unknown;
+  binding_status: MacroTableOverrideBindingStatus | null;
+  binding_error: Record<string, unknown> | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type OverrideResolution = {
+  valuesByRowId: Map<string, Map<string, unknown>>;
+  rowBindingStatus: Map<string, MacroTableOverrideBindingStatus>;
+  rowConflictCounts: Map<string, number>;
+  conflicts: MacroTableOverrideConflict[];
+  summary: MacroTableOverrideSummary;
+};
 
 type ObraRecord = {
   id: string;
@@ -131,6 +171,285 @@ function resolveObraSourceValue(obraValues: Record<string, unknown>, sourceField
   return null;
 }
 
+function normalizeBusinessIdentityValue(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
+}
+
+function resolveBusinessIdentityValue(rowData: Record<string, unknown>): string | null {
+  const candidateKeys = [
+    "nro",
+    "numero",
+    "nro_orden",
+    "numero_orden",
+    "order_number",
+    "certificado",
+    "nro_certificado",
+    "invoice_number",
+    "factura",
+    "id_negocio",
+  ];
+
+  for (const key of candidateKeys) {
+    if (!Object.prototype.hasOwnProperty.call(rowData, key)) continue;
+    const resolved = normalizeBusinessIdentityValue(rowData[key]);
+    if (resolved) return resolved;
+  }
+
+  return null;
+}
+
+function extractDocumentPath(rowData: Record<string, unknown>): string | null {
+  const value = rowData.__docPath;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function extractDocumentFileName(docPath: string | null): string | null {
+  if (!docPath) return null;
+  const parts = docPath.split("/").filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] ?? null : null;
+}
+
+function buildStableIdentityKey(
+  sourceTablaId: string | null | undefined,
+  lineageRowKey: string | null | undefined,
+): string | null {
+  if (!sourceTablaId || !lineageRowKey) return null;
+  return `${sourceTablaId}::${lineageRowKey}`;
+}
+
+function buildCellKey(rowId: string, columnId: string): string {
+  return `${rowId}::${columnId}`;
+}
+
+function chunkValues<T>(values: T[], size: number): T[][] {
+  if (values.length === 0) return [];
+  const normalizedSize = Math.max(1, size);
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += normalizedSize) {
+    chunks.push(values.slice(index, index + normalizedSize));
+  }
+  return chunks;
+}
+
+function dedupeOverrides(records: CustomValueRecord[]): CustomValueRecord[] {
+  const unique = new Map<string, CustomValueRecord>();
+  for (const record of records) {
+    unique.set(record.id, record);
+  }
+  return [...unique.values()];
+}
+
+function setRowBindingStatus(
+  map: Map<string, MacroTableOverrideBindingStatus>,
+  rowId: string,
+  nextStatus: MacroTableOverrideBindingStatus,
+) {
+  const current = map.get(rowId);
+  if (current === "conflict") return;
+  if (nextStatus === "conflict" || current == null) {
+    map.set(rowId, nextStatus);
+    return;
+  }
+  if (nextStatus === "stable" || current === "legacy") {
+    map.set(rowId, nextStatus);
+  }
+}
+
+function incrementCount(map: Map<string, number>, key: string) {
+  map.set(key, (map.get(key) ?? 0) + 1);
+}
+
+function buildOverrideConflict(args: {
+  macroTableId: string;
+  rowId: string;
+  sourceTablaId: string | null;
+  lineageRowKey: string | null;
+  columnId: string;
+  candidates: CustomValueRecord[];
+  detail: string;
+}): MacroTableOverrideConflict {
+  const uniqueCandidates = dedupeOverrides(args.candidates);
+  return {
+    code: LINEAGE_OVERRIDE_REATTACH_CONFLICT,
+    macroTableId: args.macroTableId,
+    rowId: args.rowId,
+    sourceTablaId: args.sourceTablaId,
+    lineageRowKey: args.lineageRowKey,
+    columnId: args.columnId,
+    candidateOverrideIds: uniqueCandidates.map((candidate) => candidate.id),
+    candidateSourceRowIds: uniqueCandidates.map((candidate) => candidate.source_row_id),
+    detail: args.detail,
+  };
+}
+
+function isMissingLineageMigrationError(message: string): boolean {
+  return /source_tabla_id|binding_status|binding_error|lineage_row_key|materialization_version|extraction_id/i.test(
+    message,
+  ) && /does not exist|column/i.test(message);
+}
+
+function resolveRouteErrorMessage(error: unknown): string {
+  if (error instanceof Error && typeof error.message === "string") {
+    return error.message;
+  }
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+  return "Error desconocido";
+}
+
+function resolveOverrideBindings(args: {
+  macroTableId: string;
+  currentRows: SourceRowRecord[];
+  customValues: CustomValueRecord[];
+}): OverrideResolution {
+  const rowById = new Map(args.currentRows.map((row) => [row.id, row]));
+  const rowByStableIdentity = new Map<string, SourceRowRecord>();
+  for (const row of args.currentRows) {
+    const stableIdentity = buildStableIdentityKey(row.tabla_id, row.lineage_row_key);
+    if (stableIdentity) {
+      rowByStableIdentity.set(stableIdentity, row);
+    }
+  }
+
+  const stableCandidatesByCell = new Map<string, CustomValueRecord[]>();
+  const legacyCandidatesByCell = new Map<string, CustomValueRecord[]>();
+  const matchedOverrideIds = new Set<string>();
+
+  for (const customValue of args.customValues) {
+    const stableIdentity = buildStableIdentityKey(
+      customValue.source_tabla_id,
+      customValue.lineage_row_key,
+    );
+    const stableRow = stableIdentity ? rowByStableIdentity.get(stableIdentity) : undefined;
+    if (stableRow) {
+      const key = buildCellKey(stableRow.id, customValue.column_id);
+      const list = stableCandidatesByCell.get(key) ?? [];
+      list.push(customValue);
+      stableCandidatesByCell.set(key, list);
+      matchedOverrideIds.add(customValue.id);
+    }
+
+    const legacyRow = rowById.get(customValue.source_row_id);
+    if (legacyRow) {
+      const key = buildCellKey(legacyRow.id, customValue.column_id);
+      const list = legacyCandidatesByCell.get(key) ?? [];
+      list.push(customValue);
+      legacyCandidatesByCell.set(key, list);
+      matchedOverrideIds.add(customValue.id);
+    }
+  }
+
+  const valuesByRowId = new Map<string, Map<string, unknown>>();
+  const rowBindingStatus = new Map<string, MacroTableOverrideBindingStatus>();
+  const rowConflictCounts = new Map<string, number>();
+  const conflicts: MacroTableOverrideConflict[] = [];
+  const appliedRowIds = new Set<string>();
+  let appliedStable = 0;
+  let appliedLegacy = 0;
+
+  const candidateCellKeys = new Set([
+    ...stableCandidatesByCell.keys(),
+    ...legacyCandidatesByCell.keys(),
+  ]);
+
+  for (const cellKey of candidateCellKeys) {
+    const [rowId, columnId] = cellKey.split("::");
+    const row = rowById.get(rowId);
+    if (!row || !columnId) continue;
+
+    const stableCandidates = dedupeOverrides(stableCandidatesByCell.get(cellKey) ?? []);
+    const legacyCandidates = dedupeOverrides(legacyCandidatesByCell.get(cellKey) ?? []);
+    const extraLegacyCandidates = legacyCandidates.filter(
+      (legacyCandidate) =>
+        !stableCandidates.some((stableCandidate) => stableCandidate.id === legacyCandidate.id),
+    );
+
+    let conflictDetail: string | null = null;
+    if (
+      stableCandidates.some((candidate) => candidate.binding_status === "conflict") ||
+      legacyCandidates.some((candidate) => candidate.binding_status === "conflict")
+    ) {
+      conflictDetail = "El override ya estaba marcado con conflicto de lineage.";
+    } else if (stableCandidates.length > 1) {
+      conflictDetail =
+        "Hay multiples overrides estables para la misma fila y columna despues del reattach.";
+    } else if (stableCandidates.length === 1 && extraLegacyCandidates.length > 0) {
+      conflictDetail =
+        "Conviven override estable y override legacy para la misma celda logica; no se resuelve automaticamente.";
+    } else if (stableCandidates.length === 0 && legacyCandidates.length > 1) {
+      conflictDetail =
+        "Hay multiples overrides legacy para la misma celda y no se puede elegir uno sin ambiguedad.";
+    }
+
+    if (conflictDetail) {
+      conflicts.push(
+        buildOverrideConflict({
+          macroTableId: args.macroTableId,
+          rowId,
+          sourceTablaId: row.tabla_id,
+          lineageRowKey: row.lineage_row_key,
+          columnId,
+          candidates: [...stableCandidates, ...legacyCandidates],
+          detail: conflictDetail,
+        }),
+      );
+      setRowBindingStatus(rowBindingStatus, rowId, "conflict");
+      incrementCount(rowConflictCounts, rowId);
+      continue;
+    }
+
+    const selected =
+      stableCandidates[0] ??
+      legacyCandidates[0] ??
+      null;
+    if (!selected) continue;
+
+    if (!valuesByRowId.has(rowId)) {
+      valuesByRowId.set(rowId, new Map());
+    }
+    valuesByRowId.get(rowId)?.set(columnId, selected.value);
+    appliedRowIds.add(rowId);
+
+    const selectedStatus =
+      selected.binding_status === "stable" ? "stable" : "legacy";
+    setRowBindingStatus(rowBindingStatus, rowId, selectedStatus);
+    if (selectedStatus === "stable") {
+      appliedStable += 1;
+    } else {
+      appliedLegacy += 1;
+    }
+  }
+
+  const rowsWithConflicts = new Set(conflicts.map((conflict) => conflict.rowId));
+  for (const rowId of rowsWithConflicts) {
+    appliedRowIds.add(rowId);
+  }
+
+  return {
+    valuesByRowId,
+    rowBindingStatus,
+    rowConflictCounts,
+    conflicts,
+    summary: {
+      totalRecords: dedupeOverrides(args.customValues.filter((value) => matchedOverrideIds.has(value.id)))
+        .length,
+      appliedStable,
+      appliedLegacy,
+      conflicts: conflicts.length,
+      rowsWithOverrides: appliedRowIds.size,
+      rowsWithConflicts: rowsWithConflicts.size,
+    },
+  };
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const access = await resolveRequestAccessContext();
@@ -166,6 +485,8 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   try {
+    const supabaseInBatchSize = 40;
+
     // Verify macro table exists and belongs to tenant
     const { data: macroTable, error: tableError } = await supabase
       .from("macro_tables")
@@ -313,6 +634,15 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({
         rows: [],
         columns,
+        overrideSummary: {
+          totalRecords: 0,
+          appliedStable: 0,
+          appliedLegacy: 0,
+          conflicts: 0,
+          rowsWithOverrides: 0,
+          rowsWithConflicts: 0,
+        },
+        overrideConflicts: [],
         pagination: {
           page: 1,
           limit: 50,
@@ -348,51 +678,177 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     // Fetch all rows from source tablas
-    const { data: allRows, error: rowsError } = await supabase
-      .from("obra_tabla_rows")
-      .select("id, tabla_id, data, created_at")
-      .in("tabla_id", tablaIds)
-      .order("created_at", { ascending: false });
+    const allRows: Array<Record<string, unknown>> = [];
+    for (const tablaIdChunk of chunkValues(tablaIds, supabaseInBatchSize)) {
+      const { data: rowChunk, error: rowsError } = await supabase
+        .from("obra_tabla_rows")
+        .select("id, tabla_id, lineage_row_key, extraction_id, materialization_version, data, created_at")
+        .in("tabla_id", tablaIdChunk)
+        .order("created_at", { ascending: false });
 
-    if (rowsError) throw rowsError;
+      if (rowsError) throw rowsError;
+      allRows.push(...(rowChunk ?? []));
+    }
 
-    // Fetch custom values for this macro table
-    const rowIds = (allRows ?? []).map(r => r.id);
-    const customValuesMap = new Map<string, Map<string, unknown>>();
-    
+    const rowRecords: SourceRowRecord[] = allRows
+      .map((row) => ({
+      id: row.id as string,
+      tabla_id: row.tabla_id as string,
+      lineage_row_key:
+        typeof row.lineage_row_key === "string" ? (row.lineage_row_key as string) : null,
+      extraction_id:
+        typeof row.extraction_id === "string" ? (row.extraction_id as string) : null,
+      materialization_version:
+        typeof row.materialization_version === "number"
+          ? (row.materialization_version as number)
+          : row.materialization_version == null
+            ? null
+            : Number(row.materialization_version),
+      data:
+        row.data && typeof row.data === "object" && !Array.isArray(row.data)
+          ? (row.data as Record<string, unknown>)
+          : {},
+      created_at: typeof row.created_at === "string" ? (row.created_at as string) : null,
+      }))
+      .sort((left, right) => {
+        const leftTime = left.created_at ? new Date(left.created_at).getTime() : 0;
+        const rightTime = right.created_at ? new Date(right.created_at).getTime() : 0;
+        return rightTime - leftTime;
+      });
+
+    const rowIds = rowRecords.map((row) => row.id);
+    const legacyCustomValuesById = new Map<string, CustomValueRecord>();
+    const stableCustomValuesById = new Map<string, CustomValueRecord>();
+
     if (rowIds.length > 0) {
-      const { data: customValues, error: customError } = await supabase
-        .from("macro_table_custom_values")
-        .select("id, source_row_id, column_id, value")
-        .eq("macro_table_id", id)
-        .in("source_row_id", rowIds);
+      for (const rowIdChunk of chunkValues(rowIds, supabaseInBatchSize)) {
+        const { data: legacyCustomValues, error: legacyCustomValuesError } = await supabase
+          .from("macro_table_custom_values")
+          .select(
+            "id, macro_table_id, source_row_id, source_tabla_id, lineage_row_key, column_id, value, binding_status, binding_error, created_at, updated_at",
+          )
+          .eq("macro_table_id", id)
+          .in("source_row_id", rowIdChunk);
 
-      if (customError) throw customError;
+        if (legacyCustomValuesError) throw legacyCustomValuesError;
 
-      // Build nested map: rowId -> columnId -> value
-      for (const cv of customValues ?? []) {
-        const rowId = cv.source_row_id as string;
-        const columnId = cv.column_id as string;
-        if (!customValuesMap.has(rowId)) {
-          customValuesMap.set(rowId, new Map());
+        for (const customValue of legacyCustomValues ?? []) {
+          legacyCustomValuesById.set(customValue.id as string, {
+            id: customValue.id as string,
+            macro_table_id: customValue.macro_table_id as string,
+            source_row_id: customValue.source_row_id as string,
+            source_tabla_id:
+              typeof customValue.source_tabla_id === "string"
+                ? (customValue.source_tabla_id as string)
+                : null,
+            lineage_row_key:
+              typeof customValue.lineage_row_key === "string"
+                ? (customValue.lineage_row_key as string)
+                : null,
+            column_id: customValue.column_id as string,
+            value: customValue.value,
+            binding_status:
+              customValue.binding_status === "stable" ||
+              customValue.binding_status === "conflict" ||
+              customValue.binding_status === "legacy"
+                ? (customValue.binding_status as MacroTableOverrideBindingStatus)
+                : null,
+            binding_error:
+              customValue.binding_error &&
+              typeof customValue.binding_error === "object" &&
+              !Array.isArray(customValue.binding_error)
+                ? (customValue.binding_error as Record<string, unknown>)
+                : null,
+            created_at:
+              typeof customValue.created_at === "string" ? (customValue.created_at as string) : null,
+            updated_at:
+              typeof customValue.updated_at === "string" ? (customValue.updated_at as string) : null,
+          });
         }
-        customValuesMap.get(rowId)?.set(columnId, cv.value);
       }
     }
 
+    if (tablaIds.length > 0) {
+      for (const tablaIdChunk of chunkValues(tablaIds, supabaseInBatchSize)) {
+        const { data: stableCustomValues, error: stableCustomValuesError } = await supabase
+          .from("macro_table_custom_values")
+          .select(
+            "id, macro_table_id, source_row_id, source_tabla_id, lineage_row_key, column_id, value, binding_status, binding_error, created_at, updated_at",
+          )
+          .eq("macro_table_id", id)
+          .in("source_tabla_id", tablaIdChunk);
+
+        if (stableCustomValuesError) throw stableCustomValuesError;
+
+        for (const customValue of stableCustomValues ?? []) {
+          stableCustomValuesById.set(customValue.id as string, {
+            id: customValue.id as string,
+            macro_table_id: customValue.macro_table_id as string,
+            source_row_id: customValue.source_row_id as string,
+            source_tabla_id:
+              typeof customValue.source_tabla_id === "string"
+                ? (customValue.source_tabla_id as string)
+                : null,
+            lineage_row_key:
+              typeof customValue.lineage_row_key === "string"
+                ? (customValue.lineage_row_key as string)
+                : null,
+            column_id: customValue.column_id as string,
+            value: customValue.value,
+            binding_status:
+              customValue.binding_status === "stable" ||
+              customValue.binding_status === "conflict" ||
+              customValue.binding_status === "legacy"
+                ? (customValue.binding_status as MacroTableOverrideBindingStatus)
+                : null,
+            binding_error:
+              customValue.binding_error &&
+              typeof customValue.binding_error === "object" &&
+              !Array.isArray(customValue.binding_error)
+                ? (customValue.binding_error as Record<string, unknown>)
+                : null,
+            created_at:
+              typeof customValue.created_at === "string" ? (customValue.created_at as string) : null,
+            updated_at:
+              typeof customValue.updated_at === "string" ? (customValue.updated_at as string) : null,
+          });
+        }
+      }
+    }
+
+    const overrideResolution = resolveOverrideBindings({
+      macroTableId: id,
+      currentRows: rowRecords,
+      customValues: [
+        ...legacyCustomValuesById.values(),
+        ...stableCustomValuesById.values(),
+      ],
+    });
+
     // Map rows to macro table format
-    const mappedRows: MacroTableRow[] = (allRows ?? []).map((row) => {
-      const tablaId = row.tabla_id as string;
+    const mappedRows: MacroTableRow[] = rowRecords.map((row) => {
+      const tablaId = row.tabla_id;
       const tablaInfo = tablaInfoMap.get(tablaId);
-      const rowData = (row.data as Record<string, unknown>) ?? {};
-      const rowCustomValues = customValuesMap.get(row.id as string);
+      const rowData = row.data ?? {};
+      const rowCustomValues = overrideResolution.valuesByRowId.get(row.id);
+      const businessIdentity = resolveBusinessIdentityValue(rowData);
+      const docPath = extractDocumentPath(rowData);
+      const docFileName = extractDocumentFileName(docPath);
 
       const mappedRow: MacroTableRow = {
-        id: row.id as string,
+        id: row.id,
         _sourceTablaId: tablaId,
         _sourceTablaName: tablaInfo?.name ?? "",
         _obraId: tablaInfo?.obraId ?? "",
         _obraName: tablaInfo?.obraName ?? "",
+        _businessIdentity: businessIdentity,
+        _lineageRowKey: row.lineage_row_key,
+        _extractionId: row.extraction_id,
+        _materializationVersion: row.materialization_version,
+        _docPath: docPath,
+        _docFileName: docFileName,
+        _overrideBindingStatus: overrideResolution.rowBindingStatus.get(row.id) ?? null,
+        _overrideConflictCount: overrideResolution.rowConflictCounts.get(row.id) ?? 0,
       };
 
       // Map columns
@@ -439,6 +895,8 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({
       rows: pagedRows,
       columns,
+      overrideSummary: overrideResolution.summary,
+      overrideConflicts: overrideResolution.conflicts,
       pagination: {
         page: safePage,
         limit,
@@ -450,7 +908,17 @@ export async function GET(request: Request, context: RouteContext) {
     });
   } catch (error) {
     console.error("[macro-tables:rows:get]", error);
-    const message = error instanceof Error ? error.message : "Error desconocido";
+    const message = resolveRouteErrorMessage(error);
+    if (isMissingLineageMigrationError(message)) {
+      return NextResponse.json(
+        {
+          error:
+            "Faltan migraciones de lineage en la base activa. Aplica 0093_row_lineage_identity.sql y 0094_macro_table_lineage_overrides.sql.",
+          code: "LINEAGE_MIGRATION_REQUIRED",
+        },
+        { status: 500 },
+      );
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -518,37 +986,314 @@ export async function POST(request: Request, context: RouteContext) {
         .map((col) => col.id)
     );
 
-    // Filter to only valid editable columns
-    const validValues = customValues.filter(cv => 
-      cv.sourceRowId && 
-      cv.columnId && 
-      validEditableColumnIds.has(cv.columnId)
-    );
+    // Filter to only valid editable columns and keep the latest value per logical cell.
+    const validValueMap = new Map<string, CustomValueInput>();
+    for (const customValue of customValues) {
+      if (
+        !customValue.sourceRowId ||
+        !customValue.columnId ||
+        !validEditableColumnIds.has(customValue.columnId)
+      ) {
+        continue;
+      }
+      validValueMap.set(
+        buildCellKey(customValue.sourceRowId, customValue.columnId),
+        customValue,
+      );
+    }
+    const validValues = [...validValueMap.values()];
 
     if (validValues.length === 0) {
       return NextResponse.json({ ok: true, updated: 0 });
     }
 
-    // Upsert custom values
-    const upsertPayload = validValues.map(cv => ({
-      macro_table_id: id,
-      source_row_id: cv.sourceRowId,
-      column_id: cv.columnId,
-      value: cv.value,
-    }));
+    const sourceRowIds = [...new Set(validValues.map((value) => value.sourceRowId))];
+    const { data: sourceRows, error: sourceRowsError } = await supabase
+      .from("obra_tabla_rows")
+      .select("id, tabla_id, lineage_row_key")
+      .in("id", sourceRowIds);
 
-    const { error: upsertError } = await supabase
-      .from("macro_table_custom_values")
-      .upsert(upsertPayload, { 
-        onConflict: "macro_table_id,source_row_id,column_id" 
-      });
+    if (sourceRowsError) throw sourceRowsError;
 
-    if (upsertError) throw upsertError;
+    const sourceRowMap = new Map(
+      (sourceRows ?? []).map((row) => [
+        row.id as string,
+        {
+          id: row.id as string,
+          tablaId: row.tabla_id as string,
+          lineageRowKey:
+            typeof row.lineage_row_key === "string" ? (row.lineage_row_key as string) : null,
+        },
+      ]),
+    );
 
-    return NextResponse.json({ ok: true, updated: validValues.length });
+    const stableTablaIds = [...new Set(
+      [...sourceRowMap.values()]
+        .map((row) => row.tablaId)
+        .filter((tablaId): tablaId is string => Boolean(tablaId)),
+    )];
+
+    const existingOverridesById = new Map<string, CustomValueRecord>();
+
+    if (sourceRowIds.length > 0) {
+      const { data: existingLegacyOverrides, error: existingLegacyOverridesError } = await supabase
+        .from("macro_table_custom_values")
+        .select(
+          "id, macro_table_id, source_row_id, source_tabla_id, lineage_row_key, column_id, value, binding_status, binding_error, created_at, updated_at",
+        )
+        .eq("macro_table_id", id)
+        .in("source_row_id", sourceRowIds)
+        .in("column_id", columnIds);
+
+      if (existingLegacyOverridesError) throw existingLegacyOverridesError;
+
+      for (const override of existingLegacyOverrides ?? []) {
+        existingOverridesById.set(override.id as string, {
+          id: override.id as string,
+          macro_table_id: override.macro_table_id as string,
+          source_row_id: override.source_row_id as string,
+          source_tabla_id:
+            typeof override.source_tabla_id === "string" ? (override.source_tabla_id as string) : null,
+          lineage_row_key:
+            typeof override.lineage_row_key === "string" ? (override.lineage_row_key as string) : null,
+          column_id: override.column_id as string,
+          value: override.value,
+          binding_status:
+            override.binding_status === "stable" ||
+            override.binding_status === "conflict" ||
+            override.binding_status === "legacy"
+              ? (override.binding_status as MacroTableOverrideBindingStatus)
+              : null,
+          binding_error:
+            override.binding_error &&
+            typeof override.binding_error === "object" &&
+            !Array.isArray(override.binding_error)
+              ? (override.binding_error as Record<string, unknown>)
+              : null,
+          created_at: typeof override.created_at === "string" ? (override.created_at as string) : null,
+          updated_at: typeof override.updated_at === "string" ? (override.updated_at as string) : null,
+        });
+      }
+    }
+
+    if (stableTablaIds.length > 0) {
+      const { data: existingStableOverrides, error: existingStableOverridesError } = await supabase
+        .from("macro_table_custom_values")
+        .select(
+          "id, macro_table_id, source_row_id, source_tabla_id, lineage_row_key, column_id, value, binding_status, binding_error, created_at, updated_at",
+        )
+        .eq("macro_table_id", id)
+        .in("source_tabla_id", stableTablaIds)
+        .in("column_id", columnIds);
+
+      if (existingStableOverridesError) throw existingStableOverridesError;
+
+      for (const override of existingStableOverrides ?? []) {
+        existingOverridesById.set(override.id as string, {
+          id: override.id as string,
+          macro_table_id: override.macro_table_id as string,
+          source_row_id: override.source_row_id as string,
+          source_tabla_id:
+            typeof override.source_tabla_id === "string" ? (override.source_tabla_id as string) : null,
+          lineage_row_key:
+            typeof override.lineage_row_key === "string" ? (override.lineage_row_key as string) : null,
+          column_id: override.column_id as string,
+          value: override.value,
+          binding_status:
+            override.binding_status === "stable" ||
+            override.binding_status === "conflict" ||
+            override.binding_status === "legacy"
+              ? (override.binding_status as MacroTableOverrideBindingStatus)
+              : null,
+          binding_error:
+            override.binding_error &&
+            typeof override.binding_error === "object" &&
+            !Array.isArray(override.binding_error)
+              ? (override.binding_error as Record<string, unknown>)
+              : null,
+          created_at: typeof override.created_at === "string" ? (override.created_at as string) : null,
+          updated_at: typeof override.updated_at === "string" ? (override.updated_at as string) : null,
+        });
+      }
+    }
+
+    const existingOverrides = [...existingOverridesById.values()];
+    const conflicts: MacroTableOverrideConflict[] = [];
+    const updates: Array<Record<string, unknown>> = [];
+    const inserts: Array<Record<string, unknown>> = [];
+    let stableWrites = 0;
+    let legacyWrites = 0;
+
+    for (const customValue of validValues) {
+      const sourceRow = sourceRowMap.get(customValue.sourceRowId);
+      if (!sourceRow) continue;
+
+      const stableIdentity = buildStableIdentityKey(sourceRow.tablaId, sourceRow.lineageRowKey);
+      const stableMatches = stableIdentity
+        ? existingOverrides.filter(
+            (override) =>
+              override.column_id === customValue.columnId &&
+              buildStableIdentityKey(override.source_tabla_id, override.lineage_row_key) ===
+                stableIdentity,
+          )
+        : [];
+      const legacyMatches = existingOverrides.filter(
+        (override) =>
+          override.column_id === customValue.columnId &&
+          override.source_row_id === customValue.sourceRowId,
+      );
+      const extraLegacyMatches = legacyMatches.filter(
+        (legacyMatch) => !stableMatches.some((stableMatch) => stableMatch.id === legacyMatch.id),
+      );
+
+      let conflictDetail: string | null = null;
+      if (
+        stableMatches.some((match) => match.binding_status === "conflict") ||
+        extraLegacyMatches.some((match) => match.binding_status === "conflict")
+      ) {
+        conflictDetail = "La celda ya tiene un conflicto previo de reattach por lineage.";
+      } else if (stableMatches.length > 1) {
+        conflictDetail = "Hay multiples overrides estables para la misma identidad estable.";
+      } else if (stableMatches.length === 1 && extraLegacyMatches.length > 0) {
+        conflictDetail =
+          "Existe un override estable y otro legacy para la misma celda; se requiere resolver el conflicto.";
+      } else if (stableMatches.length === 0 && legacyMatches.length > 1) {
+        conflictDetail = "Hay multiples overrides legacy para la misma celda.";
+      }
+
+      if (conflictDetail) {
+        conflicts.push(
+          buildOverrideConflict({
+            macroTableId: id,
+            rowId: customValue.sourceRowId,
+            sourceTablaId: sourceRow.tablaId,
+            lineageRowKey: sourceRow.lineageRowKey,
+            columnId: customValue.columnId,
+            candidates: [...stableMatches, ...legacyMatches],
+            detail: conflictDetail,
+          }),
+        );
+        continue;
+      }
+
+      const bindingStatus: MacroTableOverrideBindingStatus =
+        sourceRow.lineageRowKey && sourceRow.tablaId ? "stable" : "legacy";
+      const targetOverride = stableMatches[0] ?? legacyMatches[0] ?? null;
+      const payload = {
+        macro_table_id: id,
+        source_row_id: customValue.sourceRowId,
+        source_tabla_id: bindingStatus === "stable" ? sourceRow.tablaId : null,
+        lineage_row_key: bindingStatus === "stable" ? sourceRow.lineageRowKey : null,
+        column_id: customValue.columnId,
+        value: customValue.value,
+        binding_status: bindingStatus,
+        binding_error: null,
+      };
+
+      if (bindingStatus === "stable") {
+        stableWrites += 1;
+      } else {
+        legacyWrites += 1;
+      }
+
+      if (targetOverride) {
+        updates.push({
+          id: targetOverride.id,
+          ...payload,
+        });
+      } else {
+        inserts.push(payload);
+      }
+    }
+
+    if (conflicts.length > 0) {
+      // Slice note: downstream conflict persistence lives in binding_error.errorCode for now.
+      // This is the current transition backing, not the final canonical conflict model.
+      const conflictUpdatesById = new Map<string, Record<string, unknown>>();
+      for (const conflict of conflicts) {
+        for (const overrideId of conflict.candidateOverrideIds) {
+          const existingOverride = existingOverridesById.get(overrideId);
+          if (!existingOverride) continue;
+          conflictUpdatesById.set(overrideId, {
+            id: existingOverride.id,
+            macro_table_id: existingOverride.macro_table_id,
+            source_row_id: existingOverride.source_row_id,
+            source_tabla_id: existingOverride.source_tabla_id,
+            lineage_row_key: existingOverride.lineage_row_key,
+            column_id: existingOverride.column_id,
+            value: existingOverride.value,
+            binding_status: "conflict" as const,
+            binding_error: {
+              errorCode: LINEAGE_OVERRIDE_REATTACH_CONFLICT,
+              detail: conflict.detail,
+              columnId: conflict.columnId,
+              sourceTablaId: conflict.sourceTablaId,
+              lineageRowKey: conflict.lineageRowKey,
+              candidateOverrideIds: conflict.candidateOverrideIds,
+              candidateSourceRowIds: conflict.candidateSourceRowIds,
+            },
+          });
+        }
+      }
+      const conflictUpdates = [...conflictUpdatesById.values()];
+
+      if (conflictUpdates.length > 0) {
+        const { error: conflictPersistError } = await supabase
+          .from("macro_table_custom_values")
+          .upsert(conflictUpdates, { onConflict: "id" });
+
+        if (conflictPersistError) throw conflictPersistError;
+      }
+
+      return NextResponse.json(
+        {
+          error: "No se pudo reatachar uno o mas overrides por lineage.",
+          code: LINEAGE_OVERRIDE_REATTACH_CONFLICT,
+          conflicts,
+        },
+        { status: 409 },
+      );
+    }
+
+    if (updates.length > 0) {
+      const { error: updateOverridesError } = await supabase
+        .from("macro_table_custom_values")
+        .upsert(updates, { onConflict: "id" });
+
+      if (updateOverridesError) throw updateOverridesError;
+    }
+
+    if (inserts.length > 0) {
+      const { error: insertOverridesError } = await supabase
+        .from("macro_table_custom_values")
+        .insert(inserts);
+
+      if (insertOverridesError) throw insertOverridesError;
+    }
+
+    // TODO(domain-model): Emit `fila_actualizada` / `override_actualizado` domain event
+    // so dependent calculations/recommendations can be processed consistently.
+    return NextResponse.json({
+      ok: true,
+      updated: validValues.length,
+      bindingSummary: {
+        stable: stableWrites,
+        legacy: legacyWrites,
+      },
+    });
   } catch (error) {
     console.error("[macro-tables:rows:save]", error);
-    const message = error instanceof Error ? error.message : "Error desconocido";
+    const message = resolveRouteErrorMessage(error);
+    if (isMissingLineageMigrationError(message)) {
+      return NextResponse.json(
+        {
+          error:
+            "Faltan migraciones de lineage en la base activa. Aplica 0093_row_lineage_identity.sql y 0094_macro_table_lineage_overrides.sql.",
+          code: "LINEAGE_MIGRATION_REQUIRED",
+        },
+        { status: 500 },
+      );
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

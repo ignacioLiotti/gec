@@ -372,6 +372,9 @@ async function syncDefaultTablaColumns(
 	rawColumns: DefaultColumnInput[],
 	hasNestedData: boolean
 ) {
+	// TODO(domain-model): Persist baseline schema version for this default tabla after
+	// any structural change, using canonical semantic attributes (field_key/data_type/
+	// required/ocr_scope/order + semantically relevant config).
 	const draftColumns = rawColumns.map((column, index) =>
 		normalizeDefaultColumnInput(column, index, hasNestedData)
 	);
@@ -544,6 +547,15 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 		folderId: string;
 		forceSync?: boolean;
 		previousPath?: string;
+		// TODO(domain-model): include `compatibility_class` from deterministic diff
+		// classifier and require it before enqueue/execution.
+		// TODO(domain-model): for `destructiva`, include approval contract fields:
+		// approved_by, approved_role, approved_at, approval_token, token_expires_at,
+		// preview_snapshot_id/hash, migration_run_id.
+		// TODO(domain-model): include immutable snapshot integrity fields:
+		// classification_rules_version, canonical_snapshot_hash, snapshot_hmac_signature.
+		// TODO(domain-model): add `snapshot_canonicalization_version` and compute hash using
+		// provisional strategy: JCS/RFC 8785 + domain array identity rules.
 	} = { folderId };
 
 	if (forceSync === true) {
@@ -554,6 +566,9 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 		payload.previousPath = previousPath.trim();
 	}
 
+	// TODO(domain-model): This flow still uses `background_jobs` as the primary record.
+	// Add a dedicated `migration_runs` entity with who/why/what, compatibility class,
+	// impact_estimated vs impact_real, schema identity before/after, and rollback_reference.
 	const { data: queuedJob, error: jobError } = await supabase
 		.from("background_jobs")
 		.insert({
@@ -574,6 +589,18 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 	let immediateError: unknown = null;
 
 	try {
+		// TODO(domain-model): Force sync paths can be destructive, but this executes directly.
+		// Require an explicit impact preview + `validated` state before allowing execution.
+		// TODO(domain-model): Apply deterministic compatibility rules before preview:
+		// no destructiva | semidestructiva | destructiva (max severity wins).
+		// If compatibility cannot be proven, escalate severity (never default to non-destructive).
+		// TODO(domain-model): Enforce owner/admin approval for `destructiva` against a frozen
+		// preview snapshot. If snapshot changes, invalidate approval and require re-approval.
+		// TODO(domain-model): Recompute canonical preview snapshot and verify:
+		// 1) hash equality against approved snapshot
+		// 2) server HMAC signature validity
+		// 3) same classification_rules_version used during approval
+		// Any mismatch must hard-fail and force revalidation.
 		const admin = createSupabaseAdminClient();
 		immediateResult = await applyDefaultFolderToExistingObras(admin, {
 			tenantId,
@@ -610,6 +637,9 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 	}
 
 	if (immediateResult?.ok) {
+		// TODO(domain-model): `done` here is only technical job completion.
+		// Persist final auditable migration outcome with impact counters and explicit state.
+		// TODO(domain-model): Mark approval token as consumed (one-shot) on successful start/commit.
 		const { error: doneError } = await supabase
 			.from("background_jobs")
 			.update({
@@ -629,6 +659,8 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 			typeof immediateResult.reason === "string"
 				? immediateResult.reason
 				: "immediate sync skipped";
+		// TODO(domain-model): Record semantically as migration `failed`/`rolled_back` with
+		// scope + impact details, not only `last_error` in background job metadata.
 		const { error: failedError } = await supabase
 			.from("background_jobs")
 			.update({
@@ -645,6 +677,8 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 
 	if (immediateError) {
 		const message = immediateError instanceof Error ? immediateError.message : String(immediateError);
+		// TODO(domain-model): Even partial failures must end in a final auditable outcome.
+		// Add migration finalization event to avoid "hanging without domain result".
 		const { error: updateError } = await supabase
 			.from("background_jobs")
 			.update({
@@ -672,6 +706,8 @@ async function enqueueAndApplyDefaultFolderRemoval(params: {
 			: [],
 	};
 
+	// TODO(domain-model): Removal is potentially destructive and should run through the same
+	// dedicated migration entity + preview/validation lifecycle before execution.
 	const { data: queuedJob, error: jobError } = await supabase
 		.from("background_jobs")
 		.insert({
@@ -719,6 +755,8 @@ async function enqueueAndApplyDefaultFolderRemoval(params: {
 	if (!queuedJob?.id) return;
 
 	if (immediateResult?.ok) {
+		// TODO(domain-model): Store impact_real (tablas/files removed) in migration audit record,
+		// not only as an implicit successful background job transition.
 		const { error: doneError } = await supabase
 			.from("background_jobs")
 			.update({
@@ -738,6 +776,8 @@ async function enqueueAndApplyDefaultFolderRemoval(params: {
 
 	if (immediateError) {
 		const message = immediateError instanceof Error ? immediateError.message : String(immediateError);
+		// TODO(domain-model): Persist failure in migration state machine (`failed`/`rolled_back`)
+		// including actor, justification and compensation reference when applicable.
 		const { error: failedError } = await supabase
 			.from("background_jobs")
 			.update({
