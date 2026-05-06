@@ -1,16 +1,24 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
-import { getRouteAccessConfig, type Role } from "./route-access";
-import {
-	resolveTenantMembership,
-	DEFAULT_TENANT_ID,
-} from "@/lib/tenant-selection";
+import { getRouteAccessConfig } from "./route-access";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 
 export type PermissionLevel = "read" | "edit" | "admin";
+
+type PermissionRelation =
+	| { key?: string | null }
+	| Array<{ key?: string | null }>
+	| null
+	| undefined;
+
+function getPermissionRelationKey(value: PermissionRelation) {
+	const record = Array.isArray(value) ? value[0] : value;
+	return typeof record?.key === "string" ? record.key : null;
+}
 
 /**
  * Get user roles for the current tenant
@@ -97,7 +105,9 @@ export async function getUserRoles(): Promise<{
 				console.error("Error fetching user role IDs:", userRoleIdsError);
 			} else if (userRoleIds && userRoleIds.length > 0) {
 				// Step 2: Get role details for those role_ids, filtered by tenant
-				const fetchedRoleIds = userRoleIds.map((ur: any) => ur.role_id);
+				const fetchedRoleIds = (userRoleIds as Array<{ role_id: string }>).map(
+					(ur) => ur.role_id,
+				);
 				const { data: roleDetails, error: roleDetailsError } = await supabase
 					.from("roles")
 					.select("id, name, tenant_id")
@@ -179,7 +189,17 @@ export async function canAccessRoute(path: string): Promise<boolean> {
 
 	// If no roles required, allow access (most routes)
 	// Fine-grained access is controlled via sidebar_macro_tables and macro_table_permissions
-	return config.allowedRoles.length === 0;
+	if (config.allowedRoles.length > 0) {
+		return false;
+	}
+
+	if (config.requiredPermissions?.length) {
+		for (const permissionKey of config.requiredPermissions) {
+			if (!(await hasPermission(permissionKey))) return false;
+		}
+	}
+
+	return true;
 }
 
 /**
@@ -389,7 +409,7 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
  * Get all permission keys the user has
  */
 export async function getUserPermissionKeys(): Promise<string[]> {
-	const { roles, isAdmin, isSuperAdmin, tenantId } = await getUserRoles();
+	const { isAdmin, isSuperAdmin, tenantId } = await getUserRoles();
 
 	if (!tenantId) {
 		return [];
@@ -422,7 +442,7 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 		.eq("is_granted", true);
 
 	for (const o of overrides ?? []) {
-		const key = (o.permissions as any)?.key;
+		const key = getPermissionRelationKey(o.permissions as PermissionRelation);
 		if (key) {
 			permissionKeys.add(key);
 		}
@@ -444,7 +464,7 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 			.in("role_id", roleIds);
 
 		for (const rp of rolePerms ?? []) {
-			const key = (rp.permissions as any)?.key;
+			const key = getPermissionRelationKey(rp.permissions as PermissionRelation);
 			if (key) {
 				permissionKeys.add(key);
 			}

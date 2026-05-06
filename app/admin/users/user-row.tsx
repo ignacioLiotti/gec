@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 export default function UserRow({
   row,
@@ -18,6 +18,7 @@ export default function UserRow({
   const [selectedOrgRole, setSelectedOrgRole] = useState<string>(row.membership_role);
   const [newRoleId, setNewRoleId] = useState<string>("");
   const [newPermissionId, setNewPermissionId] = useState<string>("");
+  const [impersonateError, setImpersonateError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -56,6 +57,35 @@ export default function UserRow({
     await mod.updateMembershipRole({ tenantId, userId: row.user_id, role: selectedOrgRole as any });
   }
 
+  async function startImpersonation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setImpersonateError(null);
+
+    const fd = new FormData();
+    fd.set("user_id", row.user_id);
+    const response = await fetch(new URL("/api/impersonate/start", window.location.origin), {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(async () => ({
+        error: await response.text().catch(() => ""),
+      }));
+      const message =
+        typeof payload.error === "string" && payload.error.trim()
+          ? payload.error
+          : `No se pudo suplantar usuario (${response.status})`;
+      setImpersonateError(message);
+      console.error("[impersonate:start]", response.status, message);
+      return;
+    }
+
+    location.reload();
+  }
+
   const assignedRoleIds = new Set(assignedRoles.map((r: any) => r.role_id));
   const roleGrantSet = new Set((sources?.roleGrants ?? []).map((g) => g.permissionId));
   const overrideSet = new Set(sources?.overrideIds ?? []);
@@ -65,16 +95,12 @@ export default function UserRow({
       <td className="px-3 py-2">
         <div className="text-sm font-medium">{row.full_name ?? row.email ?? row.user_id}</div>
         <div className="text-xs text-foreground/60 font-mono">{row.email ?? row.user_id}</div>
-        <form
-          action={async () => {
-            const fd = new FormData();
-            fd.set("user_id", row.user_id);
-            await fetch("/api/impersonate/start", { method: "POST", body: fd });
-            location.reload();
-          }}
-        >
+        <form onSubmit={startImpersonation}>
           <button className="mt-2 rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Suplantar</button>
         </form>
+        {impersonateError ? (
+          <div className="mt-1 text-xs text-red-600">{impersonateError}</div>
+        ) : null}
       </td>
       <td className="px-3 py-2">
         <form action={updateOrgRole} className="flex items-center gap-2">

@@ -32,6 +32,10 @@ import {
   deriveLineageRowKeys,
   LineageReconciliationConflictError,
 } from "@/lib/lineage";
+import {
+  canAutoWriteDataFlow,
+  tryRecomputeObraDataFlowWritebacks,
+} from "@/lib/data-flow-recompute";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -1577,12 +1581,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
 
+    const dataFlowRecompute = await tryRecomputeObraDataFlowWritebacks({
+      supabase,
+      tenantId,
+      obraId,
+      actorUserId: user?.id ?? null,
+      trigger: "source_change",
+      allowAutoWrite: await canAutoWriteDataFlow({ supabase, tenantId }),
+    });
+
     return NextResponse.json({
       ok: true,
       inserted: perTable.reduce((acc, t) => acc + t.inserted, 0),
       extractionId: extractionIdForAudit,
       perTable,
       file: storageInfo ? { bucket: storageInfo.bucket, path: storageInfo.path } : null,
+      dataFlowRecompute,
     });
   } catch (error) {
     const message = localizeOcrProviderErrorMessage(

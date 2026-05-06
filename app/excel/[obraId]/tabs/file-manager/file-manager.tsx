@@ -67,14 +67,13 @@ import { toast } from 'sonner';
 import * as Sentry from '@sentry/nextjs';
 import { useQueryClient } from '@tanstack/react-query';
 import ForgeViewer from '@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer';
+import { DocumentApprovedSeal } from '@/components/document-approved-seal';
 import { EnhancedDocumentViewer } from '@/components/viewer/enhanced-document-viewer';
 import FolderFront from '@/components/ui/FolderFront';
 import { DocumentSheet } from './components/document-sheet';
 import { SpreadsheetGridPreview } from './components/spreadsheet-grid-preview';
 import { DocumentDataSheet } from './components/document-data-sheet';
 import { FileTreeSidebar } from './components/file-tree-sidebar';
-import { LineagePanel } from './components/lineage-panel';
-import { FolderExtractionEditor } from './components/folder-extraction-editor';
 import { SpreadsheetAdjustmentDrawer } from './components/spreadsheet-adjustment-drawer';
 import { SpreadsheetImportSummaryModal } from './components/spreadsheet-import-summary-modal';
 import type { SpreadsheetPreviewPayload, SpreadsheetPreviewTable } from './components/spreadsheet-preview-types';
@@ -113,6 +112,7 @@ import {
   invalidateFileTreeCache,
   getCachedSignedUrl,
   setCachedSignedUrl,
+  getOrCreateSignedUrlRequest,
   getCachedBlobUrl,
   setCachedBlobUrl,
   preloadAndCacheFile,
@@ -605,7 +605,7 @@ function notifyOcrImportFailure({
   if (code === 'LINEAGE_RECONCILIATION_CONFLICT') {
     toast.error(
       serverMessage ??
-        'Hubo un conflicto de continuidad. El documento no se reconcilio automaticamente con la materializacion anterior. Revisá Lineage o corregí la identidad antes de reprocesar.'
+      'Hubo un conflicto de continuidad. El documento no se reconcilio automaticamente con la materializacion anterior. Revisá Lineage o corregí la identidad antes de reprocesar.'
     );
     return;
   }
@@ -613,7 +613,7 @@ function notifyOcrImportFailure({
   if (status === 413) {
     toast.warning(
       serverMessage ??
-        'El archivo o las paginas seleccionadas son demasiado grandes para OCR. Probá con menos paginas.'
+      'El archivo o las paginas seleccionadas son demasiado grandes para OCR. Probá con menos paginas.'
     );
     return;
   }
@@ -645,7 +645,7 @@ function renderOcrStatusBadge(item: FileSystemItem, context: OcrStatusBadgeConte
       <TooltipTrigger asChild>
         <span className={className}>
           <Icon className={cn('h-3.5 w-3.5 shrink-0', meta.icon === Loader2 && 'animate-spin')} />
-          {context !== 'tree' && <span className="leading-none">{label}</span>}
+          {/* {context !== 'tree' && <span className="leading-none">{label}</span>} */}
         </span>
       </TooltipTrigger>
       <TooltipContent>{meta.tooltip}</TooltipContent>
@@ -716,7 +716,13 @@ const FileThumbnail = memo(function FileThumbnail({
 
     (async () => {
       const getSignedUrl = async () => {
-        const signedUrl = await getDocumentSignedUrl(storagePath, 3600);
+        let signedUrl: string | null = null;
+        try {
+          signedUrl = await getDocumentSignedUrl(storagePath, 3600);
+        } catch (error) {
+          console.warn('Document thumbnail access failed:', error);
+          return null;
+        }
         if (!isMounted || !signedUrl) {
           // Fresh uploads can take a short moment before signed URL is available.
           if (isMounted && retryCount < 5) {
@@ -829,7 +835,7 @@ const FileThumbnail = memo(function FileThumbnail({
           className="w-full h-full object-cover rounded-none"
           loading="lazy"
         />
-        <div className="absolute left-2 top-2 z-20">
+        <div className="absolute right-2 top-2 z-20">
           {renderOcrStatusBadge(item, "thumbnail")}
         </div>
         {hideCaption ? null : (
@@ -914,32 +920,34 @@ function FileManagerContent({
 
   const getDocumentSignedUrl = useCallback(
     async (storagePath: string, expiresIn = 3600) => {
-      const params = new URLSearchParams({
-        path: storagePath,
-        expiresIn: String(expiresIn),
-      });
-      const response = await fetch(
-        `/api/obras/${encodeURIComponent(obraId)}/documents/access?${params.toString()}`,
-        { cache: 'no-store' }
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const error = new Error(payload?.error || 'No se pudo generar el acceso al documento.') as Error & {
-          code?: string;
-        };
-        if (typeof payload?.code === 'string') {
-          error.code = payload.code;
+      return getOrCreateSignedUrlRequest(storagePath, expiresIn, async () => {
+        const params = new URLSearchParams({
+          path: storagePath,
+          expiresIn: String(expiresIn),
+        });
+        const response = await fetch(
+          `/api/obras/${encodeURIComponent(obraId)}/documents/access?${params.toString()}`,
+          { cache: 'no-store' }
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(payload?.error || 'No se pudo generar el acceso al documento.') as Error & {
+            code?: string;
+          };
+          if (typeof payload?.code === 'string') {
+            error.code = payload.code;
+          }
+          throw error;
         }
-        throw error;
-      }
-      const signedUrl =
-        typeof payload?.signedUrl === 'string' && payload.signedUrl.length > 0
-          ? payload.signedUrl
-          : null;
-      if (signedUrl) {
-        setCachedSignedUrl(storagePath, signedUrl);
-      }
-      return signedUrl;
+        const signedUrl =
+          typeof payload?.signedUrl === 'string' && payload.signedUrl.length > 0
+            ? payload.signedUrl
+            : null;
+        if (signedUrl) {
+          setCachedSignedUrl(storagePath, signedUrl);
+        }
+        return signedUrl;
+      });
     },
     [obraId]
   );
@@ -3622,6 +3630,7 @@ function FileManagerContent({
   const handleDocumentAreaDrop = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
+    event.stopPropagation();
     const files = Array.from(event.dataTransfer.files || []);
     if (files.length) {
       void uploadFilesToFolder(files);
@@ -4007,6 +4016,8 @@ function FileManagerContent({
           )}
 
           <span className="flex-1 text-left truncate">{item.name}</span>
+
+          <DocumentApprovedSeal status={item.generatedDocumentStatus} className="shrink-0" />
 
           {isOCR && (
             <Tooltip>
@@ -4516,39 +4527,6 @@ function FileManagerContent({
   }, [activeFolderLinks, activeOcrTablaIdOverride]);
 
   const activeOcrTablaId = activeFolderLink?.tablaId ?? null;
-
-  const lineageSelectedDocument = activeDocument ?? selectedDocument ?? null;
-  const lineageSelectedDocPath = useMemo(() => {
-    return typeof lineageSelectedDocument?.storagePath === 'string'
-      ? lineageSelectedDocument.storagePath
-      : null;
-  }, [lineageSelectedDocument]);
-
-  const lineageSelectedTablaId = useMemo(() => {
-    if (activeDocumentOcrLink?.tablaId) return activeDocumentOcrLink.tablaId;
-    if (activeFolderLink?.tablaId) return activeFolderLink.tablaId;
-    if (selectedFolder?.ocrTablaId) return selectedFolder.ocrTablaId;
-    return null;
-  }, [activeDocumentOcrLink?.tablaId, activeFolderLink?.tablaId, selectedFolder?.ocrTablaId]);
-
-  const extractionEditorFolderPath = useMemo(() => {
-    if (!selectedFolder?.ocrEnabled) return null;
-    return normalizeFolderPath(
-      selectedFolder.relativePath ?? selectedFolder.ocrFolderName ?? selectedFolder.name
-    ) || null;
-  }, [selectedFolder]);
-
-  const shouldShowExtractionEditor = useMemo(() => {
-    return Boolean(selectedFolder?.ocrEnabled && extractionEditorFolderPath);
-  }, [extractionEditorFolderPath, selectedFolder?.ocrEnabled]);
-
-  const shouldShowLineagePanel = useMemo(() => {
-    return Boolean(
-      lineageSelectedTablaId ||
-      selectedFolder?.ocrEnabled ||
-      activeDocumentOcrLinks.length > 0
-    );
-  }, [activeDocumentOcrLinks.length, lineageSelectedTablaId, selectedFolder?.ocrEnabled]);
 
   const handleOpenOcrReport = useCallback(() => {
     if (!obraId || !activeOcrTablaId) return;
@@ -5678,7 +5656,7 @@ function FileManagerContent({
             }
           >
             {/* Tail on the right */}
-            <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[53px] mb-[2px]" : documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[54px] mb-[1px]")} />
+            <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[53px] mb-[2px]" : documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[57px] mb-[2px]")} />
 
             {selectedFolder.ocrEnabled ? (
               <Table2 className={`w-5 h-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
@@ -5735,6 +5713,23 @@ function FileManagerContent({
                     Reprocesar todos
                   </>
                 )}
+              </Button>
+            )}
+            {selectedFolder.id !== 'root' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-1 gap-1.5"
+                onClick={() => {
+                  const nextFolderPath = getPathSegments(selectedFolder).join('/');
+                  router.push(
+                    `/document-generation?workId=${obraId}&folder=${encodeURIComponent(nextFolderPath)}`,
+                  );
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Generar documento en esta carpeta
               </Button>
             )}
           </div>
@@ -5796,7 +5791,7 @@ function FileManagerContent({
     if (isOcrDocumentsMode && documentViewMode === 'table') {
       const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
       return (
-        <div className="h-full flex flex-col gap-4">
+        <div className="h-full flex flex-col">
           {folderContentHeader}
           <div className="flex-1 rounded-lg border rounded-t-none border-[#d9d9d9] bg-white shadow-sm overflow-hidden pt-0 px-4">
             {!hasTablaSchema ? (
@@ -5822,28 +5817,12 @@ function FileManagerContent({
                     </Button>
                   </div>
                 )}
-                <div data-wizard-target="documents-extracted-data-table">
+                <div data-wizard-target="documents-extracted-data-table" className=" -mt-4">
                   <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} innerClassName="max-h-[50vh] min-h-[50vh]" />
                 </div>
               </div>
             )}
           </div>
-          {shouldShowExtractionEditor ? (
-            <FolderExtractionEditor
-              obraId={obraId}
-              folderPath={extractionEditorFolderPath}
-              refreshKey={lastFetchedAt ?? undefined}
-              onSaved={refreshFileTreeDerivedData}
-            />
-          ) : null}
-          {shouldShowLineagePanel ? (
-            <LineagePanel
-              obraId={obraId}
-              tablaId={lineageSelectedTablaId}
-              docPath={lineageSelectedDocPath}
-              refreshKey={lastFetchedAt ?? undefined}
-            />
-          ) : null}
         </div>
       );
     }
@@ -5975,6 +5954,10 @@ function FileManagerContent({
                       onClick={() => handleDocumentClick(item, selectedFolder, { preserveFilter: true })}
                       onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, item }); }}
                     >
+                      <DocumentApprovedSeal
+                        status={item.generatedDocumentStatus}
+                        className="absolute left-1.5 top-1.5 z-20"
+                      />
                       <div className="flex flex-col items-center justify-end w-full h-full">
                         <span className="bg-stone-100 border-stone-300 border-8 absolute top-0 right-0 z-10" />
                         <span className="bg-stone-200 border-white border-l-transparent border-b-transparent border-8 absolute top-[-1px] right-[-1px] z-10" />
@@ -6020,22 +6003,6 @@ function FileManagerContent({
           {folderContentHeader}
           <div className={cn("flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9]", showArchivosTablaToggle ? 'rounded-t-none' : 'rounded-tr-lg')}>{folderBody}</div>
         </div>
-        {shouldShowExtractionEditor ? (
-          <FolderExtractionEditor
-            obraId={obraId}
-            folderPath={extractionEditorFolderPath}
-            refreshKey={lastFetchedAt ?? undefined}
-            onSaved={refreshFileTreeDerivedData}
-          />
-        ) : null}
-        {shouldShowLineagePanel ? (
-          <LineagePanel
-            obraId={obraId}
-            tablaId={lineageSelectedTablaId}
-            docPath={lineageSelectedDocPath}
-            refreshKey={lastFetchedAt ?? undefined}
-          />
-        ) : null}
       </div>
     );
 

@@ -455,6 +455,9 @@
 .scrollbar {
 	scrollbar-color: #252e3a9c #f0f0f0;
 }
+.scrollbar-bg-muted {
+	scrollbar-color: #252e3a9c #e9e7e1;
+}
 
 @media (prefers-reduced-motion: reduce) {
 	*,

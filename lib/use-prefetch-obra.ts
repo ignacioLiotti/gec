@@ -20,42 +20,54 @@ export function usePrefetchObra() {
       prefetchedIds.current.add(obraId);
 
       // Prefetch the main obra detail - this is the critical data
-      queryClient.prefetchQuery({
-        queryKey: ["obra", obraId],
-        queryFn: async () => {
-          const response = await fetch(`/api/obras/${obraId}`);
-          if (!response.ok) {
-            throw new Error("Failed to fetch obra");
-          }
-          const data = await response.json();
-          return data.obra;
-        },
-        staleTime: 5 * 60 * 1000, // 5 minutes
-      });
+      void queryClient
+        .prefetchQuery({
+          queryKey: ["obra", obraId],
+          queryFn: async () => {
+            const response = await fetch(`/api/obras/${obraId}`);
+            if (!response.ok) {
+              throw new Error("Failed to fetch obra");
+            }
+            const data = await response.json();
+            return data.obra;
+          },
+          staleTime: 5 * 60 * 1000, // 5 minutes
+        })
+        .catch((error) => {
+          console.warn("[obra-prefetch] main fetch failed", obraId, error);
+        });
 
       // Prefetch pendientes - shown on general tab (default tab)
-      queryClient.prefetchQuery({
-        queryKey: ["obra", obraId, "pendientes"],
-        queryFn: async () => {
-          const res = await fetch(`/api/obras/${obraId}/pendientes`);
-          if (!res.ok) return [];
-          const data = await res.json();
-          return data?.pendientes ?? [];
-        },
-        staleTime: 5 * 60 * 1000,
-      });
+      void queryClient
+        .prefetchQuery({
+          queryKey: ["obra", obraId, "pendientes"],
+          queryFn: async () => {
+            const res = await fetch(`/api/obras/${obraId}/pendientes`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data?.pendientes ?? [];
+          },
+          staleTime: 5 * 60 * 1000,
+        })
+        .catch((error) => {
+          console.warn("[obra-prefetch] pendientes fetch failed", obraId, error);
+        });
 
       // Prefetch memoria notes - shown on general tab
-      queryClient.prefetchQuery({
-        queryKey: ["obra", obraId, "memoria"],
-        queryFn: async () => {
-          const res = await fetch(`/api/obras/${obraId}/memoria`);
-          if (!res.ok) return [];
-          const data = await res.json();
-          return data?.notes ?? [];
-        },
-        staleTime: 5 * 60 * 1000,
-      });
+      void queryClient
+        .prefetchQuery({
+          queryKey: ["obra", obraId, "memoria"],
+          queryFn: async () => {
+            const res = await fetch(`/api/obras/${obraId}/memoria`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data?.notes ?? [];
+          },
+          staleTime: 5 * 60 * 1000,
+        })
+        .catch((error) => {
+          console.warn("[obra-prefetch] memoria fetch failed", obraId, error);
+        });
     },
     [queryClient]
   );

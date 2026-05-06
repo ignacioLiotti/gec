@@ -208,6 +208,14 @@ _Avoid_: mostrar todo el grafo completo siempre
 Configuracion tenant que conecta carpetas, tipos documentales, estrategia de extraccion, tablas destino, politica de lineage y consumidores.
 _Avoid_: carpeta OCR aislada
 
+**Borrador de Documento Generado**:
+Instancia editable previa a generar el archivo final de un documento operativo, siempre anclada a tenant + obra + carpeta + plantilla.
+_Avoid_: formulario temporal sin trazabilidad
+
+**Documento Generado**:
+Documento operativo creado por plantilla que termina persistido como archivo documental normal de la obra y conserva metadata de origen, version de plantilla y datos de entrada.
+_Avoid_: documento paralelo fuera del file manager
+
 **Pipeline de Extraccion**:
 Secuencia operativa Documento -> OCR/manual/spreadsheet -> Tabla de Extraccion -> Lineage -> Consumidores.
 _Avoid_: importacion como evento aislado
@@ -249,6 +257,7 @@ _Avoid_: chat stateless sin contexto tenant
 - El **Canvas de Trazabilidad** debe respetar la direccion canonica **Documento -> Tabla de Extraccion/Macrotabla/Campo de Obra -> Calculo -> Resultado General**.
 - Un **Canvas de Trazabilidad** puede mezclar **Nodos Reales de Trazabilidad** y **Nodos Projected de Trazabilidad**, pero debe distinguirlos explicitamente.
 - Un **Flujo Documental** define el contrato de un **Pipeline de Extraccion** antes de que existan documentos concretos.
+- Un **Documento Generado** no vive en un mundo aparte: debe terminar como archivo normal dentro del sistema documental de la obra, con metadata adicional de generacion.
 - Un **Override Estable de Macrotabla** referencia un **Lineage Row Key**, no solamente una **Version de Materializacion**.
 - Un **Asistente Conversacional de Tenant** pertenece a un usuario dentro de un tenant y sus herramientas solo consultan datos autorizados para ese tenant.
 

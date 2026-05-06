@@ -38,6 +38,7 @@ export type FileSystemItem = {
 	uploadedAt?: string | null;
 	uploadedByUserId?: string | null;
 	uploadedByLabel?: string | null;
+	generatedDocumentStatus?: string | null;
 };
 
 export type FileManagerSelectionChange = {

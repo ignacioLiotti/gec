@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
 import { AlertCircle, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { cn } from "@/lib/utils";
 import { parseWorkbook, type SheetData } from "@/lib/excel-preview";
 import { ExcelGrid } from "@/components/excel-grid";
@@ -799,7 +800,12 @@ export const DocumentPreview = memo(function DocumentPreview({
 
 	if (previewKind === "image" || previewKind === "pdf") {
 		return (
-			<div className="flex h-full flex-col">
+			<div className="relative flex h-full flex-col">
+				<DocumentApprovedSeal
+					status={document.generatedDocumentStatus}
+					size="md"
+					className="absolute left-8 top-26 z-20"
+				/>
 				<EnhancedDocumentViewer
 					title={false}
 					url={previewUrl}
@@ -813,22 +819,36 @@ export const DocumentPreview = memo(function DocumentPreview({
 
 	if (previewKind === "spreadsheet" || previewKind === "csv" || previewKind === "text") {
 		return (
-			<SpreadsheetLikePreview
-				document={document}
-				previewUrl={previewUrl}
-				onDownload={onDownload}
-				mode={previewKind}
-			/>
+			<div className="relative h-full">
+				<DocumentApprovedSeal
+					status={document.generatedDocumentStatus}
+					size="md"
+					className="absolute left-4 top-4 z-20"
+				/>
+				<SpreadsheetLikePreview
+					document={document}
+					previewUrl={previewUrl}
+					onDownload={onDownload}
+					mode={previewKind}
+				/>
+			</div>
 		);
 	}
 
 	if (previewKind === "word") {
 		return (
-			<WordDocumentPreview
-				document={document}
-				previewUrl={previewUrl}
-				onDownload={onDownload}
-			/>
+			<div className="relative h-full">
+				<DocumentApprovedSeal
+					status={document.generatedDocumentStatus}
+					size="md"
+					className="absolute left-4 top-4 z-20"
+				/>
+				<WordDocumentPreview
+					document={document}
+					previewUrl={previewUrl}
+					onDownload={onDownload}
+				/>
+			</div>
 		);
 	}
 

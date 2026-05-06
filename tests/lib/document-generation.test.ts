@@ -1,0 +1,186 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  buildDocumentGenerationExtractionRows,
+  buildInitialInputData,
+  normalizeTemplateSchema,
+  renderDocumentHtml,
+  validateTemplateInput,
+} from "@/lib/document-generation";
+
+describe("document-generation helpers", () => {
+  it("hydrates default values from schema", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "title", label: "Titulo", type: "text", required: true, defaultValue: "Certificado" },
+        { key: "notes", label: "Notas", type: "textarea", required: false },
+      ],
+    });
+
+    expect(buildInitialInputData(schema)).toEqual({
+      title: "Certificado",
+    });
+  });
+
+  it("validates required fields", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "title", label: "Titulo", type: "text", required: true },
+        { key: "amount", label: "Monto", type: "money", required: true },
+      ],
+    });
+
+    expect(validateTemplateInput(schema, { title: "", amount: "abc" })).toEqual([
+      { key: "title", message: "Titulo es obligatorio." },
+      { key: "amount", message: "Monto debe ser numerico." },
+    ]);
+  });
+
+  it("renders placeholders with html escaping", () => {
+    const html = renderDocumentHtml("<h1>{{title}}</h1><p>{{workName}}</p>", {
+      title: "<script>alert(1)</script>",
+    }, {
+      workName: "Obra 10",
+    });
+
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("Obra 10");
+  });
+
+  it("renders repeatable groups as html blocks", () => {
+    const html = renderDocumentHtml(
+      "<table>{{#items}}<tr><td>{{cantidad}}</td><td>{{detalle}}</td></tr>{{/items}}</table>",
+      {
+        items: [
+          { cantidad: "2", detalle: "MDF" },
+          { cantidad: "1", detalle: "<b>Corte</b>" },
+        ],
+      },
+    );
+
+    expect(html).toContain("<td>2</td><td>MDF</td>");
+    expect(html).toContain("<td>1</td><td>&lt;b&gt;Corte&lt;/b&gt;</td>");
+  });
+
+  it("hydrates and validates table fields with configured columns", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        {
+          key: "items",
+          label: "Materiales",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "cantidad", label: "Cantidad", type: "number", required: true, defaultValue: "1" },
+            { key: "detalle", label: "Detalle", type: "text", required: true },
+          ],
+        },
+      ],
+    });
+
+    expect(buildInitialInputData(schema)).toEqual({
+      items: [{ cantidad: "1" }],
+    });
+    expect(validateTemplateInput(schema, { items: [{ cantidad: "", detalle: "" }] })).toEqual([
+      { key: "items.0.cantidad", message: "Cantidad es obligatorio." },
+      { key: "items.0.detalle", message: "Detalle es obligatorio." },
+    ]);
+  });
+
+  it("builds extraction rows from repeatable document items and duplicates parent fields", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "proveedor", label: "Proveedor", type: "text", required: true },
+        { key: "fecha_entrega", label: "Entrega", type: "date", required: false },
+        { key: "cantidad", label: "Cantidad", type: "number", required: true, repeatableGroup: "items" },
+        { key: "detalle", label: "Detalle", type: "text", required: true, repeatableGroup: "items" },
+        { key: "precio_unitario", label: "Precio", type: "money", required: false, repeatableGroup: "items" },
+      ],
+    });
+
+    const rows = buildDocumentGenerationExtractionRows({
+      schema,
+      inputData: {
+        proveedor: "Hierros del Plata",
+        fecha_entrega: "10/05/2026",
+        items: [
+          { cantidad: "2", detalle: "Malla", precio_unitario: "$ 1.200,50" },
+          { cantidad: "1", detalle: "Perfil", precio_unitario: "1000" },
+        ],
+      },
+      columns: [
+        { fieldKey: "proveedor", dataType: "text", config: { ocrScope: "parent" } },
+        { fieldKey: "fecha_entrega", dataType: "date", config: { ocrScope: "parent" } },
+        { fieldKey: "cantidad", dataType: "number", config: { ocrScope: "item" } },
+        { fieldKey: "detalle", dataType: "text", config: { ocrScope: "item" } },
+        { fieldKey: "precio_unitario", dataType: "currency", config: { ocrScope: "item" } },
+      ],
+      documentMeta: {
+        bucket: "obra-documents",
+        path: "obra-1/ordenes/oc-1.pdf",
+        fileName: "oc-1.pdf",
+      },
+    });
+
+    expect(rows).toEqual([
+      {
+        proveedor: "Hierros del Plata",
+        fecha_entrega: "2026-10-05T03:00:00.000Z",
+        cantidad: 2,
+        detalle: "Malla",
+        precio_unitario: 1200.5,
+        __docBucket: "obra-documents",
+        __docPath: "obra-1/ordenes/oc-1.pdf",
+        __docFileName: "oc-1.pdf",
+      },
+      {
+        proveedor: "Hierros del Plata",
+        fecha_entrega: "2026-10-05T03:00:00.000Z",
+        cantidad: 1,
+        detalle: "Perfil",
+        precio_unitario: 1000,
+        __docBucket: "obra-documents",
+        __docPath: "obra-1/ordenes/oc-1.pdf",
+        __docFileName: "oc-1.pdf",
+      },
+    ]);
+  });
+
+  it("falls back to a single extraction row for flat schemas and computes formulas", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "subtotal", label: "Subtotal", type: "money", required: true },
+        { key: "iva", label: "IVA", type: "money", required: true },
+      ],
+    });
+
+    const rows = buildDocumentGenerationExtractionRows({
+      schema,
+      inputData: {
+        subtotal: "1000",
+        iva: "210",
+      },
+      columns: [
+        { fieldKey: "subtotal", dataType: "currency" },
+        { fieldKey: "iva", dataType: "currency" },
+        { fieldKey: "total", dataType: "currency", config: { formula: "[subtotal] + [iva]" } },
+      ],
+      documentMeta: {
+        bucket: "obra-documents",
+        path: "obra-1/facturas/f-1.pdf",
+        fileName: "f-1.pdf",
+      },
+    });
+
+    expect(rows).toEqual([
+      {
+        subtotal: 1000,
+        iva: 210,
+        total: 1210,
+        __docBucket: "obra-documents",
+        __docPath: "obra-1/facturas/f-1.pdf",
+        __docFileName: "f-1.pdf",
+      },
+    ]);
+  });
+});

@@ -385,12 +385,24 @@ export async function proxy(req: NextRequest) {
 			return attachSecurityHeaders(res);
 		}
 
-		// For non-admin users, check if route has specific role requirements
-		// Currently all non-admin routes have empty allowedRoles (accessible to all authenticated users)
-		// Fine-grained access control is handled via:
-		// - sidebar_macro_tables for sidebar visibility
-		// - macro_table_permissions for per-table access
-		const hasAccess = !config || config.allowedRoles.length === 0;
+		// For non-admin users, check role and feature-permission requirements.
+		let hasAccess = !config || config.allowedRoles.length === 0;
+		if (hasAccess && config?.requiredPermissions?.length) {
+			const permissionResults = await Promise.all(
+				config.requiredPermissions.map((permissionKey) =>
+					supabase.rpc("has_permission", {
+						tenant: tenantId,
+						perm_key: permissionKey,
+					}),
+				),
+			);
+			for (const result of permissionResults) {
+				if (result.error || result.data !== true) {
+					hasAccess = false;
+					break;
+				}
+			}
+		}
 
 		if (!hasAccess) {
 			// Route requires specific roles but user is not admin - redirect to home

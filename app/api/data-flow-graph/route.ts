@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 import {
-  DEFAULT_OBRA_FIELD_SOURCES,
   getTenantDataFlowBuilderConfig,
+  listObraFieldSources,
 } from "@/lib/data-flow-builder";
 import {
   hasDemoCapability,
@@ -47,6 +47,18 @@ function isConfiguredCalculation(
   return Boolean(calculation.expression.trim() && calculation.inputs.length > 0);
 }
 
+async function hasDataFlowReadPermission(
+  access: Awaited<ReturnType<typeof resolveRequestAccessContext>>
+) {
+  if (access.actorType !== "user" || !access.user || !access.tenantId) return false;
+  const { data, error } = await access.supabase.rpc("has_permission", {
+    tenant: access.tenantId,
+    perm_key: "data-flow:read",
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 export async function GET() {
   try {
     const access = await resolveRequestAccessContext();
@@ -61,6 +73,9 @@ export async function GET() {
     if (!tenantId) {
       return NextResponse.json({ error: "No tenant" }, { status: 400 });
     }
+    if (actorType === "user" && !(await hasDataFlowReadPermission(access))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { data: row, error } = await supabase
       .from("tenant_data_flow_config")
@@ -72,7 +87,8 @@ export async function GET() {
     const config = getTenantDataFlowBuilderConfig(row?.config_json ?? null);
     const nodes: DataFlowNode[] = [];
     const edges: DataFlowEdge[] = [];
-    const obraFieldSourceById = new Map(DEFAULT_OBRA_FIELD_SOURCES.map((field) => [field.id, field]));
+    const obraFields = await listObraFieldSources({ supabase, tenantId });
+    const obraFieldSourceById = new Map(obraFields.map((field) => [field.id, field]));
 
     const { data: defaultTables, error: defaultTablesError } = await supabase
       .from("obra_default_tablas")

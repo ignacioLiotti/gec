@@ -48,6 +48,10 @@ export interface RouteAccessConfig {
 	 * "admin" role always has access regardless of this list
 	 */
 	allowedRoles: Role[];
+	/**
+	 * Permission keys required for non-admin users. Admin/owner/superadmin bypass remains.
+	 */
+	requiredPermissions?: string[];
 }
 
 /**
@@ -62,12 +66,27 @@ export interface RouteAccessConfig {
 export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	// === PUBLIC ROUTES (all authenticated users) ===
 	{
+		path: "/dashboard",
+		allowedRoles: [],
+		requiredPermissions: ["nav:dashboard"],
+	},
+	{
 		path: "/certificados",
 		allowedRoles: [], // Accessible to all authenticated users
 	},
 	{
 		path: "/excel",
 		allowedRoles: [], // Accessible to all authenticated users
+	},
+	{
+		path: "/excel/data-flow",
+		allowedRoles: [],
+		requiredPermissions: ["data-flow:read"],
+	},
+	{
+		path: "/excel/[obraId]/data-flow",
+		allowedRoles: [],
+		requiredPermissions: ["data-flow:read"],
 	},
 	{
 		path: "/excel/[obraId]",
@@ -87,6 +106,10 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	},
 	{
 		path: "/notifications",
+		allowedRoles: [], // Accessible to all authenticated users
+	},
+	{
+		path: "/document-generation",
 		allowedRoles: [], // Accessible to all authenticated users
 	},
 

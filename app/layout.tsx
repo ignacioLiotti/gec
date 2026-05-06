@@ -19,6 +19,8 @@ import DomainMigrationGuard from "@/components/domain-migration-guard";
 import { PathnameLayoutShell } from "@/components/pathname-layout-shell";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import type { Role } from "@/lib/route-access";
+import { getUserPermissionKeys } from "@/lib/route-guard";
+import { loadDocumentGenerationPermissions } from "@/lib/document-generation-server";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
@@ -61,6 +63,15 @@ type LayoutUserRoles = {
 	isSuperAdmin: boolean;
 	tenantId: string | null;
 	actorType?: "user" | "demo";
+	permissionKeys: string[];
+};
+
+const EMPTY_DOCUMENT_PERMISSIONS = {
+	canSeeNavigation: false,
+	canCreate: false,
+	canReview: false,
+	canManageTemplates: false,
+	canViewAllDrafts: false,
 };
 
 export default async function RootLayout({
@@ -91,8 +102,10 @@ export default async function RootLayout({
 		isAdmin: false,
 		isSuperAdmin: false,
 		tenantId: null,
+		permissionKeys: [],
 	};
 	let tenants: { id: string; name: string }[] = [];
+	let documentPermissions = EMPTY_DOCUMENT_PERMISSIONS;
 
 	if (user) {
 		type MembershipRow = MembershipLike & {
@@ -169,7 +182,16 @@ export default async function RootLayout({
 			isSuperAdmin,
 			tenantId,
 			actorType: "user",
+			permissionKeys: tenantId ? await getUserPermissionKeys() : [],
 		};
+
+		if (tenantId && user.id) {
+			documentPermissions = await loadDocumentGenerationPermissions({
+				supabase,
+				tenantId,
+				userId: user.id,
+			});
+		}
 
 		const showAllOrgs =
 			isSuperAdmin || user.email === "ignacioliotti@gmail.com";
@@ -205,6 +227,7 @@ export default async function RootLayout({
 			isSuperAdmin: false,
 			tenantId: access.tenantId,
 			actorType: "demo",
+			permissionKeys: [],
 		};
 		tenants = [
 			{
@@ -212,6 +235,7 @@ export default async function RootLayout({
 				name: access.tenantName ?? "Organizacion demo",
 			},
 		];
+		documentPermissions = EMPTY_DOCUMENT_PERMISSIONS;
 	}
 
 	if (DEBUG_AUTH) {
@@ -243,6 +267,7 @@ export default async function RootLayout({
 					<PathnameLayoutShell
 						user={user}
 						userRoles={userRoles}
+						documentPermissions={documentPermissions}
 						tenants={tenants}
 						demoSession={access.demoSession}
 						demoCapabilities={access.demoSession?.allowedCapabilities}

@@ -605,6 +605,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 			const formatted = new Intl.NumberFormat(config.currencyLocale || "es-AR", {
 				style: "currency",
 				currency: config.currencyCode || "USD",
+				currencyDisplay: "narrowSymbol",
 			}).format(amount);
 			return <span className="font-mono tabular-nums">{formatted}</span>;
 		}

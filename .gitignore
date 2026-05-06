@@ -53,3 +53,8 @@ remotion/out/
 supabase/.temp/cli-latest
 CERT N° 3 JUL-25.xlsx
 /tmp/
+
+# generated local scratch artifacts
+supabase/.temp/
+.codex-temp/
+tmp-*.png

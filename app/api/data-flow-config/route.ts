@@ -10,12 +10,21 @@ import {
   resolveRequestAccessContext,
 } from "@/lib/demo-session";
 
-function canWriteTenantDataFlow(access: Awaited<ReturnType<typeof resolveRequestAccessContext>>) {
-  return (
-    access.actorType === "user" &&
-    Boolean(access.user) &&
-    (access.isSuperAdmin || access.membershipRole === "owner" || access.membershipRole === "admin")
-  );
+async function canWriteTenantDataFlow(access: Awaited<ReturnType<typeof resolveRequestAccessContext>>) {
+  return hasDataFlowPermission(access, "data-flow:tenant-edit");
+}
+
+async function hasDataFlowPermission(
+  access: Awaited<ReturnType<typeof resolveRequestAccessContext>>,
+  permissionKey: "data-flow:read" | "data-flow:edit" | "data-flow:tenant-edit"
+) {
+  if (access.actorType !== "user" || !access.user || !access.tenantId) return false;
+  const { data, error } = await access.supabase.rpc("has_permission", {
+    tenant: access.tenantId,
+    perm_key: permissionKey,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 export async function GET() {
@@ -31,6 +40,9 @@ export async function GET() {
     }
     if (!tenantId) {
       return NextResponse.json({ error: "No tenant" }, { status: 400 });
+    }
+    if (actorType === "user" && !(await hasDataFlowPermission(access, "data-flow:read"))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { data: row, error } = await supabase
@@ -48,7 +60,7 @@ export async function GET() {
       config,
       sources,
       evaluated: null,
-      canWrite: canWriteTenantDataFlow(access),
+      canWrite: await canWriteTenantDataFlow(access),
       updatedAt: row?.updated_at ?? null,
       generalTabSlots: [
         { id: "hero", label: "Hero superior" },
@@ -67,7 +79,7 @@ export async function PATCH(request: Request) {
     const access = await resolveRequestAccessContext();
     const { supabase, tenantId, user } = access;
 
-    if (!canWriteTenantDataFlow(access) || !user) {
+    if (!(await canWriteTenantDataFlow(access)) || !user) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     if (!tenantId) {

@@ -51,6 +51,36 @@ export type MacroTablePermission = {
 	permission_level: PermissionLevel;
 };
 
+type PermissionKeyRelation =
+	| { key?: string | null }
+	| { key?: string | null }[]
+	| null;
+
+type NameRelation =
+	| { name?: string | null }
+	| { name?: string | null }[]
+	| null;
+
+type FullNameRelation =
+	| { full_name?: string | null }
+	| { full_name?: string | null }[]
+	| null;
+
+function readPermissionKey(value: PermissionKeyRelation): string | null {
+	const record = Array.isArray(value) ? value[0] : value;
+	return typeof record?.key === "string" ? record.key : null;
+}
+
+function readName(value: NameRelation): string | null {
+	const record = Array.isArray(value) ? value[0] : value;
+	return typeof record?.name === "string" ? record.name : null;
+}
+
+function readFullName(value: FullNameRelation): string | null {
+	const record = Array.isArray(value) ? value[0] : value;
+	return typeof record?.full_name === "string" ? record.full_name : null;
+}
+
 // =====================================================
 // PERMISSIONS
 // =====================================================
@@ -169,7 +199,9 @@ export async function getRolesWithPermissions({
 		if (!permMap[rp.role_id]) {
 			permMap[rp.role_id] = [];
 		}
-		const permKey = (rp.permissions as any)?.key;
+		const permKey = readPermissionKey(
+			rp.permissions as PermissionKeyRelation
+		);
 		if (permKey) {
 			permMap[rp.role_id].push(permKey);
 		}
@@ -369,7 +401,7 @@ export async function getMacroTablePermissions({
 }): Promise<MacroTablePermission[]> {
 	const supabase = await createClient();
 
-	const { data, error } = await supabase
+	const { data } = await supabase
 		.from("macro_table_permissions")
 		.select(
 			`
@@ -393,11 +425,11 @@ export async function getMacroTablePermissions({
 	return (data ?? []).map((p) => ({
 		id: p.id,
 		macro_table_id: p.macro_table_id,
-		macro_table_name: (p.macro_tables as any)?.name,
+		macro_table_name: readName(p.macro_tables as NameRelation) ?? undefined,
 		user_id: p.user_id,
-		user_email: (p.profiles as any)?.full_name,
+		user_email: readFullName(p.profiles as FullNameRelation) ?? undefined,
 		role_id: p.role_id,
-		role_name: (p.roles as any)?.name,
+		role_name: readName(p.roles as NameRelation) ?? undefined,
 		permission_level: p.permission_level as PermissionLevel,
 	}));
 }
@@ -409,16 +441,11 @@ export async function getMacroTablesForPermissions({
 }): Promise<{ id: string; name: string }[]> {
 	const supabase = await createClient();
 
-	const { data, error } = await supabase
+	const { data } = await supabase
 		.from("macro_tables")
 		.select("id, name")
 		.eq("tenant_id", tenantId)
 		.order("name");
-
-	if (error) {
-		console.error("Error fetching macro tables:", error);
-		return [];
-	}
 
 	return data ?? [];
 }
@@ -436,7 +463,12 @@ export async function setMacroTablePermission({
 }): Promise<{ error?: string }> {
 	const supabase = await createClient();
 
-	const insertData: any = {
+	const insertData: {
+		macro_table_id: string;
+		permission_level: PermissionLevel;
+		user_id?: string;
+		role_id?: string;
+	} = {
 		macro_table_id: macroTableId,
 		permission_level: permissionLevel,
 	};
@@ -561,7 +593,8 @@ export async function getUserEffectivePermissions({
 	const roleIds = (userRoles ?? []).map((ur) => ur.role_id);
 	const roleNames: Record<string, string> = {};
 	for (const ur of userRoles ?? []) {
-		roleNames[ur.role_id] = (ur.roles as any)?.name || "Unknown";
+		roleNames[ur.role_id] =
+			readName(ur.roles as NameRelation) || "Unknown";
 	}
 
 	// Get permissions from roles
@@ -741,6 +774,12 @@ const NAVIGATION_ITEMS = [
 		icon: "Database",
 	},
 	{
+		path: "/excel/data-flow",
+		label: "Data-flow",
+		permission: "data-flow:read",
+		icon: "Layers",
+	},
+	{
 		path: "/certificados",
 		label: "Certificados",
 		permission: "nav:certificados",
@@ -757,6 +796,34 @@ const NAVIGATION_ITEMS = [
 		label: "Notificaciones",
 		permission: "nav:notifications",
 		icon: "Bell",
+	},
+	{
+		path: "/document-generation",
+		label: "Documentos",
+		permission: "nav:document-generation",
+		icon: "FileText",
+		children: [
+			{
+				path: "/document-generation",
+				label: "Generar documentos",
+				permission: "documents:create",
+			},
+			{
+				path: "/document-generation/drafts",
+				label: "Borradores",
+				permission: "documents:create",
+			},
+			{
+				path: "/document-generation/review",
+				label: "Revision",
+				permission: "documents:review",
+			},
+			{
+				path: "/document-generation/config",
+				label: "Configuracion",
+				permission: "documents:templates",
+			},
+		],
 	},
 	{
 		path: "/admin",

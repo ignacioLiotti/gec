@@ -14,6 +14,7 @@ export type DataFlowBuilderAggregation =
   | "count_rows"
   | "count_non_empty";
 export type DataFlowBuilderResultFormat = "number" | "currency" | "percent";
+export type DataFlowBuilderWritebackMode = "none" | "suggest" | "auto";
 export type DataFlowBuilderGeneralTabSlot = "hero" | "financial";
 export type DataFlowBuilderNodeStatus = "ok" | "incomplete" | "error";
 export type DataFlowBuilderGeneralTabLayoutBlockType =
@@ -54,6 +55,7 @@ export type DataFlowBuilderObraFieldSource = {
   id: string;
   label: string;
   dataType: string;
+  source: "base" | "custom";
 };
 
 export type DataFlowBuilderFormulaInput = {
@@ -94,6 +96,8 @@ export type DataFlowBuilderResult = {
   label: string;
   description: string;
   calculationId: string | null;
+  targetObraFieldId: string | null;
+  writebackMode: DataFlowBuilderWritebackMode;
   format: DataFlowBuilderResultFormat;
   decimals: number;
   generalTabSlot: DataFlowBuilderGeneralTabSlot;
@@ -140,6 +144,10 @@ export type EvaluatedDataFlowResult = {
   formattedValue: string;
   description: string;
   calculationId: string | null;
+  targetObraFieldId: string | null;
+  writebackMode: DataFlowBuilderWritebackMode;
+  writebackStatus: "none" | "ready" | "blocked";
+  writebackBlockReason: string | null;
   generalTabSlot: DataFlowBuilderGeneralTabSlot;
   generalTabOrder: number;
   format: DataFlowBuilderResultFormat;
@@ -148,6 +156,25 @@ export type EvaluatedDataFlowResult = {
 export type EvaluatedDataFlowBuilder = {
   calculations: EvaluatedDataFlowCalculation[];
   results: EvaluatedDataFlowResult[];
+};
+
+export type DataFlowBuilderWritebackAction = {
+  resultId: string;
+  resultLabel: string;
+  calculationId: string | null;
+  targetObraFieldId: string;
+  mode: Exclude<DataFlowBuilderWritebackMode, "none">;
+  value: number;
+  formattedValue: string;
+  previousValue: unknown;
+  status: "ready" | "blocked";
+  blockReason: string | null;
+  formulaSummary: string[];
+};
+
+export type DataFlowBuilderWritebackPlan = {
+  actions: DataFlowBuilderWritebackAction[];
+  blocked: DataFlowBuilderWritebackAction[];
 };
 
 type BuilderEvaluationContext = {
@@ -189,11 +216,23 @@ export const BUILDER_DEFAULT_RESULT_IDS = {
   balance: "default_result_balance",
 } as const;
 
+export const CUSTOM_OBRA_FIELD_SOURCE_PREFIX = "custom:";
+
 export const DEFAULT_OBRA_FIELD_SOURCES: DataFlowBuilderObraFieldSource[] = [
-  { id: "contrato_mas_ampliaciones", label: "Contrato + ampliaciones", dataType: "currency" },
-  { id: "certificado_a_la_fecha", label: "Certificado a la fecha", dataType: "currency" },
-  { id: "saldo_a_certificar", label: "Saldo a certificar", dataType: "currency" },
-  { id: "porcentaje", label: "Porcentaje de avance", dataType: "percent" },
+  { id: "n", label: "N de obra", dataType: "number", source: "base" },
+  { id: "designacion_y_ubicacion", label: "Designacion y ubicacion", dataType: "text", source: "base" },
+  { id: "sup_de_obra_m2", label: "Superficie de obra m2", dataType: "number", source: "base" },
+  { id: "entidad_contratante", label: "Entidad contratante", dataType: "text", source: "base" },
+  { id: "mes_basico_de_contrato", label: "Mes basico de contrato", dataType: "date", source: "base" },
+  { id: "iniciacion", label: "Iniciacion", dataType: "date", source: "base" },
+  { id: "contrato_mas_ampliaciones", label: "Contrato + ampliaciones", dataType: "currency", source: "base" },
+  { id: "certificado_a_la_fecha", label: "Certificado a la fecha", dataType: "currency", source: "base" },
+  { id: "saldo_a_certificar", label: "Saldo a certificar", dataType: "currency", source: "base" },
+  { id: "segun_contrato", label: "Segun contrato", dataType: "number", source: "base" },
+  { id: "prorrogas_acordadas", label: "Prorrogas acordadas", dataType: "number", source: "base" },
+  { id: "plazo_total", label: "Plazo total", dataType: "number", source: "base" },
+  { id: "plazo_transc", label: "Plazo transcurrido", dataType: "number", source: "base" },
+  { id: "porcentaje", label: "Porcentaje de avance", dataType: "percent", source: "base" },
 ];
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -204,6 +243,233 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
+}
+
+function humanizeBuilderFieldKey(value: string) {
+  return value
+    .replace(/^custom:/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function normalizeBuilderDataType(value: unknown): string {
+  const raw = asString(value).trim();
+  if (
+    raw === "number" ||
+    raw === "currency" ||
+    raw === "percent" ||
+    raw === "date" ||
+    raw === "boolean" ||
+    raw === "select" ||
+    raw === "text"
+  ) {
+    return raw;
+  }
+  if (raw === "checkbox" || raw === "toggle") return "boolean";
+  return "text";
+}
+
+function customObraFieldSourceId(columnId: string) {
+  return `${CUSTOM_OBRA_FIELD_SOURCE_PREFIX}${columnId}`;
+}
+
+function sanitizeMainTableColumnSources(raw: unknown): DataFlowBuilderObraFieldSource[] {
+  if (!Array.isArray(raw)) return [];
+  const sources: DataFlowBuilderObraFieldSource[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const record = asRecord(item);
+    const id = asString(record.id).trim();
+    if (!id || seen.has(id) || record.kind !== "custom" || record.enabled === false) continue;
+    seen.add(id);
+    sources.push({
+      id: customObraFieldSourceId(id),
+      label: asString(record.label).trim() || humanizeBuilderFieldKey(id),
+      dataType: normalizeBuilderDataType(record.cellType),
+      source: "custom",
+    });
+  }
+  return sources;
+}
+
+export function listObraFieldSourcesFromCustomData(
+  customData: unknown,
+  configuredSources: DataFlowBuilderObraFieldSource[] = []
+) {
+  const sources = [...DEFAULT_OBRA_FIELD_SOURCES, ...configuredSources];
+  const seen = new Set(sources.map((source) => source.id));
+  const root = asRecord(customData);
+  for (const key of Object.keys(root)) {
+    if (key === "dataFlowBuilder") continue;
+    const sourceId = customObraFieldSourceId(key);
+    if (seen.has(sourceId)) continue;
+    seen.add(sourceId);
+    sources.push({
+      id: sourceId,
+      label: humanizeBuilderFieldKey(key),
+      dataType: "text",
+      source: "custom",
+    });
+  }
+  return sources;
+}
+
+export async function listObraFieldSources({
+  supabase,
+  tenantId,
+  customData,
+}: {
+  supabase: SupabaseClient;
+  tenantId: string;
+  customData?: unknown;
+}): Promise<DataFlowBuilderObraFieldSource[]> {
+  const { data, error } = await supabase
+    .from("tenant_main_table_configs")
+    .select("columns")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code !== "42P01" && error.code !== "42703") throw error;
+    return listObraFieldSourcesFromCustomData(customData);
+  }
+
+  return listObraFieldSourcesFromCustomData(
+    customData,
+    sanitizeMainTableColumnSources((data as { columns?: unknown } | null)?.columns)
+  );
+}
+
+export function resolveObraFieldValue(obraValues: unknown, sourceId: string): unknown {
+  const root = asRecord(obraValues);
+  if (sourceId.startsWith(CUSTOM_OBRA_FIELD_SOURCE_PREFIX)) {
+    const customKey = sourceId.slice(CUSTOM_OBRA_FIELD_SOURCE_PREFIX.length);
+    return asRecord(root.custom_data)[customKey];
+  }
+  return root[sourceId];
+}
+
+function isSameBuilderValue(left: unknown, right: unknown) {
+  const leftNumber = coerceBuilderNumericValue(left);
+  const rightNumber = coerceBuilderNumericValue(right);
+  if (leftNumber != null && rightNumber != null) return Math.abs(leftNumber - rightNumber) < 0.000001;
+  return left === right;
+}
+
+function getCalculationObraFieldDependencies(
+  config: DataFlowBuilderConfig,
+  calculationId: string | null,
+  stack: string[] = []
+): Set<string> {
+  if (!calculationId || stack.includes(calculationId)) return new Set();
+  const calculation = config.calculations.find((candidate) => candidate.id === calculationId);
+  if (!calculation) return new Set();
+  if (calculation.mode === "aggregate") return new Set();
+
+  const dependencies = new Set<string>();
+  for (const input of calculation.inputs) {
+    if (input.sourceType === "obra_field") {
+      dependencies.add(input.sourceId);
+      continue;
+    }
+    if (input.sourceType === "calculation") {
+      for (const dependency of getCalculationObraFieldDependencies(config, input.sourceId, [...stack, calculationId])) {
+        dependencies.add(dependency);
+      }
+    }
+  }
+  return dependencies;
+}
+
+export function buildObraResultWritebackPlan({
+  config,
+  evaluated,
+  obraValues,
+}: {
+  config: DataFlowBuilderConfig;
+  evaluated: EvaluatedDataFlowBuilder;
+  obraValues: unknown;
+}): DataFlowBuilderWritebackPlan {
+  const baseFieldIds = new Set(
+    DEFAULT_OBRA_FIELD_SOURCES
+      .filter((source) => source.source === "base")
+      .map((source) => source.id)
+  );
+  const evaluatedCalculationById = new Map(evaluated.calculations.map((calculation) => [calculation.id, calculation]));
+  const actions: DataFlowBuilderWritebackAction[] = [];
+  const blocked: DataFlowBuilderWritebackAction[] = [];
+
+  for (const result of evaluated.results) {
+    const targetFieldId = result.targetObraFieldId?.trim();
+    if (!targetFieldId || result.writebackMode === "none" || result.value == null) continue;
+
+    const currentValue = resolveObraFieldValue(obraValues, targetFieldId);
+    const targetIsCustom = targetFieldId.startsWith(CUSTOM_OBRA_FIELD_SOURCE_PREFIX);
+    const targetIsBase = baseFieldIds.has(targetFieldId);
+    const calculation = result.calculationId ? evaluatedCalculationById.get(result.calculationId) ?? null : null;
+    const dependencies = getCalculationObraFieldDependencies(config, result.calculationId);
+    let blockReason: string | null = null;
+
+    if (!targetIsBase && !targetIsCustom) {
+      blockReason = "El campo destino no existe como campo de obra permitido.";
+    } else if (targetFieldId === `${CUSTOM_OBRA_FIELD_SOURCE_PREFIX}dataFlowBuilder`) {
+      blockReason = "El campo interno dataFlowBuilder no puede ser sobrescrito.";
+    } else if (result.status !== "ok") {
+      blockReason = "El resultado no esta OK.";
+    } else if (dependencies.has(targetFieldId)) {
+      blockReason = "El resultado depende del mismo campo que intenta sobrescribir.";
+    } else if (isSameBuilderValue(currentValue, result.value)) {
+      blockReason = "El valor calculado es igual al valor actual.";
+    }
+
+    const action: DataFlowBuilderWritebackAction = {
+      resultId: result.id,
+      resultLabel: result.label,
+      calculationId: result.calculationId,
+      targetObraFieldId: targetFieldId,
+      mode: result.writebackMode,
+      value: result.value,
+      formattedValue: result.formattedValue,
+      previousValue: currentValue ?? null,
+      status: blockReason ? "blocked" : "ready",
+      blockReason,
+      formulaSummary: calculation?.formulaSummary ?? [],
+    };
+
+    if (blockReason) blocked.push(action);
+    else actions.push(action);
+  }
+
+  return { actions, blocked };
+}
+
+export function buildObraResultWritebackPatch({
+  plan,
+  customData,
+}: {
+  plan: DataFlowBuilderWritebackPlan;
+  customData: unknown;
+}) {
+  const obraPatch: Record<string, unknown> = {};
+  const nextCustomData = { ...asRecord(customData) };
+  const writtenFields: string[] = [];
+
+  for (const action of plan.actions.filter((candidate) => candidate.mode === "auto")) {
+    const targetFieldId = action.targetObraFieldId;
+    if (targetFieldId.startsWith(CUSTOM_OBRA_FIELD_SOURCE_PREFIX)) {
+      const customKey = targetFieldId.slice(CUSTOM_OBRA_FIELD_SOURCE_PREFIX.length);
+      nextCustomData[customKey] = action.value;
+      writtenFields.push(targetFieldId);
+      continue;
+    }
+
+    obraPatch[targetFieldId] = action.value;
+    writtenFields.push(targetFieldId);
+  }
+
+  return { obraPatch, customData: nextCustomData, writtenFields };
 }
 
 function asNumber(value: unknown, fallback = 0) {
@@ -310,12 +576,17 @@ function normalizeResult(value: unknown, index: number): DataFlowBuilderResult |
     : "number";
   const generalTabSlot =
     asString(record.generalTabSlot) === "financial" ? "financial" : "hero";
+  const rawWritebackMode = asString(record.writebackMode).trim();
+  const writebackMode: DataFlowBuilderWritebackMode =
+    rawWritebackMode === "suggest" || rawWritebackMode === "auto" ? rawWritebackMode : "none";
 
   return {
     id,
     label,
     description: asString(record.description).trim(),
     calculationId: asString(record.calculationId).trim() || null,
+    targetObraFieldId: asString(record.targetObraFieldId).trim() || null,
+    writebackMode,
     format,
     decimals: clampDecimals(record.decimals),
     generalTabSlot,
@@ -471,6 +742,8 @@ function buildDefaultDataFlowBuilderResults(): DataFlowBuilderResult[] {
       label: "Avance",
       description: "Porcentaje de avance guardado en General y contrastado con Curva Plan + PMC Resumen.",
       calculationId: BUILDER_DEFAULT_CALCULATION_IDS.progress,
+      targetObraFieldId: null,
+      writebackMode: "none",
       format: "percent",
       decimals: 0,
       generalTabSlot: "hero",
@@ -481,6 +754,8 @@ function buildDefaultDataFlowBuilderResults(): DataFlowBuilderResult[] {
       label: "Contrato",
       description: "Contrato + ampliaciones guardado en la obra.",
       calculationId: BUILDER_DEFAULT_CALCULATION_IDS.contract,
+      targetObraFieldId: null,
+      writebackMode: "none",
       format: "currency",
       decimals: 0,
       generalTabSlot: "financial",
@@ -491,6 +766,8 @@ function buildDefaultDataFlowBuilderResults(): DataFlowBuilderResult[] {
       label: "Certificado",
       description: "Certificado a la fecha guardado en General.",
       calculationId: BUILDER_DEFAULT_CALCULATION_IDS.certified,
+      targetObraFieldId: null,
+      writebackMode: "none",
       format: "currency",
       decimals: 0,
       generalTabSlot: "financial",
@@ -501,6 +778,8 @@ function buildDefaultDataFlowBuilderResults(): DataFlowBuilderResult[] {
       label: "Saldo a certificar",
       description: "Saldo a certificar guardado en General.",
       calculationId: BUILDER_DEFAULT_CALCULATION_IDS.balance,
+      targetObraFieldId: null,
+      writebackMode: "none",
       format: "currency",
       decimals: 0,
       generalTabSlot: "financial",
@@ -792,7 +1071,7 @@ export async function listTenantDataFlowSources({
   return {
     tables,
     macroTables,
-    obraFields: DEFAULT_OBRA_FIELD_SOURCES,
+    obraFields: await listObraFieldSources({ supabase, tenantId }),
   };
 }
 
@@ -1058,7 +1337,24 @@ export async function listObraDataFlowSources({
       columns: macroColumnsById.get(macroId) ?? [],
     }));
 
-  return { tables, macroTables, obraFields: DEFAULT_OBRA_FIELD_SOURCES };
+  const { data: obra, error: obraError } = await supabase
+    .from("obras")
+    .select("custom_data")
+    .eq("id", obraId)
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (obraError) throw obraError;
+
+  return {
+    tables,
+    macroTables,
+    obraFields: await listObraFieldSources({
+      supabase,
+      tenantId,
+      customData: (obra as { custom_data?: unknown } | null)?.custom_data,
+    }),
+  };
 }
 
 export async function evaluateObraDataFlowBuilder({
@@ -1283,7 +1579,7 @@ export async function evaluateObraDataFlowBuilder({
       }
 
       if (input.sourceType === "obra_field") {
-        const obraValue = coerceBuilderNumericValue(asRecord(obraValues)[input.sourceId]);
+        const obraValue = coerceBuilderNumericValue(resolveObraFieldValue(obraValues, input.sourceId));
         if (obraValue == null) {
           const missingInput: EvaluatedDataFlowCalculation = {
             id: calculation.id,
@@ -1370,6 +1666,18 @@ export async function evaluateObraDataFlowBuilder({
         ),
         description: result.description,
         calculationId: result.calculationId,
+        targetObraFieldId: result.targetObraFieldId,
+        writebackMode: result.writebackMode,
+        writebackStatus:
+          result.writebackMode === "none" || !result.targetObraFieldId
+            ? "none"
+            : evaluatedCalculation?.status === "ok"
+              ? "ready"
+              : "blocked",
+        writebackBlockReason:
+          result.writebackMode !== "none" && result.targetObraFieldId && evaluatedCalculation?.status !== "ok"
+            ? "El calculo asociado no esta OK."
+            : null,
         generalTabSlot: result.generalTabSlot,
         generalTabOrder: result.generalTabOrder,
         format: result.format,

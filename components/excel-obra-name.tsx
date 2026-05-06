@@ -45,11 +45,14 @@ const EMPTY_OBRA_STATE: HeaderObraState = {
 
 const PAGE_NAME_MAP: Record<string, string> = {
   excel: "Detalle de las Obras en Ejecución",
+  "excel/data-flow": "Data-flow general",
   certificados: "Certificados",
   notifications: "Notificaciones",
   admin: "Administración",
   viewer: "Visor",
 };
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizeObraNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -78,11 +81,14 @@ export function ExcelObraName() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
-  const match = pathname.match(/^\/excel\/([^/]+)$/);
-  const obraId = match?.[1];
+  const match = pathname.match(/^\/excel\/([^/]+)(?:\/.*)?$/);
+  const candidateObraId = match?.[1];
+  const obraId = candidateObraId && UUID_PATTERN.test(candidateObraId) ? candidateObraId : null;
 
   const getPageName = () => {
     const segments = pathname.split("/").filter(Boolean);
+    const firstTwoSegments = segments.slice(0, 2).join("/");
+    if (firstTwoSegments in PAGE_NAME_MAP) return PAGE_NAME_MAP[firstTwoSegments];
     const firstSegment = segments[0] || "";
     return PAGE_NAME_MAP[firstSegment] || firstSegment;
   };

@@ -20,6 +20,10 @@ import {
   hasDemoCapability,
   resolveRequestAccessContext,
 } from "@/lib/demo-session";
+import {
+  canAutoWriteDataFlow,
+  tryRecomputeObraDataFlowWritebacks,
+} from "@/lib/data-flow-recompute";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -1271,6 +1275,35 @@ export async function POST(request: Request, context: RouteContext) {
       if (insertOverridesError) throw insertOverridesError;
     }
 
+    const { data: affectedTablas, error: affectedTablasError } = stableTablaIds.length
+      ? await supabase
+          .from("obra_tablas")
+          .select("id, obra_id")
+          .in("id", stableTablaIds)
+      : { data: [], error: null };
+    if (affectedTablasError) throw affectedTablasError;
+
+    const affectedObraIds = [
+      ...new Set(
+        (affectedTablas ?? [])
+          .map((tabla) => (typeof tabla.obra_id === "string" ? tabla.obra_id : null))
+          .filter((obraId): obraId is string => Boolean(obraId)),
+      ),
+    ];
+    const allowAutoWrite = await canAutoWriteDataFlow({ supabase, tenantId });
+    const dataFlowRecompute = await Promise.all(
+      affectedObraIds.map((obraId) =>
+        tryRecomputeObraDataFlowWritebacks({
+          supabase,
+          tenantId,
+          obraId,
+          actorUserId: user.id,
+          trigger: "source_change",
+          allowAutoWrite,
+        }),
+      ),
+    );
+
     // TODO(domain-model): Emit `fila_actualizada` / `override_actualizado` domain event
     // so dependent calculations/recommendations can be processed consistently.
     return NextResponse.json({
@@ -1280,6 +1313,7 @@ export async function POST(request: Request, context: RouteContext) {
         stable: stableWrites,
         legacy: legacyWrites,
       },
+      dataFlowRecompute,
     });
   } catch (error) {
     console.error("[macro-tables:rows:save]", error);

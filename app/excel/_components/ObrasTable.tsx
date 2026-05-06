@@ -148,8 +148,7 @@ export function ObrasTable(props: ObrasTableProps) {
   const showOverlay = isRefreshing || (isLoading && visible.length > 0);
 
   return (
-    <div className="relative border border-border rounded-none overflow-x-scroll w-full max-w-[calc(98vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] 
-        bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
+    <div className="relative border border-border rounded-none overflow-x-scroll w-full max-w-[calc(94vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
       <AnimatePresence>
         {showOverlay && (
           <motion.div

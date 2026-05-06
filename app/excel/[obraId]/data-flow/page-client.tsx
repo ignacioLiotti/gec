@@ -250,6 +250,8 @@ export type BuilderResult = {
   label: string;
   description: string;
   calculationId: string | null;
+  targetObraFieldId: string | null;
+  writebackMode: "none" | "suggest" | "auto";
   format: "number" | "currency" | "percent";
   decimals: number;
   generalTabSlot: "hero" | "financial";
@@ -306,6 +308,10 @@ export type EvaluatedBuilderResult = {
   formattedValue: string;
   description: string;
   calculationId: string | null;
+  targetObraFieldId: string | null;
+  writebackMode: "none" | "suggest" | "auto";
+  writebackStatus: "none" | "ready" | "blocked";
+  writebackBlockReason: string | null;
   generalTabSlot: "hero" | "financial";
   generalTabOrder: number;
   format: "number" | "currency" | "percent";
@@ -327,7 +333,39 @@ export type DataFlowConfigPayload = {
   } | null;
   generalTabSlots?: Array<{ id: "hero" | "financial"; label: string }>;
   canWrite?: boolean;
+  writeback?: string[];
+  writebackPlan?: DataFlowWritebackPlan;
   updatedAt?: string | null;
+};
+
+type DataFlowWritebackAction = {
+  resultId: string;
+  resultLabel: string;
+  calculationId: string | null;
+  targetObraFieldId: string;
+  mode: "suggest" | "auto";
+  value: number;
+  formattedValue: string;
+  previousValue: unknown;
+  status: "ready" | "blocked";
+  blockReason: string | null;
+  formulaSummary: string[];
+};
+
+type DataFlowWritebackPlan = {
+  actions: DataFlowWritebackAction[];
+  blocked: DataFlowWritebackAction[];
+};
+
+type DataFlowSuggestion = {
+  id: string;
+  field_id: string;
+  result_label: string;
+  old_value: unknown;
+  suggested_value: unknown;
+  formatted_value: string | null;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
 };
 
 const BUILDER_DEFAULT_CALCULATION_IDS = new Set([
@@ -2852,6 +2890,8 @@ export function DataFlowEditorDrawer({
           label: "Nuevo resultado",
           description: "",
           calculationId: selectableCalculations[0]?.id ?? null,
+          targetObraFieldId: null,
+          writebackMode: "none",
           format: "number",
           decimals: 0,
           generalTabSlot: "hero",
@@ -3707,6 +3747,41 @@ export function DataFlowEditorDrawer({
                             ))}
                           </select>
                         </EditorField>
+                        <EditorField label="Sobrescribe campo">
+                          <select
+                            value={result.targetObraFieldId ?? ""}
+                            onChange={(event) =>
+                              updateResult(result.id, (current) => ({
+                                ...current,
+                                targetObraFieldId: event.target.value || null,
+                              }))
+                            }
+                            style={editorInputStyle()}
+                          >
+                            <option value="">No sobrescribir</option>
+                            {obraFieldOptions.map((field) => (
+                              <option key={field.id} value={field.id}>
+                                {field.label}
+                              </option>
+                            ))}
+                          </select>
+                        </EditorField>
+                        <EditorField label="Modo writeback">
+                          <select
+                            value={result.writebackMode ?? "none"}
+                            onChange={(event) =>
+                              updateResult(result.id, (current) => ({
+                                ...current,
+                                writebackMode: event.target.value as BuilderResult["writebackMode"],
+                              }))
+                            }
+                            style={editorInputStyle()}
+                          >
+                            <option value="none">Solo mostrar</option>
+                            <option value="suggest">Sugerir cambio</option>
+                            <option value="auto">Escribir automatico</option>
+                          </select>
+                        </EditorField>
                         <EditorField label="Formato">
                           <select
                             value={result.format}
@@ -4463,7 +4538,7 @@ export function DataFlowEditorDrawer({
           </div>
           <button
             type="button"
-            onClick={onSave}
+            onClick={() => onSave()}
             disabled={saving}
             style={{
               height: 38,
@@ -6055,7 +6130,7 @@ function DataFlowLayoutWorkspace({
         </button>
         <button
           type="button"
-          onClick={onSave}
+          onClick={() => onSave()}
           disabled={!canWrite || saving}
           style={{
             height: 34,
@@ -6217,6 +6292,9 @@ export function DataFlowPageClient({
   const [configPayload, setConfigPayload] = useState<DataFlowConfigPayload | null>(null);
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [writebackPlan, setWritebackPlan] = useState<DataFlowWritebackPlan | null>(null);
+  const [suggestions, setSuggestions] = useState<DataFlowSuggestion[]>([]);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const obraId = scope === "obra" && payload?.obra.id ? payload.obra.id : "";
 
   const canvasOuterRef = useRef<HTMLDivElement | null>(null);
@@ -6283,7 +6361,9 @@ export function DataFlowPageClient({
           );
         }
         if (!cancelled) {
-          setConfigPayload(result as DataFlowConfigPayload);
+          const typed = result as DataFlowConfigPayload;
+          setConfigPayload(typed);
+          setWritebackPlan(typed.writebackPlan ?? null);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -6299,6 +6379,39 @@ export function DataFlowPageClient({
       cancelled = true;
     };
   }, [configEndpoint, refreshToken]);
+
+  useEffect(() => {
+    if (scope !== "obra" || !obraId) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+
+    async function loadSuggestions() {
+      setSuggestionsError(null);
+      try {
+        const response = await fetch(`/api/obras/${obraId}/data-flow-suggestions`, { cache: "no-store" });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof result?.error === "string" ? result.error : "No se pudieron cargar sugerencias.");
+        }
+        if (!cancelled) {
+          setSuggestions((result?.suggestions ?? []) as DataFlowSuggestion[]);
+        }
+      } catch (suggestionError) {
+        if (!cancelled) {
+          setSuggestionsError(
+            suggestionError instanceof Error ? suggestionError.message : "No se pudieron cargar sugerencias."
+          );
+        }
+      }
+    }
+
+    void loadSuggestions();
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, obraId, refreshToken]);
 
   useEffect(() => {
     const element = canvasOuterRef.current;
@@ -6371,6 +6484,14 @@ export function DataFlowPageClient({
   );
   const activeTokens = getActiveColorTokens(activeResultColor);
   const canWriteDataFlow = configPayload?.canWrite !== false;
+  const obraFieldLabelById = useMemo(
+    () => new Map((configPayload?.sources.obraFields ?? []).map((field) => [field.id, field.label])),
+    [configPayload?.sources.obraFields]
+  );
+  const pendingSuggestions = useMemo(
+    () => suggestions.filter((suggestion) => suggestion.status === "pending"),
+    [suggestions]
+  );
   const sourceTableNodeById = useMemo(() => {
     const map = new Map<string, DataFlowNode>();
     for (const node of allNodes) {
@@ -7103,7 +7224,9 @@ export function DataFlowPageClient({
             : "No se pudo guardar el editor de data-flow."
         );
       }
-      setConfigPayload(result as DataFlowConfigPayload);
+      const typed = result as DataFlowConfigPayload;
+      setConfigPayload(typed);
+      setWritebackPlan(typed.writebackPlan ?? null);
       setRefreshToken((current) => current + 1);
     } catch (saveError) {
       setConfigError(
@@ -7111,6 +7234,25 @@ export function DataFlowPageClient({
       );
     } finally {
       setConfigSaving(false);
+    }
+  }
+
+  async function handleSuggestionDecision(suggestionId: string, decision: "accept" | "reject") {
+    if (!obraId) return;
+    setConfigError(null);
+    try {
+      const response = await fetch(`/api/obras/${obraId}/data-flow-suggestions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suggestionId, decision }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof result?.error === "string" ? result.error : "No se pudo actualizar la sugerencia.");
+      }
+      setRefreshToken((current) => current + 1);
+    } catch (decisionError) {
+      setConfigError(decisionError instanceof Error ? decisionError.message : "No se pudo actualizar la sugerencia.");
     }
   }
 
@@ -7220,6 +7362,8 @@ export function DataFlowPageClient({
             label: "Resultado nuevo",
             description: "Resultado creado desde el canvas.",
             calculationId,
+            targetObraFieldId: null,
+            writebackMode: "none",
             format: "number",
             decimals: 0,
             generalTabSlot: "hero",
@@ -7676,6 +7820,106 @@ export function DataFlowPageClient({
                   <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--df-stone-500)" }}>No hay KPIs trazables disponibles.</div>
                 )}
               </div>
+
+              {writebackPlan || pendingSuggestions.length > 0 || suggestionsError ? (
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    border: "1px solid var(--df-orange-border)",
+                    background: "#fff7ed",
+                    color: "var(--df-stone-800)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Target size={15} style={{ color: "var(--df-orange)" }} />
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "var(--df-stone-900)" }}>
+                      Writeback de data-flow
+                    </div>
+                  </div>
+
+                  {writebackPlan?.actions.map((action) => (
+                    <div key={`${action.resultId}:${action.targetObraFieldId}:ready`} style={{ fontSize: 12, lineHeight: 1.5 }}>
+                      {action.mode === "auto" ? "Escritura aplicada" : "Sugerencia creada"}:{" "}
+                      <strong>{action.resultLabel}</strong>{" -> "}
+                      {obraFieldLabelById.get(action.targetObraFieldId) ?? action.targetObraFieldId} ={" "}
+                      <strong>{action.formattedValue}</strong>
+                    </div>
+                  ))}
+
+                  {writebackPlan?.blocked.map((action) => (
+                    <div
+                      key={`${action.resultId}:${action.targetObraFieldId}:blocked`}
+                      style={{ fontSize: 12, lineHeight: 1.5, color: "#b91c1c" }}
+                    >
+                      Bloqueado: <strong>{action.resultLabel}</strong>{" -> "}
+                      {obraFieldLabelById.get(action.targetObraFieldId) ?? action.targetObraFieldId}.{" "}
+                      {action.blockReason ?? "No se pudo aplicar."}
+                    </div>
+                  ))}
+
+                  {pendingSuggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        paddingTop: 8,
+                        borderTop: "1px solid rgba(249,115,22,.18)",
+                      }}
+                    >
+                      <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                        Pendiente: <strong>{suggestion.result_label}</strong> sugiere{" "}
+                        {obraFieldLabelById.get(suggestion.field_id) ?? suggestion.field_id} ={" "}
+                        <strong>{suggestion.formatted_value ?? String(suggestion.suggested_value ?? "-")}</strong>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => void handleSuggestionDecision(suggestion.id, "accept")}
+                          style={{
+                            border: "1px solid var(--df-orange)",
+                            background: "var(--df-orange)",
+                            color: "#fff",
+                            borderRadius: 6,
+                            padding: "6px 9px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Aceptar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleSuggestionDecision(suggestion.id, "reject")}
+                          style={{
+                            border: "1px solid var(--df-stone-200)",
+                            background: "#fff",
+                            color: "var(--df-stone-700)",
+                            borderRadius: 6,
+                            padding: "6px 9px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {suggestionsError ? (
+                    <div style={{ fontSize: 12, color: "#b91c1c" }}>{suggestionsError}</div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {diagnostics.length > 0 ? (
                 <div

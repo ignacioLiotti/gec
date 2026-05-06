@@ -13,9 +13,10 @@ import {
 	isDemoPathAllowed,
 	type DemoCapability,
 } from "@/lib/demo-capabilities";
+import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import type { Role } from "@/lib/route-access";
 import { track } from "@vercel/analytics";
-import { ExcelObraName } from "./excel-obra-name";
+import { AppHeaderTitle } from "./app-header-title";
 
 const DeferredAppSidebar = dynamic(
 	() => import("@/components/app-sidebar").then((mod) => mod.AppSidebar),
@@ -55,12 +56,14 @@ type UserRolesShape = {
 	tenantId: string | null;
 	roleIds?: string[];
 	actorType?: "user" | "demo";
+	permissionKeys?: string[];
 } | null;
 
 export function PathnameLayoutShell({
 	children,
 	user,
 	userRoles,
+	documentPermissions,
 	tenants,
 	sidebarMacroTables,
 	demoSession,
@@ -69,6 +72,7 @@ export function PathnameLayoutShell({
 	children: React.ReactNode;
 	user?: { email?: string | null } | null;
 	userRoles?: UserRolesShape;
+	documentPermissions?: DocumentGenerationPermissionMap | null;
 	tenants?: { id: string; name: string | null }[];
 	sidebarMacroTables?: SidebarMacroTable[];
 	demoSession?: { label?: string | null; tenantName?: string | null } | null;
@@ -105,9 +109,6 @@ export function PathnameLayoutShell({
 	}, [demoCapabilities, isDemoMode, isStandaloneDemoRoute, pathname, router]);
 
 	if (isMarketingRoot || isStandaloneDemoRoute) {
-		if (isMarketingRoot && user?.email) {
-			return null;
-		}
 		return <main>{children}</main>;
 	}
 
@@ -117,6 +118,7 @@ export function PathnameLayoutShell({
 				<DeferredAppSidebar
 					user={normalizedUser}
 					userRoles={userRoles}
+					documentPermissions={documentPermissions}
 					tenants={tenants}
 					sidebarMacroTables={sidebarMacroTables}
 					demoMode={isDemoMode}
@@ -127,7 +129,7 @@ export function PathnameLayoutShell({
 					<header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b bg-[#fafafa] px-3 py-2 sm:px-4">
 						<div className="flex min-w-0 flex-1 items-center gap-3">
 							<SidebarTrigger className="-ml-1 block sm:hidden" />
-							<ExcelObraName />
+							<AppHeaderTitle documentPermissions={documentPermissions} />
 						</div>
 						<div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
 							<DeferredImpersonateBanner />

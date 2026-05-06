@@ -490,7 +490,7 @@ export default function DesktopExcelPageClient({
 	}, []);
 
 	return (
-		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#fafafa] px-4 py-4 md:px-8 md:py-8">
+		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#fafafa] px-4 py-4 md:pl-8 md:py-8">
 			{isPreviewOpen ? (
 				<Sheet open onOpenChange={(open) => !open && handleCancelPreview()}>
 					<SheetContent side="right" className="border-l-[#ece7df] bg-[#f6f2eb] p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:max-w-lg">

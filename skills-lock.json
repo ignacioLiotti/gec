@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "domain-model": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "02ce3c45576cccec982e5efc5099c76c965df7024345b829513f68226ca3587f"
+    },
+    "request-refactor-plan": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "6811250488d1dafcb111e7ef0dc1124211369c5f6f47ce820b7527c255489178"
+    }
+  }
+}

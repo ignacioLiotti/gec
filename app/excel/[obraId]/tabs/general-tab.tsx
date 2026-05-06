@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { type ComponentType, type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
 	AlertCircle,
@@ -107,6 +107,17 @@ type GeneralTabReportsData = {
 	} | null;
 };
 
+type DataFlowSuggestion = {
+	id: string;
+	field_id: string;
+	result_label: string;
+	old_value: unknown;
+	suggested_value: unknown;
+	formatted_value: string | null;
+	status: "pending" | "accepted" | "rejected";
+	created_at: string;
+};
+
 type MacroCertificateColumn = {
 	id: string;
 	label: string;
@@ -125,7 +136,6 @@ type MacroCertificateData = {
 } | null;
 
 type GeneralTabProps = {
-	obraId?: string;
 	form: any; // FormApi type requires 11-12 type arguments, using any for simplicity
 	isGeneralTabEditMode: boolean;
 	hasUnsavedChanges: () => boolean;
@@ -161,60 +171,11 @@ type GeneralTabProps = {
 		blockedFieldLabels: string[];
 		warningMessage: string | null;
 	} | null;
+	dataFlowSuggestions?: DataFlowSuggestion[];
+	dataFlowSuggestionsError?: string | null;
+	onDataFlowSuggestionDecision?: (suggestionId: string, decision: "accept" | "reject") => void | Promise<void>;
+	isResolvingDataFlowSuggestion?: boolean;
 };
-
-type DataFlowGeneralResult = {
-	id: string;
-	label: string;
-	description: string;
-	formattedValue: string;
-	generalTabSlot: "hero" | "financial";
-	generalTabOrder: number;
-	status: "ok" | "incomplete" | "error";
-};
-
-type GeneralTabLayoutBlockType =
-	| "progress"
-	| "curve"
-	| "general_info"
-	| "financial"
-	| "configured_fields"
-	| "certificates"
-	| "custom_result";
-
-type GeneralTabLayoutBlock = {
-	id: string;
-	type: GeneralTabLayoutBlockType;
-	label: string;
-	enabled: boolean;
-	order: number;
-	width: "one_third" | "half" | "two_thirds" | "full";
-	gridX?: number;
-	gridY?: number;
-	gridH?: number;
-	resultId: string | null;
-	fieldIds: string[];
-};
-
-const DATA_FLOW_DEFAULT_RESULT_IDS = new Set([
-	"default_result_progress",
-	"default_result_contract",
-	"default_result_certified",
-	"default_result_balance",
-]);
-
-const DEFAULT_GENERAL_TAB_LAYOUT: GeneralTabLayoutBlock[] = [
-	{ id: "layout_progress", type: "progress", label: "Avance", enabled: true, order: 1, width: "one_third", gridX: 0, gridY: 0, gridH: 5, resultId: "default_result_progress", fieldIds: ["findings"] },
-	{ id: "layout_curve", type: "curve", label: "Curva de avance", enabled: true, order: 2, width: "two_thirds", gridX: 4, gridY: 0, gridH: 5, resultId: null, fieldIds: [] },
-	{ id: "layout_general_info", type: "general_info", label: "Informacion General", enabled: true, order: 3, width: "half", gridX: 0, gridY: 5, gridH: 5, resultId: null, fieldIds: [] },
-	{ id: "layout_financial", type: "financial", label: "Datos Financieros", enabled: true, order: 4, width: "half", gridX: 6, gridY: 5, gridH: 5, resultId: null, fieldIds: [] },
-	{ id: "layout_configured_fields", type: "configured_fields", label: "Campos Configurados", enabled: true, order: 5, width: "full", gridX: 0, gridY: 10, gridH: 4, resultId: null, fieldIds: ["*"] },
-	{ id: "layout_certificates", type: "certificates", label: "Certificados", enabled: true, order: 6, width: "half", gridX: 0, gridY: 14, gridH: 4, resultId: null, fieldIds: [] },
-];
-
-const GENERAL_LAYOUT_GRID_COLS = 12;
-const GENERAL_LAYOUT_ROW_HEIGHT = 58;
-const GENERAL_LAYOUT_GAP_PX = 20;
 
 const STATIC_GENERAL_FIELD_IDS = new Set([
 	"porcentaje",
@@ -334,10 +295,12 @@ function KpiItem({
 	label,
 	value,
 	highlighted = false,
+	children,
 }: {
 	label: string;
 	value: string;
 	highlighted?: boolean;
+	children?: ReactNode;
 }) {
 	return (
 		<div
@@ -350,6 +313,7 @@ function KpiItem({
 			<p className="text-lg font-semibold tabular-nums tracking-tight text-[#1a1a1a] sm:text-xl">
 				{value}
 			</p>
+			{children}
 		</div>
 	);
 }
@@ -359,11 +323,13 @@ function MiniField({
 	label,
 	value,
 	highlighted = false,
+	children,
 }: {
 	icon: ComponentType<{ className?: string }>;
 	label: string;
 	value: string;
 	highlighted?: boolean;
+	children?: ReactNode;
 }) {
 	return (
 		<div
@@ -377,6 +343,7 @@ function MiniField({
 				<span>{label}</span>
 			</div>
 			<div className="text-[13px] font-medium leading-snug text-[#1a1a1a]">{value}</div>
+			{children}
 		</div>
 	);
 }
@@ -659,7 +626,6 @@ function CertificatesSummaryCard({
 		<ShellCard
 			title="Certificados"
 			icon={FileText}
-			className="h-full"
 			action={
 				<span className="text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
 					{certificates.length} {certificates.length === 1 ? "registro" : "registros"}
@@ -980,7 +946,6 @@ export const AdvanceCurveChart = ({
 };
 
 export function ObraGeneralTab({
-	obraId,
 	form,
 	isGeneralTabEditMode,
 	hasUnsavedChanges,
@@ -999,9 +964,11 @@ export function ObraGeneralTab({
 	certificadoContableMacro = null,
 	curveImportConfig,
 	derivedCertificadosNotice = null,
+	dataFlowSuggestions = [],
+	dataFlowSuggestionsError = null,
+	onDataFlowSuggestionDecision,
+	isResolvingDataFlowSuggestion = false,
 }: GeneralTabProps) {
-	const [dataFlowResults, setDataFlowResults] = useState<DataFlowGeneralResult[]>([]);
-	const [generalTabLayout, setGeneralTabLayout] = useState<GeneralTabLayoutBlock[]>(DEFAULT_GENERAL_TAB_LAYOUT);
 	const extraMainTableColumns = mainTableColumns.filter((column) => {
 		if (column.kind === "custom") return true;
 		const sourceId = column.baseColumnId ?? column.id;
@@ -1054,572 +1021,60 @@ export function ObraGeneralTab({
 		if (!Number.isFinite(current)) return true;
 		return Math.abs(current - recommended) > 0.01;
 	};
-
-	useEffect(() => {
-		if (!obraId) return;
-		let cancelled = false;
-		async function loadCustomFlowResults() {
-			try {
-				const response = await fetch(`/api/obras/${obraId}/data-flow-config?includeEvaluated=1`, {
-					cache: "no-store",
-				});
-				const payload = await response.json().catch(() => ({}));
-				if (!response.ok || cancelled) return;
-				const results = Array.isArray(payload?.evaluated?.results)
-					? (payload.evaluated.results as DataFlowGeneralResult[])
-							.filter((result) => result && typeof result === "object")
-							.sort((left, right) => left.generalTabOrder - right.generalTabOrder)
-					: [];
-				const rawLayout =
-					(payload?.effectiveConfig?.generalTabLayout ?? payload?.config?.generalTabLayout) as
-						| GeneralTabLayoutBlock[]
-						| undefined;
-				setDataFlowResults(results);
-				setGeneralTabLayout(
-					Array.isArray(rawLayout) && rawLayout.length > 0
-						? rawLayout
-								.filter((block) => block && typeof block === "object")
-								.sort((left, right) => left.order - right.order)
-						: DEFAULT_GENERAL_TAB_LAYOUT
-				);
-			} catch {
-				if (!cancelled) setDataFlowResults([]);
-			}
+	const pendingDataFlowSuggestions = dataFlowSuggestions.filter((suggestion) => suggestion.status === "pending");
+	const dataFlowSuggestionByFieldId = new Map(
+		pendingDataFlowSuggestions.map((suggestion) => [suggestion.field_id, suggestion])
+	);
+	const formatSuggestionValue = (value: unknown, formatted: string | null) =>
+		formatted ?? (typeof value === "number" ? formatCurrency(value) : String(value ?? "-"));
+	const getDataFlowSuggestionForField = (fieldId: string) =>
+		dataFlowSuggestionByFieldId.get(fieldId) ?? dataFlowSuggestionByFieldId.get(`custom:${fieldId}`) ?? null;
+	const hasVisibleDataFlowSuggestion = (suggestion: DataFlowSuggestion | null, currentValue: unknown) => {
+		if (!suggestion) return false;
+		if (typeof currentValue === "number" || typeof suggestion.suggested_value === "number") {
+			const current = Number(currentValue ?? 0);
+			const suggested = Number(suggestion.suggested_value ?? 0);
+			if (!Number.isFinite(current) || !Number.isFinite(suggested)) return true;
+			return Math.abs(current - suggested) > 0.01;
 		}
-		void loadCustomFlowResults();
-		return () => {
-			cancelled = true;
-		};
-	}, [obraId]);
-
-	const dataFlowResultById = new Map(dataFlowResults.map((result) => [result.id, result]));
-	const customFlowResults = dataFlowResults.filter((result) => !DATA_FLOW_DEFAULT_RESULT_IDS.has(result.id));
-	const heroCustomResults = customFlowResults.filter(
-		(result) => result.generalTabSlot === "hero"
-	);
-	const financialCustomResults = customFlowResults.filter(
-		(result) => result.generalTabSlot === "financial"
-	);
-	const layoutBlockByType = new Map(generalTabLayout.map((block) => [block.type, block]));
-	const isLayoutBlockVisible = (type: GeneralTabLayoutBlockType) =>
-		layoutBlockByType.get(type)?.enabled !== false;
-	const getLayoutBlockOrder = (type: GeneralTabLayoutBlockType) =>
-		layoutBlockByType.get(type)?.order ?? 999;
-	const visibleLayoutBlocks = generalTabLayout
-		.filter((block) => block.enabled !== false)
-		.slice()
-		.sort((left, right) => (left.gridY ?? left.order) - (right.gridY ?? right.order) || (left.gridX ?? 0) - (right.gridX ?? 0) || left.order - right.order);
-	const layoutWidthClass = (width: GeneralTabLayoutBlock["width"]) =>
-		width === "one_third"
-			? "lg:col-span-4"
-			: width === "half"
-				? "lg:col-span-6"
-				: width === "two_thirds"
-					? "lg:col-span-8"
-					: "lg:col-span-12";
-	const layoutWidthToColumns = (width: GeneralTabLayoutBlock["width"]) =>
-		width === "one_third" ? 4 : width === "half" ? 6 : width === "two_thirds" ? 8 : 12;
-	const defaultLayoutGridHeight = (type: GeneralTabLayoutBlockType) =>
-		type === "progress" || type === "curve" || type === "general_info" || type === "financial"
-			? 5
-			: 4;
-	const previewSectionStyle = (block: GeneralTabLayoutBlock): CSSProperties => {
-		const columnSpan = Math.min(layoutWidthToColumns(block.width), GENERAL_LAYOUT_GRID_COLS);
-		const maxColumnStart = GENERAL_LAYOUT_GRID_COLS - columnSpan + 1;
-		const columnStart = typeof block.gridX === "number"
-			? Math.max(1, Math.min(maxColumnStart, block.gridX + 1))
-			: 1;
-		const rowSpan = Math.max(2, Math.min(12, Math.floor(block.gridH ?? defaultLayoutGridHeight(block.type))));
-		const rowStart = typeof block.gridY === "number" ? Math.max(1, Math.floor(block.gridY) + 1) : null;
-		return {
-			"--general-layout-column": `${columnStart} / span ${columnSpan}`,
-			"--general-layout-row": rowStart ? `${rowStart} / span ${rowSpan}` : `span ${rowSpan}`,
-		} as CSSProperties;
+		return String(currentValue ?? "") !== String(suggestion.suggested_value ?? "");
 	};
-	const blockHasField = (block: GeneralTabLayoutBlock, fieldId: string, fallbackVisible = true) => {
-		if (block.fieldIds.includes("__none")) return false;
-		if (block.fieldIds.length === 0) return fallbackVisible;
-		if (block.fieldIds.includes("*")) return true;
-		return block.fieldIds.includes(fieldId);
-	};
-	const blockHasAnyField = (block: GeneralTabLayoutBlock, fieldIds: string[], fallbackVisible = true) => {
-		if (block.fieldIds.includes("__none")) return false;
-		if (block.fieldIds.length === 0) return fallbackVisible;
-		if (block.fieldIds.includes("*")) return true;
-		return fieldIds.some((fieldId) => block.fieldIds.includes(fieldId));
-	};
-	const previewSectionClass = (block: GeneralTabLayoutBlock, extra?: string | false | null) =>
-		cn(
-			layoutWidthClass(block.width),
-			"min-w-0 lg:h-full lg:[grid-column:var(--general-layout-column)] lg:[grid-row:var(--general-layout-row)]",
-			extra
-		);
-	const defaultFinancialKpis = [
-		{
-			id: "default_result_contract",
-			label: dataFlowResultById.get("default_result_contract")?.label ?? "Contrato + ampliaciones",
-			value:
-				dataFlowResultById.get("default_result_contract")?.formattedValue ??
-				formatCurrency(form.state.values.contratoMasAmpliaciones),
-			highlighted: isContratoBlockingDerived,
-		},
-		{
-			id: "default_result_certified",
-			label: dataFlowResultById.get("default_result_certified")?.label ?? "Certificado a la fecha",
-			value:
-				dataFlowResultById.get("default_result_certified")?.formattedValue ??
-				formatCurrency(form.state.values.certificadoALaFecha),
-			highlighted: isDerivedFieldHighlighted("certificadoALaFecha"),
-		},
-		{
-			id: "default_result_balance",
-			label: dataFlowResultById.get("default_result_balance")?.label ?? "Saldo a certificar",
-			value:
-				dataFlowResultById.get("default_result_balance")?.formattedValue ??
-				formatCurrency(form.state.values.saldoACertificar),
-			highlighted: isDerivedFieldHighlighted("saldoACertificar"),
-		},
-	];
-	const generalInfoFields = [
-		{
-			id: "designacionYUbicacion",
-			icon: MapPin,
-			label: "Designacion y ubicacion",
-			value: form.state.values.designacionYUbicacion || "No especificado",
-			fieldKey: "designacionYUbicacion" as keyof Obra,
-		},
-		{
-			id: "entidadContratante",
-			icon: Building2,
-			label: "Entidad contratante",
-			value: form.state.values.entidadContratante || "No especificado",
-			fieldKey: "entidadContratante" as keyof Obra,
-		},
-		{
-			id: "mesBasicoDeContrato",
-			icon: Calendar,
-			label: "Mes basico",
-			value: form.state.values.mesBasicoDeContrato || "No especificado",
-			fieldKey: "mesBasicoDeContrato" as keyof Obra,
-		},
-		{
-			id: "iniciacion",
-			icon: Calendar,
-			label: "Iniciacion",
-			value: form.state.values.iniciacion || "No especificado",
-			fieldKey: "iniciacion" as keyof Obra,
-		},
-		{
-			id: "n",
-			icon: Hash,
-			label: "N de obra",
-			value: `#${form.state.values.n ?? 0}`,
-			fieldKey: "n" as keyof Obra,
-		},
-		{
-			id: "supDeObraM2",
-			icon: Ruler,
-			label: "Superficie",
-			value: `${formatNumber(form.state.values.supDeObraM2, " m2")}`,
-			fieldKey: "supDeObraM2" as keyof Obra,
-		},
-	];
-
-	function renderEmptyLayoutBlock(message: string) {
+	const renderDataFlowSuggestion = (fieldId: string, currentValue: unknown) => {
+		const suggestion = getDataFlowSuggestionForField(fieldId);
+		if (!suggestion) return null;
+		if (!hasVisibleDataFlowSuggestion(suggestion, currentValue)) return null;
 		return (
-			<div className="rounded-lg border border-dashed border-[#e8e8e8] p-4 text-sm text-[#999]">
-				{message}
+			<div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+				<p className="text-xs text-[#b45309]">
+					Valor recomendado: {formatSuggestionValue(suggestion.suggested_value, suggestion.formatted_value)}
+				</p>
+				{onDataFlowSuggestionDecision ? (
+					<div className="flex gap-2">
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							className="h-7 px-2 text-[11px]"
+							disabled={isResolvingDataFlowSuggestion}
+							onClick={() => void onDataFlowSuggestionDecision(suggestion.id, "accept")}
+						>
+							Aplicar recomendacion
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							variant="ghost"
+							className="h-7 px-2 text-[11px] text-[#b45309]"
+							disabled={isResolvingDataFlowSuggestion}
+							onClick={() => void onDataFlowSuggestionDecision(suggestion.id, "reject")}
+						>
+							Rechazar
+						</Button>
+					</div>
+				) : null}
 			</div>
 		);
-	}
-
-	function renderProgressBlock(block: GeneralTabLayoutBlock, index: number) {
-		const showFindings = blockHasField(block, "findings", true);
-		return (
-			<motion.section
-				key={block.id}
-				initial={{ opacity: 0, scale: 0.96 }}
-				animate={{ opacity: 1, scale: 1 }}
-				transition={{ delay: 0.08 + index * 0.03 }}
-				style={previewSectionStyle(block)}
-				className={previewSectionClass(
-					block,
-					(isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
-					"rounded-xl"
-				)}
-			>
-				<ShellCard
-					title={block.label || "Avance"}
-					icon={Percent}
-					className={cn(
-						"h-full",
-						(isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
-						"border-[#f7b26a] bg-[#fffaf5]"
-					)}
-					action={
-						isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje") ? (
-							<span className="text-[11px] font-semibold text-[#f97316]">Sin guardar</span>
-						) : (
-							<span className="text-[11px] font-semibold uppercase tracking-wide text-[#f97316]">
-								Progreso
-							</span>
-						)
-					}
-				>
-					<div className="flex h-full flex-col items-center gap-4">
-						<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
-							<CircularProgress value={form.state.values.porcentaje ?? 0} />
-						</div>
-						{showFindings ? (
-							<div
-								className="w-full rounded-lg border border-[#f0f0f0] p-3"
-								data-wizard-target="obra-general-findings"
-							>
-								<p className="text-[10px] font-semibold uppercase tracking-wide text-[#aaa]">
-									Alertas detectadas
-								</p>
-								{(reportsData?.findings?.length ?? 0) === 0 ? (
-									<p className="mt-1.5 text-[13px] text-[#999]">
-										No hay alertas abiertas para esta obra.
-									</p>
-								) : (
-									<div className="mt-2 space-y-2">
-										{reportsData?.findings.slice(0, 4).map((finding) => {
-											const tone =
-												finding.severity === "critical"
-													? "border-red-200 bg-red-50 text-red-700"
-													: finding.severity === "warn"
-														? "border-amber-200 bg-amber-50 text-amber-700"
-														: "border-sky-200 bg-sky-50 text-sky-700";
-											return (
-												<div
-													key={finding.id}
-													className={cn("rounded-md border px-3 py-2", tone)}
-													data-wizard-target={
-														finding.rule_key === "cert.missing_current_month"
-															? "obra-general-missing-current-certificado"
-															: undefined
-													}
-												>
-													<div className="flex items-start gap-2">
-														<AlertTriangle className="mt-0.5 h-4 w-4" />
-														<div>
-															<p className="text-sm font-semibold">{finding.title}</p>
-															{finding.message ? (
-																<p className="mt-0.5 text-xs">{finding.message}</p>
-															) : null}
-														</div>
-													</div>
-												</div>
-											);
-										})}
-									</div>
-								)}
-							</div>
-						) : null}
-					</div>
-				</ShellCard>
-			</motion.section>
-		);
-	}
-
-	function renderCurveBlock(block: GeneralTabLayoutBlock, index: number) {
-		return (
-			<motion.section
-				key={block.id}
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ delay: 0.08 + index * 0.03 }}
-				style={previewSectionStyle(block)}
-				className={previewSectionClass(block)}
-				data-wizard-target="obra-curva-avance"
-			>
-				<ShellCard
-					title={block.label || "Curva de avance"}
-					icon={LineChartIcon}
-					className="h-full"
-					bodyClassName="p-4"
-					action={
-						<div className="flex items-center gap-3">
-							{reportsData?.curve ? (
-								<p className="text-[11px] text-[#bbb]">
-									{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
-								</p>
-							) : null}
-							{curveImportConfig ? (
-								<CurveEditorDialog
-									obraId={curveImportConfig.obraId}
-									curvaPlanTableId={curveImportConfig.curvaPlanTableId}
-									curvaPlanTableName={curveImportConfig.curvaPlanTableName}
-									pmcResumenTableId={curveImportConfig.pmcResumenTableId}
-									pmcResumenTableName={curveImportConfig.pmcResumenTableName}
-									onSaved={curveImportConfig.onImported}
-								/>
-							) : null}
-						</div>
-					}
-				>
-					{reportsData?.curve ? (
-						<AdvanceCurveChart points={reportsData.curve.points} />
-					) : (
-						<div className="flex h-[274px] flex-col rounded-lg border border-dashed border-[#e8e8e8] p-4">
-							<div className="rounded-lg border border-[#f0f0f0] px-4 py-3 text-[13px] text-[#bbb]">
-								No se detectaron tablas Curva Plan + PMC Resumen con datos suficientes.
-							</div>
-							<div className="mt-4 flex-1 rounded-lg bg-[linear-gradient(to_right,rgba(240,240,240,0.6)_1px,transparent_1px),linear-gradient(to_bottom,rgba(240,240,240,0.6)_1px,transparent_1px)] bg-[size:24px_24px]" />
-						</div>
-					)}
-				</ShellCard>
-			</motion.section>
-		);
-	}
-
-	function renderGeneralInfoBlock(block: GeneralTabLayoutBlock, index: number) {
-		const fields = generalInfoFields.filter((field) => blockHasField(block, field.id, true));
-		return (
-			<motion.section
-				key={block.id}
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ delay: 0.08 + index * 0.03 }}
-				style={previewSectionStyle(block)}
-				className={previewSectionClass(block)}
-			>
-				<ShellCard title={block.label || "Informacion General"} icon={Landmark} className="h-full">
-					{fields.length > 0 ? (
-						<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-							{fields.map((field) => (
-								<MiniField
-									key={field.id}
-									icon={field.icon}
-									label={field.label}
-									value={String(field.value)}
-									highlighted={isFieldDirty(field.fieldKey)}
-								/>
-							))}
-						</div>
-					) : (
-						renderEmptyLayoutBlock("Este bloque no tiene campos seleccionados.")
-					)}
-				</ShellCard>
-			</motion.section>
-		);
-	}
-
-	function renderFinancialBlock(block: GeneralTabLayoutBlock, index: number) {
-		const customKpis = financialCustomResults.map((result) => ({
-			id: result.id,
-			label: result.label,
-			value: result.formattedValue,
-			highlighted: result.status !== "ok",
-		}));
-		const kpis = [...defaultFinancialKpis, ...customKpis].filter((kpi) =>
-			blockHasField(block, kpi.id, true)
-		);
-		const showSegunContrato = blockHasField(block, "segunContrato", true);
-		const showProrrogas = blockHasField(block, "prorrogasAcordadas", true);
-		const showPlazo = blockHasAnyField(block, ["plazoTotal", "plazoTransc"], true);
-		const hasDuration = showSegunContrato || showProrrogas || showPlazo;
-		return (
-			<motion.section
-				key={block.id}
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ delay: 0.08 + index * 0.03 }}
-				style={previewSectionStyle(block)}
-				className={previewSectionClass(block)}
-			>
-				<ShellCard title={block.label || "Datos Financieros"} icon={BadgeDollarSign} className="h-full">
-					<div className="space-y-5">
-						{kpis.length > 0 ? (
-							<div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-								{kpis.map((kpi) => (
-									<KpiItem
-										key={kpi.id}
-										label={kpi.label}
-										value={kpi.value}
-										highlighted={kpi.highlighted}
-									/>
-								))}
-							</div>
-						) : null}
-						{kpis.length > 0 && hasDuration ? <div className="h-px bg-[#f0f0f0]" /> : null}
-						{hasDuration ? (
-							<div className="space-y-3">
-								<div className="flex flex-wrap gap-3">
-									{showSegunContrato ? (
-										<MiniField
-											icon={FileText}
-											label="Segun contrato"
-											value={`${formatNumber(form.state.values.segunContrato, " meses")}`}
-											highlighted={isFieldDirty("segunContrato")}
-										/>
-									) : null}
-									{showProrrogas && Number(form.state.values.prorrogasAcordadas) > 0 ? (
-										<MiniField
-											icon={TrendingUp}
-											label="Prorrogas"
-											value={`+${formatNumber(form.state.values.prorrogasAcordadas, " meses")}`}
-											highlighted={isFieldDirty("prorrogasAcordadas")}
-										/>
-									) : null}
-									{showPlazo ? (() => {
-										const total = Number(form.state.values.plazoTotal ?? 0);
-										const elapsed = Number(form.state.values.plazoTransc ?? 0);
-										const pct = total > 0 ? Math.min(100, (elapsed / total) * 100) : 0;
-										const remaining = Math.max(0, total - elapsed);
-										const isDirty = isFieldDirty("plazoTotal") || isFieldDirty("plazoTransc");
-										return (
-											<div className={cn(
-												"rounded-lg border border-[#f0f0f0] p-3.5 flex flex-col flex-1",
-												isDirty && "border-[#f7b26a] bg-[#fff7ed]"
-											)}>
-												<div className="mb-2.5 flex items-center justify-between">
-													<div className="flex items-center gap-1.5 text-[11px] text-[#aaa]">
-														<Calendar className="size-3.5" />
-														<span>Plazo de obra</span>
-													</div>
-													<span className="text-[12px] font-semibold tabular-nums text-[#1a1a1a]">
-														{formatNumber(elapsed)}{" "}
-														<span className="font-normal text-[#aaa]">/ {formatNumber(total)} meses</span>
-													</span>
-												</div>
-												<div className="relative h-1.5 w-full overflow-hidden rounded-full bg-[#f0f0f0]">
-													<motion.div
-														className="absolute inset-y-0 left-0 rounded-full"
-														style={{ backgroundColor: "var(--color-orange-primary)", opacity: 0.8 }}
-														initial={{ width: "0%" }}
-														animate={{ width: `${pct}%` }}
-														transition={{ type: "spring", stiffness: 120, damping: 20 }}
-													/>
-												</div>
-												<div className="mt-2 flex items-center justify-between">
-													<span className="text-[11px] font-medium" style={{ color: "var(--color-orange-primary)" }}>
-														{formatNumber(elapsed)} meses transcurridos
-													</span>
-													{remaining > 0 && (
-														<span className="text-[11px] text-[#aaa]">{formatNumber(remaining)} restantes</span>
-													)}
-												</div>
-											</div>
-										);
-									})() : null}
-								</div>
-							</div>
-						) : null}
-						{kpis.length === 0 && !hasDuration
-							? renderEmptyLayoutBlock("Este bloque no tiene resultados o campos seleccionados.")
-							: null}
-					</div>
-				</ShellCard>
-			</motion.section>
-		);
-	}
-
-	function renderConfiguredFieldsBlock(block: GeneralTabLayoutBlock, index: number) {
-		const columns = extraMainTableColumns.filter((column) => blockHasField(block, column.id, true));
-		return (
-			<motion.section
-				key={block.id}
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ delay: 0.08 + index * 0.03 }}
-				style={previewSectionStyle(block)}
-				className={previewSectionClass(block)}
-			>
-				<ShellCard title={block.label || "Campos Configurados"} icon={FileText} className="h-full">
-					{columns.length > 0 ? (
-						<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-							{columns.map((column) => (
-								<MiniField
-									key={column.id}
-									icon={FileText}
-									label={column.label}
-									value={formatMainColumnValue(
-										mainTableColumnValues[column.id],
-										column.cellType,
-										column
-									)}
-								/>
-							))}
-						</div>
-					) : (
-						renderEmptyLayoutBlock("No hay campos configurados visibles en este bloque.")
-					)}
-				</ShellCard>
-			</motion.section>
-		);
-	}
-
-	function renderCertificatesBlock(block: GeneralTabLayoutBlock, index: number) {
-		if (!hasCertificates) return null;
-		return (
-			<motion.section
-				key={block.id}
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ delay: 0.08 + index * 0.03 }}
-				style={previewSectionStyle(block)}
-				className={previewSectionClass(block)}
-			>
-				<CertificatesSummaryCard certificates={obraCertificates} />
-			</motion.section>
-		);
-	}
-
-	function renderCustomResultBlock(block: GeneralTabLayoutBlock, index: number) {
-		const result = block.resultId ? dataFlowResultById.get(block.resultId) : null;
-		return (
-			<motion.section
-				key={block.id}
-				initial={{ opacity: 0, y: 20 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ delay: 0.08 + index * 0.03 }}
-				style={previewSectionStyle(block)}
-				className={previewSectionClass(block)}
-			>
-				<ShellCard title={block.label || result?.label || "Resultado"} icon={BadgeDollarSign} className="h-full">
-					{result ? (
-						<div className="rounded-xl border border-[#ece7e2] bg-white p-4">
-							<p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#ff5800]">
-								Resultado
-							</p>
-							<p className="mt-2 text-2xl font-bold tabular-nums text-[#1a1a1a]">
-								{result.formattedValue}
-							</p>
-							<p className="mt-1 text-sm font-medium text-[#444]">{result.label}</p>
-							{result.description ? (
-								<p className="mt-1 text-xs text-[#8b8b8b]">{result.description}</p>
-							) : null}
-						</div>
-					) : (
-						renderEmptyLayoutBlock("Selecciona un resultado para este bloque desde el editor de layout.")
-					)}
-				</ShellCard>
-			</motion.section>
-		);
-	}
-
-	function renderPreviewLayoutBlock(block: GeneralTabLayoutBlock, index: number) {
-		switch (block.type) {
-			case "progress":
-				return renderProgressBlock(block, index);
-			case "curve":
-				return renderCurveBlock(block, index);
-			case "general_info":
-				return renderGeneralInfoBlock(block, index);
-			case "financial":
-				return renderFinancialBlock(block, index);
-			case "configured_fields":
-				return renderConfiguredFieldsBlock(block, index);
-			case "certificates":
-				return renderCertificatesBlock(block, index);
-			case "custom_result":
-				return renderCustomResultBlock(block, index);
-			default:
-				return null;
-		}
-	}
+	};
 
 	return (
 		<TabsContent value="general" className="space-y-6 pt-4">
@@ -1636,6 +1091,11 @@ export function ObraGeneralTab({
 							form.handleSubmit();
 						}}
 					>
+						{dataFlowSuggestionsError ? (
+							<p className="rounded-xl border border-[#f7b26a] bg-[#fffaf5] p-3 text-sm font-medium text-[#b45309]">
+								{dataFlowSuggestionsError}
+							</p>
+						) : null}
 						{derivedCertificadosNotice ? (
 							<motion.div
 								initial={{ opacity: 0, y: 12 }}
@@ -1676,27 +1136,6 @@ export function ObraGeneralTab({
 									</div>
 								</div>
 							</motion.div>
-						) : null}
-						{heroCustomResults.length > 0 ? (
-							<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-								{heroCustomResults.map((result) => (
-									<div
-										key={result.id}
-										className="rounded-2xl border border-[#ece7e2] bg-white p-4 shadow-card"
-									>
-										<p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#ff5800]">
-											Resultado custom
-										</p>
-										<p className="mt-2 text-xl font-bold text-[#1a1a1a]">
-											{result.formattedValue}
-										</p>
-										<p className="mt-1 text-sm font-medium text-[#444]">{result.label}</p>
-										{result.description ? (
-											<p className="mt-1 text-xs text-[#8b8b8b]">{result.description}</p>
-										) : null}
-									</div>
-								))}
-							</div>
 						) : null}
 						<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
 							<motion.div
@@ -1768,7 +1207,7 @@ export function ObraGeneralTab({
 																Aplicar recomendacion
 															</Button>
 														</div>
-													) : null}
+													) : renderDataFlowSuggestion("porcentaje", field.state.value)}
 													{isDerivedFieldBlocked("porcentaje") && derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -1809,6 +1248,7 @@ export function ObraGeneralTab({
 															{getErrorMessage(field.state.meta.errors)}
 														</p>
 													)}
+													{renderDataFlowSuggestion("designacionYUbicacion", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -1827,6 +1267,7 @@ export function ObraGeneralTab({
 														className={SURFACE_INPUT_CLASS}
 														placeholder="Nombre de la entidad"
 													/>
+													{renderDataFlowSuggestion("entidadContratante", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -1844,6 +1285,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
+													{renderDataFlowSuggestion("mesBasicoDeContrato", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -1861,6 +1303,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
+													{renderDataFlowSuggestion("iniciacion", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -1878,6 +1321,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
+													{renderDataFlowSuggestion("n", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -1895,6 +1339,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
+													{renderDataFlowSuggestion("supDeObraM2", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -1932,6 +1377,7 @@ export function ObraGeneralTab({
 														)}
 														placeholder="0.00"
 													/>
+													{renderDataFlowSuggestion("contratoMasAmpliaciones", field.state.value)}
 													{derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -1982,7 +1428,7 @@ export function ObraGeneralTab({
 																Aplicar recomendacion
 															</Button>
 														</div>
-													) : null}
+													) : renderDataFlowSuggestion("certificadoALaFecha", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -2029,7 +1475,7 @@ export function ObraGeneralTab({
 																Aplicar recomendacion
 															</Button>
 														</div>
-													) : null}
+													) : renderDataFlowSuggestion("saldoACertificar", field.state.value)}
 													{isDerivedFieldBlocked("saldoACertificar") && derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -2039,26 +1485,6 @@ export function ObraGeneralTab({
 											)}
 										</form.Field>
 									</div>
-									{financialCustomResults.length > 0 ? (
-										<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-											{financialCustomResults.map((result) => (
-												<div
-													key={result.id}
-													className="rounded-xl border border-[#ece7e2] bg-[#fcfcfb] p-3"
-												>
-													<p className="text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
-														{result.label}
-													</p>
-													<p className="mt-2 text-right font-mono text-lg font-semibold text-[#1a1a1a]">
-														{result.formattedValue}
-													</p>
-													{result.description ? (
-														<p className="mt-2 text-xs text-[#8b8b8b]">{result.description}</p>
-													) : null}
-												</div>
-											))}
-										</div>
-									) : null}
 									<div className="h-px bg-[#f0f0f0]" />
 									<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 										<form.Field name="segunContrato">
@@ -2074,6 +1500,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
+													{renderDataFlowSuggestion("segunContrato", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -2090,6 +1517,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
+													{renderDataFlowSuggestion("prorrogasAcordadas", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -2106,6 +1534,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
+													{renderDataFlowSuggestion("plazoTotal", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -2122,6 +1551,7 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
+													{renderDataFlowSuggestion("plazoTransc", field.state.value)}
 												</div>
 											)}
 										</form.Field>
@@ -2168,8 +1598,9 @@ export function ObraGeneralTab({
 																] ?? null
 															}
 														>
-															{(liveValue: any) =>
-																isBooleanType ? (
+															{(liveValue: any) => (
+																<>
+																	{isBooleanType ? (
 																	<Select
 																		value={
 																			liveValue === true
@@ -2194,7 +1625,7 @@ export function ObraGeneralTab({
 																			<SelectItem value="false">No</SelectItem>
 																		</SelectContent>
 																	</Select>
-																) : isSelectType ? (
+																	) : isSelectType ? (
 																	<div className="space-y-1.5">
 																		{(() => {
 																			const liveSelectValue = String(liveValue ?? "").trim();
@@ -2273,7 +1704,7 @@ export function ObraGeneralTab({
 																			);
 																		})()}
 																	</div>
-																) : (
+																	) : (
 																	<Input
 																		type={inputType}
 																		value={String(liveValue ?? "")}
@@ -2288,8 +1719,10 @@ export function ObraGeneralTab({
 																		}
 																		className={SURFACE_INPUT_CLASS}
 																	/>
-																)
-															}
+																	)}
+																	{renderDataFlowSuggestion(column.id, liveValue)}
+																</>
+															)}
 														</form.Subscribe>
 													) : (
 														<div className="rounded-lg border border-[#f0f0f0] p-3 text-sm text-[#1a1a1a]">
@@ -2341,54 +1774,15 @@ export function ObraGeneralTab({
 				</>
 			) : (
 				<div className="space-y-5">
-					{false && heroCustomResults.length > 0 ? (
-						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-							{heroCustomResults.map((result) => (
-								<div
-									key={result.id}
-									className="rounded-2xl border border-[#ece7e2] bg-white p-4 shadow-card"
-								>
-									<p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#ff5800]">
-										Resultado custom
-									</p>
-									<p className="mt-2 text-xl font-bold text-[#1a1a1a]">
-										{result.formattedValue}
-									</p>
-									<p className="mt-1 text-sm font-medium text-[#444]">{result.label}</p>
-									{result.description ? (
-										<p className="mt-1 text-xs text-[#8b8b8b]">{result.description}</p>
-									) : null}
-								</div>
-							))}
-						</div>
-					) : null}
 					<div className="flex flex-col lg:flex-row gap-4">
 						<div className="flex-1 space-y-6 min-w-0">
-							<div
-								className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:[gap:var(--general-layout-gap)] lg:[grid-auto-rows:var(--general-layout-row-height)]"
-								style={{
-									"--general-layout-row-height": `${GENERAL_LAYOUT_ROW_HEIGHT}px`,
-									"--general-layout-gap": `${GENERAL_LAYOUT_GAP_PX}px`,
-								} as CSSProperties}
-							>
-								{visibleLayoutBlocks.length > 0 ? (
-									visibleLayoutBlocks.map(renderPreviewLayoutBlock)
-								) : (
-									<div className="lg:col-span-12">
-										{renderEmptyLayoutBlock("No hay bloques visibles en el layout de General.")}
-									</div>
-								)}
-							</div>
-							<div className="hidden">
 							<div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
 								<motion.div
 									initial={{ opacity: 0, scale: 0.95 }}
 									animate={{ opacity: 1, scale: 1 }}
 									transition={{ delay: 0.1 }}
-									style={{ order: getLayoutBlockOrder("progress") }}
 									className={cn(
 										"lg:col-span-4",
-										!isLayoutBlockVisible("progress") && "hidden",
 										(isFieldDirty("porcentaje") || isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
 										"rounded-xl"
 									)}
@@ -2468,8 +1862,7 @@ export function ObraGeneralTab({
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.25 }}
-									style={{ order: getLayoutBlockOrder("curve") }}
-									className={cn("lg:col-span-8", !isLayoutBlockVisible("curve") && "hidden")}
+									className="lg:col-span-8"
 									data-wizard-target="obra-curva-avance"
 								>
 									<ShellCard
@@ -2516,8 +1909,7 @@ export function ObraGeneralTab({
 										initial={{ opacity: 0, y: 20 }}
 										animate={{ opacity: 1, y: 0 }}
 										transition={{ delay: 0.32 }}
-										style={{ order: getLayoutBlockOrder("certificates") }}
-										className={cn("lg:col-span-6", !isLayoutBlockVisible("certificates") && "hidden")}
+										className="lg:col-span-6"
 									>
 										<CertificatesSummaryCard certificates={obraCertificates} />
 									</motion.section>
@@ -2526,8 +1918,7 @@ export function ObraGeneralTab({
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.3 }}
-									style={{ order: getLayoutBlockOrder("financial") }}
-									className={cn("lg:col-span-6", !hasCertificates && "lg:order-2", !isLayoutBlockVisible("financial") && "hidden")}
+									className={cn("lg:col-span-6", !hasCertificates && "lg:order-2")}
 								>
 									<ShellCard title="Datos Financieros" icon={BadgeDollarSign}>
 										<div className="space-y-5">
@@ -2536,30 +1927,33 @@ export function ObraGeneralTab({
 													label="Contrato + ampliaciones"
 													value={formatCurrency(form.state.values.contratoMasAmpliaciones)}
 													highlighted={isContratoBlockingDerived}
-												/>
+												>
+													{renderDataFlowSuggestion(
+														"contratoMasAmpliaciones",
+														form.state.values.contratoMasAmpliaciones
+													)}
+												</KpiItem>
 												<KpiItem
 													label="Certificado a la fecha"
 													value={formatCurrency(form.state.values.certificadoALaFecha)}
 													highlighted={isDerivedFieldHighlighted("certificadoALaFecha")}
-												/>
+												>
+													{renderDataFlowSuggestion(
+														"certificadoALaFecha",
+														form.state.values.certificadoALaFecha
+													)}
+												</KpiItem>
 												<KpiItem
 													label="Saldo a certificar"
 													value={formatCurrency(form.state.values.saldoACertificar)}
 													highlighted={isDerivedFieldHighlighted("saldoACertificar")}
-												/>
+												>
+													{renderDataFlowSuggestion(
+														"saldoACertificar",
+														form.state.values.saldoACertificar
+													)}
+												</KpiItem>
 											</div>
-											{financialCustomResults.length > 0 ? (
-												<div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-													{financialCustomResults.map((result) => (
-														<KpiItem
-															key={result.id}
-															label={result.label}
-															value={result.formattedValue}
-															highlighted={result.status !== "ok"}
-														/>
-													))}
-												</div>
-											) : null}
 											<div className="h-px bg-[#f0f0f0]" />
 											<div className="space-y-3">
 												{/* Contract duration pills */}
@@ -2630,8 +2024,7 @@ export function ObraGeneralTab({
 										initial={{ opacity: 0, y: 20 }}
 										animate={{ opacity: 1, y: 0 }}
 										transition={{ delay: 0.32 }}
-										style={{ order: getLayoutBlockOrder("general_info") }}
-										className={cn("lg:col-span-6 lg:order-1", !isLayoutBlockVisible("general_info") && "hidden")}
+										className="lg:col-span-6 lg:order-1"
 									>
 										<GeneralInfoCard
 											values={form.state.values}
@@ -2646,8 +2039,7 @@ export function ObraGeneralTab({
 								initial={{ opacity: 0, y: 20 }}
 								animate={{ opacity: 1, y: 0 }}
 								transition={{ delay: 0.28 }}
-								style={{ order: getLayoutBlockOrder("general_info") }}
-								className={cn("lg:col-span-12", (!hasCertificates || !isLayoutBlockVisible("general_info")) && "hidden")}
+								className={cn("lg:col-span-12", !hasCertificates && "hidden")}
 							>
 								<ShellCard title="Información General" icon={Landmark}>
 									<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2692,12 +2084,11 @@ export function ObraGeneralTab({
 							</motion.section>
 
 
-							{extraMainTableColumns.length > 0 && isLayoutBlockVisible("configured_fields") ? (
+							{extraMainTableColumns.length > 0 ? (
 								<motion.section
 									initial={{ opacity: 0, y: 20 }}
 									animate={{ opacity: 1, y: 0 }}
 									transition={{ delay: 0.34 }}
-									style={{ order: getLayoutBlockOrder("configured_fields") }}
 								>
 									<ShellCard title="Campos Configurados" icon={FileText}>
 										<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -2711,14 +2102,14 @@ export function ObraGeneralTab({
 														column.cellType,
 														column
 													)}
-												/>
+												>
+													{renderDataFlowSuggestion(column.id, mainTableColumnValues[column.id])}
+												</MiniField>
 											))}
 										</div>
 									</ShellCard>
 								</motion.section>
 							) : null}
-
-							</div>
 
 							{hasUnsavedChanges() && (
 								<motion.div

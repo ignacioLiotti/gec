@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
-import { Pencil, Eye, StickyNote, X, AlertTriangle, RotateCcw, Trash2, Layers } from "lucide-react";
+import { Pencil, Eye, StickyNote, X, AlertTriangle, RotateCcw, Trash2, FilePlus2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
@@ -134,6 +134,16 @@ async function fetchObraDetail(obraId: string): Promise<Obra> {
 	}
 	const data = await response.json();
 	return data.obra as Obra;
+}
+
+async function fetchDataFlowSuggestions(obraId: string): Promise<DataFlowSuggestion[]> {
+	const response = await fetch(`/api/obras/${obraId}/data-flow-suggestions`);
+	if (!response.ok) {
+		const result = await response.json().catch(() => ({}));
+		throw new Error(result.error ?? "No se pudieron cargar las solicitudes de data-flow");
+	}
+	const data = await response.json().catch(() => ({}));
+	return Array.isArray(data?.suggestions) ? (data.suggestions as DataFlowSuggestion[]) : [];
 }
 
 async function fetchMemoriaNotes(obraId: string): Promise<MemoriaNote[]> {
@@ -334,6 +344,17 @@ type MemoriaNote = {
 	createdAt: string;
 	userId: string;
 	userName: string | null;
+};
+
+type DataFlowSuggestion = {
+	id: string;
+	field_id: string;
+	result_label: string;
+	old_value: unknown;
+	suggested_value: unknown;
+	formatted_value: string | null;
+	status: "pending" | "accepted" | "rejected";
+	created_at: string;
 };
 
 type DerivedCertificadosNotice = {
@@ -1451,6 +1472,13 @@ function ObraDetailPageContent() {
 		staleTime: 5 * 60 * 1000,
 	});
 
+	const dataFlowSuggestionsQuery = useQuery({
+		queryKey: ["obra", obraId, "data-flow-suggestions"],
+		queryFn: () => fetchDataFlowSuggestions(obraId!),
+		enabled: isValidObraId && isGeneralTabActive,
+		staleTime: 30 * 1000,
+	});
+
 	// Flujo actions - always fetch (cached by React Query)
 	const flujoActionsQuery = useQuery({
 		queryKey: ['obra', obraId, 'flujo-actions'],
@@ -1854,6 +1882,7 @@ function ObraDetailPageContent() {
 	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 	const [isGeneralTabEditMode, setIsGeneralTabEditMode] = useState(false);
 	const [isSavingObra, setIsSavingObra] = useState(false);
+	const [isResolvingDataFlowSuggestion, setIsResolvingDataFlowSuggestion] = useState(false);
 	const [isDeletingObra, setIsDeletingObra] = useState(false);
 	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
 	const [derivedCertificadosNotice, setDerivedCertificadosNotice] =
@@ -2009,11 +2038,6 @@ function ObraDetailPageContent() {
 	const handleOpenDocumentsTrashPage = useCallback(() => {
 		if (!obraId) return;
 		router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
-	}, [obraId, router]);
-
-	const handleOpenDataFlowPage = useCallback(() => {
-		if (!obraId) return;
-		router.push(`/excel/${encodeURIComponent(obraId)}/data-flow`);
 	}, [obraId, router]);
 
 	const handleOpenObrasTrashPage = useCallback(() => {
@@ -2398,6 +2422,43 @@ function ObraDetailPageContent() {
 			}
 		},
 		[obraId, initialFormValues, queryClient]
+	);
+
+	const handleDataFlowSuggestionDecision = useCallback(
+		async (suggestionId: string, decision: "accept" | "reject") => {
+			if (!obraId || obraId === "undefined") return;
+			setIsResolvingDataFlowSuggestion(true);
+			try {
+				const response = await fetch(`/api/obras/${obraId}/data-flow-suggestions`, {
+					method: "PATCH",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ suggestionId, decision }),
+				});
+				const result = await response.json().catch(() => ({}));
+				if (!response.ok) {
+					throw new Error(result.error ?? "No se pudo actualizar la solicitud de data-flow");
+				}
+				toast.success(decision === "accept" ? "Solicitud aplicada" : "Solicitud rechazada");
+				await Promise.all([
+					queryClient.invalidateQueries({ queryKey: ["obra", obraId] }),
+					queryClient.invalidateQueries({ queryKey: ["obra", obraId, "data-flow-suggestions"] }),
+					queryClient.invalidateQueries({ queryKey: ["obras-dashboard"] }),
+				]);
+				invalidateObrasTableSessionCache();
+			} catch (error) {
+				console.error(error);
+				toast.error(
+					error instanceof Error
+						? error.message
+						: "No se pudo actualizar la solicitud de data-flow"
+				);
+			} finally {
+				setIsResolvingDataFlowSuggestion(false);
+			}
+		},
+		[obraId, queryClient]
 	);
 
 	const form = useForm({
@@ -3654,10 +3715,10 @@ function ObraDetailPageContent() {
 										variant="outline"
 										size="sm"
 										className="h-8 gap-2"
-										onClick={handleOpenDataFlowPage}
+										onClick={() => router.push(`/document-generation?workId=${obraId}`)}
 									>
-										<Layers className="h-4 w-4" />
-										<span className="text-base md:text-sm">Flujo de datos</span>
+										<FilePlus2 className="h-4 w-4" />
+										<span className="text-base md:text-sm">Generar documento</span>
 									</Button>
 									{isTenantAdmin && (
 										<>
@@ -3799,7 +3860,6 @@ function ObraDetailPageContent() {
 							<div data-wizard-target="obra-page-content">
 								{isGeneralTabActive ? (
 									<ObraGeneralTab
-										obraId={obraId}
 										form={form}
 										isGeneralTabEditMode={isGeneralTabEditMode}
 										hasUnsavedChanges={hasUnsavedChanges}
@@ -3829,6 +3889,14 @@ function ObraDetailPageContent() {
 												: undefined
 										}
 										derivedCertificadosNotice={derivedCertificadosNotice}
+										dataFlowSuggestions={dataFlowSuggestionsQuery.data ?? []}
+										dataFlowSuggestionsError={
+											dataFlowSuggestionsQuery.error instanceof Error
+												? dataFlowSuggestionsQuery.error.message
+												: null
+										}
+										onDataFlowSuggestionDecision={handleDataFlowSuggestionDecision}
+										isResolvingDataFlowSuggestion={isResolvingDataFlowSuggestion}
 									/>
 								) : null}
 								{/* {activeTab === "general" && (

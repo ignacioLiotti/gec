@@ -60,15 +60,18 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { hasDemoCapability, type DemoCapability } from "@/lib/demo-capabilities";
+import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
 type NavItem = {
 	title: string;
 	href: string;
 	icon: React.ComponentType<{ className?: string }>;
+	requiredPermissions?: string[];
 	items?: {
 		title: string;
 		href: string;
+		requiredPermissions?: string[];
 	}[];
 };
 
@@ -77,6 +80,7 @@ const navItems: NavItem[] = [
 		title: "Dashboard",
 		href: "/dashboard",
 		icon: Home,
+		requiredPermissions: ["nav:dashboard"],
 	},
 	{
 		title: "Excel",
@@ -87,11 +91,32 @@ const navItems: NavItem[] = [
 		title: "Data-flow general",
 		href: "/excel/data-flow",
 		icon: Waypoints,
+		requiredPermissions: ["data-flow:read"],
 	},
 	{
 		title: "Notificaciones",
 		href: "/notifications",
 		icon: Bell,
+	},
+	{
+		title: "Generar Documentos",
+		href: "/document-generation",
+		icon: FileText,
+	},
+	{
+		title: "Borradores Doc.",
+		href: "/document-generation/drafts",
+		icon: FileText,
+	},
+	{
+		title: "Revision Doc.",
+		href: "/document-generation/review",
+		icon: FileText,
+	},
+	{
+		title: "Config. Doc.",
+		href: "/document-generation/config",
+		icon: FileText,
 	},
 ];
 
@@ -202,7 +227,9 @@ const SidebarPrefetchLink = React.forwardRef<
 		prefetchedRef.current = true;
 		prefetchedSidebarHrefs.add(hrefValue);
 
-		router.prefetch(hrefValue);
+		void Promise.resolve(router.prefetch(hrefValue)).catch((error) => {
+			console.warn("[sidebar-prefetch] route prefetch failed", hrefValue, error);
+		});
 
 		const obraMatch = hrefValue.match(/^\/excel\/([^/?#]+)$/);
 		if (obraMatch?.[1]) {
@@ -274,6 +301,7 @@ const SidebarPrefetchLink = React.forwardRef<
 export function AppSidebar({
 	user,
 	userRoles,
+	documentPermissions,
 	tenants,
 	sidebarMacroTables,
 	demoMode = false,
@@ -287,7 +315,9 @@ export function AppSidebar({
 		isAdmin: boolean;
 		isSuperAdmin: boolean;
 		tenantId: string | null;
+		permissionKeys?: string[];
 	} | null;
+	documentPermissions?: DocumentGenerationPermissionMap | null;
 	tenants?: { id: string; name: string | null }[];
 	sidebarMacroTables?: SidebarMacroTable[];
 	demoMode?: boolean;
@@ -307,6 +337,10 @@ export function AppSidebar({
 	const tenantOptions = tenants ?? [];
 	const activeTenantId = userRoles?.tenantId ?? null;
 	const activeMacroTableId = searchParams.get("macroId");
+	const permissionKeySet = React.useMemo(
+		() => new Set(userRoles?.permissionKeys ?? []),
+		[userRoles?.permissionKeys],
+	);
 
 	React.useEffect(() => {
 		setMacroTables(sidebarMacroTables ?? []);
@@ -401,20 +435,63 @@ export function AppSidebar({
 				return true;
 			}
 
-			if (config.allowedRoles.length === 0) {
-				return true;
+			if (config.allowedRoles.length > 0) {
+				return config.allowedRoles.some((role) =>
+					userRoles?.roles.includes(role),
+				);
 			}
 
-			return config.allowedRoles.some((role) =>
-				userRoles?.roles.includes(role),
-			);
+			if (config.requiredPermissions?.length) {
+				return config.requiredPermissions.every((permissionKey) =>
+					permissionKeySet.has(permissionKey),
+				);
+			}
+
+			return true;
 		},
-		[demoCapabilities, demoMode, userRoles],
+		[demoCapabilities, demoMode, permissionKeySet, userRoles],
+	);
+
+	const canAccessDocumentNav = React.useCallback(
+		(href: string): boolean => {
+			if (!href.startsWith("/document-generation")) return true;
+			if (demoMode) return false;
+			if (userRoles?.isAdmin || userRoles?.isSuperAdmin) return true;
+			if (!documentPermissions?.canSeeNavigation) return false;
+
+			switch (href) {
+				case "/document-generation":
+					return documentPermissions.canCreate;
+				case "/document-generation/drafts":
+					return (
+						documentPermissions.canCreate ||
+						documentPermissions.canViewAllDrafts
+					);
+				case "/document-generation/review":
+					return documentPermissions.canReview;
+				case "/document-generation/config":
+					return documentPermissions.canManageTemplates;
+				default:
+					return false;
+			}
+		},
+		[demoMode, documentPermissions, userRoles],
 	);
 
 	const filteredNavItems = React.useMemo(
-		() => navItems.filter((item) => canAccessRoute(item.href)),
-		[canAccessRoute],
+		() =>
+			navItems.filter(
+				(item) =>
+					canAccessRoute(item.href) &&
+					canAccessDocumentNav(item.href) &&
+					(!item.requiredPermissions?.length ||
+						userRoles?.isAdmin ||
+						userRoles?.isSuperAdmin ||
+						item.requiredPermissions.every((permissionKey) =>
+							permissionKeySet.has(permissionKey),
+						)),
+			),
+		[canAccessDocumentNav, canAccessRoute, permissionKeySet, userRoles],
 	);
 	const macroTablesInsertionHref = React.useMemo(() => {
 		if (macroTables.length === 0 || filteredNavItems.length === 0) return null;

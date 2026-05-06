@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 
 import {
   BUILDER_DEFAULT_CALCULATION_IDS,
-  DEFAULT_OBRA_FIELD_SOURCES,
   evaluateObraDataFlowBuilder,
   getObraDataFlowBuilderConfig,
+  listObraFieldSources,
+  resolveObraFieldValue,
 } from "@/lib/data-flow-builder";
 import {
   hasDemoCapability,
@@ -277,6 +278,18 @@ function buildCalculationProjections(config: RuleConfig): CalculationProjection[
   return projections;
 }
 
+async function hasDataFlowReadPermission(
+  access: Awaited<ReturnType<typeof resolveRequestAccessContext>>
+) {
+  if (access.actorType !== "user" || !access.user || !access.tenantId) return false;
+  const { data, error } = await access.supabase.rpc("has_permission", {
+    tenant: access.tenantId,
+    perm_key: "data-flow:read",
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const { id: obraId } = await context.params;
   if (!obraId) {
@@ -296,10 +309,13 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!tenantId) {
       return NextResponse.json({ error: "No tenant" }, { status: 400 });
     }
+    if (actorType === "user" && !(await hasDataFlowReadPermission(access))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { data: obra, error: obraError } = await supabase
       .from("obras")
-      .select("id, designacion_y_ubicacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, porcentaje, custom_data")
+      .select("*")
       .eq("id", obraId)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -459,11 +475,16 @@ export async function GET(_request: Request, context: RouteContext) {
     const tableNameById = new Map<string, string>();
     const macroNameById = new Map<string, string>();
     const obraRecord = obra as Record<string, unknown>;
-    const obraFieldSourceById = new Map(DEFAULT_OBRA_FIELD_SOURCES.map((field) => [field.id, field]));
+    const obraFields = await listObraFieldSources({
+      supabase,
+      tenantId,
+      customData: obraRecord.custom_data,
+    });
+    const obraFieldSourceById = new Map(obraFields.map((field) => [field.id, field]));
 
     function formatObraFieldValue(fieldKey: string) {
       const source = obraFieldSourceById.get(fieldKey);
-      const value = obraRecord[fieldKey];
+      const value = resolveObraFieldValue(obraRecord, fieldKey);
       if (value == null || (typeof value === "string" && value.trim().length === 0)) return "-";
       if (source?.dataType === "currency") return formatCurrency(value);
       if (source?.dataType === "percent") return formatPercent(value);
@@ -474,7 +495,7 @@ export async function GET(_request: Request, context: RouteContext) {
       const nodeId = `obra_field:${fieldKey}`;
       if (nodes.some((node) => node.id === nodeId)) return nodeId;
       const source = obraFieldSourceById.get(fieldKey);
-      const value = obraRecord[fieldKey];
+      const value = resolveObraFieldValue(obraRecord, fieldKey);
       const hasValue = value != null && !(typeof value === "string" && value.trim().length === 0);
       nodes.push({
         id: nodeId,

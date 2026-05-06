@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/utils/supabase/server";
 import {
 	hasDemoCapability,
 	resolveRequestAccessContext,
@@ -10,6 +9,10 @@ import {
 	ensureTablaDataType,
 	evaluateTablaFormula,
 } from "@/lib/tablas";
+import {
+	canAutoWriteDataFlow,
+	tryRecomputeObraDataFlowWritebacks,
+} from "@/lib/data-flow-recompute";
 
 async function fetchColumnMetas(
 	supabase: SupabaseClient,
@@ -33,6 +36,7 @@ async function fetchColumnMetas(
 	}));
 }
 type RowsContext = { params: Promise<{ id: string; tablaId: string }> };
+type DirtyRowPayload = Record<string, unknown> & { id?: unknown; source?: unknown };
 
 export async function GET(request: Request, context: RowsContext) {
 	const { id, tablaId } = await context.params;
@@ -133,17 +137,42 @@ export async function POST(request: Request, context: RowsContext) {
 
 	try {
 		const body = await request.json().catch(() => ({}));
-		const dirtyRows: any[] = Array.isArray(body?.dirtyRows)
-			? body.dirtyRows
+		const bodyRecord = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+		const dirtyRows: DirtyRowPayload[] = Array.isArray(bodyRecord.dirtyRows)
+			? bodyRecord.dirtyRows.filter(
+					(row): row is DirtyRowPayload => Boolean(row) && typeof row === "object"
+				)
 			: [];
-		const deletedRowIds: string[] = Array.isArray(body?.deletedRowIds)
-			? body.deletedRowIds.filter(
-					(value: any): value is string =>
+		const deletedRowIds: string[] = Array.isArray(bodyRecord.deletedRowIds)
+			? bodyRecord.deletedRowIds.filter(
+					(value): value is string =>
 						typeof value === "string" && value.length > 0
 				)
 			: [];
 
-		const supabase = await createClient();
+		const access = await resolveRequestAccessContext();
+		const { supabase, user, tenantId, actorType } = access;
+		if (!user && actorType !== "demo") {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		}
+		if (!tenantId) {
+			return NextResponse.json({ error: "No tenant" }, { status: 400 });
+		}
+		const { data: tabla, error: tablaError } = await supabase
+			.from("obra_tablas")
+			.select("id, obra_id, obras!inner(id, tenant_id, deleted_at)")
+			.eq("id", tablaId)
+			.eq("obra_id", id)
+			.eq("obras.tenant_id", tenantId)
+			.is("obras.deleted_at", null)
+			.maybeSingle();
+		if (tablaError) throw tablaError;
+		if (!tabla) {
+			return NextResponse.json({ error: "Tabla no encontrada" }, { status: 404 });
+		}
 		const columns = await fetchColumnMetas(supabase, tablaId);
 		if (columns.length === 0) {
 			return NextResponse.json(
@@ -160,7 +189,7 @@ export async function POST(request: Request, context: RowsContext) {
 					for (const column of columns) {
 						data[column.fieldKey] = coerceValueForType(
 							column.dataType,
-							(row as any)[column.fieldKey]
+							row[column.fieldKey]
 						);
 					}
 					for (const column of columns) {
@@ -176,17 +205,17 @@ export async function POST(request: Request, context: RowsContext) {
 						);
 					}
 					// Preserve document linkage metadata if present on the row payload.
-					if (typeof (row as any).__docPath === "string") {
-						data.__docPath = (row as any).__docPath;
+					if (typeof row.__docPath === "string") {
+						data.__docPath = row.__docPath;
 					}
-					if (typeof (row as any).__docFileName === "string") {
-						data.__docFileName = (row as any).__docFileName;
+					if (typeof row.__docFileName === "string") {
+						data.__docFileName = row.__docFileName;
 					}
 					return {
 						id: row.id as string,
 						tabla_id: tablaId,
 						data,
-						source: row.source ?? "manual",
+						source: typeof row.source === "string" ? row.source : "manual",
 					};
 				});
 
@@ -206,7 +235,16 @@ export async function POST(request: Request, context: RowsContext) {
 			if (deleteError) throw deleteError;
 		}
 
-		return NextResponse.json({ ok: true });
+		const dataFlowRecompute = await tryRecomputeObraDataFlowWritebacks({
+			supabase,
+			tenantId,
+			obraId: id,
+			actorUserId: user?.id ?? null,
+			trigger: "source_change",
+			allowAutoWrite: await canAutoWriteDataFlow({ supabase, tenantId }),
+		});
+
+		return NextResponse.json({ ok: true, dataFlowRecompute });
 	} catch (error) {
 		console.error("[tabla-rows:save]", error);
 		const message =

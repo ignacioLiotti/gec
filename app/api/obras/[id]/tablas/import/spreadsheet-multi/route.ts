@@ -27,6 +27,10 @@ import {
   deriveLineageRowKeys,
   LineageReconciliationConflictError,
 } from "@/lib/lineage";
+import {
+  canAutoWriteDataFlow,
+  tryRecomputeObraDataFlowWritebacks,
+} from "@/lib/data-flow-recompute";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -1876,15 +1880,28 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const summary = buildSpreadsheetPreviewSummary(perTable);
+    const inserted = perTable.reduce((acc, row) => acc + row.inserted, 0);
+    const dataFlowRecompute =
+      !previewMode && inserted > 0
+        ? await tryRecomputeObraDataFlowWritebacks({
+            supabase,
+            tenantId,
+            obraId,
+            actorUserId: user?.id ?? null,
+            trigger: "source_change",
+            allowAutoWrite: await canAutoWriteDataFlow({ supabase, tenantId }),
+          })
+        : null;
 
     return NextResponse.json({
       ok: true,
       preview: previewMode,
       sourceName,
       extractionId,
-      inserted: perTable.reduce((acc, row) => acc + row.inserted, 0),
+      inserted,
       perTable,
       summary,
+      dataFlowRecompute,
     });
   } catch (error) {
     console.error("[tablas:spreadsheet-multi]", error);

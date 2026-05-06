@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -29,9 +29,22 @@ type NavigationItem = {
 const NAVIGATION_STRUCTURE: NavigationItem[] = [
   { path: "/", label: "Dashboard", permission: "nav:dashboard", icon: "Home" },
   { path: "/excel", label: "Excel/Obras", permission: "nav:excel", icon: "Database" },
+  { path: "/excel/data-flow", label: "Data-flow", permission: "data-flow:read", icon: "Layers" },
   { path: "/certificados", label: "Certificados", permission: "nav:certificados", icon: "FileCheck" },
   { path: "/macro", label: "Macro Tablas", permission: "nav:macro", icon: "Layers" },
   { path: "/notifications", label: "Notificaciones", permission: "nav:notifications", icon: "Bell" },
+  {
+    path: "/document-generation",
+    label: "Documentos",
+    permission: "nav:document-generation",
+    icon: "FileText",
+    children: [
+      { path: "/document-generation", label: "Generar documentos", permission: "documents:create" },
+      { path: "/document-generation/drafts", label: "Borradores", permission: "documents:create" },
+      { path: "/document-generation/review", label: "Revision", permission: "documents:review" },
+      { path: "/document-generation/config", label: "Configuracion", permission: "documents:templates" },
+    ],
+  },
   {
     path: "/admin",
     label: "Administracion",
@@ -70,13 +83,10 @@ export function NavigationTree({
   readOnly = false,
 }: NavigationTreeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["/admin"]));
-  const [selected, setSelected] = useState<Set<string>>(
-    new Set(selectedPermissions)
+  const selected = useMemo(
+    () => new Set(selectedPermissions),
+    [selectedPermissions]
   );
-
-  useEffect(() => {
-    setSelected(new Set(selectedPermissions));
-  }, [selectedPermissions]);
 
   const toggleExpanded = (path: string) => {
     const newExpanded = new Set(expanded);
@@ -106,7 +116,6 @@ export function NavigationTree({
       newSelected.add(permission);
     }
 
-    setSelected(newSelected);
     onChange(Array.from(newSelected));
   };
 
@@ -119,9 +128,6 @@ export function NavigationTree({
     const childrenWithAccess = hasChildren
       ? item.children!.filter((c) => selected.has(c.permission)).length
       : 0;
-    const allChildrenHaveAccess =
-      hasChildren && childrenWithAccess === item.children!.length;
-
     return (
       <div key={item.path}>
         <div

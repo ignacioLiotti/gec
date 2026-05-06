@@ -56,7 +56,7 @@ user_roles                    — user_id, role_id, tenant_id
 macro_table_permissions       — macro_table_id, (user_id OR role_id), permission_level
 ```
 
-**Permission Categories:** navigation, obras, certificados, macro, admin
+**Permission Categories:** navigation, obras, certificados, macro, documents, data-flow, admin
 
 **Permission Levels (for macro tables):** `read`, `edit`, `admin`
 
@@ -69,6 +69,23 @@ macro_table_permissions       — macro_table_id, (user_id OR role_id), permissi
 | `obra_manager` | obras:admin, certificados:read |
 | `accountant` | certificados:admin |
 | `macro_analyst` | macro:admin |
+
+### Data-flow permissions
+
+Data-flow now uses explicit capability permissions:
+
+| Permission | Meaning |
+|---|---|
+| `data-flow:read` | View tenant/obra data-flow screens and graph/config APIs |
+| `data-flow:edit` | Edit obra-level data-flow overrides |
+| `data-flow:tenant-edit` | Edit tenant-level data-flow defaults |
+| `data-flow:apply-suggestion` | Accept or reject data-flow suggestions for obra fields |
+| `data-flow:auto-write` | Allow data-flow results to automatically overwrite obra fields |
+
+Dashboard route access uses `nav:dashboard`. Tenant admins and superadmins bypass these checks through `has_permission(...)`.
+| `document_creator` | nav:document-generation, documents:create |
+| `document_reviewer` | nav:document-generation, documents:review |
+| `document_manager` | nav:document-generation, documents:create, documents:review, documents:templates, documents:drafts:all |
 
 **Resolution:**
 ```typescript
@@ -104,6 +121,45 @@ const visibleNavItems = navItems.filter(item => {
   return userRoles.some(r => config.allowedRoles.includes(r));
 });
 ```
+
+For document generation there is an additional feature-level filter on top of route access:
+
+- `nav:document-generation` enables the document surfaces in the sidebar
+- `documents:create` shows `Generar` and allows editing own drafts
+- `documents:review` shows `Revision`
+- `documents:templates` shows `Plantillas` and `Configuracion`
+- `documents:drafts:all` allows seeing drafts created by other users
+
+This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document capabilities server-side and the sidebar only renders the allowed screens.
+
+---
+
+## Document Generation Permissions
+
+Document generation now has explicit feature permissions:
+
+| Permission | Purpose |
+|------|-------------|
+| `nav:document-generation` | Show document generation entries in the sidebar |
+| `documents:create` | Create documents, save drafts, resume own drafts |
+| `documents:review` | Access the review queue and approve/reject documents |
+| `documents:templates` | Access template/configuration screens and mutate template overrides |
+| `documents:drafts:all` | View drafts created by other users in the tenant |
+
+**Screens gated by these permissions:**
+
+- `/document-generation` â†’ `documents:create`
+- `/document-generation/drafts` â†’ `documents:create` or `documents:drafts:all`
+- `/document-generation/review` â†’ `documents:review`
+- `/document-generation/templates` â†’ `documents:templates`
+- `/document-generation/config` â†’ `documents:templates`
+
+**API routes gated by these permissions:**
+
+- `bootstrap`, `drafts POST`, `generate` â†’ `documents:create`
+- `drafts GET` â†’ `documents:create` for own drafts, `documents:drafts:all` for cross-user visibility
+- `generated GET/PATCH` â†’ `documents:review`
+- `templates GET/PUT` â†’ `documents:templates`
 
 ---
 

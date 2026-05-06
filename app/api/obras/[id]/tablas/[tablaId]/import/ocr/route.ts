@@ -33,6 +33,10 @@ import {
 	deriveLineageRowKeys,
 	LineageReconciliationConflictError,
 } from "@/lib/lineage";
+import {
+	canAutoWriteDataFlow,
+	tryRecomputeObraDataFlowWritebacks,
+} from "@/lib/data-flow-recompute";
 
 type RouteContext = { params: Promise<{ id: string; tablaId: string }> };
 
@@ -1673,6 +1677,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		// `surfaced` when exposed in UI/API, following canonical recommendation state machine.
 		// TODO(domain-model): Set recommendation_subject_key at creation time so new candidates
 		// can supersede previous ones for the same (obra, rule, subject_ref).
+		const dataFlowRecompute = await tryRecomputeObraDataFlowWritebacks({
+			supabase,
+			tenantId,
+			obraId: id,
+			actorUserId: user?.id ?? null,
+			trigger: "source_change",
+			allowAutoWrite: await canAutoWriteDataFlow({ supabase, tenantId }),
+		});
+
 		return NextResponse.json({
 			ok: true,
 			inserted: rowsPayload.length,
@@ -1680,6 +1693,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			file: storageInfo
 				? { bucket: storageInfo.bucket, path: storageInfo.path }
 				: null,
+			dataFlowRecompute,
 		});
 	} catch (error) {
 		if (error instanceof LineageReconciliationConflictError) {

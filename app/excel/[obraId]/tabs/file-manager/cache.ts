@@ -1,9 +1,10 @@
 "use client";
 
-import type { FileSystemItem } from "./types";
+import type { FileSystemItem, OcrFolderLink } from "./types";
 
 type CachedUrl = { url: string; expiresAt: number };
 const signedUrlCache = new Map<string, CachedUrl>();
+const pendingSignedUrlRequests = new Map<string, Promise<string | null>>();
 const URL_CACHE_DURATION = 55 * 60 * 1000; // 55 minutes
 
 type CachedFileTree = { tree: FileSystemItem; timestamp: number };
@@ -18,7 +19,7 @@ type CachedApsModels = { models: Array<{ file_path: string; aps_urn: string }>; 
 const apsModelsCache = new Map<string, CachedApsModels>();
 const APS_CACHE_DURATION = 30 * 60 * 1000;
 
-type CachedOcrLinks = { links: any[]; timestamp: number };
+type CachedOcrLinks = { links: OcrFolderLink[]; timestamp: number };
 const ocrLinksCache = new Map<string, CachedOcrLinks>();
 const OCR_LINKS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
@@ -52,6 +53,32 @@ export function setCachedSignedUrl(storagePath: string, url: string): void {
 	signedUrlCache.set(storagePath, { url, expiresAt: Date.now() + URL_CACHE_DURATION });
 }
 
+export function getOrCreateSignedUrlRequest(
+	storagePath: string,
+	expiresIn: number,
+	factory: () => Promise<string | null>,
+): Promise<string | null> {
+	const cached = getCachedSignedUrl(storagePath);
+	if (cached) return Promise.resolve(cached);
+
+	const cacheKey = `${storagePath}:${expiresIn}`;
+	const pending = pendingSignedUrlRequests.get(cacheKey);
+	if (pending) return pending;
+
+	const request = factory()
+		.then((url) => {
+			if (url) {
+				setCachedSignedUrl(storagePath, url);
+			}
+			return url;
+		})
+		.finally(() => {
+			pendingSignedUrlRequests.delete(cacheKey);
+		});
+	pendingSignedUrlRequests.set(cacheKey, request);
+	return request;
+}
+
 export function getCachedBlobUrl(storagePath: string): string | null {
 	const cached = blobCache.get(storagePath);
 	if (cached && cached.expiresAt > Date.now()) {
@@ -76,6 +103,16 @@ export function clearCachesForObra(obraId: string): void {
 	fileTreeCache.delete(obraId);
 	apsModelsCache.delete(obraId);
 	ocrLinksCache.delete(obraId);
+	for (const storagePath of signedUrlCache.keys()) {
+		if (storagePath === obraId || storagePath.startsWith(`${obraId}/`)) {
+			signedUrlCache.delete(storagePath);
+		}
+	}
+	for (const cacheKey of pendingSignedUrlRequests.keys()) {
+		if (cacheKey === obraId || cacheKey.startsWith(`${obraId}/`)) {
+			pendingSignedUrlRequests.delete(cacheKey);
+		}
+	}
 }
 
 export function getCachedApsModels(obraId: string) {
@@ -100,7 +137,7 @@ export function getCachedOcrLinks(obraId: string) {
 	return null;
 }
 
-export function setCachedOcrLinks(obraId: string, links: any[]) {
+export function setCachedOcrLinks(obraId: string, links: OcrFolderLink[]) {
 	ocrLinksCache.set(obraId, { links, timestamp: Date.now() });
 }
 

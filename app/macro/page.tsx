@@ -824,19 +824,19 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
                         );
                       },
                     }
-            : cellType === "currency"
-              ? { currencyCode: "ARS", currencyLocale: "es-AR" }
-              : cellType === "text"
-                ? {
-                  renderReadOnly: ({ value }: { value: unknown }) => {
-                    const text = String(value ?? "");
-                    if (!text) {
-                      return <span className="text-muted-foreground">-</span>;
-                    }
-                    return <TruncatedTextWithTooltip text={text} />;
-                  },
-                }
-                : undefined,
+                    : cellType === "currency"
+                      ? { currencyCode: "ARS", currencyLocale: "es-AR" }
+                      : cellType === "text"
+                        ? {
+                          renderReadOnly: ({ value }: { value: unknown }) => {
+                            const text = String(value ?? "");
+                            if (!text) {
+                              return <span className="text-muted-foreground">-</span>;
+                            }
+                            return <TruncatedTextWithTooltip text={text} />;
+                          },
+                        }
+                        : undefined,
         enableHide: true,
         enablePin: column.id !== "_obraName",
       };

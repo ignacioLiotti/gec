@@ -337,6 +337,30 @@ export async function GET(request: Request, context: RouteContext) {
     folderNodeByPath.set("", root);
     const fileNodeByPath = new Map<string, any>();
     const storageWarnings: string[] = [];
+    const generatedDocumentStatusByPath = new Map<string, string>();
+    const { data: generatedDocuments, error: generatedDocumentsError } = await supabase
+      .from("generated_documents")
+      .select("storage_path, status, updated_at")
+      .eq("obra_id", obraId)
+      .order("updated_at", { ascending: false });
+    if (generatedDocumentsError) {
+      console.error("[documents-tree:get] generated documents error:", generatedDocumentsError);
+    } else {
+      for (const generatedDocument of generatedDocuments ?? []) {
+        const storagePath =
+          typeof generatedDocument.storage_path === "string"
+            ? generatedDocument.storage_path
+            : null;
+        const status =
+          typeof generatedDocument.status === "string"
+            ? generatedDocument.status
+            : null;
+        if (!storagePath || !status || generatedDocumentStatusByPath.has(storagePath)) {
+          continue;
+        }
+        generatedDocumentStatusByPath.set(storagePath, status);
+      }
+    }
 
     const buildFolderNode = (relativeFolderPath: string) => {
       const normalizedRelative = getNormalizedPath(relativeFolderPath);
@@ -438,6 +462,7 @@ export async function GET(request: Request, context: RouteContext) {
           trackedUpload.uploadedBy === currentUser.id
             ? "Vos"
             : trackedUpload?.uploadedBy ?? null,
+        generatedDocumentStatus: generatedDocumentStatusByPath.get(storagePath) ?? null,
       };
       parentNode.children?.push(fileItem);
       fileNodeByPath.set(storagePath, fileItem);
@@ -577,6 +602,7 @@ export async function GET(request: Request, context: RouteContext) {
     const fallbackPaths = new Set<string>([
       ...docsByPath.keys(),
       ...uploadTrackingByPath.keys(),
+      ...generatedDocumentStatusByPath.keys(),
       ...apsUrnByPath.keys(),
     ]);
     for (const storagePath of fallbackPaths) {

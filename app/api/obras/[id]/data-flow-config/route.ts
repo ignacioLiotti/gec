@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import {
+  buildObraResultWritebackPlan,
+  buildObraResultWritebackPatch,
   evaluateObraDataFlowBuilder,
   getObraDataFlowBuilderConfig,
   getTenantDataFlowBuilderConfig,
@@ -8,6 +10,7 @@ import {
   mergeDataFlowBuilderConfigs,
   setObraDataFlowBuilderConfig,
 } from "@/lib/data-flow-builder";
+import { persistDataFlowWritebackRun } from "@/lib/data-flow-writeback";
 import {
   hasDemoCapability,
   resolveRequestAccessContext,
@@ -26,6 +29,19 @@ async function fetchTenantDataFlowConfig(
     .maybeSingle();
   if (error) throw error;
   return getTenantDataFlowBuilderConfig(data?.config_json ?? null);
+}
+
+async function hasDataFlowPermission(
+  access: Awaited<ReturnType<typeof resolveRequestAccessContext>>,
+  permissionKey: "data-flow:read" | "data-flow:edit" | "data-flow:tenant-edit" | "data-flow:auto-write"
+) {
+  if (access.actorType !== "user" || !access.user || !access.tenantId) return false;
+  const { data, error } = await access.supabase.rpc("has_permission", {
+    tenant: access.tenantId,
+    perm_key: permissionKey,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -47,10 +63,13 @@ export async function GET(request: Request, context: RouteContext) {
     if (!tenantId) {
       return NextResponse.json({ error: "No tenant" }, { status: 400 });
     }
+    if (actorType === "user" && !(await hasDataFlowPermission(access, "data-flow:read"))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { data: obra, error: obraError } = await supabase
       .from("obras")
-      .select("id, custom_data, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, porcentaje")
+      .select("*")
       .eq("id", obraId)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -82,6 +101,7 @@ export async function GET(request: Request, context: RouteContext) {
       effectiveConfig,
       sources,
       evaluated,
+      canWrite: actorType === "user" ? await hasDataFlowPermission(access, "data-flow:edit") : false,
       generalTabSlots: [
         { id: "hero", label: "Hero superior" },
         { id: "financial", label: "KPIs financieros" },
@@ -110,6 +130,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!tenantId) {
       return NextResponse.json({ error: "No tenant" }, { status: 400 });
     }
+    if (!(await hasDataFlowPermission(access, "data-flow:edit"))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const nextConfig = getObraDataFlowBuilderConfig({
@@ -121,7 +144,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const { data: obra, error: obraError } = await supabase
       .from("obras")
-      .select("id, custom_data, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, porcentaje")
+      .select("*")
       .eq("id", obraId)
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
@@ -134,21 +157,40 @@ export async function PATCH(request: Request, context: RouteContext) {
     const inheritedConfig = await fetchTenantDataFlowConfig(supabase, tenantId);
     const effectiveConfig = mergeDataFlowBuilderConfigs(inheritedConfig, nextConfig);
     const customData = setObraDataFlowBuilderConfig(obra.custom_data, nextConfig);
-    const { error: updateError } = await supabase
-      .from("obras")
-      .update({ custom_data: customData })
-      .eq("id", obraId)
-      .eq("tenant_id", tenantId);
-    if (updateError) throw updateError;
-
-    const sources = await listObraDataFlowSources({ supabase, tenantId, obraId });
     const evaluated = await evaluateObraDataFlowBuilder({
       supabase,
       tenantId,
       obraId,
       config: effectiveConfig,
-      obraValues: obra,
+      obraValues: { ...obra, custom_data: customData },
     });
+    const writebackPlan = buildObraResultWritebackPlan({
+      config: effectiveConfig,
+      evaluated,
+      obraValues: { ...obra, custom_data: customData },
+    });
+    const hasAutoActions = writebackPlan.actions.some((action) => action.mode === "auto");
+    if (hasAutoActions && !(await hasDataFlowPermission(access, "data-flow:auto-write"))) {
+      return NextResponse.json({ error: "Forbidden auto-write" }, { status: 403 });
+    }
+    const writeback = buildObraResultWritebackPatch({ plan: writebackPlan, customData });
+    const { error: updateError } = await supabase
+      .from("obras")
+      .update({ ...writeback.obraPatch, custom_data: writeback.customData })
+      .eq("id", obraId)
+      .eq("tenant_id", tenantId);
+    if (updateError) throw updateError;
+    await persistDataFlowWritebackRun({
+      supabase,
+      tenantId,
+      obraId,
+      actorUserId: user.id,
+      trigger: "config_save",
+      plan: writebackPlan,
+      appliedFields: writeback.writtenFields,
+    });
+
+    const sources = await listObraDataFlowSources({ supabase, tenantId, obraId });
 
     return NextResponse.json({
       scope: "obra",
@@ -157,6 +199,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       effectiveConfig,
       sources,
       evaluated,
+      writeback: writeback.writtenFields,
+      writebackPlan,
+      canWrite: true,
     });
   } catch (error) {
     console.error("[data-flow-config:patch]", error);

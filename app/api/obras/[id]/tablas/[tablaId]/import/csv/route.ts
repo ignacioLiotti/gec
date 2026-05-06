@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import Papa from "papaparse";
-import { createClient } from "@/utils/supabase/server";
 import { coerceValueForType, ensureTablaDataType, normalizeFieldKey } from "@/lib/tablas";
+import {
+	hasDemoCapability,
+	resolveRequestAccessContext,
+} from "@/lib/demo-session";
+import {
+	canAutoWriteDataFlow,
+	tryRecomputeObraDataFlowWritebacks,
+} from "@/lib/data-flow-recompute";
 
 type RouteContext = { params: Promise<{ id: string; tablaId: string }> };
 
 async function fetchColumns(
-	supabase: Awaited<ReturnType<typeof createClient>>,
+	supabase: SupabaseClient,
 	tablaId: string
 ) {
 	const { data, error } = await supabase
@@ -52,7 +60,29 @@ export async function POST(request: Request, context: RouteContext) {
 			);
 		}
 
-		const supabase = await createClient();
+		const access = await resolveRequestAccessContext();
+		const { supabase, user, tenantId, actorType } = access;
+		if (!user && actorType !== "demo") {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		if (actorType === "demo" && !hasDemoCapability(access.demoSession, "excel")) {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		}
+		if (!tenantId) {
+			return NextResponse.json({ error: "No tenant" }, { status: 400 });
+		}
+		const { data: tabla, error: tablaError } = await supabase
+			.from("obra_tablas")
+			.select("id, obra_id, obras!inner(id, tenant_id, deleted_at)")
+			.eq("id", tablaId)
+			.eq("obra_id", id)
+			.eq("obras.tenant_id", tenantId)
+			.is("obras.deleted_at", null)
+			.maybeSingle();
+		if (tablaError) throw tablaError;
+		if (!tabla) {
+			return NextResponse.json({ error: "Tabla no encontrada" }, { status: 404 });
+		}
 		const columns = await fetchColumns(supabase, tablaId);
 		if (columns.length === 0) {
 			return NextResponse.json({ error: "No hay columnas configuradas" }, { status: 400 });
@@ -120,7 +150,16 @@ export async function POST(request: Request, context: RouteContext) {
 		const { error: insertError } = await supabase.from("obra_tabla_rows").insert(rowsPayload);
 		if (insertError) throw insertError;
 
-		return NextResponse.json({ ok: true, inserted: rowsPayload.length });
+		const dataFlowRecompute = await tryRecomputeObraDataFlowWritebacks({
+			supabase,
+			tenantId,
+			obraId: id,
+			actorUserId: user?.id ?? null,
+			trigger: "source_change",
+			allowAutoWrite: await canAutoWriteDataFlow({ supabase, tenantId }),
+		});
+
+		return NextResponse.json({ ok: true, inserted: rowsPayload.length, dataFlowRecompute });
 	} catch (error) {
 		console.error("[tabla-rows:csv-import]", error);
 		const message = error instanceof Error ? error.message : "Error desconocido";

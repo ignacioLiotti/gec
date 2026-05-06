@@ -77,24 +77,24 @@ export const DocumentSheet = memo(function DocumentSheet({
 	const ocrConflictMessage =
 		document.ocrErrorCode === "LINEAGE_RECONCILIATION_CONFLICT"
 			? {
-					title: "Conflicto de continuidad detectado",
-					detail:
-						document.ocrDocumentError ??
-						"No pudimos reconciliar automaticamente la identidad estable del documento. El contenido no se aplico con continuidad y requiere revision.",
-				}
+				title: "Conflicto de continuidad detectado",
+				detail:
+					document.ocrDocumentError ??
+					"No pudimos reconciliar automaticamente la identidad estable del documento. El contenido no se aplico con continuidad y requiere revision.",
+			}
 			: document.ocrErrorCode === "OCR_PROVIDER_HIGH_DEMAND"
 				? {
-						title: "El proveedor OCR esta saturado",
-						detail:
-							document.ocrDocumentError ??
-							"El proveedor OCR devolvio una saturacion temporal. Intenta de nuevo mas tarde.",
-					}
-			: document.ocrDocumentStatus === "failed" && document.ocrDocumentError
-				? {
+					title: "El proveedor OCR esta saturado",
+					detail:
+						document.ocrDocumentError ??
+						"El proveedor OCR devolvio una saturacion temporal. Intenta de nuevo mas tarde.",
+				}
+				: document.ocrDocumentStatus === "failed" && document.ocrDocumentError
+					? {
 						title: "La extraccion OCR fallo",
 						detail: document.ocrDocumentError,
 					}
-				: null;
+					: null;
 
 	return (
 		<Sheet open={isOpen} onOpenChange={onOpenChange} modal={false}>
@@ -156,11 +156,11 @@ export const DocumentSheet = memo(function DocumentSheet({
 							{/* {ocrStatusBadge} */}
 							<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 pt-2">
 
-								{breadcrumb && (
+								{/* {breadcrumb && (
 									<SheetDescription className="truncate text-xs uppercase tracking-wide text-stone-400">
 										{breadcrumb}
 									</SheetDescription>
-								)}
+								)} */}
 								{(uploadedAtLabel || uploadedByLabel) && (
 									<div className="mt-1 text-xs text-stone-500 break-words">
 										{uploadedByLabel && <span>Subido por: {uploadedByLabel}</span>}
