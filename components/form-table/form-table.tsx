@@ -984,10 +984,22 @@ export function FormTablePagination() {
 	const canSave = !isReadOnly && typeof config.onSave === "function";
 	const isLoading = isFetching || isTransitioning;
 	const hideFooterPaginationSummary = config.hideFooterPaginationSummary === true;
+	const paginationDisabled = config.disablePagination === true;
 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground px-3 pb-4">
-			{hideFooterPaginationSummary ? (
+			{paginationDisabled ? (
+				(isLoading || filters.activeCount > 0) && (
+					<div className="flex items-center gap-4 text-foreground">
+						{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+						{filters.activeCount > 0 && (
+							<p className="text-xs text-muted-foreground">
+								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+							</p>
+						)}
+					</div>
+				)
+			) : hideFooterPaginationSummary ? (
 				(isLoading || filters.activeCount > 0) && (
 					<div className="flex items-center gap-4 text-foreground">
 						{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
@@ -1074,7 +1086,8 @@ export function FormTablePagination() {
 					</Button>
 				) : null}
 			</div>
-			<div className="flex items-center gap-2">
+			{!paginationDisabled ? (
+				<div className="flex items-center gap-2">
 				{/* <Button
 					type="button"
 					variant="outline"
@@ -1120,7 +1133,8 @@ export function FormTablePagination() {
 					Ultima
 					<ChevronsRight className="h-4 w-4" />
 				</Button> */}
-			</div>
+				</div>
+			) : null}
 		</div>
 	);
 }
@@ -1228,6 +1242,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const isDev = process.env.NODE_ENV !== "production";
 	const [externalRefreshVersion, setExternalRefreshVersion] = useState(0);
 	const enableColumnResizing = config.enableColumnResizing ?? false;
+	const paginationDisabled = config.disablePagination === true;
 	const fetchRowsFn = config.fetchRows ?? null;
 	const useServerDataMode = config.serverSideData === true && Boolean(fetchRowsFn);
 	const isEmbedded = variant === "embedded";
@@ -2143,9 +2158,10 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, setActiveCell, startSortTransition]);
 
 	const clientTotalPages = useMemo(() => {
+		if (paginationDisabled) return 1;
 		if (sortedRows.length === 0) return 1;
 		return Math.max(1, Math.ceil(sortedRows.length / pageSize));
-	}, [sortedRows.length, pageSize]);
+	}, [paginationDisabled, sortedRows.length, pageSize]);
 
 	useEffect(() => {
 		if (!useClientPagination) return;
@@ -2159,6 +2175,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		!useServerDataMode && fetchRowsFn && sortedRows.length > pageSize && serverMeta.totalPages <= 1;
 
 	const processedRows = useMemo(() => {
+		if (paginationDisabled) {
+			return sortedRows;
+		}
 		if (useServerDataMode) {
 			return sortedRows;
 		}
@@ -2168,7 +2187,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return sortedRows.slice(start, start + pageSize);
 		}
 		return sortedRows;
-	}, [page, pageSize, sortedRows, fetchRowsFn, serverReturnedAllRows, useServerDataMode]);
+	}, [paginationDisabled, page, pageSize, sortedRows, fetchRowsFn, serverReturnedAllRows, useServerDataMode]);
 
 	const processedRowsRef = useRef<Row[]>(processedRows);
 	useEffect(() => {
@@ -2178,18 +2197,26 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	// Use client pagination values when server returned all rows at once
 	const useClientPaginationValues = !useServerDataMode && (useClientPagination || serverReturnedAllRows);
 
-	const datasetTotalCount = useClientPaginationValues
+	const datasetTotalCount = paginationDisabled
+		? sortedRows.length
+		: useClientPaginationValues
 		? sortedRows.length
 		: serverMeta.total || sortedRows.length;
 
-	const totalPages = useClientPaginationValues
+	const totalPages = paginationDisabled
+		? 1
+		: useClientPaginationValues
 		? clientTotalPages
 		: serverMeta.totalPages || 1;
 
-	const hasNextPage = useClientPaginationValues
+	const hasNextPage = paginationDisabled
+		? false
+		: useClientPaginationValues
 		? page < clientTotalPages
 		: serverMeta.hasNextPage;
-	const hasPreviousPage = useClientPaginationValues
+	const hasPreviousPage = paginationDisabled
+		? false
+		: useClientPaginationValues
 		? page > 1
 		: serverMeta.hasPreviousPage;
 

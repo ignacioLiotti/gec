@@ -229,6 +229,8 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	defaultPageSize?: number;
 	pageSizeOptions?: number[];
 	lockedPageSize?: number;
+	/** When true, renders all matching rows in one view and hides page navigation controls. */
+	disablePagination?: boolean;
 	createFilters?: () => Filters;
 	renderFilters?: (props: FilterRendererProps<Filters>) => ReactNode;
 	applyFilters?: (row: Row, filters: Filters) => boolean;

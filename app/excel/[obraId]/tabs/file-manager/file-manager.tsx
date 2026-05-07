@@ -4468,7 +4468,7 @@ function FileManagerContent({
       },
       emptyStateMessage: 'No hay datos extraídos para este documento.',
       showInlineSearch: true,
-      lockedPageSize: 10,
+      disablePagination: true,
     };
   }, [
     activeDocument,
@@ -5259,6 +5259,7 @@ function FileManagerContent({
         return true;
       },
       defaultRows: ocrTableRows,
+      disablePagination: true,
       emptyStateMessage,
       showInlineSearch: true,
       toolbarMode: 'extras',
@@ -5598,6 +5599,7 @@ function FileManagerContent({
       ],
       createFilters: () => ({} as OcrOrderItemFilters),
       defaultRows: ocrOrderItemRows,
+      disablePagination: true,
       tabFilters: [],
       emptyStateMessage: 'Sin ítems registrados',
     };

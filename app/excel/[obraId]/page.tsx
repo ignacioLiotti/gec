@@ -3710,7 +3710,7 @@ function ObraDetailPageContent() {
 									)}
 								</div>
 								<div className="flex flex-wrap items-center gap-2 justify-end">
-									<Button
+									{/* <Button
 										type="button"
 										variant="outline"
 										size="sm"
@@ -3719,7 +3719,7 @@ function ObraDetailPageContent() {
 									>
 										<FilePlus2 className="h-4 w-4" />
 										<span className="text-base md:text-sm">Generar documento</span>
-									</Button>
+									</Button> */}
 									{isTenantAdmin && (
 										<>
 											{/* <Button
