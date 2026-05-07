@@ -5715,7 +5715,7 @@ function FileManagerContent({
                 )}
               </Button>
             )}
-            {selectedFolder.id !== 'root' && (
+            {/* {selectedFolder.id !== 'root' && (
               <Button
                 type="button"
                 variant="outline"
@@ -5731,7 +5731,7 @@ function FileManagerContent({
                 <Plus className="w-3.5 h-3.5" />
                 Generar documento en esta carpeta
               </Button>
-            )}
+            )} */}
           </div>
 
           {/* RIGHT TAB */}
