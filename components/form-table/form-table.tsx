@@ -1559,12 +1559,6 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [rowOrder, rowsById]);
 
 	useEffect(() => {
-		if (initialValuesRef.current.rowOrder.length === 0 && rowOrder.length > 0) {
-			initialValuesRef.current = snapshotValues(rowOrder, rowsById);
-		}
-	}, [rowOrder, rowsById]);
-
-	useEffect(() => {
 		if (hasAccordionRows) return;
 		autoExpandedRowsRef.current.clear();
 		setExpandedRowIds((prev) => {
