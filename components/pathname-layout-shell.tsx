@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
 	SidebarInset,
 	SidebarProvider,
-	SidebarTrigger,
 } from "@/components/ui/sidebar";
 import {
 	getDefaultDemoAppPath,
@@ -114,7 +113,7 @@ export function PathnameLayoutShell({
 
 	return (
 		<div className="notranslate" translate="no">
-			<SidebarProvider>
+			<SidebarProvider defaultOpen={false}>
 				<DeferredAppSidebar
 					user={normalizedUser}
 					userRoles={userRoles}
@@ -128,7 +127,6 @@ export function PathnameLayoutShell({
 				<SidebarInset>
 					<header className="flex min-h-12 max-w-full shrink-0 flex-wrap items-center gap-2 border-b bg-[#fafafa] px-3 py-2 sm:px-4">
 						<div className="flex min-w-0 flex-1 items-center gap-3">
-							<SidebarTrigger className="-ml-1 block sm:hidden" />
 							<AppHeaderTitle documentPermissions={documentPermissions} />
 						</div>
 						<div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">

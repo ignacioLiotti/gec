@@ -490,7 +490,7 @@ export default function DesktopExcelPageClient({
 	}, []);
 
 	return (
-		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#fafafa] px-4 py-4 md:pl-8 md:py-8">
+		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#f6f6f6] px-4 py-4 md:pl-8 md:py-8">
 			{isPreviewOpen ? (
 				<Sheet open onOpenChange={(open) => !open && handleCancelPreview()}>
 					<SheetContent side="right" className="border-l-[#ece7df] bg-[#f6f2eb] p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:max-w-lg">
@@ -645,7 +645,7 @@ export default function DesktopExcelPageClient({
 						data-wizard-target="excel-page-table"
 						className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none "
 					>
-						<FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(98vw-var(--sidebar-current-width))]" innerClassName="max-h-[calc(100vh-400px)]" />
+						<FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[calc(100vh-400px)]" />
 						<Separator className="bg-border" />
 						<FormTablePagination />
 					</div>

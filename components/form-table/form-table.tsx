@@ -634,7 +634,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 					onPointerLeave={handleClearHoveredCell}
 					onKeyDownCapture={handleArrowNavigation}
 					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
-					<table ref={tableRef} data-table-id={tableId} className={cn("w-full table-fixed text-sm max-w-full overflow-hidden", tableHeight)}>
+					<table ref={tableRef} data-table-id={tableId} className={cn("w-full table-fixed text-sm max-w-full relative", tableHeight)}>
 						<colgroup className="max-w-full overflow-hidden">
 							{columnDefs.map((column, index) => (
 								<col
@@ -656,7 +656,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 								/>
 							)}
 						</colgroup>
-						<thead className="sticky top-0 z-30 bg-back-darker">
+						<thead className="sticky top-0 z-[101] bg-back-darker">
 							<tr>
 								{(() => {
 									const emittedGroups = new Set<string>();
@@ -1088,7 +1088,7 @@ export function FormTablePagination() {
 			</div>
 			{!paginationDisabled ? (
 				<div className="flex items-center gap-2">
-				{/* <Button
+					{/* <Button
 					type="button"
 					variant="outline"
 					onClick={() => startTransition(() => setPage(1))}
@@ -1098,32 +1098,32 @@ export function FormTablePagination() {
 					<ChevronsLeft className="h-4 w-4" />
 					Primera
 				</Button> */}
-				<Button
-					type="button"
-					variant="default"
+					<Button
+						type="button"
+						variant="default"
 
-					onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
-					disabled={!hasPreviousPage || isLoading}
-					className="gap-1"
-				>
-					<ChevronLeft className="h-4 w-4" />
-					Anterior
-				</Button>
-				<span className="min-w-[120px] text-center text-xs text-muted-foreground">
-					Página {page} de {totalPages}
-				</span>
-				<Button
-					type="button"
-					variant="default"
+						onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
+						disabled={!hasPreviousPage || isLoading}
+						className="gap-1"
+					>
+						<ChevronLeft className="h-4 w-4" />
+						Anterior
+					</Button>
+					<span className="min-w-[120px] text-center text-xs text-muted-foreground">
+						Página {page} de {totalPages}
+					</span>
+					<Button
+						type="button"
+						variant="default"
 
-					onClick={() => startTransition(() => setPage((prev) => prev + 1))}
-					disabled={!hasNextPage || isLoading}
-					className="gap-1"
-				>
-					Siguiente
-					<ChevronRight className="h-4 w-4" />
-				</Button>
-				{/* <Button
+						onClick={() => startTransition(() => setPage((prev) => prev + 1))}
+						disabled={!hasNextPage || isLoading}
+						className="gap-1"
+					>
+						Siguiente
+						<ChevronRight className="h-4 w-4" />
+					</Button>
+					{/* <Button
 					type="button"
 					variant="outline"
 					onClick={() => startTransition(() => setPage(totalPages))}
@@ -2200,25 +2200,25 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const datasetTotalCount = paginationDisabled
 		? sortedRows.length
 		: useClientPaginationValues
-		? sortedRows.length
-		: serverMeta.total || sortedRows.length;
+			? sortedRows.length
+			: serverMeta.total || sortedRows.length;
 
 	const totalPages = paginationDisabled
 		? 1
 		: useClientPaginationValues
-		? clientTotalPages
-		: serverMeta.totalPages || 1;
+			? clientTotalPages
+			: serverMeta.totalPages || 1;
 
 	const hasNextPage = paginationDisabled
 		? false
 		: useClientPaginationValues
-		? page < clientTotalPages
-		: serverMeta.hasNextPage;
+			? page < clientTotalPages
+			: serverMeta.hasNextPage;
 	const hasPreviousPage = paginationDisabled
 		? false
 		: useClientPaginationValues
-		? page > 1
-		: serverMeta.hasPreviousPage;
+			? page > 1
+			: serverMeta.hasPreviousPage;
 
 	const totalRowCount = datasetTotalCount;
 	const visibleRowCount = processedRows.length;

@@ -2188,7 +2188,7 @@ export function ObraGeneralTab({
 							)}
 						</div>
 
-						{quickActionsAllData && (
+						{quickActionsAllData && quickActionsAllData.quickActions.length > 0 && (
 							<QuickActionsPanel
 								obraId={quickActionsAllData.obraId}
 								actions={quickActionsAllData.quickActions}
