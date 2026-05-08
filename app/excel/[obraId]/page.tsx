@@ -59,6 +59,36 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	fetchObraDetail,
+	fetchDataFlowSuggestions,
+	fetchMemoriaNotes,
+	fetchMaterialOrders,
+	fetchCertificates,
+	fetchOcrLinks,
+	fetchObraRecipients,
+	fetchFlujoActions,
+	fetchPendingDocs,
+	fetchMacroTablesList,
+	fetchAllMacroTableRows,
+	fetchGeneralReportsData,
+	normalizeForSearch,
+	normalizeMacroTableName,
+	isCertificadoContableMacroTable,
+	obraQueryKeys,
+	type MemoriaNote,
+	type DataFlowSuggestion,
+	type DerivedCertificadosNotice,
+	type DerivedCertificadosField,
+	type PendingDoc,
+	type ReportFinding,
+	type TablaRowRecord,
+	type GeneralReportCurvePoint,
+	type GeneralTabReportsData,
+	type MacroTableListItem,
+	type MacroTableColumnItem,
+	type MacroTableRowItem,
+} from "@/lib/obra-queries";
 
 const ObraFlujoTab = dynamic(
 	() => import("./tabs/flujo-tab").then((mod) => mod.ObraFlujoTab),
@@ -125,295 +155,7 @@ const emptyObra: Obra = {
 
 const DOCUMENTS_BUCKET = "obra-documents";
 
-// Query functions for React Query caching
-async function fetchObraDetail(obraId: string): Promise<Obra> {
-	const response = await fetch(`/api/obras/${obraId}`);
-	if (!response.ok) {
-		const result = await response.json().catch(() => ({}));
-		throw new Error(result.error ?? "No se pudo cargar la obra");
-	}
-	const data = await response.json();
-	return data.obra as Obra;
-}
-
-async function fetchDataFlowSuggestions(obraId: string): Promise<DataFlowSuggestion[]> {
-	const response = await fetch(`/api/obras/${obraId}/data-flow-suggestions`);
-	if (!response.ok) {
-		const result = await response.json().catch(() => ({}));
-		throw new Error(result.error ?? "No se pudieron cargar las solicitudes de data-flow");
-	}
-	const data = await response.json().catch(() => ({}));
-	return Array.isArray(data?.suggestions) ? (data.suggestions as DataFlowSuggestion[]) : [];
-}
-
-async function fetchMemoriaNotes(obraId: string): Promise<MemoriaNote[]> {
-	const res = await fetch(`/api/obras/${obraId}/memoria`);
-	if (!res.ok) return [];
-	const out = await res.json();
-	const items = Array.isArray(out?.notes) ? out.notes : [];
-	return items.map((n: any) => ({
-		id: String(n.id),
-		text: String(n.text ?? ""),
-		createdAt: String(n.createdAt ?? n.created_at ?? ""),
-		userId: String(n.userId ?? n.user_id ?? ""),
-		userName: typeof n.userName === "string" ? n.userName : n.user_name ?? null,
-	}));
-}
-
-// Normalize string for search (remove diacritics, lowercase) - used once at load time
-const normalizeForSearch = (v: string): string =>
-	v.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-
-async function fetchMaterialOrders(obraId: string): Promise<MaterialOrder[]> {
-	const res = await fetch(`/api/obras/${obraId}/materials`);
-	if (!res.ok) return [];
-	const data = await res.json();
-	const orders = (data?.orders || []) as Array<any>;
-	// Pre-normalize searchable fields at load time to avoid normalize() on every keystroke
-	return orders.map((o: any) => {
-		const nroOrden = String(o.nroOrden || o.id);
-		const fecha = String(o.fecha || "");
-		const solicitante = String(o.solicitante || "");
-		const proveedor = String(o.proveedor || "");
-		return {
-			id: String(o.id),
-			nroOrden,
-			fecha,
-			solicitante,
-			proveedor,
-			docPath: o.docPath,
-			docBucket: o.docBucket,
-			// Pre-normalized for efficient filtering
-			_nroOrdenNorm: normalizeForSearch(nroOrden),
-			_fechaNorm: normalizeForSearch(fecha),
-			_solicitanteNorm: normalizeForSearch(solicitante),
-			_proveedorNorm: normalizeForSearch(proveedor),
-			items: (o.items || []).map((it: any, idx: number) => {
-				const unidad = String(it.unidad || "");
-				const material = String(it.material || "");
-				return {
-					id: `${o.id}-i-${idx}`,
-					cantidad: Number(it.cantidad || 0),
-					unidad,
-					material,
-					precioUnitario: Number(it.precioUnitario || 0),
-					// Pre-normalized for efficient filtering
-					_unidadNorm: normalizeForSearch(unidad),
-					_materialNorm: normalizeForSearch(material),
-				};
-			}),
-		};
-	});
-}
-
-async function fetchCertificates(obraId: string): Promise<{ certificates: Certificate[]; total: number }> {
-	const response = await fetch(`/api/obras/${obraId}/certificates`);
-	if (!response.ok) {
-		throw new Error("Failed to load certificates");
-	}
-	const data = await response.json();
-	return { certificates: data.certificates || [], total: data.total || 0 };
-}
-
-async function fetchOcrLinks(obraId: string): Promise<OcrFolderLink[]> {
-	const response = await fetch(`/api/obras/${obraId}/tablas/ocr-links?limit=500`);
-	if (!response.ok) {
-		throw new Error("Failed to load OCR links");
-	}
-	const data = await response.json().catch(() => ({}));
-	return Array.isArray(data?.links) ? (data.links as OcrFolderLink[]) : [];
-}
-
-type MacroTableListItem = {
-	id: string;
-	name: string;
-};
-
-type MacroTableColumnItem = {
-	id: string;
-	label: string;
-	sourceFieldKey?: string | null;
-};
-
-type MacroTableRowItem = {
-	id: string;
-	_obraId?: unknown;
-	[key: string]: unknown;
-};
-
-function normalizeMacroTableName(value: string): string {
-	return value
-		.normalize("NFD")
-		.replace(/\p{Diacritic}/gu, "")
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, " ")
-		.trim();
-}
-
-function isCertificadoContableMacroTable(name: string): boolean {
-	const normalized = normalizeMacroTableName(name);
-	return (
-		normalized === "certificado contable" ||
-		normalized === "certificados contable" ||
-		(normalized.includes("certificado") && normalized.includes("contable"))
-	);
-}
-
-async function fetchMacroTablesList(): Promise<MacroTableListItem[]> {
-	const response = await fetch("/api/macro-tables");
-	if (!response.ok) {
-		throw new Error("Failed to load macro tables");
-	}
-	const data = await response.json();
-	return Array.isArray(data?.macroTables) ? (data.macroTables as MacroTableListItem[]) : [];
-}
-
-async function fetchAllMacroTableRows(macroTableId: string, obraId?: string): Promise<{
-	columns: MacroTableColumnItem[];
-	rows: MacroTableRowItem[];
-}> {
-	const rows: MacroTableRowItem[] = [];
-	let columns: MacroTableColumnItem[] = [];
-	let page = 1;
-	let totalPages = 1;
-
-	do {
-		const params = new URLSearchParams({
-			page: String(page),
-			limit: "200",
-		});
-		if (obraId) {
-			params.set("obraId", obraId);
-		}
-		const response = await fetch(
-			`/api/macro-tables/${encodeURIComponent(macroTableId)}/rows?${params.toString()}`
-		);
-		if (!response.ok) {
-			throw new Error("Failed to load macro table rows");
-		}
-		const data = await response.json();
-		if (page === 1 && Array.isArray(data?.columns)) {
-			columns = data.columns as MacroTableColumnItem[];
-		}
-		if (Array.isArray(data?.rows)) {
-			rows.push(...(data.rows as MacroTableRowItem[]));
-		}
-		totalPages = Math.max(1, Number(data?.pagination?.totalPages ?? 1));
-		page += 1;
-	} while (page <= totalPages);
-
-	return { columns, rows };
-}
-
-async function fetchObraRecipients(obraId: string): Promise<{ roles: ObraRole[]; users: ObraUser[]; userRoles: ObraUserRole[] }> {
-	const res = await fetch(`/api/obra-recipients?obraId=${obraId}`);
-	if (!res.ok) return { roles: [], users: [], userRoles: [] };
-	const data = await res.json();
-	return {
-		roles: data.roles ?? [],
-		users: data.users ?? [],
-		userRoles: data.userRoles ?? [],
-	};
-}
-
-async function fetchFlujoActions(obraId: string): Promise<FlujoAction[]> {
-	const res = await fetch(`/api/flujo-actions?obraId=${obraId}`);
-	if (!res.ok) throw new Error("Failed to load flujo actions");
-	const data = await res.json();
-	return data.actions || [];
-}
-
-async function fetchPendientes(obraId: string): Promise<PendingDoc[]> {
-	const res = await fetch(`/api/obras/${obraId}/pendientes`);
-	if (!res.ok) return [];
-	const data = await res.json();
-	return (data?.pendientes ?? []).map((p: any) => ({
-		id: p.id as string,
-		name: String(p.name ?? ""),
-		poliza: String(p.poliza ?? ""),
-		dueMode: (p.dueMode ?? "fixed") as "fixed" | "after_completion",
-		dueDate: String(p.dueDate ?? ""),
-		offsetDays: Number(p.offsetDays ?? 0),
-		done: Boolean(p.done ?? false),
-	}));
-}
-
-type MemoriaNote = {
-	id: string;
-	text: string;
-	createdAt: string;
-	userId: string;
-	userName: string | null;
-};
-
-type DataFlowSuggestion = {
-	id: string;
-	field_id: string;
-	result_label: string;
-	old_value: unknown;
-	suggested_value: unknown;
-	formatted_value: string | null;
-	status: "pending" | "accepted" | "rejected";
-	created_at: string;
-};
-
-type DerivedCertificadosNotice = {
-	sourceLabel: string | null;
-	updatedFieldKeys: Array<"certificadoALaFecha" | "saldoACertificar" | "porcentaje">;
-	updatedFieldLabels: string[];
-	recommendedValues: Partial<Record<DerivedCertificadosField, number>>;
-	blockedFieldKeys: Array<"saldoACertificar" | "porcentaje">;
-	blockedFieldLabels: string[];
-	warningMessage: string | null;
-};
-
-type DerivedCertificadosField =
-	| "certificadoALaFecha"
-	| "saldoACertificar"
-	| "porcentaje";
-
-type PendingDoc = {
-	id: string;
-	name: string;
-	poliza: string;
-	dueMode: "fixed" | "after_completion";
-	dueDate: string;
-	offsetDays: number;
-	done: boolean
-};
-
-type ReportFinding = {
-	id: string;
-	rule_key: string;
-	severity: "info" | "warn" | "critical";
-	title: string;
-	message: string | null;
-	created_at: string;
-};
-
-type TablaRowRecord = {
-	id: string;
-	data: Record<string, unknown>;
-	created_at?: string;
-};
-
-type GeneralReportCurvePoint = {
-	label: string;
-	planPct: number | null;
-	realPct: number | null;
-	sortOrder: number;
-	periodKey?: string | null;
-};
-
-type GeneralTabReportsData = {
-	findings: ReportFinding[];
-	curve: {
-		points: GeneralReportCurvePoint[];
-		planTableName: string;
-		resumenTableName: string;
-	} | null;
-};
-
+// Local types not exported from lib
 type CurveRuleConfig = {
 	mappings?: {
 		recommendations?: {

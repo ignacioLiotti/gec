@@ -16,6 +16,7 @@ import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-
 import type { Role } from "@/lib/route-access";
 import { track } from "@vercel/analytics";
 import { AppHeaderTitle } from "./app-header-title";
+import { NavigationProgress } from "./navigation-progress";
 
 const DeferredAppSidebar = dynamic(
 	() => import("@/components/app-sidebar").then((mod) => mod.AppSidebar),
@@ -113,6 +114,7 @@ export function PathnameLayoutShell({
 
 	return (
 		<div className="notranslate" translate="no">
+			<NavigationProgress />
 			<SidebarProvider defaultOpen={false}>
 				<DeferredAppSidebar
 					user={normalizedUser}
