@@ -5609,8 +5609,28 @@ function FileManagerContent({
   const renderMainContent = () => {
     if (loading) {
       return (
-        <div className="flex items-center justify-center h-full">
-          <Loader2 className="w-8 h-8 animate-spin text-stone-400" />
+        <div className="h-full space-y-4 p-4 animate-pulse">
+          {/* Toolbar skeleton */}
+          <div className="flex items-center justify-between gap-4 pb-3 border-b">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 bg-stone-200 rounded" />
+              <div className="h-5 w-40 bg-stone-200 rounded" />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-32 bg-stone-200 rounded" />
+              <div className="h-9 w-9 bg-stone-200 rounded" />
+            </div>
+          </div>
+          {/* Grid skeleton */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="border rounded-lg p-3 space-y-2">
+                <div className="aspect-square w-full bg-stone-100 rounded" />
+                <div className="h-4 w-3/4 bg-stone-200 rounded" />
+                <div className="h-3 w-1/2 bg-stone-200 rounded" />
+              </div>
+            ))}
+          </div>
         </div>
       );
     }
@@ -7740,9 +7760,48 @@ function FileManagerContent({
   );
 }
 
+function FileManagerSkeleton() {
+  return (
+    <div className="flex gap-4 h-[600px]">
+      {/* File tree sidebar skeleton */}
+      <div className="w-64 shrink-0 border rounded-lg p-3 space-y-2 hidden md:block animate-pulse">
+        <div className="h-5 w-32 bg-stone-200 rounded mb-4" />
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-2 py-1.5">
+            <div className="h-4 w-4 bg-stone-200 rounded" />
+            <div className="h-4 bg-stone-200 rounded" style={{ width: `${60 + Math.random() * 30}%` }} />
+          </div>
+        ))}
+      </div>
+      {/* Main content area */}
+      <div className="flex-1 border rounded-lg p-4 space-y-4 animate-pulse">
+        <div className="flex items-center justify-between gap-4 pb-3 border-b">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 bg-stone-200 rounded" />
+            <div className="h-5 w-40 bg-stone-200 rounded" />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-24 bg-stone-200 rounded" />
+            <div className="h-9 w-9 bg-stone-200 rounded" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="border rounded-lg p-3 space-y-2">
+              <div className="aspect-square w-full bg-stone-100 rounded" />
+              <div className="h-4 w-3/4 bg-stone-200 rounded" />
+              <div className="h-3 w-1/2 bg-stone-200 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FileManager(props: FileManagerProps) {
   return (
-    <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Cargando gestor de archivos...</div>}>
+    <Suspense fallback={<FileManagerSkeleton />}>
       <FileManagerContent {...props} />
     </Suspense>
   );

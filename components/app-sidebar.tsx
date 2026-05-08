@@ -24,7 +24,7 @@ import {
 	Wallet,
 	Waypoints,
 } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -202,14 +202,41 @@ type SidebarMacroTable = {
 	position: number;
 };
 
-type SidebarPrefetchLinkProps = React.ComponentProps<typeof Link>;
+type SidebarPrefetchLinkProps = React.ComponentProps<typeof Link> & {
+	/** Icon element to show (will be replaced with spinner when navigating) */
+	navIcon?: React.ReactNode;
+};
 const prefetchedSidebarHrefs = new Set<string>();
+
+/**
+ * Inner component that renders the link content with navigation status.
+ * Must be a child of Link for useLinkStatus to work.
+ */
+function SidebarLinkContent({
+	children,
+	navIcon,
+}: {
+	children: React.ReactNode;
+	navIcon?: React.ReactNode;
+}) {
+	const { pending } = useLinkStatus();
+
+	return (
+		<>
+			{navIcon && !pending && navIcon}
+			{navIcon && pending && (
+				<Loader2 className="size-4 animate-spin" />
+			)}
+			{children}
+		</>
+	);
+}
 
 const SidebarPrefetchLink = React.forwardRef<
 	HTMLAnchorElement,
 	SidebarPrefetchLinkProps
 >(function SidebarPrefetchLink(
-	{ href, onMouseEnter, onFocus, onTouchStart, onPointerDown, ...props },
+	{ href, onMouseEnter, onFocus, onTouchStart, onPointerDown, navIcon, children, ...props },
 	ref,
 ) {
 	const router = useRouter();
@@ -294,7 +321,11 @@ const SidebarPrefetchLink = React.forwardRef<
 			}}
 			{...props}
 			prefetch={false}
-		/>
+		>
+			<SidebarLinkContent navIcon={navIcon}>
+				{children}
+			</SidebarLinkContent>
+		</Link>
 	);
 });
 
@@ -709,19 +740,19 @@ export function AppSidebar({
 																		pathname === "/macro" &&
 																		activeMacroTableId === table.id;
 																	return (
-																		<DropdownMenuItem key={table.id} asChild>
-																			<SidebarPrefetchLink
-																				href={tableHref}
-																				className={
-																					isTableActive ? "font-semibold" : undefined
-																				}
-																			>
-																				<Columns3 className="size-4" />
-																				<span className="truncate">
-																					{table.name}
-																				</span>
-																			</SidebarPrefetchLink>
-																		</DropdownMenuItem>
+<DropdownMenuItem key={table.id} asChild>
+																				<SidebarPrefetchLink
+																					href={tableHref}
+																					className={
+																						isTableActive ? "font-semibold" : undefined
+																					}
+																					navIcon={<Columns3 className="size-4" />}
+																				>
+																					<span className="truncate">
+																						{table.name}
+																					</span>
+																				</SidebarPrefetchLink>
+																			</DropdownMenuItem>
 																	);
 																})}
 															</DropdownMenuContent>
@@ -755,15 +786,14 @@ export function AppSidebar({
 																			activeMacroTableId === table.id;
 																		return (
 																			<SidebarMenuSubItem key={table.id}>
-																				<SidebarMenuSubButton
-																					asChild
-																					isActive={isTableActive}
-																				>
-																					<SidebarPrefetchLink href={tableHref}>
-																						<Columns3 className="size-4" />
-																						{table.name}
-																					</SidebarPrefetchLink>
-																				</SidebarMenuSubButton>
+<SidebarMenuSubButton
+																						asChild
+																						isActive={isTableActive}
+																					>
+																						<SidebarPrefetchLink href={tableHref} navIcon={<Columns3 className="size-4" />}>
+																							{table.name}
+																						</SidebarPrefetchLink>
+																					</SidebarMenuSubButton>
 																			</SidebarMenuSubItem>
 																		);
 																	})}
@@ -778,13 +808,12 @@ export function AppSidebar({
 													isActive={isActive}
 													tooltip={item.title}
 												>
-													<SidebarPrefetchLink href={item.href}>
-														<item.icon className="size-4" />
-														<span>{item.title}</span>
-													</SidebarPrefetchLink>
-												</SidebarMenuButton>
-											</SidebarMenuItem>
-										</React.Fragment>
+<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+															<span>{item.title}</span>
+														</SidebarPrefetchLink>
+													</SidebarMenuButton>
+												</SidebarMenuItem>
+											</React.Fragment>
 									);
 								})}
 							</SidebarMenu>
@@ -809,21 +838,20 @@ export function AppSidebar({
 													isActive={isActive}
 													tooltip={item.title}
 												>
-													<SidebarPrefetchLink href={item.href}>
-														<item.icon className="size-4" />
-														<span>{item.title}</span>
-													</SidebarPrefetchLink>
-												</SidebarMenuButton>
-											</SidebarMenuItem>
-										);
-									})}
-								</SidebarMenu>
-							</SidebarGroupContent>
-						</SidebarGroup>
-					</>
-				)}
+<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+															<span>{item.title}</span>
+														</SidebarPrefetchLink>
+													</SidebarMenuButton>
+												</SidebarMenuItem>
+											);
+										})}
+									</SidebarMenu>
+								</SidebarGroupContent>
+							</SidebarGroup>
+						</>
+					)}
 
-				{filteredIgnacioItems.length > 0 && (
+					{filteredIgnacioItems.length > 0 && (
 					<>
 						<Separator />
 						<SidebarGroup className="rounded-lg bg-purple-500/20 p-2">
@@ -840,20 +868,19 @@ export function AppSidebar({
 													isActive={isActive}
 													tooltip={item.title}
 												>
-													<SidebarPrefetchLink href={item.href}>
-														<item.icon className="size-4" />
-														<span>{item.title}</span>
-													</SidebarPrefetchLink>
-												</SidebarMenuButton>
-											</SidebarMenuItem>
-										);
-									})}
-								</SidebarMenu>
-							</SidebarGroupContent>
-						</SidebarGroup>
-					</>
-				)}
-			</SidebarContent>
+<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+															<span>{item.title}</span>
+														</SidebarPrefetchLink>
+													</SidebarMenuButton>
+												</SidebarMenuItem>
+											);
+										})}
+									</SidebarMenu>
+								</SidebarGroupContent>
+							</SidebarGroup>
+						</>
+					)}
+				</SidebarContent>
 
 			<SidebarFooter>
 				{user ? (

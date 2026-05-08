@@ -68,6 +68,25 @@
 	}
 }
 
+/* Navigation progress “goo” loader (translate path matches 40×40 squares in a padded 100×100 box) */
+@keyframes nav-progress-loader-l7 {
+	0% {
+		transform: translate(0, 0);
+	}
+	25% {
+		transform: translate(100%, 0);
+	}
+	50% {
+		transform: translate(100%, 100%);
+	}
+	75% {
+		transform: translate(0, 100%);
+	}
+	100% {
+		transform: translate(0, 0);
+	}
+}
+
 :root {
 	--radius: 0.375rem;
 	--background: oklch(0.975 0 106);
