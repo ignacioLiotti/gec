@@ -1,3 +1,13 @@
+/**
+ * REFERENCE IMPLEMENTATION - Not yet wired into the page
+ * 
+ * These hooks replace useEffect fetch patterns with React Query hooks.
+ * See docs/REACT_BEST_PRACTICES.md for the full migration guide.
+ * 
+ * To use: Import these hooks and replace the useEffect + useState fetch
+ * patterns in page.tsx. For example:
+ *   const { data: tenantMarker } = useTenantMarker(activeTenantId);
+ */
 "use client";
 
 import { useQuery } from "@tanstack/react-query";

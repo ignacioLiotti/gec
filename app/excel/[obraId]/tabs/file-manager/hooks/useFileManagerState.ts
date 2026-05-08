@@ -1,3 +1,15 @@
+/**
+ * REFERENCE IMPLEMENTATION - Not yet wired into the FileManager
+ * 
+ * These hooks demonstrate the recommended pattern for refactoring the
+ * existing useState calls in file-manager.tsx into useReducer-based state.
+ * 
+ * See docs/REACT_BEST_PRACTICES.md for the full migration guide.
+ * 
+ * To use: Import and replace the existing useState calls for dialogs/modals
+ * with these hooks. For example:
+ *   const [createFolderState, createFolderDispatch] = useCreateFolderDialog();
+ */
 "use client";
 
 import { useReducer, useCallback } from "react";

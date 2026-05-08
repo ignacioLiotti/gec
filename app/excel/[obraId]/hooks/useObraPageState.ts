@@ -1,3 +1,15 @@
+/**
+ * REFERENCE IMPLEMENTATION - Not yet wired into the page
+ * 
+ * These hooks demonstrate the recommended pattern for refactoring the
+ * existing useState calls in page.tsx into useReducer-based state management.
+ * 
+ * See docs/REACT_BEST_PRACTICES.md for the full migration guide.
+ * 
+ * To use: Import and replace the existing useState calls in page.tsx with
+ * these hooks. For example, replace multiple certificate form useState calls
+ * with: const [certState, certDispatch] = useCertificateForm();
+ */
 "use client";
 
 import { useReducer, useCallback } from "react";
