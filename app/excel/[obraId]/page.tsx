@@ -101,14 +101,12 @@ const ObraFlujoTab = dynamic(
 	}
 );
 
+import { DocumentsTabSkeleton } from "./tabs/documents-tab-skeleton";
+
 const ObraDocumentsTab = dynamic(
 	() => import("./tabs/documents-tab").then((mod) => mod.ObraDocumentsTab),
 	{
-		loading: () => (
-			<TabsContent value="documentos" className="space-y-6">
-				<div className="p-4 text-sm text-muted-foreground">Cargando documentos...</div>
-			</TabsContent>
-		),
+		loading: () => <DocumentsTabSkeleton />,
 	}
 );
 
