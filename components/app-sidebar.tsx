@@ -49,6 +49,7 @@ import {
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
+import UserMenu from "@/components/auth/user-menu";
 import { getRouteAccessConfig, type Role } from "@/lib/route-access";
 import {
 	DropdownMenu,
@@ -333,7 +334,8 @@ export function AppSidebar({
 	const [macroTables, setMacroTables] = React.useState<SidebarMacroTable[]>(
 		sidebarMacroTables ?? [],
 	);
-	const tenantOptions = tenants ?? [];
+	const isAdminUser = Boolean(userRoles?.isAdmin || userRoles?.isSuperAdmin);
+	const tenantOptions = isAdminUser ? (tenants ?? []) : [];
 	const activeTenantId = userRoles?.tenantId ?? null;
 	const activeMacroTableId = searchParams.get("macroId");
 	const permissionKeySet = React.useMemo(
@@ -403,6 +405,7 @@ export function AppSidebar({
 		tenantOptions.find((tenant) => tenant.id === activeTenantId) ??
 		tenantOptions[0] ??
 		null;
+
 	const isMacroTablesActive = Boolean(
 		pathname === "/macro" &&
 		activeMacroTableId &&
@@ -563,27 +566,7 @@ export function AppSidebar({
 									</SidebarPrefetchLink>
 								</SidebarMenuButton>
 							</div>
-							{/* {demoMode && activeTenant ? (
-								state === "collapsed" ? (
-									<div
-										className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2.5"
-										title={activeTenant.name ?? "Demo"}
-									>
-										<Building2 className="size-5 text-muted-foreground" />
-									</div>
-								) : (
-									<div className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium">
-										<div className="min-w-0">
-											<p className="text-xs font-normal text-muted-foreground">
-												Demo
-											</p>
-											<p className="truncate">
-												{activeTenant.name ?? "Organizacion demo"}
-											</p>
-										</div>
-									</div>
-								)
-							) : tenantOptions.length > 0 ? (
+							{isAdminUser && tenantOptions.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										{state === "collapsed" ? (
@@ -616,7 +599,7 @@ export function AppSidebar({
 										side="bottom"
 										className="w-64"
 									>
-										<DropdownMenuLabel>Tus organizaciones</DropdownMenuLabel>
+										<DropdownMenuLabel>Organizaciones</DropdownMenuLabel>
 										<DropdownMenuSeparator />
 										{tenantOptions.map((tenant) => {
 											const isActive = tenant.id === activeTenantId;
@@ -660,22 +643,24 @@ export function AppSidebar({
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
-							) : state === "collapsed" ? (
-								<SidebarPrefetchLink
-									href="/tenants/new"
-									className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
-									title="Crear organizacion"
-								>
-									<PlusCircle className="size-5" />
-								</SidebarPrefetchLink>
-							) : (
-								<SidebarPrefetchLink
-									href="/tenants/new"
-									className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
-								>
-									Crear organizacion
-								</SidebarPrefetchLink>
-							)} */}
+							) : isAdminUser ? (
+								state === "collapsed" ? (
+									<SidebarPrefetchLink
+										href="/tenants/new"
+										className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
+										title="Crear organizacion"
+									>
+										<PlusCircle className="size-5" />
+									</SidebarPrefetchLink>
+								) : (
+									<SidebarPrefetchLink
+										href="/tenants/new"
+										className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
+									>
+										Crear organizacion
+									</SidebarPrefetchLink>
+								)
+							) : null}
 						</div>
 					</SidebarMenuItem>
 				</SidebarMenu>
@@ -874,22 +859,11 @@ export function AppSidebar({
 				{user ? (
 					<SidebarMenu>
 						<SidebarMenuItem>
-							<SidebarMenuButton
-								size="lg"
-								className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-							>
-								<div className="bg-muted flex aspect-square size-8 items-center justify-center rounded-lg">
-									<span className="text-xs font-semibold">
-										{user.email?.[0]?.toUpperCase() || "U"}
-									</span>
-								</div>
-								<div className="grid flex-1 text-left text-sm leading-tight">
-									<span className="truncate font-semibold">
-										{user.email?.split("@")[0] || "User"}
-									</span>
-									<span className="truncate text-xs">{user.email}</span>
-								</div>
-							</SidebarMenuButton>
+							<UserMenu
+								email={user.email}
+								userRoles={userRoles}
+								variant="sidebar"
+							/>
 						</SidebarMenuItem>
 					</SidebarMenu>
 				) : demoMode ? (

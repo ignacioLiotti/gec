@@ -193,31 +193,33 @@ export default async function RootLayout({
 			});
 		}
 
-		const showAllOrgs =
-			isSuperAdmin || user.email === "ignacioliotti@gmail.com";
+		if (isAdmin || isSuperAdmin) {
+			const showAllOrgs =
+				isSuperAdmin || user.email === "ignacioliotti@gmail.com";
 
-		if (showAllOrgs) {
-			const admin = createSupabaseAdminClient();
-			const { data: allTenants } = await admin
-				.from("tenants")
-				.select("id, name")
-				.order("name");
+			if (showAllOrgs) {
+				const admin = createSupabaseAdminClient();
+				const { data: allTenants } = await admin
+					.from("tenants")
+					.select("id, name")
+					.order("name");
 
-			tenants = (allTenants ?? []).map((tenant) => ({
-				id: tenant.id,
-				name: tenant.name ?? "Organizacion",
-			}));
+				tenants = (allTenants ?? []).map((tenant) => ({
+					id: tenant.id,
+					name: tenant.name ?? "Organizacion",
+				}));
 
-			if (DEBUG_AUTH) {
-				console.log("[LAYOUT] allTenants", allTenants);
+				if (DEBUG_AUTH) {
+					console.log("[LAYOUT] allTenants", allTenants);
+				}
+			} else {
+				tenants = memberships
+					.map((membership) => ({
+						id: membership.tenant_id ?? "",
+						name: getTenantName(membership) ?? "Organizacion",
+					}))
+					.filter((tenant) => tenant.id.length > 0);
 			}
-		} else {
-			tenants = memberships
-				.map((membership) => ({
-					id: membership.tenant_id ?? "",
-					name: getTenantName(membership) ?? "Organizacion",
-				}))
-				.filter((tenant) => tenant.id.length > 0);
 		}
 	} else if (access.actorType === "demo" && access.tenantId) {
 		userRoles = {
@@ -229,12 +231,6 @@ export default async function RootLayout({
 			actorType: "demo",
 			permissionKeys: [],
 		};
-		tenants = [
-			{
-				id: access.tenantId,
-				name: access.tenantName ?? "Organizacion demo",
-			},
-		];
 		documentPermissions = EMPTY_DOCUMENT_PERMISSIONS;
 	}
 

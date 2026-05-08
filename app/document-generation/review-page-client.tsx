@@ -409,7 +409,7 @@ export function DocumentReviewPageClient() {
                     size="md"
                     className="absolute left-5 top-5 z-20"
                   />
-                  <div className="report-paper min-w-max bg-white">
+                  <div className="report-paper w-full! min-w-max bg-white">
                     <div dangerouslySetInnerHTML={{ __html: detail.document.previewHtml }} />
                   </div>
                 </div>

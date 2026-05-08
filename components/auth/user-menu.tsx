@@ -15,6 +15,7 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 type UserMenuProps = {
 	email?: string | null;
@@ -26,6 +27,7 @@ type UserMenuProps = {
 		isSuperAdmin: boolean;
 		tenantId: string | null;
 	} | null;
+	variant?: "default" | "sidebar";
 };
 
 export default function UserMenu({
@@ -33,6 +35,7 @@ export default function UserMenu({
 	demoLabel,
 	demoMode = false,
 	userRoles,
+	variant = "default",
 }: UserMenuProps) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
@@ -152,10 +155,27 @@ export default function UserMenu({
 					<button
 						type="button"
 						onClick={handleTriggerClick}
-						className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm hover:bg-foreground/10"
+						className={cn(
+							"inline-flex items-center gap-2 rounded-md border text-sm hover:bg-foreground/10",
+							variant === "sidebar"
+								? "h-12 w-full overflow-hidden px-2 py-1.5 text-left transition-[width,height,padding,gap,color,background-color,box-shadow,transform] duration-300 ease-(--sidebar-motion-ease) group-data-[collapsible=icon]:h-12 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-0"
+								: "px-2 py-1",
+						)}
 					>
-						<div className="size-6 rounded-full bg-orange-primary" />
-						<span className="max-w-[160px] truncate">
+						<div
+							className={cn(
+								"shrink-0 rounded-full bg-orange-primary",
+								variant === "sidebar" ? "size-8" : "size-6",
+							)}
+						/>
+						<span
+							className={cn(
+								"truncate",
+								variant === "sidebar"
+									? "min-w-0 max-w-full transition-[opacity,transform] duration-200 ease-(--sidebar-motion-ease) group-data-[collapsible=icon]:-translate-x-1 group-data-[collapsible=icon]:opacity-0"
+									: "max-w-[160px]",
+							)}
+						>
 							{email ?? (isDemo ? (demoLabel ?? "Sesion demo") : "Iniciar sesion")}
 						</span>
 					</button>
@@ -163,6 +183,7 @@ export default function UserMenu({
 				{isAuthed && (
 					<PopoverContent
 						align="end"
+						side={variant === "sidebar" ? "right" : "bottom"}
 						sideOffset={8}
 						className="w-64 overflow-hidden p-0"
 					>

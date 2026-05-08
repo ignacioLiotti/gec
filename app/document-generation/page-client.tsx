@@ -129,8 +129,6 @@ type GeneratedDocumentResponse = {
   previewHtml: string;
 };
 
-type StepStatus = "done" | "current" | "upcoming";
-
 type RepeatableGroupDescriptor = {
   key: string;
   label: string;
@@ -207,40 +205,6 @@ function getTemplateFieldSpan(field: TemplateField) {
   return "";
 }
 
-function getStepStatuses(args: {
-  contextComplete: boolean;
-  requiredFieldCount: number;
-  pendingFieldCount: number;
-  repeatableGroups: RepeatableGroupDescriptor[];
-  inputData: Record<string, unknown>;
-  generatedDocument: GeneratedDocumentResponse | null;
-}) {
-  const { contextComplete, requiredFieldCount, pendingFieldCount, repeatableGroups, inputData, generatedDocument } = args;
-  const itemsComplete =
-    repeatableGroups.length === 0 ||
-    repeatableGroups.every((group) => countFilledRows(readRepeatableRows(inputData, group.key)) > 0);
-  const dataComplete = requiredFieldCount === 0 ? contextComplete : contextComplete && pendingFieldCount === 0;
-
-  const contextStatus: StepStatus = contextComplete ? "done" : "current";
-  const dataStatus: StepStatus = !contextComplete ? "upcoming" : dataComplete ? "done" : "current";
-  const itemsStatus: StepStatus =
-    !contextComplete
-      ? "upcoming"
-      : itemsComplete
-        ? "done"
-        : dataComplete
-          ? "current"
-          : "upcoming";
-  const reviewStatus: StepStatus = generatedDocument ? "done" : contextComplete ? "current" : "upcoming";
-
-  return [
-    { number: 1, label: "Contexto", status: contextStatus },
-    { number: 2, label: "Datos", status: dataStatus },
-    { number: 3, label: "Items", status: itemsStatus },
-    { number: 4, label: "Revision", status: reviewStatus },
-  ];
-}
-
 function buildValidationIssues(args: {
   workId: string;
   folderPath: string;
@@ -286,17 +250,6 @@ function iconForContextField(kind: "work" | "type" | "folder" | "template") {
     case "template":
       return <LayoutTemplate className="h-3.5 w-3.5" />;
   }
-}
-
-function stepDotClasses(status: StepStatus) {
-  if (status === "done") return "border-transparent bg-[#ff5800] text-white";
-  if (status === "current") return "border-transparent bg-stone-900 text-white";
-  return "border-stone-200 bg-stone-100 text-stone-500";
-}
-
-function stepLabelClasses(status: StepStatus) {
-  if (status === "done" || status === "current") return "text-stone-900";
-  return "text-stone-400";
 }
 
 function controlBaseClass(error?: boolean) {
@@ -791,21 +744,11 @@ export function DocumentGenerationPageClient() {
     return map;
   }, [validationErrors]);
 
-  const requiredFieldCount = selectedTemplate?.schema.fields.filter((field) => field.required).length ?? 0;
   const pendingFieldCount = useMemo(() => {
     if (!selectedTemplate) return 0;
     return validateTemplateInput(selectedTemplate.schema, deferredInputData).length;
   }, [deferredInputData, selectedTemplate]);
 
-  const contextComplete = Boolean(workId && documentType && folderPath && templateId && selectedTemplate);
-  const stepStatuses = getStepStatuses({
-    contextComplete,
-    requiredFieldCount,
-    pendingFieldCount,
-    repeatableGroups,
-    inputData: deferredInputData,
-    generatedDocument,
-  });
   const draftStatusLabel = draftStatus ? humanizeStatus(draftStatus) : "sin guardar";
   const documentCode = getDocumentCode(deferredInputData);
   const isEditingGeneratedDocument = Boolean(editingGeneratedId);
@@ -1125,40 +1068,10 @@ export function DocumentGenerationPageClient() {
         </div>
       </div>
 
-      <div className="grid min-h-[calc(100vh-162px)] grid-cols-1 xl:grid-cols-[minmax(0,0.85fr)_minmax(480px,1fr)]">
+      <div className="grid min-h-[calc(100vh-162px)] grid-cols-1 xl:grid-cols-[minmax(480px,1fr)_minmax(0,0.5fr)]">
         <div className="overflow-y-auto border-r ">
           <div className="px-4 pb-5 sm:px-6">
-            <div className="mx-auto flex max-w-[760px] flex-col gap-4 mt-4">
-              <div className="rounded-xl border border-stone-200 bg-white px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-                <div className="flex flex-wrap items-center gap-3 ">
-                  {stepStatuses.map((step, index) => (
-                    <div key={step.number} className="flex min-w-0 flex-1 items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold",
-                            stepDotClasses(step.status),
-                          )}
-                        >
-                          {step.status === "done" ? <Check className="h-3.5 w-3.5" /> : step.number}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[11px] font-semibold uppercase tracking-[0.14em]",
-                            stepLabelClasses(step.status),
-                          )}
-                        >
-                          {step.label}
-                        </span>
-                      </div>
-                      {index < stepStatuses.length - 1 ? (
-                        <div className="h-px flex-1 bg-[repeating-linear-gradient(90deg,#d6d3d1_0_4px,transparent_4px_8px)]" />
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
+            <div className="mx-auto flex flex-col gap-4 mt-4">
               <SectionCard
                 title="Contexto del documento"
               >
@@ -1460,21 +1373,16 @@ export function DocumentGenerationPageClient() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto px-6 py-6">
+          <div className="report-preview-container flex-1 overflow-auto px-6 py-6">
             {selectedTemplate ? (
-              <div className=" w-fit max-h-full overflow-y-auto scrollbar scrollbar-bg-muted">
-                <div
-                  className="relative origin-top max-h-full rounded-sm shadow-[0_1px_0_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.18),0_0_0_1px_rgba(0,0,0,0.04)]"
-                  style={{ transform: `scale(${previewZoom / 100})` }}
-                >
-                  <DocumentApprovedSeal
-                    status={generatedDocument?.generatedDocument.status ?? null}
-                    size="md"
-                    className="absolute left-5 top-5 z-20 w-full"
-                  />
-                  <div className="report-paper min-w-max bg-white">
-                    <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
-                  </div>
+              <div className="relative max-h-full">
+                <DocumentApprovedSeal
+                  status={generatedDocument?.generatedDocument.status ?? null}
+                  size="sm"
+                  className="absolute left-5 top-5 z-20 w-full"
+                />
+                <div className="report-paper report-paper-fit-preview bg-white">
+                  <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
                 </div>
               </div>
             ) : (

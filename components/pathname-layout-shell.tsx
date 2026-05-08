@@ -26,15 +26,6 @@ const DeferredAppSidebar = dynamic(
 	},
 );
 
-const DeferredUserMenu = dynamic(() => import("@/components/auth/user-menu"), {
-	loading: () => (
-		<div className="inline-flex h-9 min-w-32 items-center gap-2 rounded-md border px-2 py-1 text-sm">
-			<div className="size-6 rounded-full bg-orange-primary/40" />
-			<div className="h-4 w-20 animate-pulse rounded bg-[#ece7df]" />
-		</div>
-	),
-});
-
 const DeferredImpersonateBanner = dynamic(
 	() => import("@/app/admin/users/_components/impersonate-banner"),
 	{
@@ -131,12 +122,6 @@ export function PathnameLayoutShell({
 						</div>
 						<div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
 							<DeferredImpersonateBanner />
-							<DeferredUserMenu
-								email={normalizedUser?.email}
-								demoMode={isDemoMode}
-								demoLabel={demoSession?.label ?? demoSession?.tenantName ?? null}
-								userRoles={userRoles ?? undefined}
-							/>
 						</div>
 					</header>
 					<main className="flex flex-1 flex-col gap-4 bg-[#fafafa]">

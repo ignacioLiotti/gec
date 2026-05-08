@@ -155,6 +155,8 @@
 /* The paper sheet itself */
 .report-paper {
 	width: 210mm;
+	max-width: 100%;
+	box-sizing: border-box;
 	background: #f7f7f8;
 	color: #1f2328;
 	box-shadow:
@@ -168,6 +170,123 @@
 	display: inline-block;
 	height: fit-content;
 	align-self: flex-start;
+}
+
+.report-preview-container {
+	container-type: inline-size;
+}
+
+.report-paper-fit-preview {
+	display: block;
+	width: 100%;
+	max-width: none;
+	font-size: clamp(7px, 1.55cqw, 11px);
+	line-height: 1.45;
+	overflow: hidden;
+}
+
+.report-paper-fit-preview,
+.report-paper-fit-preview * {
+	box-sizing: border-box;
+	min-width: 0;
+}
+
+.report-paper-fit-preview > div,
+.report-paper-fit-preview table,
+.report-paper-fit-preview img,
+.report-paper-fit-preview svg {
+	max-width: 100%;
+}
+
+.report-paper-fit-preview [style*="width"] {
+	max-width: 100% !important;
+}
+
+.report-paper-fit-preview [style*="min-width"] {
+	min-width: 0 !important;
+}
+
+.report-paper-fit-preview [style*="display:grid"],
+.report-paper-fit-preview [style*="display: grid"] {
+	grid-template-columns: minmax(0, 1fr) !important;
+	gap: clamp(8px, 2.4cqw, 14px) !important;
+}
+
+.report-paper-fit-preview [style*="display:flex"],
+.report-paper-fit-preview [style*="display: flex"] {
+	flex-wrap: wrap !important;
+	gap: clamp(8px, 2.4cqw, 14px) !important;
+}
+
+.report-paper-fit-preview [style*="justify-content:space-between"],
+.report-paper-fit-preview [style*="justify-content: space-between"] {
+	justify-content: flex-start !important;
+}
+
+.report-paper-fit-preview [style*="display:flex"] > *,
+.report-paper-fit-preview [style*="display: flex"] > *,
+.report-paper-fit-preview [style*="display:grid"] > *,
+.report-paper-fit-preview [style*="display: grid"] > * {
+	flex: 1 1 min(100%, 180px) !important;
+	max-width: 100% !important;
+}
+
+.report-paper-fit-preview table {
+	width: 100%;
+	table-layout: fixed;
+}
+
+.report-paper-fit-preview img,
+.report-paper-fit-preview svg {
+	height: auto;
+}
+
+.report-paper-fit-preview :is(div, p, span, td, th, li) {
+	overflow-wrap: anywhere;
+}
+
+.report-paper-fit-preview .report-header-block {
+	padding: clamp(14px, 4.5cqw, 28px) clamp(18px, 5.8cqw, 36px) clamp(10px, 3.2cqw, 20px);
+}
+
+.report-paper-fit-preview .report-company {
+	font-size: clamp(15px, 3.6cqw, 22px);
+}
+
+.report-paper-fit-preview .report-divider {
+	width: clamp(48px, 14cqw, 96px);
+	margin-block: clamp(6px, 1.7cqw, 10px);
+}
+
+.report-paper-fit-preview .report-meta {
+	gap: clamp(6px, 2cqw, 12px);
+}
+
+.report-paper-fit-preview .report-title-text {
+	font-size: clamp(9px, 2.1cqw, 13px);
+}
+
+.report-paper-fit-preview .report-date-text {
+	font-size: clamp(7px, 1.65cqw, 10px);
+}
+
+.report-paper-fit-preview .report-body {
+	padding: 0 clamp(18px, 5.8cqw, 36px) clamp(14px, 4.5cqw, 28px);
+}
+
+.report-paper-fit-preview .report-th {
+	padding: clamp(4px, 1.2cqw, 7px) clamp(5px, 1.6cqw, 10px);
+	font-size: clamp(6.5px, 1.35cqw, 9px);
+	white-space: normal;
+}
+
+.report-paper-fit-preview .report-td {
+	padding: clamp(3px, 1cqw, 5px) clamp(5px, 1.6cqw, 10px);
+}
+
+.report-paper-fit-preview .report-summary-card {
+	margin-top: clamp(8px, 2.3cqw, 14px);
+	padding: clamp(8px, 2cqw, 12px) clamp(9px, 2.3cqw, 14px);
 }
 
 .report-paper > div {
