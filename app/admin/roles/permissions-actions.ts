@@ -924,7 +924,8 @@ export async function getUserMacroTableAccess({
 // =====================================================
 
 // Define the navigation structure with required permissions
-const NAVIGATION_ITEMS = [
+function getNavigationItems(): NavigationItem[] {
+	return [
 	{ path: "/", label: "Dashboard", permission: "nav:dashboard", icon: "Home" },
 	{
 		path: "/excel",
@@ -1008,7 +1009,8 @@ const NAVIGATION_ITEMS = [
 			},
 		],
 	},
-];
+	];
+}
 
 export type NavigationItem = {
 	path: string;
@@ -1039,7 +1041,7 @@ export async function getNavigationWithAccess({
 		};
 	};
 
-	return NAVIGATION_ITEMS.map(checkAccess);
+	return getNavigationItems().map(checkAccess);
 }
 
 export async function getNavigationStructure(): Promise<NavigationItem[]> {
@@ -1047,5 +1049,5 @@ export async function getNavigationStructure(): Promise<NavigationItem[]> {
 	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase);
-	return NAVIGATION_ITEMS;
+	return getNavigationItems();
 }
