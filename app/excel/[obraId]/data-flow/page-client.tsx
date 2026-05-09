@@ -7068,6 +7068,7 @@ export function DataFlowPageClient({
   }
 
   function makeUniqueAlias(label: string, existingAliases: string[]) {
+    const existingAliasSet = new Set(existingAliases);
     const base =
       label
         .normalize("NFD")
@@ -7077,7 +7078,7 @@ export function DataFlowPageClient({
         .toLowerCase() || "input";
     let alias = base;
     let index = 2;
-    while (existingAliases.includes(alias)) {
+    while (existingAliasSet.has(alias)) {
       alias = `${base}_${index}`;
       index += 1;
     }

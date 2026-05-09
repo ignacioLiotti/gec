@@ -37,8 +37,9 @@ export function hasAnyDemoCapability(
 
 export function getDefaultDemoAppPath(value: DemoCapabilitySource) {
 	const allowed = readDemoCapabilities(value);
+	const allowedSet = new Set(allowed);
 	for (const capability of DEMO_CAPABILITY_ORDER) {
-		if (!allowed.includes(capability)) continue;
+		if (!allowedSet.has(capability)) continue;
 		if (capability === "dashboard") return "/dashboard";
 		if (capability === "excel") return "/excel";
 		if (capability === "macro") return "/macro";

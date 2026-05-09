@@ -244,6 +244,19 @@ const PRESUPUESTO_ESTUDIO_TV_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] 
   },
 ];
 
+const IMAGE_FILE_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'bmp',
+  'svg',
+  'avif',
+  'heic',
+  'heif',
+]);
+
 // Utility function to check if a file is a 3D model
 const is3DModelFile = (fileName: string): boolean => {
   const ext = fileName.toLowerCase().split('.').pop();
@@ -3395,7 +3408,7 @@ function FileManagerContent({
         const ext = file.name.toLowerCase().split('.').pop() ?? '';
         const isImageFile =
           file.type.startsWith('image/') ||
-          ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'heic', 'heif'].includes(ext);
+          IMAGE_FILE_EXTENSIONS.has(ext);
         if (isImageFile) {
           const localBlobUrl = URL.createObjectURL(file);
           setCachedBlobUrl(filePath, localBlobUrl);
