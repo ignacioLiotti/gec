@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
-import { normalizeDocumentType, normalizeFolderGenerationPath } from "@/lib/document-generation";
+import {
+  applyTemplateAutoInputData,
+  normalizeDocumentType,
+  normalizeFolderGenerationPath,
+} from "@/lib/document-generation";
 import {
   assertWorkInTenant,
   loadDocumentGenerationPermissions,
@@ -57,6 +62,32 @@ export async function GET(request: NextRequest) {
       folderConfigs,
       templates,
     });
+    const resolvedDocumentType = context.resolvedDocumentType;
+    const existingSequenceCount =
+      workId && resolvedDocumentType
+        ? await countExistingDocuments({
+            supabase: access.supabase,
+            tenantId,
+            workId,
+            documentType: resolvedDocumentType,
+          })
+        : 0;
+    const workLabel = workSummary
+      ? [workSummary.n != null ? String(workSummary.n) : "", workSummary.designacion_y_ubicacion ?? ""]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+      : null;
+    const initialInputData = applyTemplateAutoInputData(
+      context.selectedTemplate?.schema ?? { fields: [] },
+      context.initialInputData,
+      {
+        selectedContextId: workId ?? null,
+        selectedContextLabel: workLabel,
+        documentType: resolvedDocumentType,
+        existingSequenceCount,
+      },
+    );
 
     return NextResponse.json({
       works,
@@ -64,18 +95,14 @@ export async function GET(request: NextRequest) {
       templates: context.filteredTemplates,
       context: {
         workId: workId ?? null,
-        workLabel: workSummary
-          ? [workSummary.n != null ? String(workSummary.n) : "", workSummary.designacion_y_ubicacion ?? ""]
-              .filter(Boolean)
-              .join(" ")
-              .trim()
-          : null,
+        workLabel,
         folderPath: context.resolvedFolderPath || null,
         folderCandidates: context.folderCandidates,
         allowedDocumentTypes: context.allowedDocumentTypes,
         documentType: context.resolvedDocumentType,
         selectedTemplate: context.selectedTemplate,
-        initialInputData: context.initialInputData,
+        existingSequenceCount,
+        initialInputData,
       },
     });
   } catch (error) {
@@ -83,4 +110,25 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Error al cargar la configuracion";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+async function countExistingDocuments({
+  supabase,
+  tenantId,
+  workId,
+  documentType,
+}: {
+  supabase: SupabaseClient;
+  tenantId: string;
+  workId: string;
+  documentType: string;
+}) {
+  const { count, error } = await supabase
+    .from("generated_documents")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("obra_id", workId)
+    .eq("document_type", documentType);
+  if (error) throw error;
+  return count ?? 0;
 }

@@ -11,8 +11,10 @@ import {
   normalizeDocumentType,
   normalizeTemplateSchema,
   renderDocumentHtml,
+  type TemplateAutoPopulate,
   type TemplateField,
   type TemplateFieldType,
+  type TemplateSelectMode,
 } from "@/lib/document-generation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,6 +81,20 @@ const FIELD_TYPE_LABELS: Record<TemplateFieldType, string> = {
   supplier_reference: "Proveedor",
 };
 
+const SELECT_MODE_OPTIONS: Array<{ value: TemplateSelectMode; label: string }> = [
+  { value: "strict", label: "Lista estricta" },
+  { value: "creatable", label: "Combo editable" },
+];
+
+const AUTO_POPULATE_OPTIONS: Array<{ value: TemplateAutoPopulate; label: string }> = [
+  { value: "none", label: "Sin autocompletar" },
+  { value: "selected_context_label", label: "Contexto seleccionado" },
+  { value: "selected_context_id", label: "ID del contexto" },
+  { value: "document_type", label: "Tipo documental" },
+  { value: "next_sequence_number", label: "Siguiente numero de secuencia" },
+  { value: "today", label: "Fecha actual" },
+];
+
 function createDefaultTableColumns(): TemplateField[] {
   return [
     { key: "cantidad", label: "Cantidad", type: "number", required: false, source: "extra" },
@@ -144,6 +160,8 @@ function createFieldFromKey(key: string, existing?: TemplateField): TemplateFiel
     description: existing?.description ?? "",
     defaultValue: existing?.defaultValue,
     options: existing?.options,
+    selectMode: existing?.selectMode,
+    autoPopulate: existing?.autoPopulate,
   };
 }
 
@@ -1355,6 +1373,10 @@ export function TemplateConfigEditorPanel() {
                                         value === "select" && !field.options?.length
                                           ? [{ label: "Opcion 1", value: "opcion_1" }]
                                           : field.options,
+                                      selectMode:
+                                        value === "select"
+                                          ? field.selectMode ?? "strict"
+                                          : field.selectMode,
                                       columns:
                                         value === "table" && !field.columns?.length
                                           ? createDefaultTableColumns()
@@ -1448,8 +1470,62 @@ export function TemplateConfigEditorPanel() {
                                     placeholder="Opcional"
                                   />
                                 </div>
+                                {field.type !== "table" ? (
+                                  <div className="space-y-2 md:col-span-3">
+                                    <Label>Autocompletar</Label>
+                                    <Select
+                                      value={field.autoPopulate ?? "none"}
+                                      onValueChange={(value) =>
+                                        updateField(index, {
+                                          autoPopulate: value as TemplateAutoPopulate,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {AUTO_POPULATE_OPTIONS.map((option) => (
+                                          <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-stone-500">
+                                      Se aplica al crear o cambiar contexto; el usuario puede editar el valor.
+                                    </p>
+                                  </div>
+                                ) : null}
                                 {field.type === "select" ? (
                                   <div className="space-y-3 md:col-span-3 rounded-lg border border-stone-200 bg-white p-3">
+                                    <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                      <div className="space-y-2">
+                                        <Label>Modo de lista</Label>
+                                        <Select
+                                          value={field.selectMode ?? "strict"}
+                                          onValueChange={(value) =>
+                                            updateField(index, {
+                                              selectMode: value as TemplateSelectMode,
+                                            })
+                                          }
+                                        >
+                                          <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {SELECT_MODE_OPTIONS.map((option) => (
+                                              <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <p className="self-end pb-2 text-xs text-stone-500">
+                                        Estricta obliga a elegir un valor existente. Combo editable permite escribir uno nuevo.
+                                      </p>
+                                    </div>
                                     <div className="flex items-center justify-between gap-3">
                                       <div>
                                         <p className="text-sm font-medium text-stone-900">Valores de la lista</p>
@@ -1544,6 +1620,10 @@ export function TemplateConfigEditorPanel() {
                                                       value === "select" && !column.options?.length
                                                         ? [{ label: "Opcion 1", value: "opcion_1" }]
                                                         : column.options,
+                                                    selectMode:
+                                                      value === "select"
+                                                        ? column.selectMode ?? "strict"
+                                                        : column.selectMode,
                                                   })
                                                 }
                                               >
@@ -1605,6 +1685,33 @@ export function TemplateConfigEditorPanel() {
                                           </div>
                                           {column.type === "select" ? (
                                             <div className="mt-3 rounded-md border border-stone-200 bg-white p-3">
+                                              <div className="mb-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                                <div className="space-y-1">
+                                                  <Label>Modo de lista</Label>
+                                                  <Select
+                                                    value={column.selectMode ?? "strict"}
+                                                    onValueChange={(value) =>
+                                                      updateTableColumn(index, columnIndex, {
+                                                        selectMode: value as TemplateSelectMode,
+                                                      })
+                                                    }
+                                                  >
+                                                    <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                      <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                      {SELECT_MODE_OPTIONS.map((option) => (
+                                                        <SelectItem key={option.value} value={option.value}>
+                                                          {option.label}
+                                                        </SelectItem>
+                                                      ))}
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+                                                <p className="self-end pb-2 text-xs text-stone-500">
+                                                  El combo editable acepta valores nuevos en esta columna.
+                                                </p>
+                                              </div>
                                               <div className="mb-2 flex items-center justify-between gap-3">
                                                 <div>
                                                   <p className="text-xs font-semibold text-stone-900">Valores de la lista</p>

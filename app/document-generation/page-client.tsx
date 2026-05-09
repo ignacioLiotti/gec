@@ -29,6 +29,7 @@ import { toast } from "sonner";
 
 import {
   DOCUMENT_TYPE_LABELS,
+  applyTemplateAutoInputData,
   buildInitialInputData,
   type DocumentTemplateSummary,
   type DocumentType,
@@ -62,6 +63,8 @@ type BootstrapResponse = {
   context: {
     workId: string | null;
     workLabel: string | null;
+    existingSequenceCount: number;
+    existingDocumentCount?: number;
     folderPath: string | null;
     folderCandidates: FolderConfig[];
     allowedDocumentTypes: DocumentType[];
@@ -454,6 +457,7 @@ function TextInput({
   icon,
   mono,
   error,
+  type = "text",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -461,6 +465,7 @@ function TextInput({
   icon?: React.ReactNode;
   mono?: boolean;
   error?: boolean;
+  type?: "text" | "number" | "date";
 }) {
   return (
     <div className="relative">
@@ -470,11 +475,48 @@ function TextInput({
         </span>
       ) : null}
       <input
+        type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className={cn(controlBaseClass(error), icon ? "pl-9" : "pl-3", mono && "font-mono")}
       />
+    </div>
+  );
+}
+
+function CreatableCombobox({
+  fieldKey,
+  value,
+  onChange,
+  options,
+  placeholder,
+  error,
+}: {
+  fieldKey: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder?: string;
+  error?: boolean;
+}) {
+  const listId = `document-field-options-${fieldKey}`;
+  return (
+    <div>
+      <input
+        list={listId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className={cn(controlBaseClass(error), "pl-3")}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={`${option.value}-${option.label}`} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </datalist>
     </div>
   );
 }
@@ -517,6 +559,8 @@ export function DocumentGenerationPageClient() {
   const [documentType, setDocumentType] = useState<DocumentType | "">(initialDocumentType ?? "");
   const [templateId, setTemplateId] = useState("");
   const [works, setWorks] = useState<WorkOption[]>([]);
+  const [workLabel, setWorkLabel] = useState<string | null>(null);
+  const [existingSequenceCount, setExistingSequenceCount] = useState(0);
   const [folderConfigs, setFolderConfigs] = useState<FolderConfig[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);
   const [inputData, setInputData] = useState<Record<string, unknown>>({});
@@ -553,6 +597,8 @@ export function DocumentGenerationPageClient() {
         }
 
         setWorks(payload.works);
+        setWorkLabel(payload.context.workLabel);
+        setExistingSequenceCount(payload.context.existingSequenceCount ?? payload.context.existingDocumentCount ?? 0);
         setFolderConfigs(payload.folderConfigs);
         setTemplates(payload.templates);
         setFolderPath(payload.context.folderPath ?? (params?.folderPath ?? folderPath));
@@ -799,7 +845,14 @@ export function DocumentGenerationPageClient() {
     setValidationErrors([]);
     const nextTemplate = templates.find((template) => template.id === value) ?? null;
     if (!nextTemplate) return;
-    setInputData(buildInitialInputData(nextTemplate.schema, inputData));
+    setInputData(
+      applyTemplateAutoInputData(nextTemplate.schema, buildInitialInputData(nextTemplate.schema, inputData), {
+        selectedContextId: workId,
+        selectedContextLabel: workLabel,
+        documentType,
+        existingSequenceCount,
+      }),
+    );
   };
 
   const handleFieldChange = (field: TemplateField, value: string) => {
@@ -983,15 +1036,27 @@ export function DocumentGenerationPageClient() {
     }
 
     if (field.type === "select") {
+      const options = (field.options ?? []).map((option) => ({
+        value: option.value,
+        label: option.label,
+      }));
+      if (field.selectMode === "creatable") {
+        return (
+          <CreatableCombobox
+            fieldKey={field.key}
+            value={String(value ?? "")}
+            onChange={onChange}
+            placeholder={`Seleccionar o crear ${field.label.toLowerCase()}`}
+            options={options}
+          />
+        );
+      }
       return (
         <NativeSelect
           value={String(value ?? "")}
           onChange={onChange}
           placeholder={`Seleccionar ${field.label.toLowerCase()}`}
-          options={(field.options ?? []).map((option) => ({
-            value: option.value,
-            label: option.label,
-          }))}
+          options={options}
         />
       );
     }
@@ -1002,6 +1067,7 @@ export function DocumentGenerationPageClient() {
         onChange={onChange}
         placeholder={`Completar ${field.label.toLowerCase()}`}
         mono={field.type === "money" || field.type === "number"}
+        type={field.type === "date" ? "date" : field.type === "number" || field.type === "money" ? "number" : "text"}
         icon={field.type === "date" ? <CalendarDays className="h-3.5 w-3.5" /> : undefined}
       />
     );
@@ -1381,8 +1447,8 @@ export function DocumentGenerationPageClient() {
                   size="sm"
                   className="absolute left-5 top-5 z-20 w-full"
                 />
-                <div className="report-paper report-paper-fit-preview bg-white">
-                  <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                <div className="report-paper report-paper-fit-preview bg-white ">
+                  <div dangerouslySetInnerHTML={{ __html: previewHtml }} className="" />
                 </div>
               </div>
             ) : (

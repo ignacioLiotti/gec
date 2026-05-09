@@ -739,6 +739,15 @@ function needsCurveInference(config: Partial<RuleConfig>): boolean {
 		!curve.plan?.startPeriod;
 }
 
+function isMissingRelationError(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		(error as { code?: unknown }).code === "42P01"
+	);
+}
+
 async function loadRuleConfigForTenant(
 	supabase: SupabaseClient,
 	tenantId: string,
@@ -748,12 +757,15 @@ async function loadRuleConfigForTenant(
 		supabase,
 		tenantId,
 	);
-	const { data } = await supabase
+	const { data, error } = await supabase
 		.from("obra_rule_config")
 		.select("config_json")
 		.eq("tenant_id", tenantId)
 		.eq("obra_id", obraId)
 		.maybeSingle();
+	if (error) {
+		if (!isMissingRelationError(error)) throw error;
+	}
 
 	const obraStored = ((data?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
 	const mergedStored = mergePartialRuleConfig(tenantDefaultStored, obraStored);
@@ -802,7 +814,9 @@ async function loadRuleConfigResolutionForTenant(
 		.eq("tenant_id", tenantId)
 		.eq("obra_id", obraId)
 		.maybeSingle();
-	if (obraConfigError) throw obraConfigError;
+	if (obraConfigError && !isMissingRelationError(obraConfigError)) {
+		throw obraConfigError;
+	}
 	const obraStored = ((obraConfigData?.config_json ?? {}) as Partial<RuleConfig>) ?? {};
 
 	const mergedStored = mergePartialRuleConfig(tenantDefaultStored, obraStored);

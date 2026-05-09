@@ -41,6 +41,14 @@ export type TemplateFieldType =
   | "supplier_reference";
 
 export type TemplateFieldSource = "folder" | "extra";
+export type TemplateSelectMode = "strict" | "creatable";
+export type TemplateAutoPopulate =
+  | "none"
+  | "selected_context_id"
+  | "selected_context_label"
+  | "document_type"
+  | "next_sequence_number"
+  | "today";
 
 export type TemplateField = {
   key: string;
@@ -51,6 +59,8 @@ export type TemplateField = {
   description?: string | null;
   defaultValue?: unknown;
   options?: Array<{ label: string; value: string }>;
+  selectMode?: TemplateSelectMode;
+  autoPopulate?: TemplateAutoPopulate;
   repeatableGroup?: string | null;
   repeatableGroupLabel?: string | null;
   columns?: TemplateField[];
@@ -167,6 +177,8 @@ function normalizeTemplateField(field: Record<string, unknown>, fallbackKey: str
             value: String(option.value ?? ""),
           }))
       : undefined,
+    selectMode: normalizeSelectMode(field.selectMode),
+    autoPopulate: normalizeAutoPopulate(field.autoPopulate),
     repeatableGroup,
     repeatableGroupLabel:
       typeof field.repeatableGroupLabel === "string" && field.repeatableGroupLabel.trim().length > 0
@@ -179,6 +191,28 @@ function normalizeTemplateField(field: Record<string, unknown>, fallbackKey: str
             .map((column, index) => normalizeTemplateField(column, `column_${index + 1}`))
         : undefined,
   };
+}
+
+function normalizeSelectMode(value: unknown): TemplateSelectMode | undefined {
+  if (value === "strict" || value === "creatable") return value;
+  return undefined;
+}
+
+function normalizeAutoPopulate(value: unknown): TemplateAutoPopulate | undefined {
+  if (value === "work_id") return "selected_context_id";
+  if (value === "work_label") return "selected_context_label";
+  if (value === "next_document_number") return "next_sequence_number";
+  if (
+    value === "none" ||
+    value === "selected_context_id" ||
+    value === "selected_context_label" ||
+    value === "document_type" ||
+    value === "next_sequence_number" ||
+    value === "today"
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 function normalizeFieldType(value: unknown): TemplateFieldType {
@@ -290,9 +324,10 @@ function validateTableField(field: TemplateField, value: unknown): ValidationErr
 function validateFieldValue(field: TemplateField, value: unknown, errorKey: string): ValidationError[] {
   const normalizedValue =
     typeof value === "string" ? value.trim() : value == null ? "" : value;
-  if (!field.required) return [];
+  const isEmpty = normalizedValue == null || normalizedValue === "";
+  if (!field.required && isEmpty) return [];
   if (field.type === "number" || field.type === "money") {
-    if (normalizedValue === "" || normalizedValue == null) {
+    if (isEmpty) {
       return [{ key: errorKey, message: `${field.label} es obligatorio.` }];
     }
     const parsed = Number(normalizedValue);
@@ -301,10 +336,24 @@ function validateFieldValue(field: TemplateField, value: unknown, errorKey: stri
     }
     return [];
   }
-  if (typeof normalizedValue === "string" && normalizedValue.length === 0) {
-    return [{ key: errorKey, message: `${field.label} es obligatorio.` }];
+  if (field.type === "date" && typeof normalizedValue === "string" && normalizedValue.length > 0) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) {
+      return [{ key: errorKey, message: `${field.label} debe ser una fecha valida.` }];
+    }
+    return [];
   }
-  if (normalizedValue == null || normalizedValue === "") {
+  if (
+    field.type === "select" &&
+    (field.selectMode ?? "strict") === "strict" &&
+    typeof normalizedValue === "string" &&
+    normalizedValue.length > 0
+  ) {
+    const validValues = new Set((field.options ?? []).map((option) => option.value));
+    if (!validValues.has(normalizedValue)) {
+      return [{ key: errorKey, message: `${field.label} debe elegirse de la lista.` }];
+    }
+  }
+  if (isEmpty) {
     return [{ key: errorKey, message: `${field.label} es obligatorio.` }];
   }
   return [];
@@ -345,6 +394,53 @@ export function buildInitialInputData(schema: TemplateSchema, current: Record<st
         .map((field) => [field.key, field.defaultValue]),
     );
     next[groupKey] = [row];
+  }
+  return next;
+}
+
+export function applyTemplateAutoInputData(
+  schema: TemplateSchema,
+  current: Record<string, unknown>,
+  context: {
+    selectedContextId?: string | null;
+    selectedContextLabel?: string | null;
+    documentType?: string | null;
+    existingSequenceCount?: number | null;
+    today?: string | null;
+    workId?: string | null;
+    workLabel?: string | null;
+    existingDocumentCount?: number | null;
+  },
+) {
+  const next: Record<string, unknown> = { ...current };
+  const selectedContextId = context.selectedContextId ?? context.workId ?? "";
+  const selectedContextLabel = context.selectedContextLabel ?? context.workLabel ?? "";
+  const existingSequenceCount = context.existingSequenceCount ?? context.existingDocumentCount ?? 0;
+  const today = context.today ?? new Date().toISOString().slice(0, 10);
+  for (const field of schema.fields) {
+    if (field.type === "table" || field.repeatableGroup) continue;
+    const currentValue = next[field.key];
+    if (currentValue != null && String(currentValue).trim().length > 0) continue;
+
+    switch (field.autoPopulate) {
+      case "selected_context_id":
+        next[field.key] = selectedContextId;
+        break;
+      case "selected_context_label":
+        next[field.key] = selectedContextLabel;
+        break;
+      case "document_type":
+        next[field.key] = context.documentType ?? "";
+        break;
+      case "next_sequence_number":
+        next[field.key] = String(Number(existingSequenceCount) + 1);
+        break;
+      case "today":
+        next[field.key] = today;
+        break;
+      default:
+        break;
+    }
   }
   return next;
 }

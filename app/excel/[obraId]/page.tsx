@@ -1147,7 +1147,11 @@ function ObraDetailPageContent() {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const isMobile = useIsMobile();
-	const { isAdmin: isTenantAdmin, tenantId: activeTenantId } = useTenantAdminStatus();
+	const {
+		isAdmin: isTenantAdmin,
+		isLoading: isTenantAdminStatusLoading,
+		tenantId: activeTenantId,
+	} = useTenantAdminStatus();
 	const obraId = useMemo(() => {
 		const raw = (params as Record<string, string | string[] | undefined>)?.obraId;
 		if (Array.isArray(raw)) return raw[0];
@@ -1418,9 +1422,13 @@ function ObraDetailPageContent() {
 			selectedCurveTableRefs.curvaPlanId ?? "none",
 			selectedCurveTableRefs.pmcResumenId ?? "none",
 		],
-		enabled: isValidObraId && isGeneralTabActive,
+		enabled:
+			isValidObraId &&
+			isGeneralTabActive &&
+			tablasQuery.isSuccess &&
+			curveRulesConfigQuery.isSuccess,
 		queryFn: async () => {
-			const rulesConfig = curveRulesConfigQuery.data ?? (await fetchRulesConfig(obraId!));
+			const rulesConfig = curveRulesConfigQuery.data;
 			const curvaTableId = selectedCurveTableRefs.curvaPlanId;
 			const resumenTableId = selectedCurveTableRefs.pmcResumenId;
 			const curvaTableName = selectedCurveTableRefs.curvaPlanName;
@@ -1474,6 +1482,31 @@ function ObraDetailPageContent() {
 				throw new Error(out?.error || "No se pudieron cargar los defaults");
 			}
 			return res.json() as Promise<{ folders: DefaultFolder[]; quickActions: QuickAction[] }>;
+		},
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const tenantMarkerQuery = useQuery({
+		queryKey: ["tenant-marker", activeTenantId ?? "none"],
+		enabled: !isTenantAdminStatusLoading,
+		queryFn: async () => {
+			const response = await fetch("/api/tenant-marker", { cache: "no-store" });
+			if (!response.ok) return false;
+			const payload = (await response.json().catch(() => ({}))) as {
+				isIlagDemoTenant?: unknown;
+			};
+			return payload.isIlagDemoTenant === true;
+		},
+		staleTime: 5 * 60 * 1000,
+	});
+
+	const mainTableConfigQuery = useQuery({
+		queryKey: ["main-table-config"],
+		queryFn: async () => {
+			const response = await fetch("/api/main-table-config", { cache: "no-store" });
+			if (!response.ok) return null;
+			const payload = (await response.json()) as { columns?: MainTableColumnConfig[] };
+			return Array.isArray(payload.columns) ? payload.columns : [];
 		},
 		staleTime: 5 * 60 * 1000,
 	});
@@ -1628,9 +1661,7 @@ function ObraDetailPageContent() {
 	const [pendingDerivedFieldValues, setPendingDerivedFieldValues] = useState<
 		Partial<Record<DerivedCertificadosField, number>>
 	>({});
-	const [mainTableColumnsConfig, setMainTableColumnsConfig] = useState<
-		MainTableColumnConfig[] | null
-	>(null);
+	const mainTableColumnsConfig = mainTableConfigQuery.data ?? null;
 
 	const [isMemoriaOpen, setIsMemoriaOpen] = useState(false);
 	const [memoriaDraft, setMemoriaDraft] = useState("");
@@ -1662,67 +1693,13 @@ function ObraDetailPageContent() {
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
 	const [documentsRecoveryRequestToken, setDocumentsRecoveryRequestToken] = useState(0);
-	const [isIlagDemoTenant, setIsIlagDemoTenant] = useState(false);
+	const isIlagDemoTenant = tenantMarkerQuery.data === true;
 	const [isIlagMaterialsWizardOpen, setIsIlagMaterialsWizardOpen] = useState(false);
-
-	useEffect(() => {
-		let cancelled = false;
-		void (async () => {
-			try {
-				const response = await fetch("/api/tenant-marker", { cache: "no-store" });
-				if (!response.ok) {
-					if (!cancelled) {
-						setIsIlagDemoTenant(false);
-					}
-					return;
-				}
-				const payload = (await response.json().catch(() => ({}))) as {
-					isIlagDemoTenant?: unknown;
-				};
-				const isIlagDemo = payload.isIlagDemoTenant === true;
-
-				if (!cancelled) {
-					setIsIlagDemoTenant(isIlagDemo);
-				}
-			} catch (error) {
-				console.error("[obra-page] failed to resolve tenant marker", error);
-				if (!cancelled) {
-					setIsIlagDemoTenant(false);
-				}
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [activeTenantId]);
 
 	useEffect(() => {
 		if (isIlagDemoTenant) return;
 		setIsIlagMaterialsWizardOpen(false);
 	}, [isIlagDemoTenant]);
-
-	useEffect(() => {
-		let cancelled = false;
-		const loadMainTableConfig = async () => {
-			try {
-				const response = await fetch("/api/main-table-config", { cache: "no-store" });
-				if (!response.ok) return;
-				const payload = (await response.json()) as { columns?: MainTableColumnConfig[] };
-				if (!cancelled) {
-					setMainTableColumnsConfig(
-						Array.isArray(payload.columns) ? payload.columns : []
-					);
-				}
-			} catch {
-				if (!cancelled) setMainTableColumnsConfig(null);
-			}
-		};
-		void loadMainTableConfig();
-		return () => {
-			cancelled = true;
-		};
-	}, []);
 
 	// Sync URL when tab changes (low priority, non-blocking)
 	const setQueryParams = useCallback((patch: Record<string, string | null | undefined>) => {

@@ -140,7 +140,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
+            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full bg-stone-300",
             className
           )}
           {...props}
@@ -208,7 +208,7 @@ function Sidebar({
 
   return (
     <div
-      className="group peer text-sidebar-foreground hidden md:block  [--sidebar-motion-duration:420ms] [--sidebar-motion-ease:cubic-bezier(0.16,1,0.3,1)]"
+      className="group peer text-sidebar-foreground hidden md:block  [--sidebar-motion-duration:420ms] [--sidebar-motion-ease:cubic-bezier(0.16,1,0.3,1)] bg-inherit"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
@@ -239,7 +239,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed bg-white inset-y-0 z-[100] my-auto hidden h-[calc(100vh-12px)] w-(--sidebar-width) transform-gpu border border-transparent shadow-none transition-[left,right,width,transform,opacity,box-shadow,border-color] duration-(--sidebar-motion-duration) ease-(--sidebar-motion-ease) will-change-[width,transform] md:flex",
+          "fixed bg-inherit inset-y-0 z-[100] my-auto hidden h-[calc(100vh-12px)] w-(--sidebar-width) transform-gpu border border-transparent shadow-none transition-[left,right,width,transform,opacity,box-shadow,border-color] duration-(--sidebar-motion-duration) ease-(--sidebar-motion-ease) will-change-[width,transform] md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",

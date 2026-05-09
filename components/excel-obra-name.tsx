@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,8 +78,6 @@ export function ExcelObraName() {
   const pathname = usePathname();
   const router = useRouter();
   const { prefetchObra } = usePrefetchObra();
-  const [obraState, setObraState] = useState<HeaderObraState>(EMPTY_OBRA_STATE);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
   const match = pathname.match(/^\/excel\/([^/]+)(?:\/.*)?$/);
@@ -95,91 +94,53 @@ export function ExcelObraName() {
 
   const pageName = getPageName();
 
-  useEffect(() => {
-    if (!obraId) {
-      setObraState(EMPTY_OBRA_STATE);
-      setIsLoading(false);
-      return;
-    }
+  const currentObraQuery = useQuery({
+    queryKey: ["obra", obraId],
+    enabled: Boolean(obraId),
+    queryFn: async () => {
+      const response = await fetch(`/api/obras/${obraId}`);
+      if (!response.ok) throw new Error("Failed to fetch obra");
+      const data = await response.json();
+      return data?.obra as ObraSummary;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-    const abortController = new AbortController();
-    let isMounted = true;
+  const obrasQuery = useQuery({
+    queryKey: ["obras", "nav", "n", "asc"],
+    enabled: Boolean(obraId),
+    queryFn: async () => {
+      const response = await fetch("/api/obras?orderBy=n&orderDir=asc");
+      if (!response.ok) return [] as ObraSummary[];
+      const data = await response.json();
+      return Array.isArray(data?.detalleObras)
+        ? (data.detalleObras as ObraSummary[])
+        : [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-    async function fetchObraHeader() {
-      setIsLoading(true);
+  const obraState = useMemo<HeaderObraState>(() => {
+    if (!obraId) return EMPTY_OBRA_STATE;
 
-      try {
-        const obraResponse = await fetch(`/api/obras/${obraId}`, {
-          signal: abortController.signal,
-        });
+    const obras = obrasQuery.data ?? [];
+    const currentFromList = obras.find((obra) => obra.id === obraId);
+    const currentObra = currentObraQuery.data ?? currentFromList ?? null;
+    const currentIndex = obras.findIndex((obra) => obra.id === obraId);
 
-        if (!obraResponse.ok) {
-          throw new Error("Failed to fetch obra");
-        }
-
-        const obraData = await obraResponse.json();
-        const currentObra = obraData?.obra as ObraSummary | undefined;
-
-        let obras: ObraSummary[] = [];
-        let previousObra: ObraSummary | null = null;
-        let nextObra: ObraSummary | null = null;
-
-        try {
-          const obrasResponse = await fetch("/api/obras?orderBy=n&orderDir=asc", {
-            signal: abortController.signal,
-          });
-
-          if (obrasResponse.ok) {
-            const obrasData = await obrasResponse.json();
-            obras = Array.isArray(obrasData?.detalleObras)
-              ? (obrasData.detalleObras as ObraSummary[])
-              : [];
-
-            const currentIndex = obras.findIndex((obra) => obra.id === obraId);
-
-            if (currentIndex > 0) {
-              previousObra = obras[currentIndex - 1] ?? null;
-            }
-            if (currentIndex >= 0 && currentIndex < obras.length - 1) {
-              nextObra = obras[currentIndex + 1] ?? null;
-            }
-          }
-        } catch (error) {
-          if (error instanceof Error && error.name === "AbortError") {
-            throw error;
-          }
-          console.error("Error fetching obra navigation:", error);
-        }
-
-        if (isMounted) {
-          setObraState({
-            obraName: currentObra?.designacionYUbicacion || "",
-            obraNumber: normalizeObraNumber(currentObra?.n),
-            previousObra,
-            nextObra,
-            obras,
-          });
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") return;
-        console.error("Error fetching obra name:", error);
-        if (isMounted) {
-          setObraState(EMPTY_OBRA_STATE);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void fetchObraHeader();
-
-    return () => {
-      isMounted = false;
-      abortController.abort();
+    return {
+      obraName: currentObra?.designacionYUbicacion || "",
+      obraNumber: normalizeObraNumber(currentObra?.n),
+      previousObra: currentIndex > 0 ? obras[currentIndex - 1] ?? null : null,
+      nextObra:
+        currentIndex >= 0 && currentIndex < obras.length - 1
+          ? obras[currentIndex + 1] ?? null
+          : null,
+      obras,
     };
-  }, [obraId]);
+  }, [currentObraQuery.data, obraId, obrasQuery.data]);
+
+  const isLoading = Boolean(obraId) && currentObraQuery.isLoading;
 
   const prefetchObraRoute = useCallback(
     (targetObra: ObraSummary | null | undefined) => {
@@ -189,14 +150,6 @@ export function ExcelObraName() {
     },
     [prefetchObra, router]
   );
-
-  useEffect(() => {
-    if (!obraId) return;
-
-    [obraState.previousObra, obraState.nextObra].forEach((target) => {
-      prefetchObraRoute(target);
-    });
-  }, [obraId, obraState.nextObra, obraState.previousObra, prefetchObraRoute]);
 
   const handleNavigateToObra = (targetObra: ObraSummary | null | undefined) => {
     if (!targetObra?.id) return;

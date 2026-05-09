@@ -255,6 +255,11 @@ function normalizeTemplateField(field: TemplateField, index: number): TemplateFi
               value: option.value,
             }))
         : undefined,
+    selectMode:
+      field.selectMode === "creatable" || field.selectMode === "strict"
+        ? field.selectMode
+        : undefined,
+    autoPopulate: normalizeAutoPopulate(field.autoPopulate),
     repeatableGroup:
       typeof field.repeatableGroup === "string" && field.repeatableGroup.trim().length > 0
         ? normalizeFieldKey(field.repeatableGroup)
@@ -268,6 +273,23 @@ function normalizeTemplateField(field: TemplateField, index: number): TemplateFi
         ? field.columns.map((column, columnIndex) => normalizeTemplateField(column, columnIndex))
         : undefined,
   };
+}
+
+function normalizeAutoPopulate(value: TemplateField["autoPopulate"] | "work_id" | "work_label" | "next_document_number" | undefined) {
+  if (value === "work_id") return "selected_context_id";
+  if (value === "work_label") return "selected_context_label";
+  if (value === "next_document_number") return "next_sequence_number";
+  if (
+    value === "none" ||
+    value === "selected_context_id" ||
+    value === "selected_context_label" ||
+    value === "document_type" ||
+    value === "next_sequence_number" ||
+    value === "today"
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 async function respondWithTemplate(
