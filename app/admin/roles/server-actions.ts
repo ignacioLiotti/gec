@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { auth } from "@/lib/auth";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { revalidatePath } from "next/cache";
 
@@ -99,14 +100,26 @@ export async function createRole({
 	tenantId: string;
 	name: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	await requireRolesAdmin(supabase, tenantId);
 	await supabase.from("roles").insert({ tenant_id: tenantId, name });
 	revalidatePath("/admin/roles");
 }
 
 export async function deleteRole({ roleId }: { roleId: string }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireRoleInTenant(supabase, roleId, tenantId);
 	await supabase.from("roles").delete().eq("id", roleId);
@@ -114,7 +127,13 @@ export async function deleteRole({ roleId }: { roleId: string }) {
 }
 
 export async function listRoles({ tenantId }: { tenantId: string }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	await requireRolesAdmin(supabase, tenantId);
 	const { data } = await supabase
 		.from("roles")
@@ -125,7 +144,13 @@ export async function listRoles({ tenantId }: { tenantId: string }) {
 }
 
 export async function listUserRoles({ userId }: { userId: string }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireUserInTenant(supabase, userId, tenantId);
 	const { data } = await supabase
@@ -143,7 +168,13 @@ export async function assignUserRole({
 	userId: string;
 	roleId: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await Promise.all([
 		requireRoleInTenant(supabase, roleId, tenantId),
@@ -162,7 +193,13 @@ export async function revokeUserRole({
 	userId: string;
 	roleId: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await Promise.all([
 		requireRoleInTenant(supabase, roleId, tenantId),
@@ -178,7 +215,13 @@ export async function revokeUserRole({
 
 // Role-Permissions
 export async function listRolePermissions({ roleId }: { roleId: string }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireRoleInTenant(supabase, roleId, tenantId);
 	const { data } = await supabase
@@ -195,7 +238,13 @@ export async function grantPermissionToRole({
 	roleId: string;
 	permissionId: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireRoleInTenant(supabase, roleId, tenantId);
 	await supabase
@@ -211,7 +260,13 @@ export async function revokePermissionFromRole({
 	roleId: string;
 	permissionId: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireRoleInTenant(supabase, roleId, tenantId);
 	await supabase
@@ -224,7 +279,13 @@ export async function revokePermissionFromRole({
 
 // User overrides
 export async function listUserOverrides({ userId }: { userId: string }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireUserInTenant(supabase, userId, tenantId);
 	const { data } = await supabase
@@ -243,7 +304,13 @@ export async function setUserOverride({
 	permissionId: string;
 	isGranted: boolean;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireUserInTenant(supabase, userId, tenantId);
 	await supabase
@@ -263,7 +330,13 @@ export async function createPermission({
 	key: string;
 	description: string | null;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	await requireRolesAdmin(supabase);
 	const { error } = await supabase.from("permissions").insert({ key, description });
 
@@ -281,7 +354,13 @@ export async function deletePermission({
 }: {
 	permissionId: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	await requireRolesAdmin(supabase);
 	const { error } = await supabase.from("permissions").delete().eq("id", permissionId);
 
@@ -302,7 +381,13 @@ export async function updateRole({
 	roleId: string;
 	name: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireRoleInTenant(supabase, roleId, tenantId);
 	await supabase.from("roles").update({ name }).eq("id", roleId);
@@ -317,7 +402,13 @@ export async function userPermissionSources({
 	tenantId: string;
 	userId: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	await requireRolesAdmin(supabase, tenantId);
 	await requireUserInTenant(supabase, userId, tenantId);
 
@@ -374,7 +465,13 @@ export async function updateMembershipRole({
 	userId: string;
 	role: "owner" | "admin" | "member";
 }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
 	await requireRolesAdmin(supabase, tenantId);
 	await requireUserInTenant(supabase, userId, tenantId);
 	await supabase
