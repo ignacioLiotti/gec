@@ -74,7 +74,7 @@ export function ColumnsMenu({
                       return Array.from(set).sort((a, b) => a - b);
                     });
                   }}
-                  className="size-4 rounded border-gray-300"
+                  className="size-4 rounded border-stone-300"
                 />
                 <button
                   onClick={() => togglePinColumn(col.index)}

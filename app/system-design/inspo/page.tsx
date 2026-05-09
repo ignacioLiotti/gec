@@ -728,7 +728,7 @@ function AISuggestionTableOverlay() {
                 </div>
 
                 <div className="mt-4">
-                  <div className="inline-flex items-center rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  <div className="inline-flex items-center rounded-md bg-stone-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
                     AI Suggestion
                   </div>
                 </div>

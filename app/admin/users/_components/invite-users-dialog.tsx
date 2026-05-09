@@ -122,7 +122,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
                   <Copy className="size-4" />
                 </Button>
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-stone-500">
                 Compartí este enlace con la persona que querés invitar. Expira en 72 horas.
               </p>
             </div>
@@ -170,13 +170,13 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
                     <SelectItem value="member">
                       <div className="flex flex-col items-start">
                         <span className="font-medium">Miembro</span>
-                        <span className="text-xs text-gray-500">Acceso regular a recursos de la organización</span>
+                        <span className="text-xs text-stone-500">Acceso regular a recursos de la organización</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="admin">
                       <div className="flex flex-col items-start">
                         <span className="font-medium">Administrador</span>
-                        <span className="text-xs text-gray-500">Puede gestionar usuarios y configuración de la organización</span>
+                        <span className="text-xs text-stone-500">Puede gestionar usuarios y configuración de la organización</span>
                       </div>
                     </SelectItem>
                   </SelectContent>

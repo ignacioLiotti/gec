@@ -124,10 +124,10 @@ export default function InvitationPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 to-stone-100">
         <Card className="w-full max-w-md">
           <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="size-8 animate-spin text-gray-400" />
+            <Loader2 className="size-8 animate-spin text-stone-400" />
           </CardContent>
         </Card>
       </div>
@@ -136,7 +136,7 @@ export default function InvitationPage() {
 
   if (error && !invitation) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 to-stone-100 p-4">
         <Card className="w-full max-w-md border-red-200">
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -145,7 +145,7 @@ export default function InvitationPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-600 mb-4">{error}</p>
+            <p className="text-stone-600 mb-4">{error}</p>
             <Button onClick={() => push("/")} className="w-full">
               Go to Home
             </Button>
@@ -181,28 +181,28 @@ export default function InvitationPage() {
 
         <CardContent className="space-y-6">
           {/* Invitation Details */}
-          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+          <div className="bg-stone-50 rounded-lg p-4 space-y-3">
             <div className="flex items-start gap-3">
-              <UserPlus className="size-5 text-gray-400 mt-0.5" />
+              <UserPlus className="size-5 text-stone-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Invitado por</p>
-                <p className="text-sm text-gray-600">{invitation.inviter_name || "Administrador de la organización"}</p>
+                <p className="text-sm font-medium text-stone-700">Invitado por</p>
+                <p className="text-sm text-stone-600">{invitation.inviter_name || "Administrador de la organización"}</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="size-5 text-gray-400 mt-0.5" />
+              <CheckCircle2 className="size-5 text-stone-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Rol</p>
-                <p className="text-sm text-gray-600 capitalize">{invitation.invited_role}</p>
+                <p className="text-sm font-medium text-stone-700">Rol</p>
+                <p className="text-sm text-stone-600 capitalize">{invitation.invited_role}</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
-              <Clock className="size-5 text-gray-400 mt-0.5" />
+              <Clock className="size-5 text-stone-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Vence</p>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm font-medium text-stone-700">Vence</p>
+                <p className="text-sm text-stone-600">
                   {isExpired ? (
                     <span className="text-red-600">Vencida</span>
                   ) : timeRemaining < 24 ? (
@@ -267,7 +267,7 @@ export default function InvitationPage() {
           </div>
 
           {isExpired && (
-            <p className="text-center text-sm text-gray-500">
+            <p className="text-center text-sm text-stone-500">
               This invitation has expired. Please contact the organization admin for a new invitation.
             </p>
           )}

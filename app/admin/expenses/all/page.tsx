@@ -318,7 +318,7 @@ export default async function GlobalTenantExpensesPage() {
 									<button
 										type="submit"
 										disabled={!canManageLimits}
-										className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800"
+										className="rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-stone-800"
 									>
 										Guardar
 									</button>

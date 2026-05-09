@@ -25,7 +25,7 @@ export default function GlobalError({
 			<body>
 				<div className="flex min-h-screen flex-col items-center justify-center p-4">
 					<h1 className="text-2xl font-bold mb-4">Something went wrong!</h1>
-					<p className="text-gray-600 mb-4">
+					<p className="text-stone-600 mb-4">
 						An unexpected error occurred. Our team has been notified.
 					</p>
 					<button

@@ -224,7 +224,7 @@ export default function UserMenu({
 										!userRoles.isSuperAdmin &&
 										userRoles.roles.filter((role) => role !== "admin")
 											.length === 0 && (
-											<span className="inline-flex items-center rounded-full bg-gray-500/20 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+											<span className="inline-flex items-center rounded-full bg-stone-500/20 px-2 py-0.5 text-xs font-medium text-stone-700 dark:text-stone-300">
 												Sin roles
 											</span>
 										)}
