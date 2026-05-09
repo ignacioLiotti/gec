@@ -39,7 +39,7 @@ function ReportePageContent() {
 
 export default function Page() {
 	return (
-		<Suspense fallback={<div className="flex items-center justify-center h-screen">Cargando...</div>}>
+		<Suspense fallback={<div className="flex items-center justify-center h-screen">Cargando?</div>}>
 			<ReportePageContent />
 		</Suspense>
 	);

@@ -673,7 +673,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 															rowSpan={2}
 															{...getStickyProps(
 																column.id,
-																"relative px-4 py-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]"
+																"relative p-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]"
 															)}
 														>
 															<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
@@ -749,7 +749,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											{showActionsColumn && (
 												<th
 													rowSpan={2}
-													className="relative px-4 py-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker"
+													className="relative p-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker"
 												>
 													<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-end gap-2">
 														<span>Acciones</span>
@@ -769,7 +769,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									if (!groupedColumnLookup.has(column.id)) return null;
 
 									const baseClassName = cn(
-										"relative px-4 py-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker"
+										"relative p-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker"
 									);
 									const isSortable = column.enableSort !== false;
 

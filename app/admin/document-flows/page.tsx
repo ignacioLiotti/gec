@@ -365,7 +365,7 @@ function selectionTitle(selection: Selection, folder: DefaultFolder | null, tabl
 
 function SummaryCard({ label, value, detail }: { label: string; value: string | number; detail: string }) {
   return (
-    <div className="rounded-[22px] border border-stone-200 bg-white px-4 py-4 shadow-sm">
+    <div className="rounded-[22px] border border-stone-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">{label}</p>
       <p className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">{value}</p>
       <p className="mt-1 text-xs text-stone-500">{detail}</p>
@@ -389,7 +389,7 @@ function FlowChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "min-w-[240px] rounded-[26px] border px-4 py-4 text-left shadow-sm transition",
+        "min-w-[240px] rounded-[26px] border p-4 text-left shadow-sm transition",
         active
           ? "border-[#d78233] bg-[#fff1e2] shadow-[0_16px_40px_rgba(201,107,20,0.16)]"
           : "border-stone-200 bg-white hover:border-stone-300 hover:shadow-md",
@@ -443,7 +443,7 @@ function LayerNodeCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "w-[300px] rounded-[24px] border bg-white px-4 py-4 text-left shadow-sm transition",
+        "w-[300px] rounded-[24px] border bg-white p-4 text-left shadow-sm transition",
         selected ? "border-[#d78233] ring-2 ring-[#f6c18b]/70" : "border-stone-200 hover:border-stone-300 hover:shadow-md",
         dimmed ? "opacity-35" : "opacity-100",
       )}
@@ -534,7 +534,7 @@ function FloatingInspector({
       className="fixed z-[80] w-[380px] rounded-[24px] border border-stone-200 bg-white shadow-[0_24px_60px_rgba(28,25,23,0.18)]"
       style={{ left: position.left, top: position.top }}
     >
-      <div className="flex items-start gap-3 border-b border-stone-100 px-4 py-4">
+      <div className="flex items-start gap-3 border-b border-stone-100 p-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500">
@@ -564,7 +564,7 @@ function FloatingInspector({
       </div>
 
       <ScrollArea className="max-h-[70vh]">
-        <div className="space-y-4 px-4 py-4">
+        <div className="space-y-4 p-4">
           {selection.kind === "folder" ? (
             <>
               <InspectorSection title="Contrato base de la carpeta">
@@ -724,7 +724,7 @@ function FloatingInspector({
                   </InspectorSection>
                 </>
               ) : (
-                <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm text-stone-600">
+                <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
                   Carpeta simple. En este slice no materializa tablas ni campos.
                 </div>
               )}
@@ -899,7 +899,7 @@ function FloatingInspector({
                     <SummaryMini label="Sources" value={selectedMacro.sourceCount ?? 0} />
                     <SummaryMini label="Columnas" value={selectedMacro.columns?.length ?? 0} />
                   </div>
-                  <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm text-stone-600">
+                  <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
                     Read-only en este slice. La relacion se resuelve desde la seleccion de fuentes de la macrotabla y el contrato default del tenant.
                   </div>
                 </div>
@@ -908,7 +908,7 @@ function FloatingInspector({
           ) : null}
 
           {selection.kind === "output" ? (
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-800">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
               Reportes / vistas / consumo final siguen planned en este slice. Esta capa queda visible como mapa, pero no se edita todavia.
             </div>
           ) : null}
@@ -951,7 +951,7 @@ function ToggleCard({
   onCheckedChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3">
+    <div className="flex items-center justify-between rounded-2xl border border-stone-200 bg-stone-50 p-3">
       <div>
         <p className="text-sm font-medium text-stone-800">{title}</p>
         <p className="text-[11px] text-stone-500">{description}</p>
@@ -963,7 +963,7 @@ function ToggleCard({
 
 function SummaryMini({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl bg-stone-50 px-3 py-3">
+    <div className="rounded-2xl bg-stone-50 p-3">
       <p className="text-[10px] uppercase tracking-[0.16em] text-stone-500">{label}</p>
       <p className="mt-1 text-lg font-semibold text-stone-950">{value}</p>
     </div>
@@ -1265,7 +1265,7 @@ export default function AdminDocumentFlowsPage() {
               </div>
 
               {error ? (
-                <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
+                <div className="rounded-[24px] border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                   {error}
                 </div>
               ) : null}
@@ -1291,7 +1291,7 @@ export default function AdminDocumentFlowsPage() {
                     Cargando flujos documentales...
                   </div>
                 ) : selectedFolder ? (
-                  <div className="overflow-x-auto rounded-[28px] border border-stone-200 bg-[#faf8f3] px-6 py-6">
+                  <div className="overflow-x-auto rounded-[28px] border border-stone-200 bg-[#faf8f3] p-6">
                     <div className="flex min-w-[1280px] items-start gap-12">
                       <div className="w-[320px] shrink-0 space-y-4">
                         <div className="flex items-center gap-2">
@@ -1450,7 +1450,7 @@ export default function AdminDocumentFlowsPage() {
                           register={(element) => registerNode(`output:${selectedFolder.id}`, element)}
                           badges={<Badge className="border border-blue-200 bg-blue-50 text-[10px] text-blue-700">planned</Badge>}
                         >
-                          <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-xs text-stone-500">
+                          <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">
                             Esta carpeta ya llega hasta macrotablas. El consumo final se habilita despues.
                           </div>
                         </LayerNodeCard>
@@ -1518,7 +1518,7 @@ export default function AdminDocumentFlowsPage() {
 
 function SliceStatus({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3">
+    <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-stone-900">{label}</p>
         <Badge className={cn("border text-[10px]", tone)}>{value}</Badge>

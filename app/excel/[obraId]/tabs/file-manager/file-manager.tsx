@@ -6389,7 +6389,7 @@ function FileManagerContent({
                     <div className="flex h-full min-h-0 flex-col">
                       {table && (
                         <div
-                          className="shrink-0 border-b border-emerald-200 bg-emerald-50/60 px-4 py-4"
+                          className="shrink-0 border-b border-emerald-200 bg-emerald-50/60 p-4"
                           data-wizard-target="wizard-sheet-selector"
                         >
                           <div className="flex items-start gap-3">
@@ -6501,7 +6501,7 @@ function FileManagerContent({
                   <div className="flex-[1_1_55%] min-w-0 flex flex-col overflow-hidden">
                     {table && (
                       <div
-                        className="shrink-0 border-b border-orange-200 bg-orange-50/60 px-4 py-4"
+                        className="shrink-0 border-b border-orange-200 bg-orange-50/60 p-4"
                         data-wizard-target="wizard-step-tabs"
                       >
                         <div className="flex items-start gap-3">
@@ -7457,7 +7457,7 @@ function FileManagerContent({
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto pr-1">
             {loadingDeletedEntries ? (
-              <div className="py-10 text-sm text-stone-500 text-center">Cargando papelera...</div>
+              <div className="py-10 text-sm text-stone-500 text-center">Cargando papelera?</div>
             ) : deletedEntries.length === 0 ? (
               <div className="py-10 text-sm text-stone-500 text-center">
                 No hay elementos en papelera.
@@ -8052,7 +8052,7 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
             ) : hasRequestedPreview && isPreviewable ? (
               <div className="flex flex-col items-center justify-center gap-2 text-xs text-stone-500 p-4">
                 <Loader2 className="size-5 text-stone-400 animate-spin" />
-                <span className="text-center leading-tight">Cargando vista previa...</span>
+                <span className="text-center leading-tight">Cargando vista previa?</span>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center gap-2 text-xs text-stone-500 p-4">

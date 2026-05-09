@@ -855,7 +855,7 @@ export function TemplatePickerCard() {
             key={template.id}
             type="button"
             onClick={() => handleTemplateSelect(template.id)}
-            className={`w-full rounded-xl border px-4 py-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${
+            className={`w-full rounded-xl border p-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${
               selectedTemplateId === template.id
                 ? "border-[#fb923c] bg-[#fff7ed] shadow-[0_1px_0_rgba(0,0,0,0.03)]"
                 : "border-stone-200 bg-white hover:border-stone-300 hover:shadow-sm"
@@ -1326,7 +1326,7 @@ export function TemplateConfigEditorPanel() {
                           value={field.key}
                           className="border-b-0"
                         >
-                          <div className="px-4 py-4">
+                          <div className="p-4">
                             <div className="grid gap-3 rounded-lg border border-stone-100 bg-stone-50/50 p-3 md:grid-cols-[minmax(0,1fr)_180px_150px_auto] md:items-end">
                               <div className="min-w-0 md:col-span-4">
                                 <Label className="mb-1 block text-xs font-medium text-stone-600">Nombre del dato</Label>
@@ -1889,7 +1889,7 @@ export function TemplateConfigEditorPanel() {
 
                 <Separator />
 
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
                   <p className="max-w-2xl text-xs leading-5 text-stone-500">
                     {selectedTemplate.tenantScoped
                       ? "Estas editando la version propia del tenant."

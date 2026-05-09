@@ -362,7 +362,7 @@ export function CurveDataImportDialog({
 											</span>
 										))
 									) : (
-										<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+										<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
 											<AlertCircle className="mt-0.5 size-4 shrink-0" />
 											<span>
 												No encontramos tablas destino para <strong>PMC Resumen</strong> o

@@ -1250,9 +1250,9 @@ function Step2Visual() {
           </div>
 
           {/* Folder tree */}
-          <div className="max-h-[140px] flex-1 overflow-auto px-2.5 py-2.5 md:max-h-none">
+          <div className="max-h-[140px] flex-1 overflow-auto p-2.5 md:max-h-none">
             {/* Root folder */}
-            <div className="mb-1 flex items-center gap-1.5 rounded px-1 py-1 text-[11px] font-medium text-stone-700">
+            <div className="mb-1 flex items-center gap-1.5 rounded p-1 text-[11px] font-medium text-stone-700">
               <ChevronDown size={11} className="shrink-0 text-stone-400" />
               <Folder size={12} className="shrink-0 text-stone-500" />
               <span>Documentos</span>
@@ -1588,7 +1588,7 @@ function Step3Visual() {
                 <div className={cn("text-[15px] font-black leading-tight transition-colors", activeSourceBox === 2 ? "text-orange-700" : "text-stone-900")}>
                   $ 234.749.391,04
                 </div>
-                <div className="text-[8px] text-stone-400">Son pesos doscientos treinta y cuatro millones...</div>
+                <div className="text-[8px] text-stone-400">Son pesos doscientos treinta y cuatro millones?</div>
               </div>
 
               {/* Body lines */}

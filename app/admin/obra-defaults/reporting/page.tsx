@@ -89,7 +89,7 @@ export default function ReportingDefaultsPage() {
   };
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-muted-foreground">Cargando configuracion de reporting...</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Cargando configuracion de reporting?</div>;
   }
 
   return (

@@ -105,7 +105,7 @@ export function FileTreeSidebar({
 				</div>
 				{!fileTree ? (
 					loading ? (
-						<div className="text-sm text-stone-400">Cargando...</div>
+						<div className="text-sm text-stone-400">Cargando?</div>
 					) : (
 						<div className="text-sm text-stone-400">Sin archivos</div>
 					)
@@ -114,7 +114,7 @@ export function FileTreeSidebar({
 						{loading && (
 							<div className="flex items-center gap-2 text-xs text-amber-600">
 								<Loader2 className="size-3 animate-spin" />
-								<span>Actualizando árbol...</span>
+								<span>Actualizando árbol?</span>
 							</div>
 						)}
 						<div className="space-y-1">{renderTreeItem(fileTree)}</div>

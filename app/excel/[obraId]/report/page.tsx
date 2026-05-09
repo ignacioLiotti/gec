@@ -8,7 +8,7 @@ export default async function ObraReportPage({
 }) {
   const { obraId } = await params;
   return (
-    <Suspense fallback={<div className="p-6 text-sm">Cargando reporte...</div>}>
+    <Suspense fallback={<div className="p-6 text-sm">Cargando reporte?</div>}>
       <ReportClient obraId={obraId} />
     </Suspense>
   );

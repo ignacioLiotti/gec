@@ -78,7 +78,7 @@ function ObraDocumentsTabContent({
 
 export function ObraDocumentsTab(props: DocumentsTabProps) {
 	return (
-		<Suspense fallback={<TabsContent value="documentos" className="space-y-6"><div className="p-4 text-sm text-muted-foreground">Cargando documentos...</div></TabsContent>}>
+		<Suspense fallback={<TabsContent value="documentos" className="space-y-6"><div className="p-4 text-sm text-muted-foreground">Cargando documentos?</div></TabsContent>}>
 			<ObraDocumentsTabContent {...props} />
 		</Suspense>
 	);

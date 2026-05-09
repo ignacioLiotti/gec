@@ -160,7 +160,7 @@ export function ObrasTable(props: ObrasTableProps) {
             transition={{ duration: 0.2 }}
           >
             <div className="size-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <p className="text-sm font-medium text-primary">Actualizando tabla...</p>
+            <p className="text-sm font-medium text-primary">Actualizando tabla?</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -460,7 +460,7 @@ export function ObrasTable(props: ObrasTableProps) {
                         </formApi.Field>
                         <formApi.Field name={`detalleObras[${index}].designacionYUbicacion`}>
                           {(subField: any) => (
-                            <td {...getStickyProps(1, " outline outline-border border-border p-0 align-center px-2 py-2 bg-background")}>
+                            <td {...getStickyProps(1, " outline outline-border border-border p-0 align-center p-2 bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
                                   {/* if there is no value for the name then asume its the first time it was created then make it editable */}
@@ -502,7 +502,7 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(2, " outline outline-border border-border p-0 relative table-cell bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="absolute inset-0 px-2 py-2">
+                                  <div className="absolute inset-0 p-2">
                                     <CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="w-full text-sm border text-right" />
                                   </div>
                                 </ContextMenuTrigger>
@@ -528,7 +528,7 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(3, " outline outline-border border-border p-0 relative table-cell bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="absolute inset-0 px-2 py-2">
+                                  <div className="absolute inset-0 p-2">
                                     <CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="w-full text-sm border" />
                                   </div>
                                 </ContextMenuTrigger>
@@ -554,7 +554,7 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(4, " outline outline-border border-border p-0 relative table-cell bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="absolute inset-0 px-2 py-2">
+                                  <div className="absolute inset-0 p-2">
                                     <CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="w-full text-sm border" />
                                   </div>
                                 </ContextMenuTrigger>
@@ -580,7 +580,7 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(5, " outline outline-border border-border p-0 relative table-cell bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="absolute inset-0 px-2 py-2">
+                                  <div className="absolute inset-0 p-2">
                                     <CustomInput type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="w-full text-sm border" />
                                   </div>
                                 </ContextMenuTrigger>
@@ -606,7 +606,7 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(6, " outline outline-border border-border p-0 relative table-cell bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="absolute inset-0 px-2 py-2">
+                                  <div className="absolute inset-0 p-2">
                                     <CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="w-full text-sm border text-right font-mono" />
                                   </div>
                                 </ContextMenuTrigger>
@@ -632,7 +632,7 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(7, " outline outline-border border-border p-0 relative table-cell bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="absolute inset-0 px-2 py-2">
+                                  <div className="absolute inset-0 p-2">
                                     <CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="w-full text-sm border text-right font-mono" />
                                   </div>
                                 </ContextMenuTrigger>
@@ -658,7 +658,7 @@ export function ObrasTable(props: ObrasTableProps) {
                             <td {...getStickyProps(8, " outline outline-border border-border p-0 relative table-cell bg-background")}>
                               <ContextMenu>
                                 <ContextMenuTrigger asChild>
-                                  <div className="absolute inset-0 px-2 py-2">
+                                  <div className="absolute inset-0 p-2">
                                     <CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="w-full text-sm border text-right font-mono" />
                                   </div>
                                 </ContextMenuTrigger>
@@ -680,25 +680,25 @@ export function ObrasTable(props: ObrasTableProps) {
                         </formApi.Field>
 
                         <formApi.Field name={`detalleObras[${index}].segunContrato`}>
-                          {(subField: any) => (<td {...getStickyProps(9, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
+                          {(subField: any) => (<td {...getStickyProps(9, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 p-2 text-sm border text-right" /></td>)}
                         </formApi.Field>
 
                         <formApi.Field name={`detalleObras[${index}].prorrogasAcordadas`}>
-                          {(subField: any) => (<td {...getStickyProps(10, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
+                          {(subField: any) => (<td {...getStickyProps(10, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 p-2 text-sm border text-right" /></td>)}
                         </formApi.Field>
 
                         <formApi.Field name={`detalleObras[${index}].plazoTotal`}>
-                          {(subField: any) => (<td {...getStickyProps(11, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm	border text-right" /></td>)}
+                          {(subField: any) => (<td {...getStickyProps(11, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 p-2 text-sm	border text-right" /></td>)}
                         </formApi.Field>
 
                         <formApi.Field name={`detalleObras[${index}].plazoTransc`}>
-                          {(subField: any) => (<td {...getStickyProps(12, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" /></td>)}
+                          {(subField: any) => (<td {...getStickyProps(12, " outline outline-border border-border p-0 relative table-cell bg-background")}><CustomInput type="number" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 p-2 text-sm border text-right" /></td>)}
                         </formApi.Field>
 
                         <formApi.Field name={`detalleObras[${index}].porcentaje`}>
                           {(subField: any) => (
                             <td {...getStickyProps(13, " outline outline-border border-border p-0 relative table-cell bg-background")}>
-                              <CustomInput type="number" step="0.01" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 px-2 py-2 text-sm border text-right" />
+                              <CustomInput type="number" step="0.01" value={subField.state.value} onChange={(event) => subField.handleChange(Number(event.target.value))} onBlur={subField.handleBlur} className="absolute inset-0 p-2 text-sm border text-right" />
                             </td>
                           )}
                         </formApi.Field>

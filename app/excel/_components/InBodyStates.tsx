@@ -24,7 +24,7 @@ export function InBodyStates({
 				<td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
 					<div className="flex flex-col items-center gap-3">
 						<div className="animate-spin rounded-full size-8 border-b-2 border-primary" />
-						<p className="text-sm text-muted-foreground">Cargando datos...</p>
+						<p className="text-sm text-muted-foreground">Cargando datos?</p>
 					</div>
 				</td>
 			</tr>

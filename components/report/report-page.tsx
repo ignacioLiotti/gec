@@ -1314,7 +1314,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														<SelectValue placeholder="Seleccionar filtro guardado" />
 													</SelectTrigger>
 													<SelectContent>
-														<SelectItem value="__none__">Seleccionar...</SelectItem>
+														<SelectItem value="__none__">Seleccionar?</SelectItem>
 														{presets.map((preset) => (
 															<SelectItem key={preset.id} value={preset.id}>
 																{preset.name}

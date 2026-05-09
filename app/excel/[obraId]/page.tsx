@@ -94,7 +94,7 @@ const ObraFlujoTab = dynamic(
 	{
 		loading: () => (
 			<TabsContent value="flujo" className="space-y-6">
-				<div className="p-4 text-sm text-muted-foreground">Cargando flujo...</div>
+				<div className="p-4 text-sm text-muted-foreground">Cargando flujo?</div>
 			</TabsContent>
 		),
 	}
@@ -3833,7 +3833,7 @@ function ObraDetailPageContent() {
 
 export default function ObraDetailPage() {
 	return (
-		<Suspense fallback={<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">Cargando obra...</div>}>
+		<Suspense fallback={<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">Cargando obra?</div>}>
 			<ObraDetailPageContent />
 		</Suspense>
 	);

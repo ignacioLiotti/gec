@@ -185,7 +185,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 				<TabsContent value="active" className="mt-4">
 					<Card className="p-0 overflow-hidden">
 						{loading ? (
-							<div className="p-8 text-sm text-stone-500 text-center">Cargando...</div>
+							<div className="p-8 text-sm text-stone-500 text-center">Cargando?</div>
 						) : activeItems.length === 0 ? (
 							<div className="p-8 text-sm text-stone-500 text-center">
 								No hay elementos en papelera.
@@ -245,7 +245,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 				<TabsContent value="history" className="mt-4">
 					<Card className="p-0 overflow-hidden">
 						{loading ? (
-							<div className="p-8 text-sm text-stone-500 text-center">Cargando...</div>
+							<div className="p-8 text-sm text-stone-500 text-center">Cargando?</div>
 						) : historyItems.length === 0 ? (
 							<div className="p-8 text-sm text-stone-500 text-center">
 								No hay eventos historicos para mostrar.

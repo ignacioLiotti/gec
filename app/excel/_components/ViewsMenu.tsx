@@ -48,7 +48,7 @@ export function ViewsMenu({
         ) : (
           <div className="max-h-[200px] overflow-y-auto">
             {views.map((v) => (
-              <div key={v.name} className="flex items-center justify-between gap-2 px-2 py-2 hover:bg-muted/50 rounded-sm transition-colors group">
+              <div key={v.name} className="flex items-center justify-between gap-2 p-2 hover:bg-muted/50 rounded-sm transition-colors group">
                 <button
                   type="button"
                   className="flex-1 text-left text-sm hover:underline truncate"

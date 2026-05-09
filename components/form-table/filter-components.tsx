@@ -46,7 +46,7 @@ export function FilterSection({
           )}
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="rounded-b-lg border border-t-0 bg-background px-3 py-3 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+      <CollapsibleContent className="rounded-b-lg border border-t-0 bg-background p-3 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
         {children}
       </CollapsibleContent>
     </Collapsible>

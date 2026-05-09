@@ -155,7 +155,7 @@ export default function TenantSecretsPanel({
 						</p>
 					)}
 				</div>
-				<div className="grid gap-4 px-4 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+				<div className="grid gap-4 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
 					<div>
 						<p className="text-xs text-foreground/60">Versión activa</p>
 						<p className="text-lg font-semibold">
@@ -188,7 +188,7 @@ export default function TenantSecretsPanel({
 						Genera una nueva versión y opcionalmente mantiene la anterior en período de gracia.
 					</p>
 				</div>
-				<div className="space-y-4 px-4 py-4">
+				<div className="space-y-4 p-4">
 					<div className="grid gap-4 sm:grid-cols-[200px_auto]">
 						<label className="text-sm font-medium">
 							Período de gracia (días)
@@ -293,7 +293,7 @@ export default function TenantSecretsPanel({
 				</div>
 			</div>
 
-			<div className="rounded-lg border bg-muted/30 px-4 py-4 text-sm">
+			<div className="rounded-lg border bg-muted/30 p-4 text-sm">
 				<h3 className="font-semibold">Cómo firmar solicitudes</h3>
 				<ol className="list-decimal space-y-2 pl-5">
 					<li>Incluí `X-Tenant-Id`, `X-Request-Timestamp`, `X-Request-Signature` y `X-Secret-Version` (opcional) en cada petición.</li>

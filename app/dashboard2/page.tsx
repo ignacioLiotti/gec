@@ -441,7 +441,7 @@ export default function Dashboard2Page() {
   }, [obras, deepRows]);
 
   if (obrasQuery.isLoading) {
-    return <div className='p-6 text-sm text-stone-600'>Cargando dashboard...</div>;
+    return <div className='p-6 text-sm text-stone-600'>Cargando dashboard?</div>;
   }
 
   if (!isAuthenticated) {
@@ -483,7 +483,7 @@ export default function Dashboard2Page() {
               Completadas: {numberFmt.format(model.completedRows.length)}
             </Badge>
             {isDeepLoading ? (
-              <Badge className='bg-amber-100 text-amber-800'>Actualizando metricas derivadas...</Badge>
+              <Badge className='bg-amber-100 text-amber-800'>Actualizando metricas derivadas?</Badge>
             ) : (
               <Badge className='bg-emerald-100 text-emerald-800'>Metricas derivadas listas</Badge>
             )}

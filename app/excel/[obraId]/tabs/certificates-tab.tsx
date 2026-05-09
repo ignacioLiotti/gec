@@ -168,7 +168,7 @@ export function ObraCertificatesTab({
 						<div className="flex items-center justify-center py-12">
 							<div className="space-y-2 text-center">
 								<div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
-								<p className="text-sm text-muted-foreground">Cargando certificados...</p>
+								<p className="text-sm text-muted-foreground">Cargando certificados?</p>
 							</div>
 						</div>
 					) : certificates.length === 0 && !isAddingCertificate ? (

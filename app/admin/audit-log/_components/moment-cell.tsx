@@ -37,7 +37,7 @@ export function MomentCell({ value }: MomentCellProps) {
   }, [date, nowMs]);
 
   return (
-    <td className="px-3 py-3 text-sm">
+    <td className="p-3 text-sm">
       <div className="font-medium">{formatted}</div>
       <div className="text-xs text-muted-foreground">{relative}</div>
     </td>

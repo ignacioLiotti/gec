@@ -123,7 +123,7 @@ export default function UserRow({
             onChange={(e) => setNewRoleId(e.currentTarget.value)}
             className="rounded-md border bg-background px-2 py-1 text-xs"
           >
-            <option value="">Agregar rol...</option>
+            <option value="">Agregar rol?</option>
             {allRoles
               .filter((r) => !assignedRoleIds.has(r.id))
               .map((r) => (
@@ -162,7 +162,7 @@ export default function UserRow({
             onChange={(e) => setNewPermissionId(e.currentTarget.value)}
             className="rounded-md border bg-background px-2 py-1 text-xs"
           >
-            <option value="">Agregar permiso...</option>
+            <option value="">Agregar permiso?</option>
             {allPermissions
               .filter((p) => {
                 const fromAdmin = sources?.isAdmin ?? false;

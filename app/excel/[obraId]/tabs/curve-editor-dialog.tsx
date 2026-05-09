@@ -1457,7 +1457,7 @@ export function CurveEditorDialog({
 								{isLoading ? (
 									<div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-stone-300 bg-white min-h-[75vh] ">
 										<Loader2 className="size-6 animate-spin text-stone-500" />
-										<p className="text-sm text-stone-500">Preparando gráfico y tabla editable...</p>
+										<p className="text-sm text-stone-500">Preparando gráfico y tabla editable?</p>
 									</div>
 								) : loadError ? (
 									<div className="flex flex-1 flex-col items-start justify-center rounded-3xl border border-[#f3c5ac] bg-[#fff7f2] p-6">

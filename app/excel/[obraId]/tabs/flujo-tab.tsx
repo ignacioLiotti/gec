@@ -503,7 +503,7 @@ export function ObraFlujoTab({
 						{isLoadingFlujoActions ? (
 							<div className="flex flex-col items-center justify-center py-12 space-y-3">
 								<div className="size-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-								<p className="text-sm text-muted-foreground">Cargando acciones...</p>
+								<p className="text-sm text-muted-foreground">Cargando acciones?</p>
 							</div>
 						) : flujoActions.length === 0 ? (
 							<div className="flex flex-col items-center justify-center py-12 space-y-3 rounded-lg border-2 border-dashed">

@@ -89,7 +89,7 @@ export function QuickFormDialog({
             )}
           </DialogHeader>
 
-          <div className="grid gap-4 py-4 px-4">
+          <div className="grid gap-4 p-4">
             {fields.map((field) => (
               <div key={field.key} className="grid gap-2">
                 <Label htmlFor={field.key}>

@@ -365,7 +365,7 @@ function SectionCard({
           {rightSlot}
         </div>
       </div>
-      <div className="px-5 py-5">{children}</div>
+      <div className="p-5">{children}</div>
     </section>
   );
 }
@@ -1297,7 +1297,7 @@ export function DocumentGenerationPageClient() {
                                 {String(rowIndex + 1).padStart(2, "0")}
                               </div>
                               {group.fields.map((field) => (
-                                <div key={`${group.key}-${rowIndex}-${field.key}`} className="px-2 py-2">
+                                <div key={`${group.key}-${rowIndex}-${field.key}`} className="p-2">
                                   {renderFieldControl(field, rowData[field.key], (nextValue) =>
                                     handleRepeatableFieldChange(group.key, rowIndex, field, nextValue),
                                   )}
@@ -1439,7 +1439,7 @@ export function DocumentGenerationPageClient() {
             </div>
           </div>
 
-          <div className="report-preview-container flex-1 overflow-auto px-6 py-6">
+          <div className="report-preview-container flex-1 overflow-auto p-6">
             {selectedTemplate ? (
               <div className="relative max-h-full">
                 <DocumentApprovedSeal
