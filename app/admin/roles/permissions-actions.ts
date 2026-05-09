@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { auth } from "@/lib/auth";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { revalidatePath } from "next/cache";
 
@@ -192,6 +193,8 @@ function readFullName(value: FullNameRelation): string | null {
 export async function getPermissionsByCategory(): Promise<
 	PermissionsByCategory[]
 > {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase);
 
@@ -227,6 +230,8 @@ export async function getPermissionsByCategory(): Promise<
 }
 
 export async function getAllPermissions(): Promise<Permission[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase);
 
@@ -249,6 +254,8 @@ export async function getAllPermissions(): Promise<Permission[]> {
 // =====================================================
 
 export async function getRoleTemplates(): Promise<RoleTemplate[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase);
 
@@ -277,6 +284,8 @@ export async function getRolesWithPermissions({
 }: {
 	tenantId: string;
 }): Promise<Role[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase, tenantId);
 
@@ -335,6 +344,8 @@ export async function createRoleFromTemplate({
 	description?: string;
 	color?: string;
 }): Promise<{ role?: Role; error?: string }> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase, tenantId);
 
@@ -405,6 +416,8 @@ export async function createRoleWithPermissions({
 	color?: string;
 	permissionKeys: string[];
 }): Promise<{ role?: Role; error?: string }> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase, tenantId);
 
@@ -459,6 +472,8 @@ export async function updateRoleWithPermissions({
 	color?: string;
 	permissionKeys: string[];
 }): Promise<{ error?: string }> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireRoleInTenant(supabase, roleId, tenantId);
@@ -511,6 +526,8 @@ export async function getMacroTablePermissions({
 }: {
 	tenantId: string;
 }): Promise<MacroTablePermission[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase, tenantId);
 
@@ -552,6 +569,8 @@ export async function getMacroTablesForPermissions({
 }: {
 	tenantId: string;
 }): Promise<{ id: string; name: string }[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase, tenantId);
 
@@ -575,6 +594,8 @@ export async function setMacroTablePermission({
 	targetId: string;
 	permissionLevel: PermissionLevel;
 }): Promise<{ error?: string }> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireMacroTableInTenant(supabase, macroTableId, tenantId);
@@ -628,6 +649,8 @@ export async function removeMacroTablePermission({
 	targetType: "user" | "role";
 	targetId: string;
 }): Promise<{ error?: string }> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	const { tenantId } = await requireRolesAdmin(supabase);
 	await requireMacroTableInTenant(supabase, macroTableId, tenantId);
@@ -680,6 +703,8 @@ export async function getUserEffectivePermissions({
 	userId: string;
 	tenantId: string;
 }): Promise<EffectivePermission[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase, tenantId);
 	await requireUserInTenant(supabase, userId, tenantId);
@@ -794,6 +819,8 @@ export async function getUserMacroTableAccess({
 		source: string;
 	}[]
 > {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase, tenantId);
 	await requireUserInTenant(supabase, userId, tenantId);
@@ -997,6 +1024,8 @@ export async function getNavigationWithAccess({
 }: {
 	permissionKeys: string[];
 }): Promise<NavigationItem[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase);
 	const permSet = new Set(permissionKeys);
@@ -1014,6 +1043,8 @@ export async function getNavigationWithAccess({
 }
 
 export async function getNavigationStructure(): Promise<NavigationItem[]> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const supabase = await createClient();
 	await requireRolesAdmin(supabase);
 	return NAVIGATION_ITEMS;
