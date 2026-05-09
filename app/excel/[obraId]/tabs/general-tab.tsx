@@ -744,7 +744,7 @@ function GeneralInfoCard({
 	);
 }
 
-export const AdvanceCurveChart = ({
+const AdvanceCurveChart = ({
 	points,
 }: {
 	points: ReportCurvePoint[];

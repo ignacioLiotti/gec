@@ -338,7 +338,7 @@ type LegacyRowColorRule = {
 
 const ROW_COLOR_RULES_KEY = "obras-detalle:row-color-rules";
 const ROW_COLOR_EVENT = "form-table:refresh";
-export const ROW_COLOR_TABLE_ID = "form-table-obras-detalle";
+const ROW_COLOR_TABLE_ID = "form-table-obras-detalle";
 const OBRAS_TABLE_QUERY_CACHE_PREFIX = "obras-detalle:query-cache:v1:";
 const OBRAS_TABLE_QUERY_CACHE_INDEX_KEY = "obras-detalle:query-cache:index:v1";
 
@@ -1840,8 +1840,8 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 	},
 ];
 
-export type MainTableColumnKind = "base" | "formula" | "custom";
-export type MainTableFormulaFormat = "number" | "currency";
+type MainTableColumnKind = "base" | "formula" | "custom";
+type MainTableFormulaFormat = "number" | "currency";
 
 export type MainTableColumnConfig = {
 	id: string;

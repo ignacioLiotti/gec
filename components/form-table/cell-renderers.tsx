@@ -470,7 +470,7 @@ export type EditableContentArgs<Row extends FormTableRow> = {
 	highlightQuery: string;
 };
 
-export type RenderCellArgs<Row extends FormTableRow> = {
+type RenderCellArgs<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
 	row: Row;
 	rowId: string;
@@ -1073,7 +1073,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 			);
 	}
 }
-export function renderCellByType<Row extends FormTableRow>({
+function renderCellByType<Row extends FormTableRow>({
 	column,
 	row,
 	rowId,
