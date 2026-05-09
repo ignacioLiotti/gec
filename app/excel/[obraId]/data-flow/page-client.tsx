@@ -1181,10 +1181,10 @@ function ResultChip({
           <Icon size={13} />
         </span>
         <span style={{ minWidth: 0, display: "grid", gap: 1, textAlign: "left" }}>
-          <span style={{ fontSize: 11, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {node.label}
           </span>
-          <span style={{ fontSize: 10, color: active ? "rgba(255,255,255,.76)" : "var(--df-stone-500)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ fontSize: 12, color: active ? "rgba(255,255,255,.76)" : "var(--df-stone-500)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {showValue ? `${value} - ${status.text}` : status.text}
           </span>
         </span>
@@ -1220,7 +1220,7 @@ function ResultChip({
     >
       <div
         style={{
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: ".15em",
           textTransform: "uppercase",
@@ -1248,7 +1248,7 @@ function ResultChip({
       ) : null}
       <div
         style={{
-          fontSize: 11,
+          fontSize: 12,
           color: active ? "rgba(255,255,255,.74)" : "var(--df-stone-500)",
           whiteSpace: "nowrap",
           overflow: "hidden",
@@ -1263,7 +1263,7 @@ function ResultChip({
           alignItems: "center",
           justifyContent: "space-between",
           marginTop: 2,
-          fontSize: 10,
+          fontSize: 12,
           color: active ? "rgba(255,255,255,.72)" : "var(--df-stone-400)",
         }}
       >
@@ -1284,7 +1284,7 @@ function SectionTag({ color, icon: Icon, label, count }: { color: string; icon: 
         display: "flex",
         alignItems: "center",
         gap: 6,
-        fontSize: 10,
+        fontSize: 12,
         fontWeight: 700,
         letterSpacing: ".15em",
         textTransform: "uppercase",
@@ -1295,7 +1295,7 @@ function SectionTag({ color, icon: Icon, label, count }: { color: string; icon: 
       {label}
       <span
         style={{
-          fontSize: 10,
+          fontSize: 12,
           color: "var(--df-stone-500)",
           background: "#fff",
           border: "1px solid var(--df-stone-200)",
@@ -1403,16 +1403,16 @@ function CanvasNode({
               <span style={{ display: "block", fontSize: 12, fontWeight: 800, color: "var(--df-stone-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {node.label}
               </span>
-              <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "#7c3aed", textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 800 }}>
+              <span style={{ display: "block", marginTop: 1, fontSize: 12, color: "#7c3aed", textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 800 }}>
                 {modeLabel}
               </span>
             </span>
-            <span style={{ borderRadius: 999, background: "#f5f3ff", color: "#5b21b6", padding: "3px 7px", fontSize: 10, fontWeight: 900 }}>
+            <span style={{ borderRadius: 999, background: "#f5f3ff", color: "#5b21b6", padding: "3px 7px", fontSize: 12, fontWeight: 900 }}>
               {operatorLabel}
             </span>
           </span>
           <span style={{ display: "grid", alignContent: "center", textAlign: "left", minWidth: 0 }}>
-            <span style={{ fontSize: 10, color: "var(--df-stone-400)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em" }}>
+            <span style={{ fontSize: 12, color: "var(--df-stone-400)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em" }}>
               Resultado
             </span>
             <span style={{ marginTop: 2, fontSize: valueText && valueText.length > 14 ? 15 : 18, fontWeight: 900, lineHeight: 1.05, color: "#4c1d95", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
@@ -1421,7 +1421,7 @@ function CanvasNode({
           </span>
           <span style={{ display: "flex", gap: 5, overflow: "hidden" }}>
             {inputs.slice(0, 3).map((label) => (
-              <span key={label} style={{ minWidth: 0, maxWidth: 82, borderRadius: 999, background: "#fafaf9", border: "1px solid #e7e5e4", padding: "3px 7px", fontSize: 9.5, color: "var(--df-stone-600)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span key={label} style={{ minWidth: 0, maxWidth: 82, borderRadius: 999, background: "#fafaf9", border: "1px solid #e7e5e4", padding: "3px 7px", fontSize: 12, color: "var(--df-stone-600)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {label}
               </span>
             ))}
@@ -1453,9 +1453,9 @@ function CanvasNode({
           }}
         >
           <span style={{ display: "grid", alignContent: "center", gap: 5, minWidth: 0, textAlign: "left" }}>
-            <span style={{ fontSize: 9, fontWeight: 900, color: "#7c3aed", letterSpacing: ".14em" }}>IN</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "#7c3aed", letterSpacing: ".14em" }}>IN</span>
             {inputs.slice(0, 3).map((label) => (
-              <span key={label} style={{ minWidth: 0, borderRadius: 7, background: "#fafaf9", border: "1px solid #e7e5e4", padding: "3px 6px", fontSize: 9.5, color: "var(--df-stone-700)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span key={label} style={{ minWidth: 0, borderRadius: 7, background: "#fafaf9", border: "1px solid #e7e5e4", padding: "3px 6px", fontSize: 12, color: "var(--df-stone-700)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {label}
               </span>
             ))}
@@ -1466,7 +1466,7 @@ function CanvasNode({
             </span>
           </span>
           <span style={{ display: "grid", alignContent: "center", minWidth: 0, textAlign: "left" }}>
-            <span style={{ fontSize: 9, fontWeight: 900, color: "#7c3aed", letterSpacing: ".14em" }}>OUT</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "#7c3aed", letterSpacing: ".14em" }}>OUT</span>
             <span style={{ marginTop: 4, fontSize: 12, fontWeight: 800, color: "var(--df-stone-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {node.label}
             </span>
@@ -1509,16 +1509,16 @@ function CanvasNode({
               <span style={{ display: "block", fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {node.label}
               </span>
-              <span style={{ display: "block", marginTop: 1, fontSize: 9, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 800 }}>
+              <span style={{ display: "block", marginTop: 1, fontSize: 12, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 800 }}>
                 {modeLabel}
               </span>
             </span>
           </span>
-          <span style={{ minWidth: 0, borderRadius: 9, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.08)", padding: "7px 8px", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: 10.5, lineHeight: 1.35, color: "#e7e5e4", overflow: "hidden", textAlign: "left" }}>
+          <span style={{ minWidth: 0, borderRadius: 9, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.08)", padding: "7px 8px", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: 12, lineHeight: 1.35, color: "#e7e5e4", overflow: "hidden", textAlign: "left" }}>
             {firstLine}
           </span>
           <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,.56)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,.56)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {inputs.slice(0, 2).join(" + ")}
             </span>
             <span style={{ fontSize: valueText && valueText.length > 14 ? 11 : 13, fontWeight: 900, color: "#fff", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
@@ -1568,7 +1568,7 @@ function CanvasNode({
           <span
             style={{
               display: "block",
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 600,
               color: "var(--df-stone-900)",
               whiteSpace: "nowrap",
@@ -1600,7 +1600,7 @@ function CanvasNode({
             style={{
               display: "block",
               marginTop: 2,
-              fontSize: 9,
+              fontSize: 12,
               textTransform: "uppercase",
               letterSpacing: ".1em",
               fontWeight: 700,
@@ -1614,7 +1614,7 @@ function CanvasNode({
               style={{
                 display: "block",
                 marginTop: 3,
-                fontSize: 9,
+                fontSize: 12,
                 color: "var(--df-stone-500)",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
@@ -1659,7 +1659,7 @@ function CanvasNode({
             display: "flex",
             alignItems: "center",
             gap: 6,
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: 800,
             letterSpacing: ".12em",
             textTransform: "uppercase",
@@ -1685,7 +1685,7 @@ function CanvasNode({
           <span
             style={{
               marginTop: "auto",
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 800,
               fontVariantNumeric: "tabular-nums",
             }}
@@ -1728,7 +1728,7 @@ function CanvasNode({
             display: "flex",
             alignItems: "center",
             gap: 6,
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: 800,
             letterSpacing: ".12em",
             textTransform: "uppercase",
@@ -1755,7 +1755,7 @@ function CanvasNode({
           <span
             style={{
               marginTop: "auto",
-              fontSize: 10,
+              fontSize: 12,
               color: "#0f766e",
               fontWeight: 700,
               textTransform: "uppercase",
@@ -1796,7 +1796,7 @@ function CanvasNode({
             display: "flex",
             alignItems: "center",
             gap: 6,
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: 700,
             letterSpacing: ".12em",
             textTransform: "uppercase",
@@ -1821,7 +1821,7 @@ function CanvasNode({
             display: "flex",
             gap: 10,
             marginTop: "auto",
-            fontSize: 10,
+            fontSize: 12,
             color: "var(--df-stone-500)",
             fontVariantNumeric: "tabular-nums",
           }}
@@ -1864,7 +1864,7 @@ function CanvasNode({
             display: "flex",
             alignItems: "center",
             gap: 6,
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: 700,
             letterSpacing: ".12em",
             textTransform: "uppercase",
@@ -1887,7 +1887,7 @@ function CanvasNode({
         <span
           style={{
             marginTop: "auto",
-            fontSize: 10,
+            fontSize: 12,
             color: "var(--df-stone-500)",
           }}
         >
@@ -1958,7 +1958,7 @@ function CanvasNode({
         style={{
           display: "flex",
           gap: 10,
-          fontSize: 10,
+          fontSize: 12,
           color: "var(--df-stone-500)",
           fontVariantNumeric: "tabular-nums",
         }}
@@ -1979,7 +1979,7 @@ function CanvasNode({
       {footerMessage ? (
         <span
           style={{
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: 600,
             color: tone,
             textTransform: "uppercase",
@@ -2096,7 +2096,7 @@ function HoverPreview({
         color: "#fff",
         borderRadius: 10,
         padding: "8px 12px",
-        fontSize: 11,
+        fontSize: 12,
         lineHeight: 1.45,
         maxWidth: 260,
         zIndex: 100,
@@ -2105,7 +2105,7 @@ function HoverPreview({
     >
       <div
         style={{
-          fontSize: 9,
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: ".15em",
           textTransform: "uppercase",
@@ -2120,10 +2120,10 @@ function HoverPreview({
         {meta.label}
       </div>
       <div style={{ fontWeight: 600, marginBottom: 2 }}>{node.label}</div>
-      <div style={{ fontSize: 10, color: "rgba(255,255,255,.72)" }}>{primary}</div>
+      <div style={{ fontSize: 12, color: "rgba(255,255,255,.72)" }}>{primary}</div>
       <div
         style={{
-          fontSize: 9,
+          fontSize: 12,
           color: "rgba(255,255,255,.5)",
           marginTop: 4,
           textTransform: "uppercase",
@@ -2214,7 +2214,7 @@ function TweaksPopover({
     return (
       <div
         style={{
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: ".12em",
           textTransform: "uppercase",
@@ -2262,7 +2262,7 @@ function TweaksPopover({
                 color: active ? "var(--df-stone-900)" : "var(--df-stone-600)",
                 boxShadow: active ? "0 1px 0 rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04)" : "none",
                 cursor: "pointer",
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: active ? 700 : 600,
                 fontFamily: "inherit",
               }}
@@ -2419,7 +2419,7 @@ function EditorField({
     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span
         style={{
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: ".12em",
           textTransform: "uppercase",
@@ -3172,7 +3172,7 @@ export function DataFlowEditorDrawer({
                       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--df-stone-900)" }}>
                         {block.label}
                       </div>
-                      <div style={{ marginTop: 2, fontSize: 11, color: "var(--df-stone-500)" }}>
+                      <div style={{ marginTop: 2, fontSize: 12, color: "var(--df-stone-500)" }}>
                         Orden {block.order} - {layoutWidthOptions.find((option) => option.value === block.width)?.label ?? block.width}
                       </div>
                     </div>
@@ -3254,7 +3254,7 @@ export function DataFlowEditorDrawer({
                           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--df-stone-900)" }}>
                             {block.label}
                           </div>
-                          <div style={{ marginTop: 2, fontSize: 11, color: "var(--df-stone-500)" }}>
+                          <div style={{ marginTop: 2, fontSize: 12, color: "var(--df-stone-500)" }}>
                             Orden {block.order} - {layoutWidthOptions.find((option) => option.value === block.width)?.label ?? block.width}
                           </div>
                         </div>
@@ -3539,7 +3539,7 @@ export function DataFlowEditorDrawer({
                       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--df-stone-900)" }}>
                         {calculation.label}
                       </div>
-                      <div style={{ marginTop: 2, fontSize: 11, color: "var(--df-stone-500)" }}>
+                      <div style={{ marginTop: 2, fontSize: 12, color: "var(--df-stone-500)" }}>
                         {calculation.mode === "formula" ? "Formula general" : "Agregado general"}
                       </div>
                     </div>
@@ -3603,7 +3603,7 @@ export function DataFlowEditorDrawer({
                         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--df-stone-900)" }}>
                           {result.label}
                         </div>
-                        <div style={{ marginTop: 2, fontSize: 11, color: "var(--df-stone-500)" }}>
+                        <div style={{ marginTop: 2, fontSize: 12, color: "var(--df-stone-500)" }}>
                           {result.generalTabSlot === "hero" ? "Hero superior" : "KPIs financieros"} - orden {result.generalTabOrder}
                         </div>
                       </div>
@@ -3685,7 +3685,7 @@ export function DataFlowEditorDrawer({
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--df-stone-900)" }}>{result.label}</div>
-                            <div style={{ marginTop: 2, fontSize: 11, color: "var(--df-stone-500)" }}>
+                            <div style={{ marginTop: 2, fontSize: 12, color: "var(--df-stone-500)" }}>
                               Preview: {evaluated?.formattedValue ?? "-"}
                             </div>
                           </div>
@@ -3927,7 +3927,7 @@ export function DataFlowEditorDrawer({
                         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--df-stone-900)" }}>
                           {calculation.label}
                         </div>
-                        <div style={{ marginTop: 2, fontSize: 11, color: "var(--df-stone-500)" }}>
+                        <div style={{ marginTop: 2, fontSize: 12, color: "var(--df-stone-500)" }}>
                           {calculation.mode === "formula" ? "Formula" : "Agregado"} - Preview: {evaluated?.formattedValue ?? "-"}
                         </div>
                       </div>
@@ -4145,7 +4145,7 @@ export function DataFlowEditorDrawer({
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div
                           style={{
-                            fontSize: 10,
+                            fontSize: 12,
                             fontWeight: 700,
                             letterSpacing: ".12em",
                             textTransform: "uppercase",
@@ -4217,7 +4217,7 @@ export function DataFlowEditorDrawer({
                                     gap: 10,
                                   }}
                                 >
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--df-stone-700)" }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--df-stone-700)" }}>
                                     Variable `{input.alias || "sin_alias"}`
                                   </div>
                                   <button
@@ -4493,7 +4493,7 @@ export function DataFlowEditorDrawer({
                     >
                       <div
                         style={{
-                          fontSize: 10,
+                          fontSize: 12,
                           fontWeight: 700,
                           letterSpacing: ".12em",
                           textTransform: "uppercase",
@@ -4597,7 +4597,7 @@ function UpstreamRow({
       <span style={{ fontSize: 12, fontWeight: 500, color: "var(--df-stone-900)" }}>{node.label}</span>
       <span
         style={{
-          fontSize: 9,
+          fontSize: 12,
           color: "var(--df-stone-400)",
           textTransform: "uppercase",
           letterSpacing: ".1em",
@@ -4773,7 +4773,7 @@ function InspectorPopover({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontSize: 9,
+              fontSize: 12,
               fontWeight: 700,
               letterSpacing: ".15em",
               textTransform: "uppercase",
@@ -4800,7 +4800,7 @@ function InspectorPopover({
             display: "inline-flex",
             alignItems: "center",
             gap: 5,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 600,
             flexShrink: 0,
           }}
@@ -4835,7 +4835,7 @@ function InspectorPopover({
               padding: "4px 10px",
               background: "var(--df-panel-soft)",
               color: "var(--df-stone-700)",
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: 700,
               textTransform: "uppercase",
               letterSpacing: ".08em",
@@ -4847,7 +4847,7 @@ function InspectorPopover({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 8, marginTop: 10 }}>
             {metrics.map((item) => (
               <div key={item.label} style={{ borderRadius: 10, background: "var(--df-stone-50)", padding: "10px 12px" }}>
-                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".15em", color: "var(--df-stone-400)", fontWeight: 700 }}>
+                <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".15em", color: "var(--df-stone-400)", fontWeight: 700 }}>
                   {item.label}
                 </div>
                 <div style={{ marginTop: 4, fontSize: 18, fontWeight: 700, color: "var(--df-stone-900)" }}>{item.value}</div>
@@ -4870,7 +4870,7 @@ function InspectorPopover({
                     background: "var(--df-orange-soft)",
                     border: "1px solid var(--df-orange-border)",
                     borderRadius: 6,
-                    fontSize: 11,
+                    fontSize: 12,
                     color: "#9a4c08",
                   }}
                 >
@@ -4884,7 +4884,7 @@ function InspectorPopover({
                   background: "var(--df-stone-50)",
                   border: "1px solid var(--df-stone-200)",
                   borderRadius: 6,
-                  fontSize: 11,
+                  fontSize: 12,
                   color: "var(--df-stone-700)",
                 }}
               >
@@ -4952,7 +4952,7 @@ function InspectorPopover({
                         >
                           <div
                             style={{
-                              fontSize: 10,
+                              fontSize: 12,
                               textTransform: "uppercase",
                               letterSpacing: ".12em",
                               color: "var(--df-stone-400)",
@@ -4981,7 +4981,7 @@ function InspectorPopover({
                         border: "1px solid var(--df-stone-200)",
                         background: "var(--df-stone-50)",
                         padding: "8px 10px",
-                        fontSize: 11,
+                        fontSize: 12,
                         color: "var(--df-stone-700)",
                         lineHeight: 1.45,
                       }}
@@ -5031,7 +5031,7 @@ function InspectorPopover({
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  fontSize: 11,
+                  fontSize: 12,
                   color: "var(--df-stone-700)",
                 }}
               >
@@ -5072,7 +5072,7 @@ function InspectorPopover({
                   background: "var(--df-stone-50)",
                   border: "1px solid var(--df-stone-200)",
                   borderRadius: 6,
-                  fontSize: 11,
+                  fontSize: 12,
                   color: "var(--df-stone-700)",
                 }}
               >
@@ -5087,7 +5087,7 @@ function InspectorPopover({
                     background: "var(--df-stone-50)",
                     border: "1px solid var(--df-stone-200)",
                     borderRadius: 6,
-                    fontSize: 11,
+                    fontSize: 12,
                     color: "var(--df-stone-700)",
                   }}
                 >
@@ -5107,7 +5107,7 @@ function InspectorSection({ title, children }: { title: string; children: ReactN
     <div>
       <div
         style={{
-          fontSize: 9,
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: ".15em",
           textTransform: "uppercase",
@@ -5254,7 +5254,7 @@ function TableDrawer({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
-                fontSize: 9,
+                fontSize: 12,
                 fontWeight: 700,
                 letterSpacing: ".15em",
                 textTransform: "uppercase",
@@ -5269,7 +5269,7 @@ function TableDrawer({
             style={{
               display: "flex",
               gap: 12,
-              fontSize: 11,
+              fontSize: 12,
               color: "var(--df-stone-500)",
               fontVariantNumeric: "tabular-nums",
               marginRight: 8,
@@ -5351,7 +5351,7 @@ function TableDrawer({
                 }}
               >
                 <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--df-stone-200)" }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", color: "var(--df-stone-400)" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", color: "var(--df-stone-400)" }}>
                     Filas reales
                   </div>
                   <div style={{ marginTop: 4, fontSize: 12, color: "var(--df-stone-500)" }}>Preview del dataset actual.</div>
@@ -5368,7 +5368,7 @@ function TableDrawer({
                               textAlign: "left",
                               padding: "9px 12px",
                               fontWeight: 700,
-                              fontSize: 9,
+                              fontSize: 12,
                               textTransform: "uppercase",
                               letterSpacing: ".12em",
                               color: "#5b616b",
@@ -5385,7 +5385,7 @@ function TableDrawer({
                             textAlign: "left",
                             padding: "9px 12px",
                             fontWeight: 700,
-                            fontSize: 9,
+                            fontSize: 12,
                             textTransform: "uppercase",
                             letterSpacing: ".12em",
                             color: "#5b616b",
@@ -5458,7 +5458,7 @@ function TableDrawer({
                 padding: 14,
               }}
             >
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", color: "var(--df-stone-400)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", color: "var(--df-stone-400)" }}>
                 Documentos
               </div>
               <div style={{ marginTop: 4, fontSize: 12, color: "var(--df-stone-500)" }}>Procesamientos OCR vinculados a la tabla.</div>
@@ -5514,7 +5514,7 @@ function TableDrawer({
                         <span
                           style={{
                             display: "block",
-                            fontSize: 10.5,
+                            fontSize: 12,
                             color: "var(--df-stone-500)",
                             marginTop: 2,
                             fontVariantNumeric: "tabular-nums",
@@ -5662,7 +5662,7 @@ function DocumentPreviewModal({
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--df-stone-900)" }}>
               {selected.document.source_file_name ?? selected.document.source_path ?? "Documento"}
             </div>
-            <div style={{ fontSize: 10.5, color: "var(--df-stone-500)", fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ fontSize: 12, color: "var(--df-stone-500)", fontVariantNumeric: "tabular-nums" }}>
               {selected.tableLabel} · {selected.document.source_path ?? "Sin path"}
             </div>
           </div>
@@ -5676,7 +5676,7 @@ function DocumentPreviewModal({
                 border: "1px solid var(--df-stone-200)",
                 borderRadius: 6,
                 padding: "6px 10px",
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 500,
                 color: "var(--df-stone-700)",
                 display: "inline-flex",
@@ -5998,7 +5998,7 @@ function DataFlowLayoutWorkspace({
               {progress}
             </div>
           </div>
-          <div style={{ border: "1px solid #fde68a", background: "#fffbeb", borderRadius: 8, padding: 10, color: "#92400e", fontSize: 11 }}>
+          <div style={{ border: "1px solid #fde68a", background: "#fffbeb", borderRadius: 8, padding: 10, color: "#92400e", fontSize: 12 }}>
             Alertas detectadas
           </div>
         </div>
@@ -6023,7 +6023,7 @@ function DataFlowLayoutWorkspace({
             const result = evaluatedResultById.get(id);
             return (
               <div key={id} style={{ border: "1px solid var(--df-stone-200)", borderRadius: 8, padding: 10, minWidth: 0 }}>
-                <div style={{ fontSize: 9, textTransform: "uppercase", color: "var(--df-stone-400)", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 12, textTransform: "uppercase", color: "var(--df-stone-400)", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {result?.label ?? humanizeFieldKey(id)}
                 </div>
                 <div style={{ marginTop: 5, fontSize: 16, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -6048,7 +6048,7 @@ function DataFlowLayoutWorkspace({
       return (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           {["Designacion", "Entidad", "Inicio", "N de obra"].map((label) => (
-            <div key={label} style={{ border: "1px solid var(--df-stone-200)", borderRadius: 8, padding: 9, fontSize: 11 }}>
+            <div key={label} style={{ border: "1px solid var(--df-stone-200)", borderRadius: 8, padding: 9, fontSize: 12 }}>
               <div style={{ color: "var(--df-stone-400)" }}>{label}</div>
               <div style={{ marginTop: 4, fontWeight: 700 }}>Campo</div>
             </div>
@@ -6229,7 +6229,7 @@ function DataFlowLayoutWorkspace({
                         <div style={{ fontSize: 13, fontWeight: 800, color: "var(--df-stone-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {block.label}
                         </div>
-                        <div style={{ marginTop: 1, fontSize: 10, color: "var(--df-stone-500)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 700 }}>
+                        <div style={{ marginTop: 1, fontSize: 12, color: "var(--df-stone-500)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 700 }}>
                           {getBlockTypeLabel(block.type)}
                         </div>
                       </div>
@@ -7468,7 +7468,7 @@ export function DataFlowPageClient({
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                fontSize: 11,
+                fontSize: 12,
                 color: "var(--df-stone-500)",
                 flexWrap: "wrap",
               }}
@@ -7491,7 +7491,7 @@ export function DataFlowPageClient({
               >
                 Trazabilidad de resultados
               </h1>
-              <span style={{ fontSize: 11, color: "var(--df-stone-500)" }}>
+              <span style={{ fontSize: 12, color: "var(--df-stone-500)" }}>
                 {canvasMode === "result" && focusViewId
                   ? `Foco en ${viewNodes.find((node) => node.id === focusViewId)?.label ?? "resultado"}`
                   : "Sistema completo"}
@@ -7518,7 +7518,7 @@ export function DataFlowPageClient({
                 cursor: "pointer",
                 background: workspaceTab === "trace" ? "#fff" : "transparent",
                 color: workspaceTab === "trace" ? "var(--df-stone-900)" : "var(--df-stone-600)",
-                fontSize: 11.5,
+                fontSize: 12,
                 fontWeight: workspaceTab === "trace" ? 600 : 500,
                 boxShadow: workspaceTab === "trace" ? "0 1px 0 rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04)" : "none",
               }}
@@ -7539,7 +7539,7 @@ export function DataFlowPageClient({
                 cursor: "pointer",
                 background: workspaceTab === "layout" ? "#fff" : "transparent",
                 color: workspaceTab === "layout" ? "var(--df-stone-900)" : "var(--df-stone-600)",
-                fontSize: 11.5,
+                fontSize: 12,
                 fontWeight: workspaceTab === "layout" ? 600 : 500,
                 boxShadow: workspaceTab === "layout" ? "0 1px 0 rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04)" : "none",
               }}
@@ -7571,7 +7571,7 @@ export function DataFlowPageClient({
                   cursor: "pointer",
                   background: canvasMode === "system" ? "#fff" : "transparent",
                   color: canvasMode === "system" ? "var(--df-stone-900)" : "var(--df-stone-600)",
-                  fontSize: 11.5,
+                  fontSize: 12,
                   fontWeight: canvasMode === "system" ? 600 : 500,
                   boxShadow: canvasMode === "system" ? "0 1px 0 rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04)" : "none",
                 }}
@@ -7593,7 +7593,7 @@ export function DataFlowPageClient({
                   cursor: "pointer",
                   background: canvasMode === "result" ? "#fff" : "transparent",
                   color: canvasMode === "result" ? "var(--df-stone-900)" : "var(--df-stone-600)",
-                  fontSize: 11.5,
+                  fontSize: 12,
                   fontWeight: canvasMode === "result" ? 600 : 500,
                   boxShadow: canvasMode === "result" ? "0 1px 0 rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04)" : "none",
                 }}
@@ -7790,7 +7790,7 @@ export function DataFlowPageClient({
                 >
                   <span
                     style={{
-                      fontSize: 9,
+                      fontSize: 12,
                       fontWeight: 700,
                       letterSpacing: ".15em",
                       textTransform: "uppercase",
@@ -7888,7 +7888,7 @@ export function DataFlowPageClient({
                             color: "#fff",
                             borderRadius: 6,
                             padding: "6px 9px",
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: 700,
                             cursor: "pointer",
                           }}
@@ -7904,7 +7904,7 @@ export function DataFlowPageClient({
                             color: "var(--df-stone-700)",
                             borderRadius: 6,
                             padding: "6px 9px",
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: 700,
                             cursor: "pointer",
                           }}
@@ -7993,7 +7993,7 @@ export function DataFlowPageClient({
                         border: "1px solid var(--df-stone-200)",
                         background: "#fff",
                         color: "var(--df-stone-700)",
-                        fontSize: 11,
+                        fontSize: 12,
                         padding: "0 9px",
                         outline: "none",
                       }}
@@ -8025,7 +8025,7 @@ export function DataFlowPageClient({
                         border: "1px solid var(--df-stone-200)",
                         background: "#fff",
                         color: "var(--df-stone-700)",
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 700,
                         cursor: canWriteDataFlow && !configSaving ? "pointer" : "not-allowed",
                         display: "inline-flex",
@@ -8049,7 +8049,7 @@ export function DataFlowPageClient({
                         border: "1px solid #ddd6fe",
                         background: "#f5f3ff",
                         color: "#5b21b6",
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 800,
                         cursor: canWriteDataFlow && !configSaving ? "pointer" : "not-allowed",
                         display: "inline-flex",
@@ -8073,7 +8073,7 @@ export function DataFlowPageClient({
                         border: "1px solid var(--df-orange-border)",
                         background: "var(--df-orange-soft)",
                         color: "#9a4c08",
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 800,
                         cursor: canWriteDataFlow && !configSaving ? "pointer" : "not-allowed",
                         display: "inline-flex",
@@ -8095,7 +8095,7 @@ export function DataFlowPageClient({
                       background: canvasMode === "result" ? activeTokens.soft : "#fff",
                       border: `1px solid ${canvasMode === "result" ? activeTokens.border : "var(--df-stone-200)"}`,
                       color: canvasMode === "result" ? activeTokens.text : "var(--df-stone-600)",
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: 600,
                     }}
                   >
@@ -8245,12 +8245,12 @@ export function DataFlowPageClient({
                           color: "#fff",
                           borderRadius: 999,
                           boxShadow: `0 6px 20px ${activeTokens.shadow}`,
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: 600,
                           zIndex: 5,
                         }}
                       >
-                        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", opacity: 0.85 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", opacity: 0.85 }}>
                           Trazando
                         </span>
                         <span>{viewNodes.find((node) => node.id === focusViewId)?.label ?? "Resultado"}</span>
@@ -8265,7 +8265,7 @@ export function DataFlowPageClient({
                           border: "1px solid var(--df-stone-200)",
                           borderRadius: 10,
                           padding: "8px 12px",
-                          fontSize: 11,
+                          fontSize: 12,
                           color: "var(--df-stone-600)",
                           boxShadow: "0 1px 0 rgba(0,0,0,.03)",
                           maxWidth: 240,
@@ -8274,7 +8274,7 @@ export function DataFlowPageClient({
                       >
                         <div
                           style={{
-                            fontSize: 9,
+                            fontSize: 12,
                             fontWeight: 700,
                             letterSpacing: ".15em",
                             textTransform: "uppercase",
