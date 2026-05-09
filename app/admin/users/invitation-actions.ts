@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { revalidatePath } from "next/cache";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { sendInvitationEmail } from "@/lib/email/invitations";
@@ -10,6 +11,97 @@ const INVITATIONS_TABLE_MISSING_CODE = "PGRST205";
 const isInvitationsTableMissing = (error?: PostgrestError | null) =>
 	error?.code === INVITATIONS_TABLE_MISSING_CODE;
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+type InvitationRow = {
+	id: string;
+	tenant_id?: string;
+	email: string;
+	token?: string;
+	invited_by: string;
+	invited_role: InvitedRole;
+	status: InvitationStatus;
+	expires_at: string;
+	created_at: string;
+};
+
+type InvitationWithDetails = InvitationRow & {
+	tenant?: { name: string | null };
+	inviter?: { full_name: string | null };
+};
+
+async function requireUsersAdmin(
+	supabase: Supabase,
+	requestedTenantId?: string
+) {
+	const {
+		data: { user },
+		error: authError,
+	} = await supabase.auth.getUser();
+
+	if (authError || !user) {
+		throw new Error("Unauthorized");
+	}
+
+	const [{ data: memberships }, { data: profile }] = await Promise.all([
+		supabase
+			.from("memberships")
+			.select("tenant_id, role")
+			.eq("user_id", user.id)
+			.order("created_at", { ascending: true }),
+		supabase
+			.from("profiles")
+			.select("is_superadmin, full_name")
+			.eq("user_id", user.id)
+			.maybeSingle(),
+	]);
+
+	const isSuperAdmin =
+		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const { tenantId } = await resolveTenantMembership(
+		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+		{ isSuperAdmin }
+	);
+	const effectiveTenantId = requestedTenantId ?? tenantId;
+
+	if (!effectiveTenantId) {
+		throw new Error("No active tenant");
+	}
+	if (requestedTenantId && requestedTenantId !== tenantId && !isSuperAdmin) {
+		throw new Error("Forbidden");
+	}
+
+	if (!isSuperAdmin) {
+		const { data: canAdmin, error } = await supabase.rpc("has_permission", {
+			tenant: effectiveTenantId,
+			perm_key: "admin:users",
+		});
+		if (error) throw error;
+		if (!canAdmin) {
+			throw new Error("Forbidden");
+		}
+	}
+
+	return { user, profile, tenantId: effectiveTenantId, isSuperAdmin };
+}
+
+async function requireInvitationInTenant(
+	supabase: Supabase,
+	invitationId: string,
+	tenantId: string
+) {
+	const { data: invitation, error } = await supabase
+		.from("invitations")
+		.select("id")
+		.eq("id", invitationId)
+		.eq("tenant_id", tenantId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!invitation) {
+		throw new Error("Invitation not found");
+	}
+}
 
 export type InvitationStatus =
 	| "pending"
@@ -52,42 +144,32 @@ export async function sendInvitation({
 	role?: InvitedRole;
 }) {
 	const supabase = await createClient();
-
-	// Get current user
-	const {
-		data: { user },
-		error: authError,
-	} = await supabase.auth.getUser();
-
-	if (authError || !user) {
+	let authContext: Awaited<ReturnType<typeof requireUsersAdmin>>;
+	try {
+		authContext = await requireUsersAdmin(supabase, tenantId);
+	} catch (error) {
+		console.error("Unauthorized invitation send attempt:", error);
 		return { error: "Unauthorized" };
 	}
+	const { user, profile } = authContext;
 
 	// Normalize email
 	const normalizedEmail = email.toLowerCase().trim();
 
-	const { data: profile } = await supabase
-		.from("profiles")
-		.select("is_superadmin, full_name")
-		.eq("user_id", user.id)
-		.maybeSingle();
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
-
-	let isAdmin = isSuperAdmin;
-	if (!isAdmin) {
-		const { data } = await supabase.rpc("is_admin_of", {
-			tenant: tenantId,
-		});
-		isAdmin = !!data;
+	const { data: isExistingMember, error: memberCheckError } = await supabase.rpc(
+		"is_email_member_of_tenant",
+		{
+			tenant_id_param: tenantId,
+			email_param: normalizedEmail,
+		}
+	);
+	if (memberCheckError) {
+		console.error("Error checking invited email membership:", memberCheckError);
+		return { error: "Failed to validate invitation recipient" };
 	}
-
-	if (!isAdmin) {
-		return { error: "Only admins can send invitations" };
+	if (isExistingMember) {
+		return { error: "This email is already a member of this organization" };
 	}
-
-	// Note: We check for pending invitations below, which prevents duplicate invites.
-	// The "already a member" case is handled gracefully during acceptance (lines 179-201).
 
 	// Check for existing pending invitation
 	const { data: existingInvitation } = await supabase
@@ -212,7 +294,11 @@ export async function acceptInvitation(token: string) {
 				accepted_at: new Date().toISOString(),
 				accepted_by: user.id,
 			})
-			.eq("id", invitation.id);
+			.eq("id", invitation.id)
+			.eq("tenant_id", invitation.tenant_id)
+			.eq("email", userEmail)
+			.eq("token", token)
+			.eq("status", "pending");
 
 		return {
 			error: "You are already a member of this organization",
@@ -241,7 +327,11 @@ export async function acceptInvitation(token: string) {
 			accepted_at: new Date().toISOString(),
 			accepted_by: user.id,
 		})
-		.eq("id", invitation.id);
+		.eq("id", invitation.id)
+		.eq("tenant_id", invitation.tenant_id)
+		.eq("email", userEmail)
+		.eq("token", token)
+		.eq("status", "pending");
 
 	if (updateError) {
 		console.error("Error updating invitation:", updateError);
@@ -282,7 +372,7 @@ export async function declineInvitation(token: string) {
 	// Get invitation
 	const { data: invitation, error: inviteError } = await supabase
 		.from("invitations")
-		.select("id, email, status")
+		.select("id, tenant_id, email, status")
 		.eq("token", token)
 		.eq("status", "pending")
 		.maybeSingle();
@@ -300,7 +390,11 @@ export async function declineInvitation(token: string) {
 	const { error: updateError } = await supabase
 		.from("invitations")
 		.update({ status: "declined" })
-		.eq("id", invitation.id);
+		.eq("id", invitation.id)
+		.eq("tenant_id", invitation.tenant_id)
+		.eq("email", userEmail)
+		.eq("token", token)
+		.eq("status", "pending");
 
 	if (updateError) {
 		console.error("Error declining invitation:", updateError);
@@ -315,36 +409,12 @@ export async function declineInvitation(token: string) {
  */
 export async function cancelInvitation(invitationId: string, tenantId: string) {
 	const supabase = await createClient();
-
-	// Get current user
-	const {
-		data: { user },
-		error: authError,
-	} = await supabase.auth.getUser();
-
-	if (authError || !user) {
+	try {
+		await requireUsersAdmin(supabase, tenantId);
+		await requireInvitationInTenant(supabase, invitationId, tenantId);
+	} catch (error) {
+		console.error("Unauthorized invitation cancellation attempt:", error);
 		return { error: "Unauthorized" };
-	}
-
-	// Check if user is admin of tenant
-	const { data: profile } = await supabase
-		.from("profiles")
-		.select("is_superadmin")
-		.eq("user_id", user.id)
-		.maybeSingle();
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
-
-	let isAdmin = isSuperAdmin;
-	if (!isAdmin) {
-		const { data } = await supabase.rpc("is_admin_of", {
-			tenant: tenantId,
-		});
-		isAdmin = !!data;
-	}
-
-	if (!isAdmin) {
-		return { error: "Only admins can cancel invitations" };
 	}
 
 	// Update invitation status
@@ -370,6 +440,12 @@ export async function cancelInvitation(invitationId: string, tenantId: string) {
  */
 export async function listPendingInvitations(tenantId: string) {
 	const supabase = await createClient();
+	try {
+		await requireUsersAdmin(supabase, tenantId);
+	} catch (error) {
+		console.error("Unauthorized pending invitation list attempt:", error);
+		return { error: "Unauthorized" };
+	}
 
 	// Expire old invitations first
 	const { error: expireError } = await supabase.rpc("expire_old_invitations");
@@ -395,6 +471,8 @@ export async function listPendingInvitations(tenantId: string) {
 		.eq("status", "pending")
 		.order("created_at", { ascending: false });
 
+	let invitationRows: InvitationWithDetails[] = (invitations ?? []) as InvitationRow[];
+
 	// Manually fetch inviter profiles if we have invitations
 	if (!error && invitations && invitations.length > 0) {
 		const inviterIds = invitations.map((inv) => inv.invited_by);
@@ -408,10 +486,10 @@ export async function listPendingInvitations(tenantId: string) {
 			(profiles || []).map((p) => [p.user_id, p.full_name])
 		);
 
-		// Attach inviter name to each invitation
-		invitations.forEach((inv: any) => {
-			inv.inviter = { full_name: profileMap.get(inv.invited_by) || null };
-		});
+		invitationRows = invitationRows.map((inv) => ({
+			...inv,
+			inviter: { full_name: profileMap.get(inv.invited_by) || null },
+		}));
 	}
 
 	if (error) {
@@ -425,7 +503,7 @@ export async function listPendingInvitations(tenantId: string) {
 		return { error: "Failed to fetch invitations" };
 	}
 
-	return { invitations };
+	return { invitations: invitationRows };
 }
 
 /**
@@ -472,7 +550,7 @@ export async function getMyPendingInvitations() {
 		.gt("expires_at", new Date().toISOString())
 		.order("created_at", { ascending: false });
 
-	let invitationRows = invitations ?? [];
+	let invitationRows: InvitationWithDetails[] = (invitations ?? []) as InvitationRow[];
 	let invitationError = error;
 
 	// Fallback for stricter RLS setups: query with admin client after authenticating
@@ -498,8 +576,10 @@ export async function getMyPendingInvitations() {
 				.gt("expires_at", new Date().toISOString())
 				.order("created_at", { ascending: false });
 			if (!adminError && adminInvitations) {
-				invitationRows = adminInvitations.filter(
-					(inv) => typeof inv.email === "string" && inv.email.toLowerCase().trim() === normalizedEmail
+				invitationRows = (adminInvitations as InvitationRow[]).filter(
+					(inv) =>
+						typeof inv.email === "string" &&
+						inv.email.toLowerCase().trim() === normalizedEmail
 				);
 				invitationError = null;
 			}
@@ -530,11 +610,11 @@ export async function getMyPendingInvitations() {
 			(profiles || []).map((p) => [p.user_id, p.full_name])
 		);
 
-		// Attach related data to each invitation
-		invitationRows.forEach((inv: any) => {
-			inv.tenant = { name: tenantMap.get(inv.tenant_id) || null };
-			inv.inviter = { full_name: profileMap.get(inv.invited_by) || null };
-		});
+		invitationRows = invitationRows.map((inv) => ({
+			...inv,
+			tenant: { name: tenantMap.get(inv.tenant_id ?? "") || null },
+			inviter: { full_name: profileMap.get(inv.invited_by) || null },
+		}));
 	}
 
 	if (invitationError) {

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { revalidatePath } from "next/cache";
 
 // Types
@@ -66,6 +67,109 @@ type FullNameRelation =
 	| { full_name?: string | null }[]
 	| null;
 
+const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+async function requireRolesAdmin(
+	supabase: Supabase,
+	requestedTenantId?: string
+) {
+	const {
+		data: { user },
+	} = await supabase.auth.getUser();
+
+	if (!user) {
+		throw new Error("Unauthorized");
+	}
+
+	const [{ data: memberships }, { data: profile }] = await Promise.all([
+		supabase
+			.from("memberships")
+			.select("tenant_id, role")
+			.eq("user_id", user.id)
+			.order("created_at", { ascending: true }),
+		supabase
+			.from("profiles")
+			.select("is_superadmin")
+			.eq("user_id", user.id)
+			.maybeSingle(),
+	]);
+
+	const isSuperAdmin =
+		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const { tenantId } = await resolveTenantMembership(
+		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+		{ isSuperAdmin }
+	);
+	const effectiveTenantId = requestedTenantId ?? tenantId;
+
+	if (!effectiveTenantId) {
+		throw new Error("No active tenant");
+	}
+	if (requestedTenantId && requestedTenantId !== tenantId && !isSuperAdmin) {
+		throw new Error("Forbidden");
+	}
+
+	if (!isSuperAdmin) {
+		const { data: canAdmin, error } = await supabase.rpc("has_permission", {
+			tenant: effectiveTenantId,
+			perm_key: "admin:roles",
+		});
+		if (error) throw error;
+		if (!canAdmin) {
+			throw new Error("Forbidden");
+		}
+	}
+
+	return { user, tenantId: effectiveTenantId, isSuperAdmin };
+}
+
+async function requireRoleInTenant(
+	supabase: Supabase,
+	roleId: string,
+	tenantId: string
+) {
+	const { data: role, error } = await supabase
+		.from("roles")
+		.select("id")
+		.eq("id", roleId)
+		.eq("tenant_id", tenantId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!role) throw new Error("Role not found");
+}
+
+async function requireUserInTenant(
+	supabase: Supabase,
+	userId: string,
+	tenantId: string
+) {
+	const { data: membership, error } = await supabase
+		.from("memberships")
+		.select("user_id")
+		.eq("user_id", userId)
+		.eq("tenant_id", tenantId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!membership) throw new Error("User is not a member of this tenant");
+}
+
+async function requireMacroTableInTenant(
+	supabase: Supabase,
+	macroTableId: string,
+	tenantId: string
+) {
+	const { data: macroTable, error } = await supabase
+		.from("macro_tables")
+		.select("id")
+		.eq("id", macroTableId)
+		.eq("tenant_id", tenantId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!macroTable) throw new Error("Macro table not found");
+}
+
 function readPermissionKey(value: PermissionKeyRelation): string | null {
 	const record = Array.isArray(value) ? value[0] : value;
 	return typeof record?.key === "string" ? record.key : null;
@@ -89,6 +193,7 @@ export async function getPermissionsByCategory(): Promise<
 	PermissionsByCategory[]
 > {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase);
 
 	const { data, error } = await supabase
 		.from("permissions")
@@ -123,6 +228,7 @@ export async function getPermissionsByCategory(): Promise<
 
 export async function getAllPermissions(): Promise<Permission[]> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase);
 
 	const { data, error } = await supabase
 		.from("permissions")
@@ -144,6 +250,7 @@ export async function getAllPermissions(): Promise<Permission[]> {
 
 export async function getRoleTemplates(): Promise<RoleTemplate[]> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase);
 
 	const { data, error } = await supabase
 		.from("role_templates")
@@ -171,6 +278,7 @@ export async function getRolesWithPermissions({
 	tenantId: string;
 }): Promise<Role[]> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase, tenantId);
 
 	// Get roles
 	const { data: roles, error: rolesError } = await supabase
@@ -228,6 +336,7 @@ export async function createRoleFromTemplate({
 	color?: string;
 }): Promise<{ role?: Role; error?: string }> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase, tenantId);
 
 	// Get template
 	const { data: template, error: templateError } = await supabase
@@ -297,6 +406,7 @@ export async function createRoleWithPermissions({
 	permissionKeys: string[];
 }): Promise<{ role?: Role; error?: string }> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase, tenantId);
 
 	// Create role
 	const { data: role, error: roleError } = await supabase
@@ -350,6 +460,8 @@ export async function updateRoleWithPermissions({
 	permissionKeys: string[];
 }): Promise<{ error?: string }> {
 	const supabase = await createClient();
+	const { tenantId } = await requireRolesAdmin(supabase);
+	await requireRoleInTenant(supabase, roleId, tenantId);
 
 	// Update role
 	const { error: roleError } = await supabase
@@ -400,6 +512,7 @@ export async function getMacroTablePermissions({
 	tenantId: string;
 }): Promise<MacroTablePermission[]> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase, tenantId);
 
 	const { data } = await supabase
 		.from("macro_table_permissions")
@@ -440,6 +553,7 @@ export async function getMacroTablesForPermissions({
 	tenantId: string;
 }): Promise<{ id: string; name: string }[]> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase, tenantId);
 
 	const { data } = await supabase
 		.from("macro_tables")
@@ -462,6 +576,13 @@ export async function setMacroTablePermission({
 	permissionLevel: PermissionLevel;
 }): Promise<{ error?: string }> {
 	const supabase = await createClient();
+	const { tenantId } = await requireRolesAdmin(supabase);
+	await requireMacroTableInTenant(supabase, macroTableId, tenantId);
+	if (targetType === "user") {
+		await requireUserInTenant(supabase, targetId, tenantId);
+	} else {
+		await requireRoleInTenant(supabase, targetId, tenantId);
+	}
 
 	const insertData: {
 		macro_table_id: string;
@@ -508,6 +629,13 @@ export async function removeMacroTablePermission({
 	targetId: string;
 }): Promise<{ error?: string }> {
 	const supabase = await createClient();
+	const { tenantId } = await requireRolesAdmin(supabase);
+	await requireMacroTableInTenant(supabase, macroTableId, tenantId);
+	if (targetType === "user") {
+		await requireUserInTenant(supabase, targetId, tenantId);
+	} else {
+		await requireRoleInTenant(supabase, targetId, tenantId);
+	}
 
 	let query = supabase
 		.from("macro_table_permissions")
@@ -553,6 +681,8 @@ export async function getUserEffectivePermissions({
 	tenantId: string;
 }): Promise<EffectivePermission[]> {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase, tenantId);
+	await requireUserInTenant(supabase, userId, tenantId);
 
 	// Check if user is admin
 	const { data: membership } = await supabase
@@ -665,6 +795,8 @@ export async function getUserMacroTableAccess({
 	}[]
 > {
 	const supabase = await createClient();
+	await requireRolesAdmin(supabase, tenantId);
+	await requireUserInTenant(supabase, userId, tenantId);
 
 	// Check if user is admin
 	const { data: membership } = await supabase
@@ -865,6 +997,8 @@ export async function getNavigationWithAccess({
 }: {
 	permissionKeys: string[];
 }): Promise<NavigationItem[]> {
+	const supabase = await createClient();
+	await requireRolesAdmin(supabase);
 	const permSet = new Set(permissionKeys);
 
 	const checkAccess = (item: NavigationItem): NavigationItem => {
@@ -880,5 +1014,7 @@ export async function getNavigationWithAccess({
 }
 
 export async function getNavigationStructure(): Promise<NavigationItem[]> {
+	const supabase = await createClient();
+	await requireRolesAdmin(supabase);
 	return NAVIGATION_ITEMS;
 }

@@ -15,9 +15,18 @@ type PermissionRelation =
 	| null
 	| undefined;
 
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
 function getPermissionRelationKey(value: PermissionRelation) {
 	const record = Array.isArray(value) ? value[0] : value;
 	return typeof record?.key === "string" ? record.key : null;
+}
+
+async function getAuthenticatedUser(supabase: Supabase) {
+	const {
+		data: { user },
+	} = await supabase.auth.getUser();
+	return user;
 }
 
 /**
@@ -31,9 +40,7 @@ export async function getUserRoles(): Promise<{
 	tenantId: string | null;
 }> {
 	const supabase = await createClient();
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
+	const user = await getAuthenticatedUser(supabase);
 
 	if (!user) {
 		return {
@@ -79,9 +86,12 @@ export async function getUserRoles(): Promise<{
 	// Get user roles from the roles table
 	const roles: string[] = []; // Role names for display
 	const roleIds: string[] = [];
+	const roleNameSet = new Set<string>();
+	const roleIdSet = new Set<string>();
 
 	// Add admin label if user is admin or superadmin
 	if (isAdmin || isSuperAdmin) {
+		roleNameSet.add("admin");
 		roles.push("admin");
 	}
 
@@ -126,11 +136,13 @@ export async function getUserRoles(): Promise<{
 						name: string;
 					}[]) {
 						// Track role ID
-						if (role.id && !roleIds.includes(role.id)) {
+						if (role.id && !roleIdSet.has(role.id)) {
+							roleIdSet.add(role.id);
 							roleIds.push(role.id);
 						}
 						// Track role name for display
-						if (role.name && !roles.includes(role.name)) {
+						if (role.name && !roleNameSet.has(role.name)) {
+							roleNameSet.add(role.name);
 							roles.push(role.name);
 						}
 					}
@@ -173,9 +185,16 @@ export async function getUserRoles(): Promise<{
  * Check if user can access a route
  */
 export async function canAccessRoute(path: string): Promise<boolean> {
+	const supabase = await createClient();
+	const user = await getAuthenticatedUser(supabase);
+
+	if (!user) {
+		return false;
+	}
+
 	const config = getRouteAccessConfig(path);
 
-	// If route is not protected, allow access
+	// If route is not protected, allow access for authenticated users.
 	if (!config) {
 		return true;
 	}
@@ -194,9 +213,12 @@ export async function canAccessRoute(path: string): Promise<boolean> {
 	}
 
 	if (config.requiredPermissions?.length) {
-		for (const permissionKey of config.requiredPermissions) {
-			if (!(await hasPermission(permissionKey))) return false;
-		}
+		const permissionResults = await Promise.all(
+			config.requiredPermissions.map((permissionKey) =>
+				hasPermission(permissionKey)
+			)
+		);
+		return permissionResults.every(Boolean);
 	}
 
 	return true;
@@ -210,9 +232,7 @@ export async function canAccessMacroTable(
 	requiredLevel: PermissionLevel
 ): Promise<boolean> {
 	const supabase = await createClient();
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
+	const user = await getAuthenticatedUser(supabase);
 
 	if (!user) {
 		return false;
@@ -320,9 +340,7 @@ export async function canAccessMacroTable(
  */
 export async function hasPermission(permissionKey: string): Promise<boolean> {
 	const supabase = await createClient();
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
+	const user = await getAuthenticatedUser(supabase);
 
 	if (!user) {
 		return false;
@@ -409,18 +427,16 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
  * Get all permission keys the user has
  */
 export async function getUserPermissionKeys(): Promise<string[]> {
-	const { isAdmin, isSuperAdmin, tenantId } = await getUserRoles();
+	const supabase = await createClient();
+	const user = await getAuthenticatedUser(supabase);
 
-	if (!tenantId) {
+	if (!user) {
 		return [];
 	}
 
-	const supabase = await createClient();
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
+	const { isAdmin, isSuperAdmin, tenantId } = await getUserRoles();
 
-	if (!user) {
+	if (!tenantId) {
 		return [];
 	}
 
