@@ -1906,8 +1906,8 @@ const Benefit1Visual = () => (
 const Benefit2Visual = () => (
   <ProtoSurface className="p-5 space-y-4">
     <div className="grid grid-cols-2 gap-3">
-      {[1, 2, 3, 4].map(i => (
-        <div key={`benefit-card-${i}`} className="h-12 rounded-xl border border-stone-200 bg-white flex items-center px-3 gap-2">
+      {[1, 2, 3, 4].map((cardNumber) => (
+        <div key={`benefit-card-${cardNumber}`} className="h-12 rounded-xl border border-stone-200 bg-white flex items-center px-3 gap-2">
           <div className="size-2 rounded-full bg-orange-500" />
           <div className="h-1.5 w-full bg-stone-200 rounded" />
         </div>

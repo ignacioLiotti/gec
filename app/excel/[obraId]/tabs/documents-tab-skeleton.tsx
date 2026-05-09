@@ -3,6 +3,20 @@
 import { TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const FOLDER_SKELETON_WIDTHS = [
+  { id: "folder-skeleton-root", width: 72 },
+  { id: "folder-skeleton-contracts", width: 84 },
+  { id: "folder-skeleton-plans", width: 66 },
+  { id: "folder-skeleton-certificates", width: 78 },
+  { id: "folder-skeleton-invoices", width: 90 },
+  { id: "folder-skeleton-reports", width: 70 },
+];
+const NESTED_SKELETON_WIDTHS = [
+  { id: "nested-skeleton-1", width: 58 },
+  { id: "nested-skeleton-2", width: 76 },
+  { id: "nested-skeleton-3", width: 64 },
+];
+
 /**
  * Skeleton loading state for the documents tab.
  * Shows a realistic file manager layout while data loads.
@@ -15,18 +29,18 @@ export function DocumentsTabSkeleton() {
         <div className="w-64 shrink-0 border rounded-lg p-3 space-y-2 hidden md:block">
           <Skeleton className="h-5 w-32 mb-4" />
           {/* Folder items */}
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-2 py-1.5">
+          {FOLDER_SKELETON_WIDTHS.map((item) => (
+            <div key={item.id} className="flex items-center gap-2 py-1.5">
               <Skeleton className="size-4 rounded" />
-              <Skeleton className="h-4 flex-1" style={{ width: `${60 + Math.random() * 30}%` }} />
+              <Skeleton className="h-4 flex-1" style={{ width: `${item.width}%` }} />
             </div>
           ))}
           {/* Nested items with indent */}
           <div className="pl-4 space-y-2 mt-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-2 py-1">
+            {NESTED_SKELETON_WIDTHS.map((item) => (
+              <div key={item.id} className="flex items-center gap-2 py-1">
                 <Skeleton className="size-4 rounded" />
-                <Skeleton className="h-3.5 flex-1" style={{ width: `${50 + Math.random() * 40}%` }} />
+                <Skeleton className="h-3.5 flex-1" style={{ width: `${item.width}%` }} />
               </div>
             ))}
           </div>
