@@ -1134,9 +1134,10 @@ function ObraDetailPageContent() {
 	const params = useParams();
 	const queryClient = useQueryClient();
 	const router = useRouter();
-  const { push, replace } = router;
+	const { push, replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
 	const isMobile = useIsMobile();
 	const {
 		isAdmin: isTenantAdmin,
@@ -1149,7 +1150,7 @@ function ObraDetailPageContent() {
 		return raw;
 	}, [params]);
 	const isValidObraId = Boolean(obraId && obraId !== "undefined");
-	const initialTab = searchParams?.get("tab") || "general";
+	const initialTab = queryParams.get("tab") || "general";
 	const [activeTab, setActiveTab] = useState(initialTab);
 	const isGeneralTabActive = activeTab === "general";
 	const isDocumentsTabActive = activeTab === "documentos";
@@ -1707,8 +1708,8 @@ function ObraDetailPageContent() {
 
 	// Handle tab change: update local state immediately, sync URL in background
 	const handleTabChange = useCallback((value: string) => {
-		const activeTour = searchParams?.get("tour") ?? null;
-		const activeStage = searchParams?.get(GUIDED_EXCEL_STAGE_PARAM) ?? null;
+		const activeTour = queryParams.get("tour") ?? null;
+		const activeStage = queryParams.get(GUIDED_EXCEL_STAGE_PARAM) ?? null;
 		setActiveTab(value); // Immediate state update
 		if (activeTour === "excel-overview") {
 			const nextStage =
@@ -1731,7 +1732,7 @@ function ObraDetailPageContent() {
 			return;
 		}
 		setQueryParams({ tab: value }); // Background URL sync
-	}, [searchParams, setQueryParams]);
+	}, [queryParams, setQueryParams]);
 
 	const handleOpenDocumentsRecovery = useCallback(() => {
 		if (activeTab !== "documentos") {

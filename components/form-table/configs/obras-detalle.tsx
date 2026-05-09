@@ -80,7 +80,8 @@ const ObraDetailLink = memo(function ObraDetailLink({
 }) {
 	const { prefetchObra } = usePrefetchObra();
 	const searchParams = useSearchParams();
-	const isExcelOverviewTour = searchParams.get("tour") === GUIDED_EXCEL_TOUR_ID;
+	const queryParams = new URLSearchParams(searchParams);
+	const isExcelOverviewTour = queryParams.get("tour") === GUIDED_EXCEL_TOUR_ID;
 	const href = isExcelOverviewTour
 		? `/excel/${obraId}?tour=${GUIDED_EXCEL_TOUR_ID}&${GUIDED_EXCEL_STAGE_PARAM}=${GUIDED_EXCEL_STAGES.obraIntro}`
 		: `/excel/${obraId}`;

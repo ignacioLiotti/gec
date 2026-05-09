@@ -25,9 +25,10 @@ function ObraDocumentsTabContent({
   const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
 
-	const folderParam = searchParams?.get?.("folder") || null;
-	const fileParam = searchParams?.get?.("file") || null;
+	const folderParam = queryParams.get("folder") || null;
+	const fileParam = queryParams.get("file") || null;
 
 	const updateDocumentsQuery = useCallback(
 		(patch: { folder?: string | null; file?: string | null }) => {

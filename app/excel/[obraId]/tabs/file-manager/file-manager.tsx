@@ -1015,6 +1015,7 @@ function FileManagerContent({
   const { push, replace } = router;
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryParams = new URLSearchParams(searchParams);
   const searchParamsKey = searchParams?.toString() ?? '';
   const guidedTourStage = getGuidedExcelStage(searchParams);
   const isGuidedExcelFlow = isGuidedExcelTour(searchParams);
@@ -4540,7 +4541,7 @@ function FileManagerContent({
   const handleOpenOcrReport = useCallback(() => {
     if (!obraId || !activeOcrTablaId) return;
     const shouldOpenMaterialsGuide =
-      searchParams?.get("ilagMaterialsReportGuide") === "1";
+      queryParams.get("ilagMaterialsReportGuide") === "1";
     const nextSearch = new URLSearchParams();
     if (shouldOpenMaterialsGuide) {
       nextSearch.set("tour", "materials-report");
@@ -4549,7 +4550,7 @@ function FileManagerContent({
     push(
       nextSearch.size > 0 ? `${reportUrl}?${nextSearch.toString()}` : reportUrl
     );
-  }, [activeOcrTablaId, obraId, router, searchParams]);
+  }, [activeOcrTablaId, obraId, queryParams, router]);
 
   const handleSaveTablaRows = useCallback(
     async ({
@@ -4828,7 +4829,7 @@ function FileManagerContent({
   const handleGuidedDocumentsStepChange = useCallback(
     (step: WizardFlow['steps'][number]) => {
       if (!isGuidedExcelFlow) return;
-      const currentStage = searchParams?.get(GUIDED_EXCEL_STAGE_PARAM) ?? null;
+      const currentStage = queryParams.get(GUIDED_EXCEL_STAGE_PARAM) ?? null;
       if (currentStage === step.id) return;
 
       const stageOrder = [
@@ -4851,7 +4852,7 @@ function FileManagerContent({
       params.set(GUIDED_EXCEL_STAGE_PARAM, step.id);
       replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [isGuidedExcelFlow, pathname, router, searchParams]
+    [isGuidedExcelFlow, pathname, queryParams, router, searchParams]
   );
 
   const ocrOrderItemRows = useMemo<OcrOrderItemRow[]>(() => {

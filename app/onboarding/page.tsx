@@ -31,6 +31,7 @@ function OnboardingPageContent() {
 	const router = useRouter();
   const { push, refresh } = router;
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
 	const [mode, setMode] = useState<Mode>("join");
 	const [user, setUser] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
@@ -40,8 +41,8 @@ function OnboardingPageContent() {
 	const [tenantName, setTenantName] = useState("");
 	const [nowMs, setNowMs] = useState(0);
 
-	const errorMessage = searchParams?.get("error");
-	const previewMode = searchParams?.get("preview") === "1" || searchParams?.get("preview") === "true";
+	const errorMessage = queryParams.get("error");
+	const previewMode = queryParams.get("preview") === "1" || queryParams.get("preview") === "true";
 
 	useEffect(() => {
 		setNowMs(Date.now());
