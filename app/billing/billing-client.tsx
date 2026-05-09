@@ -358,7 +358,7 @@ export function BillingClient() {
 								className="sm:min-w-[210px]"
 							>
 								{cancelPending
-									? "Programando cancelacion..."
+									? "Programando cancelacion?"
 									: cancelAtPeriodEnd
 										? "Cancelacion ya programada"
 										: "Cancelar al finalizar ciclo"}
@@ -598,7 +598,7 @@ export function BillingClient() {
 										{isPending ? (
 											<>
 												<Loader2 className="size-4 animate-spin" />
-												Redirigiendo a MercadoPago...
+												Redirigiendo a MercadoPago?
 											</>
 										) : isCurrentPlan && !data?.paywall?.blocked ? (
 											<>

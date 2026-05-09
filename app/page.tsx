@@ -1183,7 +1183,7 @@ function Step1Visual() {
         onChange={(key: string, value: string) => setValues((prev) => ({ ...prev, [key]: value }))}
         onSubmit={fakeSubmit}
         isSubmitting={isSubmitting}
-        submitLabel={isSubmitting ? "Creando..." : "Crear obra"}
+        submitLabel={isSubmitting ? "Creando?" : "Crear obra"}
         cancelLabel="Cancelar"
       />
     </ProtoSurface>

@@ -190,7 +190,7 @@ export default function MacroTableReportPage() {
 		<Suspense
 			fallback={
 				<div className="flex items-center justify-center h-screen">
-					Cargando...
+					Cargando?
 				</div>
 			}
 		>

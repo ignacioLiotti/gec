@@ -273,7 +273,7 @@ export default function UserMenu({
 					<div className="max-h-[60vh] overflow-auto p-4">
 						{loading ? (
 							<div className="py-6 text-center text-sm text-muted-foreground">
-								Cargando...
+								Cargando?
 							</div>
 						) : notifications.length === 0 ? (
 							<div className="py-6 text-center text-sm text-muted-foreground">

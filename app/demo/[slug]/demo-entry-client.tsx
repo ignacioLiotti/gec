@@ -28,7 +28,7 @@ export function DemoEntryClient({
 	if (token) {
 		return (
 			<div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
-				Preparando la sesion demo...
+				Preparando la sesion demo?
 			</div>
 		);
 	}

@@ -333,7 +333,7 @@ export default function Page() {
 		<Suspense
 			fallback={
 				<div className="flex items-center justify-center h-screen">
-					Cargando...
+					Cargando?
 				</div>
 			}
 		>
