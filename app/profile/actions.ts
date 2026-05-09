@@ -1,9 +1,14 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
 export async function updateProfile({ fullName }: { fullName: string }) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "No estÃ¡s autenticado." };
+	}
 	const supabase = await createClient();
 	const {
 		data: { user },
@@ -32,6 +37,10 @@ export async function updateProfile({ fullName }: { fullName: string }) {
 }
 
 export async function updateEmail({ email }: { email: string }) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "No estÃ¡s autenticado." };
+	}
 	const supabase = await createClient();
 	const {
 		data: { user },
@@ -61,6 +70,10 @@ export async function updateEmail({ email }: { email: string }) {
 }
 
 export async function updatePassword({ password }: { password: string }) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "No estÃ¡s autenticado." };
+	}
 	const supabase = await createClient();
 	const {
 		data: { user },

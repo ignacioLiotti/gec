@@ -1,6 +1,7 @@
 "use server";
 
 import type { ReportExportMeta } from "./export";
+import { auth } from "@/lib/auth";
 
 function formatFilters(filters?: Record<string, unknown>) {
 	if (!filters) return "";
@@ -25,6 +26,8 @@ export type ExportXlsxPayload = {
 export async function generateXlsxFile(
 	payload: ExportXlsxPayload,
 ): Promise<{ base64: string }> {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
 	const { data, meta } = payload;
 	const xlsx = await import("xlsx");
 	const worksheet = xlsx.utils.json_to_sheet(data);

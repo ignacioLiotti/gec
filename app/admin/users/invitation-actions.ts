@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { auth } from "@/lib/auth";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { revalidatePath } from "next/cache";
 import type { PostgrestError } from "@supabase/supabase-js";
@@ -143,6 +144,8 @@ export async function sendInvitation({
 	email: string;
 	role?: InvitedRole;
 }) {
+	const session = await auth();
+	if (!session.data.user) return { error: "Unauthorized" };
 	const supabase = await createClient();
 	let authContext: Awaited<ReturnType<typeof requireUsersAdmin>>;
 	try {
@@ -240,6 +243,10 @@ export async function sendInvitation({
  * Accept an invitation
  */
 export async function acceptInvitation(token: string) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "You must be logged in to accept an invitation" };
+	}
 	const supabase = await createClient();
 
 	// Get current user
@@ -351,6 +358,10 @@ export async function acceptInvitation(token: string) {
  * Decline an invitation
  */
 export async function declineInvitation(token: string) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "You must be logged in to decline an invitation" };
+	}
 	const supabase = await createClient();
 
 	// Get current user
@@ -408,6 +419,8 @@ export async function declineInvitation(token: string) {
  * Cancel an invitation (admin only)
  */
 export async function cancelInvitation(invitationId: string, tenantId: string) {
+	const session = await auth();
+	if (!session.data.user) return { error: "Unauthorized" };
 	const supabase = await createClient();
 	try {
 		await requireUsersAdmin(supabase, tenantId);
@@ -439,6 +452,8 @@ export async function cancelInvitation(invitationId: string, tenantId: string) {
  * List pending invitations for a tenant (admin only)
  */
 export async function listPendingInvitations(tenantId: string) {
+	const session = await auth();
+	if (!session.data.user) return { error: "Unauthorized" };
 	const supabase = await createClient();
 	try {
 		await requireUsersAdmin(supabase, tenantId);
@@ -510,6 +525,10 @@ export async function listPendingInvitations(tenantId: string) {
  * Get pending invitations for current user's email
  */
 export async function getMyPendingInvitations() {
+	const session = await auth();
+	if (!session.data.user) {
+		return { invitations: [] };
+	}
 	const supabase = await createClient();
 
 	// Get current user

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { auth } from "@/lib/auth";
 import { getRouteAccessConfig } from "./route-access";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 
@@ -39,6 +40,16 @@ export async function getUserRoles(): Promise<{
 	isSuperAdmin: boolean;
 	tenantId: string | null;
 }> {
+	const session = await auth();
+	if (!session.data.user) {
+		return {
+			roles: [],
+			roleIds: [],
+			isAdmin: false,
+			isSuperAdmin: false,
+			tenantId: null,
+		};
+	}
 	const supabase = await createClient();
 	const user = await getAuthenticatedUser(supabase);
 
@@ -185,6 +196,10 @@ export async function getUserRoles(): Promise<{
  * Check if user can access a route
  */
 export async function canAccessRoute(path: string): Promise<boolean> {
+	const session = await auth();
+	if (!session.data.user) {
+		return false;
+	}
 	const supabase = await createClient();
 	const user = await getAuthenticatedUser(supabase);
 
@@ -231,6 +246,10 @@ export async function canAccessMacroTable(
 	macroTableId: string,
 	requiredLevel: PermissionLevel
 ): Promise<boolean> {
+	const session = await auth();
+	if (!session.data.user) {
+		return false;
+	}
 	const supabase = await createClient();
 	const user = await getAuthenticatedUser(supabase);
 
@@ -339,6 +358,10 @@ export async function canAccessMacroTable(
  * Check if user has a specific permission key
  */
 export async function hasPermission(permissionKey: string): Promise<boolean> {
+	const session = await auth();
+	if (!session.data.user) {
+		return false;
+	}
 	const supabase = await createClient();
 	const user = await getAuthenticatedUser(supabase);
 
@@ -427,6 +450,10 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
  * Get all permission keys the user has
  */
 export async function getUserPermissionKeys(): Promise<string[]> {
+	const session = await auth();
+	if (!session.data.user) {
+		return [];
+	}
 	const supabase = await createClient();
 	const user = await getAuthenticatedUser(supabase);
 
