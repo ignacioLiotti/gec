@@ -8,8 +8,6 @@ import { addHours } from "date-fns";
 import { Info } from "lucide-react";
 import { PendientesCalendar, type CalendarEventPayload } from "./_components/pendientes-calendar";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
-import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
 
 type NotificationRow = {
   id: string;
@@ -489,31 +487,6 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
 
     revalidatePath("/notifications");
   }
-
-  const DS = {
-    page: "bg-stone-100",
-    frame: "rounded-3xl border border-stone-200/70 bg-white p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]",
-    frameInner: "rounded-2xl border ",
-    panel: "rounded-2xl border border-stone-200 bg-stone-50/60",
-    card: "rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]",
-  };
-
-  function Framed({
-    className,
-    innerClassName,
-    children,
-  }: {
-    className?: string;
-    innerClassName?: string;
-    children: ReactNode;
-  }) {
-    return (
-      <div className={cn(DS.frame, className)}>
-        <div className={cn(DS.frameInner, innerClassName)}>{children}</div>
-      </div>
-    );
-  }
-
 
   return (
     <div className="flex min-h-svh flex-col gap-6 p-6">

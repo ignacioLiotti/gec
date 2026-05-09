@@ -772,8 +772,8 @@ function AISuggestionTableOverlay() {
 
 // ---------- 4) Metrics overview card (Embedding v3) ----------
 
-function MetricsOverviewCard() {
-  const Stat = ({
+
+function MetricsStat({
     label,
     value,
     delta,
@@ -783,7 +783,8 @@ function MetricsOverviewCard() {
     value: string;
     delta: string;
     deltaTone: "up" | "down";
-  }) => (
+  }) {
+  return (
     <div className="rounded-xl border border-stone-200 bg-white p-4">
       <div className="text-xs font-medium text-stone-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight text-stone-900">{value}</div>
@@ -805,8 +806,10 @@ function MetricsOverviewCard() {
       </div>
     </div>
   );
+}
 
-  const QuickAction = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
+function MetricsQuickAction({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
     <button
       className={cx(
         "flex w-full items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white px-4 py-3 text-left",
@@ -821,7 +824,9 @@ function MetricsOverviewCard() {
       <span className="text-stone-400">›</span>
     </button>
   );
+}
 
+function MetricsOverviewCard() {
   return (
     <Framed className="w-full max-w-[440px]">
       <div>
@@ -859,20 +864,20 @@ function MetricsOverviewCard() {
         <div className="p-5">
           <div className="text-xs font-semibold tracking-wide text-stone-500">KEY METRICS</div>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Stat label="Latency" value="245ms" delta="892ms" deltaTone="up" />
-            <Stat label="Throughput" value="12.4k/h" delta="18.9k/h" deltaTone="down" />
-            <Stat label="Error rate" value="0.12%" delta="0.36%" deltaTone="up" />
-            <Stat label="Tokens" value="2.4M" delta="2.1M" deltaTone="up" />
+            <MetricsStat label="Latency" value="245ms" delta="892ms" deltaTone="up" />
+            <MetricsStat label="Throughput" value="12.4k/h" delta="18.9k/h" deltaTone="down" />
+            <MetricsStat label="Error rate" value="0.12%" delta="0.36%" deltaTone="up" />
+            <MetricsStat label="Tokens" value="2.4M" delta="2.1M" deltaTone="up" />
           </div>
         </div>
 
         <div className="px-5">
           <div className="text-xs font-semibold tracking-wide text-stone-500">QUICK ACTIONS</div>
           <div className="mt-3 flex flex-col gap-2 pb-5">
-            <QuickAction icon={<span className="text-stone-700">▦</span>} title="View metrics dashboard" />
-            <QuickAction icon={<Icon name="clock" />} title="Show historical data" />
-            <QuickAction icon={<span className="text-stone-700">⏱</span>} title="Configure alerts" />
-            <QuickAction icon={<span className="text-stone-700">↗</span>} title="Open in provider console" />
+            <MetricsQuickAction icon={<span className="text-stone-700">▦</span>} title="View metrics dashboard" />
+            <MetricsQuickAction icon={<Icon name="clock" />} title="Show historical data" />
+            <MetricsQuickAction icon={<span className="text-stone-700">⏱</span>} title="Configure alerts" />
+            <MetricsQuickAction icon={<span className="text-stone-700">↗</span>} title="Open in provider console" />
           </div>
         </div>
       </div>
@@ -882,8 +887,9 @@ function MetricsOverviewCard() {
 
 // ---------- 5) Task creation list + usage card + app rows + filter chips ----------
 
-function LoadingTasksAndUsage() {
-  const TaskRow = ({ step }: { step: string }) => (
+
+function LoadingTaskRow({ step }: { step: string }) {
+  return (
     <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3">
       <div className="flex items-center gap-3">
         <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-200 border-t-stone-600" />
@@ -898,8 +904,9 @@ function LoadingTasksAndUsage() {
       </button>
     </div>
   );
+}
 
-  const AppRow = ({
+function LoadingAppRow({
     name,
     host,
     env,
@@ -909,7 +916,8 @@ function LoadingTasksAndUsage() {
     host: string;
     env: string;
     last: string;
-  }) => (
+  }) {
+  return (
     <Framed className="p-2" innerClassName="rounded-[18px]">
       <div>
         <div className="flex items-center gap-3 px-4 py-3">
@@ -941,13 +949,15 @@ function LoadingTasksAndUsage() {
       </div>
     </Framed>
   );
+}
 
+function LoadingTasksAndUsage() {
   return (
     <div className="grid w-full max-w-[1020px] grid-cols-1 gap-6 lg:grid-cols-2">
       <div className="space-y-3">
-        <TaskRow step="1" />
-        <TaskRow step="2" />
-        <TaskRow step="3" />
+        <LoadingTaskRow step="1" />
+        <LoadingTaskRow step="2" />
+        <LoadingTaskRow step="3" />
 
         <div className="mt-8 space-y-2">
           <div className="flex items-center justify-between">
@@ -987,9 +997,9 @@ function LoadingTasksAndUsage() {
         </Framed>
 
         <div className="space-y-2">
-          <AppRow name="Aurora Web" host="auroraapp.io" env="aurora-main.prod.acme.cloud" last="22m" />
-          <AppRow name="Nimbus API" host="api.nimbus.dev" env="nimbus-main.prod.acme.cloud" last="1h" />
-          <AppRow name="Pulse Metrics" host="pulsemetrics.co" env="pulsemetrics-main.prod.acme.cloud" last="4d" />
+          <LoadingAppRow name="Aurora Web" host="auroraapp.io" env="aurora-main.prod.acme.cloud" last="22m" />
+          <LoadingAppRow name="Nimbus API" host="api.nimbus.dev" env="nimbus-main.prod.acme.cloud" last="1h" />
+          <LoadingAppRow name="Pulse Metrics" host="pulsemetrics.co" env="pulsemetrics-main.prod.acme.cloud" last="4d" />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1298,8 +1308,9 @@ function InvoiceSplitMock() {
 
 // ---------- 9) New: Prompt composer bar (thick frame + chips) ----------
 
-function PromptComposerBar() {
-  const Chip = ({ label }: { label: string }) => (
+
+function PromptChip({ label }: { label: string }) {
+  return (
     <span className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700">
       <span className="h-4 w-4 rounded bg-stone-100" />
       {label}
@@ -1308,14 +1319,16 @@ function PromptComposerBar() {
       </button>
     </span>
   );
+}
 
+function PromptComposerBar() {
   return (
     <Framed className="w-full max-w-[960px] " innerClassName="rounded-[26px]">
       <div className="p-4">
         <div className="flex flex-wrap gap-2">
-          <Chip label="agreement" />
-          <Chip label="evidence" />
-          <Chip label="case files" />
+          <PromptChip label="agreement" />
+          <PromptChip label="evidence" />
+          <PromptChip label="case files" />
         </div>
 
         <div className="mt-3 rounded-2xl border border-stone-200 bg-white p-3">
