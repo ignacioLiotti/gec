@@ -655,6 +655,10 @@ function renderOcrStatusBadge(item: FileSystemItem, context: OcrStatusBadgeConte
 
 const pdfThumbnailCache = new Map<string, string>();
 
+function scheduleThumbnailRetry(callback: () => void) {
+  return setTimeout(callback, 800);
+}
+
 const FileThumbnail = memo(function FileThumbnail({
   item,
   getDocumentSignedUrl,
@@ -713,6 +717,7 @@ const FileThumbnail = memo(function FileThumbnail({
     }
 
     let isMounted = true;
+    const retryTimeouts: ReturnType<typeof setTimeout>[] = [];
 
     (async () => {
       const getSignedUrl = async () => {
@@ -726,9 +731,10 @@ const FileThumbnail = memo(function FileThumbnail({
         if (!isMounted || !signedUrl) {
           // Fresh uploads can take a short moment before signed URL is available.
           if (isMounted && retryCount < 5) {
-            setTimeout(() => {
+            const retryTimeout = scheduleThumbnailRetry(() => {
               if (isMounted) setRetryCount((prev) => prev + 1);
-            }, 800);
+            });
+            retryTimeouts.push(retryTimeout);
           }
           return null;
         }
@@ -756,9 +762,10 @@ const FileThumbnail = memo(function FileThumbnail({
 
           if (!pdfBytes) {
             if (isMounted && retryCount < 5) {
-              setTimeout(() => {
+              const retryTimeout = scheduleThumbnailRetry(() => {
                 if (isMounted) setRetryCount((prev) => prev + 1);
-              }, 800);
+              });
+              retryTimeouts.push(retryTimeout);
             }
             return;
           }
@@ -815,6 +822,7 @@ const FileThumbnail = memo(function FileThumbnail({
 
     return () => {
       isMounted = false;
+      retryTimeouts.forEach(clearTimeout);
     };
   }, [
     downloadStoredDocumentBytes,

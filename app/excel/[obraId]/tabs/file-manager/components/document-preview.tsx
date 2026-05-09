@@ -577,6 +577,16 @@ function WordDocumentPreview({
 	);
 }
 
+function waitForManifestRetry(
+	ms: number,
+	waitTimeouts: ReturnType<typeof setTimeout>[]
+) {
+	return new Promise((resolve) => {
+		const timeout = setTimeout(resolve, ms);
+		waitTimeouts.push(timeout);
+	});
+}
+
 function ModelDocumentPreview({
 	document,
 	onDownload,
@@ -584,15 +594,16 @@ function ModelDocumentPreview({
 	document: FileSystemItem;
 	onDownload: (doc: FileSystemItem) => void;
 }) {
-	const [resolvedUrn, setResolvedUrn] = useState<string | null>(document.apsUrn ?? null);
-	const [isLoading, setIsLoading] = useState(Boolean(document.storagePath || document.apsUrn));
-	const [status, setStatus] = useState<string | null>(document.apsUrn ? "checking" : null);
+	const { apsUrn, name, storagePath } = document;
+	const [resolvedUrn, setResolvedUrn] = useState<string | null>(apsUrn ?? null);
+	const [isLoading, setIsLoading] = useState(Boolean(storagePath || apsUrn));
+	const [status, setStatus] = useState<string | null>(apsUrn ? "checking" : null);
 	const [progressLabel, setProgressLabel] = useState<string | null>(null);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
-		const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+		const waitTimeouts: ReturnType<typeof setTimeout>[] = [];
 
 		const pollManifest = async (urn: string) => {
 			for (let attempt = 0; attempt < 18; attempt += 1) {
@@ -638,7 +649,7 @@ function ModelDocumentPreview({
 				setStatus("processing");
 				setProgressLabel(manifestProgress);
 				setErrorMessage(null);
-				await wait(4000);
+				await waitForManifestRetry(4000, waitTimeouts);
 				if (cancelled) return;
 			}
 
@@ -649,7 +660,7 @@ function ModelDocumentPreview({
 		};
 
 		const ensureModelUrn = async () => {
-			if (!document.storagePath && !document.apsUrn) {
+			if (!storagePath && !apsUrn) {
 				setResolvedUrn(null);
 				setStatus("missing");
 				setErrorMessage("Este archivo no tiene una ruta válida para generar la vista 3D.");
@@ -662,11 +673,11 @@ function ModelDocumentPreview({
 			setProgressLabel(null);
 
 			try {
-				let urn = document.apsUrn ?? null;
+				let urn = apsUrn ?? null;
 
-				if (!urn && document.storagePath) {
+				if (!urn && storagePath) {
 					const modelResponse = await fetch(
-						`/api/aps/models?filePath=${encodeURIComponent(document.storagePath)}`,
+						`/api/aps/models?filePath=${encodeURIComponent(storagePath)}`,
 						{ cache: "no-store" }
 					);
 					const modelPayload = await modelResponse.json().catch(() => null);
@@ -677,11 +688,11 @@ function ModelDocumentPreview({
 					}
 				}
 
-				if (!urn && document.storagePath) {
+				if (!urn && storagePath) {
 					setStatus("uploading");
 					const formData = new FormData();
-					formData.append("storagePath", document.storagePath);
-					formData.append("fileName", document.name);
+					formData.append("storagePath", storagePath);
+					formData.append("fileName", name);
 
 					const uploadResponse = await fetch("/api/aps/upload", {
 						method: "POST",
@@ -728,8 +739,9 @@ function ModelDocumentPreview({
 		void ensureModelUrn();
 		return () => {
 			cancelled = true;
+			waitTimeouts.forEach(clearTimeout);
 		};
-	}, [document.apsUrn, document.name, document.storagePath]);
+	}, [apsUrn, name, storagePath]);
 
 	if (resolvedUrn && status === "ready") {
 		return (

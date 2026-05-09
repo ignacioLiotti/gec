@@ -69,6 +69,16 @@ const PDFPage = dynamic(
   }
 );
 
+function waitForRetry(
+  ms: number,
+  waitTimeouts: ReturnType<typeof setTimeout>[]
+) {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(resolve, ms);
+    waitTimeouts.push(timeout);
+  });
+}
+
 type DocumentViewerProps = {
   url: string;
   fileName: string;
@@ -144,8 +154,7 @@ export function EnhancedDocumentViewer({
     setPdfData(null);
     setPdfUseUrlFallback(false);
 
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
+    const waitTimeouts: ReturnType<typeof setTimeout>[] = [];
     const fetchPdf = async () => {
       try {
         let lastError: Error | null = null;
@@ -169,7 +178,7 @@ export function EnhancedDocumentViewer({
             if ((error as Error).name === 'AbortError') return;
             lastError = error as Error;
             if (attempt < 5) {
-              await wait(700);
+              await waitForRetry(700, waitTimeouts);
             }
           }
         }
@@ -192,7 +201,10 @@ export function EnhancedDocumentViewer({
     };
 
     void fetchPdf();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      waitTimeouts.forEach(clearTimeout);
+    };
   }, [fileType, url]);
 
   // Keyboard navigation
