@@ -572,8 +572,8 @@ function TestimonialOrbit() {
     <Framed className="w-full max-w-[900px]" innerClassName="rounded-[26px]">
       <div className="p-10">
         <div className="flex items-center justify-center gap-5">
-          {faces.slice(0, 8).map((src, i) => (
-            <Avatar key={i} src={src} size={56} />
+          {faces.slice(0, 8).map((src) => (
+            <Avatar key={src} src={src} size={56} />
           ))}
         </div>
 
@@ -656,7 +656,7 @@ function AISuggestionTableOverlay() {
                 <tbody className="divide-y divide-stone-200">
                   {["Walker", "Parker", "Thompson", "Harris", "Collins", "Reed", "Bennett"].map(
                     (name, i) => (
-                      <tr key={i} className="hover:bg-stone-50/60">
+                      <tr key={name} className="hover:bg-stone-50/60">
                         <td className="px-4 py-3 text-stone-500">Oct 24, 2025</td>
                         <td className="px-4 py-3 font-medium text-stone-900">{name}</td>
                         <td className="px-4 py-3">
@@ -708,9 +708,9 @@ function AISuggestionTableOverlay() {
                 <div className="mt-4 overflow-hidden rounded-xl border border-stone-200">
                   <table className="w-full text-left text-sm">
                     <tbody className="divide-y divide-stone-200">
-                      {rows.map((r, idx) => (
+                      {rows.map((r) => (
                         <tr
-                          key={idx}
+                          key={r.name}
                           className={cx("hover:bg-stone-50/60", r.highlighted && "bg-sky-50/60")}
                         >
                           <td className="px-4 py-3">
@@ -1108,8 +1108,8 @@ function DataGridShell({ title }: { title: string }) {
               </thead>
               <tbody className="divide-y divide-stone-200">
                 {[{ name: "Aurora Web", status: "Active" }, { name: "Nimbus API", status: "Inactive" }, { name: "Pulse Metrics", status: "Active" }].map(
-                  (row, i) => (
-                    <tr key={i} className="hover:bg-stone-50/60">
+                  (row) => (
+                    <tr key={row.name} className="hover:bg-stone-50/60">
                       <td className="px-4 py-3 font-medium text-stone-900">{row.name}</td>
                       <td className="px-4 py-3">
                         <Badge tone={row.status === "Active" ? "success" : "neutral"}>{row.status}</Badge>
@@ -1201,8 +1201,8 @@ function InvoiceSplitMock() {
                   </thead>
                   <tbody className="divide-y divide-stone-200">
                     {[{ item: "Brand Guidelines", qty: 1, cost: "$49.00" }, { item: "Logo", qty: 1, cost: "$499.00" }, { item: "3D Animation", qty: 1, cost: "$1232.00" }].map(
-                      (r, idx) => (
-                        <tr key={idx} className="hover:bg-stone-50/60">
+                      (r) => (
+                        <tr key={r.item} className="hover:bg-stone-50/60">
                           <td className="px-4 py-3 font-medium text-stone-900">{r.item}</td>
                           <td className="px-4 py-3 text-stone-700">{r.qty}</td>
                           <td className="px-4 py-3 text-stone-700">{r.cost}</td>
@@ -1261,8 +1261,8 @@ function InvoiceSplitMock() {
                 </thead>
                 <tbody className="divide-y divide-stone-200">
                   {[{ item: "Website Design", cost: 2249 }, { item: "Logo", cost: 499 }, { item: "3D Animation", cost: 1232 }, { item: "Framer Sub.", cost: 190 }].map(
-                    (r, idx) => (
-                      <tr key={idx} className="hover:bg-stone-50/60">
+                    (r) => (
+                      <tr key={r.item} className="hover:bg-stone-50/60">
                         <td className="px-4 py-3 font-medium text-stone-900">{r.item}</td>
                         <td className="px-4 py-3 text-stone-700">1</td>
                         <td className="px-4 py-3 text-stone-700">${r.cost.toFixed(2)}</td>

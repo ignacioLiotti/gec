@@ -537,7 +537,7 @@ export default async function DashboardTestPage({
                         </div>
                         {visibleMonths.map((month, idx) => (
                           <div
-                            key={`${month.toISOString()}-${idx}`}
+                            key={month.toISOString()}
                             className={cn(
                               "border-r border-[#f0f0f0] px-1 py-2.5 text-center text-[11px] font-medium last:border-r-0",
                               visibleCurrentMonthIndex === idx

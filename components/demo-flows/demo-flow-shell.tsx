@@ -46,8 +46,8 @@ export function DemoFlowShell({
 								Lo que vas a ver
 							</p>
 							<ul className="space-y-3">
-								{flow.features.map((feature, i) => (
-									<li key={i} className="flex items-start gap-3">
+								{flow.features.map((feature) => (
+									<li key={feature} className="flex items-start gap-3">
 										<span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-100">
 											<Check className="size-3 text-orange-600" strokeWidth={2.5} />
 										</span>
