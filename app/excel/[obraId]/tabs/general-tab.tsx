@@ -924,11 +924,11 @@ export const AdvanceCurveChart = ({
 				</div>
 				<div className="-mt-5 ml-4 flex flex-wrap items-center gap-4 text-xs">
 					<div className="flex items-center gap-2">
-						<span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+						<span className="size-2.5 rounded-full bg-sky-500" />
 						<span className="text-muted-foreground">Curva Plan (avance acumulado)</span>
 					</div>
 					<div className="flex items-center gap-2">
-						<span className="h-2.5 w-2.5 rounded-full bg-[#ff5800]" />
+						<span className="size-2.5 rounded-full bg-[#ff5800]" />
 						<span className="text-muted-foreground">PMC Resumen (avance físico acumulado)</span>
 					</div>
 					<div className="flex items-center gap-2">
@@ -1105,7 +1105,7 @@ export function ObraGeneralTab({
 							>
 								<div className="flex items-start gap-3">
 									<div className="mt-0.5 rounded-full bg-[#fff1df] p-2 text-[#f97316]">
-										<AlertCircle className="h-4 w-4" />
+										<AlertCircle className="size-4" />
 									</div>
 									<div className="space-y-1.5">
 										<p className="text-sm font-semibold">
@@ -1232,7 +1232,7 @@ export function ObraGeneralTab({
 											{(field: any) => (
 												<div className="sm:col-span-2">
 													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
-														<MapPin className="h-3.5 w-3.5" />
+														<MapPin className="size-3.5" />
 														Designación y ubicación
 													</label>
 													<Input
@@ -1256,7 +1256,7 @@ export function ObraGeneralTab({
 											{(field: any) => (
 												<div>
 													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
-														<Building2 className="h-3.5 w-3.5" />
+														<Building2 className="size-3.5" />
 														Entidad contratante
 													</label>
 													<Input
@@ -1275,7 +1275,7 @@ export function ObraGeneralTab({
 											{(field: any) => (
 												<div>
 													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
-														<Calendar className="h-3.5 w-3.5" />
+														<Calendar className="size-3.5" />
 														Mes básico
 													</label>
 													<Input
@@ -1293,7 +1293,7 @@ export function ObraGeneralTab({
 											{(field: any) => (
 												<div>
 													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
-														<Calendar className="h-3.5 w-3.5" />
+														<Calendar className="size-3.5" />
 														Iniciación
 													</label>
 													<Input
@@ -1311,7 +1311,7 @@ export function ObraGeneralTab({
 											{(field: any) => (
 												<div>
 													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
-														<Hash className="h-3.5 w-3.5" />
+														<Hash className="size-3.5" />
 														N° de obra
 													</label>
 													<Input
@@ -1329,7 +1329,7 @@ export function ObraGeneralTab({
 											{(field: any) => (
 												<div>
 													<label className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
-														<Ruler className="h-3.5 w-3.5" />
+														<Ruler className="size-3.5" />
 														Superficie
 													</label>
 													<Input
@@ -1840,7 +1840,7 @@ export function ObraGeneralTab({
 																	}
 																>
 																	<div className="flex items-start gap-2">
-																		<AlertTriangle className="mt-0.5 h-4 w-4" />
+																		<AlertTriangle className="mt-0.5 size-4" />
 																		<div>
 																			<p className="text-sm font-semibold">{finding.title}</p>
 																			{finding.message ? (
@@ -2119,7 +2119,7 @@ export function ObraGeneralTab({
 									className="sticky bottom-0 left-0 z-10 flex flex-col items-end gap-3 rounded-xl border border-[#f7b26a] bg-[#fffaf5]/95 p-4 backdrop-blur"
 								>
 									<div className="flex items-center gap-2 text-orange-primary">
-										<AlertCircle className="h-5 w-5" />
+										<AlertCircle className="size-5" />
 										<p className="text-sm font-semibold">Tenés cambios sin guardar</p>
 									</div>
 									{derivedCertificadosNotice ? (
@@ -2168,7 +2168,7 @@ export function ObraGeneralTab({
 												>
 													{isSaving ? (
 														<>
-															<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+															<svg className="animate-spin size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
 																<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
 																<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 															</svg>

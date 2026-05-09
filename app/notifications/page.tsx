@@ -511,7 +511,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
                 <CardHeader className="space-y-0 pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xs font-medium text-zinc-700">{metric.title}</CardTitle>
-                    <Info className="h-3.5 w-3.5 text-zinc-400" />
+                    <Info className="size-3.5 text-zinc-400" />
                   </div>
                   <p className="text-[11px] text-zinc-400">{metric.subtitle}</p>
                 </CardHeader>

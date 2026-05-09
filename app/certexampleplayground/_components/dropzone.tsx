@@ -72,14 +72,14 @@ export function Dropzone({ onFile, isLoading }: DropzoneProps) {
 			/>
 			{isLoading ? (
 				<>
-					<Loader2 className="h-10 w-10 animate-spin text-orange-500" />
+					<Loader2 className="size-10 animate-spin text-orange-500" />
 					<p className="text-sm font-medium text-muted-foreground">
 						Analizando archivo...
 					</p>
 				</>
 			) : (
 				<>
-					<Upload className="h-10 w-10 text-muted-foreground" />
+					<Upload className="size-10 text-muted-foreground" />
 					<div className="text-center">
 						<p className="text-sm font-medium">
 							Arrastrá tu certificado Excel aquí

@@ -47,12 +47,12 @@ type PermissionMatrixProps = {
 };
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  navigation: <Home className="h-4 w-4" />,
-  obras: <Database className="h-4 w-4" />,
-  certificados: <FileCheck className="h-4 w-4" />,
-  macro: <Layers className="h-4 w-4" />,
-  admin: <Settings className="h-4 w-4" />,
-  general: <Shield className="h-4 w-4" />,
+  navigation: <Home className="size-4" />,
+  obras: <Database className="size-4" />,
+  certificados: <FileCheck className="size-4" />,
+  macro: <Layers className="size-4" />,
+  admin: <Settings className="size-4" />,
+  general: <Shield className="size-4" />,
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -65,9 +65,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const LEVEL_ICONS: Record<string, React.ReactNode> = {
-  read: <Eye className="h-3 w-3" />,
-  edit: <Pencil className="h-3 w-3" />,
-  admin: <Crown className="h-3 w-3" />,
+  read: <Eye className="size-3" />,
+  edit: <Pencil className="size-3" />,
+  admin: <Crown className="size-3" />,
 };
 
 export function PermissionMatrix({
@@ -163,7 +163,7 @@ export function PermissionMatrix({
                     />
                   </div>
                   <span className="text-muted-foreground">
-                    {CATEGORY_ICONS[category.category] || <Shield className="h-4 w-4" />}
+                    {CATEGORY_ICONS[category.category] || <Shield className="size-4" />}
                   </span>
                   <span className="font-medium">
                     {CATEGORY_LABELS[category.category] || category.category}

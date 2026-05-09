@@ -94,8 +94,8 @@ const ObraDetailLink = memo(function ObraDetailLink({
 			className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary group absolute top-0 left-0 w-full h-full justify-start p-2 "
 			onMouseEnter={() => prefetchObra(obraId)}
 		>
-			<span className="inline-flex size-4 h-4 w-4 min-h-4 min-w-4 max-h-4 max-w-4 items-center justify-center rounded shadow-card text-[10px] text-bold text-primary/80 group-hover:text-white group-hover:bg-orange-primary/80">
-				<ArrowUpRight className="h-3 w-3 min-h-3 min-w-3 max-h-3 max-w-3 text-muted-foreground group-hover:text-white " />
+			<span className="inline-flex size-4 size-4 min-h-4 min-w-4 max-h-4 max-w-4 items-center justify-center rounded shadow-card text-[10px] text-bold text-primary/80 group-hover:text-white group-hover:bg-orange-primary/80">
+				<ArrowUpRight className="size-3 min-h-3 min-w-3 max-h-3 max-w-3 text-muted-foreground group-hover:text-white " />
 			</span>
 			<TruncatedTextWithTooltip text={text} />
 		</Link>
@@ -115,10 +115,10 @@ const ObraDetailShortcut = memo(function ObraDetailShortcut({
 			prefetch={false}
 			data-testid={`open-obra-${obraId}`}
 			aria-label="Abrir detalle de la obra"
-			className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+			className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 			onMouseEnter={() => prefetchObra(obraId)}
 		>
-			<ExternalLink className="h-4 w-4" />
+			<ExternalLink className="size-4" />
 		</Link>
 	);
 });
@@ -2177,7 +2177,7 @@ const resolveHeaderGroupsFromColumns = (
 		.filter((group) => group.columns.length > 0);
 };
 
-// fechas 
+// fechas
 const headerGroups: HeaderGroup[] = [
 	{
 		id: "fechas",

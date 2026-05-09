@@ -154,7 +154,7 @@ function Pill({
         map[color]
       )}
     >
-      <span className={cx("h-2 w-2 rounded-full", dot[color])} />
+      <span className={cx("size-2 rounded-full", dot[color])} />
       {children}
     </span>
   );
@@ -268,7 +268,7 @@ function Button({
 }
 
 function Icon({ name }: { name: IconName }) {
-  const common = "h-4 w-4 stroke-current";
+  const common = "size-4 stroke-current";
   switch (name) {
     case "chev-left":
       return (
@@ -491,10 +491,10 @@ function VersionHistoryCard() {
               <div className="absolute left-8 top-[108px] text-xs text-stone-400">2 PM</div>
               <div className="absolute left-8 top-[182px] text-xs text-stone-400">10 PM</div>
 
-              <div className="absolute left-[120px] top-[86px] h-2 w-2 rounded-full bg-emerald-600" />
-              <div className="absolute left-[260px] top-[132px] h-2 w-2 rounded-full bg-stone-300" />
-              <div className="absolute left-[420px] top-[118px] h-2 w-2 rounded-full bg-emerald-600" />
-              <div className="absolute left-[560px] top-[148px] h-2 w-2 rounded-full bg-stone-300" />
+              <div className="absolute left-[120px] top-[86px] size-2 rounded-full bg-emerald-600" />
+              <div className="absolute left-[260px] top-[132px] size-2 rounded-full bg-stone-300" />
+              <div className="absolute left-[420px] top-[118px] size-2 rounded-full bg-emerald-600" />
+              <div className="absolute left-[560px] top-[148px] size-2 rounded-full bg-stone-300" />
 
               {/* floating version popup */}
               <div className="absolute left-1/2 top-2 w-[420px] -translate-x-1/2">
@@ -715,7 +715,7 @@ function AISuggestionTableOverlay() {
                         >
                           <td className="px-4 py-3">
                             <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                              <span className="size-2 rounded-full bg-emerald-500" />
                               {r.status}
                             </span>
                           </td>
@@ -796,7 +796,7 @@ function MetricsStat({
       >
         <span
           className={cx(
-            "grid h-5 w-5 place-items-center rounded-full",
+            "grid size-5 place-items-center rounded-full",
             deltaTone === "up" ? "bg-emerald-50" : "bg-rose-50"
           )}
         >
@@ -892,7 +892,7 @@ function LoadingTaskRow({ step }: { step: string }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3">
       <div className="flex items-center gap-3">
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-200 border-t-stone-600" />
+        <span className="size-4 animate-spin rounded-full border-2 border-stone-200 border-t-stone-600" />
         <div className="text-sm font-medium text-stone-800">Creating tasks</div>
       </div>
       <div className="text-sm text-stone-500">{step} of 7</div>
@@ -936,13 +936,13 @@ function LoadingAppRow({
         </div>
         <div className="flex items-center justify-between border-t border-stone-200 px-4 py-2 text-xs text-stone-500">
           <div className="inline-flex items-center gap-2">
-            <span className="grid h-5 w-5 place-items-center rounded-full border border-stone-200 bg-stone-50">
+            <span className="grid size-5 place-items-center rounded-full border border-stone-200 bg-stone-50">
               🌐
             </span>
             <span className="truncate">{env}</span>
           </div>
           <div className="inline-flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-stone-300" />
+            <span className="size-1.5 rounded-full bg-stone-300" />
             <span>Last deployment {last} ago</span>
           </div>
         </div>
@@ -967,7 +967,7 @@ function LoadingTasksAndUsage() {
           <div className="rounded-2xl border border-stone-200 bg-white p-3">
             <div className="relative h-2.5 rounded-full bg-stone-100">
               <div className="absolute left-0 top-0 h-2.5 w-[12%] rounded-full bg-stone-800" />
-              <div className="absolute left-[12%] top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border border-stone-300 bg-white shadow-[0_6px_16px_rgba(0,0,0,0.10)]" />
+              <div className="absolute left-[12%] top-1/2 size-5 -translate-y-1/2 rounded-full border border-stone-300 bg-white shadow-[0_6px_16px_rgba(0,0,0,0.10)]" />
             </div>
           </div>
         </div>
@@ -1010,7 +1010,7 @@ function LoadingTasksAndUsage() {
           </div>
           <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
             <span className="text-sm text-stone-500">from</span>
-            <span className="h-5 w-5 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(249,115,22,0.6),transparent_60%),radial-gradient(circle_at_70%_70%,rgba(99,102,241,0.6),transparent_60%)]" />
+            <span className="size-5 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(249,115,22,0.6),transparent_60%),radial-gradient(circle_at_70%_70%,rgba(99,102,241,0.6),transparent_60%)]" />
             <span className="text-sm font-medium text-stone-800">Tiago Alexandrino</span>
             <span className="text-stone-400">▾</span>
           </div>
@@ -1144,7 +1144,7 @@ function InvoiceSplitMock() {
             subtitle="Enter invoice details."
             right={
               <div className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-stone-900 text-white">◌</span>
+                <span className="grid size-7 place-items-center rounded-full bg-stone-900 text-white">◌</span>
                 <div className="leading-tight">
                   <div className="text-xs font-semibold text-stone-900">Acme Corp.</div>
                   <div className="text-[11px] text-stone-500">acme@gmail.com</div>
@@ -1312,7 +1312,7 @@ function InvoiceSplitMock() {
 function PromptChip({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700">
-      <span className="h-4 w-4 rounded bg-stone-100" />
+      <span className="size-4 rounded bg-stone-100" />
       {label}
       <button className="text-stone-400 hover:text-stone-600" type="button" aria-label={`Remove ${label}`}>
         ×
@@ -1349,7 +1349,7 @@ function PromptComposerBar() {
                 Run check
               </button>
               <div className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700">
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-stone-900 text-white">◎</span>
+                <span className="grid size-5 place-items-center rounded-full bg-stone-900 text-white">◎</span>
                 GPT 5.2
                 <span className="text-stone-400">▾</span>
               </div>

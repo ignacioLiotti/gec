@@ -845,7 +845,7 @@ export function TemplatePickerCard() {
       <CardContent className="space-y-3 p-4">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-stone-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
             Cargando templates...
           </div>
         ) : null}
@@ -1210,7 +1210,7 @@ export function TemplateConfigEditorPanel() {
                         </Button>
                       </div>
                       <Button type="button" variant="outline" onClick={() => void copyHtmlVariables()}>
-                        <Copy className="mr-2 h-4 w-4" />
+                        <Copy className="mr-2 size-4" />
                         Copiar variables
                       </Button>
                       <Button type="button" variant="outline" onClick={syncFieldsWithHtml}>
@@ -1219,11 +1219,11 @@ export function TemplateConfigEditorPanel() {
                       {fieldsMode === "visual" ? (
                         <>
                           <Button type="button" variant="outline" onClick={addExtraField}>
-                            <Plus className="mr-2 h-4 w-4" />
+                            <Plus className="mr-2 size-4" />
                             Agregar dato
                           </Button>
                           <Button type="button" variant="outline" onClick={addTableField}>
-                            <Plus className="mr-2 h-4 w-4" />
+                            <Plus className="mr-2 size-4" />
                             Agregar tabla
                           </Button>
                         </>
@@ -1290,7 +1290,7 @@ export function TemplateConfigEditorPanel() {
                     <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-stone-500" />
+                          <Sparkles className="size-4 text-stone-500" />
                           <p className="text-sm font-medium text-stone-900">Datos detectados en la carpeta</p>
                         </div>
                         <span className="text-xs text-stone-500">Click para agregarlos</span>
@@ -1416,9 +1416,9 @@ export function TemplateConfigEditorPanel() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => removeField(index)}
-                                  className="h-10 w-10 rounded-lg text-stone-500 hover:bg-stone-100"
+                                  className="size-10 rounded-lg text-stone-500 hover:bg-stone-100"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="size-4" />
                                 </Button>
                               </div>
                             </div>
@@ -1538,7 +1538,7 @@ export function TemplateConfigEditorPanel() {
                                         onClick={() => addSelectOption(index)}
                                         className="rounded-md"
                                       >
-                                        <Plus className="mr-2 h-4 w-4" />
+                                        <Plus className="mr-2 size-4" />
                                         Agregar valor
                                       </Button>
                                     </div>
@@ -1568,9 +1568,9 @@ export function TemplateConfigEditorPanel() {
                                             variant="ghost"
                                             size="icon"
                                             onClick={() => removeSelectOption(index, optionIndex)}
-                                            className="h-9 w-9 rounded-md text-stone-500"
+                                            className="size-9 rounded-md text-stone-500"
                                           >
-                                            <Trash2 className="h-4 w-4" />
+                                            <Trash2 className="size-4" />
                                           </Button>
                                         </div>
                                       ))}
@@ -1593,7 +1593,7 @@ export function TemplateConfigEditorPanel() {
                                         onClick={() => addTableColumn(index)}
                                         className="rounded-md"
                                       >
-                                        <Plus className="mr-2 h-4 w-4" />
+                                        <Plus className="mr-2 size-4" />
                                         Agregar columna
                                       </Button>
                                     </div>
@@ -1653,9 +1653,9 @@ export function TemplateConfigEditorPanel() {
                                               variant="ghost"
                                               size="icon"
                                               onClick={() => removeTableColumn(index, columnIndex)}
-                                              className="h-9 w-9 rounded-md text-stone-500"
+                                              className="size-9 rounded-md text-stone-500"
                                             >
-                                              <Trash2 className="h-4 w-4" />
+                                              <Trash2 className="size-4" />
                                             </Button>
                                           </div>
                                           <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1724,7 +1724,7 @@ export function TemplateConfigEditorPanel() {
                                                   onClick={() => addTableColumnOption(index, columnIndex)}
                                                   className="h-8 rounded-md"
                                                 >
-                                                  <Plus className="mr-2 h-3.5 w-3.5" />
+                                                  <Plus className="mr-2 size-3.5" />
                                                   Agregar
                                                 </Button>
                                               </div>
@@ -1759,9 +1759,9 @@ export function TemplateConfigEditorPanel() {
                                                       variant="ghost"
                                                       size="icon"
                                                       onClick={() => removeTableColumnOption(index, columnIndex, optionIndex)}
-                                                      className="h-8 w-8 rounded-md text-stone-500"
+                                                      className="size-8 rounded-md text-stone-500"
                                                     >
-                                                      <Trash2 className="h-4 w-4" />
+                                                      <Trash2 className="size-4" />
                                                     </Button>
                                                   </div>
                                                 ))}
@@ -1896,7 +1896,7 @@ export function TemplateConfigEditorPanel() {
                       : "Al guardar se crea o actualiza un override propio del tenant sobre la template sistema."}
                   </p>
                   <Button type="button" onClick={() => void saveConfiguration()} disabled={saving} className="rounded-full">
-                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
                     Guardar configuracion
                   </Button>
                 </div>

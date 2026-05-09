@@ -60,15 +60,15 @@ const NAVIGATION_STRUCTURE: NavigationItem[] = [
 ];
 
 const ICONS: Record<string, React.ReactNode> = {
-  Home: <Home className="h-4 w-4" />,
-  Database: <Database className="h-4 w-4" />,
-  FileCheck: <FileCheck className="h-4 w-4" />,
-  Layers: <Layers className="h-4 w-4" />,
-  Bell: <Bell className="h-4 w-4" />,
-  Settings: <Settings className="h-4 w-4" />,
-  Users: <Users className="h-4 w-4" />,
-  Shield: <Shield className="h-4 w-4" />,
-  FileText: <FileText className="h-4 w-4" />,
+  Home: <Home className="size-4" />,
+  Database: <Database className="size-4" />,
+  FileCheck: <FileCheck className="size-4" />,
+  Layers: <Layers className="size-4" />,
+  Bell: <Bell className="size-4" />,
+  Settings: <Settings className="size-4" />,
+  Users: <Users className="size-4" />,
+  Shield: <Shield className="size-4" />,
+  FileText: <FileText className="size-4" />,
 };
 
 type NavigationTreeProps = {
@@ -150,9 +150,9 @@ export function NavigationTree({
               className="p-0.5 hover:bg-muted-foreground/20 rounded"
             >
               {isExpanded ? (
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="size-3" />
               ) : (
-                <ChevronRight className="h-3 w-3" />
+                <ChevronRight className="size-3" />
               )}
             </button>
           ) : (
@@ -203,7 +203,7 @@ export function NavigationTree({
   return (
     <div className="border rounded-lg p-3 bg-card">
       <div className="text-xs text-muted-foreground mb-3 flex items-center gap-2">
-        <Shield className="h-3 w-3" />
+        <Shield className="size-3" />
         Vista previa de navegacion
       </div>
       <div className="space-y-0.5">
@@ -244,7 +244,7 @@ export function NavigationAccessBadges({
   if (accessibleItems.length === NAVIGATION_STRUCTURE.length) {
     return (
       <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-        <Shield className="h-3 w-3" />
+        <Shield className="size-3" />
         Acceso completo
       </span>
     );

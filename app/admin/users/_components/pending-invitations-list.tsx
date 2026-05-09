@@ -69,7 +69,7 @@ export function PendingInvitationsList({ tenantId }: PendingInvitationsListProps
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="size-6 animate-spin text-gray-400" />
       </div>
     );
   }
@@ -103,7 +103,7 @@ export function PendingInvitationsList({ tenantId }: PendingInvitationsListProps
               >
                 <div className="flex items-center gap-3 flex-1">
                   <div className="p-2 bg-blue-100 rounded-full">
-                    <Mail className="h-4 w-4 text-blue-600" />
+                    <Mail className="size-4 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{invitation.email}</p>
@@ -112,7 +112,7 @@ export function PendingInvitationsList({ tenantId }: PendingInvitationsListProps
                         {invitation.invited_role}
                       </Badge>
                       <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
+                        <Clock className="size-3" />
                         {isExpiringSoon ? (
                           <span className="text-orange-600 font-medium">
                             Expira en {hoursRemaining}h
@@ -131,9 +131,9 @@ export function PendingInvitationsList({ tenantId }: PendingInvitationsListProps
                   disabled={cancellingId === invitation.id}
                 >
                   {cancellingId === invitation.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    <X className="h-4 w-4" />
+                    <X className="size-4" />
                   )}
                 </Button>
               </div>

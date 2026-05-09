@@ -104,7 +104,7 @@ export default function ReportingDefaultsPage() {
         </div>
         <Button asChild variant="outline">
           <Link href="/admin/obra-defaults" className="inline-flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
             Volver a configuracion de obras
           </Link>
         </Button>

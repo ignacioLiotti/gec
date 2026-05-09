@@ -47,7 +47,7 @@ export function ObraCertificatesTab({
 					<div className="flex items-center justify-between">
 						<div>
 							<div className="flex items-center gap-2">
-								<Receipt className="h-5 w-5 text-primary" />
+								<Receipt className="size-5 text-primary" />
 								<h2 className="text-lg font-semibold">Certificados asdasdade Obra</h2>
 							</div>
 							<p className="text-sm text-muted-foreground mt-1">
@@ -65,7 +65,7 @@ export function ObraCertificatesTab({
 								"Cancelar"
 							) : (
 								<>
-									<Plus className="h-4 w-4" />
+									<Plus className="size-4" />
 									Agregar certificado
 								</>
 							)}
@@ -167,13 +167,13 @@ export function ObraCertificatesTab({
 					{certificatesLoading ? (
 						<div className="flex items-center justify-center py-12">
 							<div className="space-y-2 text-center">
-								<div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+								<div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
 								<p className="text-sm text-muted-foreground">Cargando certificados...</p>
 							</div>
 						</div>
 					) : certificates.length === 0 && !isAddingCertificate ? (
 						<div className="text-center py-12">
-							<Receipt className="h-12 w-12 text-orange-primary/40 mx-auto mb-3" />
+							<Receipt className="size-12 text-orange-primary/40 mx-auto mb-3" />
 							<p className="text-sm text-orange-primary/80 mb-1">No hay certificados registrados</p>
 							<p className="text-xs text-muted-foreground">Agregá el primer certificado para esta obra</p>
 						</div>
@@ -222,7 +222,7 @@ export function ObraCertificatesTab({
 
 							<div className="flex justify-between items-center p-4 rounded-lg bg-muted/50 border">
 								<div className="flex items-center gap-2">
-									<DollarSign className="h-5 w-5 text-muted-foreground" />
+									<DollarSign className="size-5 text-muted-foreground" />
 									<span className="font-semibold">Total Certificado</span>
 								</div>
 								<span className="text-xl font-bold font-mono">

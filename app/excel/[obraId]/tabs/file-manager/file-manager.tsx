@@ -635,7 +635,7 @@ function renderOcrStatusBadge(item: FileSystemItem, context: OcrStatusBadgeConte
   const className = cn(
     'inline-flex items-center rounded-full border font-semibold backdrop-blur-sm',
     meta.toneClassName,
-    context === 'tree' && 'h-6 w-6 justify-center p-0 shadow-none',
+    context === 'tree' && 'size-6 justify-center p-0 shadow-none',
     context === 'thumbnail' && 'min-h-7 gap-1.5 px-2.5 py-1 text-[11px] uppercase tracking-[0.08em]',
     context === 'sheet' && 'min-h-8 gap-2 px-3 py-1.5 text-xs tracking-[0.08em] uppercase'
   );
@@ -644,7 +644,7 @@ function renderOcrStatusBadge(item: FileSystemItem, context: OcrStatusBadgeConte
     <Tooltip>
       <TooltipTrigger asChild>
         <span className={className}>
-          <Icon className={cn('h-3.5 w-3.5 shrink-0', meta.icon === Loader2 && 'animate-spin')} />
+          <Icon className={cn('size-3.5 shrink-0', meta.icon === Loader2 && 'animate-spin')} />
           {/* {context !== 'tree' && <span className="leading-none">{label}</span>} */}
         </span>
       </TooltipTrigger>
@@ -1391,7 +1391,7 @@ function FileManagerContent({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className={cn(baseClass, 'bg-green-100 text-green-700 border-green-500/30')}>
-                <CheckCircle2 className="w-3 h-3" />
+                <CheckCircle2 className="size-3" />
               </span>
             </TooltipTrigger>
             <TooltipContent>Extracción completa</TooltipContent>
@@ -1402,7 +1402,7 @@ function FileManagerContent({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className={`${baseClass} bg-red-500/15 text-red-700 border-red-500/30`}>
-                <AlertCircle className="w-3 h-3" />
+                <AlertCircle className="size-3" />
               </span>
             </TooltipTrigger>
             <TooltipContent>Error en extracción</TooltipContent>
@@ -1413,7 +1413,7 @@ function FileManagerContent({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className={`${baseClass} bg-blue-500/15 text-blue-700 border-blue-500/30`}>
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="size-3 animate-spin" />
               </span>
             </TooltipTrigger>
             <TooltipContent>Procesando extracción</TooltipContent>
@@ -1424,7 +1424,7 @@ function FileManagerContent({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className={`${baseClass} bg-amber-500/15 text-amber-700 border-amber-500/30`}>
-                <Clock className="w-3 h-3" />
+                <Clock className="size-3" />
               </span>
             </TooltipTrigger>
             <TooltipContent>Pendiente de extracción</TooltipContent>
@@ -1435,7 +1435,7 @@ function FileManagerContent({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className={`${baseClass} bg-stone-200 text-stone-700 border-stone-300`}>
-                <XIcon className="w-3 h-3" />
+                <XIcon className="size-3" />
               </span>
             </TooltipTrigger>
             <TooltipContent>Sin extracción</TooltipContent>
@@ -3909,10 +3909,10 @@ function FileManagerContent({
   }, []);
 
   const getTreeFileIcon = useCallback((mimetype?: string) => {
-    if (!mimetype) return <File className="w-4 h-4 text-stone-400" />;
-    if (mimetype.startsWith('image/')) return <ImageIcon className="w-4 h-4 text-stone-400" />;
-    if (mimetype === 'application/pdf') return <FileText className="w-4 h-4 text-stone-400" />;
-    return <File className="w-4 h-4 text-stone-400" />;
+    if (!mimetype) return <File className="size-4 text-stone-400" />;
+    if (mimetype.startsWith('image/')) return <ImageIcon className="size-4 text-stone-400" />;
+    if (mimetype === 'application/pdf') return <FileText className="size-4 text-stone-400" />;
+    return <File className="size-4 text-stone-400" />;
   }, []);
 
   // Get folder icon color based on data input method
@@ -4000,7 +4000,7 @@ function FileManagerContent({
           {isFolder && !isOCR ? (
             <button
               type="button"
-              className="w-4 h-4 inline-flex items-center justify-center text-stone-400 hover:text-stone-700"
+              className="size-4 inline-flex items-center justify-center text-stone-400 hover:text-stone-700"
               onClick={(event) => {
                 event.stopPropagation();
                 toggleFolder(item.id);
@@ -4008,9 +4008,9 @@ function FileManagerContent({
               aria-label={isExpanded ? 'Contraer carpeta' : 'Expandir carpeta'}
             >
               {isExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5" />
+                <ChevronDown className="size-3.5" />
               ) : (
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="size-3.5" />
               )}
             </button>
           ) : (
@@ -4018,7 +4018,7 @@ function FileManagerContent({
           )}
 
           {isFolder ? (
-            <FolderIcon className={cn("w-4 h-4 text-stone-400 ", getFolderIconColor(item.dataInputMethod))} />
+            <FolderIcon className={cn("size-4 text-stone-400 ", getFolderIconColor(item.dataInputMethod))} />
           ) : (
             getTreeFileIcon(item.mimetype)
           )}
@@ -4047,11 +4047,11 @@ function FileManagerContent({
                       }`}
                   >
                     {item.dataInputMethod === 'manual' ? (
-                      <Hand className="w-3 h-3" />
+                      <Hand className="size-3" />
                     ) : item.dataInputMethod === 'both' ? (
-                      <Layers className="w-3 h-3" />
+                      <Layers className="size-3" />
                     ) : (
-                      <Sparkles className="w-3 h-3" />
+                      <Sparkles className="size-3" />
                     )}
                   </span>
                 </div>
@@ -4091,7 +4091,7 @@ function FileManagerContent({
               }}
               aria-label={`Enviar a papelera ${item.type === 'folder' ? 'carpeta' : 'archivo'}`}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="size-4" />
             </button>
           )}
 
@@ -4179,7 +4179,7 @@ function FileManagerContent({
         <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-xl border border-stone-200 shadow-2xl flex flex-col overflow-hidden">
           <div className="flex items-center justify-between p-4 border-b border-stone-200">
             <div className="flex items-center gap-3">
-              <FileText className="w-5 h-5 text-stone-500" />
+              <FileText className="size-5 text-stone-500" />
               <span className="font-medium text-stone-800">{sourceFileModal.name}</span>
             </div>
             <div className="flex items-center gap-2">
@@ -4188,14 +4188,14 @@ function FileManagerContent({
                 size="sm"
                 onClick={() => handleDownload(sourceFileModal)}
               >
-                <Download className="w-4 h-4 mr-2" />
+                <Download className="size-4 mr-2" />
                 Descargar
               </Button>
               <button
                 onClick={() => setSourceFileModal(null)}
                 className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="size-5" />
               </button>
             </div>
           </div>
@@ -4213,7 +4213,7 @@ function FileManagerContent({
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-stone-400">
-                <FileText className="w-16 h-16 mb-4 opacity-30" />
+                <FileText className="size-16 mb-4 opacity-30" />
                 <p className="text-sm">Preview not available</p>
               </div>
             )}
@@ -4385,11 +4385,11 @@ function FileManagerContent({
   }, [activeDocument, getPathSegments, selectedDocument, selectedFolder]);
 
   const getFileIcon = useCallback((mimetype?: string) => {
-    if (!mimetype) return <File className="w-8 h-8" />;
-    if (mimetype.startsWith('image/')) return <ImageIcon className="w-8 h-8" />;
-    if (mimetype === 'application/pdf') return <FileText className="w-8 h-8" />;
-    if (mimetype.includes('zip') || mimetype.includes('rar')) return <FileArchive className="w-8 h-8" />;
-    return <File className="w-8 h-8" />;
+    if (!mimetype) return <File className="size-8" />;
+    if (mimetype.startsWith('image/')) return <ImageIcon className="size-8" />;
+    if (mimetype === 'application/pdf') return <FileText className="size-8" />;
+    if (mimetype.includes('zip') || mimetype.includes('rar')) return <FileArchive className="size-8" />;
+    return <File className="size-8" />;
   }, []);
 
   const mapDataTypeToCellType = useCallback(
@@ -5280,7 +5280,7 @@ function FileManagerContent({
           onClick={handleOpenOcrReport}
           disabled={!activeOcrTablaId}
         >
-          <BarChart3 className="h-4 w-4" />
+          <BarChart3 className="size-4" />
           Generar reporte
         </Button>
       ),
@@ -5319,7 +5319,7 @@ function FileManagerContent({
             onClick={handleQuickUploadClick}
             className="gap-2"
           >
-            <Upload className="w-4 h-4" />
+            <Upload className="size-4" />
             Subir documento
           </Button>
         </div>
@@ -5621,12 +5621,12 @@ function FileManagerContent({
           {/* Toolbar skeleton */}
           <div className="flex items-center justify-between gap-4 pb-3 border-b">
             <div className="flex items-center gap-2">
-              <div className="h-9 w-9 bg-stone-200 rounded" />
+              <div className="size-9 bg-stone-200 rounded" />
               <div className="h-5 w-40 bg-stone-200 rounded" />
             </div>
             <div className="flex items-center gap-2">
               <div className="h-9 w-32 bg-stone-200 rounded" />
-              <div className="h-9 w-9 bg-stone-200 rounded" />
+              <div className="size-9 bg-stone-200 rounded" />
             </div>
           </div>
           {/* Grid skeleton */}
@@ -5646,7 +5646,7 @@ function FileManagerContent({
     if (!selectedFolder) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-stone-400">
-          <Folder className="w-16 h-16 mb-4 opacity-20" />
+          <Folder className="size-16 mb-4 opacity-20" />
           <p>Selecciona una carpeta para ver su contenido</p>
         </div>
       );
@@ -5689,9 +5689,9 @@ function FileManagerContent({
             <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[53px] mb-[2px]" : documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[57px] mb-[2px]")} />
 
             {selectedFolder.ocrEnabled ? (
-              <Table2 className={`w-5 h-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
+              <Table2 className={`size-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
             ) : (
-              <Folder className="w-5 h-5 text-stone-500" />
+              <Folder className="size-5 text-stone-500" />
             )}
             <h2 className="text-xl font-semibold text-stone-800">
               {folderLabel}
@@ -5712,12 +5712,12 @@ function FileManagerContent({
               >
                 {isDownloadingAll ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                     Generando ZIP...
                   </>
                 ) : (
                   <>
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="size-3.5" />
                     Descargar todos
                   </>
                 )}
@@ -5734,12 +5734,12 @@ function FileManagerContent({
               >
                 {isReprocessingAll ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="size-3.5 animate-spin" />
                     Reprocesando{reprocessAllProgress ? ` (${reprocessAllProgress.done}/${reprocessAllProgress.total})` : '...'}
                   </>
                 ) : (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5" />
+                    <RefreshCw className="size-3.5" />
                     Reprocesar todos
                   </>
                 )}
@@ -5758,7 +5758,7 @@ function FileManagerContent({
                   );
                 }}
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="size-3.5" />
                 Generar documento en esta carpeta
               </Button>
             )} */}
@@ -5790,7 +5790,7 @@ function FileManagerContent({
                   aria-pressed={documentViewMode === "cards"}
                   onClick={() => handleDocumentViewModeChange("cards")}
                 >
-                  <File className="w-3.5 h-3.5" />
+                  <File className="size-3.5" />
                   Archivos
                 </Button>
                 <Button
@@ -5803,13 +5803,13 @@ function FileManagerContent({
                   aria-pressed={documentViewMode === "table"}
                   onClick={() => handleDocumentViewModeChange("table")}
                 >
-                  <Table2 className="w-3.5 h-3.5" />
+                  <Table2 className="size-3.5" />
                   Tabla
                 </Button>
               </div>
 
               {/* <Button type="button" variant="secondary" size="sm" onClick={handleQuickUploadClick} className="gap-1.5">
-              <Upload className="w-3.5 h-3.5" />
+              <Upload className="size-3.5" />
               Subir archivos
             </Button> */}
             </div>
@@ -5826,7 +5826,7 @@ function FileManagerContent({
           <div className="flex-1 rounded-lg border rounded-t-none border-[#d9d9d9] bg-white shadow-sm overflow-hidden pt-0 px-4">
             {!hasTablaSchema ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
-                <Table2 className="w-10 h-10 mb-3 text-stone-300" />
+                <Table2 className="size-10 mb-3 text-stone-300" />
                 <p>Esta carpeta de datos todavia no tiene columnas configuradas.</p>
                 <p>Configuralas desde la pestana Tablas para ver los datos aca.</p>
               </div>
@@ -5866,7 +5866,7 @@ function FileManagerContent({
             onDragLeave={handleDocumentAreaDragLeave}
             onDrop={handleDocumentAreaDrop}
           >
-            <Folder className="w-10 h-10 mb-3 text-stone-300" />
+            <Folder className="size-10 mb-3 text-stone-300" />
             <p>Esta carpeta está vacía.</p>
             <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
             <Button
@@ -5875,7 +5875,7 @@ function FileManagerContent({
               onClick={() => document.getElementById('file-upload')?.click()}
               className="mt-4 gap-2"
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="size-4" />
               Subir archivos
             </Button>
           </div>
@@ -5909,7 +5909,7 @@ function FileManagerContent({
                         <button
                           type="button"
                           data-wizard-target={thumbnailWizardTargetId}
-                          className={` flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors relative 
+                          className={` flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors relative
                             ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-6' : ''}
                             ${isOcrEnabled ? "bg-linear-to-b from-amber-500 to-amber-700" : "bg-linear-to-b from-stone-500 to-stone-700"}
                             `}
@@ -5929,9 +5929,9 @@ function FileManagerContent({
                               secondStopColor={isOcrEnabled ? "#fb8634" : "#57534d"}
                               className={cn("w-[140px] h-[80px] absolute -bottom-1 -left-3 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300", isDragTarget ? 'transform-[perspective(800px)_rotateX(-40deg)]' : '')} />
                             {/* {item.ocrEnabled ? (
-                              <Table2 className={`w-10 h-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
+                              <Table2 className={`size-10 ${getFolderIconColor(item.dataInputMethod)} absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300`} />
                             ) : (
-                              <Folder className="w-10 h-10 text-red-500 mt-2 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
+                              <Folder className="size-10 text-red-500 mt-2 absolute mx-auto top-5 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300" />
                             )} */}
                             <span className="text-sm text-center truncate w-full text-white z-10" title={item.name}>
                               {item.name}
@@ -5966,7 +5966,7 @@ function FileManagerContent({
                 onDragLeave={handleDocumentAreaDragLeave}
                 onDrop={handleDocumentAreaDrop}
               >
-                <File className="w-10 h-10 mb-3 text-stone-300" />
+                <File className="size-10 mb-3 text-stone-300" />
                 <p>No hay archivos en esta carpeta.</p>
                 <p className="text-xs text-stone-400 mt-1">Subí archivos para comenzar.</p>
               </div>
@@ -6107,7 +6107,7 @@ function FileManagerContent({
             >
               <div className="relative flex items-center justify-center">
                 <div className="relative w-24 h-28 rounded-2xl border border-amber-200 bg-amber-50 shadow-inner overflow-hidden">
-                  <FileText className="w-12 h-12 text-amber-600 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10" />
+                  <FileText className="size-12 text-amber-600 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10" />
                   <motion.div
                     className="absolute left-2 right-2 h-px bg-linear-to-r from-transparent via-amber-500 to-transparent"
                     animate={{ y: [10, 80] }}
@@ -6143,14 +6143,14 @@ function FileManagerContent({
                 size="sm"
                 onClick={() => setViewMode('grid')}
               >
-                <Grid3x3 className="w-4 h-4" />
+                <Grid3x3 className="size-4" />
               </Button>
               <Button
                 variant={viewMode === 'list' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('list')}
               >
-                <List className="w-4 h-4" />
+                <List className="size-4" />
               </Button>
             </div>
           )}
@@ -7059,7 +7059,7 @@ function FileManagerContent({
                       onClick={() => setIsTemplateConfiguratorOpen(true)}
                       className="gap-2"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="size-4" />
                       Nueva plantilla
                     </Button>
                   </div>
@@ -7114,7 +7114,7 @@ function FileManagerContent({
                       }}
                       className="gap-2"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="size-4" />
                       Agregar columna
                     </Button>
                   </div>
@@ -7182,9 +7182,9 @@ function FileManagerContent({
                             onClick={() => {
                               setNewFolderColumns(prev => prev.filter(c => c.id !== column.id));
                             }}
-                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            className="size-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="size-4" />
                           </Button>
                         </div>
                       ))}
@@ -7504,9 +7504,9 @@ function FileManagerContent({
                                       style={{ paddingLeft: `${Math.max(0, treeEntry.depth - 1) * 14 + 4}px` }}
                                     >
                                       {treeEntry.itemType === 'folder' ? (
-                                        <FolderIcon className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                                        <FolderIcon className="size-3.5 shrink-0 text-amber-700" />
                                       ) : (
-                                        <File className="h-3.5 w-3.5 shrink-0 text-stone-500" />
+                                        <File className="size-3.5 shrink-0 text-stone-500" />
                                       )}
                                       <span className="truncate">{treeEntry.name}</span>
                                       {treeEntry.itemType === 'file' &&
@@ -7665,7 +7665,7 @@ function FileManagerContent({
                   Cancelar
                 </Button>
                 <Button onClick={() => void handleReprocessAll()} className="gap-1.5">
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className="size-4" />
                   Reprocesar {reprocessableFiles.length} documento{reprocessableFiles.length !== 1 ? 's' : ''}
                 </Button>
               </>
@@ -7699,7 +7699,7 @@ function FileManagerContent({
                       setContextMenu(null);
                     }}
                   >
-                    <FolderPlus className="w-4 h-4" />
+                    <FolderPlus className="size-4" />
                     Crear carpeta
                   </button>
                   <button
@@ -7709,7 +7709,7 @@ function FileManagerContent({
                       setContextMenu(null);
                     }}
                   >
-                    <Table2 className="w-4 h-4" />
+                    <Table2 className="size-4" />
                     Crear carpeta de datos
                   </button>
                   <div className="my-1 h-px bg-stone-100" />
@@ -7724,7 +7724,7 @@ function FileManagerContent({
                       setContextMenu(null);
                     }}
                   >
-                    <Table2 className="w-4 h-4" />
+                    <Table2 className="size-4" />
                     Ver tabla de datos
                   </button>
                   <button
@@ -7734,7 +7734,7 @@ function FileManagerContent({
                       setContextMenu(null);
                     }}
                   >
-                    <Table2 className="w-4 h-4" />
+                    <Table2 className="size-4" />
                     Agregar tabla de extracción en esta carpeta
                   </button>
                 </>
@@ -7747,7 +7747,7 @@ function FileManagerContent({
                     setContextMenu(null);
                   }}
                 >
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="size-4" />
                   Convertir a carpeta de extracción
                 </button>
               )} */}
@@ -7756,7 +7756,7 @@ function FileManagerContent({
                   className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-red-600"
                   onClick={() => confirmDelete(contextMenu.item)}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="size-4" />
                   Enviar a papelera {contextMenu.item.type === 'folder' ? 'Carpeta' : 'Archivo'}
                 </button>
               )}
@@ -7776,7 +7776,7 @@ function FileManagerSkeleton() {
         <div className="h-5 w-32 bg-stone-200 rounded mb-4" />
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex items-center gap-2 py-1.5">
-            <div className="h-4 w-4 bg-stone-200 rounded" />
+            <div className="size-4 bg-stone-200 rounded" />
             <div className="h-4 bg-stone-200 rounded" style={{ width: `${60 + Math.random() * 30}%` }} />
           </div>
         ))}
@@ -7785,12 +7785,12 @@ function FileManagerSkeleton() {
       <div className="flex-1 border rounded-lg p-4 space-y-4 animate-pulse">
         <div className="flex items-center justify-between gap-4 pb-3 border-b">
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 bg-stone-200 rounded" />
+            <div className="size-9 bg-stone-200 rounded" />
             <div className="h-5 w-40 bg-stone-200 rounded" />
           </div>
           <div className="flex items-center gap-2">
             <div className="h-9 w-24 bg-stone-200 rounded" />
-            <div className="h-9 w-9 bg-stone-200 rounded" />
+            <div className="size-9 bg-stone-200 rounded" />
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -7993,9 +7993,9 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
     return (
       <div className="flex items-center justify-start gap-3 text-xs text-stone-500 h-full w-full pl-2">
         <div className="min-w-7 min-h-7 rounded-md border border-muted-foreground/40 bg-muted-foreground/10 flex items-center justify-center relative">
-          <FileText className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
+          <FileText className="size-5 text-muted-foreground" aria-hidden="true" />
           {/* a span that is a dash across the file icon */}
-          <XIcon className="w-9 h-9 text-muted-foreground opacity-60 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" aria-hidden="true" />
+          <XIcon className="size-9 text-muted-foreground opacity-60 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" aria-hidden="true" />
         </div>
         <p className="font-semibold text-stone-700 truncate">No hay archivo vinculado</p>
       </div>
@@ -8017,7 +8017,7 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
       <HoverCardTrigger asChild>
         <div className="flex items-center justify-start gap-3 min-w-0 cursor-default h-full w-full pl-2">
           <GlassyIcon size={7} primaryVar="var(--color-orange-primary)" className="w-7">
-            <FileText className="w-4.5 h-4.5 text-amber-500" aria-hidden="true" />
+            <FileText className="size-4.5 text-amber-500" aria-hidden="true" />
           </GlassyIcon>
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-semibold text-stone-800 truncate">{docName}</span>
@@ -8051,12 +8051,12 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
               </div>
             ) : hasRequestedPreview && isPreviewable ? (
               <div className="flex flex-col items-center justify-center gap-2 text-xs text-stone-500 p-4">
-                <Loader2 className="w-5 h-5 text-stone-400 animate-spin" />
+                <Loader2 className="size-5 text-stone-400 animate-spin" />
                 <span className="text-center leading-tight">Cargando vista previa...</span>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center gap-2 text-xs text-stone-500 p-4">
-                <FileText className="w-6 h-6 text-stone-400" />
+                <FileText className="size-6 text-stone-400" />
                 <span className="text-center leading-tight">Vista previa no disponible para este documento.</span>
               </div>
             )}

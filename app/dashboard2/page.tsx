@@ -296,7 +296,7 @@ function KpiCard(props: { title: string; value: string; hint?: string; icon: Rea
     <Card className='rounded-xl border-stone-200'>
       <CardHeader className='pb-2'>
         <CardDescription className='flex items-center gap-2 text-xs uppercase tracking-wide text-stone-500'>
-          <Icon className='h-3.5 w-3.5' />
+          <Icon className='size-3.5' />
           {props.title}
         </CardDescription>
       </CardHeader>

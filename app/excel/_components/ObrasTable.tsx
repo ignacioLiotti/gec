@@ -159,7 +159,7 @@ export function ObrasTable(props: ObrasTableProps) {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <div className="size-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
             <p className="text-sm font-medium text-primary">Actualizando tabla...</p>
           </motion.div>
         )}
@@ -470,7 +470,7 @@ export function ObrasTable(props: ObrasTableProps) {
                                         href={`/excel/${field.state.value[index]?.id}`}
                                         className="inline-flex items-center gap-2 font-semibold text-foreground hover:text-primary transition-colors group"
                                       >
-                                        <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                                        <ExternalLink className="size-4 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
                                         <span className="group-hover:underline" dangerouslySetInnerHTML={{ __html: highlightText(String(subField.state.value ?? ""), query) }} />
                                       </Link>
                                     </div>

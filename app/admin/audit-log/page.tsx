@@ -276,7 +276,7 @@ export default async function AuditLogPage({
               name="tech"
               value="1"
               defaultChecked={showTechnical}
-              className="h-4 w-4 rounded border-orange-primary/40"
+              className="size-4 rounded border-orange-primary/40"
             />
             Mostrar eventos técnicos/estructurales
           </label>

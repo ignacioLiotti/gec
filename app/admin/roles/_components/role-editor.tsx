@@ -110,7 +110,7 @@ export function RoleEditor({
       <SheetContent className="sm:max-w-xl w-full flex flex-col px-4">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
+            <Shield className="size-5" />
             {isNew ? "Crear Rol" : `Editar: ${role.name}`}
           </SheetTitle>
           <SheetDescription>
@@ -184,11 +184,11 @@ export function RoleEditor({
               <Tabs defaultValue="matrix">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="matrix" className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
+                    <Shield className="size-4" />
                     Permisos
                   </TabsTrigger>
                   <TabsTrigger value="navigation" className="flex items-center gap-2">
-                    <Layout className="h-4 w-4" />
+                    <Layout className="size-4" />
                     Navegacion
                   </TabsTrigger>
                 </TabsList>
@@ -219,11 +219,11 @@ export function RoleEditor({
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
-                <X className="h-4 w-4 mr-1" />
+                <X className="size-4 mr-1" />
                 Cancelar
               </Button>
               <Button onClick={handleSubmit} disabled={isPending}>
-                <Save className="h-4 w-4 mr-1" />
+                <Save className="size-4 mr-1" />
                 {isPending ? "Guardando..." : isNew ? "Crear" : "Guardar"}
               </Button>
             </div>

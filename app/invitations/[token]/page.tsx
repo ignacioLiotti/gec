@@ -126,7 +126,7 @@ export default function InvitationPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
         <Card className="w-full max-w-md">
           <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+            <Loader2 className="size-8 animate-spin text-gray-400" />
           </CardContent>
         </Card>
       </div>
@@ -139,7 +139,7 @@ export default function InvitationPage() {
         <Card className="w-full max-w-md border-red-200">
           <CardHeader>
             <div className="flex items-center gap-2">
-              <XCircle className="h-6 w-6 text-red-500" />
+              <XCircle className="size-6 text-red-500" />
               <CardTitle className="text-red-700">Invalid Invitation</CardTitle>
             </div>
           </CardHeader>
@@ -169,7 +169,7 @@ export default function InvitationPage() {
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="p-4 bg-blue-100 rounded-full">
-              <Building2 className="h-10 w-10 text-blue-600" />
+              <Building2 className="size-10 text-blue-600" />
             </div>
           </div>
           <CardTitle className="text-2xl">¡Estás invitado!</CardTitle>
@@ -182,7 +182,7 @@ export default function InvitationPage() {
           {/* Invitation Details */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <div className="flex items-start gap-3">
-              <UserPlus className="h-5 w-5 text-gray-400 mt-0.5" />
+              <UserPlus className="size-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-700">Invitado por</p>
                 <p className="text-sm text-gray-600">{invitation.inviter_name || "Administrador de la organización"}</p>
@@ -190,7 +190,7 @@ export default function InvitationPage() {
             </div>
 
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="h-5 w-5 text-gray-400 mt-0.5" />
+              <CheckCircle2 className="size-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-700">Rol</p>
                 <p className="text-sm text-gray-600 capitalize">{invitation.invited_role}</p>
@@ -198,7 +198,7 @@ export default function InvitationPage() {
             </div>
 
             <div className="flex items-start gap-3">
-              <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
+              <Clock className="size-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-700">Vence</p>
                 <p className="text-sm text-gray-600">
@@ -240,7 +240,7 @@ export default function InvitationPage() {
             >
               {processing ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 size-4 animate-spin" />
                   Processing...
                 </>
               ) : (
@@ -254,7 +254,7 @@ export default function InvitationPage() {
             >
               {processing ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 size-4 animate-spin" />
                   Processing...
                 </>
               ) : !user ? (

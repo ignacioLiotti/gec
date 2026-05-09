@@ -185,7 +185,7 @@ export function ObraFlujoTab({
 				<div className="bg-muted/50 px-6 py-4 border-b">
 					<div className="flex items-center justify-between">
 						<div className="flex items-center gap-3">
-							<Mail className="h-5 w-5 text-primary" />
+							<Mail className="size-5 text-primary" />
 							<div>
 								<h2 className="text-lg font-semibold">Flujo de Finalización</h2>
 								<p className="text-sm text-muted-foreground">
@@ -198,7 +198,7 @@ export function ObraFlujoTab({
 							onClick={() => setIsAddingFlujoAction((prev) => !prev)}
 							size="sm"
 						>
-							<Plus className="h-4 w-4 mr-2" />
+							<Plus className="size-4 mr-2" />
 							{isAddingFlujoAction ? "Cancelar" : "Nueva Acción"}
 						</Button>
 					</div>
@@ -215,7 +215,7 @@ export function ObraFlujoTab({
 							{/* Header */}
 							<div className="bg-muted/50 px-4 py-3 border-b">
 								<div className="flex items-center gap-3">
-									<Plus className="h-5 w-5 text-primary" />
+									<Plus className="size-5 text-primary" />
 									<div>
 										<h3 className="font-semibold">Nueva Acción</h3>
 										<p className="text-muted-foreground text-sm">Configurar notificación automática</p>
@@ -260,7 +260,7 @@ export function ObraFlujoTab({
 								<div className="grid grid-cols-2 gap-3">
 									<div className="flex items-center justify-between p-3 bg-muted/50 border rounded-md">
 										<div className="flex items-center gap-2">
-											<Calendar className="w-4 h-4 text-muted-foreground" />
+											<Calendar className="size-4 text-muted-foreground" />
 											<span className="text-sm">Evento calendario</span>
 										</div>
 										<Switch
@@ -276,7 +276,7 @@ export function ObraFlujoTab({
 
 									<div className="flex items-center justify-between p-3 bg-muted/50 border rounded-md">
 										<div className="flex items-center gap-2">
-											<Mail className="w-4 h-4 text-muted-foreground" />
+											<Mail className="size-4 text-muted-foreground" />
 											<span className="text-sm">Email</span>
 										</div>
 										<Switch
@@ -294,7 +294,7 @@ export function ObraFlujoTab({
 								{/* Timing Section */}
 								<div className="space-y-2">
 									<label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-										<Clock className="w-4 h-4 text-muted-foreground" />
+										<Clock className="size-4 text-muted-foreground" />
 										¿Cuándo ejecutar?
 									</label>
 									<div className="flex gap-2 flex-wrap">
@@ -394,7 +394,7 @@ export function ObraFlujoTab({
 								{/* Recipients */}
 								<div className="space-y-2">
 									<label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-										<User className="w-4 h-4 text-muted-foreground" />
+										<User className="size-4 text-muted-foreground" />
 										Destinatarios
 									</label>
 									<p className="text-xs text-muted-foreground">
@@ -485,12 +485,12 @@ export function ObraFlujoTab({
 								>
 									{isSavingFlujoAction ? (
 										<>
-											<Loader2 className="h-4 w-4 mr-1 animate-spin" />
+											<Loader2 className="size-4 mr-1 animate-spin" />
 											Guardando...
 										</>
 									) : (
 										<>
-											<Plus className="h-4 w-4 mr-1" />
+											<Plus className="size-4 mr-1" />
 											Guardar
 										</>
 									)}
@@ -502,12 +502,12 @@ export function ObraFlujoTab({
 					<div className="space-y-4">
 						{isLoadingFlujoActions ? (
 							<div className="flex flex-col items-center justify-center py-12 space-y-3">
-								<div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+								<div className="size-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
 								<p className="text-sm text-muted-foreground">Cargando acciones...</p>
 							</div>
 						) : flujoActions.length === 0 ? (
 							<div className="flex flex-col items-center justify-center py-12 space-y-3 rounded-lg border-2 border-dashed">
-								<Mail className="h-10 w-10 text-muted-foreground/40" />
+								<Mail className="size-10 text-muted-foreground/40" />
 								<p className="text-sm text-muted-foreground text-center">
 									No hay acciones configuradas. Crea una nueva acción para comenzar.
 								</p>
@@ -535,18 +535,18 @@ export function ObraFlujoTab({
 												{/* Left Side: Timeline Step */}
 												<div className="relative flex flex-col items-center pt-1">
 													{/* Icon Circle */}
-													<div className={`w-10 h-10 rounded-full flex items-center justify-center ${isGroupCompleted
+													<div className={`size-10 rounded-full flex items-center justify-center ${isGroupCompleted
 														? "bg-emerald-500 text-white"
 														: "bg-primary text-primary-foreground"
 														}`}>
 														{isGroupCompleted ? (
-															<Check className="w-5 h-5" />
+															<Check className="size-5" />
 														) : firstAction.timing_mode === "immediate" ? (
-															<Zap className="w-5 h-5" />
+															<Zap className="size-5" />
 														) : firstAction.timing_mode === "offset" ? (
-															<Timer className="w-5 h-5" />
+															<Timer className="size-5" />
 														) : (
-															<CalendarClock className="w-5 h-5" />
+															<CalendarClock className="size-5" />
 														)}
 													</div>
 
@@ -608,11 +608,11 @@ export function ObraFlujoTab({
 																					<div className="flex items-center gap-2 flex-1">
 																						<div className={`w-7 h-7 rounded-md flex items-center justify-center ${isExecuted ? "bg-emerald-500 text-white" : "bg-primary/10 text-primary"}`}>
 																							{isExecuted ? (
-																								<Check className="h-4 w-4" />
+																								<Check className="size-4" />
 																							) : action.action_type === "calendar_event" ? (
-																								<Calendar className="h-4 w-4" />
+																								<Calendar className="size-4" />
 																							) : (
-																								<Mail className="h-4 w-4" />
+																								<Mail className="size-4" />
 																							)}
 																						</div>
 																						<div className="flex flex-col items-start flex-1">
@@ -637,7 +637,7 @@ export function ObraFlujoTab({
 																				{/* Calendar Event Badge */}
 																				{action.action_type === "calendar_event" && (
 																					<div className="flex items-center gap-2 p-2 bg-muted/50 border rounded-md text-sm">
-																						<Calendar className="w-4 h-4 text-muted-foreground" />
+																						<Calendar className="size-4 text-muted-foreground" />
 																						<span>Evento de calendario</span>
 																					</div>
 																				)}
@@ -660,7 +660,7 @@ export function ObraFlujoTab({
 																									key={`${action.id}-${userId}`}
 																									className="inline-flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs"
 																								>
-																									<span className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium">
+																									<span className="size-4 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium">
 																										{label.charAt(0).toUpperCase()}
 																									</span>
 																									{label}
@@ -687,7 +687,7 @@ export function ObraFlujoTab({
 																			{/* Scheduled execution time for triggered but not-yet-executed actions */}
 																			{!isExecuted && action.scheduled_for && (
 																				<div className="flex items-center gap-2 mt-3 p-2 bg-muted/50 border rounded-md text-sm">
-																					<Timer className="w-4 h-4 text-muted-foreground" />
+																					<Timer className="size-4 text-muted-foreground" />
 																					<div>
 																						<span className="font-medium">Programada: </span>
 																						<span className="text-muted-foreground">
@@ -700,7 +700,7 @@ export function ObraFlujoTab({
 																			{/* Execution Info for completed actions */}
 																			{isExecuted && action.executed_at && (
 																				<div className="flex items-center gap-2 mt-3 p-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-md text-sm">
-																					<Check className="w-4 h-4 text-emerald-600" />
+																					<Check className="size-4 text-emerald-600" />
 																					<span className="text-emerald-700 dark:text-emerald-300">
 																						Ejecutada: {formatScheduledDate(action.executed_at)}
 																					</span>
@@ -711,7 +711,7 @@ export function ObraFlujoTab({
 																			{isEditing && !isExecuted && (
 																				<div className="space-y-3 mt-3 p-3 bg-muted/30 border rounded-md">
 																					<div className="flex items-center gap-2 text-sm font-medium">
-																						<Pencil className="w-4 h-4 text-muted-foreground" />
+																						<Pencil className="size-4 text-muted-foreground" />
 																						<span>Editando acción</span>
 																					</div>
 																					<div className="space-y-2">
@@ -737,7 +737,7 @@ export function ObraFlujoTab({
 																					{/* Timing Section */}
 																					<div className="space-y-2">
 																						<label className="text-xs font-medium text-foreground flex items-center gap-1">
-																							<Clock className="w-3 h-3" />
+																							<Clock className="size-3" />
 																							¿Cuándo ejecutar?
 																						</label>
 																						<div className="flex gap-2 flex-wrap">
@@ -873,7 +873,7 @@ export function ObraFlujoTab({
 																						}}
 																						className="flex-1"
 																					>
-																						<Pencil className="h-4 w-4 mr-2" />
+																						<Pencil className="size-4 mr-2" />
 																						Editar
 																					</Button>
 																				)}
@@ -901,7 +901,7 @@ export function ObraFlujoTab({
 																					}}
 																					className="text-destructive hover:text-destructive hover:bg-destructive/10"
 																				>
-																					<Trash2 className="h-4 w-4" />
+																					<Trash2 className="size-4" />
 																				</Button>
 																			</div>
 																		</AccordionContent>

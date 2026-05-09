@@ -317,11 +317,11 @@ export function AdvanceCurveChart({
 				</div>
 				<div className="-mt-5 ml-4 flex flex-wrap items-center gap-4 text-xs">
 					<div className="flex items-center gap-2">
-						<span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+						<span className="size-2.5 rounded-full bg-sky-500" />
 						<span className="text-muted-foreground">Curva Plan (avance acumulado)</span>
 					</div>
 					<div className="flex items-center gap-2">
-						<span className="h-2.5 w-2.5 rounded-full bg-[#ff5800]" />
+						<span className="size-2.5 rounded-full bg-[#ff5800]" />
 						<span className="text-muted-foreground">PMC Resumen (avance fisico acumulado)</span>
 					</div>
 					<div className="flex items-center gap-2">

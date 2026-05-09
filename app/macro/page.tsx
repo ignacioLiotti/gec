@@ -298,8 +298,8 @@ const MacroObraLink = memo(function MacroObraLink({
       className="inline-flex h-full w-full items-center gap-2 p-2 font-semibold text-foreground group hover:text-primary"
       onMouseEnter={() => prefetchObra(obraId)}
     >
-      <span className="inline-flex h-4 w-4 min-h-4 min-w-4 items-center justify-center rounded shadow-card text-primary/80 group-hover:bg-orange-primary/80 group-hover:text-white">
-        <ArrowUpRight className="h-3 w-3 text-muted-foreground group-hover:text-white" />
+      <span className="inline-flex size-4 min-h-4 min-w-4 items-center justify-center rounded shadow-card text-primary/80 group-hover:bg-orange-primary/80 group-hover:text-white">
+        <ArrowUpRight className="size-3 text-muted-foreground group-hover:text-white" />
       </span>
       <TruncatedTextWithTooltip text={text} />
     </Link>
@@ -910,7 +910,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
             />
           </div>
           <div
-            className="relative flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 
+            className="relative flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0
             xl:-mr-[1px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 z-10 -mb-[4px]"
             style={
               {
@@ -935,7 +935,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
                 router.push(dest);
               }}
             >
-              <FileText className="h-4 w-4" />
+              <FileText className="size-4" />
               Generar reporte
             </Button>
             <Button
@@ -944,7 +944,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
               className={toolButtonClass}
               onClick={() => router.push(`/admin/macro-tables/${macroTable.id}`)}
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="size-4" />
               Configurar
             </Button>
             <Button
@@ -952,7 +952,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
               className="gap-2 rounded-lg bg-[#1f1a17] text-white hover:bg-[#2b241f]"
               onClick={() => router.push("/admin/macro-tables/new")}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
               Nueva macro tabla
             </Button>
           </div>
@@ -1075,7 +1075,7 @@ function MacroTablesPageContent() {
   if (macroTablesQuery.isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -1083,7 +1083,7 @@ function MacroTablesPageContent() {
   if (macroTablesQuery.isError) {
     return (
       <div className="flex flex-col items-center justify-center p-12 gap-4 text-center text-muted-foreground">
-        <Layers className="h-12 w-12 opacity-30" />
+        <Layers className="size-12 opacity-30" />
         <p>Error cargando macro tablas.</p>
         <Button variant="outline" onClick={() => macroTablesQuery.refetch()}>
           Reintentar
@@ -1095,7 +1095,7 @@ function MacroTablesPageContent() {
   if (macroTables.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-12 gap-4 text-center">
-        <Layers className="h-12 w-12 text-muted-foreground opacity-30" />
+        <Layers className="size-12 text-muted-foreground opacity-30" />
         <div>
           <h2 className="text-lg font-semibold">No hay macro tablas</h2>
           <p className="text-muted-foreground">
@@ -1103,7 +1103,7 @@ function MacroTablesPageContent() {
           </p>
         </div>
         <Button onClick={() => router.push("/admin/macro-tables/new")} className="gap-2">
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
           Nueva macro tabla
         </Button>
       </div>
@@ -1160,7 +1160,7 @@ export default function MacroTablesPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center p-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
         </div>
       }
     >

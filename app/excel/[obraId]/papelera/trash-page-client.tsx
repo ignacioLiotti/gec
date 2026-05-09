@@ -162,7 +162,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 						className="h-8 px-2 text-xs"
 						onClick={() => router.push(`/excel/${encodeURIComponent(obraId)}?tab=documentos`)}
 					>
-						<ArrowLeft className="mr-1 h-3.5 w-3.5" />
+						<ArrowLeft className="mr-1 size-3.5" />
 						Volver a documentos
 					</Button>
 					<h1 className="text-2xl font-semibold text-stone-900">Papelera</h1>
@@ -171,7 +171,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 					</p>
 				</div>
 				<Button type="button" variant="outline" onClick={() => void refreshCurrentView()} disabled={loading}>
-					{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+					{loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
 					Actualizar
 				</Button>
 			</div>
@@ -223,12 +223,12 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 										>
 											{restoringId === item.id ? (
 												<>
-													<Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+													<Loader2 className="mr-2 size-3.5 animate-spin" />
 													Restaurando...
 												</>
 											) : item.recoverable ? (
 												<>
-													<RotateCcw className="mr-2 h-3.5 w-3.5" />
+													<RotateCcw className="mr-2 size-3.5" />
 													Restaurar
 												</>
 											) : (
@@ -297,7 +297,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 
 			<div className="flex items-center justify-between text-xs text-stone-500">
 				<div className="flex items-center gap-2">
-					<Trash2 className="h-3.5 w-3.5" />
+					<Trash2 className="size-3.5" />
 					<span>Vista actual: {tab === "active" ? "Papelera" : "Historial"}</span>
 				</div>
 				<span>{currentCount} elementos</span>

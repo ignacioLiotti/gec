@@ -114,7 +114,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 							arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed"
 						)}
 					>
-						<ChevronLeft className="h-5 w-5" />
+						<ChevronLeft className="size-5" />
 					</Button>
 					<Button
 						type="button"
@@ -129,7 +129,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 							arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed"
 						)}
 					>
-						<ChevronRight className="h-5 w-5" />
+						<ChevronRight className="size-5" />
 					</Button>
 				</div>
 			) : null}
@@ -199,15 +199,15 @@ export const DocumentSheet = memo(function DocumentSheet({
 									)}
 								>
 									{retryingOcr ? (
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										<Loader2 className="mr-2 size-4 animate-spin" />
 									) : (
-										<RefreshCw className="mr-2 h-4 w-4" />
+										<RefreshCw className="mr-2 size-4" />
 									)}
 									Reprocesar Extracción
 								</Button>
 							)}
 							{/* <Button variant="outline" size="sm" onClick={() => onDownload(document)} className="shrink-0">
-								<Download className="w-4 h-4 mr-2" />
+								<Download className="size-4 mr-2" />
 								Descargar
 							</Button> */}
 						</div>
@@ -247,7 +247,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 										boxShadow: "0 18px 38px rgba(255, 88, 0, 0.32)",
 									}}
 								>
-									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+									<Loader2 className="size-3.5 animate-spin" />
 									{processingOverlayLabel}
 								</div>
 							</div>
@@ -259,7 +259,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 							backdrop-filter: blur(1px);
 							--ocr-orange-rgb: 255, 88, 0;
 						}
-	
+
 						.ocr-scan-tint {
 							background: linear-gradient(
 								180deg,
@@ -268,7 +268,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 								rgba(var(--ocr-orange-rgb), 0.16) 100%
 							);
 						}
-	
+
 						.ocr-scan-grid {
 							background-image: repeating-linear-gradient(
 								to bottom,
@@ -297,7 +297,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 							);
 							filter: blur(2.6px);
 						}
-	
+
 						.ocr-scan-beam-core {
 							background: linear-gradient(
 								90deg,

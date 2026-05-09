@@ -227,7 +227,7 @@ export function DocumentReviewPageClient() {
               </p>
             </div>
             <Button type="button" variant="outline" className="rounded-md" onClick={() => setFilters((current) => ({ ...current }))}>
-              <RefreshCcw className="mr-2 h-4 w-4" />
+              <RefreshCcw className="mr-2 size-4" />
               Actualizar
             </Button>
           </div>
@@ -313,7 +313,7 @@ export function DocumentReviewPageClient() {
         <div className="overflow-auto">
           {loading ? (
             <div className="grid min-h-[420px] place-items-center">
-              <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
+              <Loader2 className="size-5 animate-spin text-stone-400" />
             </div>
           ) : documents.length === 0 ? (
             <div className="grid min-h-[420px] place-items-center px-6 text-center text-sm text-stone-500">
@@ -366,7 +366,7 @@ export function DocumentReviewPageClient() {
       <aside className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
         {detailLoading ? (
           <div className="grid min-h-[780px] place-items-center">
-            <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
+            <Loader2 className="size-5 animate-spin text-stone-400" />
           </div>
         ) : detail?.document ? (
           <div className="flex h-full flex-col">
@@ -387,15 +387,15 @@ export function DocumentReviewPageClient() {
                   </Button>
                 ) : null}
                 <Button type="button" className="rounded-md" disabled={updating} onClick={() => void handleStatusChange("APPROVED")}>
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  <CheckCircle2 className="mr-2 size-4" />
                   Aprobar
                 </Button>
                 <Button type="button" variant="outline" className="rounded-md" disabled={updating} onClick={() => void handleStatusChange("REJECTED")}>
-                  <XCircle className="mr-2 h-4 w-4" />
+                  <XCircle className="mr-2 size-4" />
                   Rechazar
                 </Button>
                 <Button type="button" variant="outline" className="rounded-md" disabled={updating} onClick={() => void handleStatusChange("UNDER_REVIEW")}>
-                  <ShieldAlert className="mr-2 h-4 w-4" />
+                  <ShieldAlert className="mr-2 size-4" />
                   Marcar en revision
                 </Button>
               </div>

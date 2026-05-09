@@ -136,7 +136,7 @@ export function DocumentDraftsPageClient({ canViewAllDrafts }: Props) {
               className="rounded-md"
               onClick={() => setFilters((current) => ({ ...current }))}
             >
-              <RefreshCcw className="mr-2 h-4 w-4" />
+              <RefreshCcw className="mr-2 size-4" />
               Actualizar
             </Button>
           </div>
@@ -199,7 +199,7 @@ export function DocumentDraftsPageClient({ canViewAllDrafts }: Props) {
         <div className="overflow-auto">
           {loading ? (
             <div className="grid min-h-[420px] place-items-center">
-              <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
+              <Loader2 className="size-5 animate-spin text-stone-400" />
             </div>
           ) : drafts.length === 0 ? (
             <div className="grid min-h-[420px] place-items-center px-6 text-center text-sm text-stone-500">
@@ -265,14 +265,14 @@ export function DocumentDraftsPageClient({ canViewAllDrafts }: Props) {
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button asChild className="rounded-md">
                   <Link href={`/document-generation?draftId=${encodeURIComponent(selectedDraft.id)}`}>
-                    <FilePenLine className="mr-2 h-4 w-4" />
+                    <FilePenLine className="mr-2 size-4" />
                     Continuar edicion
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="rounded-md">
                   <Link href={`/document-generation?draftId=${encodeURIComponent(selectedDraft.id)}`}>
                     Abrir documento
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 size-4" />
                   </Link>
                 </Button>
               </div>
@@ -290,7 +290,7 @@ export function DocumentDraftsPageClient({ canViewAllDrafts }: Props) {
             <div className="mt-4 space-y-3">
               {selectedDraft.validationErrors.map((error) => (
                 <div key={`${error.key}-${error.message}`} className="flex items-start gap-2 text-sm text-stone-700">
-                  <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600" />
+                  <AlertCircle className="mt-0.5 size-4 text-amber-600" />
                   <span>{error.message}</span>
                 </div>
               ))}

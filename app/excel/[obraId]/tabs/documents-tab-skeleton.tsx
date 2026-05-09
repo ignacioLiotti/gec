@@ -17,7 +17,7 @@ export function DocumentsTabSkeleton() {
           {/* Folder items */}
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex items-center gap-2 py-1.5">
-              <Skeleton className="h-4 w-4 rounded" />
+              <Skeleton className="size-4 rounded" />
               <Skeleton className="h-4 flex-1" style={{ width: `${60 + Math.random() * 30}%` }} />
             </div>
           ))}
@@ -25,7 +25,7 @@ export function DocumentsTabSkeleton() {
           <div className="pl-4 space-y-2 mt-2">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="flex items-center gap-2 py-1">
-                <Skeleton className="h-4 w-4 rounded" />
+                <Skeleton className="size-4 rounded" />
                 <Skeleton className="h-3.5 flex-1" style={{ width: `${50 + Math.random() * 40}%` }} />
               </div>
             ))}
@@ -37,13 +37,13 @@ export function DocumentsTabSkeleton() {
           {/* Toolbar */}
           <div className="flex items-center justify-between gap-4 pb-3 border-b">
             <div className="flex items-center gap-2">
-              <Skeleton className="h-9 w-9 rounded" />
+              <Skeleton className="size-9 rounded" />
               <Skeleton className="h-5 w-40" />
             </div>
             <div className="flex items-center gap-2">
               <Skeleton className="h-9 w-32 rounded" />
-              <Skeleton className="h-9 w-9 rounded" />
-              <Skeleton className="h-9 w-9 rounded" />
+              <Skeleton className="size-9 rounded" />
+              <Skeleton className="size-9 rounded" />
             </div>
           </div>
 

@@ -245,13 +245,13 @@ function buildValidationIssues(args: {
 function iconForContextField(kind: "work" | "type" | "folder" | "template") {
   switch (kind) {
     case "work":
-      return <Building2 className="h-3.5 w-3.5" />;
+      return <Building2 className="size-3.5" />;
     case "type":
-      return <FileText className="h-3.5 w-3.5" />;
+      return <FileText className="size-3.5" />;
     case "folder":
-      return <FolderOpen className="h-3.5 w-3.5" />;
+      return <FolderOpen className="size-3.5" />;
     case "template":
-      return <LayoutTemplate className="h-3.5 w-3.5" />;
+      return <LayoutTemplate className="size-3.5" />;
   }
 }
 
@@ -279,7 +279,7 @@ function RepeatableRowMenu({
         onClick={() => setOpen((current) => !current)}
         className="rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
       >
-        <MoreHorizontal className="h-4 w-4" />
+        <MoreHorizontal className="size-4" />
       </button>
       {open ? (
         <>
@@ -298,7 +298,7 @@ function RepeatableRowMenu({
               }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-stone-700 transition hover:bg-stone-50"
             >
-              <Copy className="h-3.5 w-3.5" />
+              <Copy className="size-3.5" />
               Duplicar
             </button>
             <button
@@ -309,7 +309,7 @@ function RepeatableRowMenu({
               }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-700 transition hover:bg-red-50"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="size-3.5" />
               Eliminar
             </button>
           </div>
@@ -333,7 +333,7 @@ function PreviewToolButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex size-8 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -394,7 +394,7 @@ function FormField({
       {children}
       {error ? (
         <p className="flex items-center gap-1 text-[11px] text-red-700">
-          <AlertCircle className="h-3.5 w-3.5" />
+          <AlertCircle className="size-3.5" />
           {error}
         </p>
       ) : hint ? (
@@ -445,7 +445,7 @@ function NativeSelect({
           </option>
         ))}
       </select>
-      <ChevronsUpDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+      <ChevronsUpDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
     </div>
   );
 }
@@ -1068,7 +1068,7 @@ export function DocumentGenerationPageClient() {
         placeholder={`Completar ${field.label.toLowerCase()}`}
         mono={field.type === "money" || field.type === "number"}
         type={field.type === "date" ? "date" : field.type === "number" || field.type === "money" ? "number" : "text"}
-        icon={field.type === "date" ? <CalendarDays className="h-3.5 w-3.5" /> : undefined}
+        icon={field.type === "date" ? <CalendarDays className="size-3.5" /> : undefined}
       />
     );
   };
@@ -1105,7 +1105,7 @@ export function DocumentGenerationPageClient() {
               className="h-9 rounded-md px-4 text-stone-700"
               hidden={Boolean(editingGeneratedId)}
             >
-              {savingDraft ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              {savingDraft ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
               Guardar borrador
             </Button>
             <Button
@@ -1114,7 +1114,7 @@ export function DocumentGenerationPageClient() {
               onClick={() => setPreviewDialogOpen(true)}
               className="h-9 rounded-md border-stone-200 bg-white px-4"
             >
-              <Eye className="mr-2 h-4 w-4" />
+              <Eye className="mr-2 size-4" />
               Vista previa completa
             </Button>
             <Button
@@ -1124,9 +1124,9 @@ export function DocumentGenerationPageClient() {
               className="h-9 rounded-md bg-[linear-gradient(180deg,#201E25_0%,#323137_100%)] px-4 text-white shadow-[0_2px_4px_rgba(0,0,0,0.10),0_0_0_1px_#0D0D0D]"
             >
               {generating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
-                <FileCheck2 className="mr-2 h-4 w-4" />
+                <FileCheck2 className="mr-2 size-4" />
               )}
               {editingGeneratedId ? "Guardar cambios" : "Generar documento"}
             </Button>
@@ -1254,7 +1254,7 @@ export function DocumentGenerationPageClient() {
                         onClick={() => addRepeatableRow(group.key, group.fields)}
                         className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
                       >
-                        <Plus className="h-3.5 w-3.5" />
+                        <Plus className="size-3.5" />
                         Agregar fila
                       </button>
                     }
@@ -1323,7 +1323,7 @@ export function DocumentGenerationPageClient() {
               >
                 {validationIssues.length === 0 ? (
                   <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                    <Check className="h-4 w-4 text-emerald-700" />
+                    <Check className="size-4 text-emerald-700" />
                     <p className="text-sm font-medium text-emerald-800">
                       Todo lo obligatorio esta completo. Ya puedes generar el documento.
                     </p>
@@ -1331,7 +1331,7 @@ export function DocumentGenerationPageClient() {
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
                     <div className="flex items-center gap-2 border-b border-stone-200 bg-stone-50 px-4 py-3">
-                      <Info className="h-4 w-4 text-stone-600" />
+                      <Info className="size-4 text-stone-600" />
                       <p className="text-sm font-medium text-stone-900">Revisa antes de generar</p>
                       <span className="ml-auto font-mono text-xs text-stone-500">
                         {validationIssues.length} pendiente{validationIssues.length === 1 ? "" : "s"}
@@ -1389,7 +1389,7 @@ export function DocumentGenerationPageClient() {
                       onClick={downloadGeneratedDocument}
                       className="rounded-md"
                     >
-                      <Download className="mr-2 h-4 w-4" />
+                      <Download className="mr-2 size-4" />
                       Descargar
                     </Button>
                     <Button asChild type="button" variant="outline" className="rounded-md">
@@ -1411,7 +1411,7 @@ export function DocumentGenerationPageClient() {
                 Vista previa
               </p>
               <span className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1 font-mono text-[11px] text-stone-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#ff5800]" />
+                <span className="size-1.5 rounded-full bg-[#ff5800]" />
                 en vivo
               </span>
             </div>
@@ -1421,7 +1421,7 @@ export function DocumentGenerationPageClient() {
                 onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
                 disabled={!selectedTemplate}
               >
-                <ZoomOut className="h-3.5 w-3.5" />
+                <ZoomOut className="size-3.5" />
               </PreviewToolButton>
               <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
                 {previewZoom}%
@@ -1430,11 +1430,11 @@ export function DocumentGenerationPageClient() {
                 onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
                 disabled={!selectedTemplate}
               >
-                <ZoomIn className="h-3.5 w-3.5" />
+                <ZoomIn className="size-3.5" />
               </PreviewToolButton>
               <div className="mx-1 h-5 w-px bg-stone-200" />
               <PreviewToolButton onClick={() => setPreviewDialogOpen(true)} disabled={!selectedTemplate}>
-                <Eye className="h-3.5 w-3.5" />
+                <Eye className="size-3.5" />
               </PreviewToolButton>
             </div>
           </div>

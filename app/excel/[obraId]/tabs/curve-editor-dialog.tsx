@@ -856,7 +856,7 @@ function WizardSteps({ currentStep }: { currentStep: "choose" | "edit" }) {
 								)}
 							>
 								{isComplete ? (
-									<svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+									<svg className="size-3" viewBox="0 0 12 12" fill="none">
 										<path
 											d="M2 6.5l2.5 2.5 5.5-5.5"
 											stroke="currentColor"
@@ -930,7 +930,7 @@ function CurveEditorOptionCard({
 						selected ? meta.toneClassName : "border-stone-200 bg-stone-50 text-stone-500",
 					)}
 				>
-					<Icon className="h-5 w-5" />
+					<Icon className="size-5" />
 				</div>
 				<Badge
 					variant="outline"
@@ -1456,7 +1456,7 @@ export function CurveEditorDialog({
 							<div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-5">
 								{isLoading ? (
 									<div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-stone-300 bg-white min-h-[75vh] ">
-										<Loader2 className="h-6 w-6 animate-spin text-stone-500" />
+										<Loader2 className="size-6 animate-spin text-stone-500" />
 										<p className="text-sm text-stone-500">Preparando gráfico y tabla editable...</p>
 									</div>
 								) : loadError ? (

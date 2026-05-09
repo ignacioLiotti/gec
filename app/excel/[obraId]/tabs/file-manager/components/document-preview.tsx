@@ -144,7 +144,7 @@ function PreviewActionBar({
 	return (
 		<div className="absolute right-4 top-4 z-20">
 			<Button variant="default" size="sm" onClick={() => onDownload(document)}>
-				<Download className="mr-2 h-4 w-4" />
+				<Download className="mr-2 size-4" />
 				Descargar
 			</Button>
 		</div>
@@ -164,10 +164,10 @@ function PreviewFallback({
 		<div className="relative flex h-full flex-col">
 			<PreviewActionBar document={document} onDownload={onDownload} />
 			<div className="flex flex-1 flex-col items-center justify-center p-4 text-stone-400">
-				<FileText className="mb-4 h-16 w-16 opacity-20" />
+				<FileText className="mb-4 size-16 opacity-20" />
 				<p>{message}</p>
 				<Button variant="outline" size="sm" onClick={() => onDownload(document)} className="mt-4">
-					<Download className="mr-2 h-4 w-4" />
+					<Download className="mr-2 size-4" />
 					Descargar para ver
 				</Button>
 			</div>
@@ -259,7 +259,7 @@ function SpreadsheetLikePreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
-					<Loader2 className="h-4 w-4 animate-spin" />
+					<Loader2 className="size-4 animate-spin" />
 					Cargando vista previa...
 				</div>
 			</div>
@@ -271,7 +271,7 @@ function SpreadsheetLikePreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center text-stone-500">
-					<AlertCircle className="h-10 w-10 text-amber-500" />
+					<AlertCircle className="size-10 text-amber-500" />
 					<p>{error}</p>
 				</div>
 			</div>
@@ -425,7 +425,7 @@ function WordDocumentPreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
-					<Loader2 className="h-4 w-4 animate-spin" />
+					<Loader2 className="size-4 animate-spin" />
 					Renderizando documento...
 				</div>
 			</div>
@@ -759,7 +759,7 @@ function ModelDocumentPreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-stone-500">
-					<Loader2 className="h-4 w-4 animate-spin" />
+					<Loader2 className="size-4 animate-spin" />
 					<p>
 						{status === "uploading"
 							? "Enviando modelo a APS..."
@@ -794,7 +794,7 @@ export const DocumentPreview = memo(function DocumentPreview({
 	if (!document) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center text-stone-400">
-				<Eye className="mb-4 h-16 w-16 opacity-20" />
+				<Eye className="mb-4 size-16 opacity-20" />
 				<p>Selecciona un documento para previsualizar</p>
 			</div>
 		);

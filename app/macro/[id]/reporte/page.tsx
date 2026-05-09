@@ -141,7 +141,7 @@ function MacroTableReportContent() {
 	if (isLoading) {
 		return (
 			<div className="flex items-center justify-center h-[70vh]">
-				<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+				<Loader2 className="size-6 animate-spin text-muted-foreground" />
 			</div>
 		);
 	}
@@ -149,7 +149,7 @@ function MacroTableReportContent() {
 	if (error || !reportConfig) {
 		return (
 			<div className="flex flex-col items-center justify-center h-[70vh] gap-3 text-muted-foreground">
-				<AlertCircle className="h-10 w-10" />
+				<AlertCircle className="size-10" />
 				<p>
 					{error ??
 						"No se pudo generar el reporte para esta macro tabla."}

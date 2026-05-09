@@ -440,8 +440,8 @@ export function QuickActionsPanel({
             "hover:bg-accent/50 active:scale-[0.98]"
           )}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-            <FolderOpen className="h-4 w-4" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+            <FolderOpen className="size-4" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{action.name}</p>
@@ -453,7 +453,7 @@ export function QuickActionsPanel({
               </p>
             )}
           </div>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
+          <ChevronRight className="size-3.5 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
         </motion.button>
       ))}
       {localActions.length === 0 && (
@@ -496,7 +496,7 @@ export function QuickActionsPanel({
             onClick={() => setIsMobileOpen(true)}
             className="fixed bottom-5 right-4 z-40 h-12 rounded-full px-4 shadow-lg"
           >
-            <Zap className="h-4 w-4" />
+            <Zap className="size-4" />
             <span className="ml-2 text-sm font-semibold">Acciones</span>
           </Button>
 
@@ -505,7 +505,7 @@ export function QuickActionsPanel({
               <SheetHeader className="px-4 pt-4 pb-2">
                 <div className="flex items-center justify-between gap-2">
                   <SheetTitle className="flex items-center gap-2 text-base">
-                    <Zap className="h-4 w-4 text-primary" />
+                    <Zap className="size-4 text-primary" />
                     Acciones rápidas
                   </SheetTitle>
                   <Button type="button" size="sm" variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
@@ -562,7 +562,7 @@ export function QuickActionsPanel({
                       <span className="flex items-center gap-2">
                         <span
                           className={cn(
-                            "flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold",
+                            "flex size-5 items-center justify-center rounded-full text-xs font-semibold",
                             isActive
                               ? "bg-stone-800 text-white"
                               : isCompleted
@@ -571,7 +571,7 @@ export function QuickActionsPanel({
                           )}
                         >
                           {isCompleted ? (
-                            <Check className="h-3 w-3" />
+                            <Check className="size-3" />
                           ) : (
                             index + 1
                           )}
@@ -598,14 +598,14 @@ export function QuickActionsPanel({
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div
                       key={i}
-                      className="w-5 h-5 rounded-full bg-stone-200 border border-stone-300 shadow-[inset_0_1px_3px_rgba(0,0,0,0.1)]"
+                      className="size-5 rounded-full bg-stone-200 border border-stone-300 shadow-[inset_0_1px_3px_rgba(0,0,0,0.1)]"
                     />
                   ))}
                 </div>
                 <div className="absolute left-11 top-0 bottom-0 w-px h-full bg-stone-200" />
                 {/* Close button */}
                 <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors z-10">
-                  <X className="h-4 w-4" />
+                  <X className="size-4" />
                 </DialogPrimitive.Close>
 
                 {/* Header */}
@@ -645,7 +645,7 @@ export function QuickActionsPanel({
                               : "text-stone-500 hover:text-stone-700"
                           )}
                         >
-                          <Upload className="h-3.5 w-3.5" />
+                          <Upload className="size-3.5" />
                           OCR
                         </button>
                         <button
@@ -658,7 +658,7 @@ export function QuickActionsPanel({
                               : "text-stone-500 hover:text-stone-700"
                           )}
                         >
-                          <FileText className="h-3.5 w-3.5" />
+                          <FileText className="size-3.5" />
                           Manual
                         </button>
                       </div>
@@ -679,8 +679,8 @@ export function QuickActionsPanel({
                       {/* Completed state */}
                       {isDone && (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
-                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 mb-4">
-                            <Check className="h-7 w-7 text-emerald-600" />
+                          <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-100 mb-4">
+                            <Check className="size-7 text-emerald-600" />
                           </div>
                           <p className="text-sm font-medium text-stone-700">Paso completado</p>
                           <p className="text-xs text-stone-400 mt-1">
@@ -786,7 +786,7 @@ export function QuickActionsPanel({
                         )}
                       >
                         Siguiente
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="size-4" />
                       </button>
                     ) : isDone && activeStepIndex === steps.length - 1 ? (
                       <button
@@ -799,7 +799,7 @@ export function QuickActionsPanel({
                           "active:bg-emerald-700"
                         )}
                       >
-                        <Check className="h-4 w-4" />
+                        <Check className="size-4" />
                         Listo
                       </button>
                     ) : !customRenderer ? (
@@ -817,18 +817,18 @@ export function QuickActionsPanel({
                       >
                         {isSubmittingStep ? (
                           <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="size-4 animate-spin" />
                             {isManualMode ? "Guardando..." : "Subiendo..."}
                           </>
                         ) : activeStepIndex === steps.length - 1 ? (
                           <>
-                            <Check className="h-4 w-4" />
+                            <Check className="size-4" />
                             {isManualMode ? "Guardar fila" : "Subir archivo"}
                           </>
                         ) : (
                           <>
                             {isManualMode ? "Guardar y seguir" : "Subir y seguir"}
-                            <ChevronRight className="h-4 w-4" />
+                            <ChevronRight className="size-4" />
                           </>
                         )}
                       </button>

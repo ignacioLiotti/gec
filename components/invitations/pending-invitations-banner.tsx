@@ -75,7 +75,7 @@ export function PendingInvitationsBanner() {
           className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm"
         >
           <div className="p-2 bg-blue-100 rounded-full">
-            <Mail className="h-4 w-4 text-blue-600" />
+            <Mail className="size-4 text-blue-600" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-blue-900">
@@ -104,12 +104,12 @@ export function PendingInvitationsBanner() {
             >
               {acceptingId === invitation.id ? (
                 <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  <Loader2 className="mr-1 size-3 animate-spin" />
                   Joining...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  <CheckCircle2 className="mr-1 size-3" />
                   Accept
                 </>
               )}
@@ -117,10 +117,10 @@ export function PendingInvitationsBanner() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+              className="size-8 p-0 text-blue-600 hover:text-blue-800 hover:bg-blue-100"
               onClick={() => handleDismiss(invitation.id)}
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </Button>
           </div>
         </div>

@@ -137,7 +137,7 @@ function OnboardingPageContent() {
 			<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f0efea] to-[#e5e4df]">
 				<Card className="w-full max-w-2xl">
 					<CardContent className="flex items-center justify-center py-12">
-						<Loader2 className="h-8 w-8 animate-spin text-[#444444]" />
+						<Loader2 className="size-8 animate-spin text-[#444444]" />
 					</CardContent>
 				</Card>
 			</div>
@@ -150,7 +150,7 @@ function OnboardingPageContent() {
 				<CardHeader className="text-center">
 					<div className="flex justify-center mb-4">
 						<div className="p-4 bg-[#fff0e6] rounded-full">
-							<Building2 className="h-10 w-10 text-[#ff5800]" />
+							<Building2 className="size-10 text-[#ff5800]" />
 						</div>
 					</div>
 					<CardTitle className="text-2xl">Bienvenido a Síntesis</CardTitle>
@@ -186,7 +186,7 @@ function OnboardingPageContent() {
 								}`}
 						>
 							<div className="flex items-center justify-center gap-2">
-								<Plus className="h-4 w-4" />
+								<Plus className="size-4" />
 								Crear Organización
 							</div>
 						</button>
@@ -198,7 +198,7 @@ function OnboardingPageContent() {
 								}`}
 						>
 							<div className="flex items-center justify-center gap-2">
-								<UserPlus className="h-4 w-4" />
+								<UserPlus className="size-4" />
 								Unirse a Organización
 								{invitations.length > 0 && (
 									<span className="ml-1 px-1.5 py-0.5 text-xs font-bold bg-[#ff5800] text-white rounded-full">
@@ -222,7 +222,7 @@ function OnboardingPageContent() {
 
 							{invitations.length === 0 ? (
 								<div className="text-center py-12 bg-[#f0efea] rounded-lg border-2 border-dashed border-[#d4d3ce]">
-									<Mail className="h-12 w-12 text-[#888888] mx-auto mb-3" />
+									<Mail className="size-12 text-[#888888] mx-auto mb-3" />
 									<p className="text-[#444444] font-medium mb-1">Sin invitaciones pendientes</p>
 									<p className="text-sm text-[#666666]">
 										Pide a un administrador que te invite, o crea tu propia organización.
@@ -240,14 +240,14 @@ function OnboardingPageContent() {
 													<div className="flex items-start justify-between gap-4">
 														<div className="flex-1 space-y-2">
 															<div className="flex items-center gap-2">
-																<Building2 className="h-5 w-5 text-[#ff5800]" />
+																<Building2 className="size-5 text-[#ff5800]" />
 																<h4 className="font-semibold text-[#444444]">
 																	{invitation.tenant?.name || "Organización"}
 																</h4>
 															</div>
 															<div className="space-y-1 text-sm">
 																<div className="flex items-center gap-2 text-[#666666]">
-																	<UserPlus className="h-4 w-4" />
+																	<UserPlus className="size-4" />
 																	<span>
 																		{invitation.inviter?.full_name
 																			? `Invitado por ${invitation.inviter.full_name}`
@@ -255,13 +255,13 @@ function OnboardingPageContent() {
 																	</span>
 																</div>
 																<div className="flex items-center gap-2 text-[#666666]">
-																	<CheckCircle2 className="h-4 w-4" />
+																	<CheckCircle2 className="size-4" />
 																	<span className="capitalize">
 																		Rol: {invitation.invited_role}
 																	</span>
 																</div>
 																<div className="flex items-center gap-2 text-[#666666]">
-																	<Clock className="h-4 w-4" />
+																	<Clock className="size-4" />
 																	<span>
 																		Expira en{" "}
 																		{timeRemaining < 24
@@ -279,12 +279,12 @@ function OnboardingPageContent() {
 															>
 																{acceptingId === invitation.id ? (
 																	<>
-																		<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+																		<Loader2 className="mr-2 size-4 animate-spin" />
 																		Uniéndose...
 																	</>
 																) : (
 																	<>
-																		<CheckCircle2 className="mr-2 h-4 w-4" />
+																		<CheckCircle2 className="mr-2 size-4" />
 																		Aceptar
 																	</>
 																)}
@@ -342,12 +342,12 @@ function OnboardingPageContent() {
 								>
 									{creatingTenant ? (
 										<>
-											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											<Loader2 className="mr-2 size-4 animate-spin" />
 											Creando Organización...
 										</>
 									) : (
 										<>
-											<Plus className="mr-2 h-4 w-4" />
+											<Plus className="mr-2 size-4" />
 											Crear Organización
 										</>
 									)}
@@ -363,7 +363,7 @@ function OnboardingPageContent() {
 
 export default function OnboardingPage() {
 	return (
-		<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#444444]" /></div>}>
+		<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="size-8 animate-spin text-[#444444]" /></div>}>
 			<OnboardingPageContent />
 		</Suspense>
 	);

@@ -23,7 +23,7 @@ export function InBodyStates({
 			<tr>
 				<td colSpan={colspan} className="px-4 py-16 text-center border-t border-border">
 					<div className="flex flex-col items-center gap-3">
-						<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+						<div className="animate-spin rounded-full size-8 border-b-2 border-primary" />
 						<p className="text-sm text-muted-foreground">Cargando datos...</p>
 					</div>
 				</td>
@@ -45,7 +45,7 @@ export function InBodyStates({
 							onClick={onRetry}
 							className="gap-2"
 						>
-							<RefreshCw className="h-4 w-4" />
+							<RefreshCw className="size-4" />
 							Reintentar
 						</Button>
 					</div>

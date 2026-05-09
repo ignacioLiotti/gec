@@ -30,7 +30,7 @@ export function ColumnsMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <Columns3 className="h-4 w-4" />
+          <Columns3 className="size-4" />
           Columnas
         </Button>
       </DropdownMenuTrigger>
@@ -39,7 +39,7 @@ export function ColumnsMenu({
           Configuración
         </div>
         <DropdownMenuItem onClick={onBalanceColumns} className="gap-2">
-          <MoveHorizontal className="h-4 w-4" />
+          <MoveHorizontal className="size-4" />
           Balancear columnas
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -47,11 +47,11 @@ export function ColumnsMenu({
           Acciones rápidas
         </div>
         <DropdownMenuItem onClick={() => setHiddenCols([])} className="gap-2">
-          <Eye className="h-4 w-4" />
+          <Eye className="size-4" />
           Mostrar todo
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setHiddenCols(allColumns.map(c => c.index))} className="gap-2">
-          <EyeOff className="h-4 w-4" />
+          <EyeOff className="size-4" />
           Ocultar todo
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -74,7 +74,7 @@ export function ColumnsMenu({
                       return Array.from(set).sort((a, b) => a - b);
                     });
                   }}
-                  className="h-4 w-4 rounded border-gray-300"
+                  className="size-4 rounded border-gray-300"
                 />
                 <button
                   onClick={() => togglePinColumn(col.index)}

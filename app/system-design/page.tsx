@@ -223,7 +223,7 @@ export default function SystemDesignPage() {
         <div className={cn('mb-6 flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between', UI_TOKENS.card, UI_TOKENS.heroOverlayShadow)}>
           <div>
             <div className={cn(UI_TOKENS.chip, 'rounded-full py-1 text-xs text-muted-foreground')}>
-              <Sparkles className="h-3.5 w-3.5 text-orange-primary" />
+              <Sparkles className="size-3.5 text-orange-primary" />
               Internal UI Showcase
             </div>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">System Design</h1>
@@ -347,16 +347,16 @@ export default function SystemDesignPage() {
                       <Button variant="destructive">Destructive</Button>
                       <Button size="sm">Small</Button>
                       <Button size="icon" aria-label="More">
-                        <MoreHorizontal className="h-4 w-4" />
+                        <MoreHorizontal className="size-4" />
                       </Button>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       <span className={UI_TOKENS.chip}>
-                        <Palette className="h-4 w-4 text-stone-600" />
+                        <Palette className="size-4 text-stone-600" />
                         Chip token
                       </span>
                       <button type="button" className={UI_TOKENS.iconButton} aria-label="Search demo">
-                        <Search className="h-4 w-4" />
+                        <Search className="size-4" />
                       </button>
                     </div>
                   </SurfaceCard>
@@ -368,10 +368,10 @@ export default function SystemDesignPage() {
                       <Badge variant="outline">Outline</Badge>
                       <Badge variant="destructive">Error</Badge>
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                        <Check className="h-3 w-3" /> Completada
+                        <Check className="size-3" /> Completada
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-                        <AlertTriangle className="h-3 w-3" /> Atención
+                        <AlertTriangle className="size-3" /> Atención
                       </span>
                     </div>
                   </SurfaceCard>
@@ -385,7 +385,7 @@ export default function SystemDesignPage() {
                   <SurfaceCard title="Field Controls">
                     <div className="space-y-4">
                       <div className={UI_TOKENS.inputWrap}>
-                        <Search className="h-4 w-4 text-stone-500" />
+                        <Search className="size-4 text-stone-500" />
                         <input className={UI_TOKENS.input} placeholder="InputWrap token (búsqueda rápida)" />
                       </div>
                       <div className="space-y-2">
@@ -415,7 +415,7 @@ export default function SystemDesignPage() {
                           <Popover>
                             <PopoverTrigger asChild>
                               <Button variant="outline" className="w-full justify-start text-left font-normal">
-                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                <CalendarIcon className="mr-2 size-4" />
                                 {selectedDate ? format(selectedDate, 'dd/MM/yyyy') : 'Elegir fecha'}
                               </Button>
                             </PopoverTrigger>
@@ -499,7 +499,7 @@ export default function SystemDesignPage() {
                       <div className="rounded-lg border border-stone-200 bg-stone-50/60 px-3 py-2 text-sm">
                         <div className="text-xs uppercase tracking-wide text-stone-500">Obras activas</div>
                         <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-2 py-1 text-xs text-stone-700">
-                          <Circle className="h-2 w-2 fill-cyan-600 text-cyan-600" /> 12 activas
+                          <Circle className="size-2 fill-cyan-600 text-cyan-600" /> 12 activas
                         </div>
                       </div>
                       <div className="rounded-lg border border-stone-200 bg-stone-50/60 px-3 py-2 text-sm">
@@ -589,7 +589,7 @@ export default function SystemDesignPage() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline">
-                            Menú <ChevronsUpDown className="ml-2 h-4 w-4" />
+                            Menú <ChevronsUpDown className="ml-2 size-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
@@ -717,7 +717,7 @@ export default function SystemDesignPage() {
                         <CommandGroup heading="Acciones">
                           {commandItems.map(([label, shortcut]) => (
                             <CommandItem key={label}>
-                              <CommandIcon className="h-4 w-4" />
+                              <CommandIcon className="size-4" />
                               {label}
                               <CommandShortcut>{shortcut}</CommandShortcut>
                             </CommandItem>
@@ -725,9 +725,9 @@ export default function SystemDesignPage() {
                         </CommandGroup>
                         <CommandSeparator />
                         <CommandGroup heading="Módulos">
-                          <CommandItem><LayoutGrid className="h-4 w-4" /> Dashboard</CommandItem>
-                          <CommandItem><Table2 className="h-4 w-4" /> Reportes</CommandItem>
-                          <CommandItem><Wand2 className="h-4 w-4" /> Extracción</CommandItem>
+                          <CommandItem><LayoutGrid className="size-4" /> Dashboard</CommandItem>
+                          <CommandItem><Table2 className="size-4" /> Reportes</CommandItem>
+                          <CommandItem><Wand2 className="size-4" /> Extracción</CommandItem>
                         </CommandGroup>
                       </CommandList>
                     </Command>
@@ -824,7 +824,7 @@ export default function SystemDesignPage() {
                             </div>
                             <CollapsibleTrigger asChild>
                               <Button variant="outline" size="sm">
-                                <SlidersHorizontal className="mr-2 h-4 w-4" />
+                                <SlidersHorizontal className="mr-2 size-4" />
                                 {isCollapsibleOpen ? 'Ocultar' : 'Mostrar'}
                               </Button>
                             </CollapsibleTrigger>
@@ -865,7 +865,7 @@ export default function SystemDesignPage() {
                               <SortableItem key={item} value={item} className="rounded-lg border border-stone-200 bg-white">
                                 <div className="flex items-center gap-2 px-3 py-2">
                                   <SortableItemHandle className="rounded-md p-1 hover:bg-stone-50">
-                                    <GripVertical className="h-4 w-4 text-stone-500" />
+                                    <GripVertical className="size-4 text-stone-500" />
                                   </SortableItemHandle>
                                   <span className="text-sm">{item}</span>
                                 </div>

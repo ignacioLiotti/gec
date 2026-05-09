@@ -411,7 +411,7 @@ function FlowChip({
         </div>
         <div className="flex items-center gap-1 text-xs font-medium text-[#9c5511]">
           Ver flujo
-          <ArrowRight className="h-3.5 w-3.5" />
+          <ArrowRight className="size-3.5" />
         </div>
       </div>
     </button>
@@ -559,7 +559,7 @@ function FloatingInspector({
           onClick={onClose}
           className="rounded-full p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </button>
       </div>
 
@@ -920,7 +920,7 @@ function FloatingInspector({
               {hasChanges ? "Hay cambios pendientes sobre el contrato del tenant." : "Sin cambios pendientes."}
             </div>
             <Button onClick={() => void onSave()} disabled={!hasChanges || isSaving} className="gap-1.5">
-              <Save className={cn("h-4 w-4", isSaving && "animate-spin")} />
+              <Save className={cn("size-4", isSaving && "animate-spin")} />
               Guardar
             </Button>
           </div>
@@ -1151,9 +1151,9 @@ export default function AdminDocumentFlowsPage() {
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2 text-sm text-stone-500">
                   <span>Administracion</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <ArrowRight className="size-3.5" />
                   <span>Tenant</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <ArrowRight className="size-3.5" />
                   <span className="font-medium text-stone-700">Document Flow 2</span>
                 </div>
                 <div>
@@ -1193,7 +1193,7 @@ export default function AdminDocumentFlowsPage() {
                   disabled={isLoading || isSaving}
                   className="gap-1.5"
                 >
-                  <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                  <RefreshCw className={cn("size-4", isLoading && "animate-spin")} />
                   Recargar
                 </Button>
                 <Button
@@ -1202,19 +1202,19 @@ export default function AdminDocumentFlowsPage() {
                   disabled={!draftFolder || !hasChanges || isSaving}
                   className="gap-1.5"
                 >
-                  <Save className={cn("h-4 w-4", isSaving && "animate-spin")} />
+                  <Save className={cn("size-4", isSaving && "animate-spin")} />
                   Guardar cambios
                 </Button>
                 <Button asChild variant="outline" size="sm">
                   <Link href="/admin/document-flows">
                     Ver version actual
-                    <ExternalLink className="ml-2 h-4 w-4" />
+                    <ExternalLink className="ml-2 size-4" />
                   </Link>
                 </Button>
                 <Button asChild variant="outline" size="sm">
                   <Link href="/admin/obra-defaults">
                     Editor avanzado
-                    <ExternalLink className="ml-2 h-4 w-4" />
+                    <ExternalLink className="ml-2 size-4" />
                   </Link>
                 </Button>
               </div>
@@ -1296,7 +1296,7 @@ export default function AdminDocumentFlowsPage() {
 
                 {isLoading && !selectedFolder ? (
                   <div className="rounded-[26px] border border-stone-200 bg-[#faf8f3] px-6 py-14 text-center text-sm text-stone-500">
-                    <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin" />
+                    <Loader2 className="mx-auto mb-3 size-5 animate-spin" />
                     Cargando flujos documentales...
                   </div>
                 ) : selectedFolder ? (
@@ -1304,7 +1304,7 @@ export default function AdminDocumentFlowsPage() {
                     <div className="flex min-w-[1280px] items-start gap-12">
                       <div className="w-[320px] shrink-0 space-y-4">
                         <div className="flex items-center gap-2">
-                          <FolderOpen className="h-3.5 w-3.5 text-stone-500" />
+                          <FolderOpen className="size-3.5 text-stone-500" />
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Campos extraidos</p>
                         </div>
                         {selectedTables.length > 0 ? (
@@ -1356,7 +1356,7 @@ export default function AdminDocumentFlowsPage() {
 
                       <div className="w-[320px] shrink-0 space-y-4">
                         <div className="flex items-center gap-2">
-                          <Table2 className="h-3.5 w-3.5 text-stone-500" />
+                          <Table2 className="size-3.5 text-stone-500" />
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Tablas destino</p>
                         </div>
                         {selectedTables.length > 0 ? (
@@ -1406,7 +1406,7 @@ export default function AdminDocumentFlowsPage() {
 
                       <div className="w-[320px] shrink-0 space-y-4">
                         <div className="flex items-center gap-2">
-                          <Layers className="h-3.5 w-3.5 text-stone-500" />
+                          <Layers className="size-3.5 text-stone-500" />
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Macrotablas</p>
                         </div>
                         {folderMacroTables.length > 0 ? (
@@ -1445,7 +1445,7 @@ export default function AdminDocumentFlowsPage() {
 
                       <div className="w-[280px] shrink-0 space-y-4">
                         <div className="flex items-center gap-2">
-                          <Waypoints className="h-3.5 w-3.5 text-stone-500" />
+                          <Waypoints className="size-3.5 text-stone-500" />
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Consumo final</p>
                         </div>
                         <LayerNodeCard
@@ -1492,7 +1492,7 @@ export default function AdminDocumentFlowsPage() {
               {hasChanges ? (
                 <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4 shadow-sm">
                   <div className="flex items-start gap-3">
-                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-700" />
                     <div>
                       <p className="text-sm font-semibold text-amber-900">Cambios sin publicar</p>
                       <p className="mt-1 text-xs leading-5 text-amber-800">

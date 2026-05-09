@@ -72,7 +72,7 @@ function ColHead({ children, className }: { children: ReactNode; className?: str
       <span className="text-[11px] font-semibold uppercase tracking-wide text-[#aaa]">
         {children}
       </span>
-      <ArrowUpDown className="h-3 w-3 shrink-0 text-[#ddd]" />
+      <ArrowUpDown className="size-3 shrink-0 text-[#ddd]" />
     </div>
   );
 }
@@ -86,7 +86,7 @@ export default function MacroTestPage() {
         <div className="mb-5 flex items-center justify-between">
           <h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a]">Macro tablas</h1>
           <Button className="gap-2 rounded-lg bg-[#f97316] text-white hover:bg-[#ea6c0a]">
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             Nueva macro tabla
           </Button>
         </div>
@@ -106,7 +106,7 @@ export default function MacroTestPage() {
                 )}
               >
                 <Layers
-                  className={cn("h-3.5 w-3.5", tab.active ? "text-[#f97316]" : "text-[#bbb]")}
+                  className={cn("size-3.5", tab.active ? "text-[#f97316]" : "text-[#bbb]")}
                 />
                 <span
                   className={cn(
@@ -128,7 +128,7 @@ export default function MacroTestPage() {
               <div className="flex items-center gap-2">
                 <div className="relative w-[260px]">
                   <svg
-                    className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#bbb]"
+                    className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#bbb]"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -149,7 +149,7 @@ export default function MacroTestPage() {
                   className="h-9 gap-1.5 rounded-lg border-[#e8e8e8] bg-white text-[#555]"
                 >
                   <svg
-                    className="h-3.5 w-3.5"
+                    className="size-3.5"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -168,11 +168,11 @@ export default function MacroTestPage() {
               </div>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-[#999] hover:text-[#555]">
-                  <FileText className="h-3.5 w-3.5" />
+                  <FileText className="size-3.5" />
                   Reportes
                 </Button>
                 <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-[#999] hover:text-[#555]">
-                  <Settings className="h-3.5 w-3.5" />
+                  <Settings className="size-3.5" />
                   Configurar
                 </Button>
               </div>
@@ -209,7 +209,7 @@ export default function MacroTestPage() {
               <div className="flex min-w-[900px] items-stretch bg-white">
                 {/* Checkbox */}
                 <div className="flex w-11 shrink-0 items-center justify-center border-b border-r border-[#f0f0f0] py-2.5">
-                  <div className="h-3.5 w-3.5 rounded-sm border-[1.5px] border-[#ddd] bg-white" />
+                  <div className="size-3.5 rounded-sm border-[1.5px] border-[#ddd] bg-white" />
                 </div>
                 <div className="flex flex-1 border-b border-[#f0f0f0]">
                   <ColHead className="w-[260px] shrink-0">Obra</ColHead>
@@ -234,7 +234,7 @@ export default function MacroTestPage() {
                   >
                     {/* Checkbox */}
                     <div className="flex w-11 shrink-0 items-center justify-center border-r border-[#f0f0f0]">
-                      <div className="h-3.5 w-3.5 rounded-sm border-[1.5px] border-[#ddd] bg-white" />
+                      <div className="size-3.5 rounded-sm border-[1.5px] border-[#ddd] bg-white" />
                     </div>
                     {/* Cells */}
                     <div className="flex flex-1">
@@ -271,7 +271,7 @@ export default function MacroTestPage() {
                 <span className="text-[13px] text-[#999]">Filas por página</span>
                 <div className="flex items-center gap-1.5 rounded-lg border border-[#e8e8e8] bg-white px-3 py-1.5">
                   <span className="text-[13px] tabular-nums text-[#1a1a1a]">10</span>
-                  <ChevronDown className="h-3.5 w-3.5 text-[#bbb]" />
+                  <ChevronDown className="size-3.5 text-[#bbb]" />
                 </div>
                 <p className="text-[13px] text-[#999]">
                   Mostrando{" "}

@@ -84,7 +84,7 @@ function ShellCard({
     >
       <header className="flex items-center justify-between gap-3 border-b border-[#f0f0f0] px-5 py-3.5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#e8e8e8] bg-[#fafafa]">
+          <div className="flex size-7 items-center justify-center rounded-lg border border-[#e8e8e8] bg-[#fafafa]">
             <Icon className="size-3.5 text-[#999]" />
           </div>
           <h2 className="text-[13px] font-semibold text-[#1a1a1a]">{title}</h2>

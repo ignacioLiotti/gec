@@ -51,7 +51,7 @@ const PDFDocument = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
       </div>
     ),
   }
@@ -63,7 +63,7 @@ const PDFPage = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex items-center justify-center p-2">
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-4 border-b-2 border-primary"></div>
       </div>
     ),
   }
@@ -345,7 +345,7 @@ export function EnhancedDocumentViewer({
                   onClick={() => setShowThumbnails(!showThumbnails)}
                   title="Toggle thumbnails"
                 >
-                  <List className="w-4 h-4" />
+                  <List className="size-4" />
                 </Button>
                 <Separator orientation="vertical" className="h-6" />
               </>
@@ -365,7 +365,7 @@ export function EnhancedDocumentViewer({
             onClick={zoomOut}
             title="Zoom out (-)"
           >
-            <ZoomOut className="w-4 h-4" />
+            <ZoomOut className="size-4" />
           </Button>
           <span className="text-sm font-medium min-w-[60px] text-center">
             {getCurrentZoom()}%
@@ -376,7 +376,7 @@ export function EnhancedDocumentViewer({
             onClick={zoomIn}
             title="Zoom in (+)"
           >
-            <ZoomIn className="w-4 h-4" />
+            <ZoomIn className="size-4" />
           </Button>
 
           <Button
@@ -385,7 +385,7 @@ export function EnhancedDocumentViewer({
             onClick={fitToWidth}
             title="Fit to width"
           >
-            <Maximize2 className="w-4 h-4" />
+            <Maximize2 className="size-4" />
           </Button>
 
           <Button
@@ -394,7 +394,7 @@ export function EnhancedDocumentViewer({
             onClick={rotate}
             title="Rotate (90°)"
           >
-            <RotateCw className="w-4 h-4" />
+            <RotateCw className="size-4" />
           </Button>
           {onDownload && (
             <Button
@@ -404,7 +404,7 @@ export function EnhancedDocumentViewer({
               title="Download"
               className="ml-auto"
             >
-              <Download className="w-4 h-4" />
+              <Download className="size-4" />
             </Button>
           )}
         </div>
@@ -419,7 +419,7 @@ export function EnhancedDocumentViewer({
               disabled={pageNumber <= 1}
               title="Previous page (←)"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="size-4" />
             </Button>
             <div className="flex items-center gap-1">
               <Input
@@ -439,7 +439,7 @@ export function EnhancedDocumentViewer({
               disabled={pageNumber >= numPages}
               title="Next page (→)"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="size-4" />
             </Button>
           </div>
         )}
@@ -479,7 +479,7 @@ export function EnhancedDocumentViewer({
   if (!isClient) {
     return (
       <div className="h-full flex items-center justify-center bg-muted/10">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -498,7 +498,7 @@ export function EnhancedDocumentViewer({
             <div className="flex justify-center">
               {pdfLoading && !pdfUseUrlFallback && (
                 <div className="flex items-center justify-center p-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
                 </div>
               )}
 

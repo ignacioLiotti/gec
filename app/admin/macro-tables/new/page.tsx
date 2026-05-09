@@ -803,7 +803,7 @@ export default function NewMacroTablePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -817,7 +817,7 @@ export default function NewMacroTablePage() {
           size="icon"
           onClick={() => router.push("/admin/macro-tables")}
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="size-4" />
         </Button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Nueva macro tabla</h1>
@@ -850,13 +850,13 @@ export default function NewMacroTablePage() {
               >
                 <div
                   className={cn(
-                    "h-8 w-8 rounded-full flex items-center justify-center",
+                    "size-8 rounded-full flex items-center justify-center",
                     isActive && "bg-cyan-500 text-white",
                     isCompleted && "bg-cyan-500/20 text-cyan-600",
                     !isActive && !isCompleted && "bg-muted text-muted-foreground"
                   )}
                 >
-                  {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                  {isCompleted ? <Check className="size-4" /> : <Icon className="size-4" />}
                 </div>
                 <span className="font-medium hidden sm:inline">{step.label}</span>
               </button>
@@ -935,7 +935,7 @@ export default function NewMacroTablePage() {
                     </CardDescription>
                   </div>
                   <Badge variant="secondary" className="gap-1">
-                    <Database className="h-3 w-3" />
+                    <Database className="size-3" />
                     {selectedSources.length} seleccionadas
                   </Badge>
                 </div>
@@ -944,7 +944,7 @@ export default function NewMacroTablePage() {
                 {templates.length > 0 && (
                   <div className="p-4 rounded-lg border border-amber-500/30 bg-gradient-to-r from-amber-50/50 to-orange-50/30 dark:from-amber-950/20 dark:to-orange-950/10">
                     <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="h-4 w-4 text-amber-600" />
+                      <Sparkles className="size-4 text-amber-600" />
                       <span className="font-medium text-amber-800 dark:text-amber-300">
                         Selección rápida por plantilla
                       </span>
@@ -971,7 +971,7 @@ export default function NewMacroTablePage() {
                             )}
                             disabled={matchCount === 0}
                           >
-                            <FileStack className="h-3.5 w-3.5" />
+                            <FileStack className="size-3.5" />
                             {template.name}
                             <Badge
                               variant={isSelected ? "secondary" : "outline"}
@@ -1050,7 +1050,7 @@ export default function NewMacroTablePage() {
 
                 {obras.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    <Database className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                    <Database className="size-12 mx-auto mb-3 opacity-20" />
                     <p>No hay tablas disponibles.</p>
                     <p className="text-sm mb-4">Creá tablas en tus obras primero.</p>
                     <Button
@@ -1058,7 +1058,7 @@ export default function NewMacroTablePage() {
                       onClick={() => router.push("/admin/obra-defaults")}
                       className="gap-2"
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="size-4" />
                       Ir a Obras para crear tablas
                     </Button>
                   </div>
@@ -1080,7 +1080,7 @@ export default function NewMacroTablePage() {
                             className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
                           >
                             <div className="flex items-center gap-3">
-                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                              <Building2 className="size-4 text-muted-foreground" />
                               <span className="font-medium">{obra.designacionYUbicacion}</span>
                               <Badge variant="outline" className="text-xs">
                                 {obra.tablas.length} tablas
@@ -1092,9 +1092,9 @@ export default function NewMacroTablePage() {
                               )}
                             </div>
                             {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              <ChevronDown className="size-4 text-muted-foreground" />
                             ) : (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              <ChevronRight className="size-4 text-muted-foreground" />
                             )}
                           </button>
                           <div className="px-3 pb-2 -mt-1 flex items-center justify-end gap-2">
@@ -1193,7 +1193,7 @@ export default function NewMacroTablePage() {
                             }
                             className="ml-1 p-0.5 rounded hover:bg-destructive/20 text-destructive"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="size-3" />
                           </button>
                         </Badge>
                       ))}
@@ -1220,7 +1220,7 @@ export default function NewMacroTablePage() {
                     </CardDescription>
                   </div>
                   <Button variant="outline" size="sm" onClick={addCustomColumn} className="gap-1">
-                    <Plus className="h-4 w-4" />
+                    <Plus className="size-4" />
                     Columna personalizada
                   </Button>
                 </div>
@@ -1288,9 +1288,9 @@ export default function NewMacroTablePage() {
                                             <div className="flex items-center gap-2">
                                               <SortableItemHandle
                                                 aria-label="Reordenar columna"
-                                                className="h-8 w-8 shrink-0 rounded-md border border-dashed border-border/70 text-muted-foreground"
+                                                className="size-8 shrink-0 rounded-md border border-dashed border-border/70 text-muted-foreground"
                                               >
-                                                <GripVertical className="h-4 w-4" />
+                                                <GripVertical className="size-4" />
                                               </SortableItemHandle>
                                               <div className="flex-1 space-y-1">
                                                 <p className="truncate font-semibold leading-tight">
@@ -1320,11 +1320,11 @@ export default function NewMacroTablePage() {
                                               <button
                                                 type="button"
                                                 aria-label="Ajustar ancho de columna"
-                                                className="flex h-8 w-8 shrink-0 cursor-col-resize items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground hover:bg-muted/50"
+                                                className="flex size-8 shrink-0 cursor-col-resize items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground hover:bg-muted/50"
                                                 onPointerDown={(event) => startResize(col.id, event)}
                                                 onClick={(event) => event.stopPropagation()}
                                               >
-                                                <MoveHorizontal className="h-4 w-4" />
+                                                <MoveHorizontal className="size-4" />
                                               </button>
                                             </div>
                                           </th>
@@ -1382,7 +1382,7 @@ export default function NewMacroTablePage() {
                         </p>
                       </div>
                       <Button variant="outline" size="sm" onClick={addCustomColumn} className="gap-1">
-                        <Plus className="h-4 w-4" />
+                        <Plus className="size-4" />
                         Nueva personalizada
                       </Button>
                     </div>
@@ -1459,7 +1459,7 @@ export default function NewMacroTablePage() {
                                   onClick={() => moveColumn(selectedColumn.id, "up")}
                                   aria-label="Mover columna arriba"
                                 >
-                                  <ArrowUp className="h-4 w-4" />
+                                  <ArrowUp className="size-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -1467,7 +1467,7 @@ export default function NewMacroTablePage() {
                                   onClick={() => moveColumn(selectedColumn.id, "down")}
                                   aria-label="Mover columna abajo"
                                 >
-                                  <ArrowDown className="h-4 w-4" />
+                                  <ArrowDown className="size-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -1476,7 +1476,7 @@ export default function NewMacroTablePage() {
                                   onClick={() => removeColumn(selectedColumn.id)}
                                   aria-label="Eliminar columna seleccionada"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="size-4" />
                                 </Button>
                               </div>
                             </div>
@@ -1597,7 +1597,7 @@ export default function NewMacroTablePage() {
           disabled={currentStep === 0}
           className="gap-2"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="size-4" />
           Anterior
         </Button>
 
@@ -1608,7 +1608,7 @@ export default function NewMacroTablePage() {
             className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
           >
             Siguiente
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="size-4" />
           </Button>
         ) : (
           <Button
@@ -1617,9 +1617,9 @@ export default function NewMacroTablePage() {
             className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
           >
             {isSubmitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Check className="h-4 w-4" />
+              <Check className="size-4" />
             )}
             Crear macro tabla
           </Button>

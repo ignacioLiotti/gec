@@ -162,12 +162,12 @@ function SimplePieChart({ data }: { data: PieSlice[] }) {
     : ["#e5e7eb 0% 100%"];
 
   return (
-    <div className="relative h-[120px] w-[120px] mx-auto">
+    <div className="relative size-[120px] mx-auto">
       <div
         className="h-full w-full rounded-full"
         style={{ backgroundImage: `conic-gradient(${segments.join(", ")})` }}
       />
-      <div className="absolute inset-0 m-auto h-[70px] w-[70px] rounded-full bg-card" />
+      <div className="absolute inset-0 m-auto size-[70px] rounded-full bg-card" />
     </div>
   );
 }
@@ -819,7 +819,7 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+          <div className="animate-spin size-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
           <p className="text-muted-foreground">Cargando...</p>
         </div>
       </div>
@@ -841,7 +841,7 @@ export default function Home() {
               <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
                 <div className="space-y-5">
                   <Badge variant="secondary" className="inline-flex items-center gap-1 rounded-2xl border border-stone-200 bg-stone-50 px-3 py-1 text-stone-700 shadow-none">
-                    <Sparkles className="h-3.5 w-3.5 text-stone-700" />
+                    <Sparkles className="size-3.5 text-stone-700" />
                     Bienvenido
                   </Badge>
                   <div className="space-y-3">
@@ -856,7 +856,7 @@ export default function Home() {
                     <Button asChild size="lg" className="gap-2 rounded-xl bg-stone-900 text-white hover:bg-stone-800">
                       <Link href="/excel" prefetch={false}>
                         Entrar al panel
-                        <ArrowRight className="h-4 w-4" />
+                        <ArrowRight className="size-4" />
                       </Link>
                     </Button>
                   </div>
@@ -894,8 +894,8 @@ export default function Home() {
               >
                 <Framed className="h-full" innerClassName="h-full">
                   <div className="h-full space-y-3 p-5">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-stone-700">
-                      <Icon className="h-5 w-5" />
+                    <div className="flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-stone-700">
+                      <Icon className="size-5" />
                     </div>
                     <div className="space-y-1">
                       <p className="text-base font-semibold text-stone-900">{title}</p>
@@ -960,8 +960,8 @@ export default function Home() {
                   finishLabel="¡Listo!"
                 />
                 <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-50">
-                    <Activity className="h-3.5 w-3.5 text-cyan-700" />
+                  <div className="flex size-6 items-center justify-center rounded-full bg-cyan-50">
+                    <Activity className="size-3.5 text-cyan-700" />
                   </div>
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-xs uppercase tracking-wide text-stone-600">Activas</span>
@@ -969,8 +969,8 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+                  <div className="flex size-6 items-center justify-center rounded-full bg-emerald-50">
+                    <CheckCircle2 className="size-3.5 text-emerald-700" />
                   </div>
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-xs uppercase tracking-wide text-stone-600">Completadas</span>
@@ -1007,7 +1007,7 @@ export default function Home() {
                       <div className="text-xs text-stone-500">
                         <div className="flex flex-wrap items-center gap-2">
                           <Button size="sm" className="gap-2 bg-stone-900 text-white hover:bg-stone-800" onClick={() => setDialogOpen(true)}>
-                            <Plus className="h-4 w-4" />
+                            <Plus className="size-4" />
                             Nueva Obra
                           </Button>
                           <QuickFormDialog
@@ -1074,7 +1074,7 @@ export default function Home() {
                           <Button asChild variant="outline" size="sm" className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
                             <Link href="/excel" prefetch={true}>
                               Ver Todas
-                              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                              <ArrowRight className="ml-1.5 size-3.5" />
                             </Link>
                           </Button>
                         </div>
@@ -1086,8 +1086,8 @@ export default function Home() {
                 <CardContent className="p-4 pt-0">
                   {obras.length === 0 ? (
                     <div className="rounded-xl border border-stone-200 bg-white px-6 py-16 text-center space-y-4">
-                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-stone-200 bg-stone-50/60">
-                        <FolderKanban className="h-8 w-8 text-stone-400" />
+                      <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border border-stone-200 bg-stone-50/60">
+                        <FolderKanban className="size-8 text-stone-400" />
                       </div>
                       <div className="space-y-2">
                         <p className="font-medium text-stone-700">No hay obras registradas</p>
@@ -1100,7 +1100,7 @@ export default function Home() {
                         </p>
                       </div>
                       <Button onClick={() => setDialogOpen(true)} className="mt-4 gap-2 bg-stone-900 text-white hover:bg-stone-800">
-                        <Plus className="h-4 w-4" />
+                        <Plus className="size-4" />
                         Crear Primera Obra
                       </Button>
                     </div>
@@ -1199,7 +1199,7 @@ export default function Home() {
                                       )}
                                     >
                                       <Link href={`/excel/${obra.id}`} onMouseEnter={() => prefetchObra(obra.id)}>
-                                        <ArrowRight className="h-4 w-4" />
+                                        <ArrowRight className="size-4" />
                                       </Link>
                                     </Button>
                                   </div>
@@ -1310,15 +1310,15 @@ export default function Home() {
                                 <Button asChild size="sm" className="w-full bg-stone-900 text-white hover:bg-stone-800">
                                   <Link href={`/excel/${selectedPreviewObra.id}`}>
                                     Abrir panel de la obra
-                                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                                    <ArrowRight className="ml-1.5 size-3.5" />
                                   </Link>
                                 </Button>
                               </div>
                             );
                           })() : (
                             <div className="flex flex-col items-center justify-center py-14 text-center space-y-3">
-                              <div className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center">
-                                <BarChart3 className="h-6 w-6 text-stone-400" />
+                              <div className="size-12 rounded-xl bg-stone-100 flex items-center justify-center">
+                                <BarChart3 className="size-6 text-stone-400" />
                               </div>
                               <p className="text-sm text-stone-500 max-w-[180px]">
                                 Selecciona una obra de la lista para ver los detalles
@@ -1346,7 +1346,7 @@ export default function Home() {
                   <Card className="rounded-xl bg-white/90 pt-0 shadow-none gap-0">
                     <CardHeader className="pb-2 pt-5">
                       <div className="flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <AlertTriangle className="size-4 text-amber-600" />
                         <CardTitle className="text-sm font-medium text-amber-800">Requieren Atencion</CardTitle>
                       </div>
                     </CardHeader>

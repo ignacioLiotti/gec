@@ -79,7 +79,7 @@ export function PageBreadcrumb() {
           return (
             <li key={crumb.href} className="flex items-center gap-1">
               {index > 0 && (
-                <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                <ChevronRight className="size-3 text-muted-foreground/60" />
               )}
 
               {isLast ? (

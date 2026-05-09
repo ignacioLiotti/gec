@@ -218,7 +218,7 @@ export default function DesktopExcelPagePreview({
 						</div>
 						{isHydratingRows ? (
 							<div className="flex items-center gap-2 rounded-lg border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-xs text-[#6b6258]">
-								<Loader2 className="h-3.5 w-3.5 animate-spin" />
+								<Loader2 className="size-3.5 animate-spin" />
 								Completando datos…
 							</div>
 						) : null}
@@ -236,7 +236,7 @@ export default function DesktopExcelPagePreview({
 						<NotchTail side="left" className="mb-[1px] h-[45px] !hidden xl:!block" />
 						<Button variant="outline" asChild>
 							<Link href="/excel/reporte" prefetch={false} className="gap-2">
-								<FileText className="h-4 w-4" />
+								<FileText className="size-4" />
 								Generar Reporte
 							</Link>
 						</Button>

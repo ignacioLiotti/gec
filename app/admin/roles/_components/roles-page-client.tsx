@@ -61,7 +61,7 @@ export function RolesPageClient({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Shield className="h-6 w-6" />
+            <Shield className="size-6" />
             Roles y Permisos
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -69,7 +69,7 @@ export function RolesPageClient({
           </p>
         </div>
         <Button onClick={handleCreateRole}>
-          <Plus className="h-4 w-4 mr-1" />
+          <Plus className="size-4 mr-1" />
           Crear Rol
         </Button>
       </div>
@@ -78,11 +78,11 @@ export function RolesPageClient({
       <Tabs defaultValue="roles" className="space-y-6">
         <TabsList>
           <TabsTrigger value="roles" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
+            <Shield className="size-4" />
             Roles ({roles.length})
           </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
+            <Users className="size-4" />
             Asignaciones
           </TabsTrigger>
         </TabsList>
@@ -91,14 +91,14 @@ export function RolesPageClient({
         <TabsContent value="roles">
           {roles.length === 0 ? (
             <div className="border rounded-lg p-12 text-center">
-              <Shield className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <Shield className="size-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <h3 className="text-lg font-medium mb-2">No hay roles configurados</h3>
               <p className="text-muted-foreground mb-4">
                 Crea tu primer rol para comenzar a asignar permisos a los usuarios.
               </p>
               <div className="flex justify-center gap-2">
                 <Button onClick={handleCreateRole}>
-                  <Plus className="h-4 w-4 mr-1" />
+                  <Plus className="size-4 mr-1" />
                   Crear Rol
                 </Button>
               </div>

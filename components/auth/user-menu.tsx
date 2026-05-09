@@ -288,7 +288,7 @@ export default function UserMenu({
 												<div className="flex items-center gap-2">
 													<span className="font-medium">{n.title}</span>
 													{!n.read_at && (
-														<span className="inline-flex h-1.5 w-1.5 rounded-full bg-orange-primary" />
+														<span className="inline-flex size-1.5 rounded-full bg-orange-primary" />
 													)}
 												</div>
 												{n.body && (

@@ -201,7 +201,7 @@ export function ObrasTrashPageClient() {
 		return (
 			<div className="p-6">
 				<Card className="p-6 text-sm text-stone-600 flex items-center gap-2">
-					<Loader2 className="h-4 w-4 animate-spin" />
+					<Loader2 className="size-4 animate-spin" />
 					Verificando permisos...
 				</Card>
 			</div>
@@ -217,7 +217,7 @@ export function ObrasTrashPageClient() {
 						Solo administradores pueden ver la papelera de obras.
 					</p>
 					<Button type="button" variant="outline" onClick={() => router.push("/excel")}>
-						<ArrowLeft className="mr-2 h-4 w-4" />
+						<ArrowLeft className="mr-2 size-4" />
 						Volver a Excel
 					</Button>
 				</Card>
@@ -235,7 +235,7 @@ export function ObrasTrashPageClient() {
 						className="h-8 px-2 text-xs"
 						onClick={() => router.push("/excel")}
 					>
-						<ArrowLeft className="mr-1 h-3.5 w-3.5" />
+						<ArrowLeft className="mr-1 size-3.5" />
 						Volver a Excel
 					</Button>
 					<h1 className="text-2xl font-semibold text-stone-900">Papelera de obras</h1>
@@ -250,9 +250,9 @@ export function ObrasTrashPageClient() {
 					disabled={loading}
 				>
 					{loading ? (
-						<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+						<Loader2 className="mr-2 size-4 animate-spin" />
 					) : (
-						<RefreshCw className="mr-2 h-4 w-4" />
+						<RefreshCw className="mr-2 size-4" />
 					)}
 					Actualizar
 				</Button>
@@ -305,12 +305,12 @@ export function ObrasTrashPageClient() {
 										>
 											{restoringId === item.id ? (
 												<>
-													<Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+													<Loader2 className="mr-2 size-3.5 animate-spin" />
 													Restaurando...
 												</>
 											) : item.recoverable ? (
 												<>
-													<RotateCcw className="mr-2 h-3.5 w-3.5" />
+													<RotateCcw className="mr-2 size-3.5" />
 													Restaurar
 												</>
 											) : (
@@ -377,7 +377,7 @@ export function ObrasTrashPageClient() {
 
 			<div className="flex items-center justify-between text-xs text-stone-500">
 				<div className="flex items-center gap-2">
-					<Trash2 className="h-3.5 w-3.5" />
+					<Trash2 className="size-3.5" />
 					<span>Vista actual: {tab === "active" ? "Papelera" : "Historial"}</span>
 				</div>
 				<span>{currentCount} elementos</span>

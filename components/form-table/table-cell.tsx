@@ -327,7 +327,7 @@ function StaticReadOnlyCellContent<Row extends FormTableRow>({
 		>
 			{suggestion && (
 				<div className="pointer-events-none absolute right-9 z-20 inline-flex h-6 items-center rounded-full border border-orange-200 bg-orange-50 px-2 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm">
-					<Sparkles className="mr-1 h-3 w-3" />
+					<Sparkles className="mr-1 size-3" />
 					Sugerencia
 				</div>
 			)}

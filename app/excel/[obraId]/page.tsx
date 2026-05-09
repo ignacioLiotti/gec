@@ -2957,7 +2957,7 @@ function ObraDetailPageContent() {
 	const memoriaHeader = (
 		<div className="flex items-center justify-between gap-2">
 			<div className="flex items-center gap-2">
-				<StickyNote className="h-4 w-4 text-primary" />
+				<StickyNote className="size-4 text-primary" />
 				<h2 className="text-sm font-semibold">Memoria descriptiva de la obra</h2>
 			</div>
 		</div>
@@ -3043,7 +3043,7 @@ function ObraDetailPageContent() {
 						>
 							<div className="flex items-center justify-between gap-2">
 								<div className="flex items-center gap-2">
-									<div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
+									<div className="size-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
 										{(note.userName || "?")
 											.split(" ")
 											.filter(Boolean)
@@ -3403,7 +3403,7 @@ function ObraDetailPageContent() {
 										<Tooltip>
 											<TooltipTrigger asChild>
 												<Badge className="bg-amber-100 text-amber-800 border-amber-200 rounded-md py-1.5">
-													<AlertTriangle className="h-3.5 w-3.5 mr-1" />
+													<AlertTriangle className="size-3.5 mr-1" />
 													{obraDelay}% atrasada
 												</Badge>
 											</TooltipTrigger>
@@ -3422,7 +3422,7 @@ function ObraDetailPageContent() {
 										className="h-8 gap-2"
 										onClick={() => router.push(`/document-generation?workId=${obraId}`)}
 									>
-										<FilePlus2 className="h-4 w-4" />
+										<FilePlus2 className="size-4" />
 										<span className="text-base md:text-sm">Generar documento</span>
 									</Button> */}
 									{isTenantAdmin && (
@@ -3434,7 +3434,7 @@ function ObraDetailPageContent() {
 												className="h-8 gap-2"
 												onClick={handleOpenObrasTrashPage}
 											>
-												<Trash2 className="h-4 w-4" />
+												<Trash2 className="size-4" />
 												<span className="text-base md:text-sm">Papelera obras</span>
 											</Button> */}
 											<Button
@@ -3445,7 +3445,7 @@ function ObraDetailPageContent() {
 												onClick={() => void handleDeleteObra()}
 												disabled={isDeletingObra}
 											>
-												<Trash2 className="h-4 w-4" />
+												<Trash2 className="size-4" />
 												<span className="text-base md:text-sm">
 													{isDeletingObra ? "Eliminando..." : "Borrar obra"}
 												</span>
@@ -3468,7 +3468,7 @@ function ObraDetailPageContent() {
 														aria-pressed={!isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(false)}
 													>
-														<Eye className="h-4 w-4" />
+														<Eye className="size-4" />
 														<span className={cn("hidden sm:inline text-base md:text-sm", !isGeneralTabEditMode ? "inline" : "hidden")}>Vista previa</span>
 													</Button>
 													<Button
@@ -3479,7 +3479,7 @@ function ObraDetailPageContent() {
 														aria-pressed={isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(true)}
 													>
-														<Pencil className="h-4 w-4" />
+														<Pencil className="size-4" />
 														<span className={cn("hidden sm:inline text-base md:text-sm", isGeneralTabEditMode ? "inline" : "hidden")}>Edición</span>
 													</Button>
 												</div>
@@ -3491,7 +3491,7 @@ function ObraDetailPageContent() {
 												className="gap-2"
 												aria-label="Memoria"
 											>
-												<StickyNote className="h-4 w-4" />
+												<StickyNote className="size-4" />
 												<span className="hidden sm:inline">Memoria</span>
 											</Button>
 										</>
@@ -3505,7 +3505,7 @@ function ObraDetailPageContent() {
 												className="h-8 gap-2"
 												onClick={handleOpenDocumentsRecovery}
 											>
-												<RotateCcw className="h-4 w-4" />
+												<RotateCcw className="size-4" />
 												<span className="text-base md:text-sm">Recuperar</span>
 											</Button>
 											<Button
@@ -3515,7 +3515,7 @@ function ObraDetailPageContent() {
 												className="h-8 gap-2"
 												onClick={handleOpenDocumentsTrashPage}
 											>
-												<Trash2 className="h-4 w-4" />
+												<Trash2 className="size-4" />
 												<span className="text-base md:text-sm">Papelera</span>
 											</Button>
 										</>
