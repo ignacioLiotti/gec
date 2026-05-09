@@ -203,7 +203,7 @@ export function ObrasTrashPageClient() {
 			<div className="p-6">
 				<Card className="p-6 text-sm text-stone-600 flex items-center gap-2">
 					<Loader2 className="size-4 animate-spin" />
-					Verificando permisos...
+					Verificando permisos&hellip;
 				</Card>
 			</div>
 		);
@@ -307,7 +307,7 @@ export function ObrasTrashPageClient() {
 											{restoringId === item.id ? (
 												<>
 													<Loader2 className="mr-2 size-3.5 animate-spin" />
-													Restaurando...
+													Restaurando&hellip;
 												</>
 											) : item.recoverable ? (
 												<>

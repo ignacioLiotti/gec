@@ -242,7 +242,7 @@ export default function InvitationPage() {
               {processing ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Processing...
+                  Processing&hellip;
                 </>
               ) : (
                 "Decline"
@@ -256,7 +256,7 @@ export default function InvitationPage() {
               {processing ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Processing...
+                  Processing&hellip;
                 </>
               ) : !user ? (
                 "Log In to Accept"

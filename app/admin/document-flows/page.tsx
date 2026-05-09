@@ -1288,7 +1288,7 @@ export default function AdminDocumentFlowsPage() {
                 {isLoading && !selectedFolder ? (
                   <div className="rounded-[26px] border border-stone-200 bg-[#faf8f3] px-6 py-14 text-center text-sm text-stone-500">
                     <Loader2 className="mx-auto mb-3 size-5 animate-spin" />
-                    Cargando flujos documentales...
+                    Cargando flujos documentales&hellip;
                   </div>
                 ) : selectedFolder ? (
                   <div className="overflow-x-auto rounded-[28px] border border-stone-200 bg-[#faf8f3] p-6">

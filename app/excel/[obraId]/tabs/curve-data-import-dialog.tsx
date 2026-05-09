@@ -411,7 +411,7 @@ export function CurveDataImportDialog({
 											{isLoadingPreview ? (
 												<>
 													<Loader2 className="size-4 animate-spin" />
-													Analizando archivo...
+													Analizando archivo&hellip;
 												</>
 											) : (
 												<>

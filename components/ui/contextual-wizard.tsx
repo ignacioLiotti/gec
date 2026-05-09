@@ -463,7 +463,7 @@ export function ContextualWizard({
 
           {!targetReady && (
             <p className="mt-3 rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-700">
-              Esperando el elemento objetivo en pantalla...
+              Esperando el elemento objetivo en pantalla&hellip;
             </p>
           )}
           {step.requiredAction === "click_target" && !actionDone && (

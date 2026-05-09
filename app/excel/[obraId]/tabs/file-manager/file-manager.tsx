@@ -5715,7 +5715,7 @@ function FileManagerContent({
                 {isDownloadingAll ? (
                   <>
                     <Loader2 className="size-3.5 animate-spin" />
-                    Generando ZIP...
+                    Generando ZIP&hellip;
                   </>
                 ) : (
                   <>
@@ -5737,7 +5737,7 @@ function FileManagerContent({
                 {isReprocessingAll ? (
                   <>
                     <Loader2 className="size-3.5 animate-spin" />
-                    Reprocesando{reprocessAllProgress ? ` (${reprocessAllProgress.done}/${reprocessAllProgress.total})` : '...'}
+                    Reprocesando{reprocessAllProgress ? ` (${reprocessAllProgress.done}/${reprocessAllProgress.total})` : "\u2026"}
                   </>
                 ) : (
                   <>
@@ -6741,7 +6741,7 @@ function FileManagerContent({
                     }}
                     disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
                   >
-                    {isApplyingSpreadsheetPreview ? 'Importando...' : 'Confirmar e importar'}
+                    {isApplyingSpreadsheetPreview ? "Importando\u2026" : 'Confirmar e importar'}
                   </Button>
                 </DialogFooter>
 
@@ -7067,7 +7067,7 @@ function FileManagerContent({
                   </div>
                   {isLoadingOcrTemplates ? (
                     <div className="text-xs text-muted-foreground border border-dashed rounded-md px-3 py-2">
-                      Cargando plantillas...
+                      Cargando plantillas&hellip;
                     </div>
                   ) : ocrTemplates.length === 0 ? (
                     <div className="text-xs text-purple-700 bg-white border border-purple-200 rounded-md px-3 py-2">
@@ -7435,7 +7435,7 @@ function FileManagerContent({
               Agregar columna
             </Button>
             <Button type="button" onClick={handleSaveSchema} disabled={isSavingSchema}>
-              {isSavingSchema ? 'Guardando...' : 'Guardar cambios'}
+              {isSavingSchema ? "Guardando\u2026" : 'Guardar cambios'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -7561,7 +7561,7 @@ function FileManagerContent({
                         onClick={() => void handleRestoreDeletedEntry(entry.id)}
                       >
                         {restoringDeleteId === entry.id
-                          ? 'Restaurando...'
+                          ? "Restaurando\u2026"
                           : entry.recoverable
                             ? 'Restaurar'
                             : 'Expirado'}
@@ -7636,7 +7636,7 @@ function FileManagerContent({
             <DialogTitle>Reprocesar todos los documentos</DialogTitle>
             <DialogDescription>
               {isReprocessingAll
-                ? 'Reprocesando documentos...'
+                ? "Reprocesando documentos\u2026"
                 : `Se van a reprocesar ${reprocessableFiles.length} documento${reprocessableFiles.length !== 1 ? 's' : ''} en la carpeta "${selectedFolder?.name ?? ''}". Los datos extraídos existentes se reemplazarán con los nuevos resultados.`}
             </DialogDescription>
           </DialogHeader>

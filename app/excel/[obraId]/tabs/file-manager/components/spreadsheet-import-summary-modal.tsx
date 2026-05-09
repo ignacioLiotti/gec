@@ -120,7 +120,7 @@ export function SpreadsheetImportSummaryModal({
         {isLoading && !payload ? (
           <div className="flex h-full min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            Detectando datos del archivo...
+            Detectando datos del archivo&hellip;
           </div>
         ) : (
           <div className="space-y-4">
@@ -148,7 +148,7 @@ export function SpreadsheetImportSummaryModal({
           Cancelar
         </Button>
         <Button onClick={onConfirm} disabled={isLoading || isApplying || !summary.canImportAll}>
-          {isApplying ? "Importando..." : primaryLabel}
+          {isApplying ? "Importando\u2026" : primaryLabel}
         </Button>
       </DialogFooter>
     </>

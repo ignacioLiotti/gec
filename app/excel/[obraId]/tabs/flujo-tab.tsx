@@ -486,7 +486,7 @@ export function ObraFlujoTab({
 									{isSavingFlujoAction ? (
 										<>
 											<Loader2 className="size-4 mr-1 animate-spin" />
-											Guardando...
+											Guardando&hellip;
 										</>
 									) : (
 										<>

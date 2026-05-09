@@ -74,7 +74,7 @@ export function Dropzone({ onFile, isLoading }: DropzoneProps) {
 				<>
 					<Loader2 className="size-10 animate-spin text-orange-500" />
 					<p className="text-sm font-medium text-muted-foreground">
-						Analizando archivo...
+						Analizando archivo&hellip;
 					</p>
 				</>
 			) : (

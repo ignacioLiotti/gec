@@ -282,7 +282,7 @@ function OnboardingPageContent() {
 																{acceptingId === invitation.id ? (
 																	<>
 																		<Loader2 className="mr-2 size-4 animate-spin" />
-																		Uniéndose...
+																		Uniéndose&hellip;
 																	</>
 																) : (
 																	<>
@@ -345,7 +345,7 @@ function OnboardingPageContent() {
 									{creatingTenant ? (
 										<>
 											<Loader2 className="mr-2 size-4 animate-spin" />
-											Creando Organización...
+											Creando Organización&hellip;
 										</>
 									) : (
 										<>

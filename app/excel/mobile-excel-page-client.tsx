@@ -135,7 +135,7 @@ export default function MobileExcelPageClient({
 					</div>
 					{isLoading ? (
 						<div className="rounded-xl border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-sm text-[#999]">
-							Cargando obras...
+							Cargando obras&hellip;
 						</div>
 					) : (
 						<div className="grid grid-cols-1 gap-3">

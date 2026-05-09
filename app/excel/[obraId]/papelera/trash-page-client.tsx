@@ -225,7 +225,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 											{restoringId === item.id ? (
 												<>
 													<Loader2 className="mr-2 size-3.5 animate-spin" />
-													Restaurando...
+													Restaurando&hellip;
 												</>
 											) : item.recoverable ? (
 												<>

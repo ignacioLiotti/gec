@@ -260,7 +260,7 @@ function SpreadsheetLikePreview({
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
 					<Loader2 className="size-4 animate-spin" />
-					Cargando vista previa...
+					Cargando vista previa&hellip;
 				</div>
 			</div>
 		);
@@ -426,7 +426,7 @@ function WordDocumentPreview({
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
 					<Loader2 className="size-4 animate-spin" />
-					Renderizando documento...
+					Renderizando documento&hellip;
 				</div>
 			</div>
 		);

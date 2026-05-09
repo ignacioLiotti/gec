@@ -846,7 +846,7 @@ export function TemplatePickerCard() {
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-stone-500">
             <Loader2 className="size-4 animate-spin" />
-            Cargando templates...
+            Cargando templates&hellip;
           </div>
         ) : null}
 

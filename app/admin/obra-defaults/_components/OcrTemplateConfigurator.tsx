@@ -847,7 +847,7 @@ export function OcrTemplateConfigurator({
 								{isRenderingPdf && (
 									<div className="sticky top-0 z-10 flex items-center justify-end p-3">
 										<div className="rounded-full border bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
-											Renderizando PDF...
+											Renderizando PDF&hellip;
 										</div>
 									</div>
 								)}

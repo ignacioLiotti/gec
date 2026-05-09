@@ -106,7 +106,7 @@ export function PendingInvitationsBanner() {
               {acceptingId === invitation.id ? (
                 <>
                   <Loader2 className="mr-1 size-3 animate-spin" />
-                  Joining...
+                  Joining&hellip;
                 </>
               ) : (
                 <>

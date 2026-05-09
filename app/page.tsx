@@ -994,7 +994,7 @@ function MarketingLanding() {
         }
         onSubmit={submitContact}
         isSubmitting={contactSubmitting}
-        submitLabel={contactSubmitting ? "Enviando..." : "Enviar información"}
+        submitLabel={contactSubmitting ? "Enviando\u2026" : "Enviar información"}
         cancelLabel="Cancelar"
       />
     </div >
@@ -1629,7 +1629,7 @@ function Step3Visual() {
                       animate={{ scale: [1, 1.4, 1] }}
                       transition={{ duration: 0.9, repeat: Infinity }}
                     />
-                    Escaneando...
+                    Escaneando&hellip;
                   </motion.span>
                 ) : (
                   <motion.span

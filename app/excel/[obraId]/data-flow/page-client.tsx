@@ -5326,7 +5326,7 @@ function TableDrawer({
                 }}
               >
                 <Loader2 size={18} style={{ margin: "0 auto 10px", animation: "spin 1s linear infinite" }} />
-                Cargando detalle de tabla...
+                Cargando detalle de tabla&hellip;
               </div>
             ) : error ? (
               <div
@@ -5733,7 +5733,7 @@ function DocumentPreviewModal({
               {loading ? (
                 <div style={{ textAlign: "center", fontSize: 13, color: "var(--df-stone-500)" }}>
                   <Loader2 size={18} style={{ margin: "0 auto 10px" }} />
-                  Generando acceso al documento...
+                  Generando acceso al documento&hellip;
                 </div>
               ) : error ? (
                 <div
@@ -8110,7 +8110,7 @@ export function DataFlowPageClient({
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--df-stone-500)", fontSize: 13 }}>
                     <div style={{ textAlign: "center" }}>
                       <Loader2 size={20} style={{ margin: "0 auto 10px" }} />
-                      Cargando trazabilidad...
+                      Cargando trazabilidad&hellip;
                     </div>
                   </div>
                 ) : error ? (
