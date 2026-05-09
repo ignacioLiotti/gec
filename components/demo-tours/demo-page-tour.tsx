@@ -32,6 +32,7 @@ export function DemoPageTour({
 }: DemoPageTourProps) {
 	const pathname = usePathname();
 	const router = useRouter();
+  const { replace } = router;
 	const searchParams = useSearchParams();
 	const [open, setOpen] = useState(false);
 	const preserveClearRef = useRef(false);
@@ -42,7 +43,7 @@ export function DemoPageTour({
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("tour");
 		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
-		router.replace(nextUrl, { scroll: false });
+		replace(nextUrl, { scroll: false });
 	}, [activeTourId, flow.id, pathname, router, searchParams]);
 
 	useEffect(() => {

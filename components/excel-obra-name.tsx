@@ -77,6 +77,7 @@ function getObraLabel(obra: ObraSummary) {
 export function ExcelObraName() {
   const pathname = usePathname();
   const router = useRouter();
+  const { prefetch, push } = router;
   const { prefetchObra } = usePrefetchObra();
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
@@ -145,7 +146,7 @@ export function ExcelObraName() {
   const prefetchObraRoute = useCallback(
     (targetObra: ObraSummary | null | undefined) => {
       if (!targetObra?.id) return;
-      router.prefetch(getObraHref(targetObra.id));
+      prefetch(getObraHref(targetObra.id));
       prefetchObra(targetObra.id);
     },
     [prefetchObra, router]
@@ -155,7 +156,7 @@ export function ExcelObraName() {
     if (!targetObra?.id) return;
     prefetchObraRoute(targetObra);
     setIsSelectorOpen(false);
-    router.push(getObraHref(targetObra.id));
+    push(getObraHref(targetObra.id));
   };
 
   const displayName = obraId ? obraState.obraName : pageName;

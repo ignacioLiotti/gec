@@ -195,6 +195,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	readOnly = false,
 }: ReportPageProps<Row, Filters>) {
 	const router = useRouter();
+  const { back, push } = router;
 	const reportContentRef = useRef<HTMLDivElement>(null);
 	const localStorageKey = `report:last:${config.id}`;
 
@@ -833,9 +834,9 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	// Handle back navigation
 	const handleBack = useCallback(() => {
 		if (backUrl) {
-			router.push(backUrl);
+			push(backUrl);
 		} else {
-			router.back();
+			back();
 		}
 	}, [backUrl, router]);
 

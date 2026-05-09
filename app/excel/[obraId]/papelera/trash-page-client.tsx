@@ -70,6 +70,7 @@ function statusVariant(status: DeletedDocumentEntry["status"]) {
 
 export function TrashPageClient({ obraId }: { obraId: string }) {
 	const router = useRouter();
+  const { push } = router;
 	const [tab, setTab] = useState<TrashView>("active");
 	const [activeItems, setActiveItems] = useState<DeletedDocumentEntry[]>([]);
 	const [historyItems, setHistoryItems] = useState<DeletedDocumentEntry[]>([]);
@@ -160,7 +161,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 						type="button"
 						variant="ghost"
 						className="h-8 px-2 text-xs"
-						onClick={() => router.push(`/excel/${encodeURIComponent(obraId)}?tab=documentos`)}
+						onClick={() => push(`/excel/${encodeURIComponent(obraId)}?tab=documentos`)}
 					>
 						<ArrowLeft className="mr-1 size-3.5" />
 						Volver a documentos

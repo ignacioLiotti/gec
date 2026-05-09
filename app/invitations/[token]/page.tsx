@@ -22,6 +22,7 @@ interface InvitationDetails {
 export default function InvitationPage() {
   const params = useParams();
   const router = useRouter();
+  const { push } = router;
   const token = params?.token as string;
 
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
@@ -76,7 +77,7 @@ export default function InvitationPage() {
   const handleAccept = async () => {
     if (!user) {
       // Redirect to login with return URL
-      router.push(`/?returnTo=/invitations/${token}`);
+      push(`/?returnTo=/invitations/${token}`);
       return;
     }
 
@@ -88,14 +89,14 @@ export default function InvitationPage() {
     if (result.error) {
       if (result.alreadyMember) {
         // Redirect to app if already a member
-        router.push("/");
+        push("/");
       } else {
         setError(result.error);
         setProcessing(false);
       }
     } else if (result.success) {
       // Success - redirect to app
-      router.push("/");
+      push("/");
     } else {
       setError("An unexpected error occurred.");
       setProcessing(false);
@@ -104,7 +105,7 @@ export default function InvitationPage() {
 
   const handleDecline = async () => {
     if (!user) {
-      router.push("/");
+      push("/");
       return;
     }
 
@@ -117,7 +118,7 @@ export default function InvitationPage() {
       setError(result.error);
       setProcessing(false);
     } else if (result.success) {
-      router.push("/");
+      push("/");
     }
   };
 
@@ -145,7 +146,7 @@ export default function InvitationPage() {
           </CardHeader>
           <CardContent>
             <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={() => router.push("/")} className="w-full">
+            <Button onClick={() => push("/")} className="w-full">
               Go to Home
             </Button>
           </CardContent>

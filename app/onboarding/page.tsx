@@ -29,6 +29,7 @@ type Mode = "join" | "create";
 
 function OnboardingPageContent() {
 	const router = useRouter();
+  const { push, refresh } = router;
 	const searchParams = useSearchParams();
 	const [mode, setMode] = useState<Mode>("join");
 	const [user, setUser] = useState<any>(null);
@@ -54,7 +55,7 @@ function OnboardingPageContent() {
 			const { data: { user: currentUser } } = await supabase.auth.getUser();
 
 			if (!currentUser) {
-				router.push("/");
+				push("/");
 				return;
 			}
 
@@ -69,7 +70,7 @@ function OnboardingPageContent() {
 
 			if (memberships && memberships.length > 0 && !previewMode) {
 				// Redirect to first tenant
-				router.push(`/api/tenants/${memberships[0].tenant_id}/switch`);
+				push(`/api/tenants/${memberships[0].tenant_id}/switch`);
 				return;
 			}
 
@@ -104,8 +105,8 @@ function OnboardingPageContent() {
 		} else if (result.success) {
 			toast.success(`¡Te uniste a ${result.tenantName}!`);
 			// Redirigir al tenant
-			router.push("/");
-			router.refresh();
+			push("/");
+			refresh();
 		}
 	};
 
@@ -292,7 +293,7 @@ function OnboardingPageContent() {
 															<Button
 																variant="outline"
 																size="sm"
-																onClick={() => router.push(`/invitations/${invitation.token}`)}
+																onClick={() => push(`/invitations/${invitation.token}`)}
 															>
 																Ver Detalles
 															</Button>

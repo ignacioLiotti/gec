@@ -406,6 +406,7 @@ function MacroFiltersContent({
 
 function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) {
   const router = useRouter();
+  const { push, replace } = router;
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [overrideSummary, setOverrideSummary] = useState<MacroTableOverrideSummary>({
@@ -932,7 +933,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
               onClick={() => {
                 const isTourActive = searchParams.get("tour") === "macro-overview";
                 const dest = `/macro/${macroTable.id}/reporte${isTourActive ? "?tour=macro-report" : ""}`;
-                router.push(dest);
+                push(dest);
               }}
             >
               <FileText className="size-4" />
@@ -942,7 +943,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
               variant="outline"
               size="sm"
               className={toolButtonClass}
-              onClick={() => router.push(`/admin/macro-tables/${macroTable.id}`)}
+              onClick={() => push(`/admin/macro-tables/${macroTable.id}`)}
             >
               <Settings className="size-4" />
               Configurar
@@ -950,7 +951,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
             <Button
               size="sm"
               className="gap-2 rounded-lg bg-[#1f1a17] text-white hover:bg-[#2b241f]"
-              onClick={() => router.push("/admin/macro-tables/new")}
+              onClick={() => push("/admin/macro-tables/new")}
             >
               <Plus className="size-4" />
               Nueva macro tabla
@@ -1021,6 +1022,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
 function MacroTablesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { push, replace } = router;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set());
 
@@ -1068,7 +1070,7 @@ function MacroTablesPageContent() {
         `${url.pathname}?${url.searchParams.toString()}`
       );
     } else {
-      router.replace(`/macro?macroId=${value}`);
+      replace(`/macro?macroId=${value}`);
     }
   };
 
@@ -1102,7 +1104,7 @@ function MacroTablesPageContent() {
             Crea una macro tabla para agregar datos de multiples fuentes.
           </p>
         </div>
-        <Button onClick={() => router.push("/admin/macro-tables/new")} className="gap-2">
+        <Button onClick={() => push("/admin/macro-tables/new")} className="gap-2">
           <Plus className="size-4" />
           Nueva macro tabla
         </Button>

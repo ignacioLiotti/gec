@@ -29,6 +29,7 @@ export function PendingInvitationsBanner() {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const router = useRouter();
+  const { push, refresh } = router;
 
   useEffect(() => {
     async function loadInvitations() {
@@ -53,7 +54,7 @@ export function PendingInvitationsBanner() {
       setInvitations((prev) => prev.filter((inv) => inv.id !== invitation.id));
       setAcceptingId(null);
       // Refresh the page to update tenant membership
-      router.refresh();
+      refresh();
     }
   };
 
@@ -92,7 +93,7 @@ export function PendingInvitationsBanner() {
               size="sm"
               variant="ghost"
               className="h-8 text-blue-700 hover:text-blue-900 hover:bg-blue-100"
-              onClick={() => router.push(`/invitations/${invitation.token}`)}
+              onClick={() => push(`/invitations/${invitation.token}`)}
             >
               View Details
             </Button>

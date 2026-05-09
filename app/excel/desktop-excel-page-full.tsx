@@ -174,6 +174,7 @@ export default function DesktopExcelPageClient({
 	initialLoadMode,
 }: ExcelPageClientProps) {
 	const router = useRouter();
+  const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
@@ -238,7 +239,7 @@ export default function DesktopExcelPageClient({
 		params.delete("tour");
 		params.delete("tourStage");
 		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
-		router.replace(nextUrl, { scroll: false });
+		replace(nextUrl, { scroll: false });
 	}, [pathname, router, searchParams]);
 
 	useEffect(() => {

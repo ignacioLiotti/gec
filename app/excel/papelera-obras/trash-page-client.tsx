@@ -95,6 +95,7 @@ function statusVariant(status: ObraDeleteStatus) {
 
 export function ObrasTrashPageClient() {
 	const router = useRouter();
+  const { push } = router;
 	const { isAdmin: isTenantAdmin, isLoading: isTenantAdminLoading } = useTenantAdminStatus();
 	const [tab, setTab] = useState<TrashView>("active");
 	const [activeItems, setActiveItems] = useState<DeletedObraEntry[]>([]);
@@ -216,7 +217,7 @@ export function ObrasTrashPageClient() {
 					<p className="text-sm text-stone-600">
 						Solo administradores pueden ver la papelera de obras.
 					</p>
-					<Button type="button" variant="outline" onClick={() => router.push("/excel")}>
+					<Button type="button" variant="outline" onClick={() => push("/excel")}>
 						<ArrowLeft className="mr-2 size-4" />
 						Volver a Excel
 					</Button>
@@ -233,7 +234,7 @@ export function ObrasTrashPageClient() {
 						type="button"
 						variant="ghost"
 						className="h-8 px-2 text-xs"
-						onClick={() => router.push("/excel")}
+						onClick={() => push("/excel")}
 					>
 						<ArrowLeft className="mr-1 size-3.5" />
 						Volver a Excel

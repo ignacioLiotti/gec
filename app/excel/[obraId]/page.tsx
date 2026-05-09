@@ -1134,6 +1134,7 @@ function ObraDetailPageContent() {
 	const params = useParams();
 	const queryClient = useQueryClient();
 	const router = useRouter();
+  const { push, replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const isMobile = useIsMobile();
@@ -1700,7 +1701,7 @@ function ObraDetailPageContent() {
 		const qs = params.toString();
 		// Use startTransition to mark URL update as low-priority
 		startTransition(() => {
-			router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+			replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
 		});
 	}, [router, pathname, searchParams]);
 
@@ -1742,7 +1743,7 @@ function ObraDetailPageContent() {
 
 	const handleOpenDocumentsTrashPage = useCallback(() => {
 		if (!obraId) return;
-		router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
+		push(`/excel/${encodeURIComponent(obraId)}/papelera`);
 	}, [obraId, router]);
 
 	const handleOpenObrasTrashPage = useCallback(() => {
@@ -1750,7 +1751,7 @@ function ObraDetailPageContent() {
 			toast.error("Solo administradores pueden ver la papelera de obras.");
 			return;
 		}
-		router.push("/excel/papelera-obras");
+		push("/excel/papelera-obras");
 	}, [isTenantAdmin, router]);
 
 	const handleStartIlagMaterialsWizard = useCallback(() => {
@@ -2216,7 +2217,7 @@ function ObraDetailPageContent() {
 			invalidateObrasTableSessionCache();
 			queryClient.invalidateQueries({ queryKey: ["obras-dashboard"] });
 			toast.success("Obra eliminada");
-			router.push("/excel");
+			push("/excel");
 		} catch (error) {
 			console.error(error);
 			toast.error(
@@ -3276,7 +3277,7 @@ function ObraDetailPageContent() {
 			tour: null,
 			tourStage: null,
 		});
-		router.push("/macro?tour=macro-overview");
+		push("/macro?tour=macro-overview");
 	}, [setQueryParams, router]);
 
 	return (
@@ -3420,7 +3421,7 @@ function ObraDetailPageContent() {
 										variant="outline"
 										size="sm"
 										className="h-8 gap-2"
-										onClick={() => router.push(`/document-generation?workId=${obraId}`)}
+										onClick={() => push(`/document-generation?workId=${obraId}`)}
 									>
 										<FilePlus2 className="size-4" />
 										<span className="text-base md:text-sm">Generar documento</span>

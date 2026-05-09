@@ -39,6 +39,7 @@ function MacroTableReportContent() {
 	const params = useParams();
 	const id = params?.id as string;
 	const router = useRouter();
+  const { push } = router;
 	const searchParams = useSearchParams();
 
 	const [macroTable, setMacroTable] =
@@ -135,8 +136,8 @@ function MacroTableReportContent() {
 	}, [isMacroReportTour]);
 
 	const finishMacroReportTour = useCallback(() => {
-		router.push("/dashboard?tour=demo-conclusion");
-	}, [router]);
+		push("/dashboard?tour=demo-conclusion");
+	}, [push]);
 
 	if (isLoading) {
 		return (

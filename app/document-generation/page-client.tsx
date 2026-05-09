@@ -546,6 +546,7 @@ function TextAreaInput({
 
 export function DocumentGenerationPageClient() {
   const router = useRouter();
+  const { push, replace } = router;
   const searchParams = useSearchParams();
 
   const initialWorkId = searchParams.get("workId") ?? "";
@@ -635,7 +636,7 @@ export function DocumentGenerationPageClient() {
           if (cancelled) return;
           if (!payload.draft.canEdit) {
             toast.error("No tienes permisos para editar este borrador.");
-            router.replace("/document-generation/drafts", { scroll: false });
+            replace("/document-generation/drafts", { scroll: false });
             return;
           }
 
@@ -685,7 +686,7 @@ export function DocumentGenerationPageClient() {
           if (cancelled) return;
           if (!payload.document.canEdit) {
             toast.error("Solo puedes editar documentos tuyos que aun no fueron aprobados.");
-            router.replace("/document-generation", { scroll: false });
+            replace("/document-generation", { scroll: false });
             return;
           }
 
@@ -749,7 +750,7 @@ export function DocumentGenerationPageClient() {
     if (draftId) query.set("draftId", draftId);
     if (editingGeneratedId) query.set("generatedId", editingGeneratedId);
     const next = query.toString();
-    router.replace(`/document-generation${next ? `?${next}` : ""}`, { scroll: false });
+    replace(`/document-generation${next ? `?${next}` : ""}`, { scroll: false });
   }, [documentType, draftId, editingGeneratedId, folderPath, router, workId]);
 
   const selectedTemplate = useMemo(
@@ -1001,7 +1002,7 @@ export function DocumentGenerationPageClient() {
       folder: generatedDocument.relativeFolderPath,
       file: generatedDocument.relativeFilePath,
     });
-    router.push(`/excel/${workId}?${query.toString()}`);
+    push(`/excel/${workId}?${query.toString()}`);
   };
 
   const downloadGeneratedDocument = () => {

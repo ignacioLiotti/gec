@@ -22,6 +22,7 @@ function ObraDocumentsTabContent({
 	recoveryRequestToken = 0,
 }: DocumentsTabProps) {
 	const router = useRouter();
+  const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 
@@ -46,7 +47,7 @@ function ObraDocumentsTabContent({
 			}
 
 			const qs = params.toString();
-			router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+			replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
 		},
 		[pathname, router, searchParams]
 	);

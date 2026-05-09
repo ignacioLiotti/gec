@@ -57,6 +57,7 @@ export default function DesktopExcelPagePreview({
 	initialObras,
 }: ExcelPageClientProps) {
 	const router = useRouter();
+  const { prefetch } = router;
 	const searchParams = useSearchParams();
 	const guidedTourStage = getGuidedExcelStage(searchParams);
 	const [rows, setRows] = useState<PreviewRow[]>(() => initialObras.map(mapObraToPreviewRow));
@@ -278,7 +279,7 @@ export default function DesktopExcelPagePreview({
 														prefetch={false}
 														data-wizard-target="excel-page-open-obra"
 														className="font-medium text-[#1f1a17] hover:text-orange-primary"
-														onMouseEnter={() => router.prefetch(`/excel/${row.id}`)}
+														onMouseEnter={() => prefetch(`/excel/${row.id}`)}
 													>
 														{toText(row.designacionYUbicacion) || PLACEHOLDER}
 													</Link>

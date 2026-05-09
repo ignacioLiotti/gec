@@ -179,6 +179,7 @@ const DATA_TYPES: MacroTableDataType[] = ["text", "number", "currency", "boolean
 
 export default function NewMacroTablePage() {
   const router = useRouter();
+  const { push } = router;
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -791,7 +792,7 @@ export default function NewMacroTablePage() {
 
       const { macroTable } = await res.json();
       toast.success("Macro tabla creada exitosamente");
-      router.push(`/macro?macroId=${macroTable.id}`);
+      push(`/macro?macroId=${macroTable.id}`);
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Error creando macro tabla");
@@ -815,7 +816,7 @@ export default function NewMacroTablePage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => router.push("/admin/macro-tables")}
+          onClick={() => push("/admin/macro-tables")}
         >
           <ArrowLeft className="size-4" />
         </Button>
@@ -1055,7 +1056,7 @@ export default function NewMacroTablePage() {
                     <p className="text-sm mb-4">Creá tablas en tus obras primero.</p>
                     <Button
                       variant="outline"
-                      onClick={() => router.push("/admin/obra-defaults")}
+                      onClick={() => push("/admin/obra-defaults")}
                       className="gap-2"
                     >
                       <Plus className="size-4" />

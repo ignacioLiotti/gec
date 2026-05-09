@@ -187,6 +187,7 @@ type MacroTableWithDetails = MacroTable & {
 
 export default function EditMacroTablePage() {
   const router = useRouter();
+  const { push } = router;
   const params = useParams();
   const id = params?.id as string;
 
@@ -388,7 +389,7 @@ export default function EditMacroTablePage() {
     } catch (error) {
       console.error(error);
       toast.error("Error cargando macro tabla");
-      router.push("/admin/macro-tables");
+      push("/admin/macro-tables");
     }
   }, [id, router]);
 
@@ -952,7 +953,7 @@ export default function EditMacroTablePage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push("/admin/macro-tables")}
+            onClick={() => push("/admin/macro-tables")}
           >
             <ArrowLeft className="size-4" />
           </Button>
@@ -964,7 +965,7 @@ export default function EditMacroTablePage() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => router.push(`/macro?macroId=${id}`)}
+            onClick={() => push(`/macro?macroId=${id}`)}
             className="gap-2"
           >
             <Eye className="size-4" />

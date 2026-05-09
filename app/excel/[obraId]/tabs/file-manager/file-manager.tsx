@@ -1012,6 +1012,7 @@ function FileManagerContent({
   }, [fetchUsageInfo]);
 
   const router = useRouter();
+  const { push, replace } = router;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams?.toString() ?? '';
@@ -1557,7 +1558,7 @@ function FileManagerContent({
       const params = new URLSearchParams(searchParamsKey);
       params.set('tab', 'tablas');
       params.set('tablaId', tablaId);
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [pathname, router, searchParamsKey]
   );
@@ -3795,7 +3796,7 @@ function FileManagerContent({
   }, [fetchDeletedEntries]);
 
   const openTrashPage = useCallback(() => {
-    router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
+    push(`/excel/${encodeURIComponent(obraId)}/papelera`);
   }, [obraId, router]);
 
   const lastExternalRecoveryRequestTokenRef = useRef(externalRecoveryRequestToken);
@@ -4545,7 +4546,7 @@ function FileManagerContent({
       nextSearch.set("tour", "materials-report");
     }
     const reportUrl = `/excel/${encodeURIComponent(obraId)}/tabla/${encodeURIComponent(activeOcrTablaId)}/reporte`;
-    router.push(
+    push(
       nextSearch.size > 0 ? `${reportUrl}?${nextSearch.toString()}` : reportUrl
     );
   }, [activeOcrTablaId, obraId, router, searchParams]);
@@ -4848,7 +4849,7 @@ function FileManagerContent({
 
       const params = new URLSearchParams(searchParams?.toString() ?? '');
       params.set(GUIDED_EXCEL_STAGE_PARAM, step.id);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [isGuidedExcelFlow, pathname, router, searchParams]
   );
@@ -5753,7 +5754,7 @@ function FileManagerContent({
                 className="ml-1 gap-1.5"
                 onClick={() => {
                   const nextFolderPath = getPathSegments(selectedFolder).join('/');
-                  router.push(
+                  push(
                     `/document-generation?workId=${obraId}&folder=${encodeURIComponent(nextFolderPath)}`,
                   );
                 }}
@@ -6080,7 +6081,7 @@ function FileManagerContent({
           open
           onOpenChange={(nextOpen) => {
             if (!nextOpen) {
-              router.push(`/excel/${obraId}?tour=documents-overview`);
+              push(`/excel/${obraId}?tour=documents-overview`);
             }
           }}
           flow={guidedDocumentsFlow}

@@ -38,6 +38,7 @@ function buildReportConfig(
 function OcrReportePageContent() {
 	const params = useParams();
 	const router = useRouter();
+  const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const obraId = params?.obraId as string;
@@ -127,7 +128,7 @@ function OcrReportePageContent() {
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("tour");
 		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
-		router.replace(nextUrl, { scroll: false });
+		replace(nextUrl, { scroll: false });
 	}, [isMaterialsReportTour, pathname, router, searchParams]);
 
 	useEffect(() => {

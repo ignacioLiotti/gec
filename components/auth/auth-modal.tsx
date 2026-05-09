@@ -14,6 +14,7 @@ type AuthModalProps = {
 
 function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
   const router = useRouter();
+  const { push, refresh } = router;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
@@ -65,16 +66,16 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         console.log("[AUTH-MODAL] Cookies after delay:", document.cookie);
 
         // Refresh server state to pick up new session
-        console.log("[AUTH-MODAL] Calling router.refresh()...");
-        router.refresh();
-        console.log("[AUTH-MODAL] router.refresh() called");
+        console.log("[AUTH-MODAL] Calling refresh()...");
+        refresh();
+        console.log("[AUTH-MODAL] refresh() called");
 
         // Close modal after session is synced
         onOpenChange(false);
         setEmail("");
         setPassword("");
         if (returnTo) {
-          router.push(returnTo);
+          push(returnTo);
         }
         console.log("[AUTH-MODAL] Modal closed, login flow complete");
       } else {
@@ -92,7 +93,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // After sign-up route to onboarding to pick a tenant
-        router.push("/onboarding");
+        push("/onboarding");
         onOpenChange(false);
         setEmail("");
         setPassword("");

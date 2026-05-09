@@ -35,6 +35,7 @@ export function RolesPageClient({
   tenantId,
 }: RolesPageClientProps) {
   const router = useRouter();
+  const { refresh } = router;
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -52,7 +53,7 @@ export function RolesPageClient({
   };
 
   const handleSaved = () => {
-    router.refresh();
+    refresh();
   };
 
   return (
