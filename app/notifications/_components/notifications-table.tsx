@@ -10,6 +10,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
+import { HydratedDateText } from "@/components/ui/hydrated-date-text";
 
 type NotificationRow = {
   id: string;
@@ -154,21 +155,6 @@ export function NotificationsTable({
     return sorted;
   }, [data, orderBy, orderDir]);
 
-  const formatRelativeTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Ahora";
-    if (diffMins < 60) return `${diffMins}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    if (diffDays < 7) return `${diffDays}d`;
-    return date.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
-  };
-
   const COLUMN_TO_DB: Record<number, string> = {
     0: "title",
     1: "body",
@@ -301,9 +287,12 @@ export function NotificationsTable({
                       <span className="text-xs text-foreground/60">{row.type}</span>
                     </td>
                     <td {...getStickyProps(3, "px-4 py-2 outline outline-border border-border bg-background")}>
-                      <span className="text-xs text-foreground/70" title={new Date(row.created_at).toLocaleString("es-ES")}>
-                        {formatRelativeTime(row.created_at)}
-                      </span>
+                      <HydratedDateText
+                        value={row.created_at}
+                        format="relative"
+                        titleLocale="es-ES"
+                        className="text-xs text-foreground/70"
+                      />
                     </td>
                     <td {...getStickyProps(4, "px-4 py-2 outline outline-border border-border bg-background")}>
                       <div className="flex items-center justify-end gap-1.5">

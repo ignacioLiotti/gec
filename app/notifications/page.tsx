@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HydratedDateText } from "@/components/ui/hydrated-date-text";
 import { Badge } from "@/components/ui/badge";
 import { parseLocalDate, formatLocalDate } from "@/utils/date";
 import { revalidatePath } from "next/cache";
@@ -539,14 +540,16 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
                               className="flex items-center justify-between gap-2 text-[11px] pl-1.5 pr-1"
                             >
                               <span className="truncate text-zinc-600">{event.title}</span>
-                              <span className="shrink-0 tabular-nums text-zinc-400">
-                                {new Date(event.start).toLocaleString("es-AR", {
+                              <HydratedDateText
+                                value={event.start}
+                                className="shrink-0 tabular-nums text-zinc-400"
+                                options={{
                                   day: "2-digit",
                                   month: "2-digit",
                                   hour: "2-digit",
                                   minute: "2-digit",
-                                })}
-                              </span>
+                                }}
+                              />
                             </div>
                           ))
                         )}

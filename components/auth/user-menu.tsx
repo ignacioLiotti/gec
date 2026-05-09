@@ -15,6 +15,7 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { HydratedDateText } from "@/components/ui/hydrated-date-text";
 import { cn } from "@/lib/utils";
 
 type UserMenuProps = {
@@ -30,6 +31,16 @@ type UserMenuProps = {
 	variant?: "default" | "sidebar";
 };
 
+type MenuNotification = {
+	id: string;
+	title: string;
+	body: string | null;
+	type: string;
+	created_at: string;
+	read_at: string | null;
+	action_url: string | null;
+};
+
 export default function UserMenu({
 	email,
 	demoLabel,
@@ -39,29 +50,23 @@ export default function UserMenu({
 }: UserMenuProps) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
-	const [notifications, setNotifications] = useState<
-		Array<{
-			id: string;
-			title: string;
-			body: string | null;
-			type: string;
-			created_at: string;
-			read_at: string | null;
-			action_url: string | null;
-		}>
-	>([]);
+	const [notifications, setNotifications] = useState<MenuNotification[]>([]);
 	const [loading, setLoading] = useState(false);
 	const isAuthed = Boolean(email);
 	const isDemo = demoMode && !isAuthed;
 
-	const demoNotifications = useMemo(
-		() => [
+	const [demoNotifications, setDemoNotifications] = useState<MenuNotification[]>([]);
+
+	useEffect(() => {
+		if (!isDemo) return;
+		const now = Date.now();
+		setDemoNotifications([
 			{
 				id: "demo-1",
 				title: "Bienvenido a la aplicacion",
 				body: "Aqui hay algunos consejos rapidos para comenzar.",
 				type: "info",
-				created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+				created_at: new Date(now - 1000 * 60 * 5).toISOString(),
 				read_at: null,
 				action_url: "#",
 			},
@@ -70,7 +75,7 @@ export default function UserMenu({
 				title: "Recordatorio de documento",
 				body: "Un documento requiere tu atencion.",
 				type: "warning",
-				created_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+				created_at: new Date(now - 1000 * 60 * 60).toISOString(),
 				read_at: null,
 				action_url: "#",
 			},
@@ -79,13 +84,12 @@ export default function UserMenu({
 				title: "Resumen semanal listo",
 				body: "Tu resumen de actividad semanal esta disponible.",
 				type: "success",
-				created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-				read_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+				created_at: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
+				read_at: new Date(now - 1000 * 60 * 30).toISOString(),
 				action_url: "#",
 			},
-		],
-		[],
-	);
+		]);
+	}, [isDemo]);
 
 	async function handleLogout() {
 		setMenuOpen(false);
@@ -297,9 +301,10 @@ export default function UserMenu({
 													</p>
 												)}
 											</div>
-											<span className="shrink-0 text-xs text-muted-foreground">
-												{new Date(n.created_at).toLocaleString()}
-											</span>
+											<HydratedDateText
+												value={n.created_at}
+												className="shrink-0 text-xs text-muted-foreground"
+											/>
 										</div>
 										{n.action_url && (
 											<div className="mt-2">
