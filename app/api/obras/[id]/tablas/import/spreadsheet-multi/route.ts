@@ -1317,6 +1317,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const uniqueTablaIds = [...new Set(tablaIds)];
     targetTablaIdsForAudit = uniqueTablaIds;
     const presupuestoTvExtractionCache = new Map<string, PresupuestoTvExtraction>();
+    const sheetByName = new Map(sheets.map((sheet) => [sheet.name, sheet]));
 
     for (const tablaId of uniqueTablaIds) {
       const columns = columnsByTabla.get(tablaId) ?? [];
@@ -1346,6 +1347,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const certTableDef = certTableId
         ? CERT_TEMPLATE_TABLE_DEFS.find((def) => def.id === certTableId) ?? null
         : null;
+      const certColumnTypeByKey = new Map(
+        (certTableDef?.columns ?? []).map((column) => [column.key, column.type]),
+      );
       const presupuestoTvTableId: PresupuestoTvTableId | null = (() => {
         if (profile !== "presupuesto_estudio_tv") return null;
         const keys = new Set(columns.map((c) => c.fieldKey));
@@ -1408,7 +1412,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const assignedSheetName = sheetAssignments[tablaId];
       const assignedSheet =
         typeof assignedSheetName === "string" && assignedSheetName.trim().length > 0
-          ? sheets.find((sheet) => sheet.name === assignedSheetName.trim()) ?? null
+          ? sheetByName.get(assignedSheetName.trim()) ?? null
           : null;
       const bestSheet =
         assignedSheet ??
@@ -1461,6 +1465,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       const explicitMappingForTabla = columnMappings[tablaId];
+      const extractionHeaderSet = new Set(extractionSheet.headers);
       const certMappingsByKey = new Map<string, { excelHeader: string | null; confidence: number }>();
       if (!explicitMappingForTabla && certTableDef) {
         const usedHeaders = new Set<string>();
@@ -1490,7 +1495,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               const isValid =
                 typeof selectedHeader === "string" &&
                 selectedHeader.length > 0 &&
-                extractionSheet.headers.includes(selectedHeader);
+                extractionHeaderSet.has(selectedHeader);
               const manualValue =
                 typeof manualValues?.[tablaId]?.[column.fieldKey] === "string"
                   ? manualValues[tablaId][column.fieldKey]
@@ -1546,7 +1551,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                   data[fieldKey] = certTableDef
                     ? coerceCertValue(
                         manual,
-                        certTableDef.columns.find((c) => c.key === fieldKey)?.type ?? "text"
+                        certColumnTypeByKey.get(fieldKey) ?? "text"
                       )
                     : coerceValueForType(map.column.dataType, manual);
                   continue;
@@ -1566,7 +1571,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                     : certTableDef
                       ? coerceCertValue(
                           rawValue,
-                          certTableDef.columns.find((c) => c.key === fieldKey)?.type ?? "text"
+                          certColumnTypeByKey.get(fieldKey) ?? "text"
                         )
                       : coerceValueForType(map.column.dataType, rawValue);
               }
@@ -1605,7 +1610,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                   certTableDef
                     ? coerceCertValue(
                         rawValue,
-                        certTableDef.columns.find((c) => c.key === map.column.fieldKey)?.type ?? "text"
+                        certColumnTypeByKey.get(map.column.fieldKey) ?? "text"
                       )
                     : coerceValueForType(map.column.dataType, rawValue);
               }
@@ -1630,16 +1635,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
         extractedRows = extractionSheet.dataRows
           .map((sourceRow) => {
             const data: Record<string, unknown> = {};
+            const normalizedHeaders = Object.keys(sourceRow).map((header) => ({
+              header,
+              normalized: normalize(header),
+            }));
             columns.forEach((column) => {
               const targetKeys = [
                 normalize(column.fieldKey),
                 normalize(column.label),
                 normalize(normalizeFieldKey(column.label)),
               ];
-              const sourceHeader = Object.keys(sourceRow).find((header) => {
-                const nh = normalize(header);
-                return targetKeys.some((tk) => tk && (nh === tk || nh.includes(tk) || tk.includes(nh)));
-              });
+              const sourceHeader = normalizedHeaders.find(({ normalized: nh }) =>
+                targetKeys.some((tk) => tk && (nh === tk || nh.includes(tk) || tk.includes(nh)))
+              )?.header;
               if (!sourceHeader) return;
                 const raw = sourceRow[sourceHeader];
                 data[column.fieldKey] =
@@ -1648,7 +1656,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                     : certTableDef
                       ? coerceCertValue(
                           raw,
-                          certTableDef.columns.find((c) => c.key === column.fieldKey)?.type ?? "text"
+                          certColumnTypeByKey.get(column.fieldKey) ?? "text"
                         )
                       : coerceValueForType(column.dataType, raw);
             });
@@ -1814,7 +1822,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    for (const prepared of preparedWrites) {
+    await Promise.all(preparedWrites.map(async (prepared) => {
       if (prepared.replaceExisting) {
         const { error: deleteAllRowsError } = await supabase
           .from("obra_tabla_rows")
@@ -1877,7 +1885,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           );
         if (processingError) throw processingError;
       }
-    }
+    }));
 
     const summary = buildSpreadsheetPreviewSummary(perTable);
     const inserted = perTable.reduce((acc, row) => acc + row.inserted, 0);
@@ -1909,27 +1917,31 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const isLineageConflict = error instanceof LineageReconciliationConflictError;
     const errorCode = isLineageConflict ? error.code : null;
 
-    if (resolvedSupabase && trackedDocMeta && targetTablaIdsForAudit.length > 0) {
-      for (const tablaId of targetTablaIdsForAudit) {
-        await resolvedSupabase
-          .from("ocr_document_processing")
-          .upsert(
-            {
-              tabla_id: tablaId,
-              obra_id: obraId,
-              source_bucket: trackedDocMeta.bucket,
-              source_path: trackedDocMeta.path,
-              source_file_name: trackedDocMeta.fileName,
-              extraction_id: extractionIdForAudit,
-              status: "failed",
-              error_code: errorCode,
-              error_message: message,
-              file_fingerprint: fileFingerprintForAudit,
-              processed_at: new Date().toISOString(),
-            },
-            { onConflict: "tabla_id,source_path" }
-          );
-      }
+    const auditSupabase = resolvedSupabase;
+    const auditDocMeta = trackedDocMeta;
+    if (auditSupabase && auditDocMeta && targetTablaIdsForAudit.length > 0) {
+      await Promise.all(
+        targetTablaIdsForAudit.map((tablaId) =>
+          auditSupabase
+            .from("ocr_document_processing")
+            .upsert(
+              {
+                tabla_id: tablaId,
+                obra_id: obraId,
+                source_bucket: auditDocMeta.bucket,
+                source_path: auditDocMeta.path,
+                source_file_name: auditDocMeta.fileName,
+                extraction_id: extractionIdForAudit,
+                status: "failed",
+                error_code: errorCode,
+                error_message: message,
+                file_fingerprint: fileFingerprintForAudit,
+                processed_at: new Date().toISOString(),
+              },
+              { onConflict: "tabla_id,source_path" }
+            )
+        )
+      );
     }
 
     if (isLineageConflict) {

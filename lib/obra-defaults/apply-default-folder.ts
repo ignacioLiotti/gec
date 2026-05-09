@@ -993,7 +993,15 @@ export async function applyDefaultFolderToExistingObras(
 			continue;
 		}
 
-		const obraOcrTablaIds = (obraOcrTablas ?? [])
+		const obraOcrTablasList = obraOcrTablas ?? [];
+		const obraOcrTablaByName = new Map<string, (typeof obraOcrTablasList)[number]>();
+		for (const tabla of obraOcrTablasList) {
+			if (typeof tabla.name === "string") {
+				obraOcrTablaByName.set(tabla.name, tabla);
+			}
+		}
+
+		const obraOcrTablaIds = obraOcrTablasList
 			.map((tabla) => (typeof tabla.id === "string" ? tabla.id : null))
 			.filter((tablaId): tablaId is string => Boolean(tablaId));
 
@@ -1020,16 +1028,29 @@ export async function applyDefaultFolderToExistingObras(
 			}
 		}
 
-		const matchingTabla = (obraOcrTablas ?? []).find((tabla) => {
+		let matchingTabla: (typeof obraOcrTablasList)[number] | null = null;
+		for (const tabla of obraOcrTablasList) {
 			const settings = (tabla.settings as Record<string, unknown>) ?? {};
 			const tablaFolder = typeof settings.ocrFolder === "string" ? settings.ocrFolder : null;
 			const defaultTablaId =
 				typeof settings.defaultTablaId === "string" ? settings.defaultTablaId : null;
-			if (bundle.defaultTablaId && defaultTablaId === bundle.defaultTablaId) return true;
-			if (tablaFolder === bundle.path) return true;
-			if (previousPath && tablaFolder === previousPath) return true;
-			return bundle.tablaName ? tabla.name === bundle.tablaName : false;
-		});
+			if (bundle.defaultTablaId && defaultTablaId === bundle.defaultTablaId) {
+				matchingTabla = tabla;
+				break;
+			}
+			if (tablaFolder === bundle.path) {
+				matchingTabla = tabla;
+				break;
+			}
+			if (previousPath && tablaFolder === previousPath) {
+				matchingTabla = tabla;
+				break;
+			}
+			if (bundle.tablaName && tabla.name === bundle.tablaName) {
+				matchingTabla = tabla;
+				break;
+			}
+		}
 
 		if (bundle.isOcr && (previousPath === null || previousPath === bundle.path) && matchingTabla?.id) {
 			try {
@@ -1108,7 +1129,7 @@ export async function applyDefaultFolderToExistingObras(
 		if (isCertificadoSpreadsheet) {
 			for (const preset of CERTIFICADO_SPREADSHEET_PRESETS) {
 				const presetName = `${bundle.name} · ${preset.name}`;
-				const existingPresetTabla = (obraOcrTablas ?? []).find((tabla) => tabla.name === presetName);
+				const existingPresetTabla = obraOcrTablaByName.get(presetName);
 				if (existingPresetTabla && !shouldForceSync) continue;
 
 					const presetSettings: Record<string, unknown> = {

@@ -207,10 +207,13 @@ function buildEmptyExtraction(
 
 function readStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const items: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (trimmed) items.push(trimmed);
+  }
+  return items;
 }
 
 function getConfiguredDocumentTypes(settings: Record<string, unknown> | null | undefined) {
@@ -376,13 +379,14 @@ function parseSelectedPages(value: FormDataEntryValue | null) {
     if (!Array.isArray(parsed)) {
       return null;
     }
-    const normalized = Array.from(
-      new Set(
-        parsed
-          .map((page) => (typeof page === "number" ? page : Number(page)))
-          .filter((page) => Number.isInteger(page) && page > 0)
-      )
-    ).sort((left, right) => left - right);
+    const pageSet = new Set<number>();
+    for (const page of parsed) {
+      const pageNumber = typeof page === "number" ? page : Number(page);
+      if (Number.isInteger(pageNumber) && pageNumber > 0) {
+        pageSet.add(pageNumber);
+      }
+    }
+    const normalized = Array.from(pageSet).sort((left, right) => left - right);
     return normalized.length > 0 ? normalized : null;
   } catch {
     return null;
@@ -632,16 +636,18 @@ async function fetchTablaDef(
   if (tablaError) throw tablaError;
   if (!tablaMeta) return null;
   if ((tablaMeta.source_type as string) !== "ocr") return null;
-  const effectiveSettings = await resolvePromptSettings(
-    supabase,
-    ((tablaMeta.settings as Record<string, unknown>) ?? {}) as Record<string, unknown>,
-  );
-
-  const { data: columns, error: columnsError } = await supabase
-    .from("obra_tabla_columns")
-    .select("id, tabla_id, field_key, label, data_type, required, position, config")
-    .eq("tabla_id", tablaId)
-    .order("position", { ascending: true });
+  const [effectiveSettings, columnsResult] = await Promise.all([
+    resolvePromptSettings(
+      supabase,
+      ((tablaMeta.settings as Record<string, unknown>) ?? {}) as Record<string, unknown>,
+    ),
+    supabase
+      .from("obra_tabla_columns")
+      .select("id, tabla_id, field_key, label, data_type, required, position, config")
+      .eq("tabla_id", tablaId)
+      .order("position", { ascending: true }),
+  ]);
+  const { data: columns, error: columnsError } = columnsResult;
   if (columnsError) throw columnsError;
 
   const templatePromptContext = await fetchTemplatePromptContext(
@@ -832,9 +838,13 @@ function normalizeTableExtraction(
   const allColumns = [...def.parentColumns, ...def.itemColumns];
   const normalizedTopLevel = remapObjectToFieldKeys(source, allColumns);
   const rawItems = Array.isArray(source.items) ? source.items : [];
-  const normalizedItems = rawItems
-    .map((item) => remapObjectToFieldKeys(item, def.itemColumns))
-    .filter((item) => typeof item === "object" && item !== null);
+  const normalizedItems: Record<string, unknown>[] = [];
+  for (const item of rawItems) {
+    const normalizedItem = remapObjectToFieldKeys(item, def.itemColumns);
+    if (typeof normalizedItem === "object" && normalizedItem !== null) {
+      normalizedItems.push(normalizedItem);
+    }
+  }
 
   if (normalizedItems.length > 0) {
     normalizedTopLevel.items = normalizedItems;
@@ -964,11 +974,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "No se enviaron tablas para OCR." }, { status: 400 });
     }
 
-    for (const tablaId of tablaIds) {
-      const def = await fetchTablaDef(supabase, obraId, tablaId);
-      if (!def) continue;
-      tablaDefs.push(def);
-    }
+    const fetchedTablaDefs = await Promise.all(
+      tablaIds.map((tablaId) => fetchTablaDef(supabase, obraId, tablaId))
+    );
+    tablaDefs = fetchedTablaDefs.filter((def): def is TablaDef => Boolean(def));
     if (tablaDefs.length === 0) {
       return NextResponse.json({ error: "No hay tablas OCR válidas para procesar." }, { status: 400 });
     }
@@ -1014,13 +1023,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const folderNames = Array.from(
-      new Set(
-        tablaDefs
-          .map((def) => (typeof def.settings.ocrFolder === "string" ? normalizeFolderPath(def.settings.ocrFolder) : ""))
-          .filter(Boolean)
-      )
-    );
+    const folderNameSet = new Set<string>();
+    for (const def of tablaDefs) {
+      if (typeof def.settings.ocrFolder !== "string") continue;
+      const folderName = normalizeFolderPath(def.settings.ocrFolder);
+      if (folderName) folderNameSet.add(folderName);
+    }
+    const folderNames = Array.from(folderNameSet);
     if (folderNames.length !== 1) {
       return NextResponse.json(
         { error: "Las tablas seleccionadas deben pertenecer a la misma carpeta OCR." },
@@ -1381,7 +1390,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       fingerprintError: Record<string, unknown> | null;
     }> = [];
 
-    for (const def of tablaDefs) {
+    const preparedResults = await Promise.all(tablaDefs.map(async (def) => {
       const rawTableExtraction = resolveTableExtraction(
         tablesExtraction,
         def,
@@ -1441,7 +1450,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           itemRows,
         }),
       );
-      const fingerprintStatus =
+      const fingerprintStatus: "completed" | "degraded" =
         fileFingerprint && contentFingerprintNormalized ? "completed" : "degraded";
       const fingerprintError =
         fingerprintStatus === "completed"
@@ -1512,18 +1521,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
         source: "ocr" as const,
       }));
 
-      preparedWrites.push({
-        def,
-        rowsPayload,
-        lineageRowKeys,
-        contentFingerprintNormalized,
-        fingerprintStatus,
-        fingerprintError,
-      });
-      perTable.push({ tablaId: def.tablaId, tablaName: def.tablaName, inserted: rowsPayload.length });
-    }
+      return {
+        preparedWrite: {
+          def,
+          rowsPayload,
+          lineageRowKeys,
+          contentFingerprintNormalized,
+          fingerprintStatus,
+          fingerprintError,
+        },
+        perTableRow: { tablaId: def.tablaId, tablaName: def.tablaName, inserted: rowsPayload.length },
+      };
+    }));
+    preparedWrites.push(...preparedResults.map((result) => result.preparedWrite));
+    perTable.push(...preparedResults.map((result) => result.perTableRow));
 
-    for (const prepared of preparedWrites) {
+    await Promise.all(preparedWrites.map(async (prepared) => {
       const currentLineageSet = new Set(prepared.lineageRowKeys);
       if (prepared.rowsPayload.length > 0) {
         const { error: upsertError } = await supabase
@@ -1540,9 +1553,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .contains("data", { __docPath: storageInfo.path });
         if (existingDocRowsError) throw existingDocRowsError;
 
-        const staleRowIds = (existingDocRows ?? [])
-          .filter((row) => !currentLineageSet.has(row.lineage_row_key as string))
-          .map((row) => row.id as string);
+        const staleRowIds: string[] = [];
+        for (const row of existingDocRows ?? []) {
+          if (!currentLineageSet.has(row.lineage_row_key as string)) {
+            staleRowIds.push(row.id as string);
+          }
+        }
 
         if (staleRowIds.length > 0) {
           const { error: staleDeleteError } = await supabase
@@ -1579,7 +1595,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           );
         if (processingError) throw processingError;
       }
-    }
+    }));
 
     const dataFlowRecompute = await tryRecomputeObraDataFlowWritebacks({
       supabase,
@@ -1615,25 +1631,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
       await rollbackReservation("ocr_reservation_rollback_multi");
     }
 
-    if (storageInfoForError && tablaDefs.length > 0 && resolvedSupabase) {
-      for (const def of tablaDefs) {
-        await resolvedSupabase.from("ocr_document_processing").upsert(
-          {
-            tabla_id: def.tablaId,
-            obra_id: obraId,
-            source_bucket: storageInfoForError.bucket,
-            source_path: storageInfoForError.path,
-            source_file_name: storageInfoForError.fileName,
-            extraction_id: extractionIdForAudit,
-            status: "failed",
-            error_code: errorCode,
-            error_message: message,
-            file_fingerprint: fileFingerprint,
-            processed_at: new Date().toISOString(),
-          },
-          { onConflict: "tabla_id,source_path" }
-        );
-      }
+    const auditStorageInfo = storageInfoForError;
+    const auditSupabase = resolvedSupabase;
+    if (auditStorageInfo && tablaDefs.length > 0 && auditSupabase) {
+      await Promise.all(
+        tablaDefs.map((def) =>
+          auditSupabase.from("ocr_document_processing").upsert(
+            {
+              tabla_id: def.tablaId,
+              obra_id: obraId,
+              source_bucket: auditStorageInfo.bucket,
+              source_path: auditStorageInfo.path,
+              source_file_name: auditStorageInfo.fileName,
+              extraction_id: extractionIdForAudit,
+              status: "failed",
+              error_code: errorCode,
+              error_message: message,
+              file_fingerprint: fileFingerprint,
+              processed_at: new Date().toISOString(),
+            },
+            { onConflict: "tabla_id,source_path" }
+          )
+        )
+      );
     }
     if (isLineageConflict) {
       return NextResponse.json(

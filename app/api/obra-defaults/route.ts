@@ -130,12 +130,14 @@ function normalizePositiveInt(value: unknown): number | null {
 }
 
 function normalizeStringArray(value: unknown): string[] {
-	return Array.isArray(value)
-		? value
-				.filter((item): item is string => typeof item === "string")
-				.map((item) => item.trim())
-				.filter(Boolean)
-		: [];
+	if (!Array.isArray(value)) return [];
+	const items: string[] = [];
+	for (const item of value) {
+		if (typeof item !== "string") continue;
+		const trimmed = item.trim();
+		if (trimmed) items.push(trimmed);
+	}
+	return items;
 }
 
 function normalizeDataInputMethod(value: unknown): DataInputMethod {
@@ -190,9 +192,9 @@ function normalizeExtractedTables(
 		return [fallback];
 	}
 
-	const normalized = value
-		.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-		.map((item, index) => {
+	const normalized: ExtractedTableConfig[] = [];
+	value.forEach((item, index) => {
+			if (typeof item !== "object" || item === null) return;
 			const name =
 				typeof item.name === "string" && item.name.trim().length > 0
 					? item.name.trim()
@@ -225,7 +227,7 @@ function normalizeExtractedTables(
 				examples: normalizeStringArray(column.examples),
 				excelKeywords: normalizeStringArray(column.excelKeywords),
 			}));
-			return {
+			normalized.push({
 				id:
 					typeof item.id === "string" && item.id.trim().length > 0
 						? item.id.trim()
@@ -255,7 +257,7 @@ function normalizeExtractedTables(
 						? item.extractionInstructions.trim()
 						: null,
 				columns,
-			};
+			});
 		});
 
 	return normalized.length > 0 ? normalized : [fallback];
@@ -289,24 +291,9 @@ function normalizeDefaultColumnInput(
 			: label
 	);
 	const config: Record<string, unknown> = {};
-	const aliases = Array.isArray(column.aliases)
-		? column.aliases
-				.filter((value): value is string => typeof value === "string")
-				.map((value) => value.trim())
-				.filter(Boolean)
-		: [];
-	const examples = Array.isArray(column.examples)
-		? column.examples
-				.filter((value): value is string => typeof value === "string")
-				.map((value) => value.trim())
-				.filter(Boolean)
-		: [];
-	const excelKeywords = Array.isArray(column.excelKeywords)
-		? column.excelKeywords
-				.filter((value): value is string => typeof value === "string")
-				.map((value) => value.trim())
-				.filter(Boolean)
-		: [];
+	const aliases = normalizeStringArray(column.aliases);
+	const examples = normalizeStringArray(column.examples);
+	const excelKeywords = normalizeStringArray(column.excelKeywords);
 	if (hasNestedData && typeof column.ocrScope === "string" && column.ocrScope) {
 		config.ocrScope = column.ocrScope;
 	}
@@ -413,30 +400,34 @@ async function syncDefaultTablaColumns(
 		};
 	});
 
-	const incomingIds = new Set(
-		normalizedColumns
-			.map((column) => column.id)
-			.filter((id): id is string => typeof id === "string")
-	);
-	const removedIds = existingColumns
-		.map((column) => column.id)
-		.filter((id) => !incomingIds.has(id));
-
-	for (const column of normalizedColumns.filter((item) => item.id)) {
-		const { error: updateError } = await supabase
-			.from("obra_default_tabla_columns")
-			.update({
-				field_key: column.field_key,
-				label: column.label,
-				data_type: column.data_type,
-				required: column.required,
-				position: column.position,
-				config: column.config,
-			})
-			.eq("id", column.id as string)
-			.eq("default_tabla_id", defaultTablaId);
-		if (updateError) throw updateError;
+	const incomingIds = new Set<string>();
+	const columnsToUpdate = [];
+	for (const column of normalizedColumns) {
+		if (!column.id) continue;
+		incomingIds.add(column.id);
+		columnsToUpdate.push(column);
 	}
+	const removedIds = existingColumns.flatMap((column) =>
+		incomingIds.has(column.id) ? [] : [column.id]
+	);
+
+	await Promise.all(
+		columnsToUpdate.map(async (column) => {
+			const { error: updateError } = await supabase
+				.from("obra_default_tabla_columns")
+				.update({
+					field_key: column.field_key,
+					label: column.label,
+					data_type: column.data_type,
+					required: column.required,
+					position: column.position,
+					config: column.config,
+				})
+				.eq("id", column.id as string)
+				.eq("default_tabla_id", defaultTablaId);
+			if (updateError) throw updateError;
+		})
+	);
 
 	let insertedColumns: PersistedDefaultColumn[] = [];
 	const newColumns = normalizedColumns.filter((item) => !item.id);
@@ -840,17 +831,18 @@ export async function GET(request: Request) {
 		// Fetch OCR templates for names
 		const templateIds = (tablas ?? []).flatMap((tabla) => {
 			const settings = (tabla.settings as Record<string, unknown>) ?? {};
-			const nestedIds = Array.isArray(settings.extractedTables)
-				? (settings.extractedTables as Array<Record<string, unknown>>)
-						.map((item) =>
-							typeof item?.ocrTemplateId === "string" ? item.ocrTemplateId : null
-						)
-						.filter((value): value is string => typeof value === "string" && value.length > 0)
-				: [];
-			return [
-				typeof tabla.ocr_template_id === "string" ? tabla.ocr_template_id : null,
-				...nestedIds,
-			].filter((value): value is string => typeof value === "string" && value.length > 0);
+			const ids: string[] = [];
+			if (typeof tabla.ocr_template_id === "string" && tabla.ocr_template_id.length > 0) {
+				ids.push(tabla.ocr_template_id);
+			}
+			if (Array.isArray(settings.extractedTables)) {
+				for (const item of settings.extractedTables as Array<Record<string, unknown>>) {
+					if (typeof item?.ocrTemplateId === "string" && item.ocrTemplateId.length > 0) {
+						ids.push(item.ocrTemplateId);
+					}
+				}
+			}
+			return ids;
 		});
 
 		const templatesMap = new Map<string, string>();
@@ -1870,9 +1862,10 @@ export async function DELETE(request: Request) {
 						.select("id")
 						.eq("tenant_id", tenantId)
 						.eq("linked_folder_path", folder.path);
-					linkedDefaultTablaIds = (linkedTablas ?? [])
-						.map((row) => (row as { id?: string }).id)
-						.filter((rowId): rowId is string => typeof rowId === "string" && rowId.length > 0);
+					linkedDefaultTablaIds = (linkedTablas ?? []).flatMap((row) => {
+						const rowId = (row as { id?: string }).id;
+						return typeof rowId === "string" && rowId.length > 0 ? [rowId] : [];
+					});
 
 					// Delete any linked tabla (cascade will delete columns)
 					await supabase
