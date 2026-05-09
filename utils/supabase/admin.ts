@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { requireVersionedSecret } from "@/lib/security/secrets";
+import { supabaseServerFetch } from "./fetch";
 
 export function createSupabaseAdminClient() {
 	const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,5 +11,10 @@ export function createSupabaseAdminClient() {
 	if (!url) {
 		throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
 	}
-	return createClient(url, serviceRoleKey, { auth: { persistSession: false } });
+	return createClient(url, serviceRoleKey, {
+		auth: { persistSession: false },
+		global: {
+			fetch: supabaseServerFetch,
+		},
+	});
 }
