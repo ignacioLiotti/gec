@@ -176,6 +176,7 @@ const STEPS = [
 ];
 
 const DATA_TYPES: MacroTableDataType[] = ["text", "number", "currency", "boolean", "date"];
+const DATA_TYPE_SET = new Set<MacroTableDataType>(DATA_TYPES);
 
 export default function NewMacroTablePage() {
   const router = useRouter();
@@ -416,11 +417,12 @@ export default function NewMacroTablePage() {
       if (!template) return;
 
       const matchingTables: SelectedSource[] = [];
+      const onlyTableNameSet = new Set(onlyTableNames);
       for (const obra of obras) {
         for (const tabla of obra.tablas) {
           if (!matchesTemplate(tabla, template)) continue;
           const baseName = extractBaseTableName(tabla.name);
-          if (onlyTableNames.length > 0 && !onlyTableNames.includes(baseName)) continue;
+          if (onlyTableNameSet.size > 0 && !onlyTableNameSet.has(baseName)) continue;
           matchingTables.push({
             obraId: obra.id,
             obraName: obra.designacionYUbicacion,
@@ -478,7 +480,7 @@ export default function NewMacroTablePage() {
         byKey.set(col.fieldKey, {
           key: col.fieldKey,
           label: col.label || col.fieldKey,
-          dataType: (DATA_TYPES.includes(col.dataType as MacroTableDataType)
+          dataType: (DATA_TYPE_SET.has(col.dataType as MacroTableDataType)
             ? col.dataType
             : "text") as MacroTableDataType,
         });
@@ -500,7 +502,7 @@ export default function NewMacroTablePage() {
       byKey.set(obraColumn.fieldKey, {
         key: obraColumn.fieldKey,
         label: obraColumn.label || obraColumn.fieldKey,
-        dataType: (DATA_TYPES.includes(obraColumn.dataType as MacroTableDataType)
+        dataType: (DATA_TYPE_SET.has(obraColumn.dataType as MacroTableDataType)
           ? obraColumn.dataType
           : "text") as MacroTableDataType,
       });
