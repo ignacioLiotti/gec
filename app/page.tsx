@@ -391,9 +391,9 @@ function MarketingLanding() {
               [50, 50],
               [73, 56],
               [90, 62],
-            ] as [number, number][]).map(([x1, x2], i) => (
+            ] as [number, number][]).map(([x1, x2]) => (
               <path
-                key={i}
+                key={`pipeline-curve-${x1}-${x2}`}
                 d={`M ${x1} 0 C ${x1} 38 ${x2} 62 ${x2} 100`}
                 fill="none"
                 stroke="#d6d3d1"
@@ -411,7 +411,7 @@ function MarketingLanding() {
             ["73%", "70.3%", "64.5%", "58.7%", "56%"],
             ["90%", "85.6%", "76%", "66.4%", "62%"],
           ]).map((xKeys, i) => (
-            <div key={i}>
+            <div key={`pipeline-dot-${xKeys.join("-")}`}>
               {/* Primary dot */}
               <motion.div
                 className="absolute size-2.5 -translate-x-1/2 rounded-full bg-orange-500"
@@ -485,7 +485,7 @@ function MarketingLanding() {
                   const isNext = idx === activeStep + 1;
                   const isLast = idx === steps.length - 1;
                   return (
-                    <motion.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4">
+                    <motion.div key={step.id} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4">
                       {/* Left: circle + connector */}
                       <div className="flex flex-col items-center">
                         <button
@@ -580,9 +580,9 @@ function MarketingLanding() {
                 >
                   <MarketingLandingFrame innerClassName="p-0 overflow-hidden">
                     <div className="border-b border-stone-200/80 bg-white px-4 py-2.5 flex items-center gap-1.5">
-                      {steps.map((_, idx) => (
+                      {steps.map((step, idx) => (
                         <button
-                          key={idx}
+                          key={step.id}
                           type="button"
                           onClick={() => setActiveStep(idx)}
                           className={`h-1.5 rounded-full transition-all ${activeStep === idx ? "w-5 bg-orange-500" : "w-1.5 bg-stone-200 hover:bg-stone-300"}`}
@@ -617,9 +617,9 @@ function MarketingLanding() {
               [50, 50],
               [73, 56],
               [90, 62],
-            ] as [number, number][]).map(([x1, x2], i) => (
+            ] as [number, number][]).map(([x1, x2]) => (
               <path
-                key={i}
+                key={`results-curve-${x1}-${x2}`}
                 d={`M ${x1} 0 C ${x1} 38 ${x2} 62 ${x2} 100`}
                 fill="none"
                 stroke="#d6d3d1"
@@ -637,7 +637,7 @@ function MarketingLanding() {
             ["73%", "70.3%", "64.5%", "58.7%", "56%"],
             ["90%", "85.6%", "76%", "66.4%", "62%"],
           ]).map((xKeys, i) => (
-            <div key={i}>
+            <div key={`results-dot-${xKeys.join("-")}`}>
               {/* Primary dot */}
               <motion.div
                 className="absolute size-2.5 -translate-x-1/2 rounded-full bg-orange-500"
@@ -762,7 +762,7 @@ function MarketingLanding() {
                     const isNext = idx === activeBenefit + 1;
                     const isLast = idx === benefits.length - 1;
                     return (
-                      <motion.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4 cursor-pointer">
+                      <motion.div key={benefit.title} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4 cursor-pointer">
                         <div className="flex flex-col items-center cursor-pointer">
                           <button
                             type="button"
@@ -851,9 +851,9 @@ function MarketingLanding() {
               [50, 50],
               [70, 50],
               [85, 50],
-            ] as [number, number][]).map(([x1, x2], i) => (
+            ] as [number, number][]).map(([x1, x2]) => (
               <path
-                key={i}
+                key={`cta-curve-${x1}-${x2}`}
                 d={`M ${x1} 0 C ${x1} 45 ${x2} 55 ${x2} 100`}
                 fill="none"
                 stroke="#d6d3d1"
@@ -871,7 +871,7 @@ function MarketingLanding() {
             ["70%", "67%", "60%", "53%", "50%"],
             ["85%", "79.5%", "67.5%", "55.5%", "50%"],
           ]).map((xKeys, i) => (
-            <div key={i}>
+            <div key={`cta-dot-${xKeys.join("-")}`}>
               <motion.div
                 className="absolute size-2 -translate-x-1/2 rounded-full bg-orange-500"
                 style={{ boxShadow: "0 0 6px 2px rgba(249,115,22,0.4)" }}
@@ -1593,8 +1593,15 @@ function Step3Visual() {
 
               {/* Body lines */}
               <div className="space-y-1.5 px-3 pb-2">
-                {[10, 8, 10, 7, 9, 8].map((w, i) => (
-                  <div key={i} className="h-[3px] rounded-full bg-stone-100" style={{ width: `${w * 10}%` }} />
+                {[
+                  { id: "source-body-line-1", width: 10 },
+                  { id: "source-body-line-2", width: 8 },
+                  { id: "source-body-line-3", width: 10 },
+                  { id: "source-body-line-4", width: 7 },
+                  { id: "source-body-line-5", width: 9 },
+                  { id: "source-body-line-6", width: 8 },
+                ].map((line) => (
+                  <div key={line.id} className="h-[3px] rounded-full bg-stone-100" style={{ width: `${line.width * 10}%` }} />
                 ))}
               </div>
 
@@ -1651,9 +1658,9 @@ function Step3Visual() {
               </div>
               {scanPhase === "scanning" ? (
                 <div className="flex flex-col gap-1.5 p-2">
-                  {[...Array(4)].map((_, i) => (
+                  {["scan-placeholder-1", "scan-placeholder-2", "scan-placeholder-3", "scan-placeholder-4"].map((placeholderId, i) => (
                     <motion.div
-                      key={i}
+                      key={placeholderId}
                       className="h-5 rounded bg-stone-100"
                       animate={{ opacity: [0.3, 0.65, 0.3] }}
                       transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
@@ -1759,8 +1766,8 @@ const Step4Visual = () => (
           <div className="rounded-lg border border-stone-200 bg-white p-3">
             <div className="relative h-28">
               <div className="absolute inset-0 grid grid-rows-4 gap-0">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="border-t border-stone-100" />
+                {["curve-grid-line-1", "curve-grid-line-2", "curve-grid-line-3", "curve-grid-line-4"].map((lineId) => (
+                  <div key={lineId} className="border-t border-stone-100" />
                 ))}
               </div>
               <svg viewBox="0 0 220 90" className="absolute inset-0 h-full w-full">
@@ -1900,7 +1907,7 @@ const Benefit2Visual = () => (
   <ProtoSurface className="p-5 space-y-4">
     <div className="grid grid-cols-2 gap-3">
       {[1, 2, 3, 4].map(i => (
-        <div key={i} className="h-12 rounded-xl border border-stone-200 bg-white flex items-center px-3 gap-2">
+        <div key={`benefit-card-${i}`} className="h-12 rounded-xl border border-stone-200 bg-white flex items-center px-3 gap-2">
           <div className="size-2 rounded-full bg-orange-500" />
           <div className="h-1.5 w-full bg-stone-200 rounded" />
         </div>
