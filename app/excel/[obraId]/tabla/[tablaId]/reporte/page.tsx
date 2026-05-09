@@ -41,6 +41,7 @@ function OcrReportePageContent() {
   const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const getSearchParam = (key: string): string | null => searchParams.get(key);
 	const obraId = params?.obraId as string;
 	const tablaId = params?.tablaId as string;
 
@@ -50,7 +51,7 @@ function OcrReportePageContent() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [isMaterialsReportWizardOpen, setIsMaterialsReportWizardOpen] = useState(false);
-	const isMaterialsReportTour = searchParams.get("tour") === "materials-report";
+	const isMaterialsReportTour = getSearchParam("tour") === "materials-report";
 
 	useEffect(() => {
 		const loadTabla = async () => {

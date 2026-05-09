@@ -358,6 +358,7 @@ export function AppSidebar({
 }) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const getSearchParam = (key: string): string | null => searchParams.get(key);
 	const router = useRouter();
 	const { refresh } = router;
 	const { state } = useSidebar();
@@ -370,7 +371,7 @@ export function AppSidebar({
 	const isAdminUser = Boolean(userRoles?.isAdmin || userRoles?.isSuperAdmin);
 	const tenantOptions = isAdminUser ? (tenants ?? []) : [];
 	const activeTenantId = userRoles?.tenantId ?? null;
-	const activeMacroTableId = searchParams.get("macroId");
+	const activeMacroTableId = getSearchParam("macroId");
 	const permissionKeySet = React.useMemo(
 		() => new Set(userRoles?.permissionKeys ?? []),
 		[userRoles?.permissionKeys],

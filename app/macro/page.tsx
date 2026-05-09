@@ -408,6 +408,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   const router = useRouter();
   const { push, replace } = router;
   const searchParams = useSearchParams();
+  const getSearchParam = (key: string): string | null => searchParams.get(key);
   const queryClient = useQueryClient();
   const [overrideSummary, setOverrideSummary] = useState<MacroTableOverrideSummary>({
     totalRecords: 0,
@@ -931,7 +932,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
               className={toolButtonClass}
               data-wizard-target="macro-generar-reporte"
               onClick={() => {
-                const isTourActive = searchParams.get("tour") === "macro-overview";
+                const isTourActive = getSearchParam("tour") === "macro-overview";
                 const dest = `/macro/${macroTable.id}/reporte${isTourActive ? "?tour=macro-report" : ""}`;
                 push(dest);
               }}
@@ -1021,6 +1022,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
 
 function MacroTablesPageContent() {
   const searchParams = useSearchParams();
+  const getSearchParam = (key: string): string | null => searchParams.get(key);
   const router = useRouter();
   const { push, replace } = router;
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1041,7 +1043,7 @@ function MacroTablesPageContent() {
 
   useEffect(() => {
     if (macroTables.length === 0) return;
-    const queryMacroId = searchParams.get("macroId");
+    const queryMacroId = getSearchParam("macroId");
     if (queryMacroId && macroTables.some((macroTable) => macroTable.id === queryMacroId)) {
       setSelectedId((prev) => (prev === queryMacroId ? prev : queryMacroId));
     } else if (!selectedId) {

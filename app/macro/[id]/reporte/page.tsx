@@ -41,13 +41,14 @@ function MacroTableReportContent() {
 	const router = useRouter();
   const { push } = router;
 	const searchParams = useSearchParams();
+	const getSearchParam = (key: string): string | null => searchParams.get(key);
 
 	const [macroTable, setMacroTable] =
 		useState<MacroTableResponse["macroTable"] | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const isMacroReportTour = searchParams.get("tour") === "macro-report";
+	const isMacroReportTour = getSearchParam("tour") === "macro-report";
 
 	useEffect(() => {
 		if (!id) return;

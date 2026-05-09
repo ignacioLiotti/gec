@@ -17,6 +17,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
   const { push, refresh } = router;
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const getSearchParam = (key: string): string | null => searchParams.get(key);
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,10 +25,8 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
   const [error, setError] = useState<string | null>(null);
   const [showOtherMethods, setShowOtherMethods] = useState(false);
 
-  const returnTo =
-    searchParams?.get("returnTo") && searchParams.get("returnTo")!.startsWith("/")
-      ? searchParams.get("returnTo")!
-      : null;
+  const returnToParam = getSearchParam("returnTo");
+  const returnTo = returnToParam?.startsWith("/") ? returnToParam : null;
 
   const currentPathWithQuery = (() => {
     const current = `${pathname ?? "/"}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;

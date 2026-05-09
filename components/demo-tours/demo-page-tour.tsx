@@ -34,9 +34,10 @@ export function DemoPageTour({
 	const router = useRouter();
   const { replace } = router;
 	const searchParams = useSearchParams();
+	const getSearchParam = (key: string): string | null => searchParams.get(key);
 	const [open, setOpen] = useState(false);
 	const preserveClearRef = useRef(false);
-	const activeTourId = searchParams.get("tour");
+	const activeTourId = getSearchParam("tour");
 
 	const clearTourQuery = useCallback(() => {
 		if (activeTourId !== flow.id) return;

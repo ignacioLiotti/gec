@@ -548,12 +548,13 @@ export function DocumentGenerationPageClient() {
   const router = useRouter();
   const { push, replace } = router;
   const searchParams = useSearchParams();
+  const getSearchParam = (key: string): string | null => searchParams.get(key);
 
-  const initialWorkId = searchParams.get("workId") ?? "";
-  const initialFolderPath = searchParams.get("folder") ?? searchParams.get("folderPath") ?? "";
-  const initialDocumentType = normalizeDocumentType(searchParams.get("documentType"));
-  const initialDraftId = searchParams.get("draftId") ?? "";
-  const initialGeneratedId = searchParams.get("generatedId") ?? "";
+  const initialWorkId = getSearchParam("workId") ?? "";
+  const initialFolderPath = getSearchParam("folder") ?? getSearchParam("folderPath") ?? "";
+  const initialDocumentType = normalizeDocumentType(getSearchParam("documentType"));
+  const initialDraftId = getSearchParam("draftId") ?? "";
+  const initialGeneratedId = getSearchParam("generatedId") ?? "";
 
   const [workId, setWorkId] = useState(initialWorkId);
   const [folderPath, setFolderPath] = useState(initialFolderPath);
