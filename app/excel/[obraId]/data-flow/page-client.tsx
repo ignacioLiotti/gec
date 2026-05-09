@@ -188,7 +188,7 @@ type GraphTweaks = {
   showDocuments: boolean;
 };
 
-export type BuilderSourceColumn = {
+type BuilderSourceColumn = {
   key: string;
   label: string;
   dataType: string;
@@ -198,19 +198,19 @@ export type BuilderSourceType = "table" | "macro_table";
 export type BuilderAggregation = "sum" | "avg" | "min" | "max" | "latest" | "count_rows" | "count_non_empty";
 export type BuilderFormulaInputSourceType = "calculation" | BuilderSourceType | "obra_field";
 
-export type BuilderObraFieldSource = {
+type BuilderObraFieldSource = {
   id: string;
   label: string;
   dataType: string;
 };
 
-export type BuilderTableSource = {
+type BuilderTableSource = {
   id: string;
   name: string;
   columns: BuilderSourceColumn[];
 };
 
-export type BuilderMacroSource = {
+type BuilderMacroSource = {
   id: string;
   name: string;
   columns: BuilderSourceColumn[];
@@ -245,7 +245,7 @@ export type BuilderCalculation =
     inputs: BuilderFormulaInput[];
   };
 
-export type BuilderResult = {
+type BuilderResult = {
   id: string;
   label: string;
   description: string;
@@ -258,7 +258,7 @@ export type BuilderResult = {
   generalTabOrder: number;
 };
 
-export type BuilderGeneralTabLayoutBlockType =
+type BuilderGeneralTabLayoutBlockType =
   | "progress"
   | "curve"
   | "general_info"
@@ -266,9 +266,9 @@ export type BuilderGeneralTabLayoutBlockType =
   | "configured_fields"
   | "certificates"
   | "custom_result";
-export type BuilderGeneralTabLayoutWidth = "one_third" | "half" | "two_thirds" | "full";
+type BuilderGeneralTabLayoutWidth = "one_third" | "half" | "two_thirds" | "full";
 
-export type BuilderGeneralTabLayoutBlock = {
+type BuilderGeneralTabLayoutBlock = {
   id: string;
   type: BuilderGeneralTabLayoutBlockType;
   label: string;
@@ -289,7 +289,7 @@ export type BuilderConfig = {
   generalTabLayout: BuilderGeneralTabLayoutBlock[];
 };
 
-export type EvaluatedBuilderCalculation = {
+type EvaluatedBuilderCalculation = {
   id: string;
   label: string;
   status: "ok" | "incomplete" | "error";
@@ -300,7 +300,7 @@ export type EvaluatedBuilderCalculation = {
   errorMessage: string | null;
 };
 
-export type EvaluatedBuilderResult = {
+type EvaluatedBuilderResult = {
   id: string;
   label: string;
   status: "ok" | "incomplete" | "error";
@@ -432,7 +432,7 @@ function getLayoutBlockIcon(type: BuilderGeneralTabLayoutBlockType) {
   return Database;
 }
 
-export const PAGE_THEME = `
+const PAGE_THEME = `
 :root {
   --df-orange: #ff5800;
   --df-orange-soft: #fff1e8;
@@ -2466,7 +2466,7 @@ function editorAccordionKey(type: DataFlowEditorAccordionType, id: string) {
   return `${type}:${id}`;
 }
 
-export function DataFlowEditorDrawer({
+function DataFlowEditorDrawer({
   open,
   config,
   payload,
