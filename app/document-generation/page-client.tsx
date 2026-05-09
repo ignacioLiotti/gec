@@ -548,7 +548,8 @@ export function DocumentGenerationPageClient() {
   const router = useRouter();
   const { push, replace } = router;
   const searchParams = useSearchParams();
-  const getSearchParam = (key: string): string | null => searchParams.get(key);
+  const queryParams = new URLSearchParams(searchParams);
+  const getSearchParam = (key: string): string | null => queryParams.get(key);
 
   const initialWorkId = getSearchParam("workId") ?? "";
   const initialFolderPath = getSearchParam("folder") ?? getSearchParam("folderPath") ?? "";

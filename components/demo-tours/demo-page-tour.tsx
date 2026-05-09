@@ -34,7 +34,8 @@ export function DemoPageTour({
 	const router = useRouter();
   const { replace } = router;
 	const searchParams = useSearchParams();
-	const getSearchParam = (key: string): string | null => searchParams.get(key);
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const [open, setOpen] = useState(false);
 	const preserveClearRef = useRef(false);
 	const activeTourId = getSearchParam("tour");

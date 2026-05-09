@@ -41,7 +41,8 @@ function OcrReportePageContent() {
   const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
-	const getSearchParam = (key: string): string | null => searchParams.get(key);
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const obraId = params?.obraId as string;
 	const tablaId = params?.tablaId as string;
 

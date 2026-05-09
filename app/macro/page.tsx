@@ -408,7 +408,8 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
   const router = useRouter();
   const { push, replace } = router;
   const searchParams = useSearchParams();
-  const getSearchParam = (key: string): string | null => searchParams.get(key);
+  const queryParams = new URLSearchParams(searchParams);
+  const getSearchParam = (key: string): string | null => queryParams.get(key);
   const queryClient = useQueryClient();
   const [overrideSummary, setOverrideSummary] = useState<MacroTableOverrideSummary>({
     totalRecords: 0,
@@ -1022,7 +1023,8 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
 
 function MacroTablesPageContent() {
   const searchParams = useSearchParams();
-  const getSearchParam = (key: string): string | null => searchParams.get(key);
+  const queryParams = new URLSearchParams(searchParams);
+  const getSearchParam = (key: string): string | null => queryParams.get(key);
   const router = useRouter();
   const { push, replace } = router;
   const [selectedId, setSelectedId] = useState<string | null>(null);

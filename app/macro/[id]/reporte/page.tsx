@@ -41,7 +41,8 @@ function MacroTableReportContent() {
 	const router = useRouter();
   const { push } = router;
 	const searchParams = useSearchParams();
-	const getSearchParam = (key: string): string | null => searchParams.get(key);
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 
 	const [macroTable, setMacroTable] =
 		useState<MacroTableResponse["macroTable"] | null>(null);

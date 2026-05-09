@@ -11,7 +11,8 @@ import {
 
 function ReportePageContent() {
 	const searchParams = useSearchParams();
-	const getSearchParam = (key: string): string | null => searchParams.get(key);
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 
 	// Initialize filters from URL params
 	const initialFilters: Partial<ObraFilters> = {

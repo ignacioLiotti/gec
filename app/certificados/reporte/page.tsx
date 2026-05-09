@@ -11,8 +11,9 @@ import {
 
 function ReportePageContent() {
 	const searchParams = useSearchParams();
-	const getSearchParam = (key: string): string | null => searchParams.get(key);
-	const getAllSearchParams = (key: string): string[] => searchParams.getAll(key);
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
+	const getAllSearchParams = (key: string): string[] => queryParams.getAll(key);
 
 	// Initialize filters from URL params
 	const initialFilters: Partial<CertificadoFilters> = {

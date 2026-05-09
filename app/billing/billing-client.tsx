@@ -174,7 +174,8 @@ function extractAmountArs(plan: SubscriptionPlan) {
 
 export function BillingClient() {
 	const searchParams = useSearchParams();
-	const getSearchParam = (key: string): string | null => searchParams.get(key);
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const [data, setData] = useState<SubscriptionResponse | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);

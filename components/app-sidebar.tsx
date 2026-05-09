@@ -358,7 +358,8 @@ export function AppSidebar({
 }) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
-	const getSearchParam = (key: string): string | null => searchParams.get(key);
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const router = useRouter();
 	const { refresh } = router;
 	const { state } = useSidebar();
