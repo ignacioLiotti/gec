@@ -33,6 +33,7 @@ import {
 	coerceMainColumnInputValue,
 	formatMainColumnValue,
 } from "@/lib/main-table-columns";
+import { evaluateMathExpression } from "@/lib/safe-math-expression";
 import { ObraGeneralTab } from "./tabs/general-tab";
 import { obraOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
 import {
@@ -1065,7 +1066,7 @@ const toNumericValue = (value: unknown): number => {
 	return 0;
 };
 
-// Formula compiler cache - compiles formula once, reuses the evaluator function
+// Formula compiler cache - extracts formula references once and reuses the parsed shape.
 const formulaCache = new Map<string, { fieldNames: string[]; evaluate: (values: number[]) => number | null }>();
 
 const compileFormula = (formula: string): { fieldNames: string[]; evaluate: (values: number[]) => number | null } | null => {
@@ -1104,29 +1105,18 @@ const compileFormula = (formula: string): { fieldNames: string[]; evaluate: (val
 		return null;
 	}
 
-	// Compile the evaluator function once
-	try {
-		const argNames = fieldNames.map((_, i) => `__v${i}__`);
-		const fnBody = `"use strict"; return (${expressionTemplate});`;
-		const evaluatorFn = new Function(...argNames, fnBody) as (...args: number[]) => number;
+	const compiled = {
+		fieldNames,
+		evaluate: (values: number[]): number | null => {
+			const variables = Object.fromEntries(
+				values.map((value, index) => [`__v${index}__`, value])
+			);
+			return evaluateMathExpression(expressionTemplate, variables).value;
+		}
+	};
 
-		const compiled = {
-			fieldNames,
-			evaluate: (values: number[]): number | null => {
-				try {
-					const result = evaluatorFn(...values);
-					return Number.isFinite(result) ? Number(result) : null;
-				} catch {
-					return null;
-				}
-			}
-		};
-
-		formulaCache.set(trimmed, compiled);
-		return compiled;
-	} catch {
-		return null;
-	}
+	formulaCache.set(trimmed, compiled);
+	return compiled;
 };
 
 const evaluateMainFormula = (
