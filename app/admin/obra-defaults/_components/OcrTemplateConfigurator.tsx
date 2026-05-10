@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import NextImage from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { toast } from "sonner";
 import {
 	Upload,
@@ -938,13 +938,13 @@ export function OcrTemplateConfigurator({
 										<ScrollArea className="h-full pr-3">
 											<AnimatePresence mode="popLayout">
 												{currentPageRegions.length === 0 ? (
-													<motion.p
+													<m.p
 														initial={{ opacity: 0 }}
 														animate={{ opacity: 1 }}
 														className="text-sm text-muted-foreground py-8 text-center"
 													>
 														Dibujá regiones sobre el documento
-													</motion.p>
+													</m.p>
 												) : (
 													<div className="space-y-2">
 														{currentPageRegions.map((region) => (
@@ -1184,13 +1184,13 @@ export function OcrTemplateConfigurator({
 							<ScrollArea className="h-[calc(100%-2rem)] pr-3">
 								<AnimatePresence mode="popLayout">
 									{regions.length === 0 ? (
-										<motion.p
+										<m.p
 											initial={{ opacity: 0 }}
 											animate={{ opacity: 1 }}
 											className="text-sm text-muted-foreground py-8 text-center"
 										>
 											Dibujá regiones sobre el documento
-										</motion.p>
+										</m.p>
 									) : (
 										<div className="space-y-2">
 											{regions.map((region) => (
@@ -1294,7 +1294,7 @@ function RegionItem({
 	};
 
 	return (
-		<motion.div
+		<m.div
 			layout
 			initial={{ opacity: 0, x: -10 }}
 			animate={{ opacity: 1, x: 0 }}
@@ -1370,7 +1370,7 @@ function RegionItem({
 
 			{/* Table columns */}
 			{region.type === "table" && (
-				<motion.div
+				<m.div
 					initial={{ opacity: 0, height: 0 }}
 					animate={{ opacity: 1, height: "auto" }}
 					className="mt-2 pt-2 border-t space-y-2"
@@ -1419,8 +1419,8 @@ function RegionItem({
 							</div>
 						</div>
 					)}
-				</motion.div>
+				</m.div>
 			)}
-		</motion.div>
+		</m.div>
 	);
 }

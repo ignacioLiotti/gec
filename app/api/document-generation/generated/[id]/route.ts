@@ -153,6 +153,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const body = await request.json().catch(() => ({}));
     const nextStatus = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
+    const comment = typeof body.comment === "string" ? body.comment.trim() : "";
     if (!ALLOWED_STATUSES.has(nextStatus)) {
       return NextResponse.json({ error: "Estado no permitido" }, { status: 400 });
     }
@@ -179,7 +180,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       accessContext,
       id,
       "GeneratedDocumentStatusChanged",
-      { status: nextStatus },
+      { status: nextStatus, comment },
       String(current.status ?? ""),
       nextStatus,
     );

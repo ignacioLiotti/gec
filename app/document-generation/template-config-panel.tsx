@@ -26,8 +26,10 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { normalizeFieldKey } from "@/lib/tablas";
 import { cn } from "@/lib/utils";
+import { DocumentGenerationNav } from "./document-nav";
 
 type FolderConfig = {
   path: string;
@@ -44,6 +46,7 @@ type TemplateConfigResponse = {
 
 type Props = {
   workId: string;
+  permissions?: DocumentGenerationPermissionMap | null;
 };
 
 type EditableTemplate = {
@@ -223,9 +226,9 @@ function cloneTemplate(template: DocumentTemplateSummary): EditableTemplate {
       options: field.options ? field.options.map((option) => ({ ...option })) : undefined,
       columns: field.columns
         ? field.columns.map((column) => ({
-            ...column,
-            options: column.options ? column.options.map((option) => ({ ...option })) : undefined,
-          }))
+          ...column,
+          options: column.options ? column.options.map((option) => ({ ...option })) : undefined,
+        }))
         : undefined,
     })),
   };
@@ -347,9 +350,8 @@ function useDocumentTemplateConfig(workId: string) {
         setTemplates(payload.templates);
         setFolderConfigs(payload.folderConfigs);
         setFolderFieldSuggestions(payload.folderFieldSuggestions ?? {});
-        const initialTemplate = payload.templates[0] ?? null;
-        setSelectedTemplateId(initialTemplate?.id ?? "");
-        setDraft(initialTemplate ? cloneTemplate(initialTemplate) : null);
+        setSelectedTemplateId("");
+        setDraft(null);
         setExpandedField("");
       } catch (error) {
         if (!cancelled) {
@@ -445,12 +447,12 @@ function useDocumentTemplateConfig(workId: string) {
         fields: current.fields.map((field, index) =>
           index === fieldIndex
             ? {
-                ...field,
-                options: [
-                  ...(field.options ?? []),
-                  { label: `Opcion ${(field.options?.length ?? 0) + 1}`, value: `opcion_${(field.options?.length ?? 0) + 1}` },
-                ],
-              }
+              ...field,
+              options: [
+                ...(field.options ?? []),
+                { label: `Opcion ${(field.options?.length ?? 0) + 1}`, value: `opcion_${(field.options?.length ?? 0) + 1}` },
+              ],
+            }
             : field,
         ),
       };
@@ -487,11 +489,11 @@ function useDocumentTemplateConfig(workId: string) {
         fields: current.fields.map((field, index) =>
           index === fieldIndex
             ? {
-                ...field,
-                columns: (field.columns ?? []).map((column, currentColumnIndex) =>
-                  currentColumnIndex === columnIndex ? { ...column, ...patch } : column,
-                ),
-              }
+              ...field,
+              columns: (field.columns ?? []).map((column, currentColumnIndex) =>
+                currentColumnIndex === columnIndex ? { ...column, ...patch } : column,
+              ),
+            }
             : field,
         ),
       };
@@ -506,18 +508,18 @@ function useDocumentTemplateConfig(workId: string) {
         fields: current.fields.map((field, index) =>
           index === fieldIndex
             ? {
-                ...field,
-                columns: [
-                  ...(field.columns ?? []),
-                  {
-                    key: `columna_${(field.columns?.length ?? 0) + 1}`,
-                    label: `Columna ${(field.columns?.length ?? 0) + 1}`,
-                    type: "text",
-                    required: false,
-                    source: "extra",
-                  },
-                ],
-              }
+              ...field,
+              columns: [
+                ...(field.columns ?? []),
+                {
+                  key: `columna_${(field.columns?.length ?? 0) + 1}`,
+                  label: `Columna ${(field.columns?.length ?? 0) + 1}`,
+                  type: "text",
+                  required: false,
+                  source: "extra",
+                },
+              ],
+            }
             : field,
         ),
       };
@@ -587,18 +589,18 @@ function useDocumentTemplateConfig(workId: string) {
         fields: current.fields.map((field, index) =>
           index === fieldIndex
             ? {
-                ...field,
-                columns: (field.columns ?? []).map((column, currentColumnIndex) =>
-                  currentColumnIndex === columnIndex
-                    ? {
-                        ...column,
-                        options: (column.options ?? []).filter(
-                          (_, currentOptionIndex) => currentOptionIndex !== optionIndex,
-                        ),
-                      }
-                    : column,
-                ),
-              }
+              ...field,
+              columns: (field.columns ?? []).map((column, currentColumnIndex) =>
+                currentColumnIndex === columnIndex
+                  ? {
+                    ...column,
+                    options: (column.options ?? []).filter(
+                      (_, currentOptionIndex) => currentOptionIndex !== optionIndex,
+                    ),
+                  }
+                  : column,
+              ),
+            }
             : field,
         ),
       };
@@ -819,7 +821,11 @@ export function TemplateConfigProvider({ workId, children }: { workId: string; c
   return <TemplateConfigContext.Provider value={value}>{children}</TemplateConfigContext.Provider>;
 }
 
-export function TemplatePickerCard() {
+export function TemplatePickerCard({
+  permissions,
+}: {
+  permissions?: DocumentGenerationPermissionMap | null;
+}) {
   const { templates, loading, selectedTemplateId, handleTemplateSelect } = useTemplateConfig();
 
   return (
@@ -827,7 +833,13 @@ export function TemplatePickerCard() {
       <CardHeader className="border-b border-stone-200/80">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <CardTitle className="text-2xl tracking-[-0.04em]">Templates</CardTitle>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+              Paso 1
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle className="text-2xl tracking-[-0.04em]">Elige un template</CardTitle>
+              <DocumentGenerationNav permissions={permissions} />
+            </div>
             <CardDescription className="mt-2 max-w-xl text-sm leading-6">
               Elige la plantilla base que vas a ajustar para este tenant. La idea es que la seleccion ya comunique alcance, version y destino.
             </CardDescription>
@@ -850,48 +862,49 @@ export function TemplatePickerCard() {
           </div>
         ) : null}
 
-        {templates.map((template) => (
-          <button
-            key={template.id}
-            type="button"
-            onClick={() => handleTemplateSelect(template.id)}
-            className={`w-full rounded-xl border px-4 py-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${
-              selectedTemplateId === template.id
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              onClick={() => handleTemplateSelect(template.id)}
+              className={`h-full rounded-xl border px-4 py-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${selectedTemplateId === template.id
                 ? "border-[#fb923c] bg-[#fff7ed] shadow-[0_1px_0_rgba(0,0,0,0.03)]"
                 : "border-stone-200 bg-white hover:border-stone-300 hover:shadow-sm"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-stone-950">{template.name}</p>
-                  <Badge variant="outline" className="rounded-full border-stone-200 bg-white text-[10px] text-stone-600">
-                    {DOCUMENT_TYPE_LABELS[template.documentType]}
+                }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-stone-950">{template.name}</p>
+                    <Badge variant="outline" className="rounded-full border-stone-200 bg-white text-[10px] text-stone-600">
+                      {DOCUMENT_TYPE_LABELS[template.documentType]}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-stone-500">
+                    {template.description?.trim() || "Sin descripcion cargada para esta template."}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1">
+                      {template.targetFolderPath || "Sin carpeta fija"}
+                    </span>
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1">
+                      {template.schema.fields.length} campos
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge variant="outline" className="rounded-full">
+                    {template.tenantScoped ? "tenant" : "system"}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full">
+                    v{template.version}
                   </Badge>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-stone-500">
-                  {template.description?.trim() || "Sin descripcion cargada para esta template."}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
-                  <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1">
-                    {template.targetFolderPath || "Sin carpeta fija"}
-                  </span>
-                  <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1">
-                    {template.schema.fields.length} campos
-                  </span>
-                </div>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <Badge variant="outline" className="rounded-full">
-                  {template.tenantScoped ? "tenant" : "system"}
-                </Badge>
-                <Badge variant="secondary" className="rounded-full">
-                  v{template.version}
-                </Badge>
-              </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
@@ -994,157 +1007,98 @@ export function TemplateConfigEditorPanel() {
   };
 
   return (
-      <div className="space-y-6">
-        <Card className="overflow-hidden rounded-2xl border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
-          <CardHeader className="border-b border-stone-200/80">
-            <CardTitle className="text-2xl tracking-[-0.04em]">Configuracion de la template</CardTitle>
-            <CardDescription className="mt-2 max-w-3xl text-sm leading-6">
-              Ajusta metadata, campos y HTML con una estructura mas editorial: primero el alcance, despues los datos y por ultimo la composicion visual.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {!draft || !selectedTemplate ? (
-              <div className="rounded-[24px] border border-dashed border-stone-300 bg-stone-50 p-8 text-sm text-stone-500">
-                Selecciona una template para editarla.
-              </div>
-            ) : (
-              <>
-                <div className="rounded-xl border border-stone-200 bg-stone-50 p-5 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
-                        Alcance actual
-                      </p>
-                      <h3 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-stone-950">
-                        {draft.name}
-                      </h3>
-                      <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-                        {draft.description?.trim() || "Define mejor esta template para que su proposito sea obvio incluso antes de abrir el HTML."}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-700 shadow-none">
-                        {DOCUMENT_TYPE_LABELS[draft.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? draft.documentType}
-                      </Badge>
-                      <Badge className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-700 shadow-none">
-                        {draft.targetFolderPath || "Sin carpeta fija"}
-                      </Badge>
-                      <Badge className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-700 shadow-none">
-                        {draft.status}
-                      </Badge>
-                    </div>
-                  </div>
+    <div className="space-y-6">
+      <Card className="overflow-hidden rounded-2xl border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
+        <CardContent className="space-y-6">
+          {!draft || !selectedTemplate ? (
+            <div className="rounded-[24px] border border-dashed border-stone-300 bg-stone-50 p-8 text-sm text-stone-500">
+              Selecciona una template para editarla.
+            </div>
+          ) : (
+            <>
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">Campos</p>
-                      <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-stone-950">{draft.fields.length}</p>
-                    </div>
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">Extra</p>
-                      <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-stone-950">
-                        {draft.fields.filter((field) => field.source !== "folder").length}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">Requeridos</p>
-                      <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-stone-950">
-                        {draft.fields.filter((field) => field.required).length}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">Origen</p>
-                      <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-stone-950">
-                        {selectedTemplate.tenantScoped ? "Tenant" : "System"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
-                  <div className="space-y-6">
-                  <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-[var(--shadow-card)]">
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
+                <div className="space-y-6">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Nombre</Label>
-                    <Input
-                      value={draft.name}
-                      onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
-                      className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Tipo documental</Label>
-                    <Select
-                      value={draft.documentType}
-                      onValueChange={(value) =>
-                        setDraft((current) =>
-                          current && normalizeDocumentType(value)
-                            ? { ...current, documentType: value }
-                            : current,
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => (
-                          <SelectItem key={key} value={key}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Carpeta destino sugerida</Label>
-                    <Select
-                      value={draft.targetFolderPath || "__none__"}
-                      onValueChange={(value) =>
-                        setDraft((current) =>
-                          current ? { ...current, targetFolderPath: value === "__none__" ? "" : value } : current,
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
-                        <SelectValue placeholder="Sin carpeta fija" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Sin carpeta fija</SelectItem>
-                        {folderConfigs.map((folder) => (
-                          <SelectItem key={folder.path} value={folder.path}>
-                            {folder.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Estado</Label>
-                    <Select
-                      value={draft.status}
-                      onValueChange={(value) => setDraft((current) => (current ? { ...current, status: value } : current))}
-                    >
-                      <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">draft</SelectItem>
-                        <SelectItem value="active">active</SelectItem>
-                        <SelectItem value="inactive">inactive</SelectItem>
-                        <SelectItem value="archived">archived</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <Input
+                        value={draft.name}
+                        onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
+                        className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tipo documental</Label>
+                      <Select
+                        value={draft.documentType}
+                        onValueChange={(value) =>
+                          setDraft((current) =>
+                            current && normalizeDocumentType(value)
+                              ? { ...current, documentType: value }
+                              : current,
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => (
+                            <SelectItem key={key} value={key}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Carpeta destino sugerida</Label>
+                      <Select
+                        value={draft.targetFolderPath || "__none__"}
+                        onValueChange={(value) =>
+                          setDraft((current) =>
+                            current ? { ...current, targetFolderPath: value === "__none__" ? "" : value } : current,
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
+                          <SelectValue placeholder="Sin carpeta fija" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sin carpeta fija</SelectItem>
+                          {folderConfigs.map((folder) => (
+                            <SelectItem key={folder.path} value={folder.path}>
+                              {folder.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Estado</Label>
+                      <Select
+                        value={draft.status}
+                        onValueChange={(value) => setDraft((current) => (current ? { ...current, status: value } : current))}
+                      >
+                        <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">draft</SelectItem>
+                          <SelectItem value="active">active</SelectItem>
+                          <SelectItem value="inactive">inactive</SelectItem>
+                          <SelectItem value="archived">archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-                  <div className="space-y-2 rounded-xl border border-stone-200 bg-white p-5 shadow-[var(--shadow-card)]">
+                  <div className="space-y-2">
                     <Label>Descripcion</Label>
                     <Textarea
                       rows={2}
@@ -1153,122 +1107,99 @@ export function TemplateConfigEditorPanel() {
                       className="rounded-xl border-stone-200 bg-white shadow-none"
                     />
                   </div>
-                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">
-                      Resumen
-                    </p>
-                    <div className="mt-3 space-y-2 text-sm text-stone-600">
-                      <div className="flex items-center justify-between">
-                        <span>Campos</span>
-                        <span className="font-medium text-stone-900">{draft.fields.length}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Extra</span>
-                        <span className="font-medium text-stone-900">
-                          {draft.fields.filter((field) => field.source !== "folder").length}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Requeridos</span>
-                        <span className="font-medium text-stone-900">
-                          {draft.fields.filter((field) => field.required).length}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
 
-                <Separator />
 
-                <div className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-5 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-stone-950">Campos del documento</p>
-                      <p className="text-xs text-stone-500">
-                        Define que datos se van a pedir al generar este documento.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <div className="inline-flex rounded-md border border-stone-200 bg-white p-1">
-                        <Button
-                          type="button"
-                          variant={fieldsMode === "visual" ? "secondary" : "ghost"}
-                          size="sm"
-                          onClick={() => setFieldsMode("visual")}
-                          className="h-8 rounded-full"
-                        >
-                          Editor
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={fieldsMode === "json" ? "secondary" : "ghost"}
-                          size="sm"
-                          onClick={showFieldsJson}
-                          className="h-8 rounded-full"
-                        >
-                          JSON
-                        </Button>
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-stone-950">Campos del documento</p>
+                        <p className="text-xs text-stone-500">
+                          Define que datos se van a pedir al generar este documento.
+                        </p>
                       </div>
-                      <Button type="button" variant="outline" onClick={() => void copyHtmlVariables()}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        Copiar variables
-                      </Button>
-                      <Button type="button" variant="outline" onClick={syncFieldsWithHtml}>
-                        Sincronizar desde HTML
-                      </Button>
-                      {fieldsMode === "visual" ? (
-                        <>
-                          <Button type="button" variant="outline" onClick={addExtraField}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Agregar dato
+                      <div className="flex flex-wrap gap-2">
+                        <div className="inline-flex rounded-md border border-stone-200 bg-white p-1">
+                          <Button
+                            type="button"
+                            variant={fieldsMode === "visual" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={() => setFieldsMode("visual")}
+                            className="h-8 rounded-full"
+                          >
+                            Editor
                           </Button>
-                          <Button type="button" variant="outline" onClick={addTableField}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Agregar tabla
+                          <Button
+                            type="button"
+                            variant={fieldsMode === "json" ? "secondary" : "ghost"}
+                            size="sm"
+                            onClick={showFieldsJson}
+                            className="h-8 rounded-full"
+                          >
+                            JSON
                           </Button>
-                        </>
-                      ) : (
-                        <Button type="button" variant="outline" onClick={applyFieldsJson}>
-                          Aplicar JSON
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {fieldsMode === "json" ? (
-                    <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-stone-900">Configuracion JSON de campos</p>
-                          <p className="text-xs text-stone-500">
-                            Pega un array de campos o un objeto con {"{ \"fields\": [...] }"}. Soporta columnas en campos tipo tabla.
-                          </p>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setFieldsJsonState({ templateId: draft.id, value: formatFieldsJson(draft.fields) })}
-                          className="rounded-md"
-                        >
-                          Restaurar
+                        <Button type="button" variant="outline" onClick={() => void copyHtmlVariables()}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Copiar variables
                         </Button>
+                        <Button type="button" variant="outline" onClick={syncFieldsWithHtml}>
+                          Sincronizar desde HTML
+                        </Button>
+                        {fieldsMode === "visual" ? (
+                          <>
+                            <Button type="button" variant="outline" onClick={addExtraField}>
+                              <Plus className="mr-2 h-4 w-4" />
+                              Agregar dato
+                            </Button>
+                            <Button type="button" variant="outline" onClick={addTableField}>
+                              <Plus className="mr-2 h-4 w-4" />
+                              Agregar tabla
+                            </Button>
+                          </>
+                        ) : (
+                          <Button type="button" variant="outline" onClick={applyFieldsJson}>
+                            Aplicar JSON
+                          </Button>
+                        )}
                       </div>
-                      <Textarea
-                        value={fieldsJson}
-                        onChange={(event) => {
-                          setFieldsJsonState({ templateId: draft.id, value: event.target.value });
-                          setFieldsJsonError("");
-                        }}
-                        rows={24}
-                        spellCheck={false}
-                        className="min-h-[520px] rounded-xl border-[#fb9b72] font-mono text-xs"
-                      />
-                      {activeFieldsJsonError ? <p className="text-xs text-red-600">{activeFieldsJsonError}</p> : null}
-                      <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
-                        Ejemplo tabla:
-                        <pre className="mt-2 overflow-auto rounded-md bg-white p-3 text-[11px] text-stone-800">
-{`[
+                    </div>
+
+                    {fieldsMode === "json" ? (
+                      <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-stone-900">Configuracion JSON de campos</p>
+                            <p className="text-xs text-stone-500">
+                              Pega un array de campos o un objeto con {"{ \"fields\": [...] }"}. Soporta columnas en campos tipo tabla.
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFieldsJsonState({ templateId: draft.id, value: formatFieldsJson(draft.fields) })}
+                            className="rounded-md"
+                          >
+                            Restaurar
+                          </Button>
+                        </div>
+                        <Textarea
+                          value={fieldsJson}
+                          onChange={(event) => {
+                            setFieldsJsonState({ templateId: draft.id, value: event.target.value });
+                            setFieldsJsonError("");
+                          }}
+                          rows={24}
+                          spellCheck={false}
+                          className="min-h-[520px] rounded-xl border-[#fb9b72] font-mono text-xs"
+                        />
+                        {activeFieldsJsonError ? <p className="text-xs text-red-600">{activeFieldsJsonError}</p> : null}
+                        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
+                          Ejemplo tabla:
+                          <pre className="mt-2 overflow-auto rounded-md bg-white p-3 text-[11px] text-stone-800">
+                            {`[
   {
     "key": "items",
     "label": "Materiales",
@@ -1281,641 +1212,680 @@ export function TemplateConfigEditorPanel() {
     ]
   }
 ]`}
-                        </pre>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                  {suggestedFields.length > 0 ? (
-                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-stone-500" />
-                          <p className="text-sm font-medium text-stone-900">Datos detectados en la carpeta</p>
+                          </pre>
                         </div>
-                        <span className="text-xs text-stone-500">Click para agregarlos</span>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {suggestedFields.map((field) => (
-                          <Button
-                            key={field.fieldKey}
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => addSuggestedField(field)}
-                            disabled={draft.fields.some((entry) => entry.key === field.fieldKey)}
-                          >
-                            {field.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-                    <Accordion
-                      type="single"
-                      collapsible
-                      value={expandedField}
-                      onValueChange={setExpandedField}
-                      className="divide-y divide-stone-200"
-                    >
-                      {draft.fields.map((field, index) => (
-                        <AccordionItem
-                          key={`${field.key}-${index}`}
-                          value={field.key}
-                          className="border-b-0"
-                        >
-                          <div className="px-4 py-4">
-                            <div className="grid gap-3 rounded-lg border border-stone-100 bg-stone-50/50 p-3 md:grid-cols-[minmax(0,1fr)_180px_150px_auto] md:items-end">
-                              <div className="min-w-0 md:col-span-4">
-                                <Label className="mb-1 block text-xs font-medium text-stone-600">Nombre del dato</Label>
-                                <Input
-                                  value={field.label}
-                                  onChange={(event) => {
-                                    const nextLabel = event.target.value;
-                                    updateField(index, {
-                                      label: nextLabel,
-                                    });
-                                  }}
-                                  className="h-11 rounded-lg border-stone-200 bg-white text-sm shadow-none"
-                                />
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline" className="rounded-full text-[10px]">
-                                    {field.source === "folder" ? "Detectado" : "Manual"}
-                                  </Badge>
-                                  {field.defaultValue ? (
-                                    <span className="truncate text-xs text-stone-500">
-                                      Valor inicial: {String(field.defaultValue)}
-                                    </span>
-                                  ) : null}
-                                  {field.repeatableGroup ? (
-                                    <span className="truncate text-xs text-stone-500">
-                                      Tabla: {field.repeatableGroupLabel || field.repeatableGroup}
-                                    </span>
-                                  ) : null}
-                                  {field.type === "table" ? (
-                                    <span className="truncate text-xs text-stone-500">
-                                      {field.columns?.length ?? 0} columnas
-                                    </span>
-                                  ) : null}
-                                </div>
+                    ) : (
+                      <>
+                        {suggestedFields.length > 0 ? (
+                          <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="h-4 w-4 text-stone-500" />
+                                <p className="text-sm font-medium text-stone-900">Datos detectados en la carpeta</p>
                               </div>
-
-                              <div>
-                                <Label className="mb-1 block text-xs font-medium text-stone-600">Tipo de dato</Label>
-                                <Select
-                                  value={field.type}
-                                  onValueChange={(value) =>
-                                    updateField(index, {
-                                      type: value as TemplateFieldType,
-                                      options:
-                                        value === "select" && !field.options?.length
-                                          ? [{ label: "Opcion 1", value: "opcion_1" }]
-                                          : field.options,
-                                      selectMode:
-                                        value === "select"
-                                          ? field.selectMode ?? "strict"
-                                          : field.selectMode,
-                                      columns:
-                                        value === "table" && !field.columns?.length
-                                          ? createDefaultTableColumns()
-                                          : field.columns,
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {FIELD_TYPE_OPTIONS.map((option) => (
-                                      <SelectItem key={option} value={option}>
-                                        {FIELD_TYPE_LABELS[option]}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
-                                <div className="flex items-center justify-between gap-3">
-                                  <Label className="text-xs font-medium text-stone-700">Obligatorio</Label>
-                                  <Switch
-                                    checked={field.required}
-                                    onCheckedChange={(checked) => updateField(index, { required: checked })}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="flex items-center justify-end gap-1 self-end lg:self-center">
-                                <AccordionTrigger className="h-10 rounded-lg border border-stone-200 px-3 py-0 hover:no-underline">
-                                  <span className="text-xs font-medium text-stone-600">Mas opciones</span>
-                                </AccordionTrigger>
+                              <span className="text-xs text-stone-500">Click para agregarlos</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {suggestedFields.map((field) => (
                                 <Button
+                                  key={field.fieldKey}
                                   type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => removeField(index)}
-                                  className="h-10 w-10 rounded-lg text-stone-500 hover:bg-stone-100"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => addSuggestedField(field)}
+                                  disabled={draft.fields.some((entry) => entry.key === field.fieldKey)}
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  {field.label}
                                 </Button>
-                              </div>
+                              ))}
                             </div>
                           </div>
+                        ) : null}
 
-                          <AccordionContent className="px-4 pb-4 pt-0">
-                            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-                              <div className="grid gap-4 md:grid-cols-3">
-                                {field.type !== "table" ? (
-                                <div className="space-y-2">
-                                  <Label>Valor inicial</Label>
-                                  <Input
-                                    value={String(field.defaultValue ?? "")}
-                                    onChange={(event) => updateField(index, { defaultValue: event.target.value })}
-                                    className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
-                                    placeholder="Opcional"
-                                  />
-                                </div>
-                                ) : null}
-                                <div className="space-y-2">
-                                  <Label>Variable para el HTML</Label>
-                                  <Input
-                                    value={field.key}
-                                    onChange={(event) =>
-                                      updateField(index, { key: normalizeFieldKey(event.target.value || field.label) })
-                                    }
-                                    className={cn(
-                                      "h-10 rounded-lg border-stone-200 bg-white shadow-none",
-                                      field.source === "folder" && "bg-stone-100 text-stone-500",
-                                    )}
-                                    disabled={field.source === "folder"}
-                                  />
-                                  {field.source === "folder" ? (
-                                    <p className="text-xs text-stone-500">
-                                      Viene de la extraccion de la carpeta.
-                                    </p>
-                                  ) : (
-                                    <p className="text-xs text-stone-500">
-                                      Se usa como {"{{variable}}"} dentro del HTML.
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>Ayuda interna</Label>
-                                  <Input
-                                    value={field.description ?? ""}
-                                    onChange={(event) => updateField(index, { description: event.target.value })}
-                                    className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
-                                    placeholder="Opcional"
-                                  />
-                                </div>
-                                {field.type !== "table" ? (
-                                  <div className="space-y-2 md:col-span-3">
-                                    <Label>Autocompletar</Label>
-                                    <Select
-                                      value={field.autoPopulate ?? "none"}
-                                      onValueChange={(value) =>
-                                        updateField(index, {
-                                          autoPopulate: value as TemplateAutoPopulate,
-                                        })
-                                      }
-                                    >
-                                      <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {AUTO_POPULATE_OPTIONS.map((option) => (
-                                          <SelectItem key={option.value} value={option.value}>
-                                            {option.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-stone-500">
-                                      Se aplica al crear o cambiar contexto; el usuario puede editar el valor.
-                                    </p>
-                                  </div>
-                                ) : null}
-                                {field.type === "select" ? (
-                                  <div className="space-y-3 md:col-span-3 rounded-lg border border-stone-200 bg-white p-3">
-                                    <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-                                      <div className="space-y-2">
-                                        <Label>Modo de lista</Label>
-                                        <Select
-                                          value={field.selectMode ?? "strict"}
-                                          onValueChange={(value) =>
-                                            updateField(index, {
-                                              selectMode: value as TemplateSelectMode,
-                                            })
-                                          }
-                                        >
-                                          <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {SELECT_MODE_OPTIONS.map((option) => (
-                                              <SelectItem key={option.value} value={option.value}>
-                                                {option.label}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
+                        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+                          <Accordion
+                            type="single"
+                            collapsible
+                            value={expandedField}
+                            onValueChange={setExpandedField}
+                            className="divide-y divide-stone-200"
+                          >
+                            {draft.fields.map((field, index) => (
+                              <AccordionItem
+                                key={`${field.key}-${index}`}
+                                value={field.key}
+                                className="border-b-0"
+                              >
+                                <div className="px-4 py-4">
+                                  <div className="grid gap-3 rounded-lg border border-stone-100 bg-stone-50/50 p-3 md:grid-cols-[minmax(0,1fr)_180px_150px_auto] md:items-end">
+                                    <div className="min-w-0 md:col-span-4">
+                                      <Label className="mb-1 block text-xs font-medium text-stone-600">Nombre del dato</Label>
+                                      <Input
+                                        value={field.label}
+                                        onChange={(event) => {
+                                          const nextLabel = event.target.value;
+                                          updateField(index, {
+                                            label: nextLabel,
+                                          });
+                                        }}
+                                        className="h-11 rounded-lg border-stone-200 bg-white text-sm shadow-none"
+                                      />
+                                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <Badge variant="outline" className="rounded-full text-[10px]">
+                                          {field.source === "folder" ? "Detectado" : "Manual"}
+                                        </Badge>
+                                        {field.defaultValue ? (
+                                          <span className="truncate text-xs text-stone-500">
+                                            Valor inicial: {String(field.defaultValue)}
+                                          </span>
+                                        ) : null}
+                                        {field.repeatableGroup ? (
+                                          <span className="truncate text-xs text-stone-500">
+                                            Tabla: {field.repeatableGroupLabel || field.repeatableGroup}
+                                          </span>
+                                        ) : null}
+                                        {field.type === "table" ? (
+                                          <span className="truncate text-xs text-stone-500">
+                                            {field.columns?.length ?? 0} columnas
+                                          </span>
+                                        ) : null}
                                       </div>
-                                      <p className="self-end pb-2 text-xs text-stone-500">
-                                        Estricta obliga a elegir un valor existente. Combo editable permite escribir uno nuevo.
-                                      </p>
                                     </div>
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div>
-                                        <p className="text-sm font-medium text-stone-900">Valores de la lista</p>
-                                        <p className="text-xs text-stone-500">Estos valores aparecen cuando el usuario completa el documento.</p>
+
+                                    <div>
+                                      <Label className="mb-1 block text-xs font-medium text-stone-600">Tipo de dato</Label>
+                                      <Select
+                                        value={field.type}
+                                        onValueChange={(value) =>
+                                          updateField(index, {
+                                            type: value as TemplateFieldType,
+                                            options:
+                                              value === "select" && !field.options?.length
+                                                ? [{ label: "Opcion 1", value: "opcion_1" }]
+                                                : field.options,
+                                            selectMode:
+                                              value === "select"
+                                                ? field.selectMode ?? "strict"
+                                                : field.selectMode,
+                                            columns:
+                                              value === "table" && !field.columns?.length
+                                                ? createDefaultTableColumns()
+                                                : field.columns,
+                                          })
+                                        }
+                                      >
+                                        <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {FIELD_TYPE_OPTIONS.map((option) => (
+                                            <SelectItem key={option} value={option}>
+                                              {FIELD_TYPE_LABELS[option]}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+
+                                    <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <Label className="text-xs font-medium text-stone-700">Obligatorio</Label>
+                                        <Switch
+                                          checked={field.required}
+                                          onCheckedChange={(checked) => updateField(index, { required: checked })}
+                                        />
                                       </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-end gap-1 self-end lg:self-center">
+                                      <AccordionTrigger className="h-10 rounded-lg border border-stone-200 px-3 py-0 hover:no-underline">
+                                        <span className="text-xs font-medium text-stone-600">Mas opciones</span>
+                                      </AccordionTrigger>
                                       <Button
                                         type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => addSelectOption(index)}
-                                        className="rounded-md"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removeField(index)}
+                                        className="h-10 w-10 rounded-lg text-stone-500 hover:bg-stone-100"
                                       >
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Agregar valor
+                                        <Trash2 className="h-4 w-4" />
                                       </Button>
                                     </div>
-                                    <div className="space-y-2">
-                                      {(field.options ?? []).map((option, optionIndex) => (
-                                        <div key={`${field.key}-option-${optionIndex}`} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                  </div>
+                                </div>
+
+                                <AccordionContent className="px-4 pb-4 pt-0">
+                                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                                    <div className="grid gap-4 md:grid-cols-3">
+                                      {field.type !== "table" ? (
+                                        <div className="space-y-2">
+                                          <Label>Valor inicial</Label>
                                           <Input
-                                            value={option.label}
-                                            onChange={(event) =>
-                                              updateSelectOption(index, optionIndex, { label: event.target.value })
-                                            }
-                                            className="h-9 rounded-md border-stone-200"
-                                            placeholder="Texto visible"
+                                            value={String(field.defaultValue ?? "")}
+                                            onChange={(event) => updateField(index, { defaultValue: event.target.value })}
+                                            className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                            placeholder="Opcional"
                                           />
-                                          <Input
-                                            value={option.value}
-                                            onChange={(event) =>
-                                              updateSelectOption(index, optionIndex, {
-                                                value: normalizeFieldKey(event.target.value || option.label),
+                                        </div>
+                                      ) : null}
+                                      <div className="space-y-2">
+                                        <Label>Variable para el HTML</Label>
+                                        <Input
+                                          value={field.key}
+                                          onChange={(event) =>
+                                            updateField(index, { key: normalizeFieldKey(event.target.value || field.label) })
+                                          }
+                                          className={cn(
+                                            "h-10 rounded-lg border-stone-200 bg-white shadow-none",
+                                            field.source === "folder" && "bg-stone-100 text-stone-500",
+                                          )}
+                                          disabled={field.source === "folder"}
+                                        />
+                                        {field.source === "folder" ? (
+                                          <p className="text-xs text-stone-500">
+                                            Viene de la extraccion de la carpeta.
+                                          </p>
+                                        ) : (
+                                          <p className="text-xs text-stone-500">
+                                            Se usa como {"{{variable}}"} dentro del HTML.
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Ayuda interna</Label>
+                                        <Input
+                                          value={field.description ?? ""}
+                                          onChange={(event) => updateField(index, { description: event.target.value })}
+                                          className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                          placeholder="Opcional"
+                                        />
+                                      </div>
+                                      {field.type !== "table" ? (
+                                        <div className="space-y-2 md:col-span-3">
+                                          <Label>Autocompletar</Label>
+                                          <Select
+                                            value={field.autoPopulate ?? "none"}
+                                            onValueChange={(value) =>
+                                              updateField(index, {
+                                                autoPopulate: value as TemplateAutoPopulate,
                                               })
                                             }
-                                            className="h-9 rounded-md border-stone-200"
-                                            placeholder="valor_interno"
-                                          />
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => removeSelectOption(index, optionIndex)}
-                                            className="h-9 w-9 rounded-md text-stone-500"
                                           >
-                                            <Trash2 className="h-4 w-4" />
-                                          </Button>
+                                            <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {AUTO_POPULATE_OPTIONS.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                          <p className="text-xs text-stone-500">
+                                            Se aplica al crear o cambiar contexto; el usuario puede editar el valor.
+                                          </p>
                                         </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : null}
-                                {field.type === "table" ? (
-                                  <div className="space-y-3 md:col-span-3 rounded-lg border border-stone-200 bg-white p-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div>
-                                        <p className="text-sm font-medium text-stone-900">Columnas de la tabla</p>
-                                        <p className="text-xs text-stone-500">
-                                          Cada columna se puede usar dentro de {"{{#"}{field.key}{"}}"}.
-                                        </p>
-                                      </div>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => addTableColumn(index)}
-                                        className="rounded-md"
-                                      >
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Agregar columna
-                                      </Button>
-                                    </div>
-                                    <div className="space-y-3">
-                                      {(field.columns ?? []).map((column, columnIndex) => (
-                                        <div key={`${field.key}-column-${columnIndex}`} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-                                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_130px_auto] md:items-end">
-                                            <div className="space-y-1">
-                                              <Label>Nombre de columna</Label>
-                                              <Input
-                                                value={column.label}
-                                                onChange={(event) => updateTableColumn(index, columnIndex, { label: event.target.value })}
-                                                className="h-9 rounded-md border-stone-200 bg-white"
-                                              />
-                                            </div>
-                                            <div className="space-y-1">
-                                              <Label>Tipo</Label>
+                                      ) : null}
+                                      {field.type === "select" ? (
+                                        <div className="space-y-3 md:col-span-3 rounded-lg border border-stone-200 bg-white p-3">
+                                          <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                            <div className="space-y-2">
+                                              <Label>Modo de lista</Label>
                                               <Select
-                                                value={column.type}
+                                                value={field.selectMode ?? "strict"}
                                                 onValueChange={(value) =>
-                                                  updateTableColumn(index, columnIndex, {
-                                                    type: value as TemplateFieldType,
-                                                    options:
-                                                      value === "select" && !column.options?.length
-                                                        ? [{ label: "Opcion 1", value: "opcion_1" }]
-                                                        : column.options,
-                                                    selectMode:
-                                                      value === "select"
-                                                        ? column.selectMode ?? "strict"
-                                                        : column.selectMode,
+                                                  updateField(index, {
+                                                    selectMode: value as TemplateSelectMode,
                                                   })
                                                 }
                                               >
-                                                <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
                                                   <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                  {FIELD_TYPE_OPTIONS.filter((option) => option !== "table").map((option) => (
-                                                    <SelectItem key={option} value={option}>
-                                                      {FIELD_TYPE_LABELS[option]}
+                                                  {SELECT_MODE_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                      {option.label}
                                                     </SelectItem>
                                                   ))}
                                                 </SelectContent>
                                               </Select>
                                             </div>
-                                            <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
-                                              <div className="flex items-center justify-between gap-3">
-                                                <Label className="text-xs">Obligatorio</Label>
-                                                <Switch
-                                                  checked={column.required}
-                                                  onCheckedChange={(checked) => updateTableColumn(index, columnIndex, { required: checked })}
-                                                />
-                                              </div>
+                                            <p className="self-end pb-2 text-xs text-stone-500">
+                                              Estricta obliga a elegir un valor existente. Combo editable permite escribir uno nuevo.
+                                            </p>
+                                          </div>
+                                          <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                              <p className="text-sm font-medium text-stone-900">Valores de la lista</p>
+                                              <p className="text-xs text-stone-500">Estos valores aparecen cuando el usuario completa el documento.</p>
                                             </div>
                                             <Button
                                               type="button"
-                                              variant="ghost"
-                                              size="icon"
-                                              onClick={() => removeTableColumn(index, columnIndex)}
-                                              className="h-9 w-9 rounded-md text-stone-500"
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => addSelectOption(index)}
+                                              className="rounded-md"
                                             >
-                                              <Trash2 className="h-4 w-4" />
+                                              <Plus className="mr-2 h-4 w-4" />
+                                              Agregar valor
                                             </Button>
                                           </div>
-                                          <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                            <div className="space-y-1">
-                                              <Label>Variable HTML</Label>
-                                              <Input
-                                                value={column.key}
-                                                onChange={(event) =>
-                                                  updateTableColumn(index, columnIndex, {
-                                                    key: normalizeFieldKey(event.target.value || column.label),
-                                                  })
-                                                }
-                                                className="h-9 rounded-md border-stone-200 bg-white"
-                                              />
-                                            </div>
-                                            <div className="space-y-1">
-                                              <Label>Valor inicial</Label>
-                                              <Input
-                                                value={String(column.defaultValue ?? "")}
-                                                onChange={(event) =>
-                                                  updateTableColumn(index, columnIndex, { defaultValue: event.target.value })
-                                                }
-                                                className="h-9 rounded-md border-stone-200 bg-white"
-                                                placeholder="Opcional"
-                                              />
-                                            </div>
-                                          </div>
-                                          {column.type === "select" ? (
-                                            <div className="mt-3 rounded-md border border-stone-200 bg-white p-3">
-                                              <div className="mb-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-                                                <div className="space-y-1">
-                                                  <Label>Modo de lista</Label>
-                                                  <Select
-                                                    value={column.selectMode ?? "strict"}
-                                                    onValueChange={(value) =>
-                                                      updateTableColumn(index, columnIndex, {
-                                                        selectMode: value as TemplateSelectMode,
-                                                      })
-                                                    }
-                                                  >
-                                                    <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
-                                                      <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      {SELECT_MODE_OPTIONS.map((option) => (
-                                                        <SelectItem key={option.value} value={option.value}>
-                                                          {option.label}
-                                                        </SelectItem>
-                                                      ))}
-                                                    </SelectContent>
-                                                  </Select>
-                                                </div>
-                                                <p className="self-end pb-2 text-xs text-stone-500">
-                                                  El combo editable acepta valores nuevos en esta columna.
-                                                </p>
-                                              </div>
-                                              <div className="mb-2 flex items-center justify-between gap-3">
-                                                <div>
-                                                  <p className="text-xs font-semibold text-stone-900">Valores de la lista</p>
-                                                  <p className="text-xs text-stone-500">Opciones disponibles para esta columna.</p>
-                                                </div>
+                                          <div className="space-y-2">
+                                            {(field.options ?? []).map((option, optionIndex) => (
+                                              <div key={`${field.key}-option-${optionIndex}`} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                                <Input
+                                                  value={option.label}
+                                                  onChange={(event) =>
+                                                    updateSelectOption(index, optionIndex, { label: event.target.value })
+                                                  }
+                                                  className="h-9 rounded-md border-stone-200"
+                                                  placeholder="Texto visible"
+                                                />
+                                                <Input
+                                                  value={option.value}
+                                                  onChange={(event) =>
+                                                    updateSelectOption(index, optionIndex, {
+                                                      value: normalizeFieldKey(event.target.value || option.label),
+                                                    })
+                                                  }
+                                                  className="h-9 rounded-md border-stone-200"
+                                                  placeholder="valor_interno"
+                                                />
                                                 <Button
                                                   type="button"
-                                                  variant="outline"
-                                                  size="sm"
-                                                  onClick={() => addTableColumnOption(index, columnIndex)}
-                                                  className="h-8 rounded-md"
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  onClick={() => removeSelectOption(index, optionIndex)}
+                                                  className="h-9 w-9 rounded-md text-stone-500"
                                                 >
-                                                  <Plus className="mr-2 h-3.5 w-3.5" />
-                                                  Agregar
+                                                  <Trash2 className="h-4 w-4" />
                                                 </Button>
                                               </div>
-                                              <div className="space-y-2">
-                                                {(column.options ?? []).map((option, optionIndex) => (
-                                                  <div
-                                                    key={`${field.key}-column-${columnIndex}-option-${optionIndex}`}
-                                                    className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-                                                  >
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                      {field.type === "table" ? (
+                                        <div className="space-y-3 md:col-span-3 rounded-lg border border-stone-200 bg-white p-3">
+                                          <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                              <p className="text-sm font-medium text-stone-900">Columnas de la tabla</p>
+                                              <p className="text-xs text-stone-500">
+                                                Cada columna se puede usar dentro de {"{{#"}{field.key}{"}}"}.
+                                              </p>
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => addTableColumn(index)}
+                                              className="rounded-md"
+                                            >
+                                              <Plus className="mr-2 h-4 w-4" />
+                                              Agregar columna
+                                            </Button>
+                                          </div>
+                                          <div className="space-y-3">
+                                            {(field.columns ?? []).map((column, columnIndex) => (
+                                              <div key={`${field.key}-column-${columnIndex}`} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                                                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_130px_auto] md:items-end">
+                                                  <div className="space-y-1">
+                                                    <Label>Nombre de columna</Label>
                                                     <Input
-                                                      value={option.label}
-                                                      onChange={(event) =>
-                                                        updateTableColumnOption(index, columnIndex, optionIndex, {
-                                                          label: event.target.value,
-                                                        })
-                                                      }
-                                                      className="h-8 rounded-md border-stone-200"
-                                                      placeholder="Texto visible"
+                                                      value={column.label}
+                                                      onChange={(event) => updateTableColumn(index, columnIndex, { label: event.target.value })}
+                                                      className="h-9 rounded-md border-stone-200 bg-white"
                                                     />
-                                                    <Input
-                                                      value={option.value}
-                                                      onChange={(event) =>
-                                                        updateTableColumnOption(index, columnIndex, optionIndex, {
-                                                          value: normalizeFieldKey(event.target.value || option.label),
-                                                        })
-                                                      }
-                                                      className="h-8 rounded-md border-stone-200"
-                                                      placeholder="valor_interno"
-                                                    />
-                                                    <Button
-                                                      type="button"
-                                                      variant="ghost"
-                                                      size="icon"
-                                                      onClick={() => removeTableColumnOption(index, columnIndex, optionIndex)}
-                                                      className="h-8 w-8 rounded-md text-stone-500"
-                                                    >
-                                                      <Trash2 className="h-4 w-4" />
-                                                    </Button>
                                                   </div>
-                                                ))}
+                                                  <div className="space-y-1">
+                                                    <Label>Tipo</Label>
+                                                    <Select
+                                                      value={column.type}
+                                                      onValueChange={(value) =>
+                                                        updateTableColumn(index, columnIndex, {
+                                                          type: value as TemplateFieldType,
+                                                          options:
+                                                            value === "select" && !column.options?.length
+                                                              ? [{ label: "Opcion 1", value: "opcion_1" }]
+                                                              : column.options,
+                                                          selectMode:
+                                                            value === "select"
+                                                              ? column.selectMode ?? "strict"
+                                                              : column.selectMode,
+                                                        })
+                                                      }
+                                                    >
+                                                      <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                        <SelectValue />
+                                                      </SelectTrigger>
+                                                      <SelectContent>
+                                                        {FIELD_TYPE_OPTIONS.filter((option) => option !== "table").map((option) => (
+                                                          <SelectItem key={option} value={option}>
+                                                            {FIELD_TYPE_LABELS[option]}
+                                                          </SelectItem>
+                                                        ))}
+                                                      </SelectContent>
+                                                    </Select>
+                                                  </div>
+                                                  <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                      <Label className="text-xs">Obligatorio</Label>
+                                                      <Switch
+                                                        checked={column.required}
+                                                        onCheckedChange={(checked) => updateTableColumn(index, columnIndex, { required: checked })}
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                  <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => removeTableColumn(index, columnIndex)}
+                                                    className="h-9 w-9 rounded-md text-stone-500"
+                                                  >
+                                                    <Trash2 className="h-4 w-4" />
+                                                  </Button>
+                                                </div>
+                                                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                                  <div className="space-y-1">
+                                                    <Label>Variable HTML</Label>
+                                                    <Input
+                                                      value={column.key}
+                                                      onChange={(event) =>
+                                                        updateTableColumn(index, columnIndex, {
+                                                          key: normalizeFieldKey(event.target.value || column.label),
+                                                        })
+                                                      }
+                                                      className="h-9 rounded-md border-stone-200 bg-white"
+                                                    />
+                                                  </div>
+                                                  <div className="space-y-1">
+                                                    <Label>Valor inicial</Label>
+                                                    <Input
+                                                      value={String(column.defaultValue ?? "")}
+                                                      onChange={(event) =>
+                                                        updateTableColumn(index, columnIndex, { defaultValue: event.target.value })
+                                                      }
+                                                      className="h-9 rounded-md border-stone-200 bg-white"
+                                                      placeholder="Opcional"
+                                                    />
+                                                  </div>
+                                                </div>
+                                                {column.type === "select" ? (
+                                                  <div className="mt-3 rounded-md border border-stone-200 bg-white p-3">
+                                                    <div className="mb-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                                      <div className="space-y-1">
+                                                        <Label>Modo de lista</Label>
+                                                        <Select
+                                                          value={column.selectMode ?? "strict"}
+                                                          onValueChange={(value) =>
+                                                            updateTableColumn(index, columnIndex, {
+                                                              selectMode: value as TemplateSelectMode,
+                                                            })
+                                                          }
+                                                        >
+                                                          <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                            <SelectValue />
+                                                          </SelectTrigger>
+                                                          <SelectContent>
+                                                            {SELECT_MODE_OPTIONS.map((option) => (
+                                                              <SelectItem key={option.value} value={option.value}>
+                                                                {option.label}
+                                                              </SelectItem>
+                                                            ))}
+                                                          </SelectContent>
+                                                        </Select>
+                                                      </div>
+                                                      <p className="self-end pb-2 text-xs text-stone-500">
+                                                        El combo editable acepta valores nuevos en esta columna.
+                                                      </p>
+                                                    </div>
+                                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                                      <div>
+                                                        <p className="text-xs font-semibold text-stone-900">Valores de la lista</p>
+                                                        <p className="text-xs text-stone-500">Opciones disponibles para esta columna.</p>
+                                                      </div>
+                                                      <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => addTableColumnOption(index, columnIndex)}
+                                                        className="h-8 rounded-md"
+                                                      >
+                                                        <Plus className="mr-2 h-3.5 w-3.5" />
+                                                        Agregar
+                                                      </Button>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                      {(column.options ?? []).map((option, optionIndex) => (
+                                                        <div
+                                                          key={`${field.key}-column-${columnIndex}-option-${optionIndex}`}
+                                                          className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                                                        >
+                                                          <Input
+                                                            value={option.label}
+                                                            onChange={(event) =>
+                                                              updateTableColumnOption(index, columnIndex, optionIndex, {
+                                                                label: event.target.value,
+                                                              })
+                                                            }
+                                                            className="h-8 rounded-md border-stone-200"
+                                                            placeholder="Texto visible"
+                                                          />
+                                                          <Input
+                                                            value={option.value}
+                                                            onChange={(event) =>
+                                                              updateTableColumnOption(index, columnIndex, optionIndex, {
+                                                                value: normalizeFieldKey(event.target.value || option.label),
+                                                              })
+                                                            }
+                                                            className="h-8 rounded-md border-stone-200"
+                                                            placeholder="valor_interno"
+                                                          />
+                                                          <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => removeTableColumnOption(index, columnIndex, optionIndex)}
+                                                            className="h-8 w-8 rounded-md text-stone-500"
+                                                          >
+                                                            <Trash2 className="h-4 w-4" />
+                                                          </Button>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                ) : null}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-2 md:col-span-3">
+                                          <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)]">
+                                            <div className="rounded-lg border border-stone-200 bg-white px-3 py-2">
+                                              <div className="flex items-center justify-between gap-3">
+                                                <Label className="text-xs font-medium text-stone-700">Repite en tabla</Label>
+                                                <Switch
+                                                  checked={Boolean(field.repeatableGroup)}
+                                                  onCheckedChange={(checked) =>
+                                                    updateField(index, {
+                                                      repeatableGroup: checked ? "items" : null,
+                                                      repeatableGroupLabel: checked ? "Items" : null,
+                                                    })
+                                                  }
+                                                />
                                               </div>
                                             </div>
-                                          ) : null}
+                                            <div className="space-y-2">
+                                              <Label>Nombre de la tabla</Label>
+                                              <Input
+                                                value={field.repeatableGroupLabel ?? ""}
+                                                onChange={(event) =>
+                                                  updateField(index, {
+                                                    repeatableGroupLabel: event.target.value,
+                                                    repeatableGroup: normalizeFieldKey(
+                                                      field.repeatableGroup || event.target.value || "items",
+                                                    ),
+                                                  })
+                                                }
+                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                placeholder="Ej. Materiales"
+                                                disabled={!field.repeatableGroup}
+                                              />
+                                            </div>
+                                            <div className="space-y-2">
+                                              <Label>Variable del bloque</Label>
+                                              <Input
+                                                value={field.repeatableGroup ?? ""}
+                                                onChange={(event) =>
+                                                  updateField(index, {
+                                                    repeatableGroup: normalizeFieldKey(event.target.value || "items"),
+                                                  })
+                                                }
+                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                placeholder="items"
+                                                disabled={!field.repeatableGroup}
+                                              />
+                                              <p className="text-xs text-stone-500">
+                                                Usalo en HTML como {"{{#items}}"} ... {"{{/items}}"}.
+                                              </p>
+                                            </div>
+                                          </div>
                                         </div>
-                                      ))}
+                                      )}
                                     </div>
                                   </div>
-                                ) : (
-                                <div className="space-y-2 md:col-span-3">
-                                  <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)]">
-                                    <div className="rounded-lg border border-stone-200 bg-white px-3 py-2">
-                                      <div className="flex items-center justify-between gap-3">
-                                        <Label className="text-xs font-medium text-stone-700">Repite en tabla</Label>
-                                        <Switch
-                                          checked={Boolean(field.repeatableGroup)}
-                                          onCheckedChange={(checked) =>
-                                            updateField(index, {
-                                              repeatableGroup: checked ? "items" : null,
-                                              repeatableGroupLabel: checked ? "Items" : null,
-                                            })
-                                          }
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                      <Label>Nombre de la tabla</Label>
-                                      <Input
-                                        value={field.repeatableGroupLabel ?? ""}
-                                        onChange={(event) =>
-                                          updateField(index, {
-                                            repeatableGroupLabel: event.target.value,
-                                            repeatableGroup: normalizeFieldKey(
-                                              field.repeatableGroup || event.target.value || "items",
-                                            ),
-                                          })
-                                        }
-                                        className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
-                                        placeholder="Ej. Materiales"
-                                        disabled={!field.repeatableGroup}
-                                      />
-                                    </div>
-                                    <div className="space-y-2">
-                                      <Label>Variable del bloque</Label>
-                                      <Input
-                                        value={field.repeatableGroup ?? ""}
-                                        onChange={(event) =>
-                                          updateField(index, {
-                                            repeatableGroup: normalizeFieldKey(event.target.value || "items"),
-                                          })
-                                        }
-                                        className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
-                                        placeholder="items"
-                                        disabled={!field.repeatableGroup}
-                                      />
-                                      <p className="text-xs text-stone-500">
-                                        Usalo en HTML como {"{{#items}}"} ... {"{{/items}}"}.
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                                )}
-                              </div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </div>
-                    </>
-                  )}
-                </div>
-
-                  </div>
-
-                  <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label>{rightPanelMode === "preview" ? "Preview" : "HTML"}</Label>
-                      <div className="inline-flex rounded-full border border-stone-200 bg-stone-50 p-1">
-                        <Button
-                          type="button"
-                          variant={rightPanelMode === "preview" ? "secondary" : "ghost"}
-                          size="sm"
-                          onClick={() => setRightPanelMode("preview")}
-                          className="h-8 rounded-full"
-                        >
-                          Preview
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={rightPanelMode === "html" ? "secondary" : "ghost"}
-                          size="sm"
-                          onClick={() => setRightPanelMode("html")}
-                          className="h-8 rounded-full"
-                        >
-                          HTML
-                        </Button>
-                      </div>
-                    </div>
-                    {rightPanelMode === "preview" ? (
-                      <div className="overflow-hidden rounded-xl border border-stone-200 bg-[#eceae6] p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-                        <div className="max-h-[calc(100vh-252px)] min-h-[640px] overflow-auto rounded-xl border border-stone-300 bg-white p-4">
-                          <div className="min-w-max" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                                </AccordionContent>
+                              </AccordionItem>
+                            ))}
+                          </Accordion>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 rounded-xl border border-stone-200 bg-white p-4 shadow-[var(--shadow-card)]">
-                        <Textarea
-                          rows={28}
-                          value={draft.contentHtml}
-                          onChange={(event) =>
-                            setDraft((current) => (current ? { ...current, contentHtml: event.target.value } : current))
-                          }
-                          className="min-h-[640px] rounded-[22px] border-[#fb9b72] font-mono text-xs shadow-none"
-                        />
-                        <p className="text-xs text-stone-500">
-                          Variables simples: `{"{{campo}}"}`. Tablas repetibles: `{"{{#items}}"}...{"{{/items}}"}`.
-                        </p>
-                      </div>
+                      </>
                     )}
                   </div>
+
                 </div>
 
-                <Separator />
-
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-4">
-                  <p className="max-w-2xl text-xs leading-5 text-stone-500">
-                    {selectedTemplate.tenantScoped
-                      ? "Estas editando la version propia del tenant."
-                      : "Al guardar se crea o actualiza un override propio del tenant sobre la template sistema."}
-                  </p>
-                  <Button type="button" onClick={() => void saveConfiguration()} disabled={saving} className="rounded-full">
-                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Guardar configuracion
-                  </Button>
+                <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>{rightPanelMode === "preview" ? "Preview" : "HTML"}</Label>
+                    <div className="inline-flex rounded-full border border-stone-200 bg-stone-50 p-1">
+                      <Button
+                        type="button"
+                        variant={rightPanelMode === "preview" ? "secondary" : "ghost"}
+                        size="sm"
+                        onClick={() => setRightPanelMode("preview")}
+                        className="h-8 rounded-full"
+                      >
+                        Preview
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={rightPanelMode === "html" ? "secondary" : "ghost"}
+                        size="sm"
+                        onClick={() => setRightPanelMode("html")}
+                        className="h-8 rounded-full"
+                      >
+                        HTML
+                      </Button>
+                    </div>
+                  </div>
+                  {rightPanelMode === "preview" ? (
+                    <div className="overflow-hidden rounded-xl border border-stone-200 bg-[#eceae6] p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+                      <div className="max-h-[calc(100vh-252px)] min-h-[640px] overflow-auto rounded-xl border border-stone-300 bg-white p-4">
+                        <div className="min-w-max" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 rounded-xl border border-stone-200 bg-white p-4 shadow-[var(--shadow-card)]">
+                      <Textarea
+                        rows={28}
+                        value={draft.contentHtml}
+                        onChange={(event) =>
+                          setDraft((current) => (current ? { ...current, contentHtml: event.target.value } : current))
+                        }
+                        className="min-h-[640px] rounded-[22px] border-[#fb9b72] font-mono text-xs shadow-none"
+                      />
+                      <p className="text-xs text-stone-500">
+                        Variables simples: `{"{{campo}}"}`. Tablas repetibles: `{"{{#items}}"}...{"{{/items}}"}`.
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-4">
+                <p className="max-w-2xl text-xs leading-5 text-stone-500">
+                  {selectedTemplate.tenantScoped
+                    ? "Estas editando la version propia del tenant."
+                    : "Al guardar se crea o actualiza un override propio del tenant sobre la template sistema."}
+                </p>
+                <Button type="button" onClick={() => void saveConfiguration()} disabled={saving} className="rounded-full">
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Guardar configuracion
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
-export function TemplateConfigPanel({ workId }: Props) {
+export function TemplateConfigPanel({ workId, permissions }: Props) {
   return (
     <TemplateConfigProvider workId={workId}>
-      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <TemplatePickerCard />
-        <TemplateConfigEditorPanel />
-      </div>
+      <TemplateConfigSteps permissions={permissions} />
     </TemplateConfigProvider>
+  );
+}
+
+function TemplateConfigSteps({
+  permissions,
+}: {
+  permissions?: DocumentGenerationPermissionMap | null;
+}) {
+  const { selectedTemplateId, selectedTemplate, handleTemplateSelect } = useTemplateConfig();
+
+  if (!selectedTemplateId || !selectedTemplate) {
+    return <TemplatePickerCard permissions={permissions} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+            Paso 2
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
+              {selectedTemplate.name}
+            </h1>
+            <DocumentGenerationNav permissions={permissions} />
+          </div>
+          <p className="mt-1 text-sm text-stone-500">
+            Configura metadata, campos y preview para este template.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-md"
+          onClick={() => handleTemplateSelect("")}
+        >
+          Cambiar template
+        </Button>
+      </div>
+      <TemplateConfigEditorPanel />
+    </div>
   );
 }
 

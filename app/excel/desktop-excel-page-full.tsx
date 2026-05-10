@@ -168,6 +168,74 @@ const buildHeaders = (rows: CsvRow[], headerRows: number) => {
 	return headers;
 };
 
+type HeaderAliasMap = Readonly<Record<string, string>>;
+
+async function parseCsvFileToValidRows(
+	file: File,
+	headerAliases: HeaderAliasMap
+): Promise<{ validRows: CsvObra[]; skippedCount: number }> {
+	const decodeWithFallback = async () => {
+		const buffer = await file.arrayBuffer();
+		const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+		const utf8ReplacementCount = (utf8.match(/\uFFFD/g) ?? []).length;
+		if (utf8ReplacementCount === 0) return utf8;
+		const win1252 = new TextDecoder("windows-1252", { fatal: false }).decode(buffer);
+		const winReplacementCount = (win1252.match(/\uFFFD/g) ?? []).length;
+		return winReplacementCount < utf8ReplacementCount ? win1252 : utf8;
+	};
+
+	const [{ default: Papa }, csvText] = await Promise.all([import("papaparse"), decodeWithFallback()]);
+	const results = Papa.parse<string[]>(csvText, {
+		header: false,
+		skipEmptyLines: true,
+		delimiter: ";",
+	});
+
+	if (results.errors.length) {
+		throw new Error(results.errors[0]?.message || "No se pudo leer el CSV");
+	}
+
+	const rows = results.data as CsvRow[];
+	if (!rows.length) {
+		throw new Error("El CSV esta vacio");
+	}
+
+	const headerRows = isMultiRowHeader(rows) ? 3 : 1;
+	const headers = buildHeaders(rows, headerRows);
+	const mappedRows = rows
+		.slice(headerRows)
+		.map((row) => {
+			const mapped: Record<string, string> = {};
+			headers.forEach((header, index) => {
+				if (!header) return;
+				const normalized = normalizeHeader(header);
+				const mappedKey = headerAliases[normalized] ?? normalized;
+				mapped[mappedKey] = toText(row[index]);
+			});
+			return mapped as CsvObra;
+		})
+		.filter((row) => Object.values(row).some((value) => String(value ?? "").trim().length > 0));
+
+	if (!mappedRows.length) {
+		throw new Error("El CSV no contiene filas validas");
+	}
+
+	const validRows = mappedRows.filter(
+		(row) =>
+			toText(row.designacionYUbicacion) &&
+			toText(row.entidadContratante) &&
+			toText(row.mesBasicoDeContrato) &&
+			toText(row.iniciacion)
+	);
+
+	if (!validRows.length) {
+		throw new Error("No hay filas validas con campos obligatorios");
+	}
+
+	const skippedCount = mappedRows.length - validRows.length;
+	return { validRows, skippedCount };
+}
+
 export default function DesktopExcelPageClient({
 	initialMainTableColumnsConfig,
 	initialObras,
@@ -299,77 +367,14 @@ export default function DesktopExcelPageClient({
 	);
 
 	const handleCsvImport = useCallback(
-		(file: File) => {
-			setIsImporting(true);
+		(files: File[] | FileList) => {
+			const fileList = Array.from(files);
+			if (!fileList.length) return;
 
-			const decodeWithFallback = async () => {
-				const buffer = await file.arrayBuffer();
-				const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
-				const utf8ReplacementCount = (utf8.match(/\uFFFD/g) ?? []).length;
-				if (utf8ReplacementCount === 0) return utf8;
-				const win1252 = new TextDecoder("windows-1252", { fatal: false }).decode(buffer);
-				const winReplacementCount = (win1252.match(/\uFFFD/g) ?? []).length;
-				return winReplacementCount < utf8ReplacementCount ? win1252 : utf8;
-			};
+			setIsImporting(true);
 
 			void (async () => {
 				try {
-					const [{ default: Papa }, csvText] = await Promise.all([
-						import("papaparse"),
-						decodeWithFallback(),
-					]);
-					const results = Papa.parse<string[]>(csvText, {
-						header: false,
-						skipEmptyLines: true,
-						delimiter: ";",
-					});
-
-					if (results.errors.length) {
-						throw new Error(results.errors[0]?.message || "No se pudo leer el CSV");
-					}
-
-					const rows = results.data as CsvRow[];
-					if (!rows.length) {
-						throw new Error("El CSV esta vacio");
-					}
-
-					const headerRows = isMultiRowHeader(rows) ? 3 : 1;
-					const headers = buildHeaders(rows, headerRows);
-					const mappedRows = rows
-						.slice(headerRows)
-						.map((row) => {
-							const mapped: Record<string, string> = {};
-							headers.forEach((header, index) => {
-								if (!header) return;
-								const normalized = normalizeHeader(header);
-								const mappedKey =
-									headerAliases[normalized as keyof typeof headerAliases] ?? normalized;
-								mapped[mappedKey] = toText(row[index]);
-							});
-							return mapped as CsvObra;
-						})
-						.filter((row) =>
-							Object.values(row).some((value) => String(value ?? "").trim().length > 0)
-						);
-
-					if (!mappedRows.length) {
-						throw new Error("El CSV no contiene filas validas");
-					}
-
-					const validRows = mappedRows.filter(
-						(row) =>
-							toText(row.designacionYUbicacion) &&
-							toText(row.entidadContratante) &&
-							toText(row.mesBasicoDeContrato) &&
-							toText(row.iniciacion)
-					);
-
-					if (!validRows.length) {
-						throw new Error("No hay filas validas con campos obligatorios");
-					}
-
-					const skippedCount = mappedRows.length - validRows.length;
-
 					let currentMaxN = 0;
 					try {
 						const existingResponse = await fetch("/api/obras", { cache: "no-store" });
@@ -390,8 +395,40 @@ export default function DesktopExcelPageClient({
 						);
 					}
 
+					const allValid: CsvObra[] = [];
+					let totalSkipped = 0;
+					const importErrors: string[] = [];
+
+					for (const file of fileList) {
+						try {
+							const { validRows, skippedCount } = await parseCsvFileToValidRows(file, headerAliases);
+							allValid.push(...validRows);
+							totalSkipped += skippedCount;
+						} catch (err) {
+							const message = err instanceof Error ? err.message : "No se pudo leer el archivo";
+							importErrors.push(`${file.name}: ${message}`);
+						}
+					}
+
+					if (importErrors.length && allValid.length === 0) {
+						throw new Error(importErrors.join(" · "));
+					}
+					if (importErrors.length) {
+						toast.message(`Algunos archivos se omitieron: ${importErrors.join(" · ")}`);
+					}
+
+					if (!allValid.length) {
+						throw new Error(
+							"No hay filas validas con campos obligatorios en los archivos seleccionados"
+						);
+					}
+
+					if (totalSkipped > 0) {
+						toast.message(`Se omitieron ${totalSkipped} filas sin campos obligatorios en total`);
+					}
+
 					let nextAuto = currentMaxN + 1;
-					const updates = validRows.map((row) => {
+					const updates = allValid.map((row) => {
 						const finalN = nextAuto;
 						nextAuto += 1;
 						return {
@@ -415,9 +452,6 @@ export default function DesktopExcelPageClient({
 					toast.message(
 						`Se asignaron Nro consecutivos desde ${currentMaxN + 1} para agregar las obras al final`
 					);
-					if (skippedCount > 0) {
-						toast.message(`Se omitieron ${skippedCount} filas sin campos obligatorios`);
-					}
 
 					setPendingUpdates(updates);
 					setPreviewRows(
@@ -426,7 +460,12 @@ export default function DesktopExcelPageClient({
 							_rowIndex: idx + 1,
 						}))
 					);
-					setPendingFileName(file.name);
+					const namesJoined = fileList.map((f) => f.name).join(", ");
+					const namesLabel =
+						namesJoined.length > 120 ? `${namesJoined.slice(0, 117)}…` : namesJoined;
+					setPendingFileName(
+						fileList.length === 1 ? fileList[0].name : `${fileList.length} archivos (${namesLabel})`
+					);
 					setIsPreviewOpen(true);
 				} catch (error) {
 					const message = error instanceof Error ? error.message : "No se pudo importar el CSV";
@@ -490,7 +529,7 @@ export default function DesktopExcelPageClient({
 	}, []);
 
 	return (
-		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#f6f6f6] px-4 py-4 md:pl-8 md:py-8">
+		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#f9f9f9] px-4 py-4 md:pl-8 md:py-8">
 			{isPreviewOpen ? (
 				<Sheet open onOpenChange={(open) => !open && handleCancelPreview()}>
 					<SheetContent side="right" className="border-l-[#ece7df] bg-[#f6f2eb] p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:max-w-lg">
@@ -566,7 +605,7 @@ export default function DesktopExcelPageClient({
 						<div className="flex w-full flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 							<div data-wizard-target="excel-page-header">
 								<h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a] sm:text-4xl">
-									Construction Workspace
+									Tus Obras
 								</h1>
 								<p className="mt-1 text-sm text-[#999]">
 									Filtra, busca y actualiza tus obras desde una vista unificada.
@@ -607,11 +646,12 @@ export default function DesktopExcelPageClient({
 									ref={inputRef}
 									type="file"
 									accept=".csv,text/csv"
+									multiple
 									className="hidden"
 									onChange={(event) => {
-										const file = event.target.files?.[0];
-										if (file) {
-											handleCsvImport(file);
+										const list = event.target.files;
+										if (list?.length) {
+											handleCsvImport(list);
 										}
 									}}
 								/>

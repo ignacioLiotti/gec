@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AsciiScene } from "@/components/ascii-scene";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 
 type AuthModalProps = {
   open: boolean;
@@ -211,7 +211,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
             </div>
             <AnimatePresence>
               {showOtherMethods && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
@@ -256,7 +256,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                   >
                     {loading ? "Cargando..." : mode === "sign_in" ? "Iniciar sesión" : "Registrarse"}
                   </button>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
             {!showOtherMethods && error && (

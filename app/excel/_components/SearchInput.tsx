@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 
 export function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
@@ -17,7 +17,7 @@ export function SearchInput({ value, onChange }: { value: string; onChange: (v: 
       />
       <AnimatePresence>
         {value && (
-          <motion.button
+          <m.button
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
@@ -27,7 +27,7 @@ export function SearchInput({ value, onChange }: { value: string; onChange: (v: 
             onClick={() => onChange("")}
           >
             <X className="h-4 w-4" />
-          </motion.button>
+          </m.button>
         )}
       </AnimatePresence>
     </div>

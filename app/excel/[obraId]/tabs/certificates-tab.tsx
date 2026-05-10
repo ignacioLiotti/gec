@@ -1,7 +1,7 @@
 'use client';
 
 import type { FormEvent } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { DollarSign, Plus, Receipt } from "lucide-react";
 
 import { TabsContent } from "@/components/ui/tabs";
@@ -37,7 +37,7 @@ export function ObraCertificatesTab({
 }: CertificatesTabProps) {
 	return (
 		<TabsContent value="certificates" className="space-y-6">
-			<motion.section
+			<m.section
 				initial={{ opacity: 0, y: 20 }}
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ duration: 0.4 }}
@@ -75,7 +75,7 @@ export function ObraCertificatesTab({
 
 				<div className="p-6 space-y-6">
 					{isAddingCertificate && (
-						<motion.div
+						<m.div
 							initial={{ opacity: 0, height: 0 }}
 							animate={{ opacity: 1, height: "auto" }}
 							exit={{ opacity: 0, height: 0 }}
@@ -161,7 +161,7 @@ export function ObraCertificatesTab({
 									</Button>
 								</div>
 							</form>
-						</motion.div>
+						</m.div>
 					)}
 
 					{certificatesLoading ? (
@@ -192,7 +192,7 @@ export function ObraCertificatesTab({
 									</thead>
 									<tbody>
 										{certificates.map((cert, index) => (
-											<motion.tr
+											<m.tr
 												key={cert.id}
 												initial={{ opacity: 0, y: 10 }}
 												animate={{ opacity: 1, y: 0 }}
@@ -214,7 +214,7 @@ export function ObraCertificatesTab({
 														{cert.estado}
 													</span>
 												</td>
-											</motion.tr>
+											</m.tr>
 										))}
 									</tbody>
 								</table>
@@ -236,7 +236,7 @@ export function ObraCertificatesTab({
 						</div>
 					) : null}
 				</div>
-			</motion.section>
+			</m.section>
 		</TabsContent>
 	);
 }

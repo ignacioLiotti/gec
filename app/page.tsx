@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   BarChart3,
   CheckCircle2,
@@ -338,7 +338,7 @@ function MarketingLanding() {
       </nav>
 
       <section className="relative pt-28 md:pt-48 pb-16 px-6 text-center max-w-5xl mx-auto z-10">
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1 }}
@@ -371,7 +371,7 @@ function MarketingLanding() {
             </a>
 
           </div> */}
-        </motion.div>
+        </m.div>
       </section>
 
       <div className="relative bg-stone-100 bg-linear-to-b from-stone-50 to-stone-100 -mt-60 z-[5] hidden md:block" style={{ height: 340 }}>
@@ -413,7 +413,7 @@ function MarketingLanding() {
           ]).map((xKeys, i) => (
             <div key={i}>
               {/* Primary dot */}
-              <motion.div
+              <m.div
                 className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-orange-500"
                 style={{ boxShadow: "0 0 7px 2px rgba(249,115,22,0.4)" }}
                 animate={{
@@ -430,7 +430,7 @@ function MarketingLanding() {
                 }}
               />
               {/* Trailing dot */}
-              <motion.div
+              <m.div
                 className="absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-orange-300"
                 animate={{
                   left: xKeys,
@@ -456,13 +456,13 @@ function MarketingLanding() {
       <section id="como-funciona" className="scroll-mt-20 px-4 md:px-6  relative bg-stone-100">
         <div className="absolute flex items-center justify-center pointer-events-none top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100000]">
           <div className="flex items-center gap-2.5 rounded-full border border-stone-200 bg-stone-100 px-5 py-2 text-[15px] font-bold uppercase tracking-widest text-stone-400 shadow-sm">
-            <motion.div
+            <m.div
               className="h-2 w-2 rounded-full bg-orange-400"
               animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
               transition={{ duration: 1.2, repeat: Infinity }}
             />
             Cómo funciona
-            <motion.div
+            <m.div
               className="h-2 w-2 rounded-full bg-orange-400"
               animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
               transition={{ duration: 1.2, repeat: Infinity, delay: 0.6 }}
@@ -485,7 +485,7 @@ function MarketingLanding() {
                   const isNext = idx === activeStep + 1;
                   const isLast = idx === steps.length - 1;
                   return (
-                    <motion.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4">
+                    <m.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4">
                       {/* Left: circle + connector */}
                       <div className="flex flex-col items-center">
                         <button
@@ -517,7 +517,7 @@ function MarketingLanding() {
                           )}
                         </button>
                         {!isLast && (
-                          <motion.div layout className="mt-1 mb-1 w-px flex-1 border-l-2 border-dashed border-stone-200" />
+                          <m.div layout className="mt-1 mb-1 w-px flex-1 border-l-2 border-dashed border-stone-200" />
                         )}
                       </div>
 
@@ -544,7 +544,7 @@ function MarketingLanding() {
                         </div>
                         <AnimatePresence initial={false}>
                           {isActive && (
-                            <motion.p
+                            <m.p
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "auto" }}
                               exit={{ opacity: 0, height: 0 }}
@@ -552,11 +552,11 @@ function MarketingLanding() {
                               className="mt-1.5 text-xs leading-relaxed text-stone-500 overflow-hidden"
                             >
                               {step.description}
-                            </motion.p>
+                            </m.p>
                           )}
                         </AnimatePresence>
                       </button>
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </div>
@@ -570,7 +570,7 @@ function MarketingLanding() {
                 </div>
               </div>
               <AnimatePresence mode="wait">
-                <motion.div
+                <m.div
                   key={activeStep}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -594,7 +594,7 @@ function MarketingLanding() {
                       {steps[activeStep].visual}
                     </div>
                   </MarketingLandingFrame>
-                </motion.div>
+                </m.div>
               </AnimatePresence>
             </div>
           </div>
@@ -639,7 +639,7 @@ function MarketingLanding() {
           ]).map((xKeys, i) => (
             <div key={i}>
               {/* Primary dot */}
-              <motion.div
+              <m.div
                 className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-orange-500"
                 style={{ boxShadow: "0 0 7px 2px rgba(249,115,22,0.4)" }}
                 animate={{
@@ -656,7 +656,7 @@ function MarketingLanding() {
                 }}
               />
               {/* Trailing dot */}
-              <motion.div
+              <m.div
                 className="absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-orange-300"
                 animate={{
                   left: xKeys,
@@ -677,13 +677,13 @@ function MarketingLanding() {
           {/* Center label */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="flex items-center gap-2.5 rounded-full border border-stone-200 bg-stone-100 px-5 py-2 text-[15px] font-bold uppercase tracking-widest text-stone-400 shadow-sm">
-              <motion.div
+              <m.div
                 className="h-2 w-2 rounded-full bg-orange-400"
                 animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
                 transition={{ duration: 1.2, repeat: Infinity }}
               />
               sintesis genera
-              <motion.div
+              <m.div
                 className="h-2 w-2 rounded-full bg-orange-400"
                 animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
                 transition={{ duration: 1.2, repeat: Infinity, delay: 0.6 }}
@@ -705,7 +705,7 @@ function MarketingLanding() {
               <div className="flex w-full md:w-[60%] bg-stone-50/70 items-center justify-center relative border-b border-stone-200/70 md:border-b-0 md:border-r min-h-[180px] md:min-h-0">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-orange-100/40 blur-[100px] rounded-full pointer-events-none" />
                 <AnimatePresence mode="wait">
-                  <motion.div
+                  <m.div
                     key={activeBenefit}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -743,7 +743,7 @@ function MarketingLanding() {
                       <div className="h-48 w-48 rounded-full border border-stone-200/60" />
                       <div className="absolute h-64 w-64 rounded-full border border-stone-200/30" />
                     </div>
-                  </motion.div>
+                  </m.div>
                 </AnimatePresence>
               </div>
 
@@ -762,7 +762,7 @@ function MarketingLanding() {
                     const isNext = idx === activeBenefit + 1;
                     const isLast = idx === benefits.length - 1;
                     return (
-                      <motion.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4 cursor-pointer">
+                      <m.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4 cursor-pointer">
                         <div className="flex flex-col items-center cursor-pointer">
                           <button
                             type="button"
@@ -791,7 +791,7 @@ function MarketingLanding() {
                             )}
                           </button>
                           {!isLast && (
-                            <motion.div layout className="mt-1 mb-1 w-px flex-1 border-l-2 border-dashed border-stone-200" />
+                            <m.div layout className="mt-1 mb-1 w-px flex-1 border-l-2 border-dashed border-stone-200" />
                           )}
                         </div>
                         <button
@@ -816,7 +816,7 @@ function MarketingLanding() {
                           </div>
                           <AnimatePresence initial={false}>
                             {/* {isActive && ( */}
-                            <motion.p
+                            <m.p
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "auto" }}
                               exit={{ opacity: 0, height: 0 }}
@@ -824,11 +824,11 @@ function MarketingLanding() {
                               className="mt-1.5 text-xs leading-relaxed text-stone-500 overflow-hidden"
                             >
                               {/* {benefit.description} */}
-                            </motion.p>
+                            </m.p>
                             {/* )} */}
                           </AnimatePresence>
                         </button>
-                      </motion.div>
+                      </m.div>
                     );
                   })}
                 </div>
@@ -872,7 +872,7 @@ function MarketingLanding() {
             ["85%", "79.5%", "67.5%", "55.5%", "50%"],
           ]).map((xKeys, i) => (
             <div key={i}>
-              <motion.div
+              <m.div
                 className="absolute h-2 w-2 -translate-x-1/2 rounded-full bg-orange-500"
                 style={{ boxShadow: "0 0 6px 2px rgba(249,115,22,0.4)" }}
                 animate={{
@@ -882,7 +882,7 @@ function MarketingLanding() {
                 }}
                 transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.28, ease: "linear", repeatDelay: 1 }}
               />
-              <motion.div
+              <m.div
                 className="absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-orange-300"
                 animate={{
                   left: xKeys,
@@ -895,7 +895,7 @@ function MarketingLanding() {
           ))}
 
           {/* Convergence glow — sits right at the bottom, aligns with the orange ball below */}
-          {/* <motion.div
+          {/* <m.div
             className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 h-5 w-5 rounded-full bg-orange-500"
             style={{ boxShadow: "0 0 16px 6px rgba(249,115,22,0.35)" }}
             animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.7, 1, 0.7] }}
@@ -905,7 +905,7 @@ function MarketingLanding() {
       </div>
 
       <section id="agendar-demo" className="scroll-mt-28 pt-12 pb-20 md:pt-0 md:pb-40 text-center px-6 relative z-10">
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -935,7 +935,7 @@ function MarketingLanding() {
             100% online
             Siempre disponible cuando lo necesites
           </p> */}
-        </motion.div>
+        </m.div>
       </section>
 
 
@@ -1130,7 +1130,7 @@ function Step1Visual() {
           </div>
           <div className="flex items-center gap-2">
             <div className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[10px] font-semibold text-stone-600">Importar CSV</div>
-            <motion.button
+            <m.button
               type="button"
               onClick={() => setOpen(true)}
               animate={{
@@ -1150,7 +1150,7 @@ function Step1Visual() {
               }}
             >
               Nueva obra
-            </motion.button>
+            </m.button>
           </div>
         </div>
       </div>
@@ -1374,7 +1374,7 @@ function Step2Visual() {
 
             {/* File cards */}
             <AnimatePresence mode="wait">
-              <motion.div
+              <m.div
                 key={activeFolder}
                 className="flex flex-wrap gap-2.5 mt-1"
                 initial="hidden"
@@ -1385,7 +1385,7 @@ function Step2Visual() {
                   const isXlsx = file.type === "xlsx";
                   const isImage = file.type === "image";
                   return (
-                    <motion.div
+                    <m.div
                       key={file.name}
                       variants={{
                         hidden: { opacity: 0, y: 14 },
@@ -1423,10 +1423,10 @@ function Step2Visual() {
                           {file.name}
                         </div>
                       </div>
-                    </motion.div>
+                    </m.div>
                   );
                 })}
-              </motion.div>
+              </m.div>
             </AnimatePresence>
           </div>
         </div>
@@ -1510,7 +1510,7 @@ function Step3Visual() {
               <AnimatePresence>
                 {scanPhase === "scanning" && (
                   <>
-                    <motion.div
+                    <m.div
                       key="scan-overlay"
                       className="pointer-events-none absolute inset-0 z-20 bg-orange-500/5"
                       initial={{ opacity: 0 }}
@@ -1518,7 +1518,7 @@ function Step3Visual() {
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.2 }}
                     />
-                    <motion.div
+                    <m.div
                       key="scan-line"
                       className="pointer-events-none absolute left-0 right-0 z-30 h-[3px]"
                       style={{
@@ -1529,7 +1529,7 @@ function Step3Visual() {
                       animate={{ top: "100%" }}
                       transition={{ duration: 1.7, ease: "linear" }}
                     />
-                    <motion.div
+                    <m.div
                       key="scan-glow"
                       className="pointer-events-none absolute left-0 right-0 z-20 h-12"
                       style={{
@@ -1617,29 +1617,29 @@ function Step3Visual() {
               <span className="font-semibold uppercase tracking-widest text-stone-500">Hoja extraída</span>
               <AnimatePresence mode="wait">
                 {scanPhase === "scanning" ? (
-                  <motion.span
+                  <m.span
                     key="scanning-label"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: [0.4, 1, 0.4] }}
                     transition={{ duration: 0.9, repeat: Infinity }}
                     className="flex items-center gap-1 text-orange-500"
                   >
-                    <motion.span
+                    <m.span
                       className="inline-block h-1.5 w-1.5 rounded-full bg-orange-500"
                       animate={{ scale: [1, 1.4, 1] }}
                       transition={{ duration: 0.9, repeat: Infinity }}
                     />
                     Escaneando...
-                  </motion.span>
+                  </m.span>
                 ) : (
-                  <motion.span
+                  <m.span
                     key="done-label"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="text-stone-500"
                   >
                     {visibleRows} filas detectadas
-                  </motion.span>
+                  </m.span>
                 )}
               </AnimatePresence>
             </div>
@@ -1652,7 +1652,7 @@ function Step3Visual() {
               {scanPhase === "scanning" ? (
                 <div className="flex flex-col gap-1.5 p-2">
                   {[...Array(4)].map((_, i) => (
-                    <motion.div
+                    <m.div
                       key={i}
                       className="h-5 rounded bg-stone-100"
                       animate={{ opacity: [0.3, 0.65, 0.3] }}
@@ -1662,7 +1662,7 @@ function Step3Visual() {
                 </div>
               ) : (
                 extractedRows.slice(0, visibleRows).map((row) => (
-                  <motion.div
+                  <m.div
                     key={row.id}
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -1679,31 +1679,31 @@ function Step3Visual() {
                     <div className="px-2 py-1.5">
                       <Check className="w-3 h-3 text-emerald-700" />
                     </div>
-                  </motion.div>
+                  </m.div>
                 ))
               )}
             </div>
             <div className="mt-2 grid grid-cols-1 gap-2 text-[10px] sm:grid-cols-2">
               <div className="rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-stone-600">Tabla: Certificados</div>
-              <motion.div
+              <m.div
                 animate={scanPhase === "done" ? { opacity: [0.7, 1, 0.7] } : { opacity: 0.35 }}
                 transition={{ duration: 1.6, repeat: Infinity }}
                 className="rounded-lg border border-orange-200 bg-orange-50 px-2 py-1.5 text-orange-700 font-semibold"
               >
                 Guardar {visibleRows} filas
-              </motion.div>
+              </m.div>
             </div>
           </ProtoPanel>
         </div>
 
-        <motion.div
+        <m.div
           initial={{ opacity: 0.7 }}
           animate={{ opacity: [0.7, 1, 0.7] }}
           transition={{ duration: 1.6, repeat: Infinity }}
           className="rounded-xl border border-stone-900 bg-stone-900 px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-widest text-white"
         >
           Guardar filas en la base
-        </motion.div>
+        </m.div>
       </div>
     </ProtoSurface>
   );
@@ -1726,27 +1726,27 @@ const Step4Visual = () => (
               { label: "Avance", value: 64, color: "bg-cyan-600" },
               { label: "Plazo", value: 58, color: "bg-blue-600" },
               { label: "Saldo", value: 72, color: "bg-emerald-600" },
-            ].map((m, i) => (
-              <motion.div
-                key={m.label}
+            ].map((metric, i) => (
+              <m.div
+                key={metric.label}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.08 }}
                 className="rounded-lg border border-stone-200 bg-white p-2"
               >
                 <div className="flex items-center justify-between text-[9px] uppercase tracking-wide text-stone-500">
-                  <span>{m.label}</span>
-                  <span className="font-semibold text-stone-700">{m.value}%</span>
+                  <span>{metric.label}</span>
+                  <span className="font-semibold text-stone-700">{metric.value}%</span>
                 </div>
                 <div className="mt-2 h-1.5 rounded-full bg-stone-100">
-                  <motion.div
+                  <m.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${m.value}%` }}
+                    animate={{ width: `${metric.value}%` }}
                     transition={{ delay: 0.2 + i * 0.1, duration: 0.6 }}
-                    className={cn("h-1.5 rounded-full", m.color)}
+                    className={cn("h-1.5 rounded-full", metric.color)}
                   />
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </ProtoPanel>
@@ -1772,7 +1772,7 @@ const Step4Visual = () => (
                   strokeDasharray="3 3"
                   strokeLinecap="round"
                 />
-                <motion.polyline
+                <m.polyline
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
                   transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 0.6 }}
@@ -1827,7 +1827,7 @@ const Step4Visual = () => (
             ["Inactividad documental", "Hace 9 días"],
             ["Desvío curva > 10%", "Obra #22"],
           ].map(([title, meta], i) => (
-            <motion.div
+            <m.div
               key={title}
               animate={{ y: [0, -1, 0] }}
               transition={{ duration: 2, repeat: Infinity, delay: i * 0.25 }}
@@ -1835,7 +1835,7 @@ const Step4Visual = () => (
             >
               <div className="text-[10px] font-semibold text-stone-900 leading-tight">{title}</div>
               <div className="mt-1 text-[9px] uppercase tracking-wide text-orange-700">{meta}</div>
-            </motion.div>
+            </m.div>
           ))}
         </div>
       </div>
@@ -1886,7 +1886,7 @@ const Benefit1Visual = () => (
         <span className="font-semibold text-orange-700">85%</span>
       </div>
       <div className="h-2 rounded-full bg-stone-200/70 overflow-hidden">
-        <motion.div animate={{ width: '85%' }} className="h-full bg-orange-500" />
+        <m.div animate={{ width: '85%' }} className="h-full bg-orange-500" />
       </div>
       <div className="mt-2 flex justify-between text-[10px] font-medium text-stone-600">
         <span>Gastado: $1.2M</span>

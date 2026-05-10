@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type DragEvent } from "react";
 import { Check, ChevronRight, FileText, Loader2, Upload, X, Zap, FolderOpen, Plus } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { toast } from "sonner";
 
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -428,7 +428,7 @@ export function QuickActionsPanel({
   const panelList = (
     <div className="space-y-1">
       {localActions.map((action, i) => (
-        <motion.button
+        <m.button
           key={action.id}
           {...listItemMotion}
           transition={{ ...listItemMotion.transition, delay: i * 0.04 }}
@@ -454,7 +454,7 @@ export function QuickActionsPanel({
             )}
           </div>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
-        </motion.button>
+        </m.button>
       ))}
       {localActions.length === 0 && (
         <p className="rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground">
@@ -467,7 +467,7 @@ export function QuickActionsPanel({
   return (
     <>
       {!isMobile && (
-        <motion.aside
+        <m.aside
           initial={{ x: 20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
@@ -486,7 +486,7 @@ export function QuickActionsPanel({
             <Plus className="size-4" />
             Nueva acción
           </Button>
-        </motion.aside>
+        </m.aside>
       )}
 
       {isMobile && (
@@ -669,7 +669,7 @@ export function QuickActionsPanel({
                 {/* Content area */}
                 <div className="px-5 mx-12 pb-6 max-h-[calc(90vh-250px)] overflow-y-auto bg-sidebar/50 pt-4">
                   <AnimatePresence mode="wait">
-                    <motion.div
+                    <m.div
                       key={`${currentStepId}-${currentMode}`}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -755,7 +755,7 @@ export function QuickActionsPanel({
                           )}
                         </div>
                       )}
-                    </motion.div>
+                    </m.div>
                   </AnimatePresence>
                 </div>
 

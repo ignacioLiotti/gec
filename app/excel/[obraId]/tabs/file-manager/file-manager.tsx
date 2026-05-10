@@ -20,7 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import JSZip from 'jszip';
 import {
   ChevronRight,
@@ -6083,14 +6083,14 @@ function FileManagerContent({
       {/* Upload animation overlay */}
       <AnimatePresence>
         {isUploadingOcrFolder && (
-          <motion.div
+          <m.div
             key="materiales-upload"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 z-30 flex items-center justify-center bg-white/80 backdrop-blur-sm"
           >
-            <motion.div
+            <m.div
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
@@ -6100,7 +6100,7 @@ function FileManagerContent({
               <div className="relative flex items-center justify-center">
                 <div className="relative w-24 h-28 rounded-2xl border border-amber-200 bg-amber-50 shadow-inner overflow-hidden">
                   <FileText className="w-12 h-12 text-amber-600 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10" />
-                  <motion.div
+                  <m.div
                     className="absolute left-2 right-2 h-px bg-linear-to-r from-transparent via-amber-500 to-transparent"
                     animate={{ y: [10, 80] }}
                     transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
@@ -6114,14 +6114,14 @@ function FileManagerContent({
                 </p>
               </div>
               <div className="w-full h-1.5 rounded-full bg-stone-100 overflow-hidden">
-                <motion.span
+                <m.span
                   className="block h-full bg-linear-to-r from-amber-300 via-amber-500 to-amber-300"
                   animate={{ x: ['-100%', '100%'] }}
                   transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
                 />
               </div>
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         )}
       </AnimatePresence>
 

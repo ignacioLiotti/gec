@@ -16,6 +16,7 @@ import type { MembershipLike } from "@/lib/tenant-selection";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 import DomainMigrationGuard from "@/components/domain-migration-guard";
+import { LazyMotionProvider } from "@/components/motion/lazy-motion-provider";
 import { PathnameLayoutShell } from "@/components/pathname-layout-shell";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import type { Role } from "@/lib/route-access";
@@ -254,22 +255,24 @@ export default async function RootLayout({
 			>
 				{ENABLE_VERCEL_CLIENT_TELEMETRY && <SpeedInsights />}
 				<QueryClientProvider>
-					<DomainMigrationGuard />
-					<SupabaseAuthListener />
-					<AuthController />
-					<AuthGate allowAnonymous={access.actorType === "demo"} />
-					<Toaster position="bottom-right" richColors />
-					<NotificationsListener />
-					<PathnameLayoutShell
-						user={user}
-						userRoles={userRoles}
-						documentPermissions={documentPermissions}
-						tenants={tenants}
-						demoSession={access.demoSession}
-						demoCapabilities={access.demoSession?.allowedCapabilities}
-					>
-						{children}
-					</PathnameLayoutShell>
+					<LazyMotionProvider>
+						<DomainMigrationGuard />
+						<SupabaseAuthListener />
+						<AuthController />
+						<AuthGate allowAnonymous={access.actorType === "demo"} />
+						<Toaster position="bottom-right" richColors />
+						<NotificationsListener />
+						<PathnameLayoutShell
+							user={user}
+							userRoles={userRoles}
+							documentPermissions={documentPermissions}
+							tenants={tenants}
+							demoSession={access.demoSession}
+							demoCapabilities={access.demoSession?.allowedCapabilities}
+						>
+							{children}
+						</PathnameLayoutShell>
+					</LazyMotionProvider>
 				</QueryClientProvider>
 				{ENABLE_VERCEL_CLIENT_TELEMETRY && <Analytics />}
 			</body>

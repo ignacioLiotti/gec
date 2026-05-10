@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,7 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
 
   return (
     <div className="space-y-6">
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
@@ -133,9 +133,9 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
             </div>
           </form>
         </Card>
-      </motion.div>
+      </m.div>
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, delay: 0.05 }}
@@ -167,9 +167,9 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
             </div>
           </form>
         </Card>
-      </motion.div>
+      </m.div>
 
-      {/* <motion.div
+      {/* <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, delay: 0.1 }}
@@ -217,7 +217,7 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
             </div>
           </form>
         </Card>
-      </motion.div> */}
+      </m.div> */}
     </div>
   );
 }

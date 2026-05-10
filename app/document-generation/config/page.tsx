@@ -17,7 +17,7 @@ export default async function DocumentGenerationConfigPage() {
     <DocumentGenerationShell permissions={access.permissions}>
       <div className="px-4 py-6 sm:px-6">
         {access.permissions.canManageTemplates ? (
-          <TemplateConfigPanel workId="" />
+          <TemplateConfigPanel workId="" permissions={access.permissions} />
         ) : (
           <div className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-600">
             No tienes permisos para editar configuracion de plantillas.

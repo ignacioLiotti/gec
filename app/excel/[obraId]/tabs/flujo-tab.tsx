@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Calendar, Mail, Plus, Trash2, Clock, MessageSquare, User, Zap, Timer, CalendarClock, Check, Pencil, Loader2 } from "lucide-react";
 
 import { TabsContent } from "@/components/ui/tabs";
@@ -176,7 +176,7 @@ export function ObraFlujoTab({
 			value="flujo"
 			className="space-y-6"
 		>
-			<motion.section
+			<m.section
 				initial={{ opacity: 0, y: 20 }}
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ duration: 0.4 }}
@@ -206,7 +206,7 @@ export function ObraFlujoTab({
 
 				<div className="p-6 space-y-6">
 					{isAddingFlujoAction && (
-						<motion.div
+						<m.div
 							initial={{ opacity: 0, height: 0 }}
 							animate={{ opacity: 1, height: "auto" }}
 							exit={{ opacity: 0, height: 0 }}
@@ -326,7 +326,7 @@ export function ObraFlujoTab({
 								</div>
 
 								{newFlujoAction.timing_mode === "offset" && (
-									<motion.div
+									<m.div
 										initial={{ opacity: 0, y: -10 }}
 										animate={{ opacity: 1, y: 0 }}
 										className="grid grid-cols-2 gap-3"
@@ -364,11 +364,11 @@ export function ObraFlujoTab({
 												<option value="months">Meses</option>
 											</select>
 										</div>
-									</motion.div>
+									</m.div>
 								)}
 
 								{newFlujoAction.timing_mode === "scheduled" && (
-									<motion.div
+									<m.div
 										initial={{ opacity: 0, y: -10 }}
 										animate={{ opacity: 1, y: 0 }}
 										className="space-y-1.5"
@@ -381,7 +381,7 @@ export function ObraFlujoTab({
 												setNewFlujoAction((prev) => ({ ...prev, scheduled_date: e.target.value }))
 											}
 										/>
-									</motion.div>
+									</m.div>
 								)}
 
 
@@ -496,7 +496,7 @@ export function ObraFlujoTab({
 									)}
 								</Button>
 							</div>
-						</motion.div>
+						</m.div>
 					)}
 
 					<div className="space-y-4">
@@ -589,7 +589,7 @@ export function ObraFlujoTab({
 														const isEditing = editingActionId === action.id;
 
 														return (
-															<motion.div
+															<m.div
 																key={action.id}
 																initial={{ opacity: 0, y: 8 }}
 																animate={{ opacity: 1, y: 0 }}
@@ -907,7 +907,7 @@ export function ObraFlujoTab({
 																		</AccordionContent>
 																	</AccordionItem>
 																</Accordion>
-															</motion.div>
+															</m.div>
 														);
 													})}
 												</div>
@@ -919,7 +919,7 @@ export function ObraFlujoTab({
 						)}
 					</div>
 				</div>
-			</motion.section>
+			</m.section>
 		</TabsContent >
 	);
 }
