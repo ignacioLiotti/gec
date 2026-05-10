@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { toast } from "sonner";
 import {
   Layers,
@@ -882,7 +882,7 @@ export default function NewMacroTablePage() {
           <AnimatePresence mode="wait">
             {/* Step 1: Basic Info */}
             {currentStep === 0 && (
-              <motion.div
+              <m.div
                 key="step-info"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -918,12 +918,12 @@ export default function NewMacroTablePage() {
                     />
                   </div>
                 </div>
-              </motion.div>
+              </m.div>
             )}
 
             {/* Step 2: Select Sources */}
             {currentStep === 1 && (
-              <motion.div
+              <m.div
                 key="step-sources"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -1129,7 +1129,7 @@ export default function NewMacroTablePage() {
 
                           <AnimatePresence>
                             {isExpanded && (
-                              <motion.div
+                              <m.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: "auto", opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
@@ -1167,7 +1167,7 @@ export default function NewMacroTablePage() {
                                     );
                                   })}
                                 </div>
-                              </motion.div>
+                              </m.div>
                             )}
                           </AnimatePresence>
                         </div>
@@ -1203,12 +1203,12 @@ export default function NewMacroTablePage() {
                     </div>
                   </div>
                 )}
-              </motion.div>
+              </m.div>
             )}
 
             {/* Step 3: Configure Columns */}
             {currentStep === 2 && (
-              <motion.div
+              <m.div
                 key="step-columns"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -1586,7 +1586,7 @@ export default function NewMacroTablePage() {
                   <span className="text-amber-500">● Calculadas</span> y <span>● Fuente</span>{" "}
                   son solo lectura por defecto, pero podés habilitar edición manual por columna.
                 </p>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
         </CardContent>

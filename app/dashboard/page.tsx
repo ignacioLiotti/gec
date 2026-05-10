@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   ArrowRight,
   BarChart3,
@@ -16,15 +16,6 @@ import {
   Check
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -831,7 +822,7 @@ export default function Home() {
     return (
       <div className={cn("min-h-screen", DS.page)}>
         <div className="mx-auto flex flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
@@ -882,11 +873,11 @@ export default function Home() {
                 </div>
               </div>
             </Framed>
-          </motion.div>
+          </m.div>
 
           <div className="grid gap-6 md:grid-cols-3">
             {features.map(({ title, description, icon: Icon }) => (
-              <motion.div
+              <m.div
                 key={title}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -903,11 +894,11 @@ export default function Home() {
                     </div>
                   </div>
                 </Framed>
-              </motion.div>
+              </m.div>
             ))}
           </div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
@@ -923,7 +914,7 @@ export default function Home() {
                 </p>
               </div>
             </Framed>
-          </motion.div>
+          </m.div>
         </div>
       </div>
     );
@@ -934,7 +925,7 @@ export default function Home() {
     <div className={cn("relative min-h-screen", DS.page)}>
       <div className="mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-2 lg:pt-6">
         {/* Header */}
-        <motion.div
+        <m.div
           data-wizard-target="dashboard-header"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -981,13 +972,13 @@ export default function Home() {
 
             </div>
           </div>
-        </motion.div>
+        </m.div>
 
         {/* Main Grid — 3 equal columns */}
         <div data-wizard-target="dashboard-stats" className="grid gap-6 lg:grid-cols-3">
 
           {/* Combined: Obras Recientes + Vista Previa */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
@@ -1126,7 +1117,7 @@ export default function Home() {
                               const isBehind = timeProgress > obra.porcentaje + 10;
                               const isSelected = (selectedPreviewObra?.id ?? recentObras[0]?.id) === obra.id;
                               return (
-                                <motion.div
+                                <m.div
                                   key={obra.id}
                                   initial={newlyAddedObraId === obra.id ? { scale: 0.95, opacity: 0 } : { opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
@@ -1135,7 +1126,7 @@ export default function Home() {
                                   className={`relative ${newlyAddedObraId === obra.id ? 'z-10' : ''}`}
                                 >
                                   {newlyAddedObraId === obra.id && (
-                                    <motion.div
+                                    <m.div
                                       initial={{ opacity: 0 }}
                                       animate={{ opacity: [0, 1, 1, 0] }}
                                       transition={{ duration: 2, times: [0, 0.1, 0.8, 1] }}
@@ -1203,7 +1194,7 @@ export default function Home() {
                                       </Link>
                                     </Button>
                                   </div>
-                                </motion.div>
+                                </m.div>
                               );
                             })}
                           </AnimatePresence>
@@ -1332,12 +1323,12 @@ export default function Home() {
                 </CardContent>
               </Card>
             </Framed>
-          </motion.div>
+          </m.div>
 
           {/* Column 3: Alerts + Distribution Chart */}
           <div className="space-y-4 lg:col-span-1">
             {alertObras.length > 0 && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4, delay: 0.2 }}
@@ -1384,11 +1375,11 @@ export default function Home() {
                     </CardContent>
                   </Card>
                 </Framed>
-              </motion.div>
+              </m.div>
             )}
 
             {obras.length > 0 && progressDistributionData.length > 0 && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.25 }}
@@ -1406,7 +1397,7 @@ export default function Home() {
                     </CardContent>
                   </Card>
                 </Framed>
-              </motion.div>
+              </m.div>
             )}
           </div>
         </div>

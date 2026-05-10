@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from "sonner";
 import { useParams } from "next/navigation";
 import { Pencil, Eye, StickyNote, X, AlertTriangle, RotateCcw, Trash2, FilePlus2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
@@ -3309,15 +3309,15 @@ function ObraDetailPageContent() {
 				/>
 			) : null}
 			{routeError ? (
-				<motion.div
+				<m.div
 					initial={{ opacity: 0, scale: 0.95 }}
 					animate={{ opacity: 1, scale: 1 }}
 					className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
 				>
 					<p className="font-medium">{routeError}</p>
-				</motion.div>
+				</m.div>
 			) : isLoading ? (
-				<motion.div
+				<m.div
 					initial={{ opacity: 0 }}
 					animate={{ opacity: 1 }}
 					className="animate-pulse space-y-4"
@@ -3359,15 +3359,15 @@ function ObraDetailPageContent() {
 							</div>
 						</div>
 					</div>
-				</motion.div>
+				</m.div>
 			) : loadError ? (
-				<motion.div
+				<m.div
 					initial={{ opacity: 0, scale: 0.95 }}
 					animate={{ opacity: 1, scale: 1 }}
 					className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive"
 				>
 					<p className="font-medium">{loadError}</p>
-				</motion.div>
+				</m.div>
 			) : (
 				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
 					<div className="flex-1 min-w-0">
@@ -3456,7 +3456,7 @@ function ObraDetailPageContent() {
 									)}
 									{activeTab === "general" && (
 										<>
-											<motion.div
+											<m.div
 												initial={{ opacity: 0 }}
 												animate={{ opacity: 1 }}
 												className="flex justify-end"
@@ -3485,7 +3485,7 @@ function ObraDetailPageContent() {
 														<span className={cn("hidden sm:inline text-base md:text-sm", isGeneralTabEditMode ? "inline" : "hidden")}>Edición</span>
 													</Button>
 												</div>
-											</motion.div>
+											</m.div>
 											<Button
 												type="button"
 												variant={isMemoriaOpen ? "default" : "secondary"}
@@ -3525,7 +3525,7 @@ function ObraDetailPageContent() {
 								</div>
 							</div>
 							{/* {derivedCertificadosNotice && activeTab !== "general" ? (
-								<motion.div
+								<m.div
 									initial={{ opacity: 0, y: 12 }}
 									animate={{ opacity: 1, y: 0 }}
 									className="mb-2 flex flex-col gap-3 rounded-xl border border-[#f7b26a] bg-[#fffaf5] p-4 text-[#7a4b13] shadow-card sm:flex-row sm:items-center sm:justify-between"
@@ -3561,7 +3561,7 @@ function ObraDetailPageContent() {
 									>
 										Ir a General
 									</Button>
-								</motion.div>
+								</m.div>
 							) : null} */}
 
 							<div data-wizard-target="obra-page-content">
@@ -3815,7 +3815,7 @@ function ObraDetailPageContent() {
 					) : (
 						<AnimatePresence>
 							{isMemoriaOpen && (
-								<motion.aside
+								<m.aside
 									initial={{ x: 320, opacity: 0 }}
 									animate={{ x: 0, opacity: 1 }}
 									exit={{ x: 320, opacity: 0 }}
@@ -3823,7 +3823,7 @@ function ObraDetailPageContent() {
 									className="w-full lg:w-80 shrink-0 rounded-lg border bg-card shadow-sm p-4 flex flex-col gap-4"
 								>
 									{memoriaContent}
-								</motion.aside>
+								</m.aside>
 							)}
 						</AnimatePresence>
 					)}

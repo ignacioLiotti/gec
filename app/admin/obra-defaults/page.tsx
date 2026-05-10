@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { toast } from "sonner";
 import {
   FolderPlus,
@@ -793,7 +793,7 @@ function FolderRow({
   if (!isOcr) {
     // Simple folder row
     return (
-      <motion.div
+      <m.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
@@ -825,13 +825,13 @@ function FolderRow({
         >
           <Trash2 className="size-4" />
         </Button>
-      </motion.div>
+      </m.div>
     );
   }
 
   // OCR folder with expandable details
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
@@ -1035,7 +1035,7 @@ function FolderRow({
           </CollapsibleContent>
         </div>
       </Collapsible>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -1058,7 +1058,7 @@ function OcrTemplateCard({
   const itemColumns = template.columns.filter(c => c.ocrScope !== "parent");
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
@@ -1219,7 +1219,7 @@ function OcrTemplateCard({
           </CollapsibleContent>
         </div>
       </Collapsible>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -2461,7 +2461,7 @@ export default function ObraDefaultsPage() {
             ) : (
               <AnimatePresence mode="popLayout">
                 {quickActions.map((action, index) => (
-                  <motion.div
+                  <m.div
                     key={action.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -2492,7 +2492,7 @@ export default function ObraDefaultsPage() {
                         </Badge>
                       ))}
                     </div>
-                  </motion.div>
+                  </m.div>
                 ))}
               </AnimatePresence>
             )}
@@ -2584,7 +2584,7 @@ export default function ObraDefaultsPage() {
             ) : (
               <AnimatePresence mode="popLayout">
                 {quickActions.map((action, index) => (
-                  <motion.div
+                  <m.div
                     key={action.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -2615,7 +2615,7 @@ export default function ObraDefaultsPage() {
                         </Badge>
                       ))}
                     </div>
-                  </motion.div>
+                  </m.div>
                 ))}
               </AnimatePresence>
             )}

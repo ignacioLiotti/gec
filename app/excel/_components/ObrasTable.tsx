@@ -13,7 +13,7 @@ import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
 import { InBodyStates } from "./InBodyStates";
 import { CustomInput } from "./CustomInput";
 import { Input } from "@/components/ui/input";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { ExternalLink } from "lucide-react";
 
 type AnyFormApi = {
@@ -151,7 +151,7 @@ export function ObrasTable(props: ObrasTableProps) {
     <div className="relative border border-border rounded-none overflow-x-scroll w-full max-w-[calc(94vw-var(--sidebar-current-width))] transition-all duration-300 h-[70vh] bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat">
       <AnimatePresence>
         {showOverlay && (
-          <motion.div
+          <m.div
             key="obras-table-loader"
             className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
@@ -161,7 +161,7 @@ export function ObrasTable(props: ObrasTableProps) {
           >
             <div className="size-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
             <p className="text-sm font-medium text-primary">Actualizando tabla?</p>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
       <div className="max-h-[70vh]">
