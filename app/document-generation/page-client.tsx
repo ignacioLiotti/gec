@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -34,6 +34,7 @@ import {
   type DocumentTemplateSummary,
   type DocumentType,
   normalizeDocumentType,
+  escapeHtml,
   renderDocumentHtml,
   type TemplateField,
   validateTemplateInput,
@@ -42,7 +43,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
+import { DocumentGenerationNav } from "./document-nav";
 
 type WorkOption = {
   id: string;
@@ -206,6 +209,213 @@ function getTemplateFieldSpan(field: TemplateField) {
   if (field.type === "textarea") return "md:col-span-3";
   if (field.type === "select") return "md:col-span-2";
   return "";
+}
+
+function collectTemplateTokens(templateHtml: string) {
+  return new Set(
+    Array.from(templateHtml.matchAll(/\{\{(?![#/])\s*([a-zA-Z0-9_]+)\s*\}\}/g)).map((match) => match[1]),
+  );
+}
+
+function normalizeTokenAlias(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function getFieldAliasCandidates(field: TemplateField) {
+  const key = normalizeTokenAlias(field.key);
+  const label = normalizeTokenAlias(field.label);
+  const aliases = new Set([key, label]);
+
+  if (key.includes("order") || key.includes("orden") || key.includes("numero") || label.includes("orden")) {
+    aliases.add("nro");
+    aliases.add("numero");
+    aliases.add("numeroorden");
+    aliases.add("nroorden");
+    aliases.add("pedido");
+  }
+  if (key.includes("date") || key.includes("fecha") || label.includes("fecha")) {
+    aliases.add("fecha");
+    aliases.add("fechaorden");
+    aliases.add("fechaentrega");
+  }
+  if (key.includes("supplier") || key.includes("proveedor") || label.includes("proveedor")) {
+    aliases.add("proveedor");
+  }
+  if (key.includes("requester") || key.includes("solicit") || label.includes("solicit")) {
+    aliases.add("solicitante");
+    aliases.add("empresasolicita");
+  }
+  if (key.includes("detail") || key.includes("detalle") || label.includes("detalle")) {
+    aliases.add("detalle");
+  }
+  if (key.includes("total") || label.includes("total") || label.includes("importe")) {
+    aliases.add("total");
+    aliases.add("totalorden");
+    aliases.add("preciototal");
+  }
+
+  return aliases;
+}
+
+function buildTemplateFieldBindings(templateHtml: string, fields: TemplateField[]) {
+  const tokens = Array.from(collectTemplateTokens(templateHtml));
+  const bindings = new Map<string, TemplateField>();
+  const bindableFields = fields.flatMap((field) =>
+    field.type === "table" ? [field, ...(field.columns ?? [])] : [field],
+  );
+
+  for (const token of tokens) {
+    const normalizedToken = normalizeTokenAlias(token);
+    const exactField = bindableFields.find((field) => field.key === token);
+    if (exactField) {
+      bindings.set(token, exactField);
+      continue;
+    }
+
+    const aliasField = bindableFields.find((field) => getFieldAliasCandidates(field).has(normalizedToken));
+    if (aliasField) {
+      bindings.set(token, aliasField);
+    }
+  }
+
+  return bindings;
+}
+
+function collectRenderedFieldKeys(templateHtml: string, fields: TemplateField[]) {
+  const tokens = collectTemplateTokens(templateHtml);
+  const bindings = buildTemplateFieldBindings(templateHtml, fields);
+  const rendered = new Set<string>();
+  const repeatableGroups = getRepeatableGroups(fields);
+  const repeatableFieldKeys = new Set(repeatableGroups.flatMap((group) => group.fields.map((field) => field.key)));
+
+  for (const field of fields) {
+    if (field.type === "table") {
+      if (tokens.has(field.key)) rendered.add(field.key);
+      for (const column of field.columns ?? []) {
+        if (tokens.has(column.key)) rendered.add(column.key);
+      }
+      continue;
+    }
+
+    if (tokens.has(field.key)) rendered.add(field.key);
+  }
+
+  for (const key of repeatableFieldKeys) {
+    if (tokens.has(key)) rendered.add(key);
+  }
+  for (const field of bindings.values()) {
+    rendered.add(field.key);
+  }
+
+  return rendered;
+}
+
+function renderInlineFieldControl(
+  field: TemplateField,
+  value: unknown,
+  invalidKeys: Set<string>,
+  errorKey: string,
+  scope?: { groupKey?: string; rowIndex?: number; token?: string },
+) {
+  const hasValue = String(value ?? "").trim().length > 0;
+  const isInvalid =
+    invalidKeys.has(errorKey) ||
+    Boolean(scope?.groupKey && field.required && invalidKeys.has(scope.groupKey));
+  const className = cn(
+    "inline-doc-field",
+    field.type === "select" && "inline-doc-select",
+    hasValue && "inline-doc-field-filled",
+    isInvalid && "inline-doc-field-invalid",
+  );
+  const dataAttrs = [
+    `data-inline-field="${escapeHtml(field.key)}"`,
+    scope?.token && scope.token !== field.key ? `data-inline-token="${escapeHtml(scope.token)}"` : "",
+    scope?.groupKey ? `data-inline-group="${escapeHtml(scope.groupKey)}"` : "",
+    typeof scope?.rowIndex === "number" ? `data-inline-row="${scope.rowIndex}"` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const required = field.required ? "required" : "";
+  const label = escapeHtml(field.label);
+  const currentValue = escapeHtml(value ?? "");
+
+  if (field.type === "select" && field.options?.length) {
+    const options = [
+      `<option value="">${label}</option>`,
+      ...field.options.map((option) => {
+        const selected = String(value ?? "") === option.value ? "selected" : "";
+        return `<option value="${escapeHtml(option.value)}" ${selected}>${escapeHtml(option.label)}</option>`;
+      }),
+    ].join("");
+    return `<select class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}">${options}</select>`;
+  }
+
+  const inputType = field.type === "date" ? "date" : field.type === "number" || field.type === "money" ? "number" : "text";
+  return `<input class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}" type="${inputType}" value="${currentValue}" />`;
+}
+
+function renderEditableDocumentHtml(
+  templateHtml: string,
+  fields: TemplateField[],
+  inputData: Record<string, unknown>,
+  extraData: Record<string, unknown>,
+  invalidKeys: Set<string>,
+) {
+  const fieldByKey = new Map(fields.map((field) => [field.key, field]));
+  const fieldBindings = buildTemplateFieldBindings(templateHtml, fields);
+  const repeatableGroupsByKey = new Map(getRepeatableGroups(fields).map((group) => [group.key, group]));
+  const extraScope = Object.fromEntries(
+    Object.entries(extraData).map(([key, value]) => [key, escapeHtml(value)]),
+  );
+
+  const renderedRepeatables = templateHtml.replace(
+    /\{\{#\s*([a-zA-Z0-9_]+)\s*\}\}([\s\S]*?)\{\{\/\s*\1\s*\}\}/g,
+    (_, groupKey: string, block: string) => {
+      const group = repeatableGroupsByKey.get(groupKey);
+      if (!group) return "";
+      const rows = readRepeatableRows(inputData, groupKey);
+      const safeRows = rows.length > 0 ? rows : [createRepeatableRow(group.fields)];
+      return safeRows
+        .map((row, rowIndex) => {
+          const rowData =
+            row && typeof row === "object" && !Array.isArray(row)
+              ? (row as Record<string, unknown>)
+              : {};
+          return block.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_rowMatch: string, token: string) => {
+            const field = group.fields.find((entry) => entry.key === token) ?? fieldByKey.get(token) ?? fieldBindings.get(token);
+            if (field) {
+              return renderInlineFieldControl(
+                field,
+                rowData[field.key] ?? rowData[token] ?? inputData[field.key] ?? inputData[token],
+                invalidKeys,
+                `${groupKey}.${rowIndex}.${field.key}`,
+                { groupKey, rowIndex, token },
+              );
+            }
+            return extraScope[token] ?? escapeHtml(inputData[token] ?? "");
+          });
+        })
+        .join("");
+    },
+  );
+
+  return renderedRepeatables.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, token: string) => {
+    const field = fieldByKey.get(token) ?? fieldBindings.get(token);
+    if (field) {
+      return renderInlineFieldControl(
+        field,
+        inputData[field.key] ?? inputData[token],
+        invalidKeys,
+        field.key,
+        { token },
+      );
+    }
+    return extraScope[token] ?? escapeHtml(inputData[token] ?? "");
+  });
 }
 
 function buildValidationIssues(args: {
@@ -544,7 +754,11 @@ function TextAreaInput({
   );
 }
 
-export function DocumentGenerationPageClient() {
+export function DocumentGenerationPageClient({
+  permissions,
+}: {
+  permissions: DocumentGenerationPermissionMap;
+}) {
   const router = useRouter();
   const { push, replace } = router;
   const searchParams = useSearchParams();
@@ -577,7 +791,9 @@ export function DocumentGenerationPageClient() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [previewZoom, setPreviewZoom] = useState(92);
+  const [previewZoom, setPreviewZoom] = useState(112);
+  const [showValidationReview, setShowValidationReview] = useState(false);
+  const [editorMode, setEditorMode] = useState<"inline" | "form">("inline");
 
   const loadBootstrap = useCallback(
     async (
@@ -792,6 +1008,30 @@ export function DocumentGenerationPageClient() {
     }
     return map;
   }, [validationErrors]);
+  const invalidInlineFieldKeys = useMemo(
+    () => new Set(validationErrors.map((error) => error.key)),
+    [validationErrors],
+  );
+
+  const editableDocumentHtml = useMemo(() => {
+    if (!selectedTemplate) return "";
+    const currentWorkLabel = works.find((work) => work.id === workId)?.label ?? "";
+    return renderEditableDocumentHtml(
+      selectedTemplate.contentHtml,
+      selectedTemplate.schema.fields,
+      inputData,
+      {
+        workName: currentWorkLabel,
+        generatedAt: new Date().toLocaleDateString("es-AR"),
+      },
+      invalidInlineFieldKeys,
+    );
+  }, [inputData, invalidInlineFieldKeys, selectedTemplate, workId, works]);
+
+  const templateTokens = useMemo(
+    () => collectRenderedFieldKeys(selectedTemplate?.contentHtml ?? "", selectedTemplate?.schema.fields ?? []),
+    [selectedTemplate],
+  );
 
   const pendingFieldCount = useMemo(() => {
     if (!selectedTemplate) return 0;
@@ -863,6 +1103,16 @@ export function DocumentGenerationPageClient() {
       ...current,
       [field.key]: value,
     }));
+    setValidationErrors((current) => current.filter((error) => error.key !== field.key));
+  };
+
+  const handleInlineFieldChange = (field: TemplateField, value: string, token?: string) => {
+    setInputData((current) => ({
+      ...current,
+      [field.key]: value,
+      ...(token && token !== field.key ? { [token]: value } : {}),
+    }));
+    setValidationErrors((current) => current.filter((error) => error.key !== field.key));
   };
 
   const handleRepeatableFieldChange = (
@@ -870,9 +1120,13 @@ export function DocumentGenerationPageClient() {
     rowIndex: number,
     field: TemplateField,
     value: string,
+    token?: string,
   ) => {
     setInputData((current) => {
-      const rows = readRepeatableRows(current, groupKey);
+      const rows = readRepeatableRows(current, groupKey).slice();
+      while (rows.length <= rowIndex) {
+        rows.push({});
+      }
       return {
         ...current,
         [groupKey]: rows.map((row, index) => {
@@ -880,10 +1134,36 @@ export function DocumentGenerationPageClient() {
             row && typeof row === "object" && !Array.isArray(row)
               ? (row as Record<string, unknown>)
               : {};
-          return index === rowIndex ? { ...rowData, [field.key]: value } : rowData;
+          return index === rowIndex
+            ? { ...rowData, [field.key]: value, ...(token && token !== field.key ? { [token]: value } : {}) }
+            : rowData;
         }),
       };
     });
+    setValidationErrors((current) =>
+      current.filter((error) => error.key !== `${groupKey}.${rowIndex}.${field.key}` && error.key !== groupKey),
+    );
+  };
+
+  const handleInlineDocumentCommit = (event: FormEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+    const fieldKey = target.dataset.inlineField;
+    if (!fieldKey) return;
+    const token = target.dataset.inlineToken;
+    const groupKey = target.dataset.inlineGroup;
+    const rowIndex = Number(target.dataset.inlineRow ?? "");
+    const field = selectedTemplate?.schema.fields.find((entry) => entry.key === fieldKey);
+    const groupField = groupKey
+      ? repeatableGroups.find((group) => group.key === groupKey)?.fields.find((entry) => entry.key === fieldKey)
+      : null;
+    const targetField = groupField ?? field;
+    if (!targetField) return;
+    if (groupKey && Number.isInteger(rowIndex)) {
+      handleRepeatableFieldChange(groupKey, rowIndex, targetField, target.value, token);
+      return;
+    }
+    handleInlineFieldChange(targetField, target.value, token);
   };
 
   const addRepeatableRow = (groupKey: string, fields: TemplateField[]) => {
@@ -955,8 +1235,14 @@ export function DocumentGenerationPageClient() {
   };
 
   const handleGenerate = async () => {
-    if (!workId || !folderPath || !documentType || !templateId) {
-      toast.error("Completa obra, carpeta, tipo documental y plantilla.");
+    const clientValidationErrors = selectedTemplate
+      ? validateTemplateInput(selectedTemplate.schema, inputData)
+      : [];
+    setValidationErrors(clientValidationErrors);
+
+    if (!workId || !folderPath || !documentType || !templateId || clientValidationErrors.length > 0) {
+      setShowValidationReview(true);
+      toast.error("Completa los campos pendientes antes de generar.");
       return;
     }
 
@@ -981,6 +1267,7 @@ export function DocumentGenerationPageClient() {
       };
       if (!response.ok) {
         setValidationErrors(payload.validationErrors ?? []);
+        setShowValidationReview(true);
         throw new Error(payload.error || "No se pudo generar el documento");
       }
 
@@ -989,6 +1276,7 @@ export function DocumentGenerationPageClient() {
         setEditingGeneratedStatus(payload.generatedDocument.status);
       }
       setValidationErrors([]);
+      setShowValidationReview(false);
       toast.success(editingGeneratedId ? "Documento actualizado." : "Documento generado y guardado en la carpeta.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo generar el documento");
@@ -1078,24 +1366,37 @@ export function DocumentGenerationPageClient() {
 
   return (
     <div className="w-full ">
-      <div className="border-b border-stone-200 bg-white">
+      <div className="sticky top-0 z-40 border-b border-stone-200 bg-white">
         <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-stone-950">
-                {draftId ? "Editar borrador" : editingGeneratedId ? "Editar documento" : "Nuevo documento"}
-              </h1>
-              <span className="rounded-md border border-stone-200 bg-stone-50 px-3 py-1 font-mono text-xs text-stone-500">
-                {documentCode}
-              </span>
-              {editingGeneratedId ? (
-                <span className="rounded-md border border-stone-200 bg-white px-3 py-1 text-xs uppercase text-stone-500">
-                  {generatedDocument?.generatedDocument.status ?? editingGeneratedStatus}
-                </span>
-              ) : null}
-              <span className="rounded-md border border-stone-200 bg-white px-3 py-1 text-xs capitalize text-stone-500">
-                {editingGeneratedId ? "documento emitido" : draftStatusLabel}
-              </span>
+              <DocumentGenerationNav permissions={permissions} className="w-full sm:w-auto" />
+              <div className="inline-flex rounded-md border border-stone-200 bg-stone-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => setEditorMode("inline")}
+                  className={cn(
+                    "h-8 rounded px-3 text-sm font-medium transition",
+                    editorMode === "inline"
+                      ? "bg-stone-950 text-white shadow-sm"
+                      : "text-stone-600 hover:bg-white",
+                  )}
+                >
+                  Documento
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorMode("form")}
+                  className={cn(
+                    "h-8 rounded px-3 text-sm font-medium transition",
+                    editorMode === "form"
+                      ? "bg-stone-950 text-white shadow-sm"
+                      : "text-stone-600 hover:bg-white",
+                  )}
+                >
+                  Formulario
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1136,6 +1437,258 @@ export function DocumentGenerationPageClient() {
           </div>
         </div>
       </div>
+
+      {editorMode === "inline" ? (
+      <div className="min-h-[calc(100vh-162px)] bg-[#e9e7e1] px-3 py-4 sm:px-6">
+        <div className="mx-auto grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_220px]">
+          <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:self-start">
+            <div className="grid gap-3">
+              <FormField label="Obra" required>
+                <NativeSelect
+                  value={workId}
+                  onChange={(value) => void handleWorkChange(value)}
+                  icon={iconForContextField("work")}
+                  options={works.map((work) => ({ value: work.id, label: work.label }))}
+                  placeholder="Seleccionar obra"
+                  disabled={isEditingGeneratedDocument}
+                />
+              </FormField>
+              <FormField label="Tipo documental" required>
+                <NativeSelect
+                  value={documentType}
+                  onChange={(value) => void handleDocumentTypeChange(value)}
+                  icon={iconForContextField("type")}
+                  options={Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                  placeholder="Seleccionar tipo"
+                  disabled={isEditingGeneratedDocument}
+                />
+              </FormField>
+              <FormField label="Carpeta destino" required>
+                <NativeSelect
+                  value={folderPath}
+                  onChange={(value) => void handleFolderChange(value)}
+                  icon={iconForContextField("folder")}
+                  options={visibleFolderOptions.map((folder) => ({
+                    value: folder.path,
+                    label: `${folder.path} - ${folder.name}`,
+                  }))}
+                  placeholder="Seleccionar carpeta"
+                  disabled={isEditingGeneratedDocument}
+                />
+              </FormField>
+              <FormField label="Plantilla" required>
+                <NativeSelect
+                  value={templateId}
+                  onChange={handleTemplateChange}
+                  icon={iconForContextField("template")}
+                  options={templates.map((template) => ({
+                    value: template.id,
+                    label: template.name,
+                  }))}
+                  placeholder="Seleccionar plantilla"
+                />
+              </FormField>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:col-start-2 xl:row-span-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+                  Editor del documento
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-semibold tracking-tight text-stone-950">
+                    {selectedTemplate?.name ?? "Selecciona una plantilla"}
+                  </h1>
+                  <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-medium text-[#b54708]">
+                    {pendingFieldCount} pendientes
+                  </span>
+                  <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] font-medium text-stone-600">
+                    borrador {draftStatusLabel}
+                  </span>
+                  <span className="rounded-full border border-stone-200 bg-white px-3 py-1 font-mono text-[11px] text-stone-500">
+                    {documentCode}
+                  </span>
+                  {editingGeneratedId ? (
+                    <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-600">
+                      {humanizeStatus(editingGeneratedStatus)}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <PreviewToolButton
+                  onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
+                  disabled={!selectedTemplate}
+                >
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </PreviewToolButton>
+                <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
+                  {previewZoom}%
+                </span>
+                <PreviewToolButton
+                  onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
+                  disabled={!selectedTemplate}
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </PreviewToolButton>
+              </div>
+            </div>
+
+            <div className="overflow-auto bg-[#d8d4c6] px-2 py-5 sm:px-5 max-h-[calc(100vh-200px)]">
+              {selectedTemplate ? (
+                <div className="mx-auto w-fit pb-6">
+                  <div
+                    className="origin-top rounded-sm bg-white shadow-[0_1px_0_rgba(0,0,0,0.04),0_18px_50px_-18px_rgba(0,0,0,0.28)]"
+                    style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: "top center" }}
+                  >
+                    <div
+                      className="report-paper inline-document-editor bg-white"
+                      onBlur={handleInlineDocumentCommit}
+                      onChange={handleInlineDocumentCommit}
+                      dangerouslySetInnerHTML={{ __html: editableDocumentHtml }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid min-h-[560px] place-items-center rounded-xl border border-dashed border-stone-300 bg-white px-6 text-center">
+                  <div>
+                    <FileText className="mx-auto h-8 w-8 text-stone-400" />
+                    <p className="mt-3 text-sm font-medium text-stone-800">
+                      Elige una plantilla para escribir directo sobre el documento.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {repeatableGroups.length > 0 ? (
+            <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:col-start-3 xl:row-start-1 xl:self-start">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+                Tablas
+              </p>
+              <div className="flex flex-wrap gap-2 xl:flex-col">
+                {repeatableGroups.map((group) => (
+                  <Button
+                    key={group.key}
+                    type="button"
+                    variant="outline"
+                    className="rounded-md"
+                    onClick={() => addRepeatableRow(group.key, group.fields)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Agregar {group.label}
+                  </Button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {standaloneFields.some((field) => !templateTokens.has(field.key)) ? (
+            <div className="xl:col-start-2">
+              <SectionCard title="Campos adicionales">
+                <div className="grid gap-4 md:grid-cols-3">
+                  {standaloneFields
+                    .filter((field) => !templateTokens.has(field.key))
+                    .map((field) => {
+                      const value = inputData[field.key];
+                      const error = validationErrorsByKey.get(field.key);
+                      return (
+                        <FormField
+                          key={field.key}
+                          label={field.label}
+                          required={field.required}
+                          hint={field.description || undefined}
+                          error={error}
+                          className={getTemplateFieldSpan(field)}
+                        >
+                          {renderFieldControl(field, value, (nextValue) => handleFieldChange(field, nextValue))}
+                        </FormField>
+                      );
+                    })}
+                </div>
+              </SectionCard>
+            </div>
+          ) : null}
+
+          {showValidationReview && validationIssues.length > 0 ? (
+            <div className="xl:col-start-2">
+              <SectionCard title="Revision incompleta">
+                {validationIssues.length === 0 ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <Check className="h-4 w-4 text-emerald-700" />
+                    <p className="text-sm font-medium text-emerald-800">
+                      Todo lo obligatorio esta completo. Ya puedes generar el documento.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+                    {validationIssues.map((issue, index) => (
+                      <div
+                        key={`${issue.kind}-${issue.message}-${index}`}
+                        className="flex items-center gap-3 border-t border-stone-100 px-4 py-3 text-sm text-stone-700 first:border-t-0"
+                      >
+                        <span
+                          className={cn(
+                            "h-2 w-2 rounded-full",
+                            issue.kind === "error" ? "bg-red-500" : "bg-amber-500",
+                          )}
+                        />
+                        {issue.message}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+          ) : null}
+
+          {generatedDocument ? (
+            <div className="xl:col-start-2">
+              <SectionCard
+                eyebrow="Documento generado"
+                title={generatedDocument.generatedDocument.file_name}
+                hint={`Guardado en ${generatedDocument.relativeFolderPath}.`}
+                rightSlot={
+                  generatedDocument.generatedDocument.status === "APPROVED" ? (
+                    <DocumentApprovedSeal status={generatedDocument.generatedDocument.status} />
+                  ) : (
+                    <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-700">
+                      {humanizeStatus(generatedDocument.generatedDocument.status)}
+                    </span>
+                  )
+                }
+              >
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={openInWork} className="rounded-md">
+                    Ver en la obra
+                  </Button>
+                  <Button asChild type="button" variant="outline" className="rounded-md">
+                    <Link
+                      href={`/excel/${workId}?tab=documentos&folder=${encodeURIComponent(generatedDocument.relativeFolderPath)}&file=${encodeURIComponent(generatedDocument.relativeFilePath)}`}
+                    >
+                      Abrir documento
+                    </Link>
+                  </Button>
+                  <Button type="button" variant="outline" onClick={downloadGeneratedDocument} className="rounded-md">
+                    <Download className="mr-2 h-4 w-4" />
+                    Descargar
+                  </Button>
+                  <Button asChild type="button" variant="outline" className="rounded-md">
+                    <Link href="/document-generation/review">Ir a revision</Link>
+                  </Button>
+                </div>
+              </SectionCard>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      ) : (
 
       <div className="grid min-h-[calc(100vh-162px)] grid-cols-1 xl:grid-cols-[minmax(480px,1fr)_minmax(0,0.5fr)]">
         <div className="overflow-y-auto border-r ">
@@ -1469,6 +2022,7 @@ export function DocumentGenerationPageClient() {
           </div>
         </aside>
       </div>
+      )}
 
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
         <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden rounded-2xl p-0">

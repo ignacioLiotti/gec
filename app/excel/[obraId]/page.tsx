@@ -17,6 +17,7 @@ import { useParams } from "next/navigation";
 import { Pencil, Eye, StickyNote, X, AlertTriangle, RotateCcw, Trash2, FilePlus2 } from "lucide-react";
 import { AnimatePresence, m } from "framer-motion";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
+import { ExcelObraName } from "@/components/excel-obra-name";
 import { ExcelPageTabs } from "@/components/excel-page-tabs";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import { ContextualWizard, type WizardFlow } from "@/components/ui/contextual-wizard";
@@ -3371,6 +3372,50 @@ function ObraDetailPageContent() {
 			) : (
 				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
 					<div className="flex-1 min-w-0">
+						<div className="mb-3 flex min-w-0 flex-col gap-3 border-b border-stone-200 pb-3 pt-2 xl:flex-row xl:items-center xl:justify-between">
+							<ExcelObraName />
+							<div className="flex flex-wrap items-center gap-2 xl:justify-end">
+								{activeTab === "documentos" ? (
+									<>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="h-8 gap-2"
+											onClick={handleOpenDocumentsRecovery}
+										>
+											<RotateCcw className="h-4 w-4" />
+											<span className="text-base md:text-sm">Recuperar</span>
+										</Button>
+										<Button
+											type="button"
+											variant="secondary"
+											size="sm"
+											className="h-8 gap-2"
+											onClick={handleOpenDocumentsTrashPage}
+										>
+											<Trash2 className="h-4 w-4" />
+											<span className="text-base md:text-sm">Papelera</span>
+										</Button>
+									</>
+								) : null}
+								{isTenantAdmin ? (
+									<Button
+										type="button"
+										variant="destructive"
+										size="sm"
+										className="h-8 gap-2"
+										onClick={() => void handleDeleteObra()}
+										disabled={isDeletingObra}
+									>
+										<Trash2 className="h-4 w-4" />
+										<span className="text-base md:text-sm">
+											{isDeletingObra ? "Eliminando..." : "Borrar obra"}
+										</span>
+									</Button>
+								) : null}
+							</div>
+						</div>
 						<Tabs
 							value={activeTab}
 							onValueChange={handleTabChange}
@@ -3379,7 +3424,7 @@ function ObraDetailPageContent() {
 							{/* <p className="text-3xl font-normal">{obraData?.designacionYUbicacion ?? ""}</p> */}
 							<div
 								data-wizard-target="obra-page-tabs"
-								className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2 bg-white shadow-card rounded-xl p-3"
+								className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2 "
 							>
 								<div className="flex flex-wrap items-center gap-2">
 									<ExcelPageTabs

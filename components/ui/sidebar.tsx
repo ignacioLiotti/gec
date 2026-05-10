@@ -140,7 +140,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full bg-stone-300",
+            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full bg-white",
             className
           )}
           {...props}
@@ -208,7 +208,7 @@ function Sidebar({
 
   return (
     <div
-      className="group peer text-sidebar-foreground hidden md:block  [--sidebar-motion-duration:420ms] [--sidebar-motion-ease:cubic-bezier(0.16,1,0.3,1)] bg-inherit"
+      className="group peer text-sidebar-foreground hidden md:block  [--sidebar-motion-duration:420ms] [--sidebar-motion-ease:cubic-bezier(0.16,1,0.3,1)] bg-inherit mr-[1px]"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
@@ -239,7 +239,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed bg-inherit inset-y-0 z-[100] my-auto hidden h-[calc(100vh-12px)] w-(--sidebar-width) transform-gpu border border-transparent shadow-none transition-[left,right,width,transform,opacity,box-shadow,border-color] duration-(--sidebar-motion-duration) ease-(--sidebar-motion-ease) will-change-[width,transform] md:flex",
+          "fixed bg-inherit inset-y-0 z-100 my-auto hidden h-[calc(100vh-12px)] w-(--sidebar-width) transform-gpu border border-transparent shadow-none transition-[left,right,width,transform,opacity,box-shadow,border-color] duration-(--sidebar-motion-duration) ease-(--sidebar-motion-ease) will-change-[width,transform] md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -324,7 +324,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
       <main
         data-slot="sidebar-inset"
         className={cn(
-          "bg-background relative flex w-full flex-1 flex-col rounded-xl shadow border max-h-[calc(100vh-2rem)] overflow-y-auto",
+          "bg-background z-10 relative flex w-full flex-1 flex-col rounded-xl shadow-card max-h-[calc(100vh-2rem)] overflow-y-auto bg-red-50 ",
           "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
           className
         )}
@@ -504,7 +504,7 @@ const sidebarMenuButtonVariants = cva(
 
   // Active (selected page)
   "data-[active=true]:text-foreground " +
-  "data-[active=true]:bg-[radial-gradient(100%_50%_at_50%_0%,#fff_0%,#fff0_100%),var(--background-85,#fafafad9)] data-[active=true]:shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset,0_8px_3px_0_#0b090c03,0_5px_3px_0_#0b090c08,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_-1px_0_0_#0000001f_inset] " +
+  "data-[active=true]:bg-white data-[active=true]:shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset,0_8px_3px_0_#0b090c03,0_5px_3px_0_#0b090c08,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_-1px_0_0_#0000001f_inset] " +
 
   // Press
   "active:translate-y-[1px] " +

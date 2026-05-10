@@ -162,14 +162,14 @@ export function ExcelObraName() {
   const displayName = obraId ? obraState.obraName : pageName;
   const fullDisplayName = obraId
     ? [obraState.obraNumber != null ? String(obraState.obraNumber) : "", obraState.obraName]
-        .filter(Boolean)
-        .join(" ")
+      .filter(Boolean)
+      .join(" ")
     : pageName;
 
   if (!displayName && !isLoading) return null;
 
   return (
-    <div className="flex min-w-0 items-center gap-1 px-2 py-1">
+    <div className="flex min-w-0 items-center gap-1 pr-2 -ml-2 py-1">
       {obraId ? (
         <Button
           type="button"

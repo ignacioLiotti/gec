@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowRight, FilePenLine, Loader2, RefreshCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
+import { DocumentGenerationNav } from "./document-nav";
 
 type DraftListItem = {
   id: string;
@@ -32,6 +34,7 @@ type DraftsResponse = {
 
 type Props = {
   canViewAllDrafts: boolean;
+  permissions: DocumentGenerationPermissionMap;
 };
 
 function formatDate(value: string) {
@@ -51,7 +54,7 @@ function statusBadgeClasses(status: string) {
   }
 }
 
-export function DocumentDraftsPageClient({ canViewAllDrafts }: Props) {
+export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Props) {
   const [drafts, setDrafts] = useState<DraftListItem[]>([]);
   const [works, setWorks] = useState<Array<{ id: string; label: string }>>([]);
   const [creators, setCreators] = useState<Array<{ id: string; label: string }>>([]);
@@ -123,9 +126,12 @@ export function DocumentDraftsPageClient({ canViewAllDrafts }: Props) {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Borradores</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">
-                Retoma documentos sin terminar.
-              </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
+                  Retoma documentos sin terminar.
+                </h1>
+                <DocumentGenerationNav permissions={permissions} />
+              </div>
               <p className="mt-1 text-sm text-stone-500">
                 Filtra por fecha, obra y estado para volver a editar un documento.
               </p>
