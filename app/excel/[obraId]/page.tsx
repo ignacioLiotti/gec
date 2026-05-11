@@ -523,10 +523,25 @@ function parseMonthOrder(rawValue: unknown, fallback: number): { label: string; 
 		return { label: `Mes ${n}`, order: n };
 	}
 
+	const ymd = norm.match(/^(\d{4})[/-](\d{1,2})$/);
+	if (ymd) {
+		const year = Number.parseInt(ymd[1], 10);
+		const month = Number.parseInt(ymd[2], 10) - 1;
+		return { label: raw, order: year * 12 + Math.max(0, Math.min(11, month)) };
+	}
+
 	const dmy = norm.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
 	if (dmy) {
 		const month = Number.parseInt(dmy[2], 10) - 1;
 		const yearRaw = Number.parseInt(dmy[3], 10);
+		const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+		return { label: raw, order: year * 12 + Math.max(0, Math.min(11, month)) };
+	}
+
+	const monthYear = norm.match(/^(\d{1,2})[/-](\d{2,4})$/);
+	if (monthYear) {
+		const month = Number.parseInt(monthYear[1], 10) - 1;
+		const yearRaw = Number.parseInt(monthYear[2], 10);
 		const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
 		return { label: raw, order: year * 12 + Math.max(0, Math.min(11, month)) };
 	}
@@ -726,8 +741,27 @@ function addMonths(periodKey: string, offset: number): string | null {
 	return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function periodKeyFromSortOrder(sortOrder: number): string | null {
+	if (!Number.isInteger(sortOrder) || sortOrder < 1000) return null;
+	return `${Math.floor(sortOrder / 12)}-${String((sortOrder % 12) + 1).padStart(2, "0")}`;
+}
+
+function periodKeyFromValue(value: unknown): string | null {
+	if (!hasValue(value)) return null;
+	const parsed = parseMonthOrder(value, 0);
+	return periodKeyFromSortOrder(parsed.order);
+}
+
 function getCurveMonthNumber(rawValue: unknown): number | null {
-	const mesN = normalizeText(String(rawValue ?? "")).match(/mes\s*(\d{1,3})/);
+	if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+		return Math.trunc(rawValue);
+	}
+	const normalized = normalizeText(String(rawValue ?? ""));
+	const numericOnly = normalized.match(/^\d{1,3}$/);
+	if (numericOnly) {
+		return Number.parseInt(numericOnly[0], 10);
+	}
+	const mesN = normalized.match(/mes\s*(\d{1,3})/);
 	if (!mesN) return null;
 	const monthNumber = Number.parseInt(mesN[1], 10);
 	return Number.isFinite(monthNumber) ? monthNumber : null;
@@ -1422,10 +1456,12 @@ function ObraDetailPageContent() {
 			currentPeriodKey,
 			selectedCurveTableRefs.curvaPlanId ?? "none",
 			selectedCurveTableRefs.pmcResumenId ?? "none",
+			periodKeyFromValue(obraQuery.data?.iniciacion) ?? "no-start-period",
 		],
 		enabled:
 			isValidObraId &&
 			isGeneralTabActive &&
+			obraQuery.isSuccess &&
 			tablasQuery.isSuccess &&
 			curveRulesConfigQuery.isSuccess,
 		queryFn: async () => {
@@ -1454,8 +1490,12 @@ function ObraDetailPageContent() {
 			]);
 
 			const points = buildCurvePoints(curvaRows, resumenRows, {
-				curveStartPeriod: rulesConfig?.mappings?.curve?.plan?.startPeriod ?? null,
+				curveStartPeriod:
+					rulesConfig?.mappings?.curve?.plan?.startPeriod ??
+					periodKeyFromValue(obraQuery.data?.iniciacion),
 			});
+			const planPointsCount = points.filter((point) => point.planPct != null).length;
+			const realPointsCount = points.filter((point) => point.realPct != null).length;
 			return {
 				findings,
 				curve:
@@ -1464,6 +1504,10 @@ function ObraDetailPageContent() {
 							points,
 							planTableName: curvaTableName,
 							resumenTableName,
+							planRowsCount: curvaRows.length,
+							resumenRowsCount: resumenRows.length,
+							planPointsCount,
+							realPointsCount,
 						}
 						: null,
 			} satisfies GeneralTabReportsData;

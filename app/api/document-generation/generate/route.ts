@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
+  applyTemplateAliasInputData,
   buildInitialInputData,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
   normalizeTemplateSchema,
   renderDocumentHtml,
+  renderTemplateFileNamePattern,
   sanitizeGeneratedFileName,
   validateTemplateInput,
   withNumericSuffix,
@@ -27,6 +29,7 @@ type GenerateRequestBody = {
   folderPath?: string;
   documentType?: string;
   templateId?: string;
+  fileName?: string;
   inputData?: Record<string, unknown>;
 };
 
@@ -80,8 +83,15 @@ function buildDocumentFileName(params: {
   documentType: string;
   workName: string;
   folderPath: string;
+  fileName?: string | null;
   inputData: Record<string, unknown>;
 }) {
+  const requestedFileName = typeof params.fileName === "string" ? params.fileName.trim() : "";
+  if (requestedFileName) {
+    const withExtension = /\.pdf$/i.test(requestedFileName) ? requestedFileName : `${requestedFileName}.pdf`;
+    return sanitizeGeneratedFileName(withExtension);
+  }
+
   const numberLike =
     typeof params.inputData.certificateNumber === "string"
       ? params.inputData.certificateNumber
@@ -319,7 +329,7 @@ export async function POST(request: NextRequest) {
     }
 
     const schema = normalizeTemplateSchema(template.schema);
-    const hydratedInputData = buildInitialInputData(schema, inputData);
+    const hydratedInputData = applyTemplateAliasInputData(schema, buildInitialInputData(schema, inputData));
     const validationErrors = validateTemplateInput(schema, hydratedInputData);
     if (validationErrors.length > 0) {
       return NextResponse.json(
@@ -366,6 +376,16 @@ export async function POST(request: NextRequest) {
       documentType,
       workName: workName || workId,
       folderPath,
+      fileName:
+        typeof body.fileName === "string" && body.fileName.trim()
+          ? body.fileName
+          : renderTemplateFileNamePattern(schema.fileNamePattern, hydratedInputData, {
+              templateName: String(template.name ?? ""),
+              documentType,
+              workName,
+              folderPath,
+              documentNumberFieldKey: schema.documentNumberFieldKey,
+            }),
       inputData: hydratedInputData,
     });
 

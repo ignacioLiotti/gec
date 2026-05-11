@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
+  applyTemplateAliasInputData,
   buildInitialInputData,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
@@ -16,6 +17,7 @@ import {
   loadWorks,
   validateGenerationTarget,
 } from "@/lib/document-generation-server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type DraftRequestBody = {
   id?: string;
@@ -25,6 +27,60 @@ type DraftRequestBody = {
   templateId?: string;
   inputData?: Record<string, unknown>;
 };
+
+async function loadDraftRejectionContexts(tenantId: string, draftIds: string[]) {
+  const ids = Array.from(new Set(draftIds.filter(Boolean)));
+  if (ids.length === 0) return new Map<string, unknown>();
+
+  const admin = createSupabaseAdminClient();
+  const { data: rejectedDocuments, error: documentsError } = await admin
+    .from("generated_documents")
+    .select("id, source_draft_id")
+    .eq("tenant_id", tenantId)
+    .eq("status", "REJECTED")
+    .in("source_draft_id", ids);
+  if (documentsError) throw documentsError;
+
+  const documentRows = (rejectedDocuments ?? []) as Array<Record<string, unknown>>;
+  const draftIdByDocumentId = new Map(
+    documentRows.map((row) => [String(row.id), String(row.source_draft_id ?? "")]),
+  );
+  const documentIds = Array.from(draftIdByDocumentId.keys());
+  if (documentIds.length === 0) return new Map<string, unknown>();
+
+  const { data: events, error: eventsError } = await admin
+    .from("generated_document_events")
+    .select("generated_document_id, payload, created_by, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("event_type", "GeneratedDocumentStatusChanged")
+    .eq("to_status", "REJECTED")
+    .in("generated_document_id", documentIds)
+    .order("created_at", { ascending: false });
+  if (eventsError) throw eventsError;
+
+  const eventRows = (events ?? []) as Array<Record<string, unknown>>;
+  const actorsById = await loadActorsByIds(eventRows.map((event) => String(event.created_by ?? "")));
+  const rejectionByDraftId = new Map<string, unknown>();
+
+  for (const event of eventRows) {
+    const generatedDocumentId = String(event.generated_document_id ?? "");
+    const draftId = draftIdByDocumentId.get(generatedDocumentId);
+    if (!draftId || rejectionByDraftId.has(draftId)) continue;
+    const payload =
+      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+        ? (event.payload as Record<string, unknown>)
+        : {};
+    const rejectedBy = actorsById[String(event.created_by ?? "")] ?? null;
+    rejectionByDraftId.set(draftId, {
+      generatedDocumentId,
+      comment: typeof payload.comment === "string" ? payload.comment : "",
+      rejectedAt: String(event.created_at ?? ""),
+      rejectedBy,
+    });
+  }
+
+  return rejectionByDraftId;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -91,6 +147,10 @@ export async function GET(request: NextRequest) {
 
     const rows = (data ?? []) as Array<Record<string, unknown>>;
     const actorsById = await loadActorsByIds(rows.map((row) => String(row.created_by ?? "")));
+    const rejectionByDraftId = await loadDraftRejectionContexts(
+      tenantId,
+      rows.map((row) => String(row.id ?? "")),
+    );
     const works = await loadWorks(accessContext);
 
     const drafts = rows.map((row) => {
@@ -115,6 +175,7 @@ export async function GET(request: NextRequest) {
         createdAt: String(row.created_at ?? ""),
         updatedAt: String(row.updated_at ?? ""),
         createdBy: actor,
+        rejection: rejectionByDraftId.get(String(row.id)) ?? null,
         canEdit: permissions.canCreate && String(row.created_by ?? "") === user.id,
       };
     });
@@ -224,7 +285,7 @@ export async function POST(request: NextRequest) {
     }
 
     const schema = normalizeTemplateSchema(template.schema);
-    const hydratedInputData = buildInitialInputData(schema, inputData);
+    const hydratedInputData = applyTemplateAliasInputData(schema, buildInitialInputData(schema, inputData));
     const validationErrors = validateTemplateInput(schema, hydratedInputData);
     const status = validationErrors.length === 0 ? "READY_TO_GENERATE" : "DRAFT";
 

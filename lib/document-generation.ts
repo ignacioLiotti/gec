@@ -42,6 +42,7 @@ export type TemplateFieldType =
 
 export type TemplateFieldSource = "folder" | "extra";
 export type TemplateSelectMode = "strict" | "creatable";
+export type TemplateOptionSource = "manual" | "tenant_users";
 export type TemplateAutoPopulate =
   | "none"
   | "selected_context_id"
@@ -58,16 +59,26 @@ export type TemplateField = {
   source?: TemplateFieldSource;
   description?: string | null;
   defaultValue?: unknown;
-  options?: Array<{ label: string; value: string }>;
+  options?: TemplateSelectOption[];
   selectMode?: TemplateSelectMode;
+  optionSource?: TemplateOptionSource;
+  optionUnitTargetKey?: string | null;
   autoPopulate?: TemplateAutoPopulate;
   repeatableGroup?: string | null;
   repeatableGroupLabel?: string | null;
   columns?: TemplateField[];
 };
 
+export type TemplateSelectOption = {
+  label: string;
+  value: string;
+  unit?: string | null;
+};
+
 export type TemplateSchema = {
   fields: TemplateField[];
+  documentNumberFieldKey?: string | null;
+  fileNamePattern?: string | null;
 };
 
 export type ValidationError = {
@@ -133,15 +144,26 @@ export function normalizeTemplateSchema(value: unknown): TemplateSchema {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { fields: [] };
   }
+  const source = value as { fields?: unknown[]; documentNumberFieldKey?: unknown; fileNamePattern?: unknown };
   const rawFields = Array.isArray((value as { fields?: unknown }).fields)
-    ? ((value as { fields?: unknown[] }).fields ?? [])
+    ? (source.fields ?? [])
     : [];
 
   const fields = rawFields
     .filter((field): field is Record<string, unknown> => Boolean(field) && typeof field === "object" && !Array.isArray(field))
     .map((field, index) => normalizeTemplateField(field, `field_${index + 1}`));
 
-  return { fields };
+  return {
+    fields,
+    documentNumberFieldKey:
+      typeof source.documentNumberFieldKey === "string" && source.documentNumberFieldKey.trim().length > 0
+        ? normalizeTemplateVariableKey(source.documentNumberFieldKey)
+        : null,
+    fileNamePattern:
+      typeof source.fileNamePattern === "string" && source.fileNamePattern.trim().length > 0
+        ? source.fileNamePattern.trim()
+        : null,
+  };
 }
 
 function normalizeTemplateField(field: Record<string, unknown>, fallbackKey: string): TemplateField {
@@ -169,15 +191,14 @@ function normalizeTemplateField(field: Record<string, unknown>, fallbackKey: str
             (option): option is Record<string, unknown> =>
               Boolean(option) && typeof option === "object" && !Array.isArray(option),
           )
-          .map((option) => ({
-            label:
-              typeof option.label === "string" && option.label.trim()
-                ? option.label.trim()
-                : String(option.value ?? ""),
-            value: String(option.value ?? ""),
-          }))
+          .map(normalizeTemplateSelectOption)
       : undefined,
     selectMode: normalizeSelectMode(field.selectMode),
+    optionSource: normalizeOptionSource(field.optionSource),
+    optionUnitTargetKey:
+      typeof field.optionUnitTargetKey === "string" && field.optionUnitTargetKey.trim().length > 0
+        ? normalizeTemplateVariableKey(field.optionUnitTargetKey)
+        : null,
     autoPopulate: normalizeAutoPopulate(field.autoPopulate),
     repeatableGroup,
     repeatableGroupLabel:
@@ -193,8 +214,23 @@ function normalizeTemplateField(field: Record<string, unknown>, fallbackKey: str
   };
 }
 
+function normalizeTemplateSelectOption(option: Record<string, unknown>): TemplateSelectOption {
+  const value = String(option.value ?? "").trim();
+  const label =
+    typeof option.label === "string" && option.label.trim()
+      ? option.label.trim()
+      : value;
+  const unit = typeof option.unit === "string" && option.unit.trim().length > 0 ? option.unit.trim() : null;
+  return { label, value, unit };
+}
+
 function normalizeSelectMode(value: unknown): TemplateSelectMode | undefined {
   if (value === "strict" || value === "creatable") return value;
+  return undefined;
+}
+
+function normalizeOptionSource(value: unknown): TemplateOptionSource | undefined {
+  if (value === "manual" || value === "tenant_users") return value;
   return undefined;
 }
 
@@ -398,6 +434,77 @@ export function buildInitialInputData(schema: TemplateSchema, current: Record<st
   return next;
 }
 
+const TEMPLATE_FIELD_ALIAS_GROUPS = [
+  ["nro", "orderNumber", "ordernumber", "numero_orden", "numeroorden", "nro_orden", "pedido"],
+  ["fecha_orden", "issueDate", "issuedate", "fecha"],
+  ["proveedor", "supplier"],
+  ["empresa_solicita", "requester", "solicitante"],
+  ["total_orden", "total", "importe_total"],
+  ["detail", "detalle"],
+];
+
+function hasTemplateInputValue(value: unknown) {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function collectTableColumnValues(schema: TemplateSchema, inputData: Record<string, unknown>, columnKeys: string[]) {
+  const values: string[] = [];
+  const wantedKeys = new Set(columnKeys);
+  for (const field of schema.fields) {
+    const rows = inputData[field.key];
+    if (field.type !== "table" || !Array.isArray(rows)) continue;
+    const columns = field.columns ?? [];
+    const matchingColumnKeys = columns
+      .map((column) => column.key)
+      .filter((key) => wantedKeys.has(key));
+    if (matchingColumnKeys.length === 0) continue;
+    for (const row of rows) {
+      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+      const rowData = row as Record<string, unknown>;
+      for (const key of matchingColumnKeys) {
+        const value = rowData[key];
+        if (hasTemplateInputValue(value)) {
+          values.push(String(value).trim());
+        }
+      }
+    }
+  }
+  return values;
+}
+
+export function applyTemplateAliasInputData(schema: TemplateSchema, current: Record<string, unknown>) {
+  const next: Record<string, unknown> = { ...current };
+  const topLevelFieldKeys = new Set(
+    schema.fields
+      .filter((field) => field.type !== "table" && !field.repeatableGroup)
+      .map((field) => field.key),
+  );
+
+  const copyAliasValue = (keys: string[], fallbackValue?: unknown) => {
+    const sourceValue = hasTemplateInputValue(fallbackValue)
+      ? fallbackValue
+      : keys.map((key) => next[key]).find(hasTemplateInputValue);
+    if (!hasTemplateInputValue(sourceValue)) return;
+    for (const key of keys) {
+      if (topLevelFieldKeys.has(key) && !hasTemplateInputValue(next[key])) {
+        next[key] = sourceValue;
+      }
+    }
+  };
+
+  for (const aliases of TEMPLATE_FIELD_ALIAS_GROUPS) {
+    copyAliasValue(aliases);
+  }
+
+  const detailFromTableRows = collectTableColumnValues(schema, next, ["detalle", "detail"]).join("; ");
+  copyAliasValue(["detail", "detalle"], detailFromTableRows);
+
+  return next;
+}
+
 export function applyTemplateAutoInputData(
   schema: TemplateSchema,
   current: Record<string, unknown>,
@@ -443,6 +550,36 @@ export function applyTemplateAutoInputData(
     }
   }
   return next;
+}
+
+export function renderTemplateFileNamePattern(
+  pattern: string | null | undefined,
+  inputData: Record<string, unknown>,
+  context: {
+    templateName?: string | null;
+    documentType?: string | null;
+    workName?: string | null;
+    folderPath?: string | null;
+    documentNumberFieldKey?: string | null;
+  } = {},
+) {
+  const normalizedPattern = typeof pattern === "string" ? pattern.trim() : "";
+  if (!normalizedPattern) return "";
+  const numberFieldKey = context.documentNumberFieldKey ?? "";
+  const numberValue = numberFieldKey ? inputData[numberFieldKey] : "";
+  const values: Record<string, unknown> = {
+    ...inputData,
+    templateName: context.templateName ?? "",
+    documentType: context.documentType ?? "",
+    workName: context.workName ?? "",
+    folderPath: context.folderPath ?? "",
+    number: numberValue,
+    numero: numberValue,
+    nro: numberValue,
+  };
+  return normalizedPattern.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) =>
+    String(values[key] ?? "").trim(),
+  ).replace(/\s+/g, " ").trim();
 }
 
 export function escapeHtml(value: unknown): string {

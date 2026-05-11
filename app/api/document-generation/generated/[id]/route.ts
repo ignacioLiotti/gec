@@ -5,10 +5,10 @@ import { renderDocumentHtml } from "@/lib/document-generation";
 import {
   canEditGeneratedDocument,
   formatWorkLabel,
-  insertGeneratedDocumentEvent,
   loadActorsByIds,
   loadDocumentGenerationPermissions,
 } from "@/lib/document-generation-server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 const ALLOWED_STATUSES = new Set(["UNDER_REVIEW", "APPROVED", "REJECTED", "CANCELLED"]);
 
@@ -17,6 +17,94 @@ type RouteContext = { params: Promise<{ id: string }> };
 function readSingleRelation<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
+}
+
+async function reopenPurchaseOrderDraft(params: {
+  generatedDocument: {
+    id: string;
+    tenant_id: string;
+    obra_id: string;
+    folder_path: string;
+    document_type: string;
+    template_id: string;
+    template_version: number;
+    source_draft_id: string | null;
+    input_data: Record<string, unknown>;
+    generated_by: string;
+  };
+}) {
+  if (params.generatedDocument.document_type !== "PURCHASE_ORDER") return null;
+
+  const admin = createSupabaseAdminClient();
+  const draftPayload = {
+    tenant_id: params.generatedDocument.tenant_id,
+    obra_id: params.generatedDocument.obra_id,
+    folder_path: params.generatedDocument.folder_path,
+    document_type: params.generatedDocument.document_type,
+    template_id: params.generatedDocument.template_id,
+    template_version: params.generatedDocument.template_version,
+    status: "DRAFT",
+    input_data: params.generatedDocument.input_data,
+    validation_errors: [],
+    created_by: params.generatedDocument.generated_by,
+  };
+
+  if (params.generatedDocument.source_draft_id) {
+    const { data, error } = await admin
+      .from("generated_document_drafts")
+      .update({
+        status: "DRAFT",
+        input_data: params.generatedDocument.input_data,
+        validation_errors: [],
+      })
+      .eq("id", params.generatedDocument.source_draft_id)
+      .eq("tenant_id", params.generatedDocument.tenant_id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (data?.id) return String(data.id);
+  }
+
+  const { data: draft, error: draftError } = await admin
+    .from("generated_document_drafts")
+    .insert(draftPayload)
+    .select("id")
+    .maybeSingle();
+  if (draftError) throw draftError;
+
+  const draftId = String(draft?.id ?? "");
+  if (!draftId) return null;
+
+  const { error: linkError } = await admin
+    .from("generated_documents")
+    .update({ source_draft_id: draftId })
+    .eq("id", params.generatedDocument.id)
+    .eq("tenant_id", params.generatedDocument.tenant_id);
+  if (linkError) throw linkError;
+
+  return draftId;
+}
+
+async function insertReviewEvent(params: {
+  generatedDocumentId: string;
+  tenantId: string;
+  userId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+}) {
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.from("generated_document_events").insert({
+    generated_document_id: params.generatedDocumentId,
+    tenant_id: params.tenantId,
+    event_type: params.eventType,
+    from_status: params.fromStatus ?? null,
+    to_status: params.toStatus ?? null,
+    payload: params.payload,
+    created_by: params.userId,
+  });
+  if (error) throw error;
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -160,7 +248,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const { data: current, error: currentError } = await supabase
       .from("generated_documents")
-      .select("id, status")
+      .select(
+        "id, tenant_id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, input_data, generated_by, status",
+      )
       .eq("id", id)
       .maybeSingle();
     if (currentError) throw currentError;
@@ -176,14 +266,39 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .maybeSingle();
     if (error) throw error;
 
-    await insertGeneratedDocumentEvent(
-      accessContext,
-      id,
-      "GeneratedDocumentStatusChanged",
-      { status: nextStatus, comment },
-      String(current.status ?? ""),
-      nextStatus,
-    );
+    const reopenedDraftId =
+      nextStatus === "REJECTED"
+        ? await reopenPurchaseOrderDraft({
+            generatedDocument: {
+              id: String(current.id),
+              tenant_id: String(current.tenant_id),
+              obra_id: String(current.obra_id),
+              folder_path: String(current.folder_path ?? ""),
+              document_type: String(current.document_type ?? ""),
+              template_id: String(current.template_id ?? ""),
+              template_version: Number(current.template_version) || 1,
+              source_draft_id:
+                typeof current.source_draft_id === "string"
+                  ? current.source_draft_id
+                  : null,
+              input_data:
+                current.input_data && typeof current.input_data === "object" && !Array.isArray(current.input_data)
+                  ? (current.input_data as Record<string, unknown>)
+                  : {},
+              generated_by: String(current.generated_by),
+            },
+          })
+        : null;
+
+    await insertReviewEvent({
+      generatedDocumentId: id,
+      tenantId,
+      userId: user.id,
+      eventType: "GeneratedDocumentStatusChanged",
+      payload: { status: nextStatus, comment, reopenedDraftId },
+      fromStatus: String(current.status ?? ""),
+      toStatus: nextStatus,
+    });
 
     return NextResponse.json({ generatedDocument: data });
   } catch (error) {

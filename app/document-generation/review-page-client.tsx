@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -74,7 +74,7 @@ function statusLabel(status: string) {
     case "APPROVED":
       return "Aprobado";
     case "REJECTED":
-      return "Desaprobado";
+      return "Rechazado";
     case "UNDER_REVIEW":
       return "En revision";
     default:
@@ -86,6 +86,57 @@ function eventComment(event: GeneratedEvent) {
   const comment = event.payload.comment;
   return typeof comment === "string" && comment.trim() ? comment.trim() : "";
 }
+
+const ReviewCommentActions = memo(function ReviewCommentActions({
+  updating,
+  disabled,
+  onDecision,
+}: {
+  updating: boolean;
+  disabled: boolean;
+  onDecision: (status: "APPROVED" | "REJECTED", comment: string) => void;
+}) {
+  const [comment, setComment] = useState("");
+
+  return (
+    <>
+      <div className="mt-4">
+        <label htmlFor="review-comment" className="text-sm font-medium text-stone-800">
+          Comentario
+        </label>
+        <textarea
+          id="review-comment"
+          value={comment}
+          onChange={(event) => setComment(event.target.value)}
+          placeholder="Escribe por que se aprueba o rechaza..."
+          className="mt-2 min-h-28 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-200/60"
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-12 rounded-lg border-red-200 text-red-700 hover:bg-red-50 active:scale-[0.98]"
+          disabled={disabled || updating}
+          onClick={() => onDecision("REJECTED", comment)}
+        >
+          {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+          Rechazar
+        </Button>
+        <Button
+          type="button"
+          className="h-12 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98]"
+          disabled={disabled || updating}
+          onClick={() => onDecision("APPROVED", comment)}
+        >
+          {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+          Aprobar
+        </Button>
+      </div>
+    </>
+  );
+});
 
 export function DocumentReviewPageClient({
   permissions,
@@ -99,7 +150,6 @@ export function DocumentReviewPageClient({
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [comment, setComment] = useState("");
   const [zoom, setZoom] = useState(82);
 
   const loadQueue = async (preferredId?: string) => {
@@ -149,7 +199,6 @@ export function DocumentReviewPageClient({
         if (!response.ok) throw new Error(payload.error || "No se pudo cargar el documento");
         if (!cancelled) {
           setDetail(payload);
-          setComment("");
         }
       } catch (error) {
         if (!cancelled) {
@@ -186,7 +235,7 @@ export function DocumentReviewPageClient({
     setSelectedId(documents[nextIndex]?.id ?? "");
   };
 
-  const handleDecision = async (status: "APPROVED" | "REJECTED") => {
+  const handleDecision = async (status: "APPROVED" | "REJECTED", comment: string) => {
     if (!selectedId) return;
     setUpdating(true);
     try {
@@ -325,7 +374,7 @@ export function DocumentReviewPageClient({
                   style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
                 >
                   <DocumentApprovedSeal status={detail.document.status} size="md" className="absolute left-5 top-5 z-20" />
-                  <div className="report-paper min-w-max bg-white">
+                  <div className="report-paper bg-white">
                     <div dangerouslySetInnerHTML={{ __html: detail.document.previewHtml }} />
                   </div>
                 </div>
@@ -361,40 +410,12 @@ export function DocumentReviewPageClient({
             ) : null}
           </div>
 
-          <div className="mt-4">
-            <label htmlFor="review-comment" className="text-sm font-medium text-stone-800">
-              Comentario
-            </label>
-            <textarea
-              id="review-comment"
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-              placeholder="Escribe por que se aprueba o rechaza..."
-              className="mt-2 min-h-28 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-200/60"
-            />
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 rounded-lg border-red-200 text-red-700 hover:bg-red-50 active:scale-[0.98]"
-              disabled={!selectedId || updating}
-              onClick={() => void handleDecision("REJECTED")}
-            >
-              {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
-              Rechazar
-            </Button>
-            <Button
-              type="button"
-              className="h-12 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98]"
-              disabled={!selectedId || updating}
-              onClick={() => void handleDecision("APPROVED")}
-            >
-              {updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-              Aprobar
-            </Button>
-          </div>
+          <ReviewCommentActions
+            key={selectedId}
+            updating={updating}
+            disabled={!selectedId}
+            onDecision={(status, comment) => void handleDecision(status, comment)}
+          />
 
           <div className="mt-3 flex gap-2 lg:hidden">
             <Button

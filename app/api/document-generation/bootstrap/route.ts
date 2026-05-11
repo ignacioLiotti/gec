@@ -11,6 +11,7 @@ import {
   assertWorkInTenant,
   loadDocumentGenerationPermissions,
   loadFolderGenerationConfigs,
+  loadTenantUserOptions,
   loadTemplates,
   loadWorks,
   resolveGenerationContext,
@@ -42,9 +43,10 @@ export async function GET(request: NextRequest) {
     const folderPath = normalizeFolderGenerationPath(request.nextUrl.searchParams.get("folderPath"));
     const documentType = normalizeDocumentType(request.nextUrl.searchParams.get("documentType"));
 
-    const [works, templates] = await Promise.all([
+    const [works, templates, tenantUserOptions] = await Promise.all([
       loadWorks(accessContext),
       loadTemplates(accessContext),
+      loadTenantUserOptions(accessContext),
     ]);
 
     let workSummary: { id: string; n: number | null; designacion_y_ubicacion: string | null } | null = null;
@@ -70,6 +72,7 @@ export async function GET(request: NextRequest) {
             tenantId,
             workId,
             documentType: resolvedDocumentType,
+            folderPath: context.resolvedFolderPath,
           })
         : 0;
     const workLabel = workSummary
@@ -93,6 +96,9 @@ export async function GET(request: NextRequest) {
       works,
       folderConfigs,
       templates: context.filteredTemplates,
+      dynamicOptions: {
+        tenantUsers: tenantUserOptions,
+      },
       context: {
         workId: workId ?? null,
         workLabel,
@@ -117,18 +123,24 @@ async function countExistingDocuments({
   tenantId,
   workId,
   documentType,
+  folderPath,
 }: {
   supabase: SupabaseClient;
   tenantId: string;
   workId: string;
   documentType: string;
+  folderPath?: string | null;
 }) {
-  const { count, error } = await supabase
+  let query = supabase
     .from("generated_documents")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
     .eq("obra_id", workId)
     .eq("document_type", documentType);
+  if (folderPath) {
+    query = query.eq("folder_path", folderPath);
+  }
+  const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
 }

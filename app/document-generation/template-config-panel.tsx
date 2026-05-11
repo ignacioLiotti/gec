@@ -14,6 +14,7 @@ import {
   type TemplateAutoPopulate,
   type TemplateField,
   type TemplateFieldType,
+  type TemplateOptionSource,
   type TemplateSelectMode,
 } from "@/lib/document-generation";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +59,8 @@ type EditableTemplate = {
   status: string;
   contentHtml: string;
   fields: TemplateField[];
+  documentNumberFieldKey: string;
+  fileNamePattern: string;
 };
 
 const FIELD_TYPE_OPTIONS: TemplateFieldType[] = [
@@ -89,13 +92,18 @@ const SELECT_MODE_OPTIONS: Array<{ value: TemplateSelectMode; label: string }> =
   { value: "creatable", label: "Combo editable" },
 ];
 
+const OPTION_SOURCE_OPTIONS: Array<{ value: TemplateOptionSource; label: string }> = [
+  { value: "manual", label: "Valores manuales" },
+  { value: "tenant_users", label: "Usuarios del tenant" },
+];
+
 const AUTO_POPULATE_OPTIONS: Array<{ value: TemplateAutoPopulate; label: string }> = [
   { value: "none", label: "Sin autocompletar" },
-  { value: "selected_context_label", label: "Contexto seleccionado" },
-  { value: "selected_context_id", label: "ID del contexto" },
+  { value: "selected_context_label", label: "Obra seleccionada" },
+  { value: "selected_context_id", label: "ID de la obra seleccionada" },
   { value: "document_type", label: "Tipo documental" },
-  { value: "next_sequence_number", label: "Siguiente numero de secuencia" },
-  { value: "today", label: "Fecha actual" },
+  { value: "next_sequence_number", label: "Siguiente numero en la carpeta" },
+  { value: "today", label: "Fecha de hoy" },
 ];
 
 function createDefaultTableColumns(): TemplateField[] {
@@ -164,6 +172,8 @@ function createFieldFromKey(key: string, existing?: TemplateField): TemplateFiel
     defaultValue: existing?.defaultValue,
     options: existing?.options,
     selectMode: existing?.selectMode,
+    optionSource: existing?.optionSource,
+    optionUnitTargetKey: existing?.optionUnitTargetKey,
     autoPopulate: existing?.autoPopulate,
   };
 }
@@ -221,6 +231,8 @@ function cloneTemplate(template: DocumentTemplateSummary): EditableTemplate {
     targetFolderPath: template.targetFolderPath ?? "",
     status: template.status,
     contentHtml: template.contentHtml,
+    documentNumberFieldKey: template.schema.documentNumberFieldKey ?? "",
+    fileNamePattern: template.schema.fileNamePattern ?? "",
     fields: template.schema.fields.map((field) => ({
       ...field,
       options: field.options ? field.options.map((option) => ({ ...option })) : undefined,
@@ -419,7 +431,7 @@ function useDocumentTemplateConfig(workId: string) {
   const updateSelectOption = (
     fieldIndex: number,
     optionIndex: number,
-    patch: Partial<{ label: string; value: string }>,
+    patch: Partial<{ label: string; value: string; unit: string | null }>,
   ) => {
     setDraft((current) => {
       if (!current) return current;
@@ -530,7 +542,7 @@ function useDocumentTemplateConfig(workId: string) {
     fieldIndex: number,
     columnIndex: number,
     optionIndex: number,
-    patch: Partial<{ label: string; value: string }>,
+    patch: Partial<{ label: string; value: string; unit: string | null }>,
   ) => {
     setDraft((current) => {
       if (!current) return current;
@@ -743,7 +755,11 @@ function useDocumentTemplateConfig(workId: string) {
           targetFolderPath: draft.targetFolderPath || null,
           status: draft.status,
           contentHtml: draft.contentHtml,
-          schema: { fields: fieldsToSave },
+          schema: {
+            fields: fieldsToSave,
+            documentNumberFieldKey: draft.documentNumberFieldKey || null,
+            fileNamePattern: draft.fileNamePattern || null,
+          },
         }),
       });
       const payload = (await response.json()) as {
@@ -816,6 +832,26 @@ function useTemplateConfig() {
   return ctx;
 }
 
+function TemplateThumbnail({ template }: { template: DocumentTemplateSummary }) {
+  const thumbnailHtml = useMemo(
+    () =>
+      renderDocumentHtml(template.contentHtml, buildPreviewData(template.schema.fields), {
+        workName: "Obra de ejemplo",
+        generatedAt: "29/04/2026",
+      }),
+    [template],
+  );
+
+  return (
+    <div className="relative h-48 overflow-hidden rounded-lg border border-stone-200 bg-[#e7e4dc]">
+      <div className="absolute left-1/2 top-3 h-[720px] w-[520px] -translate-x-1/2 origin-top scale-[0.255] overflow-hidden rounded-sm bg-white shadow-[0_12px_35px_rgba(0,0,0,0.18)]">
+        <div className="pointer-events-none" dangerouslySetInnerHTML={{ __html: thumbnailHtml }} />
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#e7e4dc] to-transparent" />
+    </div>
+  );
+}
+
 export function TemplateConfigProvider({ workId, children }: { workId: string; children: ReactNode }) {
   const value = useDocumentTemplateConfig(workId);
   return <TemplateConfigContext.Provider value={value}>{children}</TemplateConfigContext.Provider>;
@@ -844,17 +880,10 @@ export function TemplatePickerCard({
               Elige la plantilla base que vas a ajustar para este tenant. La idea es que la seleccion ya comunique alcance, version y destino.
             </CardDescription>
           </div>
-          <div className="rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
-              Catalogo visible
-            </p>
-            <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-stone-950">
-              {templates.length}
-            </p>
-          </div>
+
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-4 p-4">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-stone-500">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -862,18 +891,19 @@ export function TemplatePickerCard({
           </div>
         ) : null}
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((template) => (
             <button
               key={template.id}
               type="button"
               onClick={() => handleTemplateSelect(template.id)}
-              className={`h-full rounded-xl border px-4 py-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${selectedTemplateId === template.id
-                ? "border-[#fb923c] bg-[#fff7ed] shadow-[0_1px_0_rgba(0,0,0,0.03)]"
+              className={`h-full overflow-hidden rounded-xl border text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${selectedTemplateId === template.id
+                ? "border-[#fb923c] bg-[#fff7ed] shadow-[0_1px_0_rgba(0,0,0,0.03),0_0_0_3px_rgba(251,146,60,0.16)]"
                 : "border-stone-200 bg-white hover:border-stone-300 hover:shadow-sm"
                 }`}
             >
-              <div className="flex items-start justify-between gap-3">
+              <TemplateThumbnail template={template} />
+              <div className="flex items-start justify-between gap-3 px-4 py-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-stone-950">{template.name}</p>
@@ -1108,6 +1138,68 @@ export function TemplateConfigEditorPanel() {
                     />
                   </div>
 
+                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                    <div className="mb-3">
+                      <p className="text-sm font-semibold text-stone-950">Nombre y numeracion</p>
+                      <p className="text-xs text-stone-500">
+                        Define que campo recibe la secuencia y como se nombra automaticamente el PDF final.
+                      </p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Campo de numeracion</Label>
+                        <Select
+                          value={draft.documentNumberFieldKey || "__none__"}
+                          onValueChange={(value) =>
+                            setDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    documentNumberFieldKey: value === "__none__" ? "" : value,
+                                    fields: current.fields.map((field) =>
+                                      field.key === value
+                                        ? { ...field, autoPopulate: "next_sequence_number" }
+                                        : field,
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                            <SelectValue placeholder="Sin numeracion" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Sin numeracion automatica</SelectItem>
+                            {draft.fields
+                              .filter((field) => field.type !== "table" && !field.repeatableGroup)
+                              .map((field) => (
+                                <SelectItem key={field.key} value={field.key}>
+                                  {field.label} ({field.key})
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Patron de nombre final</Label>
+                        <Input
+                          value={draft.fileNamePattern}
+                          onChange={(event) =>
+                            setDraft((current) =>
+                              current ? { ...current, fileNamePattern: event.target.value } : current,
+                            )
+                          }
+                          className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                          placeholder="Ej. orden-de-compra-{{nro}}"
+                        />
+                        <p className="text-xs text-stone-500">
+                          Variables utiles: {"{{number}}"}, {"{{nro}}"}, {"{{workName}}"} o cualquier campo del template.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
 
                   <Separator />
 
@@ -1308,6 +1400,10 @@ export function TemplateConfigEditorPanel() {
                                               value === "select"
                                                 ? field.selectMode ?? "strict"
                                                 : field.selectMode,
+                                            optionSource:
+                                              value === "select"
+                                                ? field.optionSource ?? "manual"
+                                                : field.optionSource,
                                             columns:
                                               value === "table" && !field.columns?.length
                                                 ? createDefaultTableColumns()
@@ -1430,7 +1526,7 @@ export function TemplateConfigEditorPanel() {
                                       ) : null}
                                       {field.type === "select" ? (
                                         <div className="space-y-3 md:col-span-3 rounded-lg border border-stone-200 bg-white p-3">
-                                          <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                          <div className="grid gap-3 md:grid-cols-[220px_220px_minmax(0,1fr)]">
                                             <div className="space-y-2">
                                               <Label>Modo de lista</Label>
                                               <Select
@@ -1453,8 +1549,49 @@ export function TemplateConfigEditorPanel() {
                                                 </SelectContent>
                                               </Select>
                                             </div>
+                                            <div className="space-y-2">
+                                              <Label>Origen de opciones</Label>
+                                              <Select
+                                                value={field.optionSource ?? "manual"}
+                                                onValueChange={(value) =>
+                                                  updateField(index, {
+                                                    optionSource: value as TemplateOptionSource,
+                                                    selectMode: value === "tenant_users" ? "creatable" : field.selectMode,
+                                                  })
+                                                }
+                                              >
+                                                <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {OPTION_SOURCE_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                      {option.label}
+                                                    </SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
                                             <p className="self-end pb-2 text-xs text-stone-500">
                                               Estricta obliga a elegir un valor existente. Combo editable permite escribir uno nuevo.
+                                            </p>
+                                          </div>
+                                          <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                            <div className="space-y-2">
+                                              <Label>Autocompletar unidad en</Label>
+                                              <Input
+                                                value={field.optionUnitTargetKey ?? ""}
+                                                onChange={(event) =>
+                                                  updateField(index, {
+                                                    optionUnitTargetKey: normalizeFieldKey(event.target.value),
+                                                  })
+                                                }
+                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                placeholder="Ej. unidad"
+                                              />
+                                            </div>
+                                            <p className="self-end pb-2 text-xs text-stone-500">
+                                              Si este select representa un detalle, puede completar otra variable con la unidad configurada en cada valor.
                                             </p>
                                           </div>
                                           <div className="flex items-center justify-between gap-3">
@@ -1475,7 +1612,10 @@ export function TemplateConfigEditorPanel() {
                                           </div>
                                           <div className="space-y-2">
                                             {(field.options ?? []).map((option, optionIndex) => (
-                                              <div key={`${field.key}-option-${optionIndex}`} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                              <div
+                                                key={`${field.key}-option-${optionIndex}`}
+                                                className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_auto]"
+                                              >
                                                 <Input
                                                   value={option.label}
                                                   onChange={(event) =>
@@ -1493,6 +1633,16 @@ export function TemplateConfigEditorPanel() {
                                                   }
                                                   className="h-9 rounded-md border-stone-200"
                                                   placeholder="valor_interno"
+                                                />
+                                                <Input
+                                                  value={option.unit ?? ""}
+                                                  onChange={(event) =>
+                                                    updateSelectOption(index, optionIndex, {
+                                                      unit: event.target.value || null,
+                                                    })
+                                                  }
+                                                  className="h-9 rounded-md border-stone-200"
+                                                  placeholder="Unidad"
                                                 />
                                                 <Button
                                                   type="button"
@@ -1555,6 +1705,10 @@ export function TemplateConfigEditorPanel() {
                                                             value === "select"
                                                               ? column.selectMode ?? "strict"
                                                               : column.selectMode,
+                                                          optionSource:
+                                                            value === "select"
+                                                              ? column.optionSource ?? "manual"
+                                                              : column.optionSource,
                                                         })
                                                       }
                                                     >
@@ -1616,7 +1770,7 @@ export function TemplateConfigEditorPanel() {
                                                 </div>
                                                 {column.type === "select" ? (
                                                   <div className="mt-3 rounded-md border border-stone-200 bg-white p-3">
-                                                    <div className="mb-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                                    <div className="mb-3 grid gap-3 md:grid-cols-[220px_220px_minmax(0,1fr)]">
                                                       <div className="space-y-1">
                                                         <Label>Modo de lista</Label>
                                                         <Select
@@ -1639,8 +1793,49 @@ export function TemplateConfigEditorPanel() {
                                                           </SelectContent>
                                                         </Select>
                                                       </div>
+                                                      <div className="space-y-1">
+                                                        <Label>Origen de opciones</Label>
+                                                        <Select
+                                                          value={column.optionSource ?? "manual"}
+                                                          onValueChange={(value) =>
+                                                            updateTableColumn(index, columnIndex, {
+                                                              optionSource: value as TemplateOptionSource,
+                                                              selectMode: value === "tenant_users" ? "creatable" : column.selectMode,
+                                                            })
+                                                          }
+                                                        >
+                                                          <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                            <SelectValue />
+                                                          </SelectTrigger>
+                                                          <SelectContent>
+                                                            {OPTION_SOURCE_OPTIONS.map((option) => (
+                                                              <SelectItem key={option.value} value={option.value}>
+                                                                {option.label}
+                                                              </SelectItem>
+                                                            ))}
+                                                          </SelectContent>
+                                                        </Select>
+                                                      </div>
                                                       <p className="self-end pb-2 text-xs text-stone-500">
                                                         El combo editable acepta valores nuevos en esta columna.
+                                                      </p>
+                                                    </div>
+                                                    <div className="mb-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                                                      <div className="space-y-1">
+                                                        <Label>Autocompletar unidad en</Label>
+                                                        <Input
+                                                          value={column.optionUnitTargetKey ?? ""}
+                                                          onChange={(event) =>
+                                                            updateTableColumn(index, columnIndex, {
+                                                              optionUnitTargetKey: normalizeFieldKey(event.target.value),
+                                                            })
+                                                          }
+                                                          className="h-9 rounded-md border-stone-200 bg-white"
+                                                          placeholder="Ej. unidad"
+                                                        />
+                                                      </div>
+                                                      <p className="self-end pb-2 text-xs text-stone-500">
+                                                        Para detalles de item, indicá la columna donde se escribe la unidad asociada.
                                                       </p>
                                                     </div>
                                                     <div className="mb-2 flex items-center justify-between gap-3">
@@ -1663,7 +1858,7 @@ export function TemplateConfigEditorPanel() {
                                                       {(column.options ?? []).map((option, optionIndex) => (
                                                         <div
                                                           key={`${field.key}-column-${columnIndex}-option-${optionIndex}`}
-                                                          className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                                                          className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_150px_auto]"
                                                         >
                                                           <Input
                                                             value={option.label}
@@ -1684,6 +1879,16 @@ export function TemplateConfigEditorPanel() {
                                                             }
                                                             className="h-8 rounded-md border-stone-200"
                                                             placeholder="valor_interno"
+                                                          />
+                                                          <Input
+                                                            value={option.unit ?? ""}
+                                                            onChange={(event) =>
+                                                              updateTableColumnOption(index, columnIndex, optionIndex, {
+                                                                unit: event.target.value || null,
+                                                              })
+                                                            }
+                                                            className="h-8 rounded-md border-stone-200"
+                                                            placeholder="Unidad"
                                                           />
                                                           <Button
                                                             type="button"
@@ -1797,7 +2002,7 @@ export function TemplateConfigEditorPanel() {
                   {rightPanelMode === "preview" ? (
                     <div className="overflow-hidden rounded-xl border border-stone-200 bg-[#eceae6] p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
                       <div className="max-h-[calc(100vh-252px)] min-h-[640px] overflow-auto rounded-xl border border-stone-300 bg-white p-4">
-                        <div className="min-w-max" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                        <div className="" dangerouslySetInnerHTML={{ __html: previewHtml }} />
                       </div>
                     </div>
                   ) : (

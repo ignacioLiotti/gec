@@ -175,7 +175,15 @@ function addMonths(periodKey: string, offset: number): string | null {
 }
 
 function getCurveMonthNumber(rawValue: unknown): number | null {
-	const mesN = normalizeText(String(rawValue ?? "")).match(/mes\s*(\d{1,3})/);
+	if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+		return Math.trunc(rawValue);
+	}
+	const normalized = normalizeText(String(rawValue ?? ""));
+	const numericOnly = normalized.match(/^\d{1,3}$/);
+	if (numericOnly) {
+		return Number.parseInt(numericOnly[0], 10);
+	}
+	const mesN = normalized.match(/mes\s*(\d{1,3})/);
 	if (!mesN) return null;
 	const monthNumber = Number.parseInt(mesN[1], 10);
 	return Number.isFinite(monthNumber) ? monthNumber : null;
@@ -273,12 +281,27 @@ function parseMonthOrder(rawValue: unknown, fallback: number): { label: string; 
 		return { label: `Mes ${n}`, order: n };
 	}
 
+	const ymd = norm.match(/^(\d{4})[/-](\d{1,2})$/);
+	if (ymd) {
+		const year = Number.parseInt(ymd[1], 10);
+		const month = Number.parseInt(ymd[2], 10) - 1;
+		return { label: raw, order: year * 12 + Math.max(0, Math.min(11, month)) };
+	}
+
 	const dmy = norm.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
 	if (dmy) {
 		const month = Number.parseInt(dmy[2], 10) - 1;
 		const yearRaw = Number.parseInt(dmy[3], 10);
 		const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
 		return { label: raw, order: year * 12 + month };
+	}
+
+	const monthYear = norm.match(/^(\d{1,2})[/-](\d{2,4})$/);
+	if (monthYear) {
+		const month = Number.parseInt(monthYear[1], 10) - 1;
+		const yearRaw = Number.parseInt(monthYear[2], 10);
+		const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
+		return { label: raw, order: year * 12 + Math.max(0, Math.min(11, month)) };
 	}
 
 	const monYear = norm.match(/([a-z]{3})[-\s_/]*(\d{2,4})/);

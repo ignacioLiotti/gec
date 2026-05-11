@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyTemplateAliasInputData,
   buildDocumentGenerationExtractionRows,
   buildInitialInputData,
   normalizeTemplateSchema,
@@ -34,6 +35,45 @@ describe("document-generation helpers", () => {
       { key: "title", message: "Titulo es obligatorio." },
       { key: "amount", message: "Monto debe ser numerico." },
     ]);
+  });
+
+  it("hydrates duplicated template aliases before validation", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "proveedor", label: "Proveedor", type: "text", required: false },
+        { key: "supplier", label: "Proveedor", type: "text", required: true },
+        { key: "empresa_solicita", label: "Solicitante", type: "text", required: false },
+        { key: "requester", label: "Solicitante", type: "text", required: true },
+        { key: "detail", label: "Detalle", type: "textarea", required: true },
+        { key: "total_orden", label: "Total Orden", type: "money", required: false },
+        { key: "total", label: "Total", type: "money", required: true },
+        {
+          key: "items",
+          label: "Items",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "detalle", label: "Detalle", type: "text", required: false },
+            { key: "precio_total", label: "Precio Total", type: "money", required: false },
+          ],
+        },
+      ],
+    });
+
+    const inputData = applyTemplateAliasInputData(schema, {
+      proveedor: "Acme SA",
+      empresa_solicita: "Ignacio Blanco",
+      total_orden: "213121233",
+      items: [{ detalle: "Hormigon" }, { detalle: "Arena" }],
+    });
+
+    expect(inputData).toMatchObject({
+      supplier: "Acme SA",
+      requester: "Ignacio Blanco",
+      total: "213121233",
+      detail: "Hormigon; Arena",
+    });
+    expect(validateTemplateInput(schema, inputData)).toEqual([]);
   });
 
   it("renders placeholders with html escaping", () => {

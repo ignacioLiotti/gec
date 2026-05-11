@@ -20,10 +20,18 @@ type DraftListItem = {
   status: string;
   inputData: Record<string, unknown>;
   validationErrors: Array<{ key: string; message: string }>;
+  rejection: DraftRejection | null;
   createdAt: string;
   updatedAt: string;
   createdBy: { id: string; fullName: string | null; email: string | null; label: string } | null;
   canEdit: boolean;
+};
+
+type DraftRejection = {
+  generatedDocumentId: string;
+  comment: string;
+  rejectedAt: string;
+  rejectedBy: { id: string; fullName: string | null; email: string | null; label: string } | null;
 };
 
 type DraftsResponse = {
@@ -45,13 +53,19 @@ function formatDate(value: string) {
   });
 }
 
-function statusBadgeClasses(status: string) {
+function statusBadgeClasses(status: string, rejection?: DraftRejection | null) {
+  if (rejection) return "border-red-200 bg-red-50 text-red-700";
   switch (status) {
     case "READY_TO_GENERATE":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
     default:
       return "border-amber-200 bg-amber-50 text-amber-700";
   }
+}
+
+function statusLabel(draft: DraftListItem) {
+  if (draft.rejection) return "Rechazado";
+  return draft.status === "READY_TO_GENERATE" ? "Listo" : "En borrador";
 }
 
 export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Props) {
@@ -239,8 +253,8 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
                     <td className="px-5 py-4 text-sm text-stone-700">{draft.workLabel}</td>
                     <td className="px-5 py-4 text-sm text-stone-700">{draft.createdBy?.label ?? "Usuario"}</td>
                     <td className="px-5 py-4">
-                      <span className={cn("rounded-full border px-3 py-1 text-xs font-medium", statusBadgeClasses(draft.status))}>
-                        {draft.status === "READY_TO_GENERATE" ? "Listo" : "En borrador"}
+                      <span className={cn("rounded-full border px-3 py-1 text-xs font-medium", statusBadgeClasses(draft.status, draft.rejection))}>
+                        {statusLabel(draft)}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-sm text-stone-700">{formatDate(draft.updatedAt)}</td>
@@ -265,8 +279,28 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
                 <p><strong className="text-stone-900">Carpeta:</strong> {selectedDraft.folderPath}</p>
                 <p><strong className="text-stone-900">Creado por:</strong> {selectedDraft.createdBy?.label ?? "Usuario"}</p>
                 <p><strong className="text-stone-900">Actualizado:</strong> {formatDate(selectedDraft.updatedAt)}</p>
+                <p>
+                  <strong className="text-stone-900">Estado:</strong>{" "}
+                  <span className={selectedDraft.rejection ? "font-medium text-red-700" : undefined}>
+                    {statusLabel(selectedDraft)}
+                  </span>
+                </p>
                 <p><strong className="text-stone-900">Campos con error:</strong> {selectedDraft.validationErrors.length}</p>
               </div>
+
+              {selectedDraft.rejection ? (
+                <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-700">
+                    Comentario de rechazo
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-red-950">
+                    {selectedDraft.rejection.comment || "Sin comentario."}
+                  </p>
+                  <p className="mt-2 text-xs text-red-800/80">
+                    {selectedDraft.rejection.rejectedBy?.label ?? "Usuario"} · {formatDate(selectedDraft.rejection.rejectedAt)}
+                  </p>
+                </div>
+              ) : null}
 
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button asChild className="rounded-md">

@@ -143,6 +143,8 @@ export async function PUT(request: NextRequest) {
     const targetFolderPath = normalizeFolderGenerationPath(body.targetFolderPath);
     const schemaPayload = {
       fields: normalizedFields,
+      documentNumberFieldKey: schema.documentNumberFieldKey ?? null,
+      fileNamePattern: schema.fileNamePattern ?? null,
     };
 
     if (baseTemplate.tenant_id === tenantId) {
@@ -253,12 +255,21 @@ function normalizeTemplateField(field: TemplateField, index: number): TemplateFi
             .map((option) => ({
               label: typeof option.label === "string" && option.label.trim().length > 0 ? option.label.trim() : option.value,
               value: option.value,
+              unit: typeof option.unit === "string" && option.unit.trim().length > 0 ? option.unit.trim() : null,
             }))
         : undefined,
     selectMode:
       field.selectMode === "creatable" || field.selectMode === "strict"
         ? field.selectMode
         : undefined,
+    optionSource:
+      field.optionSource === "tenant_users" || field.optionSource === "manual"
+        ? field.optionSource
+        : undefined,
+    optionUnitTargetKey:
+      typeof field.optionUnitTargetKey === "string" && field.optionUnitTargetKey.trim().length > 0
+        ? normalizeFieldKey(field.optionUnitTargetKey)
+        : null,
     autoPopulate: normalizeAutoPopulate(field.autoPopulate),
     repeatableGroup:
       typeof field.repeatableGroup === "string" && field.repeatableGroup.trim().length > 0

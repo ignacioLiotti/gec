@@ -93,6 +93,10 @@ type GeneralTabReportsData = {
 		points: ReportCurvePoint[];
 		planTableName: string;
 		resumenTableName: string;
+		planRowsCount?: number;
+		resumenRowsCount?: number;
+		planPointsCount?: number;
+		realPointsCount?: number;
 	} | null;
 };
 
@@ -765,6 +769,23 @@ export function ObraGeneralTab({
 		field: "saldoACertificar" | "porcentaje"
 	) => blockedDerivedFieldSet.has(field);
 	const isContratoBlockingDerived = blockedDerivedFieldSet.size > 0;
+	const curvePlanRowsCount = reportsData?.curve?.planRowsCount ?? null;
+	const curveResumenRowsCount = reportsData?.curve?.resumenRowsCount ?? null;
+	const curvePlanPointsCount = reportsData?.curve?.planPointsCount ?? null;
+	const curveRealPointsCount = reportsData?.curve?.realPointsCount ?? null;
+	const curveMissingPlanData =
+		reportsData?.curve != null &&
+		curvePlanRowsCount === 0;
+	const curveMissingRealData =
+		reportsData?.curve != null &&
+		curveResumenRowsCount === 0;
+	const curveHasOnlyRealProgress =
+		reportsData?.curve != null &&
+		curvePlanPointsCount === 0 &&
+		(curveRealPointsCount ?? 0) > 0;
+	const curveHasSinglePlanPoint =
+		reportsData?.curve != null &&
+		curvePlanPointsCount === 1;
 	const hasUnsavedValues = (values: Record<string, unknown>) =>
 		(Object.keys(initialFormValues) as Array<keyof Obra>).some((key) => {
 			const currentValue = values[key as string];
@@ -1667,7 +1688,20 @@ export function ObraGeneralTab({
 										}
 									>
 										{reportsData?.curve ? (
-											<AdvanceCurveChart points={reportsData.curve.points} />
+											<div className="space-y-3">
+												{curveMissingPlanData || curveMissingRealData || curveHasOnlyRealProgress || curveHasSinglePlanPoint ? (
+													<div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+														{curveMissingPlanData
+															? `${reportsData.curve.planTableName} no tiene filas cargadas. La curva planificada va a aparecer cuando cargues la planilla de Curva Plan.`
+															: curveMissingRealData
+																? `${reportsData.curve.resumenTableName} no tiene certificados cargados para comparar contra la curva planificada.`
+																: curveHasOnlyRealProgress
+																	? "Hay certificados cargados, pero no hay puntos de Curva Plan para comparar contra el avance real."
+																	: "Curva Plan tiene un solo punto cargado. Carga al menos dos periodos para ver la linea planificada."}
+													</div>
+												) : null}
+												<AdvanceCurveChart points={reportsData.curve.points} />
+											</div>
 										) : (
 											<div className="flex h-[274px] flex-col rounded-lg border border-dashed border-[#e8e8e8] p-4">
 												<div className="rounded-lg border border-[#f0f0f0] px-4 py-3 text-[13px] text-[#bbb]">

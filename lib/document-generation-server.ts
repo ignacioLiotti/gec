@@ -14,6 +14,7 @@ import {
   normalizeFolderGenerationPath,
   normalizeTemplateSchema,
   type TemplateSchema,
+  type TemplateSelectOption,
   type FolderGenerationConfig,
 } from "@/lib/document-generation";
 
@@ -257,6 +258,28 @@ export async function loadActorsByIds(userIds: string[]): Promise<Record<string,
   );
 
   return Object.fromEntries(users);
+}
+
+export async function loadTenantUserOptions(access: AccessContext): Promise<TemplateSelectOption[]> {
+  const admin = createSupabaseAdminClient();
+  const { data: memberships, error: membershipsError } = await admin
+    .from("memberships")
+    .select("user_id")
+    .eq("tenant_id", access.tenantId);
+  if (membershipsError) throw membershipsError;
+
+  const userIds = Array.from(new Set((memberships ?? []).map((membership) => String(membership.user_id)).filter(Boolean)));
+  if (userIds.length === 0) return [];
+
+  const actors = await loadActorsByIds(userIds);
+  return userIds
+    .map((userId) => actors[userId])
+    .filter((actor): actor is DocumentActorSummary => Boolean(actor))
+    .map((actor) => ({
+      label: actor.label,
+      value: actor.fullName || actor.email || actor.label,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export async function assertWorkInTenant(
@@ -653,7 +676,10 @@ export async function validateGenerationTarget(
     };
   }
 
-  if (!folderConfig.allowedDocumentTypes.includes(args.documentType)) {
+  if (
+    folderConfig.allowedDocumentTypes.length > 0 &&
+    !folderConfig.allowedDocumentTypes.includes(args.documentType)
+  ) {
     return {
       valid: false,
       error: "El tipo documental no esta permitido para la carpeta destino.",

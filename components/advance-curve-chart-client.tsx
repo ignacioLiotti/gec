@@ -1,67 +1,16 @@
 "use client";
 
-import type { ComponentType } from "react";
-import dynamic from "next/dynamic";
-
-type RechartsComponent = ComponentType<Record<string, unknown>>;
-
-const CartesianGrid = dynamic(
-	() =>
-		import("recharts").then(
-			(mod) => mod.CartesianGrid as unknown as RechartsComponent,
-		),
-	{ ssr: false },
-);
-const Line = dynamic(
-	() =>
-		import("recharts").then((mod) => mod.Line as unknown as RechartsComponent),
-	{ ssr: false },
-);
-const LineChart = dynamic(
-	() =>
-		import("recharts").then(
-			(mod) => mod.LineChart as unknown as RechartsComponent,
-		),
-	{ ssr: false },
-);
-const ReferenceArea = dynamic(
-	() =>
-		import("recharts").then(
-			(mod) => mod.ReferenceArea as unknown as RechartsComponent,
-		),
-	{ ssr: false },
-);
-const ReferenceLine = dynamic(
-	() =>
-		import("recharts").then(
-			(mod) => mod.ReferenceLine as unknown as RechartsComponent,
-		),
-	{ ssr: false },
-);
-const ResponsiveContainer = dynamic(
-	() =>
-		import("recharts").then(
-			(mod) => mod.ResponsiveContainer as unknown as RechartsComponent,
-		),
-	{ ssr: false },
-);
-const Tooltip = dynamic(
-	() =>
-		import("recharts").then(
-			(mod) => mod.Tooltip as unknown as RechartsComponent,
-		),
-	{ ssr: false },
-);
-const XAxis = dynamic(
-	() =>
-		import("recharts").then((mod) => mod.XAxis as unknown as RechartsComponent),
-	{ ssr: false },
-);
-const YAxis = dynamic(
-	() =>
-		import("recharts").then((mod) => mod.YAxis as unknown as RechartsComponent),
-	{ ssr: false },
-);
+import {
+	CartesianGrid,
+	Line,
+	LineChart,
+	ReferenceArea,
+	ReferenceLine,
+	ResponsiveContainer,
+	Tooltip,
+	XAxis,
+	YAxis,
+} from "recharts";
 
 export type AdvanceCurvePoint = {
 	label: string;

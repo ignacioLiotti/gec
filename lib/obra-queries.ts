@@ -94,6 +94,10 @@ export type GeneralTabReportsData = {
     points: GeneralReportCurvePoint[];
     planTableName: string;
     resumenTableName: string;
+    planRowsCount?: number;
+    resumenRowsCount?: number;
+    planPointsCount?: number;
+    realPointsCount?: number;
   } | null;
 };
 
