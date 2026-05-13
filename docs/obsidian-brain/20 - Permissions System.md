@@ -82,7 +82,7 @@ Data-flow now uses explicit capability permissions:
 | `data-flow:apply-suggestion` | Accept or reject data-flow suggestions for obra fields |
 | `data-flow:auto-write` | Allow data-flow results to automatically overwrite obra fields |
 
-Dashboard route access uses `nav:dashboard`. Tenant admins and superadmins bypass these checks through `has_permission(...)`.
+Dashboard route access is available to all authenticated users and appears in the sidebar for regular members.
 | `document_creator` | nav:document-generation, documents:create |
 | `document_reviewer` | nav:document-generation, documents:review |
 | `document_manager` | nav:document-generation, documents:create, documents:review, documents:templates, documents:drafts:all |

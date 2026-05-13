@@ -68,7 +68,6 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	{
 		path: "/dashboard",
 		allowedRoles: [],
-		requiredPermissions: ["nav:dashboard"],
 	},
 	{
 		path: "/certificados",

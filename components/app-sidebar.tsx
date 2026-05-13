@@ -80,7 +80,6 @@ const navItems: NavItem[] = [
 		title: "Dashboard",
 		href: "/dashboard",
 		icon: Home,
-		requiredPermissions: ["nav:dashboard"],
 	},
 	{
 		title: "Excel",
