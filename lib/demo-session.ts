@@ -19,6 +19,7 @@ import {
 } from "@/lib/demo-capabilities";
 
 export const DEMO_SESSION_COOKIE = "demo_session";
+const SUPERADMIN_EMAIL = "ignacioliotti@gmail.com";
 
 type TenantMembershipRow = MembershipLike & {
 	tenants?: { name: string | null } | { name: string | null }[] | null;
@@ -77,6 +78,64 @@ function getTenantName(
 	return Array.isArray(row.tenants)
 		? (row.tenants[0]?.name ?? null)
 		: (row.tenants.name ?? null);
+}
+
+async function loadUserMemberships(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	userId: string,
+) {
+	const { data, error } = await supabase
+		.from("memberships")
+		.select("tenant_id, role, tenants(name)")
+		.eq("user_id", userId)
+		.order("created_at", { ascending: true });
+
+	if (!error) {
+		return (data ?? []) as TenantMembershipRow[];
+	}
+
+	console.warn("[demo-session] memberships join failed; using fallback", {
+		code: error.code,
+		message: error.message,
+	});
+
+	const { data: fallbackRows, error: fallbackError } = await supabase
+		.from("memberships")
+		.select("tenant_id, role")
+		.eq("user_id", userId)
+		.order("created_at", { ascending: true });
+
+	if (fallbackError) {
+		console.warn("[demo-session] memberships fallback failed", {
+			code: fallbackError.code,
+			message: fallbackError.message,
+		});
+		return [];
+	}
+
+	const memberships = (fallbackRows ?? []) as TenantMembershipRow[];
+	const tenantIds = memberships
+		.map((membership) => membership.tenant_id)
+		.filter((tenantId): tenantId is string => Boolean(tenantId));
+
+	if (tenantIds.length === 0) {
+		return memberships;
+	}
+
+	const { data: tenants } = await supabase
+		.from("tenants")
+		.select("id, name")
+		.in("id", tenantIds);
+	const tenantNameById = new Map(
+		(tenants ?? []).map((tenant) => [tenant.id, tenant.name ?? null]),
+	);
+
+	return memberships.map((membership) => ({
+		...membership,
+		tenants: membership.tenant_id
+			? { name: tenantNameById.get(membership.tenant_id) ?? null }
+			: null,
+	}));
 }
 
 function normalizeCapabilities(value: unknown): string[] {
@@ -208,27 +267,20 @@ export async function resolveRequestAccessContext(): Promise<RequestAccessContex
 	} = await supabase.auth.getUser();
 
 	if (user) {
-		const [{ data: profile }, { data: memberships, error: membershipsError }] =
-			await Promise.all([
-				supabase
-					.from("profiles")
-					.select("is_superadmin")
-					.eq("user_id", user.id)
-					.maybeSingle(),
-				supabase
-					.from("memberships")
-					.select("tenant_id, role, tenants(name)")
-					.eq("user_id", user.id)
-					.order("created_at", { ascending: true }),
-			]);
+		const [{ data: profile }, memberships] = await Promise.all([
+			supabase
+				.from("profiles")
+				.select("is_superadmin")
+				.eq("user_id", user.id)
+				.maybeSingle(),
+			loadUserMemberships(supabase, user.id),
+		]);
 
-		if (membershipsError) {
-			console.error("[demo-session] failed to fetch memberships", membershipsError);
-		}
-
-		const isSuperAdmin = profile?.is_superadmin ?? false;
+		const isSuperAdmin =
+			(profile?.is_superadmin ?? false) ||
+			user.email?.toLowerCase() === SUPERADMIN_EMAIL;
 		const resolvedMembership = await resolveTenantMembership(
-			(memberships ?? []) as TenantMembershipRow[],
+			memberships,
 			{ isSuperAdmin },
 		);
 

@@ -5,10 +5,12 @@ import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SUPERADMIN_EMAIL = "ignacioliotti@gmail.com";
 
 async function canSwitchTenant(
 	supabase: Awaited<ReturnType<typeof createClient>>,
 	userId: string,
+	userEmail: string | undefined,
 	tenantId: string
 ) {
 	const { data: membership } = await supabase
@@ -19,6 +21,10 @@ async function canSwitchTenant(
 		.maybeSingle();
 
 	if (membership) {
+		return true;
+	}
+
+	if (userEmail?.toLowerCase() === SUPERADMIN_EMAIL) {
 		return true;
 	}
 
@@ -61,17 +67,7 @@ export async function POST(
 		return NextResponse.json({ success: false }, { status: 401 });
 	}
 
-	const allowed = await canSwitchTenant(supabase, user.id, tenantId);
-	console.log("[tenant-switch][GET]", {
-		userId: user.id,
-		tenantId,
-		allowed,
-	});
-	console.log("[tenant-switch][POST]", {
-		userId: user.id,
-		tenantId,
-		allowed,
-	});
+	const allowed = await canSwitchTenant(supabase, user.id, user.email, tenantId);
 	if (!allowed) {
 		return NextResponse.json({ success: false }, { status: 403 });
 	}
@@ -100,7 +96,7 @@ export async function GET(
 		return NextResponse.redirect(origin);
 	}
 
-	const allowed = await canSwitchTenant(supabase, user.id, tenantId);
+	const allowed = await canSwitchTenant(supabase, user.id, user.email, tenantId);
 
 	if (!allowed) {
 		return NextResponse.redirect(new URL("/onboarding", req.url));

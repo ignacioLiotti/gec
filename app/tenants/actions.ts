@@ -46,7 +46,7 @@ export async function createTenantAction(
 	errorPath: string,
 	formData: FormData
 ) {
-	const { supabase, user } = await resolveUser();
+	const { user } = await resolveUser();
 	const name = String(formData.get("name") ?? "").trim();
 
 	if (name.length < 3) {

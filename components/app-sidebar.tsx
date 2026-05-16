@@ -364,8 +364,8 @@ export function AppSidebar({
 	const [macroTables, setMacroTables] = React.useState<SidebarMacroTable[]>(
 		sidebarMacroTables ?? [],
 	);
-	const isAdminUser = Boolean(userRoles?.isAdmin || userRoles?.isSuperAdmin);
-	const tenantOptions = isAdminUser ? (tenants ?? []) : [];
+	const tenantOptions = tenants ?? [];
+	const canCreateTenant = Boolean(user && !demoMode);
 	const activeTenantId = userRoles?.tenantId ?? null;
 	const activeMacroTableId = searchParams.get("macroId");
 	const permissionKeySet = React.useMemo(
@@ -596,7 +596,7 @@ export function AppSidebar({
 									</SidebarPrefetchLink>
 								</SidebarMenuButton>
 							</div>
-							{isAdminUser && tenantOptions.length > 0 ? (
+							{tenantOptions.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										{state === "collapsed" ? (
@@ -661,19 +661,23 @@ export function AppSidebar({
 												</DropdownMenuItem>
 											);
 										})}
-										<DropdownMenuSeparator />
-										<DropdownMenuItem asChild>
-											<SidebarPrefetchLink
-												href="/tenants/new"
-												className="flex items-center gap-2"
-											>
-												<PlusCircle className="size-4" />
-												<span>Crear organizacion</span>
-											</SidebarPrefetchLink>
-										</DropdownMenuItem>
+										{canCreateTenant && (
+											<>
+												<DropdownMenuSeparator />
+												<DropdownMenuItem asChild>
+													<SidebarPrefetchLink
+														href="/tenants/new"
+														className="flex items-center gap-2"
+													>
+														<PlusCircle className="size-4" />
+														<span>Crear organizacion</span>
+													</SidebarPrefetchLink>
+												</DropdownMenuItem>
+											</>
+										)}
 									</DropdownMenuContent>
 								</DropdownMenu>
-							) : isAdminUser ? (
+							) : canCreateTenant ? (
 								state === "collapsed" ? (
 									<SidebarPrefetchLink
 										href="/tenants/new"

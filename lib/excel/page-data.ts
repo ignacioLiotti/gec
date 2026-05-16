@@ -81,6 +81,17 @@ function mapDbPreviewRowToObra(row: DbObraPreviewRow) {
 	};
 }
 
+function warnQueryError(
+	context: string,
+	error: { code?: string; message?: string } | null,
+) {
+	if (!error) return;
+	console.warn(context, {
+		code: error.code,
+		message: error.message,
+	});
+}
+
 function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
 	if (!Array.isArray(raw)) return [];
 	const next: ExcelPageMainTableColumnConfig[] = [];
@@ -155,16 +166,6 @@ function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
 	return next;
 }
 
-async function getTenantId() {
-	const access = await resolveRequestAccessContext();
-	return {
-		supabase: access.supabase,
-		user: access.user,
-		tenantId: access.tenantId,
-		actorType: access.actorType,
-	};
-}
-
 export async function getExcelPageInitialData(options?: {
 	previewOnly?: boolean;
 }) {
@@ -208,7 +209,10 @@ export async function getExcelPageInitialData(options?: {
 
 	if (previewOnly) {
 		if (obrasResult.error) {
-			console.error("[excel/page-data] failed to fetch obra preview", obrasResult.error);
+			warnQueryError(
+				"[excel/page-data] failed to fetch obra preview",
+				obrasResult.error,
+			);
 		}
 
 		return {
@@ -249,7 +253,7 @@ export async function getExcelPageInitialData(options?: {
 	}
 
 	if (obrasError) {
-		console.error("[excel/page-data] failed to fetch obras", obrasError);
+		warnQueryError("[excel/page-data] failed to fetch obras", obrasError);
 	}
 
 	return {

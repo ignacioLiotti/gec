@@ -172,7 +172,14 @@ export async function hasDocumentGenerationPermission(
     tenant: access.tenantId,
     perm_key: permissionKey,
   });
-  if (error) throw error;
+  if (error) {
+    console.warn("[document-generation/permissions] permission check failed", {
+      code: error.code,
+      message: error.message,
+      permissionKey,
+    });
+    return false;
+  }
   return Boolean(data);
 }
 

@@ -5,6 +5,7 @@ import { getRouteAccessConfig } from "./route-access";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+const SUPERADMIN_EMAIL = "ignacioliotti@gmail.com";
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 
 export type PermissionLevel = "read" | "edit" | "admin";
@@ -18,6 +19,56 @@ type PermissionRelation =
 function getPermissionRelationKey(value: PermissionRelation) {
 	const record = Array.isArray(value) ? value[0] : value;
 	return typeof record?.key === "string" ? record.key : null;
+}
+
+function warnSupabaseError(
+	context: string,
+	error: { code?: string; message?: string } | unknown,
+) {
+	if (error && typeof error === "object" && ("code" in error || "message" in error)) {
+		const typedError = error as { code?: string; message?: string };
+		console.warn(context, {
+			code: typedError.code,
+			message: typedError.message,
+		});
+		return;
+	}
+	console.warn(context, error);
+}
+
+async function isSuperAdminUser(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	user: { id: string; email?: string },
+) {
+	const { data: profile } = await supabase
+		.from("profiles")
+		.select("is_superadmin")
+		.eq("user_id", user.id)
+		.maybeSingle();
+
+	return (
+		(profile?.is_superadmin ?? false) ||
+		user.id === SUPERADMIN_USER_ID ||
+		user.email?.toLowerCase() === SUPERADMIN_EMAIL
+	);
+}
+
+async function loadUserTenantMemberships(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	userId: string,
+) {
+	const { data, error } = await supabase
+		.from("memberships")
+		.select("tenant_id, role")
+		.eq("user_id", userId)
+		.order("created_at", { ascending: true });
+
+	if (error) {
+		warnSupabaseError("Could not fetch memberships; using empty set", error);
+		return [];
+	}
+
+	return (data ?? []) as { tenant_id: string | null; role: string | null }[];
 }
 
 /**
@@ -45,29 +96,13 @@ export async function getUserRoles(): Promise<{
 		};
 	}
 
-	// Check if superadmin
-	const { data: profile } = await supabase
-		.from("profiles")
-		.select("is_superadmin")
-		.eq("user_id", user.id)
-		.maybeSingle();
-
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = await isSuperAdminUser(supabase, user);
 
 	// Get tenant membership for current user
-	const { data: memberships, error: membershipsError } = await supabase
-		.from("memberships")
-		.select("tenant_id, role")
-		.eq("user_id", user.id)
-		.order("created_at", { ascending: true });
-
-	if (membershipsError) {
-		console.error("Error fetching memberships:", membershipsError);
-	}
+	const memberships = await loadUserTenantMemberships(supabase, user.id);
 
 	const { tenantId, activeMembership } = await resolveTenantMembership(
-		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+		memberships,
 		{ isSuperAdmin }
 	);
 	const membershipRole = activeMembership?.role;
@@ -87,7 +122,7 @@ export async function getUserRoles(): Promise<{
 
 	// Get custom roles assigned to user within tenant (from user_roles table)
 	// Split into two queries to avoid RLS circular dependency issues
-	if (tenantId) {
+	if (tenantId && !isAdmin && !isSuperAdmin) {
 		try {
 			// Step 1: Get role_ids from user_roles table (simpler query, avoids RLS circular dependency)
 			const { data: userRoleIds, error: userRoleIdsError } = await supabase
@@ -102,7 +137,10 @@ export async function getUserRoles(): Promise<{
 				);
 				// Skip this query and continue with just admin/superadmin roles
 			} else if (userRoleIdsError) {
-				console.error("Error fetching user role IDs:", userRoleIdsError);
+				warnSupabaseError(
+					"Could not fetch user role IDs; continuing without custom roles",
+					userRoleIdsError,
+				);
 			} else if (userRoleIds && userRoleIds.length > 0) {
 				// Step 2: Get role details for those role_ids, filtered by tenant
 				const fetchedRoleIds = (userRoleIds as Array<{ role_id: string }>).map(
@@ -115,7 +153,10 @@ export async function getUserRoles(): Promise<{
 					.eq("tenant_id", tenantId);
 
 					if (roleDetailsError) {
-						console.error("Error fetching role details:", roleDetailsError);
+						warnSupabaseError(
+							"Could not fetch role details; continuing without custom roles",
+							roleDetailsError,
+						);
 					} else if (roleDetails) {
 						if (DEBUG_AUTH) {
 							console.log("[getUserRoles] Found roles:", roleDetails);
@@ -141,7 +182,10 @@ export async function getUserRoles(): Promise<{
 					}
 				}
 			} catch (error) {
-				console.error("Exception fetching user roles:", error);
+				warnSupabaseError(
+					"Unexpected error fetching user roles; continuing without custom roles",
+					error,
+				);
 			}
 		}
 
@@ -231,15 +275,7 @@ export async function canAccessMacroTable(
 
 	const tenantId = macroTable.tenant_id;
 
-	// Check if superadmin
-	const { data: profile } = await supabase
-		.from("profiles")
-		.select("is_superadmin")
-		.eq("user_id", user.id)
-		.maybeSingle();
-
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = await isSuperAdminUser(supabase, user);
 
 	if (isSuperAdmin) {
 		return true;
@@ -286,19 +322,35 @@ export async function canAccessMacroTable(
 	}
 
 	// Check through roles
-	const { data: userRoles } = await supabase
+	const { data: userRoles, error: userRolesError } = await supabase
 		.from("user_roles")
 		.select("role_id")
 		.eq("user_id", user.id);
 
+	if (userRolesError) {
+		warnSupabaseError(
+			"Could not fetch macro table user roles; denying macro table access",
+			userRolesError,
+		);
+		return false;
+	}
+
 	if (userRoles && userRoles.length > 0) {
 		const roleIds = userRoles.map((ur) => ur.role_id);
 
-		const { data: rolePerms } = await supabase
+		const { data: rolePerms, error: rolePermsError } = await supabase
 			.from("macro_table_permissions")
 			.select("permission_level")
 			.eq("macro_table_id", macroTableId)
 			.in("role_id", roleIds);
+
+		if (rolePermsError) {
+			warnSupabaseError(
+				"Could not fetch macro table role permissions; denying macro table access",
+				rolePermsError,
+			);
+			return false;
+		}
 
 		if (rolePerms && rolePerms.length > 0) {
 			const maxRoleLevel = Math.max(
@@ -328,33 +380,21 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 		return false;
 	}
 
-	// Check if superadmin
-	const { data: profile } = await supabase
-		.from("profiles")
-		.select("is_superadmin")
-		.eq("user_id", user.id)
-		.maybeSingle();
-
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = await isSuperAdminUser(supabase, user);
 
 	if (isSuperAdmin) {
 		return true;
 	}
 
 	// Get current tenant
-	const { data: memberships } = await supabase
-		.from("memberships")
-		.select("tenant_id, role")
-		.eq("user_id", user.id)
-		.order("created_at", { ascending: true });
+	const memberships = await loadUserTenantMemberships(supabase, user.id);
 
 	if (!memberships || memberships.length === 0) {
 		return false;
 	}
 
 	const { tenantId, activeMembership } = await resolveTenantMembership(
-		memberships as { tenant_id: string | null; role: string | null }[],
+		memberships,
 		{ isSuperAdmin }
 	);
 
@@ -370,32 +410,55 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 	}
 
 	// Check direct user permission override
-	const { data: override } = await supabase
+	const { data: override, error: overrideError } = await supabase
 		.from("user_permission_overrides")
 		.select("is_granted, permissions!inner(key)")
 		.eq("user_id", user.id)
 		.eq("permissions.key", permissionKey)
 		.maybeSingle();
 
+	if (overrideError) {
+		warnSupabaseError(
+			"Could not fetch user permission override; continuing without override",
+			overrideError,
+		);
+	}
+
 	if (override?.is_granted) {
 		return true;
 	}
 
 	// Check through roles
-	const { data: userRoles } = await supabase
+	const { data: userRoles, error: userRolesError } = await supabase
 		.from("user_roles")
 		.select("role_id, roles!inner(tenant_id)")
 		.eq("user_id", user.id)
 		.eq("roles.tenant_id", tenantId);
 
+	if (userRolesError) {
+		warnSupabaseError(
+			"Could not fetch permission user roles; denying permission",
+			userRolesError,
+		);
+		return false;
+	}
+
 	if (userRoles && userRoles.length > 0) {
 		const roleIds = userRoles.map((ur) => ur.role_id);
 
-		const { data: rolePerms } = await supabase
+		const { data: rolePerms, error: rolePermsError } = await supabase
 			.from("role_permissions")
 			.select("permissions!inner(key)")
 			.in("role_id", roleIds)
 			.eq("permissions.key", permissionKey);
+
+		if (rolePermsError) {
+			warnSupabaseError(
+				"Could not fetch role permissions; denying permission",
+				rolePermsError,
+			);
+			return false;
+		}
 
 		if (rolePerms && rolePerms.length > 0) {
 			return true;
@@ -435,11 +498,18 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 	const permissionKeys = new Set<string>();
 
 	// Get direct overrides
-	const { data: overrides } = await supabase
+	const { data: overrides, error: overridesError } = await supabase
 		.from("user_permission_overrides")
 		.select("permissions(key)")
 		.eq("user_id", user.id)
 		.eq("is_granted", true);
+
+	if (overridesError) {
+		warnSupabaseError(
+			"Could not fetch permission overrides; continuing without overrides",
+			overridesError,
+		);
+	}
 
 	for (const o of overrides ?? []) {
 		const key = getPermissionRelationKey(o.permissions as PermissionRelation);
@@ -449,19 +519,35 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 	}
 
 	// Get role permissions
-	const { data: userRoles } = await supabase
+	const { data: userRoles, error: userRolesError } = await supabase
 		.from("user_roles")
 		.select("role_id, roles!inner(tenant_id)")
 		.eq("user_id", user.id)
 		.eq("roles.tenant_id", tenantId);
 
+	if (userRolesError) {
+		warnSupabaseError(
+			"Could not fetch permission key user roles; returning direct permissions only",
+			userRolesError,
+		);
+		return Array.from(permissionKeys);
+	}
+
 	if (userRoles && userRoles.length > 0) {
 		const roleIds = userRoles.map((ur) => ur.role_id);
 
-		const { data: rolePerms } = await supabase
+		const { data: rolePerms, error: rolePermsError } = await supabase
 			.from("role_permissions")
 			.select("permissions(key)")
 			.in("role_id", roleIds);
+
+		if (rolePermsError) {
+			warnSupabaseError(
+				"Could not fetch permission keys from roles; returning direct permissions only",
+				rolePermsError,
+			);
+			return Array.from(permissionKeys);
+		}
 
 		for (const rp of rolePerms ?? []) {
 			const key = getPermissionRelationKey(rp.permissions as PermissionRelation);

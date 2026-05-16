@@ -4,6 +4,19 @@ import {
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
 
+type SidebarMacroTableJoin = {
+	macro_table_id: string;
+	position: number | null;
+	macro_tables?: { name?: string | null } | { name?: string | null }[] | null;
+};
+
+function getJoinedMacroTableName(row: SidebarMacroTableJoin) {
+	const joined = Array.isArray(row.macro_tables)
+		? row.macro_tables[0]
+		: row.macro_tables;
+	return joined?.name ?? "Unknown";
+}
+
 export async function GET() {
 	const access = await resolveRequestAccessContext();
 
@@ -40,21 +53,22 @@ export async function GET() {
 		}
 
 		// Check if user is admin/superadmin
-		const { data: membership } = await supabase
+		const { data: membership, error: membershipError } = await supabase
 			.from("memberships")
 			.select("role")
 			.eq("user_id", user.id)
 			.eq("tenant_id", tenantId)
 			.maybeSingle();
 
-		const { data: profile } = await supabase
-			.from("profiles")
-			.select("is_superadmin")
-			.eq("user_id", user.id)
-			.maybeSingle();
+		if (membershipError) {
+			console.warn("[sidebar-macro-tables] membership lookup failed", {
+				code: membershipError.code,
+				message: membershipError.message,
+			});
+		}
 
 		const isAdmin = membership?.role === "admin" || membership?.role === "owner";
-		const isSuperAdmin = profile?.is_superadmin ?? false;
+		const isSuperAdmin = access.isSuperAdmin;
 
 		// If admin/superadmin, show all macro tables marked for sidebar
 		if (isAdmin || isSuperAdmin) {
@@ -71,7 +85,7 @@ export async function GET() {
 
 			// Deduplicate by macro_table_id
 			const seen = new Set<string>();
-			const tables = (sidebarTables ?? [])
+			const tables = ((sidebarTables ?? []) as SidebarMacroTableJoin[])
 				.filter((t) => {
 					const id = t.macro_table_id;
 					if (seen.has(id)) return false;
@@ -80,7 +94,7 @@ export async function GET() {
 				})
 				.map((t) => ({
 					id: t.macro_table_id,
-					name: (t.macro_tables as any)?.name ?? "Unknown",
+					name: getJoinedMacroTableName(t),
 					position: t.position,
 				}));
 
@@ -88,11 +102,19 @@ export async function GET() {
 		}
 
 		// For regular users, get tables based on their roles
-		const { data: userRoles } = await supabase
+		const { data: userRoles, error: userRolesError } = await supabase
 			.from("user_roles")
 			.select("role_id")
 			.eq("user_id", user.id)
 			.eq("tenant_id", tenantId);
+
+		if (userRolesError) {
+			console.warn("[sidebar-macro-tables] user role lookup failed", {
+				code: userRolesError.code,
+				message: userRolesError.message,
+			});
+			return NextResponse.json({ tables: [] });
+		}
 
 		if (!userRoles || userRoles.length === 0) {
 			return NextResponse.json({ tables: [] });
@@ -113,7 +135,7 @@ export async function GET() {
 
 		// Deduplicate by macro_table_id
 		const seen = new Set<string>();
-		const tables = (sidebarTables ?? [])
+		const tables = ((sidebarTables ?? []) as SidebarMacroTableJoin[])
 			.filter((t) => {
 				const id = t.macro_table_id;
 				if (seen.has(id)) return false;
@@ -122,13 +144,13 @@ export async function GET() {
 			})
 			.map((t) => ({
 				id: t.macro_table_id,
-				name: (t.macro_tables as any)?.name ?? "Unknown",
+				name: getJoinedMacroTableName(t),
 				position: t.position,
 			}));
 
 		return NextResponse.json({ tables });
 	} catch (error) {
-		console.error("[sidebar-macro-tables] Error:", error);
+		console.warn("[sidebar-macro-tables] Error:", error);
 		return NextResponse.json({ tables: [] });
 	}
 }
