@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sintesis Workflow Map</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101114;
+      --panel: #181a20;
+      --panel-2: #20232a;
+      --ink: #f4f0e8;
+      --muted: #a9a096;
+      --line: #393d48;
+      --line-active: #ffb45e;
+      --accent: #ff8f3d;
+      --accent-2: #74d7c4;
+      --danger: #ff6b6b;
+      --shadow: 0 18px 55px rgba(0, 0, 0, 0.36);
+      --radius: 8px;
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 143, 61, 0.08), transparent 320px),
+        var(--bg);
+      color: var(--ink);
+    }
+
+    body {
+      overflow-x: hidden;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: rgba(16, 17, 20, 0.92);
+      backdrop-filter: blur(16px);
+      padding: 22px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .lede {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .status {
+      display: grid;
+      gap: 8px;
+      margin: 18px 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .status strong {
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    .tools {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .search {
+      width: 100%;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #111319;
+      color: var(--ink);
+      padding: 0 12px;
+      outline: none;
+    }
+
+    .search:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(255, 143, 61, 0.18);
+    }
+
+    .file-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #151820;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .file-label:hover {
+      border-color: rgba(255, 143, 61, 0.72);
+    }
+
+    .file-label input {
+      display: none;
+    }
+
+    .category {
+      margin-top: 18px;
+    }
+
+    .category-title {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .flow-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .flow-button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--ink);
+      padding: 10px;
+      text-align: left;
+      cursor: pointer;
+      display: grid;
+      gap: 4px;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .flow-button:hover {
+      border-color: rgba(255, 143, 61, 0.75);
+      transform: translateY(-1px);
+    }
+
+    .flow-button.active {
+      border-color: var(--accent);
+      background: rgba(255, 143, 61, 0.13);
+    }
+
+    .flow-button strong {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .flow-button span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto minmax(620px, 1fr) auto;
+      gap: 16px;
+      padding: 24px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .selected {
+      display: grid;
+      gap: 8px;
+    }
+
+    .selected h2 {
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .selected p {
+      max-width: 920px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .dot.ui {
+      background: #8fb7ff;
+    }
+
+    .dot.domain {
+      background: #74d7c4;
+    }
+
+    .dot.data {
+      background: #d5b2ff;
+    }
+
+    .dot.tooling {
+      background: #ffd166;
+    }
+
+    .canvas-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
+      gap: 14px;
+      min-height: 620px;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      min-height: 620px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        rgba(20, 22, 27, 0.88);
+      background-size: 44px 44px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .canvas {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 620px;
+    }
+
+    .handoff-rail {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(24, 26, 32, 0.92);
+      padding: 14px;
+      overflow: auto;
+      box-shadow: var(--shadow);
+    }
+
+    .handoff-rail h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .handoff-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .handoff-card {
+      border: 1px solid rgba(255, 180, 94, 0.34);
+      border-radius: var(--radius);
+      background: rgba(255, 143, 61, 0.08);
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .handoff-card strong {
+      color: var(--line-active);
+      font-size: 13px;
+    }
+
+    .handoff-route {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .handoff-passes {
+      color: var(--muted);
+    }
+
+    .edges {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    .edge {
+      stroke: rgba(130, 138, 152, 0);
+      stroke-width: 2;
+      fill: none;
+      transition: stroke 160ms ease, stroke-width 160ms ease, opacity 160ms ease;
+    }
+
+    .edge.active {
+      stroke: var(--line-active);
+      stroke-width: 5;
+      filter: drop-shadow(0 0 5px rgba(255, 180, 94, 0.32));
+    }
+
+    .edge.dimmed {
+      opacity: 0;
+    }
+
+    .node {
+      position: absolute;
+      width: min(16vw, 190px);
+      min-width: 132px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(28, 31, 38, 0.96);
+      padding: 12px;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
+    }
+
+    .node.dimmed {
+      opacity: 0.18;
+    }
+
+    .node.active {
+      border-color: var(--accent);
+      background: rgba(61, 34, 20, 0.98);
+      box-shadow: 0 0 0 4px rgba(255, 143, 61, 0.16), 0 16px 40px rgba(0, 0, 0, 0.32);
+      opacity: 1;
+      z-index: 5;
+    }
+
+    .node.entry {
+      border-color: var(--accent-2);
+    }
+
+    .node-title {
+      font-size: 14px;
+      line-height: 1.2;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .node-meta {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .node::before {
+      content: "";
+      display: block;
+      width: 24px;
+      height: 3px;
+      border-radius: 99px;
+      margin-bottom: 8px;
+      background: var(--accent);
+    }
+
+    .node[data-group="ui"]::before {
+      background: #8fb7ff;
+    }
+
+    .node[data-group="domain"]::before {
+      background: #74d7c4;
+    }
+
+    .node[data-group="data"]::before {
+      background: #d5b2ff;
+    }
+
+    .node[data-group="tooling"]::before {
+      background: #ffd166;
+    }
+
+    .node[data-group="side-effect"]::before {
+      background: #ff8f8f;
+    }
+
+    .inspector {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 16px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(24, 26, 32, 0.92);
+      padding: 16px;
+    }
+
+    .panel h3 {
+      margin-bottom: 10px;
+      font-size: 15px;
+    }
+
+    .node-detail {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .node-detail strong {
+      color: var(--ink);
+    }
+
+    .path-pill {
+      display: inline-block;
+      width: fit-content;
+      max-width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 5px 7px;
+      background: #111319;
+      color: #d8d0c6;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .steps {
+      display: grid;
+      gap: 10px;
+      max-height: 340px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.025);
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .step-title {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .step-num {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(255, 143, 61, 0.18);
+      color: var(--line-active);
+      font-size: 11px;
+    }
+
+    .step-route,
+    .step-passes,
+    .step-notes {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .step-passes b,
+    .step-notes b {
+      color: #d8d0c6;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .error {
+      color: var(--danger);
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: relative;
+        height: auto;
+      }
+
+      .main {
+        padding: 16px;
+      }
+
+      .topbar,
+      .inspector {
+        grid-template-columns: 1fr;
+      }
+
+      .legend {
+        justify-content: flex-start;
+      }
+
+      .canvas-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .canvas-wrap,
+      .canvas {
+        min-height: 760px;
+      }
+
+      .handoff-rail {
+        max-height: none;
+      }
+
+      .node {
+        width: 150px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1 id="map-title">Workflow Map</h1>
+        <p class="lede" id="map-description">
+          Select a workflow to highlight the packages, components, APIs, and services involved.
+        </p>
+      </div>
+
+      <div class="status" id="data-status">
+        <div><strong>Data source</strong></div>
+        <div>Loading <code>workflow-map.flows.json</code>...</div>
+      </div>
+
+      <div class="tools">
+        <input class="search" id="flow-search" type="search" placeholder="Filter workflows" />
+        <label class="file-label">
+          Load JSON file
+          <input id="json-file" type="file" accept="application/json,.json" />
+        </label>
+      </div>
+
+      <div id="flow-menu"></div>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div class="selected">
+          <h2 id="selected-title">Loading map...</h2>
+          <p id="selected-summary">The diagram will appear as soon as the JSON data is available.</p>
+        </div>
+        <div class="legend" aria-label="Node groups">
+          <span class="chip"><span class="dot"></span>Route / server</span>
+          <span class="chip"><span class="dot ui"></span>UI</span>
+          <span class="chip"><span class="dot domain"></span>Domain</span>
+          <span class="chip"><span class="dot data"></span>Data</span>
+          <span class="chip"><span class="dot tooling"></span>Tooling</span>
+        </div>
+      </section>
+
+      <section class="canvas-layout" aria-label="Workflow package map">
+        <div class="canvas-wrap">
+          <div class="canvas" id="canvas">
+            <svg class="edges" id="edges" aria-hidden="true"></svg>
+            <div id="nodes"></div>
+          </div>
+        </div>
+        <aside class="handoff-rail">
+          <h3>Active handoffs</h3>
+          <div class="handoff-list" id="handoffs"></div>
+        </aside>
+      </section>
+
+      <section class="inspector">
+        <article class="panel">
+          <h3>Selected package</h3>
+          <div class="node-detail" id="node-detail">
+            <p class="empty">Click any package or component node to inspect its role.</p>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>Workflow steps</h3>
+          <div class="steps" id="steps"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script id="fallback-data" type="application/json">
+{
+  "metadata": {
+    "title": "Sintesis Workflow Map",
+    "description": "Fallback map. Load workflow-map.flows.json for the full editable data set.",
+    "schemaVersion": 1
+  },
+  "nodes": [
+    {"id":"browser","label":"Browser / User","kind":"actor","group":"entry","path":"User interaction","summary":"User or developer entry point.","x":6,"y":20},
+    {"id":"app-router","label":"app/","kind":"package","group":"next","path":"app","summary":"Next App Router pages and route handlers.","x":28,"y":20},
+    {"id":"components","label":"components/","kind":"package","group":"ui","path":"components","summary":"Shared UI components.","x":50,"y":12},
+    {"id":"api","label":"app/api","kind":"package","group":"server","path":"app/api","summary":"Server route handlers.","x":50,"y":32},
+    {"id":"lib","label":"lib/","kind":"package","group":"domain","path":"lib","summary":"Domain and integration helpers.","x":72,"y":20},
+    {"id":"supabase","label":"Supabase","kind":"service","group":"data","path":"supabase","summary":"Auth, Postgres, RLS, and storage.","x":92,"y":20}
+  ],
+  "flows": [
+    {
+      "id":"fallback-request",
+      "label":"Request lifecycle",
+      "category":"Fallback",
+      "summary":"Basic app request flow.",
+      "steps":[
+        {"from":"browser","to":"app-router","label":"Navigate","passes":"URL and session","notes":"Next handles the route."},
+        {"from":"app-router","to":"components","label":"Render UI","passes":"props and data","notes":"Client and server components display the page."},
+        {"from":"app-router","to":"api","label":"Fetch data","passes":"tenant-scoped request","notes":"API handlers authorize and read data."},
+        {"from":"api","to":"lib","label":"Apply domain logic","passes":"validated payload","notes":"Shared helpers normalize behavior."},
+        {"from":"lib","to":"supabase","label":"Persist/read","passes":"tenant data","notes":"RLS enforces tenant isolation."}
+      ]
+    }
+  ]
+}
+  </script>
+
+  <script>
+    const state = {
+      data: null,
+      selectedFlowId: null,
+      selectedNodeId: null,
+      query: ""
+    };
+
+    const els = {
+      title: document.getElementById("map-title"),
+      description: document.getElementById("map-description"),
+      status: document.getElementById("data-status"),
+      search: document.getElementById("flow-search"),
+      file: document.getElementById("json-file"),
+      menu: document.getElementById("flow-menu"),
+      selectedTitle: document.getElementById("selected-title"),
+      selectedSummary: document.getElementById("selected-summary"),
+      canvas: document.getElementById("canvas"),
+      edges: document.getElementById("edges"),
+      handoffs: document.getElementById("handoffs"),
+      nodes: document.getElementById("nodes"),
+      detail: document.getElementById("node-detail"),
+      steps: document.getElementById("steps")
+    };
+
+    async function loadData() {
+      try {
+        const response = await fetch("workflow-map.flows.json", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        setData(data, "workflow-map.flows.json");
+      } catch (error) {
+        const fallback = JSON.parse(document.getElementById("fallback-data").textContent);
+        setData(fallback, "embedded fallback");
+        setStatus(
+          "Embedded fallback",
+          "Could not fetch workflow-map.flows.json. If you opened this as a file, use the Load JSON file button or serve the docs folder locally.",
+          true
+        );
+      }
+    }
+
+    function setData(data, source) {
+      validateData(data);
+      state.data = data;
+      state.selectedFlowId = data.flows[0]?.id ?? null;
+      state.selectedNodeId = null;
+      els.title.textContent = data.metadata?.title ?? "Workflow Map";
+      els.description.textContent = data.metadata?.description ?? "";
+      setStatus(source, `${data.nodes.length} nodes, ${data.flows.length} flows`, false);
+      render();
+    }
+
+    function setStatus(source, message, isError) {
+      els.status.innerHTML = `
+        <div><strong>Data source</strong></div>
+        <div class="${isError ? "error" : ""}">${escapeHtml(source)}</div>
+        <div>${escapeHtml(message)}</div>
+      `;
+    }
+
+    function validateData(data) {
+      if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.flows)) {
+        throw new Error("Workflow data must include nodes[] and flows[].");
+      }
+      const nodeIds = new Set(data.nodes.map((node) => node.id));
+      for (const flow of data.flows) {
+        for (const step of flow.steps ?? []) {
+          if (!nodeIds.has(step.from) || !nodeIds.has(step.to)) {
+            throw new Error(`Flow ${flow.id} references an unknown node.`);
+          }
+        }
+      }
+    }
+
+    function render() {
+      if (!state.data) return;
+      renderMenu();
+      renderCanvas();
+      renderInspector();
+    }
+
+    function renderMenu() {
+      const flows = state.data.flows.filter((flow) => {
+        const haystack = `${flow.label} ${flow.category} ${flow.summary}`.toLowerCase();
+        return haystack.includes(state.query.toLowerCase());
+      });
+      const byCategory = new Map();
+      for (const flow of flows) {
+        const category = flow.category || "Other";
+        if (!byCategory.has(category)) byCategory.set(category, []);
+        byCategory.get(category).push(flow);
+      }
+
+      els.menu.innerHTML = "";
+      for (const [category, categoryFlows] of byCategory) {
+        const section = document.createElement("section");
+        section.className = "category";
+        section.innerHTML = `<div class="category-title">${escapeHtml(category)}</div>`;
+        const list = document.createElement("div");
+        list.className = "flow-list";
+        for (const flow of categoryFlows) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `flow-button ${flow.id === state.selectedFlowId ? "active" : ""}`;
+          button.innerHTML = `
+            <strong>${escapeHtml(flow.label)}</strong>
+            <span>${escapeHtml(flow.summary || "")}</span>
+          `;
+          button.addEventListener("click", () => {
+            state.selectedFlowId = flow.id;
+            state.selectedNodeId = flow.entryNode || flow.steps?.[0]?.from || null;
+            render();
+          });
+          list.appendChild(button);
+        }
+        section.appendChild(list);
+        els.menu.appendChild(section);
+      }
+    }
+
+    function renderCanvas() {
+      const flow = getSelectedFlow();
+      const activeNodeIds = new Set();
+      const activeEdgeKeys = new Set();
+      for (const step of flow?.steps ?? []) {
+        activeNodeIds.add(step.from);
+        activeNodeIds.add(step.to);
+        activeEdgeKeys.add(edgeKey(step.from, step.to));
+      }
+      if (flow?.entryNode) activeNodeIds.add(flow.entryNode);
+
+      els.nodes.innerHTML = "";
+      els.edges.innerHTML = "";
+
+      const rect = els.canvas.getBoundingClientRect();
+      els.edges.setAttribute("viewBox", `0 0 ${rect.width || 1000} ${rect.height || 610}`);
+
+      const nodeById = new Map(state.data.nodes.map((node) => [node.id, node]));
+      const drawnEdges = new Set();
+      const allEdges = collectEdges();
+
+      for (const step of allEdges) {
+        const from = nodeById.get(step.from);
+        const to = nodeById.get(step.to);
+        if (!from || !to) continue;
+        const key = edgeKey(step.from, step.to);
+        if (drawnEdges.has(key)) continue;
+        drawnEdges.add(key);
+        drawEdge(from, to, activeEdgeKeys.has(key), Boolean(flow));
+      }
+
+      for (const node of state.data.nodes) {
+        const el = document.createElement("button");
+        el.type = "button";
+        const isActive = activeNodeIds.has(node.id);
+        el.className = `node ${isActive ? "active" : "dimmed"} ${node.id === flow?.entryNode ? "entry" : ""}`;
+        el.dataset.group = node.group || "";
+        el.style.left = `${node.x}%`;
+        el.style.top = `${node.y}%`;
+        el.innerHTML = `
+          <div class="node-title">${escapeHtml(node.label)}</div>
+          <div class="node-meta">${escapeHtml(node.kind || "node")}</div>
+        `;
+        el.addEventListener("click", () => {
+          state.selectedNodeId = node.id;
+          renderInspector();
+        });
+        els.nodes.appendChild(el);
+      }
+    }
+
+    function collectEdges() {
+      const result = [];
+      for (const flow of state.data.flows) {
+        for (const step of flow.steps ?? []) result.push(step);
+      }
+      return result;
+    }
+
+    function drawEdge(from, to, isActive, hasFlow) {
+      const rect = els.canvas.getBoundingClientRect();
+      const width = rect.width || 1000;
+      const height = rect.height || 610;
+      const x1 = (from.x / 100) * width;
+      const y1 = (from.y / 100) * height;
+      const x2 = (to.x / 100) * width;
+      const y2 = (to.y / 100) * height;
+      const dx = Math.max(70, Math.abs(x2 - x1) * 0.42);
+      const c1x = x1 + (x2 >= x1 ? dx : -dx);
+      const c2x = x2 - (x2 >= x1 ? dx : -dx);
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`);
+      path.setAttribute("class", `edge ${isActive ? "active" : hasFlow ? "dimmed" : ""}`);
+      els.edges.appendChild(path);
+    }
+
+    function renderInspector() {
+      const flow = getSelectedFlow();
+      if (!flow) return;
+      els.selectedTitle.textContent = flow.label;
+      els.selectedSummary.textContent = flow.summary || "";
+
+      const defaultNodeId = state.selectedNodeId || flow.entryNode || flow.steps?.[0]?.from;
+      const node = state.data.nodes.find((candidate) => candidate.id === defaultNodeId);
+      if (node) {
+        els.detail.innerHTML = `
+          <p><strong>${escapeHtml(node.label)}</strong> <span>(${escapeHtml(node.kind || "node")})</span></p>
+          <span class="path-pill">${escapeHtml(node.path || node.id)}</span>
+          <p>${escapeHtml(node.summary || "")}</p>
+        `;
+      } else {
+        els.detail.innerHTML = `<p class="empty">Click any package or component node to inspect its role.</p>`;
+      }
+
+      els.steps.innerHTML = "";
+      els.handoffs.innerHTML = "";
+      for (const [index, step] of (flow.steps ?? []).entries()) {
+        const from = nodeLabel(step.from);
+        const to = nodeLabel(step.to);
+        const handoff = document.createElement("article");
+        handoff.className = "handoff-card";
+        handoff.innerHTML = `
+          <strong>${index + 1}. ${escapeHtml(step.label || "handoff")}</strong>
+          <div class="handoff-route">${escapeHtml(from)} -> ${escapeHtml(to)}</div>
+          <div class="handoff-passes">${escapeHtml(step.passes || "documented in JSON")}</div>
+        `;
+        els.handoffs.appendChild(handoff);
+
+        const el = document.createElement("article");
+        el.className = "step";
+        el.innerHTML = `
+          <div class="step-title"><span class="step-num">${index + 1}</span>${escapeHtml(step.label || "handoff")}</div>
+          <div class="step-route">${escapeHtml(from)} -> ${escapeHtml(to)}</div>
+          <div class="step-passes"><b>Passes:</b> ${escapeHtml(step.passes || "documented in JSON")}</div>
+          <div class="step-notes"><b>Notes:</b> ${escapeHtml(step.notes || "")}</div>
+        `;
+        els.steps.appendChild(el);
+      }
+    }
+
+    function getSelectedFlow() {
+      return state.data?.flows.find((flow) => flow.id === state.selectedFlowId) ?? state.data?.flows[0] ?? null;
+    }
+
+    function nodeLabel(id) {
+      return state.data.nodes.find((node) => node.id === id)?.label ?? id;
+    }
+
+    function edgeKey(from, to) {
+      return `${from}->${to}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    els.search.addEventListener("input", (event) => {
+      state.query = event.target.value;
+      renderMenu();
+    });
+
+    els.file.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        setData(JSON.parse(text), file.name);
+      } catch (error) {
+        setStatus(file.name, error instanceof Error ? error.message : "Could not parse JSON", true);
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      if (state.data) renderCanvas();
+    });
+
+    loadData();
+  </script>
+</body>
+</html>

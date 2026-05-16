@@ -235,6 +235,12 @@ export default function SystemDesignPage() {
             <Button variant="outline" asChild>
               <Link href="/dashboard">Ir al dashboard</Link>
             </Button>
+            <Button variant="outline" asChild>
+              <Link href="/system-design/tokens">Design Tokens</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/system-design/audit">Component Audit</Link>
+            </Button>
             <Button asChild className="bg-zinc-900 text-white hover:bg-zinc-800">
               <Link href="/excel">Abrir app</Link>
             </Button>

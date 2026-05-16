@@ -1,0 +1,888 @@
+{
+  "metadata": {
+    "title": "Sintesis Workflow Map",
+    "description": "Data-driven map of how app packages, components, APIs, and services collaborate to complete product and build workflows.",
+    "schemaVersion": 1,
+    "lastReviewed": "2026-05-12"
+  },
+  "nodes": [
+    {
+      "id": "browser",
+      "label": "Browser / User",
+      "kind": "actor",
+      "group": "entry",
+      "path": "User interaction",
+      "summary": "Clicks, form submissions, uploads, route navigation, and build commands initiated by a user or developer.",
+      "x": 4,
+      "y": 10
+    },
+    {
+      "id": "app-router",
+      "label": "app/",
+      "kind": "package",
+      "group": "next",
+      "path": "app",
+      "summary": "Next.js App Router pages, layouts, route groups, and server components.",
+      "x": 18,
+      "y": 10
+    },
+    {
+      "id": "admin",
+      "label": "app/admin",
+      "kind": "route-area",
+      "group": "next",
+      "path": "app/admin",
+      "summary": "Tenant-scoped administration for users, roles, defaults, audit log, secrets, and configuration.",
+      "x": 33,
+      "y": 5
+    },
+    {
+      "id": "excel",
+      "label": "app/excel",
+      "kind": "route-area",
+      "group": "next",
+      "path": "app/excel",
+      "summary": "Main obra workspace: General, Documents, Tablas, Flujo, and data-flow experiences.",
+      "x": 33,
+      "y": 15
+    },
+    {
+      "id": "macro",
+      "label": "app/macro",
+      "kind": "route-area",
+      "group": "next",
+      "path": "app/macro",
+      "summary": "Cross-obra macro table views and report entry points.",
+      "x": 33,
+      "y": 25
+    },
+    {
+      "id": "document-generation",
+      "label": "app/document-generation",
+      "kind": "route-area",
+      "group": "next",
+      "path": "app/document-generation",
+      "summary": "Document template selection, draft data entry, and generated document review.",
+      "x": 33,
+      "y": 35
+    },
+    {
+      "id": "notifications-page",
+      "label": "app/notifications",
+      "kind": "route-area",
+      "group": "next",
+      "path": "app/notifications",
+      "summary": "Inbox view that merges pendientes, calendar events, workflow items, and notification records.",
+      "x": 33,
+      "y": 45
+    },
+    {
+      "id": "components",
+      "label": "components/",
+      "kind": "package",
+      "group": "ui",
+      "path": "components",
+      "summary": "Shared React components, app shell, tabs, viewers, reports, quick actions, and shadcn primitives.",
+      "x": 49,
+      "y": 10
+    },
+    {
+      "id": "form-table",
+      "label": "components/form-table",
+      "kind": "component-package",
+      "group": "ui",
+      "path": "components/form-table",
+      "summary": "Editable table engine used for obras, certificates, dynamic tablas, and admin data grids.",
+      "x": 64,
+      "y": 5
+    },
+    {
+      "id": "quick-actions",
+      "label": "components/quick-actions",
+      "kind": "component-package",
+      "group": "ui",
+      "path": "components/quick-actions",
+      "summary": "Floating multi-step action runner configured from tenant default folders and tables.",
+      "x": 64,
+      "y": 15
+    },
+    {
+      "id": "viewer-report",
+      "label": "components/viewer + report",
+      "kind": "component-package",
+      "group": "ui",
+      "path": "components/viewer, components/report",
+      "summary": "Document preview, PDF/3D viewers, report builders, and rendered report surfaces.",
+      "x": 64,
+      "y": 25
+    },
+    {
+      "id": "api",
+      "label": "app/api",
+      "kind": "package",
+      "group": "server",
+      "path": "app/api",
+      "summary": "Route handlers for obras, tablas, OCR imports, macros, calendars, notifications, billing, and PDF rendering.",
+      "x": 49,
+      "y": 42
+    },
+    {
+      "id": "auth-tenant",
+      "label": "lib auth + tenant",
+      "kind": "lib-package",
+      "group": "server",
+      "path": "lib/tenant-selection.ts, lib/route-guard.ts, lib/route-access.ts",
+      "summary": "Resolves the active tenant, user roles, route visibility, and request authorization.",
+      "x": 64,
+      "y": 38
+    },
+    {
+      "id": "obra-defaults",
+      "label": "lib/obra-defaults",
+      "kind": "lib-package",
+      "group": "domain",
+      "path": "lib/obra-defaults.ts",
+      "summary": "Materializes tenant default folders, tabs, tables, and action scaffolding into an obra instance.",
+      "x": 78,
+      "y": 8
+    },
+    {
+      "id": "tablas",
+      "label": "lib/tablas",
+      "kind": "lib-package",
+      "group": "domain",
+      "path": "lib/tablas.ts",
+      "summary": "Dynamic table schema helpers, parsing, coercion, formula support, and row handling contracts.",
+      "x": 78,
+      "y": 18
+    },
+    {
+      "id": "data-flow",
+      "label": "lib/data-flow-*",
+      "kind": "lib-package",
+      "group": "domain",
+      "path": "lib/data-flow-builder.ts, lib/data-flow-recompute.ts, lib/data-flow-writeback.ts",
+      "summary": "Effective data-flow config, calculations, traceability, writeback suggestions, and recomputation helpers.",
+      "x": 78,
+      "y": 28
+    },
+    {
+      "id": "macro-lib",
+      "label": "lib/macro-tables",
+      "kind": "lib-package",
+      "group": "domain",
+      "path": "lib/macro-tables.ts, lib/macro-table-source-selection.ts",
+      "summary": "Cross-obra source selection, stable identity, override mapping, and macro row assembly.",
+      "x": 78,
+      "y": 38
+    },
+    {
+      "id": "notifications-lib",
+      "label": "lib/notifications + workflow",
+      "kind": "lib-package",
+      "group": "side-effect",
+      "path": "lib/notifications, lib/workflow",
+      "summary": "Notification rules, delivery engine, workflow helpers, emails, and calendar side-effect orchestration.",
+      "x": 78,
+      "y": 48
+    },
+    {
+      "id": "email",
+      "label": "lib/email + Resend",
+      "kind": "service-adapter",
+      "group": "side-effect",
+      "path": "lib/email",
+      "summary": "Transactional email templates and Resend delivery adapter for invitations and workflow notifications.",
+      "x": 92,
+      "y": 48
+    },
+    {
+      "id": "supabase",
+      "label": "Supabase Postgres + RLS",
+      "kind": "service",
+      "group": "data",
+      "path": "supabase",
+      "summary": "Tenant-scoped relational data, RPC functions, auth identities, memberships, and RLS policies.",
+      "x": 92,
+      "y": 18
+    },
+    {
+      "id": "storage",
+      "label": "Supabase Storage",
+      "kind": "service",
+      "group": "data",
+      "path": "obra-documents bucket",
+      "summary": "Document binaries, generated files, PDFs, CSV/XLSX uploads, and model artifacts.",
+      "x": 92,
+      "y": 30
+    },
+    {
+      "id": "ai-ocr",
+      "label": "AI OCR / extraction",
+      "kind": "external-service",
+      "group": "external",
+      "path": "OpenAI / Gemini via AI SDK",
+      "summary": "Structured extraction from PDFs, images, spreadsheets, and invoices into tenant-configured tables.",
+      "x": 92,
+      "y": 6
+    },
+    {
+      "id": "workflow-engine",
+      "label": "workflow engine",
+      "kind": "external-service",
+      "group": "side-effect",
+      "path": "workflow npm package, workflows",
+      "summary": "Async jobs for reminders, obra completion, notifications, and scheduled dispatches.",
+      "x": 92,
+      "y": 40
+    },
+    {
+      "id": "scripts",
+      "label": "scripts/",
+      "kind": "package",
+      "group": "tooling",
+      "path": "scripts",
+      "summary": "Demo tenant bootstrapping, backfills, migrations support, and local operational scripts.",
+      "x": 18,
+      "y": 62
+    },
+    {
+      "id": "tests",
+      "label": "tests/",
+      "kind": "package",
+      "group": "tooling",
+      "path": "tests, playwright",
+      "summary": "Vitest unit coverage and Playwright route/workflow checks.",
+      "x": 33,
+      "y": 62
+    },
+    {
+      "id": "next-config",
+      "label": "next.config.ts",
+      "kind": "config",
+      "group": "tooling",
+      "path": "next.config.ts",
+      "summary": "Next.js build behavior, Sentry wrapping, server external packages, and image/runtime config.",
+      "x": 49,
+      "y": 62
+    },
+    {
+      "id": "build-output",
+      "label": ".next / deployment bundle",
+      "kind": "artifact",
+      "group": "tooling",
+      "path": ".next",
+      "summary": "Compiled Next.js server/client output used by deployment and desktop packaging flows.",
+      "x": 64,
+      "y": 62
+    },
+    {
+      "id": "desktop-packager",
+      "label": "ToDesktop / desktop shell",
+      "kind": "external-tool",
+      "group": "tooling",
+      "path": "External packaging flow",
+      "summary": "External desktop packaging layer. This repo exposes the Next build artifact, but no ToDesktop config was found here.",
+      "x": 78,
+      "y": 62
+    },
+    {
+      "id": "remotion",
+      "label": "remotion/",
+      "kind": "package",
+      "group": "tooling",
+      "path": "remotion",
+      "summary": "Marketing/product video compositions and rendering support.",
+      "x": 92,
+      "y": 62
+    }
+  ],
+  "flows": [
+    {
+      "id": "invite-new-user",
+      "label": "Invite new user",
+      "category": "Admin",
+      "summary": "Tenant admin creates an invitation, the system sends an email token, and acceptance creates tenant membership.",
+      "entryNode": "admin",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "admin",
+          "label": "Open Users admin",
+          "passes": "tenant context, invite form values",
+          "notes": "The admin UI scopes the action to the active tenant."
+        },
+        {
+          "from": "admin",
+          "to": "api",
+          "label": "Create invitation",
+          "passes": "email, invited_role, active tenant id",
+          "notes": "Server action/API validates admin capability and duplicate pending invites."
+        },
+        {
+          "from": "api",
+          "to": "auth-tenant",
+          "label": "Authorize",
+          "passes": "Supabase session, tenant membership, role checks",
+          "notes": "Tenant and role resolution keep UI permissions and server writes aligned."
+        },
+        {
+          "from": "api",
+          "to": "supabase",
+          "label": "Persist token",
+          "passes": "invitations row, status=pending, expiry, invited role",
+          "notes": "Database constraints prevent duplicate active invitations."
+        },
+        {
+          "from": "api",
+          "to": "email",
+          "label": "Send invite email",
+          "passes": "recipient email, tenant name, invitation token link",
+          "notes": "Resend delivery is best-effort; the DB invite remains the source of truth."
+        },
+        {
+          "from": "browser",
+          "to": "app-router",
+          "label": "Accept token link",
+          "passes": "token from /invitations/[token]",
+          "notes": "Public token lookup is allowed through security-definer database helpers."
+        },
+        {
+          "from": "app-router",
+          "to": "supabase",
+          "label": "Create membership",
+          "passes": "tenant_id, user_id, invited_role, accepted_at",
+          "notes": "Acceptance updates invitation status and makes route guards recognize the new member."
+        }
+      ]
+    },
+    {
+      "id": "create-obra",
+      "label": "Create obra",
+      "category": "Obras",
+      "summary": "A new obra row is created, then tenant defaults materialize folders, tablas, and workflow-ready structure.",
+      "entryNode": "excel",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "excel",
+          "label": "Submit obra row",
+          "passes": "obra fields and configured FormTable columns",
+          "notes": "The Excel panel owns the spreadsheet-like creation surface."
+        },
+        {
+          "from": "excel",
+          "to": "form-table",
+          "label": "Normalize table edit",
+          "passes": "column config, cell values, validation state",
+          "notes": "FormTable converts user edits into the API payload shape."
+        },
+        {
+          "from": "form-table",
+          "to": "api",
+          "label": "POST /api/obras",
+          "passes": "tenant-scoped obra payload",
+          "notes": "The route handler enforces tenant membership before persistence."
+        },
+        {
+          "from": "api",
+          "to": "obra-defaults",
+          "label": "Apply defaults",
+          "passes": "tenant template, obra id, folders, tabs, table definitions",
+          "notes": "Defaults seed downstream OCR, quick actions, and reporting structure."
+        },
+        {
+          "from": "obra-defaults",
+          "to": "supabase",
+          "label": "Persist obra graph",
+          "passes": "obra, folder rows, tabla rows, columns, config JSON",
+          "notes": "Database state becomes the source for Documents, Tablas, General, and Macro surfaces."
+        }
+      ]
+    },
+    {
+      "id": "upload-ocr-import",
+      "label": "Upload document + OCR",
+      "category": "Documents",
+      "summary": "A document upload lands in storage, extraction maps it to configured table rows, and lineage-aware consumers refresh.",
+      "entryNode": "excel",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "excel",
+          "label": "Drop file in Documents",
+          "passes": "file binary, obra id, target folder",
+          "notes": "The Documents tab routes uploads through the obra file manager."
+        },
+        {
+          "from": "excel",
+          "to": "storage",
+          "label": "Store binary",
+          "passes": "tenant/obra storage path and file metadata",
+          "notes": "Supabase Storage holds the document bytes."
+        },
+        {
+          "from": "excel",
+          "to": "api",
+          "label": "Run import route",
+          "passes": "folder config, tabla id, document pointer",
+          "notes": "The API chooses OCR, spreadsheet, or manual import logic based on configured defaults."
+        },
+        {
+          "from": "api",
+          "to": "ai-ocr",
+          "label": "Extract structure",
+          "passes": "document content, Zod schema, extraction instructions",
+          "notes": "AI returns rows that match tenant table columns."
+        },
+        {
+          "from": "api",
+          "to": "tablas",
+          "label": "Coerce and lineage",
+          "passes": "extracted values, column types, fingerprints, lineage row keys",
+          "notes": "Table helpers normalize types and preserve stable business identity across reimports."
+        },
+        {
+          "from": "tablas",
+          "to": "supabase",
+          "label": "Write rows",
+          "passes": "tabla rows, cells, document links, extraction metadata",
+          "notes": "Persisted rows feed macro tables, data-flow, reports, and notifications."
+        },
+        {
+          "from": "supabase",
+          "to": "data-flow",
+          "label": "Refresh consumers",
+          "passes": "changed source rows and recalculation inputs",
+          "notes": "Derived indicators can recompute or surface writeback suggestions."
+        }
+      ]
+    },
+    {
+      "id": "quick-action",
+      "label": "Run quick action",
+      "category": "Obras",
+      "summary": "A tenant-configured action walks the user through upload, OCR import, or manual row entry steps for an obra.",
+      "entryNode": "quick-actions",
+      "steps": [
+        {
+          "from": "excel",
+          "to": "quick-actions",
+          "label": "Render panel",
+          "passes": "obra defaults, action definitions, folder nature",
+          "notes": "Quick actions appear on the Obra General tab."
+        },
+        {
+          "from": "quick-actions",
+          "to": "api",
+          "label": "Execute step",
+          "passes": "current step id, uploaded file or row payload",
+          "notes": "Each step delegates to the same document/table APIs used by the full tabs."
+        },
+        {
+          "from": "api",
+          "to": "storage",
+          "label": "Optional file write",
+          "passes": "binary, folder path, file metadata",
+          "notes": "Upload steps persist documents before import."
+        },
+        {
+          "from": "api",
+          "to": "tablas",
+          "label": "Optional row import",
+          "passes": "manual values or OCR output",
+          "notes": "Manual and OCR steps converge into table rows."
+        },
+        {
+          "from": "tablas",
+          "to": "supabase",
+          "label": "Persist progress",
+          "passes": "rows, action completion state, document links",
+          "notes": "The panel refreshes Documents and General data after each step."
+        }
+      ]
+    },
+    {
+      "id": "data-flow-recompute",
+      "label": "Recompute data-flow",
+      "category": "Analytics",
+      "summary": "Tenant and obra data-flow configs merge, sources evaluate, results render, and writeback suggestions can update obra fields.",
+      "entryNode": "excel",
+      "steps": [
+        {
+          "from": "excel",
+          "to": "api",
+          "label": "Load data-flow config",
+          "passes": "obra id, tenant id, selected General/Data Flow view",
+          "notes": "Routes read inherited tenant config and obra-local overrides."
+        },
+        {
+          "from": "api",
+          "to": "data-flow",
+          "label": "Merge + evaluate",
+          "passes": "sources, calculations, results, layout blocks",
+          "notes": "Effective config combines tenant defaults with obra-specific changes."
+        },
+        {
+          "from": "data-flow",
+          "to": "tablas",
+          "label": "Read table sources",
+          "passes": "source table ids, columns, aggregates, filters",
+          "notes": "Table and macro inputs become calculation variables."
+        },
+        {
+          "from": "data-flow",
+          "to": "macro-lib",
+          "label": "Read macro sources",
+          "passes": "macro table selection and override state",
+          "notes": "Macro tables can participate as source nodes."
+        },
+        {
+          "from": "data-flow",
+          "to": "components",
+          "label": "Render General layout",
+          "passes": "evaluated results, status, formatted values, traceability ids",
+          "notes": "Cards and traceability canvas share the same evaluated output."
+        },
+        {
+          "from": "data-flow",
+          "to": "supabase",
+          "label": "Optional writeback",
+          "passes": "suggested or automatic obra custom_data patch",
+          "notes": "Writeback preserves auditability and blocks unsafe internal fields."
+        }
+      ]
+    },
+    {
+      "id": "macro-report",
+      "label": "Build macro table",
+      "category": "Analytics",
+      "summary": "Macro views aggregate configured source tablas across obras, preserving stable row identities and user overrides.",
+      "entryNode": "macro",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "macro",
+          "label": "Open macro view",
+          "passes": "selected macro table, filters, tenant context",
+          "notes": "The macro route is the cross-obra reporting surface."
+        },
+        {
+          "from": "macro",
+          "to": "api",
+          "label": "Fetch rows",
+          "passes": "macro id, source selections, pagination/filter state",
+          "notes": "API handlers centralize source resolution and override merge behavior."
+        },
+        {
+          "from": "api",
+          "to": "macro-lib",
+          "label": "Resolve sources",
+          "passes": "source tabla ids, selected obras, column mapping",
+          "notes": "Library helpers normalize macro settings and source table contracts."
+        },
+        {
+          "from": "macro-lib",
+          "to": "supabase",
+          "label": "Read rows + overrides",
+          "passes": "lineage keys, source rows, custom values",
+          "notes": "Stable identity keeps overrides attached when source rows rematerialize."
+        },
+        {
+          "from": "macro-lib",
+          "to": "form-table",
+          "label": "Render editable report",
+          "passes": "assembled rows, conflict flags, column schema",
+          "notes": "The same table engine renders cross-obra data with macro-specific controls."
+        }
+      ]
+    },
+    {
+      "id": "generate-document",
+      "label": "Generate document",
+      "category": "Documents",
+      "summary": "A template draft hydrates data, renders a document, and stores the generated file as a normal obra document.",
+      "entryNode": "document-generation",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "document-generation",
+          "label": "Start draft",
+          "passes": "obra id, folder id, template id, input data",
+          "notes": "The route gives users an editable draft before generating the final file."
+        },
+        {
+          "from": "document-generation",
+          "to": "api",
+          "label": "Generate",
+          "passes": "template schema, hydrated aliases, draft values",
+          "notes": "The API owns document file naming and server-side rendering."
+        },
+        {
+          "from": "api",
+          "to": "supabase",
+          "label": "Read template + obra data",
+          "passes": "template version, tenant, obra, configured inputs",
+          "notes": "Generated documents remain anchored to tenant, obra, folder, and template version."
+        },
+        {
+          "from": "api",
+          "to": "storage",
+          "label": "Save generated file",
+          "passes": "docx/pdf bytes and metadata",
+          "notes": "The output becomes a regular document in the obra file tree."
+        },
+        {
+          "from": "storage",
+          "to": "viewer-report",
+          "label": "Preview result",
+          "passes": "document URL, MIME type, metadata",
+          "notes": "Viewer components show the generated artifact alongside uploaded documents."
+        }
+      ]
+    },
+    {
+      "id": "reminder-notification",
+      "label": "Schedule reminder",
+      "category": "Notifications",
+      "summary": "A pendiente or due rule schedules workflow work that later writes notifications, calendar entries, or emails.",
+      "entryNode": "notifications-page",
+      "steps": [
+        {
+          "from": "excel",
+          "to": "api",
+          "label": "Create pendiente",
+          "passes": "obra id, due rule, assignee, document context",
+          "notes": "Reminder routes store the operational obligation."
+        },
+        {
+          "from": "api",
+          "to": "supabase",
+          "label": "Persist schedule",
+          "passes": "pendiente, schedule row, notification intent",
+          "notes": "Database rows are the durable queue for reminders."
+        },
+        {
+          "from": "api",
+          "to": "workflow-engine",
+          "label": "Dispatch async work",
+          "passes": "schedule id, tenant id, trigger time",
+          "notes": "The workflow engine handles delayed and retryable effects."
+        },
+        {
+          "from": "workflow-engine",
+          "to": "notifications-lib",
+          "label": "Apply rules",
+          "passes": "event payload, recipient policy, delivery channels",
+          "notes": "Rules decide in-app, email, and calendar outcomes."
+        },
+        {
+          "from": "notifications-lib",
+          "to": "email",
+          "label": "Optional email",
+          "passes": "template, recipient, tenant context",
+          "notes": "Email delivery is one side effect of the notification pipeline."
+        },
+        {
+          "from": "notifications-lib",
+          "to": "notifications-page",
+          "label": "Render inbox",
+          "passes": "notification rows, pendientes, calendar events",
+          "notes": "The page merges active work items for the user."
+        }
+      ]
+    },
+    {
+      "id": "route-access",
+      "label": "Open protected route",
+      "category": "Auth",
+      "summary": "Route visibility and access checks resolve the same tenant membership and route requirements before rendering or serving data.",
+      "entryNode": "app-router",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "app-router",
+          "label": "Navigate",
+          "passes": "URL, cookies, Supabase session",
+          "notes": "Server components and route handlers resolve auth on demand."
+        },
+        {
+          "from": "app-router",
+          "to": "auth-tenant",
+          "label": "Resolve active tenant",
+          "passes": "active_tenant_id cookie, memberships, route requirements",
+          "notes": "No middleware.ts is used; tenant checks happen in request code."
+        },
+        {
+          "from": "auth-tenant",
+          "to": "supabase",
+          "label": "Read roles",
+          "passes": "user id, tenant id, custom role assignments",
+          "notes": "RLS and helper queries enforce tenant boundaries."
+        },
+        {
+          "from": "auth-tenant",
+          "to": "components",
+          "label": "Gate navigation",
+          "passes": "allowed route ids and sidebar sections",
+          "notes": "Sidebar visibility follows the same route-access config as server checks."
+        },
+        {
+          "from": "auth-tenant",
+          "to": "api",
+          "label": "Authorize API",
+          "passes": "membership and capability result",
+          "notes": "API routes reject forbidden actions even if a link is manually visited."
+        }
+      ]
+    },
+    {
+      "id": "pdf-export",
+      "label": "Export PDF report",
+      "category": "Reports",
+      "summary": "Report HTML is rendered server-side to a downloadable PDF using Puppeteer-compatible Chromium.",
+      "entryNode": "viewer-report",
+      "steps": [
+        {
+          "from": "macro",
+          "to": "viewer-report",
+          "label": "Prepare report",
+          "passes": "macro rows, report config, filters",
+          "notes": "Report components build the printable HTML."
+        },
+        {
+          "from": "viewer-report",
+          "to": "api",
+          "label": "POST render request",
+          "passes": "HTML payload, page size, tenant/obra metadata",
+          "notes": "The PDF route handles server rendering."
+        },
+        {
+          "from": "api",
+          "to": "storage",
+          "label": "Optional archive",
+          "passes": "PDF bytes and document metadata",
+          "notes": "Reports can be downloaded or stored depending on caller behavior."
+        }
+      ]
+    },
+    {
+      "id": "seed-demo-tenant",
+      "label": "Seed demo tenant",
+      "category": "Tooling",
+      "summary": "Local scripts create a representative tenant, obras, defaults, documents, rows, and demo capabilities for development.",
+      "entryNode": "scripts",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "scripts",
+          "label": "Run pnpm seed:demo-tenant",
+          "passes": "environment variables and service role credentials",
+          "notes": "The package script starts the demo bootstrap module."
+        },
+        {
+          "from": "scripts",
+          "to": "supabase",
+          "label": "Insert demo data",
+          "passes": "tenant, memberships, obras, tablas, rows, configs",
+          "notes": "Scripts use elevated credentials for controlled local setup."
+        },
+        {
+          "from": "scripts",
+          "to": "storage",
+          "label": "Upload fixtures",
+          "passes": "CSV/PDF/demo artifacts",
+          "notes": "Demo documents exercise file manager and extraction paths."
+        },
+        {
+          "from": "supabase",
+          "to": "app-router",
+          "label": "Demo appears in app",
+          "passes": "tenant cookie targets seeded tenant",
+          "notes": "The app uses normal runtime paths after seeding."
+        }
+      ]
+    },
+    {
+      "id": "next-build",
+      "label": "Next build",
+      "category": "Build",
+      "summary": "The production build compiles routes and shared packages into the Next.js output bundle.",
+      "entryNode": "next-config",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "next-config",
+          "label": "Run pnpm build",
+          "passes": "package script: next build --turbopack",
+          "notes": "The build script is defined in package.json."
+        },
+        {
+          "from": "next-config",
+          "to": "app-router",
+          "label": "Compile routes",
+          "passes": "App Router pages, server components, route handlers",
+          "notes": "Next processes app routes and server/client boundaries."
+        },
+        {
+          "from": "app-router",
+          "to": "components",
+          "label": "Bundle UI",
+          "passes": "React components, CSS, client component chunks",
+          "notes": "Shared component imports become client and server chunks as needed."
+        },
+        {
+          "from": "app-router",
+          "to": "api",
+          "label": "Bundle handlers",
+          "passes": "route handlers and server-only libraries",
+          "notes": "API routes retain server runtime dependencies."
+        },
+        {
+          "from": "api",
+          "to": "build-output",
+          "label": "Emit .next",
+          "passes": "server bundle, client assets, manifests",
+          "notes": "The output is what deployment and packaging flows consume."
+        }
+      ]
+    },
+    {
+      "id": "todesktop-build",
+      "label": "ToDesktop build",
+      "category": "Build",
+      "summary": "Desktop packaging starts from the Next production artifact, then an external ToDesktop configuration wraps the deployed/local app shell.",
+      "entryNode": "desktop-packager",
+      "steps": [
+        {
+          "from": "browser",
+          "to": "next-config",
+          "label": "Build web app",
+          "passes": "pnpm build / next build output",
+          "notes": "No ToDesktop config was found in this repo, so the known handoff is the Next artifact."
+        },
+        {
+          "from": "next-config",
+          "to": "build-output",
+          "label": "Produce bundle",
+          "passes": ".next server/client output",
+          "notes": "The desktop layer depends on a stable production web build."
+        },
+        {
+          "from": "build-output",
+          "to": "desktop-packager",
+          "label": "Wrap app",
+          "passes": "app URL or local server command, icons, signing settings",
+          "notes": "These settings likely live outside this repository unless added later."
+        },
+        {
+          "from": "desktop-packager",
+          "to": "storage",
+          "label": "Runtime data access",
+          "passes": "same Supabase environment variables and network requests",
+          "notes": "The packaged desktop app still talks to Supabase and APIs through the web runtime."
+        }
+      ]
+    }
+  ]
+}
