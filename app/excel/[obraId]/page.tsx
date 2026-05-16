@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
 	fetchObraDetail,
+	fetchObraDataFlowConfig,
 	fetchDataFlowSuggestions,
 	fetchMemoriaNotes,
 	fetchMaterialOrders,
@@ -358,6 +359,16 @@ type CertificadosRecommendationMapping = {
 	montoAcumuladoColumnKey?: string | null;
 	dateOrPeriodColumnKey?: string | null;
 };
+
+const DERIVED_CERTIFICADOS_FIELD_TO_DATA_FLOW_FIELD: Record<DerivedCertificadosField, string> = {
+	certificadoALaFecha: "certificado_a_la_fecha",
+	saldoACertificar: "saldo_a_certificar",
+	porcentaje: "porcentaje",
+};
+
+const DATA_FLOW_DERIVED_CERTIFICADOS_FIELDS = new Set(
+	Object.values(DERIVED_CERTIFICADOS_FIELD_TO_DATA_FLOW_FIELD),
+);
 
 function normalizeOptionalMappingKey(value: unknown): string | null {
 	if (typeof value !== "string") return null;
@@ -683,6 +694,10 @@ function isMeaningfulCertificadoResumenRow(
 	return hasValue(dateOrPeriod) && monto != null;
 }
 
+/**
+ * @deprecated Data-flow is the authority for certificate-derived metrics when configured.
+ * Keep this as a temporary fallback for obras without data-flow ownership.
+ */
 function computeDerivedCertificadosMetrics(
 	rows: TablaDataRow[],
 	contratoMasAmpliaciones: unknown,
@@ -1254,6 +1269,13 @@ function ObraDetailPageContent() {
 		queryFn: () => fetchDataFlowSuggestions(obraId!),
 		enabled: isValidObraId && isGeneralTabActive,
 		staleTime: 30 * 1000,
+	});
+
+	const dataFlowConfigQuery = useQuery({
+		queryKey: ["obra", obraId, "data-flow-config", "effective"],
+		queryFn: () => fetchObraDataFlowConfig(obraId!),
+		enabled: isValidObraId && isGeneralTabActive,
+		staleTime: 5 * 60 * 1000,
 	});
 
 	// Flujo actions - always fetch (cached by React Query)
@@ -2164,7 +2186,9 @@ function ObraDetailPageContent() {
 					id: obraId,
 				});
 				setDerivedCertificadosNotice(null);
-				setPendingDerivedFieldValues({});
+				setPendingDerivedFieldValues((previous) =>
+					Object.keys(previous).length === 0 ? previous : {},
+				);
 				toast.success("Obra actualizada correctamente");
 
 				queryClient.invalidateQueries({ queryKey: ['obra', obraId] });
@@ -2393,7 +2417,9 @@ function ObraDetailPageContent() {
 			// Store initial values for dirty tracking
 			setInitialFormValues(normalized);
 			setDerivedCertificadosNotice(null);
-			setPendingDerivedFieldValues({});
+			setPendingDerivedFieldValues((previous) =>
+				Object.keys(previous).length === 0 ? previous : {},
+			);
 		},
 		[form]
 	);
@@ -2409,7 +2435,26 @@ function ObraDetailPageContent() {
 		}
 	}, [obraQuery.data, obraQuery.dataUpdatedAt, applyObraToForm]);
 
+	const hasDataFlowDerivedCertificadosAuthority = useMemo(() => {
+		const ownedByConfig = dataFlowConfigQuery.data?.effectiveConfig?.results?.some((result) => {
+			const targetFieldId = typeof result.targetObraFieldId === "string" ? result.targetObraFieldId.trim() : "";
+			return result.writebackMode !== "none" && DATA_FLOW_DERIVED_CERTIFICADOS_FIELDS.has(targetFieldId);
+		}) ?? false;
+		if (ownedByConfig) return true;
+
+		return (dataFlowSuggestionsQuery.data ?? []).some((suggestion) => {
+			return suggestion.status === "pending" && DATA_FLOW_DERIVED_CERTIFICADOS_FIELDS.has(suggestion.field_id);
+		});
+	}, [dataFlowConfigQuery.data, dataFlowSuggestionsQuery.data]);
+
 	useEffect(() => {
+		if (hasDataFlowDerivedCertificadosAuthority) {
+			setDerivedCertificadosNotice(null);
+			setPendingDerivedFieldValues((previous) =>
+				Object.keys(previous).length === 0 ? previous : {},
+			);
+			return;
+		}
 		if (!obraData || certificadosExtraidosRows.length === 0) return;
 		if (latestExtractedCertificadoALaFecha == null) return;
 
@@ -2626,6 +2671,7 @@ function ObraDetailPageContent() {
 		initialFormValues.certificadoALaFecha,
 		initialFormValues.porcentaje,
 		initialFormValues.saldoACertificar,
+		hasDataFlowDerivedCertificadosAuthority,
 		latestExtractedCertificadoALaFecha,
 		latestExtractedCertificadoSourceLabel,
 		obraData,
@@ -3524,9 +3570,9 @@ function ObraDetailPageContent() {
 										<FilePlus2 className="h-4 w-4" />
 										<span className="text-base md:text-sm">Generar documento</span>
 									</Button> */}
-									{isTenantAdmin && (
-										<>
-											{/* <Button
+									{/* {isTenantAdmin && ( */}
+									{/* <> */}
+									{/* <Button
 												type="button"
 												variant="outline"
 												size="sm"
@@ -3536,7 +3582,7 @@ function ObraDetailPageContent() {
 												<Trash2 className="h-4 w-4" />
 												<span className="text-base md:text-sm">Papelera obras</span>
 											</Button> */}
-											<Button
+									{/* <Button
 												type="button"
 												variant="destructive"
 												size="sm"
@@ -3548,9 +3594,9 @@ function ObraDetailPageContent() {
 												<span className="text-base md:text-sm">
 													{isDeletingObra ? "Eliminando..." : "Borrar obra"}
 												</span>
-											</Button>
-										</>
-									)}
+											</Button> */}
+									{/* </> */}
+									{/* )} */}
 									{activeTab === "general" && (
 										<>
 											<m.div
@@ -3595,7 +3641,7 @@ function ObraDetailPageContent() {
 											</Button>
 										</>
 									)}
-									{activeTab === "documentos" && (
+									{/* {activeTab === "documentos" && (
 										<>
 											<Button
 												type="button"
@@ -3618,7 +3664,7 @@ function ObraDetailPageContent() {
 												<span className="text-base md:text-sm">Papelera</span>
 											</Button>
 										</>
-									)}
+									)} */}
 								</div>
 							</div>
 							{/* {derivedCertificadosNotice && activeTab !== "general" ? (

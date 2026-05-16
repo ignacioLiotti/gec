@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   BUILDER_DEFAULT_CALCULATION_IDS,
+  BUILDER_DEFAULT_RESULT_IDS,
   evaluateObraDataFlowBuilder,
   getObraDataFlowBuilderConfig,
   listObraFieldSources,
@@ -694,6 +695,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const defaultContractCalculation = builderCalculationValueById.get(BUILDER_DEFAULT_CALCULATION_IDS.contract) ?? null;
     const defaultCertifiedCalculation = builderCalculationValueById.get(BUILDER_DEFAULT_CALCULATION_IDS.certified) ?? null;
     const defaultBalanceCalculation = builderCalculationValueById.get(BUILDER_DEFAULT_CALCULATION_IDS.balance) ?? null;
+    const builderResultIds = new Set((evaluatedBuilder?.results ?? []).map((result) => result.id));
 
     const resultMetricViews = [
       {
@@ -714,6 +716,7 @@ export async function GET(_request: Request, context: RouteContext) {
         consumedMacroTableIds: [] as string[],
         displayedMetrics: ["Porcentaje de avance", "Curva de avance", "PMC Resumen", "Alertas"],
         resultOrder: 1,
+        builderResultId: BUILDER_DEFAULT_RESULT_IDS.progress,
       },
       {
         id: "view:metric-contract",
@@ -730,6 +733,7 @@ export async function GET(_request: Request, context: RouteContext) {
         consumedMacroTableIds: costMacro ? [costMacro[0]] : [],
         displayedMetrics: ["Contrato + ampliaciones"],
         resultOrder: 2,
+        builderResultId: BUILDER_DEFAULT_RESULT_IDS.contract,
       },
       {
         id: "view:metric-certificado",
@@ -746,6 +750,7 @@ export async function GET(_request: Request, context: RouteContext) {
         consumedMacroTableIds: certContableMacro ? [certContableMacro[0]] : [],
         displayedMetrics: ["Certificado a la fecha"],
         resultOrder: 3,
+        builderResultId: BUILDER_DEFAULT_RESULT_IDS.certified,
       },
       {
         id: "view:metric-saldo",
@@ -762,10 +767,15 @@ export async function GET(_request: Request, context: RouteContext) {
         consumedMacroTableIds: certContableMacro ? [certContableMacro[0]] : [],
         displayedMetrics: ["Saldo a certificar"],
         resultOrder: 4,
+        builderResultId: BUILDER_DEFAULT_RESULT_IDS.balance,
       },
     ] as const;
 
-    for (const metricView of resultMetricViews) {
+    const activeResultMetricViews = resultMetricViews.filter(
+      (metricView) => !builderResultIds.has(metricView.builderResultId)
+    );
+
+    for (const metricView of activeResultMetricViews) {
       nodes.push({
         id: metricView.id,
         type: "view",
@@ -833,7 +843,7 @@ export async function GET(_request: Request, context: RouteContext) {
       }
     );
 
-    for (const metricView of resultMetricViews) {
+    for (const metricView of activeResultMetricViews) {
       for (const calculationId of metricView.consumedCalculationIds) {
         edges.push({
           id: `edge:${calculationId}:${metricView.id}`,

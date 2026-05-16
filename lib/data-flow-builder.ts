@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { toNumericValue as parseNumericValue } from "@/lib/tablas";
 
 export type DataFlowBuilderSourceType = "table" | "macro_table";
-export type DataFlowBuilderCalculationMode = "aggregate" | "formula";
+export type DataFlowBuilderCalculationMode = "aggregate" | "formula" | "text_template";
 export type DataFlowBuilderFormulaInputSourceType = "calculation" | DataFlowBuilderSourceType | "obra_field";
 export type DataFlowBuilderAggregation =
   | "sum"
@@ -13,7 +13,7 @@ export type DataFlowBuilderAggregation =
   | "latest"
   | "count_rows"
   | "count_non_empty";
-export type DataFlowBuilderResultFormat = "number" | "currency" | "percent";
+export type DataFlowBuilderResultFormat = "number" | "currency" | "percent" | "text";
 export type DataFlowBuilderWritebackMode = "none" | "suggest" | "auto";
 export type DataFlowBuilderGeneralTabSlot = "hero" | "financial";
 export type DataFlowBuilderNodeStatus = "ok" | "incomplete" | "error";
@@ -26,6 +26,7 @@ export type DataFlowBuilderGeneralTabLayoutBlockType =
   | "certificates"
   | "custom_result";
 export type DataFlowBuilderGeneralTabLayoutWidth = "one_third" | "half" | "two_thirds" | "full";
+export type DataFlowBuilderValue = number | string | null;
 
 export type DataFlowBuilderSourceColumn = {
   key: string;
@@ -65,6 +66,7 @@ export type DataFlowBuilderFormulaInput = {
   sourceId: string;
   fieldKey: string | null;
   aggregation: DataFlowBuilderAggregation | null;
+  sortFieldKey?: string | null;
 };
 
 export type DataFlowBuilderAggregateCalculation = {
@@ -72,10 +74,12 @@ export type DataFlowBuilderAggregateCalculation = {
   label: string;
   mode: "aggregate";
   description: string;
+  deleted?: boolean;
   sourceType: DataFlowBuilderSourceType;
   sourceId: string;
   fieldKey: string | null;
   aggregation: DataFlowBuilderAggregation;
+  sortFieldKey?: string | null;
 };
 
 export type DataFlowBuilderFormulaCalculation = {
@@ -83,18 +87,31 @@ export type DataFlowBuilderFormulaCalculation = {
   label: string;
   mode: "formula";
   description: string;
+  deleted?: boolean;
   expression: string;
+  inputs: DataFlowBuilderFormulaInput[];
+};
+
+export type DataFlowBuilderTextTemplateCalculation = {
+  id: string;
+  label: string;
+  mode: "text_template";
+  description: string;
+  deleted?: boolean;
+  template: string;
   inputs: DataFlowBuilderFormulaInput[];
 };
 
 export type DataFlowBuilderCalculation =
   | DataFlowBuilderAggregateCalculation
-  | DataFlowBuilderFormulaCalculation;
+  | DataFlowBuilderFormulaCalculation
+  | DataFlowBuilderTextTemplateCalculation;
 
 export type DataFlowBuilderResult = {
   id: string;
   label: string;
   description: string;
+  deleted?: boolean;
   calculationId: string | null;
   targetObraFieldId: string | null;
   writebackMode: DataFlowBuilderWritebackMode;
@@ -129,7 +146,7 @@ export type EvaluatedDataFlowCalculation = {
   id: string;
   label: string;
   status: DataFlowBuilderNodeStatus;
-  value: number | null;
+  value: DataFlowBuilderValue;
   formattedValue: string;
   formulaSummary: string[];
   inputs: string[];
@@ -140,7 +157,7 @@ export type EvaluatedDataFlowResult = {
   id: string;
   label: string;
   status: DataFlowBuilderNodeStatus;
-  value: number | null;
+  value: DataFlowBuilderValue;
   formattedValue: string;
   description: string;
   calculationId: string | null;
@@ -164,7 +181,7 @@ export type DataFlowBuilderWritebackAction = {
   calculationId: string | null;
   targetObraFieldId: string;
   mode: Exclude<DataFlowBuilderWritebackMode, "none">;
-  value: number;
+  value: Exclude<DataFlowBuilderValue, null>;
   formattedValue: string;
   previousValue: unknown;
   status: "ready" | "blocked";
@@ -217,6 +234,10 @@ export const BUILDER_DEFAULT_RESULT_IDS = {
 } as const;
 
 export const CUSTOM_OBRA_FIELD_SOURCE_PREFIX = "custom:";
+export const BUILDER_PRESET_TABLE_SOURCE_PREFIX = "preset:";
+export const BUILDER_PRESET_TABLE_SOURCE_IDS = {
+  pmcResumen: `${BUILDER_PRESET_TABLE_SOURCE_PREFIX}pmc_resumen`,
+} as const;
 
 export const DEFAULT_OBRA_FIELD_SOURCES: DataFlowBuilderObraFieldSource[] = [
   { id: "n", label: "N de obra", dataType: "number", source: "base" },
@@ -243,6 +264,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
+}
+
+function normalizeLooseIdentifier(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function humanizeBuilderFieldKey(value: string) {
@@ -398,6 +428,7 @@ export function buildObraResultWritebackPlan({
       .map((source) => source.id)
   );
   const evaluatedCalculationById = new Map(evaluated.calculations.map((calculation) => [calculation.id, calculation]));
+  const configuredCalculationById = new Map(config.calculations.map((calculation) => [calculation.id, calculation]));
   const actions: DataFlowBuilderWritebackAction[] = [];
   const blocked: DataFlowBuilderWritebackAction[] = [];
 
@@ -409,7 +440,11 @@ export function buildObraResultWritebackPlan({
     const targetIsCustom = targetFieldId.startsWith(CUSTOM_OBRA_FIELD_SOURCE_PREFIX);
     const targetIsBase = baseFieldIds.has(targetFieldId);
     const calculation = result.calculationId ? evaluatedCalculationById.get(result.calculationId) ?? null : null;
+    const configuredCalculation = result.calculationId ? configuredCalculationById.get(result.calculationId) ?? null : null;
     const dependencies = getCalculationObraFieldDependencies(config, result.calculationId);
+    const canSuggestTextFromSameField =
+      result.writebackMode === "suggest" &&
+      (result.format === "text" || typeof result.value === "string" || configuredCalculation?.mode === "text_template");
     let blockReason: string | null = null;
 
     if (!targetIsBase && !targetIsCustom) {
@@ -418,7 +453,7 @@ export function buildObraResultWritebackPlan({
       blockReason = "El campo interno dataFlowBuilder no puede ser sobrescrito.";
     } else if (result.status !== "ok") {
       blockReason = "El resultado no esta OK.";
-    } else if (dependencies.has(targetFieldId)) {
+    } else if (dependencies.has(targetFieldId) && !canSuggestTextFromSameField) {
       blockReason = "El resultado depende del mismo campo que intenta sobrescribir.";
     } else if (isSameBuilderValue(currentValue, result.value)) {
       blockReason = "El valor calculado es igual al valor actual.";
@@ -521,31 +556,48 @@ function normalizeFormulaInput(value: unknown, index: number): DataFlowBuilderFo
         : asString(record.fieldKey).trim() || null,
     aggregation:
       sourceType === "calculation" || sourceType === "obra_field" ? null : aggregation,
+    sortFieldKey:
+      sourceType === "calculation" || sourceType === "obra_field"
+        ? null
+        : asString(record.sortFieldKey).trim() || null,
   };
 }
 
 function normalizeCalculation(value: unknown, index: number): DataFlowBuilderCalculation | null {
   const record = asRecord(value);
-  const mode = asString(record.mode) === "formula" ? "formula" : "aggregate";
+  const rawMode = asString(record.mode);
+  const mode: DataFlowBuilderCalculationMode =
+    rawMode === "formula" || rawMode === "text_template" ? rawMode : "aggregate";
   const id = asString(record.id).trim() || `calc_${index + 1}`;
   const label = asString(record.label).trim() || `Calculo ${index + 1}`;
   const description = asString(record.description).trim();
 
-  if (mode === "formula") {
+  if (mode === "formula" || mode === "text_template") {
     const inputs = Array.isArray(record.inputs)
       ? record.inputs
           .map((input, inputIndex) => normalizeFormulaInput(input, inputIndex))
           .filter((input): input is DataFlowBuilderFormulaInput => Boolean(input))
       : [];
 
-    return {
+    const common = {
       id,
       label,
       mode,
       description,
-      expression: asString(record.expression).trim(),
+      deleted: record.deleted === true,
       inputs,
     };
+    return mode === "formula"
+      ? {
+          ...common,
+          mode,
+          expression: asString(record.expression).trim(),
+        }
+      : {
+          ...common,
+          mode,
+          template: asString(record.template).trim(),
+        };
   }
 
   const sourceType = asString(record.sourceType) === "macro_table" ? "macro_table" : "table";
@@ -558,10 +610,12 @@ function normalizeCalculation(value: unknown, index: number): DataFlowBuilderCal
     label,
     mode,
     description,
+    deleted: record.deleted === true,
     sourceType,
     sourceId: asString(record.sourceId).trim(),
     fieldKey: asString(record.fieldKey).trim() || null,
     aggregation,
+    sortFieldKey: asString(record.sortFieldKey).trim() || null,
   };
 }
 
@@ -569,7 +623,7 @@ function normalizeResult(value: unknown, index: number): DataFlowBuilderResult |
   const record = asRecord(value);
   const id = asString(record.id).trim() || `result_${index + 1}`;
   const label = asString(record.label).trim() || `Resultado ${index + 1}`;
-  const format = new Set<DataFlowBuilderResultFormat>(["number", "currency", "percent"]).has(
+  const format = new Set<DataFlowBuilderResultFormat>(["number", "currency", "percent", "text"]).has(
     record.format as DataFlowBuilderResultFormat
   )
     ? (record.format as DataFlowBuilderResultFormat)
@@ -584,6 +638,7 @@ function normalizeResult(value: unknown, index: number): DataFlowBuilderResult |
     id,
     label,
     description: asString(record.description).trim(),
+    deleted: record.deleted === true,
     calculationId: asString(record.calculationId).trim() || null,
     targetObraFieldId: asString(record.targetObraFieldId).trim() || null,
     writebackMode,
@@ -668,19 +723,13 @@ function buildDefaultDataFlowBuilderCalculations(): DataFlowBuilderCalculation[]
     {
       id: BUILDER_DEFAULT_CALCULATION_IDS.certified,
       label: "Certificado a la fecha",
-      mode: "formula",
-      description: "Monto certificado acumulado actualmente guardado en la obra.",
-      expression: "certificado",
-      inputs: [
-        {
-          id: "default-input-certified",
-          alias: "certificado",
-          sourceType: "obra_field",
-          sourceId: "certificado_a_la_fecha",
-          fieldKey: null,
-          aggregation: null,
-        },
-      ],
+      mode: "aggregate",
+      description: "Ultimo monto acumulado valido de PMC Resumen ordenado por fecha de certificacion.",
+      sourceType: "table",
+      sourceId: BUILDER_PRESET_TABLE_SOURCE_IDS.pmcResumen,
+      fieldKey: "monto_acumulado",
+      aggregation: "latest",
+      sortFieldKey: "fecha_certificacion",
     },
     {
       id: BUILDER_DEFAULT_CALCULATION_IDS.balance,
@@ -742,8 +791,8 @@ function buildDefaultDataFlowBuilderResults(): DataFlowBuilderResult[] {
       label: "Avance",
       description: "Porcentaje de avance guardado en General y contrastado con Curva Plan + PMC Resumen.",
       calculationId: BUILDER_DEFAULT_CALCULATION_IDS.progress,
-      targetObraFieldId: null,
-      writebackMode: "none",
+      targetObraFieldId: "porcentaje",
+      writebackMode: "suggest",
       format: "percent",
       decimals: 0,
       generalTabSlot: "hero",
@@ -764,10 +813,10 @@ function buildDefaultDataFlowBuilderResults(): DataFlowBuilderResult[] {
     {
       id: BUILDER_DEFAULT_RESULT_IDS.certified,
       label: "Certificado",
-      description: "Certificado a la fecha guardado en General.",
+      description: "Certificado a la fecha recomendado desde PMC Resumen.",
       calculationId: BUILDER_DEFAULT_CALCULATION_IDS.certified,
-      targetObraFieldId: null,
-      writebackMode: "none",
+      targetObraFieldId: "certificado_a_la_fecha",
+      writebackMode: "suggest",
       format: "currency",
       decimals: 0,
       generalTabSlot: "financial",
@@ -776,10 +825,10 @@ function buildDefaultDataFlowBuilderResults(): DataFlowBuilderResult[] {
     {
       id: BUILDER_DEFAULT_RESULT_IDS.balance,
       label: "Saldo a certificar",
-      description: "Saldo a certificar guardado en General.",
+      description: "Saldo a certificar recomendado desde contrato menos certificado acumulado.",
       calculationId: BUILDER_DEFAULT_CALCULATION_IDS.balance,
-      targetObraFieldId: null,
-      writebackMode: "none",
+      targetObraFieldId: "saldo_a_certificar",
+      writebackMode: "suggest",
       format: "currency",
       decimals: 0,
       generalTabSlot: "financial",
@@ -895,9 +944,17 @@ export function mergeDataFlowBuilderConfigs(
 
   for (const config of configs) {
     for (const calculation of config.calculations) {
+      if (calculation.deleted) {
+        calculationsById.delete(calculation.id);
+        continue;
+      }
       calculationsById.set(calculation.id, calculation);
     }
     for (const result of config.results) {
+      if (result.deleted) {
+        resultsById.delete(result.id);
+        continue;
+      }
       resultsById.set(result.id, result);
     }
     for (const block of config.generalTabLayout) {
@@ -911,6 +968,89 @@ export function mergeDataFlowBuilderConfigs(
     results: [...resultsById.values()],
     generalTabLayout: [...layoutById.values()].sort((left, right) => left.order - right.order),
   };
+}
+
+function enforceOfficialCertificateKpis(config: DataFlowBuilderConfig): DataFlowBuilderConfig {
+  const officialCalculations = new Map(
+    buildDefaultDataFlowBuilderCalculations()
+      .filter((calculation) =>
+        calculation.id === BUILDER_DEFAULT_CALCULATION_IDS.contract ||
+        calculation.id === BUILDER_DEFAULT_CALCULATION_IDS.certified ||
+        calculation.id === BUILDER_DEFAULT_CALCULATION_IDS.balance ||
+        calculation.id === BUILDER_DEFAULT_CALCULATION_IDS.progress
+      )
+      .map((calculation) => [calculation.id, calculation])
+  );
+  const officialResults = new Map(
+    buildDefaultDataFlowBuilderResults()
+      .filter((result) =>
+        result.id === BUILDER_DEFAULT_RESULT_IDS.certified ||
+        result.id === BUILDER_DEFAULT_RESULT_IDS.balance ||
+        result.id === BUILDER_DEFAULT_RESULT_IDS.progress
+      )
+      .map((result) => [result.id, result])
+  );
+
+  return {
+    ...config,
+    calculations: config.calculations.map((calculation) =>
+      shouldMigrateLegacyDefaultCalculation(calculation)
+        ? officialCalculations.get(calculation.id) ?? calculation
+        : calculation
+    ),
+    results: config.results.map((result) =>
+      shouldMigrateLegacyDefaultResult(result)
+        ? officialResults.get(result.id) ?? result
+        : result
+    ),
+  };
+}
+
+function shouldMigrateLegacyDefaultCalculation(calculation: DataFlowBuilderCalculation) {
+  if (
+    calculation.id === BUILDER_DEFAULT_CALCULATION_IDS.certified &&
+    calculation.mode === "formula" &&
+    calculation.inputs.some((input) => input.sourceType === "obra_field" && input.sourceId === "certificado_a_la_fecha")
+  ) {
+    return true;
+  }
+  if (
+    calculation.id === BUILDER_DEFAULT_CALCULATION_IDS.balance &&
+    calculation.mode === "formula" &&
+    calculation.inputs.some((input) => input.sourceType === "obra_field" && input.sourceId === "saldo_a_certificar")
+  ) {
+    return true;
+  }
+  if (
+    calculation.id === BUILDER_DEFAULT_CALCULATION_IDS.progress &&
+    calculation.mode === "formula" &&
+    calculation.inputs.some((input) => input.sourceType === "obra_field" && input.sourceId === "porcentaje")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function shouldMigrateLegacyDefaultResult(result: DataFlowBuilderResult) {
+  if (
+    result.id === BUILDER_DEFAULT_RESULT_IDS.certified &&
+    (result.targetObraFieldId !== "certificado_a_la_fecha" || result.writebackMode === "none")
+  ) {
+    return true;
+  }
+  if (
+    result.id === BUILDER_DEFAULT_RESULT_IDS.balance &&
+    (result.targetObraFieldId !== "saldo_a_certificar" || result.writebackMode === "none")
+  ) {
+    return true;
+  }
+  if (
+    result.id === BUILDER_DEFAULT_RESULT_IDS.progress &&
+    (result.targetObraFieldId !== "porcentaje" || result.writebackMode === "none")
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function getRawDataFlowBuilderConfig(rawValue: unknown): DataFlowBuilderConfig {
@@ -947,7 +1087,7 @@ export function getObraDataFlowBuilderConfig(customData: unknown): DataFlowBuild
 export function getTenantDataFlowBuilderConfig(settings: unknown): DataFlowBuilderConfig {
   const root = asRecord(settings);
   const rawConfig = getRawDataFlowBuilderConfig(root.dataFlowBuilder);
-  return mergeDataFlowBuilderConfigs(
+  return enforceOfficialCertificateKpis(mergeDataFlowBuilderConfigs(
     {
       version: 1,
       calculations: buildDefaultDataFlowBuilderCalculations(),
@@ -955,7 +1095,7 @@ export function getTenantDataFlowBuilderConfig(settings: unknown): DataFlowBuild
       generalTabLayout: buildDefaultGeneralTabLayout(),
     },
     rawConfig
-  );
+  ));
 }
 
 export function setObraDataFlowBuilderConfig(
@@ -1111,35 +1251,94 @@ function coerceBuilderNumericValue(value: unknown): number | null {
 }
 
 function formatBuilderValue(
-  value: number | null,
+  value: DataFlowBuilderValue,
   format: DataFlowBuilderResultFormat,
   decimals: number
 ) {
-  if (value == null || !Number.isFinite(value)) return "-";
+  if (value == null) return "-";
+  if (format === "text") return String(value);
+  const numericValue = coerceBuilderNumericValue(value);
+  if (numericValue == null || !Number.isFinite(numericValue)) return "-";
   if (format === "currency") {
     return new Intl.NumberFormat("es-AR", {
       style: "currency",
       currency: "ARS",
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
-    }).format(value);
+    }).format(numericValue);
   }
   if (format === "percent") {
     return `${new Intl.NumberFormat("es-AR", {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
-    }).format(value)}%`;
+    }).format(numericValue)}%`;
   }
   return new Intl.NumberFormat("es-AR", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(value);
+  }).format(numericValue);
+}
+
+function parseBuilderDateOrder(value: unknown): number | null {
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.getTime();
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = asString(value).trim();
+  if (!raw) return null;
+
+  const iso = raw.match(/^(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?$/);
+  if (iso) {
+    const year = Number.parseInt(iso[1] ?? "", 10);
+    const month = Number.parseInt(iso[2] ?? "", 10);
+    const day = Number.parseInt(iso[3] ?? "1", 10);
+    const time = Date.UTC(year, month - 1, day);
+    return Number.isFinite(time) ? time : null;
+  }
+
+  const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    const day = Number.parseInt(slash[1] ?? "", 10);
+    const month = Number.parseInt(slash[2] ?? "", 10);
+    const rawYear = Number.parseInt(slash[3] ?? "", 10);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    const time = Date.UTC(year, month - 1, day);
+    return Number.isFinite(time) ? time : null;
+  }
+
+  const monthYear = raw.match(/^(\d{1,2})[/-](\d{2,4})$/);
+  if (monthYear) {
+    const month = Number.parseInt(monthYear[1] ?? "", 10);
+    const rawYear = Number.parseInt(monthYear[2] ?? "", 10);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    const time = Date.UTC(year, month - 1, 1);
+    return Number.isFinite(time) ? time : null;
+  }
+
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getLatestRowSortOrder(row: BuilderRowRecord, sortFieldKey: string | null | undefined) {
+  const data = asRecord(row.data);
+  const candidates = [
+    sortFieldKey,
+    sortFieldKey === "fecha_certificacion" ? "periodo" : null,
+    sortFieldKey !== "periodo" ? "periodo" : null,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of [...new Set(candidates)]) {
+    const parsed = parseBuilderDateOrder(data[candidate]);
+    if (parsed != null) return parsed;
+  }
+
+  const createdAt = row.created_at ? Date.parse(row.created_at) : NaN;
+  return Number.isFinite(createdAt) ? createdAt : 0;
 }
 
 function aggregateRows(
   rows: BuilderRowRecord[],
   fieldKey: string | null,
-  aggregation: DataFlowBuilderAggregation
+  aggregation: DataFlowBuilderAggregation,
+  sortFieldKey?: string | null
 ): { value: number | null; errorMessage: string | null } {
   if (aggregation === "count_rows") {
     return { value: rows.length, errorMessage: null };
@@ -1150,14 +1349,13 @@ function aggregateRows(
   }
 
   if (aggregation === "latest") {
-    const latestValue = [...rows]
-      .sort((left, right) => {
-        const leftTime = left.created_at ? Date.parse(left.created_at) : 0;
-        const rightTime = right.created_at ? Date.parse(right.created_at) : 0;
-        return rightTime - leftTime;
-      })
-      .map((row) => coerceBuilderNumericValue(asRecord(row.data)[fieldKey]))
-      .find((value) => value != null);
+    const latestValue = rows
+      .map((row) => ({
+        value: coerceBuilderNumericValue(asRecord(row.data)[fieldKey]),
+        sortOrder: getLatestRowSortOrder(row, sortFieldKey),
+      }))
+      .filter((row): row is { value: number; sortOrder: number } => row.value != null)
+      .sort((left, right) => right.sortOrder - left.sortOrder)[0]?.value;
     return { value: latestValue ?? null, errorMessage: latestValue == null ? "No hay valores numericos para la columna elegida." : null };
   }
 
@@ -1238,6 +1436,32 @@ function evaluateExpression(
       errorMessage: error instanceof Error ? error.message : "No se pudo evaluar la expresion.",
     };
   }
+}
+
+function getTextTemplateAliases(template: string) {
+  return [...template.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]);
+}
+
+function renderTextTemplate(
+  template: string,
+  variables: Record<string, DataFlowBuilderValue>
+): { value: string | null; errorMessage: string | null } {
+  const trimmed = template.trim();
+  if (!trimmed) {
+    return { value: null, errorMessage: "La plantilla de texto esta vacia." };
+  }
+
+  const missingAliases = getTextTemplateAliases(trimmed).filter((alias) => variables[alias] == null);
+  if (missingAliases.length > 0) {
+    return { value: null, errorMessage: `Faltan valores para: ${missingAliases.join(", ")}.` };
+  }
+
+  return {
+    value: trimmed.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_token, alias: string) =>
+      String(variables[alias] ?? "")
+    ),
+    errorMessage: null,
+  };
 }
 
 export async function listObraDataFlowSources({
@@ -1366,20 +1590,35 @@ export async function evaluateObraDataFlowBuilder({
 }: BuilderEvaluationContext): Promise<EvaluatedDataFlowBuilder> {
   const { data: obraTables, error: obraTablesError } = await supabase
     .from("obra_tablas")
-    .select("id, settings")
+    .select("id, name, settings")
     .eq("obra_id", obraId);
   if (obraTablesError) throw obraTablesError;
 
   const defaultTableToObraTableId = new Map<string, string>();
+  const presetTableToObraTableId = new Map<string, string>();
   for (const table of obraTables ?? []) {
     const settings = asRecord(table.settings);
     const defaultTableId = asString(settings.defaultTablaId).trim();
     if (defaultTableId && !defaultTableToObraTableId.has(defaultTableId)) {
       defaultTableToObraTableId.set(defaultTableId, table.id as string);
     }
+    const presetKey = asString(settings.spreadsheetPresetKey).trim();
+    if (presetKey && !presetTableToObraTableId.has(presetKey)) {
+      presetTableToObraTableId.set(presetKey, table.id as string);
+    }
+    const normalizedName = normalizeLooseIdentifier(asString(table.name));
+    if (
+      (normalizedName.includes("pmc_resumen") || normalizedName.includes("certificados_extraidos_pmc_resumen")) &&
+      !presetTableToObraTableId.has("pmc_resumen")
+    ) {
+      presetTableToObraTableId.set("pmc_resumen", table.id as string);
+    }
   }
 
   function resolveTableSourceId(sourceId: string) {
+    if (sourceId.startsWith(BUILDER_PRESET_TABLE_SOURCE_PREFIX)) {
+      return presetTableToObraTableId.get(sourceId.slice(BUILDER_PRESET_TABLE_SOURCE_PREFIX.length)) ?? sourceId;
+    }
     return defaultTableToObraTableId.get(sourceId) ?? sourceId;
   }
 
@@ -1525,7 +1764,12 @@ export async function evaluateObraDataFlowBuilder({
 
     if (calculation.mode === "aggregate") {
       const sourceRows = getRowsForSource(calculation.sourceType, calculation.sourceId);
-      const aggregated = aggregateRows(sourceRows, calculation.fieldKey, calculation.aggregation);
+      const aggregated = aggregateRows(
+        sourceRows,
+        calculation.fieldKey,
+        calculation.aggregation,
+        calculation.sortFieldKey
+      );
       const result: EvaluatedDataFlowCalculation = {
         id: calculation.id,
         label: calculation.label,
@@ -1534,6 +1778,9 @@ export async function evaluateObraDataFlowBuilder({
         formattedValue: formatBuilderValue(aggregated.value, "number", 2),
         formulaSummary: [
           `${calculation.aggregation}(${calculation.sourceType}:${calculation.sourceId}${calculation.fieldKey ? `.${calculation.fieldKey}` : ""})`,
+          ...(calculation.aggregation === "latest" && calculation.sortFieldKey
+            ? [`Orden: ${calculation.sortFieldKey}`]
+            : []),
         ],
         inputs: [calculation.sourceId],
         errorMessage: aggregated.errorMessage,
@@ -1542,9 +1789,32 @@ export async function evaluateObraDataFlowBuilder({
       return result;
     }
 
-    const variables: Record<string, number> = {};
+    const numericVariables: Record<string, number> = {};
+    const textVariables: Record<string, DataFlowBuilderValue> = {};
     const inputIds: string[] = [];
     const resolvedInputSummary: string[] = [];
+    const calculationKey = calculation.id;
+    const calculationLabel = calculation.label;
+    const calculationMode = calculation.mode;
+    const calculationExpression =
+      calculationMode === "formula" ? calculation.expression : calculation.template;
+
+    function missingInputResult(inputAlias: string, inputLabel: string): EvaluatedDataFlowCalculation {
+      return {
+        id: calculationKey,
+        label: calculationLabel,
+        status: "incomplete",
+        value: null,
+        formattedValue: "-",
+        formulaSummary: [
+          calculationExpression || (calculationMode === "formula" ? "Formula vacia." : "Plantilla vacia."),
+          `Input faltante: ${inputAlias} -> ${inputLabel}`,
+        ],
+        inputs: inputIds,
+        errorMessage: `No se pudo resolver ${inputAlias}.`,
+      };
+    }
+
     for (const input of calculation.inputs) {
       inputIds.push(input.sourceId);
       const inputLabel = describeBuilderSourceValue(
@@ -1557,47 +1827,35 @@ export async function evaluateObraDataFlowBuilder({
       if (input.sourceType === "calculation") {
         const inputEvaluation = evaluateCalculation(input.sourceId, [...stack, id]);
         if (inputEvaluation.value == null) {
-          const missingInput: EvaluatedDataFlowCalculation = {
-            id: calculation.id,
-            label: calculation.label,
-            status: "incomplete",
-            value: null,
-            formattedValue: "-",
-            formulaSummary: [
-              calculation.expression || "Formula vacia.",
-              `Input faltante: ${input.alias} -> ${inputLabel}`,
-            ],
-            inputs: inputIds,
-            errorMessage: `No se pudo resolver ${input.alias}.`,
-          };
+          const missingInput = missingInputResult(input.alias, inputLabel);
           cache.set(id, missingInput);
           return missingInput;
         }
-        variables[input.alias] = inputEvaluation.value;
+        textVariables[input.alias] = inputEvaluation.value;
+        const numericValue = coerceBuilderNumericValue(inputEvaluation.value);
+        if (calculation.mode === "formula" && numericValue == null) {
+          const missingInput = missingInputResult(input.alias, inputLabel);
+          cache.set(id, missingInput);
+          return missingInput;
+        }
+        if (numericValue != null) numericVariables[input.alias] = numericValue;
         resolvedInputSummary.push(`${input.alias} = ${inputLabel}`);
         continue;
       }
 
       if (input.sourceType === "obra_field") {
-        const obraValue = coerceBuilderNumericValue(resolveObraFieldValue(obraValues, input.sourceId));
-        if (obraValue == null) {
-          const missingInput: EvaluatedDataFlowCalculation = {
-            id: calculation.id,
-            label: calculation.label,
-            status: "incomplete",
-            value: null,
-            formattedValue: "-",
-            formulaSummary: [
-              calculation.expression || "Formula vacia.",
-              `Input faltante: ${input.alias} -> ${inputLabel}`,
-            ],
-            inputs: inputIds,
-            errorMessage: `No se pudo resolver ${input.alias}.`,
-          };
+        const rawObraValue = resolveObraFieldValue(obraValues, input.sourceId);
+        const textValue =
+          rawObraValue == null || String(rawObraValue).trim().length === 0 ? null : String(rawObraValue);
+        const numericValue = coerceBuilderNumericValue(rawObraValue);
+        const resolvedValue = calculation.mode === "formula" ? numericValue : textValue;
+        if (resolvedValue == null) {
+          const missingInput = missingInputResult(input.alias, inputLabel);
           cache.set(id, missingInput);
           return missingInput;
         }
-        variables[input.alias] = obraValue;
+        textVariables[input.alias] = resolvedValue;
+        if (numericValue != null) numericVariables[input.alias] = numericValue;
         resolvedInputSummary.push(`${input.alias} = ${inputLabel}`);
         continue;
       }
@@ -1605,30 +1863,39 @@ export async function evaluateObraDataFlowBuilder({
       const aggregated = aggregateRows(
         getRowsForSource(input.sourceType, input.sourceId),
         input.fieldKey,
-        input.aggregation ?? "sum"
+        input.aggregation ?? "sum",
+        input.sortFieldKey
       );
       if (aggregated.value == null) {
-        const missingInput: EvaluatedDataFlowCalculation = {
-          id: calculation.id,
-          label: calculation.label,
-          status: "incomplete",
-          value: null,
-          formattedValue: "-",
-          formulaSummary: [
-            calculation.expression || "Formula vacia.",
-            `Input faltante: ${input.alias} -> ${inputLabel}`,
-          ],
-          inputs: inputIds,
-          errorMessage: `No se pudo resolver ${input.alias}.`,
-        };
+        const missingInput = missingInputResult(input.alias, inputLabel);
         cache.set(id, missingInput);
         return missingInput;
       }
-      variables[input.alias] = aggregated.value;
+      numericVariables[input.alias] = aggregated.value;
+      textVariables[input.alias] = aggregated.value;
       resolvedInputSummary.push(`${input.alias} = ${inputLabel}`);
     }
 
-    const evaluated = evaluateExpression(calculation.expression, variables);
+    if (calculation.mode === "text_template") {
+      const evaluated = renderTextTemplate(calculation.template, textVariables);
+      const result: EvaluatedDataFlowCalculation = {
+        id: calculation.id,
+        label: calculation.label,
+        status: evaluated.value != null ? "ok" : evaluated.errorMessage ? "incomplete" : "error",
+        value: evaluated.value,
+        formattedValue: formatBuilderValue(evaluated.value, "text", 0),
+        formulaSummary: [
+          calculation.template || "Plantilla vacia.",
+          ...resolvedInputSummary,
+        ],
+        inputs: inputIds,
+        errorMessage: evaluated.errorMessage,
+      };
+      cache.set(id, result);
+      return result;
+    }
+
+    const evaluated = evaluateExpression(calculation.expression, numericVariables);
     const result: EvaluatedDataFlowCalculation = {
       id: calculation.id,
       label: calculation.label,
@@ -1652,6 +1919,8 @@ export async function evaluateObraDataFlowBuilder({
     .map((result) => {
       const evaluatedCalculation =
         result.calculationId != null ? calculationValueById.get(result.calculationId) ?? null : null;
+      const resultFormat =
+        typeof evaluatedCalculation?.value === "string" ? "text" : result.format;
       return {
         id: result.id,
         label: result.label,
@@ -1661,7 +1930,7 @@ export async function evaluateObraDataFlowBuilder({
         value: evaluatedCalculation?.value ?? null,
         formattedValue: formatBuilderValue(
           evaluatedCalculation?.value ?? null,
-          result.format,
+          resultFormat,
           result.decimals
         ),
         description: result.description,
@@ -1680,7 +1949,7 @@ export async function evaluateObraDataFlowBuilder({
             : null,
         generalTabSlot: result.generalTabSlot,
         generalTabOrder: result.generalTabOrder,
-        format: result.format,
+        format: resultFormat,
       } satisfies EvaluatedDataFlowResult;
     })
     .sort((left, right) => {

@@ -16,6 +16,7 @@ import type {
   FlujoAction,
 } from "@/app/excel/[obraId]/tabs/types";
 import type { OcrFolderLink } from "@/app/excel/[obraId]/tabs/file-manager/types";
+import type { DataFlowBuilderConfig } from "@/lib/data-flow-builder";
 
 // =============================================================================
 // Types
@@ -99,6 +100,10 @@ export type GeneralTabReportsData = {
     planPointsCount?: number;
     realPointsCount?: number;
   } | null;
+};
+
+export type ObraDataFlowConfigResponse = {
+  effectiveConfig: DataFlowBuilderConfig;
 };
 
 export type MacroTableListItem = {
@@ -203,6 +208,21 @@ export async function fetchDataFlowSuggestions(obraId: string): Promise<DataFlow
   }
   const data = await response.json().catch(() => ({}));
   return Array.isArray(data?.suggestions) ? (data.suggestions as DataFlowSuggestion[]) : [];
+}
+
+/**
+ * Fetch obra data-flow config without evaluating calculations.
+ */
+export async function fetchObraDataFlowConfig(obraId: string): Promise<ObraDataFlowConfigResponse> {
+  const response = await fetch(`/api/obras/${obraId}/data-flow-config`);
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error ?? "No se pudo cargar la configuracion de data-flow");
+  }
+  const data = await response.json().catch(() => ({}));
+  return {
+    effectiveConfig: data.effectiveConfig as DataFlowBuilderConfig,
+  };
 }
 
 /**

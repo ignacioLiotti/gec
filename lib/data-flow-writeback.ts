@@ -21,6 +21,21 @@ function missingWritebackMigrationError() {
   return new Error("Falta aplicar la migracion 0100_data_flow_writeback_runs.sql para sugerencias/auditoria de data-flow.");
 }
 
+function normalizeComparableSuggestionValue(value: unknown) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  return value;
+}
+
+function isSameSuggestionValue(left: unknown, right: unknown) {
+  const leftValue = normalizeComparableSuggestionValue(left);
+  const rightValue = normalizeComparableSuggestionValue(right);
+  if (typeof leftValue === "number" && typeof rightValue === "number") {
+    return Math.abs(leftValue - rightValue) < 0.000001;
+  }
+  return JSON.stringify(leftValue) === JSON.stringify(rightValue);
+}
+
 export async function persistDataFlowWritebackRun({
   supabase,
   tenantId,
@@ -79,10 +94,34 @@ export async function persistDataFlowWritebackRun({
     }));
 
   if (suggestionRows.length > 0) {
-    const { error } = await supabase.from("obra_data_flow_suggestions").insert(suggestionRows);
-    if (error) {
-      if (isMissingTableError(error)) throw missingWritebackMigrationError();
-      throw error;
+    const { data: pendingSuggestions, error: pendingError } = await supabase
+      .from("obra_data_flow_suggestions")
+      .select("result_id, field_id, suggested_value")
+      .eq("tenant_id", tenantId)
+      .eq("obra_id", obraId)
+      .eq("status", "pending");
+
+    if (pendingError) {
+      if (isMissingTableError(pendingError)) throw missingWritebackMigrationError();
+      throw pendingError;
+    }
+
+    const newSuggestionRows = suggestionRows.filter((row) => {
+      return !(pendingSuggestions ?? []).some((pending) => {
+        return (
+          pending.result_id === row.result_id &&
+          pending.field_id === row.field_id &&
+          isSameSuggestionValue(pending.suggested_value, row.suggested_value)
+        );
+      });
+    });
+
+    if (newSuggestionRows.length > 0) {
+      const { error } = await supabase.from("obra_data_flow_suggestions").insert(newSuggestionRows);
+      if (error) {
+        if (isMissingTableError(error)) throw missingWritebackMigrationError();
+        throw error;
+      }
     }
   }
 

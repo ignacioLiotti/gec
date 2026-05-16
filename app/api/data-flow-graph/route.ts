@@ -44,6 +44,9 @@ function isConfiguredCalculation(
   if (calculation.mode === "aggregate") {
     return Boolean(calculation.sourceId && (calculation.aggregation === "count_rows" || calculation.fieldKey));
   }
+  if (calculation.mode === "text_template") {
+    return Boolean(calculation.template.trim() && calculation.inputs.length > 0);
+  }
   return Boolean(calculation.expression.trim() && calculation.inputs.length > 0);
 }
 
@@ -249,13 +252,13 @@ export async function GET() {
           inputTableLabels:
             calculation.mode === "aggregate" && calculation.sourceType === "table"
               ? [defaultTableNameById.get(calculation.sourceId) ?? calculation.sourceId]
-              : calculation.mode === "formula"
+              : calculation.mode !== "aggregate"
                 ? calculation.inputs
                     .filter((input) => input.sourceType === "table")
                     .map((input) => defaultTableNameById.get(input.sourceId) ?? input.sourceId)
                 : [],
           inputColumnKeys:
-            calculation.mode === "formula"
+            calculation.mode !== "aggregate"
               ? calculation.inputs.map((input) =>
                   input.sourceType === "calculation" || input.sourceType === "obra_field"
                     ? input.alias
@@ -286,6 +289,17 @@ export async function GET() {
                         : `${input.alias} = ${input.aggregation ?? "sum"}(${input.sourceType}:${input.sourceId}${input.fieldKey ? `.${input.fieldKey}` : ""})`
                   ),
                 ]
+              : calculation.mode === "text_template"
+                ? [
+                    calculation.template || "Plantilla vacia.",
+                    ...calculation.inputs.map((input) =>
+                      input.sourceType === "calculation"
+                        ? `${input.alias} = calculation:${input.sourceId}`
+                        : input.sourceType === "obra_field"
+                          ? `${input.alias} = obra_field:${input.sourceId}`
+                          : `${input.alias} = ${input.aggregation ?? "sum"}(${input.sourceType}:${input.sourceId}${input.fieldKey ? `.${input.fieldKey}` : ""})`
+                    ),
+                  ]
               : [
                   `${calculation.aggregation}(${calculation.sourceType}:${calculation.sourceId}${calculation.fieldKey ? `.${calculation.fieldKey}` : ""})`,
                 ],
@@ -437,6 +451,27 @@ export async function GET() {
       },
       diagnostics: {
         reportingProjectionErrors: [],
+      },
+      builderConfig: config,
+      builderSources: {
+        tables: (defaultTables ?? []).map((table) => {
+          const tableId = table.id as string;
+          return {
+            id: tableId,
+            name: table.name as string,
+            columns: (defaultColumnsByTableId.get(tableId) ?? []).map((column) => ({
+              key: column.fieldKey,
+              label: column.label,
+              dataType: column.dataType,
+            })),
+          };
+        }),
+        macroTables: (macroTables ?? []).map((table) => ({
+          id: table.id as string,
+          name: table.name as string,
+          columns: [],
+        })),
+        obraFields,
       },
       nodes,
       edges,

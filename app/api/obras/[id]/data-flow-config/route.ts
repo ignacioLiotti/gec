@@ -16,6 +16,8 @@ import {
   resolveRequestAccessContext,
 } from "@/lib/demo-session";
 
+export const runtime = "nodejs";
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 async function fetchTenantDataFlowConfig(

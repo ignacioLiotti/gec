@@ -669,6 +669,7 @@ function GeneralInfoCard({
 	values,
 	isFieldDirty,
 	className,
+	renderSuggestion,
 }: {
 	values: Pick<
 		Obra,
@@ -681,6 +682,7 @@ function GeneralInfoCard({
 	>;
 	isFieldDirty: (field: keyof Obra) => boolean;
 	className?: string;
+	renderSuggestion?: (fieldId: string, currentValue: unknown) => ReactNode;
 }) {
 	return (
 		<ShellCard title="Información General" icon={Landmark} className={className}>
@@ -690,37 +692,49 @@ function GeneralInfoCard({
 					label="Designación y ubicación"
 					value={values.designacionYUbicacion || "No especificado"}
 					highlighted={isFieldDirty("designacionYUbicacion")}
-				/>
+				>
+					{renderSuggestion?.("designacionYUbicacion", values.designacionYUbicacion)}
+				</MiniField>
 				<MiniField
 					icon={Building2}
 					label="Entidad contratante"
 					value={values.entidadContratante || "No especificado"}
 					highlighted={isFieldDirty("entidadContratante")}
-				/>
+				>
+					{renderSuggestion?.("entidadContratante", values.entidadContratante)}
+				</MiniField>
 				<MiniField
 					icon={Calendar}
 					label="Mes básico"
 					value={values.mesBasicoDeContrato || "No especificado"}
 					highlighted={isFieldDirty("mesBasicoDeContrato")}
-				/>
+				>
+					{renderSuggestion?.("mesBasicoDeContrato", values.mesBasicoDeContrato)}
+				</MiniField>
 				<MiniField
 					icon={Calendar}
 					label="Iniciación"
 					value={values.iniciacion || "No especificado"}
 					highlighted={isFieldDirty("iniciacion")}
-				/>
+				>
+					{renderSuggestion?.("iniciacion", values.iniciacion)}
+				</MiniField>
 				<MiniField
 					icon={Hash}
 					label="N° de obra"
 					value={`#${values.n ?? 0}`}
 					highlighted={isFieldDirty("n")}
-				/>
+				>
+					{renderSuggestion?.("n", values.n)}
+				</MiniField>
 				<MiniField
 					icon={Ruler}
 					label="Superficie"
 					value={`${formatNumber(values.supDeObraM2, " m²")}`}
 					highlighted={isFieldDirty("supDeObraM2")}
-				/>
+				>
+					{renderSuggestion?.("supDeObraM2", values.supDeObraM2)}
+				</MiniField>
 			</div>
 		</ShellCard>
 	);
@@ -820,13 +834,35 @@ export function ObraGeneralTab({
 		return Math.abs(current - recommended) > 0.01;
 	};
 	const pendingDataFlowSuggestions = dataFlowSuggestions.filter((suggestion) => suggestion.status === "pending");
-	const dataFlowSuggestionByFieldId = new Map(
-		pendingDataFlowSuggestions.map((suggestion) => [suggestion.field_id, suggestion])
-	);
+	const dataFlowSuggestionByFieldId = new Map<string, DataFlowSuggestion>();
+	for (const suggestion of pendingDataFlowSuggestions) {
+		if (!dataFlowSuggestionByFieldId.has(suggestion.field_id)) {
+			dataFlowSuggestionByFieldId.set(suggestion.field_id, suggestion);
+		}
+	}
+	const dataFlowFieldAliases: Record<string, string[]> = {
+		certificadoALaFecha: ["certificado_a_la_fecha"],
+		saldoACertificar: ["saldo_a_certificar"],
+		contratoMasAmpliaciones: ["contrato_mas_ampliaciones"],
+		designacionYUbicacion: ["designacion_y_ubicacion"],
+		entidadContratante: ["entidad_contratante"],
+		mesBasicoDeContrato: ["mes_basico_de_contrato"],
+		supDeObraM2: ["sup_de_obra_m2"],
+		segunContrato: ["segun_contrato"],
+		prorrogasAcordadas: ["prorrogas_acordadas"],
+		plazoTotal: ["plazo_total"],
+		plazoTransc: ["plazo_transc"],
+	};
 	const formatSuggestionValue = (value: unknown, formatted: string | null) =>
 		formatted ?? (typeof value === "number" ? formatCurrency(value) : String(value ?? "-"));
-	const getDataFlowSuggestionForField = (fieldId: string) =>
-		dataFlowSuggestionByFieldId.get(fieldId) ?? dataFlowSuggestionByFieldId.get(`custom:${fieldId}`) ?? null;
+	const getDataFlowSuggestionForField = (fieldId: string) => {
+		const candidateIds = [fieldId, ...(dataFlowFieldAliases[fieldId] ?? []), `custom:${fieldId}`];
+		for (const candidateId of candidateIds) {
+			const suggestion = dataFlowSuggestionByFieldId.get(candidateId);
+			if (suggestion) return suggestion;
+		}
+		return null;
+	};
 	const hasVisibleDataFlowSuggestion = (suggestion: DataFlowSuggestion | null, currentValue: unknown) => {
 		if (!suggestion) return false;
 		if (typeof currentValue === "number" || typeof suggestion.suggested_value === "number") {
@@ -842,8 +878,8 @@ export function ObraGeneralTab({
 		if (!suggestion) return null;
 		if (!hasVisibleDataFlowSuggestion(suggestion, currentValue)) return null;
 		return (
-			<div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-				<p className="text-xs text-[#b45309]">
+			<div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+				<p className="text-xs font-medium text-emerald-700">
 					Valor recomendado: {formatSuggestionValue(suggestion.suggested_value, suggestion.formatted_value)}
 				</p>
 				{onDataFlowSuggestionDecision ? (
@@ -852,7 +888,7 @@ export function ObraGeneralTab({
 							type="button"
 							size="sm"
 							variant="outline"
-							className="h-7 px-2 text-[11px]"
+							className="h-7 border-emerald-200 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
 							disabled={isResolvingDataFlowSuggestion}
 							onClick={() => void onDataFlowSuggestionDecision(suggestion.id, "accept")}
 						>
@@ -862,7 +898,7 @@ export function ObraGeneralTab({
 							type="button"
 							size="sm"
 							variant="ghost"
-							className="h-7 px-2 text-[11px] text-[#b45309]"
+							className="h-7 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
 							disabled={isResolvingDataFlowSuggestion}
 							onClick={() => void onDataFlowSuggestionDecision(suggestion.id, "reject")}
 						>
@@ -1841,6 +1877,7 @@ export function ObraGeneralTab({
 											values={form.state.values}
 											isFieldDirty={isFieldDirty}
 											className="h-full"
+											renderSuggestion={renderDataFlowSuggestion}
 										/>
 									</m.section>
 								) : null}
@@ -1859,37 +1896,58 @@ export function ObraGeneralTab({
 											label="Designación y ubicación"
 											value={form.state.values.designacionYUbicacion || "No especificado"}
 											highlighted={isFieldDirty("designacionYUbicacion")}
-										/>
+										>
+											{renderDataFlowSuggestion(
+												"designacionYUbicacion",
+												form.state.values.designacionYUbicacion
+											)}
+										</MiniField>
 										<MiniField
 											icon={Building2}
 											label="Entidad contratante"
 											value={form.state.values.entidadContratante || "No especificado"}
 											highlighted={isFieldDirty("entidadContratante")}
-										/>
+										>
+											{renderDataFlowSuggestion(
+												"entidadContratante",
+												form.state.values.entidadContratante
+											)}
+										</MiniField>
 										<MiniField
 											icon={Calendar}
 											label="Mes básico"
 											value={form.state.values.mesBasicoDeContrato || "No especificado"}
 											highlighted={isFieldDirty("mesBasicoDeContrato")}
-										/>
+										>
+											{renderDataFlowSuggestion(
+												"mesBasicoDeContrato",
+												form.state.values.mesBasicoDeContrato
+											)}
+										</MiniField>
 										<MiniField
 											icon={Calendar}
 											label="Iniciación"
 											value={form.state.values.iniciacion || "No especificado"}
 											highlighted={isFieldDirty("iniciacion")}
-										/>
+										>
+											{renderDataFlowSuggestion("iniciacion", form.state.values.iniciacion)}
+										</MiniField>
 										<MiniField
 											icon={Hash}
 											label="N° de obra"
 											value={`#${form.state.values.n ?? 0}`}
 											highlighted={isFieldDirty("n")}
-										/>
+										>
+											{renderDataFlowSuggestion("n", form.state.values.n)}
+										</MiniField>
 										<MiniField
 											icon={Ruler}
 											label="Superficie"
 											value={`${formatNumber(form.state.values.supDeObraM2, " m²")}`}
 											highlighted={isFieldDirty("supDeObraM2")}
-										/>
+										>
+											{renderDataFlowSuggestion("supDeObraM2", form.state.values.supDeObraM2)}
+										</MiniField>
 									</div>
 								</ShellCard>
 							</m.section>
