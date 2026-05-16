@@ -1,1 +1,14 @@
-{}
+{
+  "files.exclude": {
+    ".env*": true,
+    "*.dump": true,
+    "*.list": true,
+    "*.tsbuildinfo": true,
+    "package-lock.json": true,
+    "components.json": true,
+    "react-doctor.config.json": true,
+    "skills-lock.json": true,
+    "tmpclaude-ffbb-cwd": true
+  },
+  "explorer.excludeGitIgnore": true
+}

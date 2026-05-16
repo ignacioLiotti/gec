@@ -30,7 +30,13 @@
       "Bash(find /c/Users/Usuario/Desktop/projects/multi-tenant -type f -name \"*quick*\" 2>/dev/null | head -20)",
       "Bash(git ls-tree:*)",
       "mcp__paper__set_text_content",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(gunzip)",
+      "Bash(tar -x)",
+      "Bash(awk NR>=11055 && NR<=11065:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

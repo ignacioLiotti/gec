@@ -1,10 +1,19 @@
 // next.config.ts
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { withWorkflow } from "workflow/next";
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+/** Pin Turbopack root so a parent folder `package-lock.json` does not steal the workspace root. */
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+
 const nextConfig: NextConfig = {
 	reactStrictMode: true,
+	allowedDevOrigins: ["127.0.0.1", "localhost"],
+	turbopack: {
+		root: projectRoot,
+	},
 	reactCompiler: true,
 	outputFileTracingIncludes: {
 		"/api/pdf-render/route": [
@@ -103,6 +112,6 @@ const sentryWebpackOptions = {
 export default isVercelProductionBuild
 	? withSentryConfig(
 			withSentryConfig(workflowConfig, sentryOptions),
-			sentryWebpackOptions
-	  )
+			sentryWebpackOptions,
+		)
 	: workflowConfig;

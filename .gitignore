@@ -53,6 +53,11 @@ remotion/out/
 supabase/.temp/cli-latest
 CERT N° 3 JUL-25.xlsx
 /tmp/
+*.dump
+*.list
+tmpclaude-ffbb-cwd
+/data/
+.claude/worktrees/
 
 # generated local scratch artifacts
 supabase/.temp/
