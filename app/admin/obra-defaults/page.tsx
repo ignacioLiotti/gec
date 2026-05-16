@@ -13,6 +13,7 @@ import {
   ScanLine,
   Plus,
   Folder,
+  FolderInput,
   FileText,
   ChevronDown,
   ChevronUp,
@@ -754,6 +755,94 @@ function mapFolderToExtractedTables(folder: DefaultFolder): ExtractedTableConfig
   ];
 }
 
+function getFolderParentPath(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  return segments.length > 1 ? segments.slice(0, -1).join("/") : "";
+}
+
+function isFolderDescendant(candidatePath: string, folderPath: string): boolean {
+  return candidatePath.startsWith(`${folderPath}/`);
+}
+
+function buildFolderUpdatePayload(
+  folder: DefaultFolder,
+  parentPath: string,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    type: "folder",
+    id: folder.id,
+    name: folder.name,
+    parentPath: parentPath || null,
+  };
+
+  if (!folder.isOcr) {
+    return payload;
+  }
+
+  const extractedTables = mapFolderToExtractedTables(folder);
+  const primaryTable = extractedTables[0] ?? createEmptyExtractedTable(folder.name);
+
+  return {
+    ...payload,
+    isOcr: true,
+    dataInputMethod: primaryTable.dataInputMethod ?? folder.dataInputMethod ?? "both",
+    spreadsheetTemplate: primaryTable.spreadsheetTemplate ?? folder.spreadsheetTemplate ?? null,
+    ocrTemplateId: primaryTable.ocrTemplateId ?? folder.ocrTemplateId ?? null,
+    manualEntryEnabled:
+      typeof primaryTable.manualEntryEnabled === "boolean"
+        ? primaryTable.manualEntryEnabled
+        : typeof folder.manualEntryEnabled === "boolean"
+          ? folder.manualEntryEnabled
+          : true,
+    hasNestedData: Boolean(primaryTable.hasNestedData ?? folder.hasNestedData),
+    documentTypes: primaryTable.documentTypes ?? folder.documentTypes ?? [],
+    extractionInstructions:
+      primaryTable.extractionInstructions ?? folder.extractionInstructions ?? null,
+    extractionRowMode: primaryTable.rowMode,
+    extractionMaxRows: getEffectiveTableMaxRows(primaryTable),
+    extractedTables: extractedTables.map((table, tableIndex) => ({
+      id: table.id,
+      name: table.name?.trim() || `Tabla ${tableIndex + 1}`,
+      rowMode: table.rowMode,
+      maxRows: getEffectiveTableMaxRows(table),
+      dataInputMethod: table.dataInputMethod,
+      spreadsheetTemplate: table.spreadsheetTemplate ?? null,
+      ocrTemplateId: table.ocrTemplateId ?? null,
+      manualEntryEnabled:
+        typeof table.manualEntryEnabled === "boolean" ? table.manualEntryEnabled : true,
+      hasNestedData: Boolean(table.hasNestedData),
+      documentTypes: table.documentTypes ?? [],
+      extractionInstructions: table.extractionInstructions?.trim() || null,
+      columns: table.columns.map((col, index) => ({
+        id: col.columnId ?? col.id,
+        label: col.label,
+        fieldKey: col.fieldKey || normalizeFieldKey(col.label),
+        dataType: col.dataType,
+        required: col.required,
+        position: index,
+        ocrScope: table.hasNestedData ? col.scope : "item",
+        description: col.description,
+        aliases: col.aliases ?? [],
+        examples: col.examples ?? [],
+        excelKeywords: col.excelKeywords ?? [],
+      })),
+    })),
+    columns: primaryTable.columns.map((col, index) => ({
+      id: col.columnId ?? col.id,
+      label: col.label,
+      fieldKey: col.fieldKey || normalizeFieldKey(col.label),
+      dataType: col.dataType,
+      required: col.required,
+      position: index,
+      ocrScope: primaryTable.hasNestedData ? col.scope : "item",
+      description: col.description,
+      aliases: col.aliases ?? [],
+      examples: col.examples ?? [],
+      excelKeywords: col.excelKeywords ?? [],
+    })),
+  };
+}
+
 // Get icon for data type
 function getDataTypeIcon(dataType: string) {
   switch (dataType) {
@@ -775,11 +864,13 @@ function FolderRow({
   folder,
   onDelete,
   onEdit,
+  onMove,
   index,
 }: {
   folder: DefaultFolder;
   onDelete: () => void;
   onEdit: () => void;
+  onMove: () => void;
   index: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -812,8 +903,18 @@ function FolderRow({
         <Button
           variant="ghost"
           size="icon"
+          onClick={onMove}
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="Mover carpeta"
+        >
+          <FolderInput className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onEdit}
           className="opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="Editar carpeta"
         >
           <Pencil className="h-4 w-4" />
         </Button>
@@ -865,9 +966,22 @@ function FolderRow({
                   size="icon"
                   onClick={(e) => {
                     e.stopPropagation();
+                    onMove();
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Mover carpeta"
+                >
+                  <FolderInput className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onEdit();
                   }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Editar carpeta"
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -1250,6 +1364,9 @@ export default function ObraDefaultsPage() {
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderParentPath, setNewFolderParentPath] = useState("");
   const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
+  const [movingFolder, setMovingFolder] = useState<DefaultFolder | null>(null);
+  const [moveFolderParentPath, setMoveFolderParentPath] = useState("");
+  const [isSubmittingMoveFolder, setIsSubmittingMoveFolder] = useState(false);
 
   // Data folder state
   const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>("both");
@@ -1533,8 +1650,7 @@ export default function ObraDefaultsPage() {
   }, [loadEditorFromExtractedTable]);
 
   const handleEditFolder = useCallback((folder: DefaultFolder) => {
-    const pathSegments = folder.path.split("/").filter(Boolean);
-    const parentPath = pathSegments.length > 1 ? pathSegments.slice(0, -1).join("/") : "";
+    const parentPath = getFolderParentPath(folder.path);
     const extractedTables = mapFolderToExtractedTables(folder);
     const activeTable = extractedTables[0] ?? createEmptyExtractedTable(folder.name);
     setEditingFolderId(folder.id);
@@ -1550,6 +1666,48 @@ export default function ObraDefaultsPage() {
     setFolderEditorStep(0);
     setIsAddFolderOpen(true);
   }, [loadEditorFromExtractedTable]);
+
+  const handleOpenMoveFolder = useCallback((folder: DefaultFolder) => {
+    setMovingFolder(folder);
+    setMoveFolderParentPath(getFolderParentPath(folder.path));
+  }, []);
+
+  const handleSaveFolderMove = async () => {
+    if (!movingFolder) return;
+
+    const currentParentPath = getFolderParentPath(movingFolder.path);
+    const nextParentPath = moveFolderParentPath.trim();
+    if (nextParentPath === currentParentPath) {
+      setMovingFolder(null);
+      setMoveFolderParentPath("");
+      return;
+    }
+
+    try {
+      setIsSubmittingMoveFolder(true);
+      const res = await fetch("/api/obra-defaults", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildFolderUpdatePayload(movingFolder, nextParentPath)),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Error moviendo carpeta");
+      }
+
+      const { folder } = await res.json();
+      setFolders((prev) => prev.map((item) => (item.id === folder.id ? folder : item)));
+      setMovingFolder(null);
+      setMoveFolderParentPath("");
+      toast.success("Carpeta movida");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Error moviendo carpeta");
+    } finally {
+      setIsSubmittingMoveFolder(false);
+    }
+  };
 
   const handleSaveFolder = async () => {
     if (!newFolderName.trim()) return;
@@ -2058,10 +2216,27 @@ export default function ObraDefaultsPage() {
   const folderEditorLastStep = folderEditorSteps.length - 1;
   const isFolderReviewStep = folderEditorStep === folderEditorLastStep;
   const parentFolderOptions = useMemo(
-    () => folders.filter((folder) => folder.id !== editingFolderId),
+    () => folders.filter((folder) => {
+      if (folder.id === editingFolderId) return false;
+      const editingFolder = folders.find((item) => item.id === editingFolderId);
+      if (!editingFolder) return true;
+      return !isFolderDescendant(folder.path, editingFolder.path);
+    }),
     [folders, editingFolderId]
   );
+  const moveParentFolderOptions = useMemo(
+    () =>
+      folders.filter((folder) => {
+        if (!movingFolder) return true;
+        if (folder.id === movingFolder.id) return false;
+        return !isFolderDescendant(folder.path, movingFolder.path);
+      }),
+    [folders, movingFolder]
+  );
   const folderPathPreview = `/${newFolderParentPath ? `${newFolderParentPath}/` : ""}${normalizeFolderName(newFolderName || "carpeta")}`;
+  const moveFolderPathPreview = movingFolder
+    ? `/${moveFolderParentPath ? `${moveFolderParentPath}/` : ""}${normalizeFolderName(movingFolder.name)}`
+    : "/";
   const activeExtractedTable = useMemo(
     () =>
       newFolderExtractedTables.find((table) => table.id === activeExtractedTableId) ??
@@ -2273,6 +2448,7 @@ export default function ObraDefaultsPage() {
                         folder={folder}
                         index={index}
                         onEdit={() => handleEditFolder(folder)}
+                        onMove={() => handleOpenMoveFolder(folder)}
                         onDelete={() => handleDeleteFolder(folder.id)}
                       />
                     ))}
@@ -2356,6 +2532,7 @@ export default function ObraDefaultsPage() {
                         folder={folder}
                         index={index}
                         onEdit={() => handleEditFolder(folder)}
+                        onMove={() => handleOpenMoveFolder(folder)}
                         onDelete={() => handleDeleteFolder(folder.id)}
                       />
                     ))}
@@ -2500,6 +2677,93 @@ export default function ObraDefaultsPage() {
         </TabsContent>
       </Tabs>
 
+      <Dialog
+        open={Boolean(movingFolder)}
+        onOpenChange={(open) => {
+          if (!open && !isSubmittingMoveFolder) {
+            setMovingFolder(null);
+            setMoveFolderParentPath("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderInput className="h-5 w-5 text-orange-500" />
+              Mover carpeta
+            </DialogTitle>
+            <DialogDescription>
+              Cambiá solo la ubicación de la carpeta. La configuración de datos y extracción se conserva.
+            </DialogDescription>
+          </DialogHeader>
+
+          {movingFolder ? (
+            <div className="space-y-5 py-2">
+              <div className="rounded-2xl border bg-muted/30 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                  Carpeta actual
+                </p>
+                <p className="mt-1 font-mono text-sm">/{movingFolder.path}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Nuevo padre</Label>
+                <Select
+                  value={moveFolderParentPath || "__root__"}
+                  onValueChange={(value) =>
+                    setMoveFolderParentPath(value === "__root__" ? "" : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Raiz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__root__">Raiz</SelectItem>
+                    {moveParentFolderOptions.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.path}>
+                        {folder.name} (/{folder.path})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-2xl bg-muted/40 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                  Ruta final
+                </p>
+                <p className="mt-1 font-mono text-sm">{moveFolderPathPreview}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMovingFolder(null);
+                setMoveFolderParentPath("");
+              }}
+              disabled={isSubmittingMoveFolder}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void handleSaveFolderMove()}
+              disabled={isSubmittingMoveFolder || !movingFolder}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              {isSubmittingMoveFolder ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FolderInput className="mr-2 h-4 w-4" />
+              )}
+              Mover carpeta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {false && (<div className="flex flex-col xl:flex-row gap-6">)
 
         {/* Folders Section */}
@@ -2543,6 +2807,7 @@ export default function ObraDefaultsPage() {
                     folder={folder}
                     index={index}
                     onEdit={() => handleEditFolder(folder)}
+                    onMove={() => handleOpenMoveFolder(folder)}
                     onDelete={() => handleDeleteFolder(folder.id)}
                   />
                 ))}
@@ -4572,4 +4837,3 @@ export default function ObraDefaultsPage() {
     </div >
   );
 }
-

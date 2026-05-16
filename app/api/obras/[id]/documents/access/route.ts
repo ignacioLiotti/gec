@@ -5,6 +5,7 @@ import {
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
 import { normalizeFolderPath } from "@/lib/tablas";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 const DOCUMENTS_BUCKET = "obra-documents";
 
@@ -97,8 +98,10 @@ export async function GET(request: Request, context: RouteContext) {
 			);
 		}
 
+		const storageClient = createSupabaseAdminClient();
+
 		if (download) {
-			const { data, error } = await supabase.storage
+			const { data, error } = await storageClient.storage
 				.from(DOCUMENTS_BUCKET)
 				.download(storagePath);
 			if (error || !data) {
@@ -129,7 +132,7 @@ export async function GET(request: Request, context: RouteContext) {
 			});
 		}
 
-		const { data, error } = await supabase.storage
+		const { data, error } = await storageClient.storage
 			.from(DOCUMENTS_BUCKET)
 			.createSignedUrl(storagePath, expiresIn);
 		if (error || !data?.signedUrl) {

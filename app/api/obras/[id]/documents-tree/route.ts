@@ -325,6 +325,27 @@ export async function GET(request: Request, context: RouteContext) {
       }
     }
 
+    const { data: defaultFolders, error: defaultFoldersError } = await supabase
+      .from("obra_default_folders")
+      .select("name, path")
+      .eq("tenant_id", tenantId)
+      .order("position", { ascending: true });
+    if (defaultFoldersError) {
+      console.error("[documents-tree:get] default folders error:", defaultFoldersError);
+    } else {
+      for (const folder of defaultFolders ?? []) {
+        const folderPath =
+          typeof folder.path === "string" ? normalizeFolderPath(folder.path) : "";
+        const folderName =
+          typeof folder.name === "string" && folder.name.trim().length > 0
+            ? folder.name.trim()
+            : "";
+        if (folderPath && folderName) {
+          displayNameByPath.set(folderPath, folderName);
+        }
+      }
+    }
+
     const root: any = {
       id: "root",
       name: "Documentos",
@@ -407,6 +428,19 @@ export async function GET(request: Request, context: RouteContext) {
       folderNodeByPath.set(normalizedRelative, folderNode);
       return folderNode;
     };
+
+    for (const link of ocrLinks as any[]) {
+      const folderPath = normalizeFolderPath(link?.folderName ?? "");
+      if (!folderPath || isDeletedPath(`${obraId}/${folderPath}`)) continue;
+      ensureFolderPath(folderPath);
+    }
+
+    for (const folder of defaultFolders ?? []) {
+      const folderPath =
+        typeof folder.path === "string" ? normalizeFolderPath(folder.path) : "";
+      if (!folderPath || isDeletedPath(`${obraId}/${folderPath}`)) continue;
+      ensureFolderPath(folderPath);
+    }
 
     const buildFileNode = (
       storagePath: string,
@@ -541,7 +575,7 @@ export async function GET(request: Request, context: RouteContext) {
       }
 
       for (const item of folderContents ?? []) {
-        if (item.name === ".emptyFolderPlaceholder") continue;
+        if (item.name === ".emptyFolderPlaceholder" || item.name === ".keep") continue;
         const isFolder = !item.metadata;
         if (isFolder) {
           const childRelative = currentRelative

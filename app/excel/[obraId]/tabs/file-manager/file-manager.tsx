@@ -62,6 +62,7 @@ import {
   FolderIcon,
   Crosshair,
   RefreshCw,
+  FolderInput,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Sentry from '@sentry/nextjs';
@@ -1082,6 +1083,7 @@ function FileManagerContent({
   const [loadingDeletedEntries, setLoadingDeletedEntries] = useState(false);
   const [restoringDeleteId, setRestoringDeleteId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
+  const [draggedMoveFolderId, setDraggedMoveFolderId] = useState<string | null>(null);
   const [currentUploadFolder, setCurrentUploadFolder] = useState<FileSystemItem | null>(null);
   // ocrFolderLinks now comes from the global store (documentsState)
   const ocrFolderLinks = documentsState.ocrFolderLinks;
@@ -1224,6 +1226,7 @@ function FileManagerContent({
   const lastBootstrapObraIdRef = useRef<string | null>(null);
   const isUploadingOcrFolder = uploadingFiles && Boolean(currentUploadFolder?.ocrEnabled);
   const parentMapRef = useRef<Map<string, FileSystemItem | null>>(new Map());
+  const draggedMoveFolderRef = useRef<FileSystemItem | null>(null);
   const pendingFolderPathRef = useRef<string | null>(null);
   const pendingFilePathRef = useRef<string | null>(null);
   const skipFilePathSyncRef = useRef(false);
@@ -1370,6 +1373,11 @@ function FileManagerContent({
       return Array.from(dataTransfer.items).some(item => item.kind === 'file');
     }
     return false;
+  };
+
+  const containsFolderMove = (dataTransfer?: DataTransfer | null) => {
+    if (!dataTransfer?.types) return false;
+    return Array.from(dataTransfer.types).includes('application/x-obra-folder-id');
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -3601,6 +3609,7 @@ function FileManagerContent({
   }, [buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, fetchUsageInfo, getAutoSelectedSpreadsheetTablaIds, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, sanitizeStorageFileName, selectedFolder]);
 
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (containsFolderMove(event.dataTransfer)) return;
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
     if (draggedFolderId) {
@@ -3613,6 +3622,7 @@ function FileManagerContent({
   }, [draggedFolderId, isGlobalFileDragActive]);
 
   const handleDocumentAreaDragEnter = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (containsFolderMove(event.dataTransfer)) return;
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
     if (draggedFolderId) return;
@@ -3620,6 +3630,7 @@ function FileManagerContent({
   }, [draggedFolderId]);
 
   const handleDocumentAreaDragLeave = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (containsFolderMove(event.dataTransfer)) return;
     if (!containsFiles(event.dataTransfer)) return;
     const currentTarget = event.currentTarget as HTMLElement;
     const related = event.relatedTarget as Node | null;
@@ -3628,6 +3639,7 @@ function FileManagerContent({
   }, []);
 
   const handleDocumentAreaDrop = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (containsFolderMove(event.dataTransfer)) return;
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -3653,7 +3665,82 @@ function FileManagerContent({
     e.target.value = '';
   };
 
+  const moveFolderToParent = useCallback(async (sourceFolder: FileSystemItem, targetParent: FileSystemItem) => {
+    if (sourceFolder.id === 'root') return;
+    if (targetParent.type !== 'folder') return;
+    if (sourceFolder.id === targetParent.id) {
+      toast.error('No podes mover una carpeta dentro de si misma.');
+      return;
+    }
+
+    const sourceFolderPath = getPathSegments(sourceFolder).join('/');
+    const targetParentFolderPath = targetParent.id === 'root' ? '' : getPathSegments(targetParent).join('/');
+    if (!sourceFolderPath) {
+      toast.error('No se pudo resolver la carpeta origen.');
+      return;
+    }
+    if (
+      targetParentFolderPath === sourceFolderPath ||
+      targetParentFolderPath.startsWith(`${sourceFolderPath}/`)
+    ) {
+      toast.error('No podes mover una carpeta dentro de una de sus subcarpetas.');
+      return;
+    }
+
+    const currentParent = parentMapRef.current.get(sourceFolder.id) ?? null;
+    const currentParentPath =
+      currentParent && currentParent.id !== 'root' ? getPathSegments(currentParent).join('/') : '';
+    if (currentParentPath === targetParentFolderPath) {
+      return;
+    }
+    if (hasOcrAncestor(targetParent)) {
+      toast.error('No podes mover carpetas dentro de una carpeta de datos.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/obras/${obraId}/documents/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceFolderPath, targetParentFolderPath }),
+      });
+      const payload = await response.json().catch(() => ({} as { error?: string; targetFolderPath?: string }));
+      if (!response.ok) {
+        throw new Error(payload.error || 'No se pudo mover la carpeta');
+      }
+
+      toast.success('Carpeta movida correctamente');
+      pendingFolderPathRef.current = typeof payload.targetFolderPath === 'string' ? payload.targetFolderPath : null;
+      await refreshFileTreeDerivedData();
+    } catch (error) {
+      console.error('Error moving folder:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo mover la carpeta');
+    }
+  }, [getPathSegments, hasOcrAncestor, obraId, refreshFileTreeDerivedData]);
+
+  const handleFolderMoveDragStart = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (folder.id === 'root') return;
+    draggedMoveFolderRef.current = folder;
+    setDraggedMoveFolderId(folder.id);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-obra-folder-id', folder.id);
+    event.dataTransfer.setData('text/plain', folder.name);
+  }, []);
+
+  const handleFolderMoveDragEnd = useCallback(() => {
+    draggedMoveFolderRef.current = null;
+    setDraggedMoveFolderId(null);
+    setDraggedFolderId(null);
+  }, []);
+
   const handleFolderDragEnter = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (containsFolderMove(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsGlobalFileDragActive(false);
+      setDraggedFolderId(folder.id);
+      return;
+    }
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -3662,6 +3749,14 @@ function FileManagerContent({
   }, []);
 
   const handleFolderDragOver = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (containsFolderMove(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'move';
+      setIsGlobalFileDragActive(false);
+      setDraggedFolderId(prev => (prev === folder.id ? prev : folder.id));
+      return;
+    }
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -3671,7 +3766,7 @@ function FileManagerContent({
   }, []);
 
   const handleFolderDragLeave = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
-    if (!containsFiles(event.dataTransfer)) return;
+    if (!containsFiles(event.dataTransfer) && !containsFolderMove(event.dataTransfer)) return;
     const currentTarget = event.currentTarget as HTMLElement;
     const related = event.relatedTarget as Node | null;
     if (related && currentTarget.contains(related)) return;
@@ -3679,6 +3774,19 @@ function FileManagerContent({
   }, []);
 
   const handleFolderDrop = useCallback((event: React.DragEvent<HTMLElement>, folder: FileSystemItem) => {
+    if (containsFolderMove(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const sourceFolder = draggedMoveFolderRef.current;
+      setDraggedFolderId(null);
+      setDraggedMoveFolderId(null);
+      draggedMoveFolderRef.current = null;
+      event.dataTransfer.clearData();
+      if (sourceFolder) {
+        void moveFolderToParent(sourceFolder, folder);
+      }
+      return;
+    }
     if (!containsFiles(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -3689,7 +3797,7 @@ function FileManagerContent({
     if (files.length) {
       void uploadFilesToFolder(files, folder);
     }
-  }, [uploadFilesToFolder]);
+  }, [moveFolderToParent, uploadFilesToFolder]);
 
   const openCreateFolderDialog = useCallback((mode: 'normal' | 'data', parent?: FileSystemItem | null) => {
     if (parent && hasOcrAncestor(parent)) {
@@ -3939,6 +4047,7 @@ function FileManagerContent({
     const isFolderSelected = selectedFolder?.id === item.id;
     const isDocumentSelected = selectedDocument?.id === item.id;
     const isDragTarget = draggedFolderId === item.id;
+    const isMovingThisFolder = draggedMoveFolderId === item.id;
     const hasChildren = item.children && item.children.length > 0;
     const folderLookupKey = normalizeFolderPath((item.relativePath ?? item.ocrFolderName ?? item.name));
     const folderLink = isFolder && item.ocrEnabled ? (ocrFolderMap.get(folderLookupKey) || ocrFolderMap.get(normalizeFolderName(folderLookupKey)) || null) : null;
@@ -3964,6 +4073,9 @@ function FileManagerContent({
           onDragOver={isFolder ? (event) => handleFolderDragOver(event, item) : undefined}
           onDragLeave={isFolder ? (event) => handleFolderDragLeave(event, item) : undefined}
           onDrop={isFolder ? (event) => handleFolderDrop(event, item) : undefined}
+          draggable={isFolder && item.id !== 'root'}
+          onDragStart={isFolder ? (event) => handleFolderMoveDragStart(event, item) : undefined}
+          onDragEnd={isFolder ? handleFolderMoveDragEnd : undefined}
           onContextMenu={isFolder && item.id !== 'root'
             ? (e) => {
               e.preventDefault();
@@ -3986,6 +4098,7 @@ function FileManagerContent({
             }
             ${isDocumentSelected && !isFolder ? 'bg-amber-50 ring-2 ring-amber-400' : ''}
             ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-1' : ''}
+            ${isMovingThisFolder ? 'opacity-50' : ''}
           `}
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
@@ -4115,12 +4228,15 @@ function FileManagerContent({
     handleFolderDragLeave,
     handleFolderDragOver,
     handleFolderDrop,
+    handleFolderMoveDragEnd,
+    handleFolderMoveDragStart,
     normalizeFolderName,
     ocrFolderMap,
     renderOcrStatusBadge,
     selectedDocument?.id,
     selectedFolder?.id,
     toggleFolder,
+    draggedMoveFolderId,
   ]);
 
   const toggleOrderExpanded = (orderId: string) => {
@@ -5882,6 +5998,7 @@ function FileManagerContent({
                 <div className="flex items-start gap-4 w-max px-2 pb-1 ">
                   {folders.map((item) => {
                     const isDragTarget = draggedFolderId === item.id;
+                    const isMovingThisFolder = draggedMoveFolderId === item.id;
                     const thumbnailWizardTargetId =
                       normalizeFolderName(item.name) === 'presupuesto-personalizado'
                         ? 'documents-folder-thumbnail-presupuesto-personalizado'
@@ -5903,6 +6020,7 @@ function FileManagerContent({
                           data-wizard-target={thumbnailWizardTargetId}
                           className={` flex flex-col items-start gap-2 p-3 pb-1 ml-1 mb-1 w-[120px] h-[85px] border rounded-lg hover:bg-stone-100 transition-colors relative 
                             ${isDragTarget ? 'ring-2 ring-amber-500 ring-offset-6' : ''}
+                            ${isMovingThisFolder ? 'opacity-50' : ''}
                             ${isOcrEnabled ? "bg-linear-to-b from-amber-500 to-amber-700" : "bg-linear-to-b from-stone-500 to-stone-700"}
                             `}
                           onClick={() => handleFolderClick(item)}
@@ -5911,6 +6029,9 @@ function FileManagerContent({
                           onDragOver={(event) => handleFolderDragOver(event, item)}
                           onDragLeave={(event) => handleFolderDragLeave(event, item)}
                           onDrop={(event) => handleFolderDrop(event, item)}
+                          draggable
+                          onDragStart={(event) => handleFolderMoveDragStart(event, item)}
+                          onDragEnd={handleFolderMoveDragEnd}
                         >
                           <div className="flex flex-col items-center justify-end w-full h-full">
                             {countValue > 0 && (
@@ -7706,6 +7827,18 @@ function FileManagerContent({
                   </button>
                   <div className="my-1 h-px bg-stone-100" />
                 </>
+              )}
+              {contextMenu.item.type === 'folder' && contextMenu.item.id !== 'root' && parentMapRef.current.get(contextMenu.item.id)?.id !== 'root' && fileTree && (
+                <button
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-stone-700"
+                  onClick={() => {
+                    void moveFolderToParent(contextMenu.item, fileTree);
+                    setContextMenu(null);
+                  }}
+                >
+                  <FolderInput className="w-4 h-4" />
+                  Mover a Documentos
+                </button>
               )}
               {contextMenu.item.ocrEnabled && contextMenu.item.ocrTablaId && (
                 <>
