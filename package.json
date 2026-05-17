@@ -4,7 +4,8 @@
 	"private": true,
 	"packageManager": "npm@10.9.3",
 	"scripts": {
-		"dev": "next dev --webpack",
+		"dev": "next dev",
+		"dev:workflow": "set WORKFLOW_DEV_ENABLED=1&& next dev",
 		"build": "next build --turbopack",
 		"start": "next start",
 		"lint": "eslint",

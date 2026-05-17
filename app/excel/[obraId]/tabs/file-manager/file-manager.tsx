@@ -5840,6 +5840,7 @@ function FileManagerContent({
     const showArchivosTablaToggle = selectedFolder.ocrEnabled && hasTablaSchema && activeFolderLink?.dataInputMethod !== "manual";
     const folderLabel = selectedFolder.id === 'root' ? 'Todos los documentos' : selectedFolder.name;
     const showDownloadAllButton = collectFolderDownloadEntries(selectedFolder).length > 0;
+    const parentFolder = parentMapRef.current.get(selectedFolder.id) ?? null;
     const folderContentHeader = (
       <div className="mb-0">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -5854,21 +5855,38 @@ function FileManagerContent({
             }
           >
             {/* Tail on the right */}
-            <NotchTail side="right" className={cn("h-[53px] mb-[2px]", !selectedFolder.ocrEnabled ? documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[53px] mb-[2px]" : documentViewMode === "cards" ? "h-[57px] mb-[2px]" : "h-[57px] mb-[2px]")} />
+            <NotchTail side="right" className="h-[76px] mb-[2px]" />
 
+            {parentFolder && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0"
+                aria-label={`Volver a ${parentFolder.id === 'root' ? 'Todos los documentos' : parentFolder.name}`}
+                title={`Volver a ${parentFolder.id === 'root' ? 'Todos los documentos' : parentFolder.name}`}
+                onClick={() => handleFolderClick(parentFolder)}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+            )}
             {selectedFolder.ocrEnabled ? (
               <Table2 className={`size-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
             ) : (
               <Folder className="size-5 text-stone-500" />
             )}
-            <h2 className="text-xl font-semibold text-stone-800">
-              {folderLabel}
-            </h2>
-            <span className="text-sm text-stone-500">
-              {selectedFolder.ocrEnabled && documentViewMode === "table"
-                ? `(${ocrFilteredRowCount} filas)`
-                : `(${files.length} archivos)`}
-            </span>
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                <h2 className="truncate text-xl font-semibold text-stone-900">
+                  {folderLabel}
+                </h2>
+                <span className="text-sm font-medium text-stone-500">
+                  {selectedFolder.ocrEnabled && documentViewMode === "table"
+                    ? `(${ocrFilteredRowCount} filas)`
+                    : `(${files.length} archivos)`}
+                </span>
+              </div>
+            </div>
             {showDownloadAllButton && documentViewMode === "cards" && (
               <Button
                 type="button"
@@ -5991,7 +6009,7 @@ function FileManagerContent({
       return (
         <div className="h-full flex flex-col">
           {folderContentHeader}
-          <div className="flex-1 rounded-lg border rounded-t-none border-[#d9d9d9] bg-white shadow-sm overflow-hidden pt-0 px-4">
+          <div className="flex-1 rounded-lg border rounded-t-none border-[#d9d9d9] bg-white shadow-sm overflow-hidden pt-0">
             {!hasTablaSchema ? (
               <div className="flex h-full flex-col items-center justify-center text-sm text-stone-500 p-6 text-center">
                 <Table2 className="size-10 mb-3 text-stone-300" />
@@ -5999,7 +6017,7 @@ function FileManagerContent({
                 <p>Configuralas desde la pestana Tablas para ver los datos aca.</p>
               </div>
             ) : (
-              <div className="flex flex-col h-full">
+              <div className="flex flex-col h-full px-4">
                 {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
                     <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
@@ -6204,7 +6222,9 @@ function FileManagerContent({
           onDrop={handleDocumentAreaDrop}
         >
           {folderContentHeader}
-          <div className={cn("flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9]", showArchivosTablaToggle ? 'rounded-t-none' : 'rounded-tr-lg')}>{folderBody}</div>
+          <div className={cn("flex-1 min-h-[320px] bg-white border rounded-t-none rounded-b-lg border-[#d9d9d9] flex flex-col overflow-hidden", showArchivosTablaToggle ? 'rounded-t-none' : 'rounded-tr-lg')}>
+            <div className="min-h-0 flex-1">{folderBody}</div>
+          </div>
         </div>
       </div>
     );

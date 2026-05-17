@@ -5,76 +5,83 @@ import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 
 export default function SupabaseAuthListener() {
-  const router = useRouter();
-  const { refresh } = router;
-  const listenerSetup = useRef(false);
-  const refreshTimeout = useRef<NodeJS.Timeout | null>(null);
+	const router = useRouter();
+	const { refresh } = router;
+	const refreshTimeout = useRef<NodeJS.Timeout | null>(null);
+	const currentUserId = useRef<string | null>(null);
 
-  // Debounced refresh to handle cookie propagation timing
-  const debouncedRefresh = useCallback((delay: number = 100) => {
-    if (refreshTimeout.current) {
-      clearTimeout(refreshTimeout.current);
-    }
-    refreshTimeout.current = setTimeout(() => {
-      console.log("[AUTH-LISTENER] Executing debounced refresh()");
-      refresh();
-    }, delay);
-  }, [refresh]);
+	// Debounced refresh to handle cookie propagation timing
+	const debouncedRefresh = useCallback(
+		(delay: number = 100) => {
+			if (refreshTimeout.current) {
+				clearTimeout(refreshTimeout.current);
+			}
 
-  useEffect(() => {
-    console.log("[AUTH-LISTENER] useEffect running, listenerSetup.current:", listenerSetup.current);
+			refreshTimeout.current = setTimeout(() => {
+				refresh();
+			}, delay);
+		},
+		[refresh],
+	);
 
-    // Only set up listener once to avoid race conditions
-    if (listenerSetup.current) return;
-    listenerSetup.current = true;
+	useEffect(() => {
+		const supabase = createSupabaseBrowserClient();
+		let isMounted = true;
+		let unsubscribe: (() => void) | undefined;
 
-    const supabase = createSupabaseBrowserClient();
-    console.log("[AUTH-LISTENER] Setting up onAuthStateChange listener");
+		void supabase.auth.getSession().then(({ data }) => {
+			if (!isMounted) {
+				return;
+			}
 
-    // Check initial session state
-    supabase.auth.getSession().then(({ data }) => {
-      console.log("[AUTH-LISTENER] Initial session check:", {
-        hasSession: !!data?.session,
-        user: data?.session?.user?.email,
-        expiresAt: data?.session?.expires_at
-      });
-    });
+			currentUserId.current = data.session?.user.id ?? null;
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[AUTH-LISTENER] onAuthStateChange fired:", {
-        event,
-        hasSession: !!session,
-        user: session?.user?.email,
-        timestamp: new Date().toISOString()
-      });
+			const { data: subscription } = supabase.auth.onAuthStateChange(
+				(event, session) => {
+					const nextUserId = session?.user.id ?? null;
 
-      if (event === 'SIGNED_OUT') {
-        // Sign out is immediate, no delay needed
-        console.log("[AUTH-LISTENER] Calling refresh() for SIGNED_OUT");
-        refresh();
-      } else if (event === 'SIGNED_IN') {
-        // For SIGNED_IN, use debounce to allow cookies to propagate
-        // This handles both OAuth callback and client-side PKCE flow
-        console.log("[AUTH-LISTENER] Scheduling debounced refresh for SIGNED_IN");
-        debouncedRefresh(500);
-      } else if (event === 'TOKEN_REFRESHED') {
-        console.log("[AUTH-LISTENER] Calling refresh() for TOKEN_REFRESHED");
-        refresh();
-      } else {
-        console.log("[AUTH-LISTENER] Skipping refresh() for event:", event);
-      }
-    });
+					if (event === "INITIAL_SESSION") {
+						currentUserId.current = nextUserId;
+						return;
+					}
 
-    return () => {
-      console.log("[AUTH-LISTENER] Cleanup, unsubscribing");
-      subscription.subscription?.unsubscribe();
-      if (refreshTimeout.current) {
-        clearTimeout(refreshTimeout.current);
-      }
-      listenerSetup.current = false;
-    };
-  }, [debouncedRefresh]);
+					if (event === "SIGNED_OUT") {
+						currentUserId.current = null;
+						refresh();
+						return;
+					}
 
-  return null;
+					if (event === "SIGNED_IN") {
+						const isExistingSession =
+							!!currentUserId.current && currentUserId.current === nextUserId;
+
+						currentUserId.current = nextUserId;
+
+						if (!isExistingSession) {
+							debouncedRefresh(500);
+						}
+						return;
+					}
+
+					if (event === "TOKEN_REFRESHED") {
+						currentUserId.current = nextUserId;
+						refresh();
+					}
+				},
+			);
+
+			unsubscribe = () => subscription.subscription?.unsubscribe();
+		});
+
+		return () => {
+			isMounted = false;
+			unsubscribe?.();
+			if (refreshTimeout.current) {
+				clearTimeout(refreshTimeout.current);
+			}
+		};
+	}, [debouncedRefresh, refresh]);
+
+	return null;
 }
 

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 // Base: border-black/15 + active press + transition
 // Per variant: bg + hue-matched 2-layer shadow + inset glint
 const buttonVariants = cva(
-  "inline-flex items-center justify-center cursor-pointer gap-1.5 whitespace-nowrap rounded-lg text-xs font-medium " +
+  "flex items-center justify-center cursor-pointer gap-1.5 whitespace-nowrap rounded-lg text-[12px] font-medium " +
   "border border-black/15 " +
   "active:translate-y-px " +
   "transition-[box-shadow,background-color,opacity] duration-150 " +
@@ -23,7 +23,7 @@ const buttonVariants = cva(
         default:
           "bg-orange-primary text-[#FAF9F5] " +
           "shadow-[0_1px_3px_rgba(180,90,30,.35),0_2px_6px_rgba(180,90,30,.20),inset_0_1px_0_rgba(255,255,255,.15)] " +
-          "hover:bg-[#C96B4A] hover:shadow-[0_2px_6px_rgba(180,90,30,.40),0_4px_10px_rgba(180,90,30,.25),inset_0_1px_0_rgba(255,255,255,.15)]",
+          "hover:bg-orange-primary/80 hover:shadow-[0_2px_6px_rgba(180,90,30,.40),0_4px_10px_rgba(180,90,30,.25),inset_0_1px_0_rgba(255,255,255,.15)]",
         // Dark — used for primary actions in dense app UI
         dark:
           "bg-stone-900 text-stone-50 " +
@@ -31,9 +31,12 @@ const buttonVariants = cva(
           "hover:bg-stone-800 hover:shadow-[0_2px_6px_rgba(0,0,0,.40),0_4px_10px_rgba(0,0,0,.25),inset_0_1px_0_rgba(255,255,255,.10)]",
         // Outline — secondary action, most used variant
         outline:
-          "bg-white text-stone-800 " +
-          "shadow-[0_1px_2px_rgba(0,0,0,.08),0_1px_3px_rgba(0,0,0,.06),inset_0_1px_0_rgba(255,255,255,.80)] " +
-          "hover:bg-stone-50 hover:shadow-[0_2px_4px_rgba(0,0,0,.10),0_2px_6px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,.80)]",
+          // "bg-stone-50 text-stone-800 " +
+          // "shadow-[0_1px_2px_rgba(0,0,0,.20),0_1px_3px_rgba(0,0,0,.06),inset_0_1px_0_rgba(255,255,255,.80)] " +
+          // "hover:bg-stone-50 hover:shadow-[0_2px_4px_rgba(0,0,0,.10),0_2px_6px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,.80)]",
+          "bg-stone-100 text-stone-700 " +
+          "shadow-[0_1px_2px_rgba(0,0,0,.06),0_1px_3px_rgba(0,0,0,.04),inset_0_1px_0_rgba(255,255,255,.70)] " +
+          "hover:bg-stone-200 hover:shadow-[0_2px_4px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,.70)]",
         // Secondary — lighter variant, paper-like
         secondary:
           "bg-stone-100 text-stone-700 " +

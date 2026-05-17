@@ -115,6 +115,9 @@ const ObraDocumentsTab = dynamic(
 	}
 );
 
+const EMPTY_GENERAL_REPORTS_DATA: GeneralTabReportsData = { findings: [], curve: null };
+const EMPTY_DATA_FLOW_SUGGESTIONS: DataFlowSuggestion[] = [];
+
 import type {
 	Certificate,
 	NewCertificateFormState,
@@ -1677,7 +1680,7 @@ function ObraDetailPageContent() {
 		},
 		[certRecommendationsMapping, certificadosExtraidosRows, tablasById]
 	);
-	const generalReportsData = generalReportsQuery.data ?? { findings: [], curve: null };
+	const generalReportsData = generalReportsQuery.data ?? EMPTY_GENERAL_REPORTS_DATA;
 	const hasMissingCurrentMonthFinding = generalReportsData.findings.some(
 		(finding) => finding.rule_key === "cert.missing_current_month",
 	);
@@ -1688,6 +1691,30 @@ function ObraDetailPageContent() {
 			queryClient.invalidateQueries({ queryKey: ["obra-certificado-contable-macro", obraId] }),
 		]);
 	}, [obraId, queryClient]);
+	const generalTabCurveImportConfig = useMemo(() => {
+		if (!obraId) return undefined;
+		return {
+			obraId,
+			curvaPlanTableId: selectedCurveTableRefs.curvaPlanId,
+			curvaPlanTableName: selectedCurveTableRefs.curvaPlanName,
+			pmcResumenTableId: selectedCurveTableRefs.pmcResumenId,
+			pmcResumenTableName: selectedCurveTableRefs.pmcResumenName,
+			onImported: handleCurveDataImported,
+		};
+	}, [
+		handleCurveDataImported,
+		obraId,
+		selectedCurveTableRefs.curvaPlanId,
+		selectedCurveTableRefs.curvaPlanName,
+		selectedCurveTableRefs.pmcResumenId,
+		selectedCurveTableRefs.pmcResumenName,
+	]);
+	const generalTabDataFlowSuggestions =
+		dataFlowSuggestionsQuery.data ?? EMPTY_DATA_FLOW_SUGGESTIONS;
+	const generalTabDataFlowSuggestionsError =
+		dataFlowSuggestionsQuery.error instanceof Error
+			? dataFlowSuggestionsQuery.error.message
+			: null;
 	const obraTimeProgress =
 		obraData && obraData.plazoTotal > 0
 			? (obraData.plazoTransc / obraData.plazoTotal) * 100
@@ -2346,7 +2373,7 @@ function ObraDetailPageContent() {
 		[mainTableColumnsConfig]
 	);
 
-	const mainTableColumnValues = (() => {
+	const mainTableColumnValues = useMemo(() => {
 		const customData =
 			(form.state.values.customData as Record<string, unknown> | null) ?? {};
 		const source = {
@@ -2363,7 +2390,7 @@ function ObraDetailPageContent() {
 						: source[column.baseColumnId ?? column.id];
 		}
 		return values;
-	})();
+	}, [activeMainTableColumns, form.state.values]);
 
 	// Only depend on form (stable hook reference) - read current customData at call time
 	// to avoid stale closure and excessive callback recreation
@@ -3759,25 +3786,10 @@ function ObraDetailPageContent() {
 										setCustomMainColumnValue={setCustomMainColumnValue}
 										certificadosExtraidosRows={certificadosExtraidosRows}
 										certificadoContableMacro={certificadoContableMacroQuery.data ?? null}
-										curveImportConfig={
-											obraId
-												? {
-													obraId,
-													curvaPlanTableId: selectedCurveTableRefs.curvaPlanId,
-													curvaPlanTableName: selectedCurveTableRefs.curvaPlanName,
-													pmcResumenTableId: selectedCurveTableRefs.pmcResumenId,
-													pmcResumenTableName: selectedCurveTableRefs.pmcResumenName,
-													onImported: handleCurveDataImported,
-												}
-												: undefined
-										}
+										curveImportConfig={generalTabCurveImportConfig}
 										derivedCertificadosNotice={derivedCertificadosNotice}
-										dataFlowSuggestions={dataFlowSuggestionsQuery.data ?? []}
-										dataFlowSuggestionsError={
-											dataFlowSuggestionsQuery.error instanceof Error
-												? dataFlowSuggestionsQuery.error.message
-												: null
-										}
+										dataFlowSuggestions={generalTabDataFlowSuggestions}
+										dataFlowSuggestionsError={generalTabDataFlowSuggestionsError}
 										onDataFlowSuggestionDecision={handleDataFlowSuggestionDecision}
 										isResolvingDataFlowSuggestion={isResolvingDataFlowSuggestion}
 									/>

@@ -1056,7 +1056,7 @@ export function FormTablePagination() {
 			<div className="flex items-center gap-2">
 				{config.footerActions}
 				{allowAddRows && (
-					<Button type="button" variant="outline" onClick={actions.addRow} data-testid="form-table-add-row">
+					<Button type="button" variant="dark" onClick={actions.addRow} data-testid="form-table-add-row">
 						Agregar fila vacía
 					</Button>
 				)}
@@ -1100,7 +1100,7 @@ export function FormTablePagination() {
 				</Button> */}
 					<Button
 						type="button"
-						variant="default"
+						variant="dark"
 
 						onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
 						disabled={!hasPreviousPage || isLoading}
@@ -1114,7 +1114,7 @@ export function FormTablePagination() {
 					</span>
 					<Button
 						type="button"
-						variant="default"
+						variant="dark"
 
 						onClick={() => startTransition(() => setPage((prev) => prev + 1))}
 						disabled={!hasNextPage || isLoading}

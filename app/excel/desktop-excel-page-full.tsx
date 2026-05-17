@@ -242,7 +242,7 @@ export default function DesktopExcelPageClient({
 	initialLoadMode,
 }: ExcelPageClientProps) {
 	const router = useRouter();
-  const { replace } = router;
+	const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();

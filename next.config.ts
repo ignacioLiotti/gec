@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { withWorkflow } from "workflow/next";
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
 
 /** Pin Turbopack root so a parent folder `package-lock.json` does not steal the workspace root. */
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +73,12 @@ const isVercelProductionBuild =
 	process.env.VERCEL === "1" &&
 	process.env.VERCEL_ENV === "production";
 
-const workflowConfig = withWorkflow(nextConfig);
+function shouldEnableWorkflowPlugin(phase: string) {
+	const isDevelopmentServer =
+		phase === "phase-development-server" || process.env.NODE_ENV === "development";
+
+	return !isDevelopmentServer || process.env.WORKFLOW_DEV_ENABLED === "1";
+}
 
 const sentryWebpackOptions = {
 	// For all available options, see:
@@ -109,9 +113,22 @@ const sentryWebpackOptions = {
 	automaticVercelMonitors: true,
 };
 
-export default isVercelProductionBuild
-	? withSentryConfig(
-			withSentryConfig(workflowConfig, sentryOptions),
-			sentryWebpackOptions,
-		)
-	: workflowConfig;
+export default async function buildConfig(
+	phase: string,
+	ctx: { defaultConfig: NextConfig },
+) {
+	const config = shouldEnableWorkflowPlugin(phase)
+		? await withWorkflow(nextConfig)(phase, ctx)
+		: nextConfig;
+
+	if (!isVercelProductionBuild) {
+		return config;
+	}
+
+	const { withSentryConfig } = await import("@sentry/nextjs");
+
+	return withSentryConfig(
+		withSentryConfig(config, sentryOptions),
+		sentryWebpackOptions,
+	);
+}
