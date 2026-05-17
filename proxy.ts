@@ -15,7 +15,10 @@ const rateLimitEnabled =
 	(process.env.RATE_LIMIT_IP ?? "120") !== "0" &&
 	!!process.env.UPSTASH_REDIS_REST_URL &&
 	!!process.env.UPSTASH_REDIS_REST_TOKEN;
-const domainSplitEnabled = process.env.ENABLE_DOMAIN_SPLIT === "true";
+const domainSplitEnabled =
+	process.env.ENABLE_DOMAIN_SPLIT === "true" &&
+	(process.env.VERCEL_ENV !== "preview" ||
+		process.env.ENABLE_DOMAIN_SPLIT_PREVIEW === "true");
 const appHost = process.env.APP_HOST?.toLowerCase();
 const marketingHost = process.env.MARKETING_HOST?.toLowerCase();
 

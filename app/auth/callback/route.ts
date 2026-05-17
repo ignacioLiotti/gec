@@ -2,7 +2,10 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
-const domainSplitEnabled = process.env.ENABLE_DOMAIN_SPLIT === "true";
+const domainSplitEnabled =
+	process.env.ENABLE_DOMAIN_SPLIT === "true" &&
+	(process.env.VERCEL_ENV !== "preview" ||
+		process.env.ENABLE_DOMAIN_SPLIT_PREVIEW === "true");
 const appHost = process.env.APP_HOST?.toLowerCase();
 const marketingHost = process.env.MARKETING_HOST?.toLowerCase();
 

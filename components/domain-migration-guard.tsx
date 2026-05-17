@@ -4,7 +4,10 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 
-const domainSplitEnabled = process.env.NEXT_PUBLIC_ENABLE_DOMAIN_SPLIT === "true";
+const domainSplitEnabled =
+	process.env.NEXT_PUBLIC_ENABLE_DOMAIN_SPLIT === "true" &&
+	(process.env.NEXT_PUBLIC_VERCEL_ENV !== "preview" ||
+		process.env.NEXT_PUBLIC_ENABLE_DOMAIN_SPLIT_PREVIEW === "true");
 const appHost = process.env.NEXT_PUBLIC_APP_HOST?.toLowerCase();
 const marketingHost = process.env.NEXT_PUBLIC_MARKETING_HOST?.toLowerCase();
 
