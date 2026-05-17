@@ -223,7 +223,10 @@ function getDataFlowSuggestionForField(
 	return null;
 }
 
-function hasVisibleDataFlowSuggestion(suggestion: DataFlowSuggestion | null, currentValue: unknown) {
+function hasVisibleDataFlowSuggestion(
+	suggestion: DataFlowSuggestion | null,
+	currentValue: unknown,
+): suggestion is DataFlowSuggestion {
 	if (!suggestion) return false;
 	if (typeof currentValue === "number" || typeof suggestion.suggested_value === "number") {
 		const current = Number(currentValue ?? 0);
