@@ -239,6 +239,7 @@ const SidebarPrefetchLink = React.forwardRef<
 	ref,
 ) {
 	const router = useRouter();
+  const { prefetch } = router;
 	const { prefetchObra } = usePrefetchObra();
 	const prefetchedRef = React.useRef(false);
 	const hrefValue = typeof href === "string" ? href : href.toString();
@@ -253,7 +254,7 @@ const SidebarPrefetchLink = React.forwardRef<
 		prefetchedRef.current = true;
 		prefetchedSidebarHrefs.add(hrefValue);
 
-		void Promise.resolve(router.prefetch(hrefValue)).catch((error) => {
+		void Promise.resolve(prefetch(hrefValue)).catch((error) => {
 			console.warn("[sidebar-prefetch] route prefetch failed", hrefValue, error);
 		});
 
@@ -261,7 +262,7 @@ const SidebarPrefetchLink = React.forwardRef<
 		if (obraMatch?.[1]) {
 			prefetchObra(obraMatch[1]);
 		}
-	}, [hrefValue, prefetchObra, router]);
+	}, [hrefValue, prefetch, prefetchObra]);
 
 	React.useEffect(() => {
 		if (!shouldIdlePrefetchExcel) return;
@@ -356,7 +357,10 @@ export function AppSidebar({
 }) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const router = useRouter();
+	const { refresh } = router;
 	const { state } = useSidebar();
 	const [switchingTenantId, setSwitchingTenantId] = React.useState<
 		string | null
@@ -367,7 +371,7 @@ export function AppSidebar({
 	const tenantOptions = tenants ?? [];
 	const canCreateTenant = Boolean(user && !demoMode);
 	const activeTenantId = userRoles?.tenantId ?? null;
-	const activeMacroTableId = searchParams.get("macroId");
+	const activeMacroTableId = getSearchParam("macroId");
 	const permissionKeySet = React.useMemo(
 		() => new Set(userRoles?.permissionKeys ?? []),
 		[userRoles?.permissionKeys],
@@ -420,7 +424,7 @@ export function AppSidebar({
 					console.error("[tenant-switch] failed", response.status);
 					return;
 				}
-				router.refresh();
+				refresh();
 			} catch (error) {
 				console.error("[tenant-switch] error", error);
 			} finally {
@@ -429,7 +433,7 @@ export function AppSidebar({
 				);
 			}
 		},
-		[router],
+		[refresh],
 	);
 	const activeTenant =
 		tenantOptions.find((tenant) => tenant.id === activeTenantId) ??

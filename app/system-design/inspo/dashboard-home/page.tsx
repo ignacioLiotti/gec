@@ -93,7 +93,7 @@ function StatPanel({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center border-r border-[#f0f0f0] px-5 py-4 text-center last:border-r-0">
-      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full border border-[#e8e8e8] bg-[#fafafa]">
+      <div className="mb-2 flex size-9 items-center justify-center rounded-full border border-[#e8e8e8] bg-[#fafafa]">
         {Icon}
       </div>
       <p className="mb-3 text-[12px] text-[#aaa]">{label}</p>
@@ -163,21 +163,21 @@ export default function DashboardHomePage() {
           <div className="flex items-center gap-3">
             {/* Stat chips */}
             <div className="flex items-center gap-2 rounded-full border border-[#e8e8e8] bg-white px-4 py-2">
-              <div className="h-2 w-2 rounded-full bg-cyan-500" />
+              <div className="size-2 rounded-full bg-cyan-500" />
               <span className="text-[11px] uppercase tracking-wide text-[#999]">Activas</span>
               <span className="text-sm font-semibold tabular-nums text-[#1a1a1a]">14</span>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-[#e8e8e8] bg-white px-4 py-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+              <div className="size-2 rounded-full bg-emerald-500" />
               <span className="text-[11px] uppercase tracking-wide text-[#999]">Completadas</span>
               <span className="text-sm font-semibold tabular-nums text-[#1a1a1a]">42</span>
             </div>
             <Button className="gap-2 rounded-lg bg-[#1a1a1a] text-white hover:bg-[#333]">
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
               Nueva Obra
             </Button>
             <Button variant="outline" className="gap-1.5 rounded-lg border-[#e8e8e8] bg-white text-[#555]">
-              Ver Todas <ArrowRight className="h-3.5 w-3.5" />
+              Ver Todas <ArrowRight className="size-3.5" />
             </Button>
           </div>
         </header>
@@ -240,7 +240,7 @@ export default function DashboardHomePage() {
                           </p>
                         </div>
                         <div className={cn("flex h-7 w-7 items-center justify-center rounded-md", isSelected ? "text-orange-500" : "text-[#ccc] group-hover:text-[#999]")}>
-                          <ArrowRight className="h-3.5 w-3.5" />
+                          <ArrowRight className="size-3.5" />
                         </div>
                       </div>
                     );
@@ -257,7 +257,7 @@ export default function DashboardHomePage() {
                 {/* Stats row */}
                 <div className="flex border-b border-[#f0f0f0]">
                   <StatPanel
-                    icon={<BarChart3 className="h-4 w-4 text-[#bbb]" />}
+                    icon={<BarChart3 className="size-4 text-[#bbb]" />}
                     label="Avance físico"
                     value={`${SELECTED_OBRA.avance}%`}
                     barColor="#0891b2"
@@ -265,7 +265,7 @@ export default function DashboardHomePage() {
                     sub="0–100% físico"
                   />
                   <StatPanel
-                    icon={<Clock className="h-4 w-4 text-[#bbb]" />}
+                    icon={<Clock className="size-4 text-[#bbb]" />}
                     label="Plazo"
                     value={`${SELECTED_OBRA.plazo}%`}
                     barColor="#2563eb"
@@ -273,7 +273,7 @@ export default function DashboardHomePage() {
                     sub="Tiempo transcurrido"
                   />
                   <StatPanel
-                    icon={<CheckCircle2 className="h-4 w-4 text-[#bbb]" />}
+                    icon={<CheckCircle2 className="size-4 text-[#bbb]" />}
                     label="Certificado"
                     value={SELECTED_OBRA.saldoLabel}
                     barColor="#059669"
@@ -286,7 +286,7 @@ export default function DashboardHomePage() {
                 {/* CTA */}
                 <div className="border-t border-[#f0f0f0] p-4">
                   <Button className="w-full gap-2 rounded-lg bg-[#1a1a1a] text-white hover:bg-[#333]">
-                    Abrir panel de la obra <ArrowRight className="h-3.5 w-3.5" />
+                    Abrir panel de la obra <ArrowRight className="size-3.5" />
                   </Button>
                 </div>
               </div>
@@ -298,7 +298,7 @@ export default function DashboardHomePage() {
             {/* Alerts */}
             <div className="overflow-hidden rounded-xl border border-[#e8e8e8] bg-white">
               <div className="flex items-center gap-2 border-b border-[#f0f0f0] px-4 py-3.5">
-                <AlertTriangle className="h-4 w-4 text-[#f59e0b]" />
+                <AlertTriangle className="size-4 text-[#f59e0b]" />
                 <p className="text-[13px] font-semibold text-[#1a1a1a]">Requieren Atención</p>
               </div>
               <div className="flex flex-col divide-y divide-[#f5f5f5]">

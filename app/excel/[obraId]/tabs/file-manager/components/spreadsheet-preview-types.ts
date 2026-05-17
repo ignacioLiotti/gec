@@ -4,7 +4,7 @@ import type {
   SpreadsheetPreviewSummary,
 } from "@/lib/spreadsheet-preview-summary";
 
-export type SpreadsheetPreviewMapping = {
+type SpreadsheetPreviewMapping = {
   dbColumn: string;
   label: string;
   excelHeader: string | null;
@@ -12,7 +12,7 @@ export type SpreadsheetPreviewMapping = {
   manualValue?: string;
 };
 
-export type SpreadsheetPreviewSheet = {
+type SpreadsheetPreviewSheet = {
   name: string;
   headers: string[];
   rowCount: number;

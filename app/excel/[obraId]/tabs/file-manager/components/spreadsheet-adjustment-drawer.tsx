@@ -90,7 +90,7 @@ export function SpreadsheetAdjustmentDrawer({
           {table ? (
             <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
               <div className="min-h-0 border-r bg-muted/10">
-                <div className="border-b border-emerald-200 bg-emerald-50/60 px-4 py-4">
+                <div className="border-b border-emerald-200 bg-emerald-50/60 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
                     Hoja origen
                   </p>
@@ -153,7 +153,7 @@ export function SpreadsheetAdjustmentDrawer({
                 </div>
               </div>
 
-              <div className="min-h-0 overflow-auto px-4 py-4">
+              <div className="min-h-0 overflow-auto p-4">
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">

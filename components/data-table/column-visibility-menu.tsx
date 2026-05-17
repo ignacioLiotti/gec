@@ -47,7 +47,7 @@ export function ColumnVisibilityMenu({
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
 				<Button variant={triggerVariant} className={triggerClassName ?? "gap-2"} disabled={disabled}>
-					<Columns3 className="h-4 w-4" />
+					<Columns3 className="size-4" />
 					Columnas
 				</Button>
 			</DropdownMenuTrigger>
@@ -57,7 +57,7 @@ export function ColumnVisibilityMenu({
 				</div>
 				{onBalanceColumns && (
 					<DropdownMenuItem onClick={onBalanceColumns} className="gap-2">
-						<MoveHorizontal className="h-4 w-4" />
+						<MoveHorizontal className="size-4" />
 						Balancear ancho
 					</DropdownMenuItem>
 				)}
@@ -70,7 +70,7 @@ export function ColumnVisibilityMenu({
 					className="gap-2"
 					disabled={!columns.some((col) => col.canHide)}
 				>
-					<Eye className="h-4 w-4" />
+					<Eye className="size-4" />
 					Mostrar todo
 				</DropdownMenuItem>
 				<DropdownMenuItem
@@ -80,7 +80,7 @@ export function ColumnVisibilityMenu({
 					className="gap-2"
 					disabled={!columns.some((col) => col.canHide)}
 				>
-					<EyeOff className="h-4 w-4" />
+					<EyeOff className="size-4" />
 					Ocultar todo
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
@@ -100,7 +100,7 @@ export function ColumnVisibilityMenu({
 							>
 								<input
 									type="checkbox"
-									className="h-4 w-4 rounded border-border"
+									className="size-4 rounded border-border"
 									checked={!isHidden}
 									onChange={(event) => {
 										if (hideDisabled) return;
@@ -127,7 +127,7 @@ export function ColumnVisibilityMenu({
 									title={isPinned ? "Desfijar" : "Fijar"}
 									disabled={pinDisabled}
 								>
-									<Pin className="h-3 w-3" />
+									<Pin className="size-3" />
 								</button>
 								<span className="flex-1 truncate">{col.label}</span>
 							</div>

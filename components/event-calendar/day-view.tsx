@@ -198,7 +198,7 @@ export function DayView({
     <div data-slot="day-view" className="contents">
       {hasPastIncomplete && (
         <div className="text-destructive mb-2 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-1 text-xs font-medium">
-          <span className="h-2 w-2 rounded-full bg-destructive" />
+          <span className="size-2 rounded-full bg-destructive" />
           Hay pendientes anteriores sin completar
         </div>
       )}
@@ -286,7 +286,7 @@ export function DayView({
               style={{ top: `${currentTimePosition}%` }}
             >
               <div className="relative flex items-center">
-                <div className="absolute -left-1 h-2 w-2 rounded-full bg-cyan-500"></div>
+                <div className="absolute -left-1 size-2 rounded-full bg-cyan-500"></div>
                 <div className="h-[2px] w-full bg-cyan-500"></div>
               </div>
             </div>

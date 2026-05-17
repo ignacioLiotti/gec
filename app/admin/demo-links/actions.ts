@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { auth } from "@/lib/auth";
 
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
@@ -75,6 +76,10 @@ export async function createDemoLinkAction(input: {
 	expiresInDays?: number | null;
 	capabilities?: string[];
 }) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "Unauthorized" };
+	}
 	const tenantId = String(input.tenantId ?? "").trim();
 	if (!tenantId) {
 		return { error: "Selecciona una organizacion valida." };
@@ -141,6 +146,10 @@ export async function revokeDemoLinkAction(input: {
 	tenantId: string;
 	linkId: string;
 }) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "Unauthorized" };
+	}
 	const tenantId = String(input.tenantId ?? "").trim();
 	const linkId = String(input.linkId ?? "").trim();
 

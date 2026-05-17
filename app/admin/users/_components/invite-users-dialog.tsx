@@ -88,7 +88,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogTrigger asChild>
         <Button onClick={() => setOpen(true)}>
-          <UserPlus className="mr-2 h-4 w-4" />
+          <UserPlus className="mr-2 size-4" />
           Invitar Usuarios
         </Button>
       </DialogTrigger>
@@ -105,7 +105,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
           <div className="space-y-4 py-4">
             <div className="flex items-center justify-center py-6">
               <div className="rounded-full bg-green-100 p-3">
-                <CheckCircle2 className="h-10 w-10 text-green-600" />
+                <CheckCircle2 className="size-10 text-green-600" />
               </div>
             </div>
 
@@ -119,10 +119,10 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
                   className="font-mono text-sm"
                 />
                 <Button type="button" variant="outline" size="icon" onClick={copyInviteLink}>
-                  <Copy className="h-4 w-4" />
+                  <Copy className="size-4" />
                 </Button>
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-stone-500">
                 Compartí este enlace con la persona que querés invitar. Expira en 72 horas.
               </p>
             </div>
@@ -142,7 +142,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="email">
-                  <Mail className="inline-block mr-2 h-4 w-4" />
+                  <Mail className="inline-block mr-2 size-4" />
                   Correo Electrónico
                 </Label>
                 <Input
@@ -170,13 +170,13 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
                     <SelectItem value="member">
                       <div className="flex flex-col items-start">
                         <span className="font-medium">Miembro</span>
-                        <span className="text-xs text-gray-500">Acceso regular a recursos de la organización</span>
+                        <span className="text-xs text-stone-500">Acceso regular a recursos de la organización</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="admin">
                       <div className="flex flex-col items-start">
                         <span className="font-medium">Administrador</span>
-                        <span className="text-xs text-gray-500">Puede gestionar usuarios y configuración de la organización</span>
+                        <span className="text-xs text-stone-500">Puede gestionar usuarios y configuración de la organización</span>
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -191,12 +191,12 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
               <Button type="submit" disabled={loading}>
                 {loading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Enviando...
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Enviando&hellip;
                   </>
                 ) : (
                   <>
-                    <UserPlus className="mr-2 h-4 w-4" />
+                    <UserPlus className="mr-2 size-4" />
                     Enviar Invitación
                   </>
                 )}

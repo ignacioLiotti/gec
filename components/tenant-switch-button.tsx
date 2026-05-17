@@ -17,6 +17,7 @@ export function TenantSwitchButton({
 	...buttonProps
 }: TenantSwitchButtonProps) {
 	const router = useRouter();
+  const { refresh } = router;
 	const [pending, setPending] = React.useState(false);
 
 	const handleClick = React.useCallback(async () => {
@@ -30,7 +31,7 @@ export function TenantSwitchButton({
 				console.error("[tenant-switch] failed", response.status);
 				return;
 			}
-			router.refresh();
+			refresh();
 		} catch (error) {
 			console.error("[tenant-switch] error", error);
 		} finally {

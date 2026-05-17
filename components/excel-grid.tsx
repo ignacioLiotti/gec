@@ -101,7 +101,7 @@ export function ExcelGrid({
       } else if (isHovered) {
         cellClass += "bg-blue-50 border-blue-200 text-blue-800 cursor-crosshair";
       } else {
-        cellClass += `bg-white border-gray-200 text-gray-700${isPicking ? " cursor-crosshair" : ""}`;
+        cellClass += `bg-white border-stone-200 text-gray-700${isPicking ? " cursor-crosshair" : ""}`;
       }
 
       cells.push(
@@ -127,7 +127,7 @@ export function ExcelGrid({
     let cls = "absolute flex items-center justify-center border-r border-b text-[11px] font-medium ";
     if (isHighlighted) cls += "bg-orange-200 border-orange-300 text-orange-800 font-semibold";
     else if (isHovered) cls += "bg-blue-100 border-blue-200 text-blue-700 font-semibold";
-    else cls += "border-gray-200 bg-gray-50 text-gray-500";
+    else cls += "border-stone-200 bg-stone-50 text-stone-500";
 
     colHeaders.push(
       <div key={`ch-${c}`} className={cls} style={{ top: 0, left: ROW_HEADER_WIDTH + c * CELL_WIDTH, width: CELL_WIDTH, height: COL_HEADER_HEIGHT }} >
@@ -139,7 +139,7 @@ export function ExcelGrid({
   const rowHeaders: React.ReactNode[] = [];
   for (let r = startRow; r <= endRow; r++) {
     rowHeaders.push(
-      <div key={`rh-${r}`} className="absolute flex items-center justify-center border-r border-b border-gray-200 bg-gray-50 text-[11px] font-medium text-gray-500"
+      <div key={`rh-${r}`} className="absolute flex items-center justify-center border-r border-b border-stone-200 bg-stone-50 text-[11px] font-medium text-stone-500"
         style={{ top: COL_HEADER_HEIGHT + r * CELL_HEIGHT, left: 0, width: ROW_HEADER_WIDTH, height: CELL_HEIGHT }} >
         {r + 1}
       </div>
@@ -149,7 +149,7 @@ export function ExcelGrid({
   return (
     <div ref={containerRef} className="relative overflow-auto bg-white" style={{ height: "100%" }} onScroll={handleScroll}>
       <div style={{ width: totalWidth, height: totalHeight, position: "relative" }}>
-        <div className="flex items-center justify-center border-r border-b border-gray-200 bg-gray-50"
+        <div className="flex items-center justify-center border-r border-b border-stone-200 bg-stone-50"
           style={{ position: "absolute", top: scrollTop, left: scrollLeft, width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT, zIndex: 30 }} />
         <div style={{ position: "absolute", top: scrollTop, left: 0, width: totalWidth, height: COL_HEADER_HEIGHT, zIndex: 20, pointerEvents: "none" }}>
           {colHeaders}

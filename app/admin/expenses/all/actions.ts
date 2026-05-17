@@ -3,10 +3,15 @@
 import { revalidatePath } from "next/cache";
 
 import { canManageTenantLimits } from "@/lib/admin/tenant-limit-access";
+import { auth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
 export async function updateTenantLimitsAction(formData: FormData) {
+	const session = await auth();
+	if (!session.data.user) {
+		throw new Error("No tenes permisos para modificar limites.");
+	}
 	const supabase = await createClient();
 	const {
 		data: { user },

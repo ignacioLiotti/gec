@@ -345,7 +345,7 @@ function MarketingLanding() {
         >
           {/* <span className="w-[400px] h-[200px] bg-orange-primary/40 blur-[100px] rounded-full pointer-events-none block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></span> */}
           <div className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-1 mb-8 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-            <span className="bg-orange-primary w-2 h-2 rounded-full"></span>
+            <span className="bg-orange-primary size-2 rounded-full"></span>
             <p className="text-[10px] font-bold uppercase tracking-widest text-stone-600">Sistema de gestion  de obras</p>
           </div>
           <h1 className="text-4xl md:text-7xl font-light tracking-tight mb-6 md:mb-10 text-stone-900 leading-[1.05] md:leading-[0.95]">
@@ -391,9 +391,9 @@ function MarketingLanding() {
               [50, 50],
               [73, 56],
               [90, 62],
-            ] as [number, number][]).map(([x1, x2], i) => (
+            ] as [number, number][]).map(([x1, x2]) => (
               <path
-                key={i}
+                key={`pipeline-curve-${x1}-${x2}`}
                 d={`M ${x1} 0 C ${x1} 38 ${x2} 62 ${x2} 100`}
                 fill="none"
                 stroke="#d6d3d1"
@@ -411,10 +411,10 @@ function MarketingLanding() {
             ["73%", "70.3%", "64.5%", "58.7%", "56%"],
             ["90%", "85.6%", "76%", "66.4%", "62%"],
           ]).map((xKeys, i) => (
-            <div key={i}>
+            <div key={`pipeline-dot-${xKeys.join("-")}`}>
               {/* Primary dot */}
               <m.div
-                className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-orange-500"
+                className="absolute size-2.5 -translate-x-1/2 rounded-full bg-orange-500"
                 style={{ boxShadow: "0 0 7px 2px rgba(249,115,22,0.4)" }}
                 animate={{
                   left: xKeys,
@@ -431,7 +431,7 @@ function MarketingLanding() {
               />
               {/* Trailing dot */}
               <m.div
-                className="absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-orange-300"
+                className="absolute size-1.5 -translate-x-1/2 rounded-full bg-orange-300"
                 animate={{
                   left: xKeys,
                   top: ["-8px", "33px", "70px", "107px", "148px"],
@@ -457,13 +457,13 @@ function MarketingLanding() {
         <div className="absolute flex items-center justify-center pointer-events-none top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100000]">
           <div className="flex items-center gap-2.5 rounded-full border border-stone-200 bg-stone-100 px-5 py-2 text-[15px] font-bold uppercase tracking-widest text-stone-400 shadow-sm">
             <m.div
-              className="h-2 w-2 rounded-full bg-orange-400"
+              className="size-2 rounded-full bg-orange-400"
               animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
               transition={{ duration: 1.2, repeat: Infinity }}
             />
             Cómo funciona
             <m.div
-              className="h-2 w-2 rounded-full bg-orange-400"
+              className="size-2 rounded-full bg-orange-400"
               animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
               transition={{ duration: 1.2, repeat: Infinity, delay: 0.6 }}
             />
@@ -485,15 +485,15 @@ function MarketingLanding() {
                   const isNext = idx === activeStep + 1;
                   const isLast = idx === steps.length - 1;
                   return (
-                    <m.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4">
+                    <m.div key={step.id} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4">
                       {/* Left: circle + connector */}
                       <div className="flex flex-col items-center">
                         <button
                           type="button"
                           onClick={() => setActiveStep(idx)}
                           className={cn(
-                            "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200",
-                            "h-8 w-8 md:h-10 md:w-10",
+                            "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200",
+                            "h-8 w-8 md:size-10",
                             isActive
                               ? "border-orange-500 bg-orange-500 text-white shadow-md shadow-orange-200/60"
                               : isDone
@@ -563,7 +563,7 @@ function MarketingLanding() {
             </div>
 
             <div className="flex w-full md:w-[60%] bg-stone-50/70 p-2 sm:p-3 md:p-6 items-start md:items-center justify-center relative border-t border-stone-200/70 md:border-t-0">
-              <div className="hidden md:block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-orange-100/40 blur-[100px] rounded-full pointer-events-none" />
+              <div className="hidden md:block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-64 bg-orange-100/40 blur-[100px] rounded-full pointer-events-none" />
               <div className="absolute right-3 top-3 md:right-5 md:top-5 z-20 flex items-center gap-2">
                 <div className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-[9px] md:text-[10px] font-semibold uppercase tracking-widest text-stone-500 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
                   {steps[activeStep].tag}
@@ -580,9 +580,9 @@ function MarketingLanding() {
                 >
                   <MarketingLandingFrame innerClassName="p-0 overflow-hidden">
                     <div className="border-b border-stone-200/80 bg-white px-4 py-2.5 flex items-center gap-1.5">
-                      {steps.map((_, idx) => (
+                      {steps.map((step, idx) => (
                         <button
-                          key={idx}
+                          key={step.id}
                           type="button"
                           onClick={() => setActiveStep(idx)}
                           className={`h-1.5 rounded-full transition-all ${activeStep === idx ? "w-5 bg-orange-500" : "w-1.5 bg-stone-200 hover:bg-stone-300"}`}
@@ -617,9 +617,9 @@ function MarketingLanding() {
               [50, 50],
               [73, 56],
               [90, 62],
-            ] as [number, number][]).map(([x1, x2], i) => (
+            ] as [number, number][]).map(([x1, x2]) => (
               <path
-                key={i}
+                key={`results-curve-${x1}-${x2}`}
                 d={`M ${x1} 0 C ${x1} 38 ${x2} 62 ${x2} 100`}
                 fill="none"
                 stroke="#d6d3d1"
@@ -637,10 +637,10 @@ function MarketingLanding() {
             ["73%", "70.3%", "64.5%", "58.7%", "56%"],
             ["90%", "85.6%", "76%", "66.4%", "62%"],
           ]).map((xKeys, i) => (
-            <div key={i}>
+            <div key={`results-dot-${xKeys.join("-")}`}>
               {/* Primary dot */}
               <m.div
-                className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-orange-500"
+                className="absolute size-2.5 -translate-x-1/2 rounded-full bg-orange-500"
                 style={{ boxShadow: "0 0 7px 2px rgba(249,115,22,0.4)" }}
                 animate={{
                   left: xKeys,
@@ -657,7 +657,7 @@ function MarketingLanding() {
               />
               {/* Trailing dot */}
               <m.div
-                className="absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-orange-300"
+                className="absolute size-1.5 -translate-x-1/2 rounded-full bg-orange-300"
                 animate={{
                   left: xKeys,
                   top: ["-8px", "33px", "70px", "107px", "148px"],
@@ -678,13 +678,13 @@ function MarketingLanding() {
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="flex items-center gap-2.5 rounded-full border border-stone-200 bg-stone-100 px-5 py-2 text-[15px] font-bold uppercase tracking-widest text-stone-400 shadow-sm">
               <m.div
-                className="h-2 w-2 rounded-full bg-orange-400"
+                className="size-2 rounded-full bg-orange-400"
                 animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
                 transition={{ duration: 1.2, repeat: Infinity }}
               />
               sintesis genera
               <m.div
-                className="h-2 w-2 rounded-full bg-orange-400"
+                className="size-2 rounded-full bg-orange-400"
                 animate={{ scale: [1, 1.6, 1], opacity: [0.6, 1, 0.6] }}
                 transition={{ duration: 1.2, repeat: Infinity, delay: 0.6 }}
               />
@@ -695,7 +695,7 @@ function MarketingLanding() {
 
       <section className="pb-16 md:pb-0 bg-stone-100 text-stone-900 overflow-hidden relative">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute left-1/2 top-1/3 -translate-x-1/2 h-72 w-72 rounded-full bg-orange-200/20 blur-[120px]" />
+          <div className="absolute left-1/2 top-1/3 -translate-x-1/2 size-72 rounded-full bg-orange-200/20 blur-[120px]" />
         </div>
         <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <MarketingLandingFrame className="max-w-7xl mx-auto" innerClassName="overflow-hidden md:h-[640px]">
@@ -703,7 +703,7 @@ function MarketingLanding() {
 
               {/* Left: animated stat visual */}
               <div className="flex w-full md:w-[60%] bg-stone-50/70 items-center justify-center relative border-b border-stone-200/70 md:border-b-0 md:border-r min-h-[180px] md:min-h-0">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-orange-100/40 blur-[100px] rounded-full pointer-events-none" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-64 bg-orange-100/40 blur-[100px] rounded-full pointer-events-none" />
                 <AnimatePresence mode="wait">
                   <m.div
                     key={activeBenefit}
@@ -740,8 +740,8 @@ function MarketingLanding() {
                     </div>
                     {/* Decorative ring */}
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center -z-10">
-                      <div className="h-48 w-48 rounded-full border border-stone-200/60" />
-                      <div className="absolute h-64 w-64 rounded-full border border-stone-200/30" />
+                      <div className="size-48 rounded-full border border-stone-200/60" />
+                      <div className="absolute size-64 rounded-full border border-stone-200/30" />
                     </div>
                   </m.div>
                 </AnimatePresence>
@@ -762,13 +762,13 @@ function MarketingLanding() {
                     const isNext = idx === activeBenefit + 1;
                     const isLast = idx === benefits.length - 1;
                     return (
-                      <m.div key={idx} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4 cursor-pointer">
+                      <m.div key={benefit.title} layout transition={{ duration: 0.18, ease: "easeInOut" }} className="flex gap-3 md:gap-4 cursor-pointer">
                         <div className="flex flex-col items-center cursor-pointer">
                           <button
                             type="button"
                             onClick={() => setActiveBenefit(idx)}
                             className={cn(
-                              "relative flex h-8 w-8 md:h-10 md:w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200 cursor-pointer",
+                              "relative flex h-8 w-8 md:size-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200 cursor-pointer",
                               isActive
                                 ? "border-orange-500 bg-orange-500 text-white shadow-md shadow-orange-200/60"
                                 : isDone
@@ -851,9 +851,9 @@ function MarketingLanding() {
               [50, 50],
               [70, 50],
               [85, 50],
-            ] as [number, number][]).map(([x1, x2], i) => (
+            ] as [number, number][]).map(([x1, x2]) => (
               <path
-                key={i}
+                key={`cta-curve-${x1}-${x2}`}
                 d={`M ${x1} 0 C ${x1} 45 ${x2} 55 ${x2} 100`}
                 fill="none"
                 stroke="#d6d3d1"
@@ -871,9 +871,9 @@ function MarketingLanding() {
             ["70%", "67%", "60%", "53%", "50%"],
             ["85%", "79.5%", "67.5%", "55.5%", "50%"],
           ]).map((xKeys, i) => (
-            <div key={i}>
+            <div key={`cta-dot-${xKeys.join("-")}`}>
               <m.div
-                className="absolute h-2 w-2 -translate-x-1/2 rounded-full bg-orange-500"
+                className="absolute size-2 -translate-x-1/2 rounded-full bg-orange-500"
                 style={{ boxShadow: "0 0 6px 2px rgba(249,115,22,0.4)" }}
                 animate={{
                   left: xKeys,
@@ -883,7 +883,7 @@ function MarketingLanding() {
                 transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.28, ease: "linear", repeatDelay: 1 }}
               />
               <m.div
-                className="absolute h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-orange-300"
+                className="absolute size-1.5 -translate-x-1/2 rounded-full bg-orange-300"
                 animate={{
                   left: xKeys,
                   top: ["-6px", "37px", "84px", "131px", "186px"],
@@ -896,7 +896,7 @@ function MarketingLanding() {
 
           {/* Convergence glow — sits right at the bottom, aligns with the orange ball below */}
           {/* <m.div
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 h-5 w-5 rounded-full bg-orange-500"
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 size-5 rounded-full bg-orange-500"
             style={{ boxShadow: "0 0 16px 6px rgba(249,115,22,0.35)" }}
             animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.7, 1, 0.7] }}
             transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
@@ -913,7 +913,7 @@ function MarketingLanding() {
           className="flex flex-col items-center"
         >
           {/* Orange ball — landing point of the converging lines */}
-          <div className="mb-10 flex h-24 w-24 items-center justify-center rounded-full bg-orange-500 shadow-[0_0_28px_8px_rgba(249,115,22,0.25)] shadow-xl">
+          <div className="mb-10 flex size-24 items-center justify-center rounded-full bg-orange-500 shadow-[0_0_28px_8px_rgba(249,115,22,0.25)] shadow-xl">
           </div>
 
           {/* Headline */}
@@ -994,7 +994,7 @@ function MarketingLanding() {
         }
         onSubmit={submitContact}
         isSubmitting={contactSubmitting}
-        submitLabel={contactSubmitting ? "Enviando..." : "Enviar información"}
+        submitLabel={contactSubmitting ? "Enviando\u2026" : "Enviar información"}
         cancelLabel="Cancelar"
       />
     </div >
@@ -1183,7 +1183,7 @@ function Step1Visual() {
         onChange={(key: string, value: string) => setValues((prev) => ({ ...prev, [key]: value }))}
         onSubmit={fakeSubmit}
         isSubmitting={isSubmitting}
-        submitLabel={isSubmitting ? "Creando..." : "Crear obra"}
+        submitLabel={isSubmitting ? "Creando?" : "Crear obra"}
         cancelLabel="Cancelar"
       />
     </ProtoSurface>
@@ -1250,9 +1250,9 @@ function Step2Visual() {
           </div>
 
           {/* Folder tree */}
-          <div className="max-h-[140px] flex-1 overflow-auto px-2.5 py-2.5 md:max-h-none">
+          <div className="max-h-[140px] flex-1 overflow-auto p-2.5 md:max-h-none">
             {/* Root folder */}
-            <div className="mb-1 flex items-center gap-1.5 rounded px-1 py-1 text-[11px] font-medium text-stone-700">
+            <div className="mb-1 flex items-center gap-1.5 rounded p-1 text-[11px] font-medium text-stone-700">
               <ChevronDown size={11} className="shrink-0 text-stone-400" />
               <Folder size={12} className="shrink-0 text-stone-500" />
               <span>Documentos</span>
@@ -1296,15 +1296,15 @@ function Step2Visual() {
             <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-widest text-stone-400">Leyenda</div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-2 text-[10px] text-stone-500">
-                <div className="h-2.5 w-2.5 shrink-0 rounded-[2px] bg-blue-500" />
+                <div className="size-2.5 shrink-0 rounded-[2px] bg-blue-500" />
                 <span>Extracción de datos</span>
               </div>
               <div className="flex items-center gap-2 text-[10px] text-stone-500">
-                <div className="h-2.5 w-2.5 shrink-0 rounded-[2px] bg-purple-500" />
+                <div className="size-2.5 shrink-0 rounded-[2px] bg-purple-500" />
                 <span>Entrada manual</span>
               </div>
               <div className="flex items-center gap-2 text-[10px] text-stone-500">
-                <div className="h-2.5 w-2.5 shrink-0 rounded-[2px] bg-indigo-400" />
+                <div className="size-2.5 shrink-0 rounded-[2px] bg-indigo-400" />
                 <span>Mixta (extracción + manual)</span>
               </div>
             </div>
@@ -1551,9 +1551,9 @@ function Step3Visual() {
 
               {/* Seal + title row */}
               <div className="flex items-center gap-2.5 border-b border-stone-200 px-3 py-2">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-stone-300 bg-stone-50">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full border border-stone-400 bg-stone-100">
-                    <div className="h-2 w-2 rounded-full bg-stone-500" />
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-stone-300 bg-stone-50">
+                  <div className="flex size-5 items-center justify-center rounded-full border border-stone-400 bg-stone-100">
+                    <div className="size-2 rounded-full bg-stone-500" />
                   </div>
                 </div>
                 <div className="min-w-0">
@@ -1588,13 +1588,20 @@ function Step3Visual() {
                 <div className={cn("text-[15px] font-black leading-tight transition-colors", activeSourceBox === 2 ? "text-orange-700" : "text-stone-900")}>
                   $ 234.749.391,04
                 </div>
-                <div className="text-[8px] text-stone-400">Son pesos doscientos treinta y cuatro millones...</div>
+                <div className="text-[8px] text-stone-400">Son pesos doscientos treinta y cuatro millones?</div>
               </div>
 
               {/* Body lines */}
               <div className="space-y-1.5 px-3 pb-2">
-                {[10, 8, 10, 7, 9, 8].map((w, i) => (
-                  <div key={i} className="h-[3px] rounded-full bg-stone-100" style={{ width: `${w * 10}%` }} />
+                {[
+                  { id: "source-body-line-1", width: 10 },
+                  { id: "source-body-line-2", width: 8 },
+                  { id: "source-body-line-3", width: 10 },
+                  { id: "source-body-line-4", width: 7 },
+                  { id: "source-body-line-5", width: 9 },
+                  { id: "source-body-line-6", width: 8 },
+                ].map((line) => (
+                  <div key={line.id} className="h-[3px] rounded-full bg-stone-100" style={{ width: `${line.width * 10}%` }} />
                 ))}
               </div>
 
@@ -1625,11 +1632,11 @@ function Step3Visual() {
                     className="flex items-center gap-1 text-orange-500"
                   >
                     <m.span
-                      className="inline-block h-1.5 w-1.5 rounded-full bg-orange-500"
+                      className="inline-block size-1.5 rounded-full bg-orange-500"
                       animate={{ scale: [1, 1.4, 1] }}
                       transition={{ duration: 0.9, repeat: Infinity }}
                     />
-                    Escaneando...
+                    Escaneando&hellip;
                   </m.span>
                 ) : (
                   <m.span
@@ -1651,9 +1658,9 @@ function Step3Visual() {
               </div>
               {scanPhase === "scanning" ? (
                 <div className="flex flex-col gap-1.5 p-2">
-                  {[...Array(4)].map((_, i) => (
+                  {["scan-placeholder-1", "scan-placeholder-2", "scan-placeholder-3", "scan-placeholder-4"].map((placeholderId, i) => (
                     <m.div
-                      key={i}
+                      key={placeholderId}
                       className="h-5 rounded bg-stone-100"
                       animate={{ opacity: [0.3, 0.65, 0.3] }}
                       transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
@@ -1677,7 +1684,7 @@ function Step3Visual() {
                     <div className="px-2 py-1.5 text-stone-700">{row.campo}</div>
                     <div className="px-2 py-1.5 text-stone-600 truncate">{row.valor}</div>
                     <div className="px-2 py-1.5">
-                      <Check className="w-3 h-3 text-emerald-700" />
+                      <Check className="size-3 text-emerald-700" />
                     </div>
                   </m.div>
                 ))
@@ -1759,8 +1766,8 @@ const Step4Visual = () => (
           <div className="rounded-lg border border-stone-200 bg-white p-3">
             <div className="relative h-28">
               <div className="absolute inset-0 grid grid-rows-4 gap-0">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="border-t border-stone-100" />
+                {["curve-grid-line-1", "curve-grid-line-2", "curve-grid-line-3", "curve-grid-line-4"].map((lineId) => (
+                  <div key={lineId} className="border-t border-stone-100" />
                 ))}
               </div>
               <svg viewBox="0 0 220 90" className="absolute inset-0 h-full w-full">
@@ -1872,7 +1879,7 @@ function StatCounter({ target, from = 0, suffix, delay = 0, frames = 52 }: { tar
 const Benefit1Visual = () => (
   <ProtoSurface className="p-5">
     <div className="mb-4 flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 text-orange-700">
+      <div className="flex size-10 items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 text-orange-700">
         <AlertTriangle size={18} />
       </div>
       <div>
@@ -1899,9 +1906,9 @@ const Benefit1Visual = () => (
 const Benefit2Visual = () => (
   <ProtoSurface className="p-5 space-y-4">
     <div className="grid grid-cols-2 gap-3">
-      {[1, 2, 3, 4].map(i => (
-        <div key={i} className="h-12 rounded-xl border border-stone-200 bg-white flex items-center px-3 gap-2">
-          <div className="w-2 h-2 rounded-full bg-orange-500" />
+      {[1, 2, 3, 4].map((cardNumber) => (
+        <div key={`benefit-card-${cardNumber}`} className="h-12 rounded-xl border border-stone-200 bg-white flex items-center px-3 gap-2">
+          <div className="size-2 rounded-full bg-orange-500" />
           <div className="h-1.5 w-full bg-stone-200 rounded" />
         </div>
       ))}
@@ -1918,7 +1925,7 @@ const Benefit2Visual = () => (
 const Benefit3Visual = () => (
   <ProtoSurface className="p-5 text-stone-900">
     <div className="flex items-center gap-3 mb-4">
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
+      <div className="flex size-10 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
         <CheckCircle2 size={18} />
       </div>
       <div className="font-semibold text-sm">Single Source of Truth</div>
@@ -1943,12 +1950,12 @@ const Benefit4Visual = () => (
         <Globe size={64} className="text-orange-400/20 group-hover:scale-125 transition-transform duration-1000" />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-900 to-transparent" />
         <div className="absolute bottom-4 left-4 flex items-center gap-2">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+          <div className="size-2 bg-emerald-500 rounded-full animate-ping" />
           <span className="text-[10px] font-bold text-white tracking-widest">SISTEMA ONLINE</span>
         </div>
       </div>
     </ProtoSurface>
-    <div className="absolute -top-4 -right-4 w-12 h-12 bg-orange-500 rounded-2xl shadow-[0_10px_30px_rgba(251,146,60,0.35)] flex items-center justify-center text-white">
+    <div className="absolute -top-4 -right-4 size-12 bg-orange-500 rounded-2xl shadow-[0_10px_30px_rgba(251,146,60,0.35)] flex items-center justify-center text-white">
       <Zap size={20} />
     </div>
   </div>

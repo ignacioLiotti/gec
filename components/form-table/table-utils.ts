@@ -37,7 +37,7 @@ export function createRowFromColumns<Row extends FormTableRow>(columns: ColumnDe
 	return row as Row;
 }
 
-export function isValueEmpty(value: unknown) {
+function isValueEmpty(value: unknown) {
 	if (value == null) return true;
 	if (typeof value === "string") return value.trim() === "";
 	return false;

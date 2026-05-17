@@ -116,11 +116,11 @@ export function SpreadsheetImportSummaryModal({
 
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto bg-muted/10 px-5 py-5">
+      <div className="min-h-0 flex-1 overflow-auto bg-muted/10 p-5">
         {isLoading && !payload ? (
           <div className="flex h-full min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            Detectando datos del archivo...
+            Detectando datos del archivo&hellip;
           </div>
         ) : (
           <div className="space-y-4">
@@ -148,7 +148,7 @@ export function SpreadsheetImportSummaryModal({
           Cancelar
         </Button>
         <Button onClick={onConfirm} disabled={isLoading || isApplying || !summary.canImportAll}>
-          {isApplying ? "Importando..." : primaryLabel}
+          {isApplying ? "Importando\u2026" : primaryLabel}
         </Button>
       </DialogFooter>
     </>

@@ -108,7 +108,7 @@ export function MonthView({
     <div data-slot="month-view" className="contents">
       {hasPastIncomplete && (
         <div className="text-destructive mb-2 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-1 text-xs font-medium">
-          <span className="h-2 w-2 rounded-none bg-destructive" />
+          <span className="size-2 rounded-none bg-destructive" />
           Hay pendientes anteriores sin completar
         </div>
       )}

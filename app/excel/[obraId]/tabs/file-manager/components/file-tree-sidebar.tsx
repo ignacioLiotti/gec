@@ -55,7 +55,7 @@ export function FileTreeSidebar({
 			<div className="p-4">
 				<div className="mb-4 flex flex-col gap-2">
 					<div className="relative flex-1">
-						<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+						<Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-stone-400" />
 						<Input
 							type="search"
 							placeholder="Buscar..."
@@ -78,25 +78,25 @@ export function FileTreeSidebar({
 								onClick={onRefresh}
 								disabled={isRefreshing}
 								title="Sincronizar documentos"
-								className="h-7 w-7 p-0"
+								className="size-7 p-0"
 							>
-								<RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
+								<RefreshCw className={cn("size-3.5", isRefreshing && "animate-spin")} />
 							</Button>
 						)}
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button variant="outline" size="xs">
-									<FolderPlus className="w-4 h-4 mr-1" />
+									<FolderPlus className="size-4 mr-1" />
 									Crear
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
 								<DropdownMenuItem onClick={() => onCreateFolderClick("normal")}>
-									<Folder className="w-4 h-4 mr-2 text-stone-500" />
+									<Folder className="size-4 mr-2 text-stone-500" />
 									Carpeta normal
 								</DropdownMenuItem>
 								<DropdownMenuItem onClick={() => onCreateFolderClick("data")}>
-									<Table2 className="w-4 h-4 mr-2 text-amber-600" />
+									<Table2 className="size-4 mr-2 text-amber-600" />
 									Carpeta de datos
 								</DropdownMenuItem>
 							</DropdownMenuContent>
@@ -105,7 +105,7 @@ export function FileTreeSidebar({
 				</div>
 				{!fileTree ? (
 					loading ? (
-						<div className="text-sm text-stone-400">Cargando...</div>
+						<div className="text-sm text-stone-400">Cargando?</div>
 					) : (
 						<div className="text-sm text-stone-400">Sin archivos</div>
 					)
@@ -113,8 +113,8 @@ export function FileTreeSidebar({
 					<div className="space-y-2">
 						{loading && (
 							<div className="flex items-center gap-2 text-xs text-amber-600">
-								<Loader2 className="h-3 w-3 animate-spin" />
-								<span>Actualizando árbol...</span>
+								<Loader2 className="size-3 animate-spin" />
+								<span>Actualizando árbol?</span>
 							</div>
 						)}
 						<div className="space-y-1">{renderTreeItem(fileTree)}</div>
@@ -125,15 +125,15 @@ export function FileTreeSidebar({
 				<p className="text-xs text-stone-400 mb-2">Leyenda</p>
 				<div className="space-y-1.5">
 					<div className="flex items-center gap-2 text-xs text-stone-500">
-						<Table2 className="w-3.5 h-3.5 text-amber-600" />
+						<Table2 className="size-3.5 text-amber-600" />
 						<span>Extracción de datos</span>
 					</div>
 					<div className="flex items-center gap-2 text-xs text-stone-500">
-						<Table2 className="w-3.5 h-3.5 text-blue-600" />
+						<Table2 className="size-3.5 text-blue-600" />
 						<span>Entrada manual</span>
 					</div>
 					<div className="flex items-center gap-2 text-xs text-stone-500">
-						<Table2 className="w-3.5 h-3.5 text-purple-600" />
+						<Table2 className="size-3.5 text-purple-600" />
 						<span>Mixta (extracción + manual)</span>
 					</div>
 				</div>

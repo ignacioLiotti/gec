@@ -609,14 +609,14 @@ export function AddRowDialog({
                 {Array.from({ length: 5 }).map((_, index) => (
                   <div
                     key={index}
-                    className="h-5 w-5 rounded-full border border-stone-300 bg-stone-200 shadow-[inset_0_1px_3px_rgba(0,0,0,0.1)]"
+                    className="size-5 rounded-full border border-stone-300 bg-stone-200 shadow-[inset_0_1px_3px_rgba(0,0,0,0.1)]"
                   />
                 ))}
               </div>
               <div className="absolute bottom-0 left-11 top-0 h-full w-px bg-stone-200" />
 
               <DialogClose className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600">
-                <X className="h-4 w-4" />
+                <X className="size-4" />
               </DialogClose>
 
               <div className="px-12 pb-5 pt-6">
@@ -644,7 +644,7 @@ export function AddRowDialog({
                           : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
                       )}
                     >
-                      <ClipboardPaste className="h-3.5 w-3.5" />
+                      <ClipboardPaste className="size-3.5" />
                       Pegar CSV
                     </button>
                   </div>
@@ -760,14 +760,14 @@ export function AddRowDialog({
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Guardando...
+                        <Loader2 className="size-4 animate-spin" />
+                        Guardando&hellip;
                       </>
                     ) : (
                       <>
-                        <Table2 className="h-4 w-4" />
+                        <Table2 className="size-4" />
                         {csvText.trim() ? "Agregar filas" : "Agregar fila"}
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="size-4" />
                       </>
                     )}
                   </button>

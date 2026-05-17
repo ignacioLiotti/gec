@@ -3,10 +3,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
  * Hook to prefetch obra data when user hovers over a link.
  * This reduces perceived load time when navigating to obra detail pages.
- * 
+ *
  * Uses debouncing to prevent excessive prefetch calls on rapid mouse movements.
  */
 export function usePrefetchObra() {
@@ -15,6 +18,8 @@ export function usePrefetchObra() {
 
   const prefetchObra = useCallback(
     (obraId: string) => {
+      if (!UUID_PATTERN.test(obraId)) return;
+
       // Skip if already prefetched in this session
       if (prefetchedIds.current.has(obraId)) return;
       prefetchedIds.current.add(obraId);

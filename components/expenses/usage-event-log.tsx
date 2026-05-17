@@ -1,5 +1,6 @@
 import { formatCompactNumber, formatReadableBytes } from "@/lib/tenant-expenses";
 import { estimateUsdForTokens } from "@/lib/ai-pricing";
+import { HydratedDateText } from "@/components/ui/hydrated-date-text";
 
 type UsageEvent = {
 	id: string;
@@ -100,13 +101,16 @@ export function UsageEventLog({
 						return (
 							<tr key={event.id} className="border-b last:border-b-0">
 								<td className="px-3 py-2 align-top text-xs text-muted-foreground">
-									{new Date(event.created_at).toLocaleString("es-AR", {
-										day: "2-digit",
-										month: "2-digit",
-										year: "numeric",
-										hour: "2-digit",
-										minute: "2-digit",
-									})}
+									<HydratedDateText
+										value={event.created_at}
+										options={{
+											day: "2-digit",
+											month: "2-digit",
+											year: "numeric",
+											hour: "2-digit",
+											minute: "2-digit",
+										}}
+									/>
 								</td>
 								{tenantNameById && (
 									<td className="px-3 py-2 align-top">

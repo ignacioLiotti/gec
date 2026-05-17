@@ -230,7 +230,7 @@ export default function DocumentsTestPage() {
           </aside>
 
           <main className="rounded-lg border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-            <div className="flex flex-col gap-4 border-b border-stone-200/80 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 border-b border-stone-200/80 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="grid size-8 place-items-center rounded-md bg-stone-100 text-stone-600">
                   <Folder className="size-4" />

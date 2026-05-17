@@ -34,6 +34,7 @@ import {
 	coerceMainColumnInputValue,
 	formatMainColumnValue,
 } from "@/lib/main-table-columns";
+import { evaluateMathExpression } from "@/lib/safe-math-expression";
 import { ObraGeneralTab } from "./tabs/general-tab";
 import { obraOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
 import {
@@ -95,7 +96,7 @@ const ObraFlujoTab = dynamic(
 	{
 		loading: () => (
 			<TabsContent value="flujo" className="space-y-6">
-				<div className="p-4 text-sm text-muted-foreground">Cargando flujo...</div>
+				<div className="p-4 text-sm text-muted-foreground">Cargando flujo?</div>
 			</TabsContent>
 		),
 	}
@@ -1115,7 +1116,7 @@ const toNumericValue = (value: unknown): number => {
 	return 0;
 };
 
-// Formula compiler cache - compiles formula once, reuses the evaluator function
+// Formula compiler cache - extracts formula references once and reuses the parsed shape.
 const formulaCache = new Map<string, { fieldNames: string[]; evaluate: (values: number[]) => number | null }>();
 
 const compileFormula = (formula: string): { fieldNames: string[]; evaluate: (values: number[]) => number | null } | null => {
@@ -1154,29 +1155,18 @@ const compileFormula = (formula: string): { fieldNames: string[]; evaluate: (val
 		return null;
 	}
 
-	// Compile the evaluator function once
-	try {
-		const argNames = fieldNames.map((_, i) => `__v${i}__`);
-		const fnBody = `"use strict"; return (${expressionTemplate});`;
-		const evaluatorFn = new Function(...argNames, fnBody) as (...args: number[]) => number;
+	const compiled = {
+		fieldNames,
+		evaluate: (values: number[]): number | null => {
+			const variables = Object.fromEntries(
+				values.map((value, index) => [`__v${index}__`, value])
+			);
+			return evaluateMathExpression(expressionTemplate, variables).value;
+		}
+	};
 
-		const compiled = {
-			fieldNames,
-			evaluate: (values: number[]): number | null => {
-				try {
-					const result = evaluatorFn(...values);
-					return Number.isFinite(result) ? Number(result) : null;
-				} catch {
-					return null;
-				}
-			}
-		};
-
-		formulaCache.set(trimmed, compiled);
-		return compiled;
-	} catch {
-		return null;
-	}
+	formulaCache.set(trimmed, compiled);
+	return compiled;
 };
 
 const evaluateMainFormula = (
@@ -1194,8 +1184,10 @@ function ObraDetailPageContent() {
 	const params = useParams();
 	const queryClient = useQueryClient();
 	const router = useRouter();
+	const { push, replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
 	const isMobile = useIsMobile();
 	const {
 		isAdmin: isTenantAdmin,
@@ -1208,7 +1200,7 @@ function ObraDetailPageContent() {
 		return raw;
 	}, [params]);
 	const isValidObraId = Boolean(obraId && obraId !== "undefined");
-	const initialTab = searchParams?.get("tab") || "general";
+	const initialTab = queryParams.get("tab") || "general";
 	const [activeTab, setActiveTab] = useState(initialTab);
 	const isGeneralTabActive = activeTab === "general";
 	const isDocumentsTabActive = activeTab === "documentos";
@@ -1777,14 +1769,14 @@ function ObraDetailPageContent() {
 		const qs = params.toString();
 		// Use startTransition to mark URL update as low-priority
 		startTransition(() => {
-			router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+			replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
 		});
 	}, [router, pathname, searchParams]);
 
 	// Handle tab change: update local state immediately, sync URL in background
 	const handleTabChange = useCallback((value: string) => {
-		const activeTour = searchParams?.get("tour") ?? null;
-		const activeStage = searchParams?.get(GUIDED_EXCEL_STAGE_PARAM) ?? null;
+		const activeTour = queryParams.get("tour") ?? null;
+		const activeStage = queryParams.get(GUIDED_EXCEL_STAGE_PARAM) ?? null;
 		setActiveTab(value); // Immediate state update
 		if (activeTour === "excel-overview") {
 			const nextStage =
@@ -1807,7 +1799,7 @@ function ObraDetailPageContent() {
 			return;
 		}
 		setQueryParams({ tab: value }); // Background URL sync
-	}, [searchParams, setQueryParams]);
+	}, [queryParams, setQueryParams]);
 
 	const handleOpenDocumentsRecovery = useCallback(() => {
 		if (activeTab !== "documentos") {
@@ -1819,7 +1811,7 @@ function ObraDetailPageContent() {
 
 	const handleOpenDocumentsTrashPage = useCallback(() => {
 		if (!obraId) return;
-		router.push(`/excel/${encodeURIComponent(obraId)}/papelera`);
+		push(`/excel/${encodeURIComponent(obraId)}/papelera`);
 	}, [obraId, router]);
 
 	const handleOpenObrasTrashPage = useCallback(() => {
@@ -1827,7 +1819,7 @@ function ObraDetailPageContent() {
 			toast.error("Solo administradores pueden ver la papelera de obras.");
 			return;
 		}
-		router.push("/excel/papelera-obras");
+		push("/excel/papelera-obras");
 	}, [isTenantAdmin, router]);
 
 	const handleStartIlagMaterialsWizard = useCallback(() => {
@@ -2295,7 +2287,7 @@ function ObraDetailPageContent() {
 			invalidateObrasTableSessionCache();
 			queryClient.invalidateQueries({ queryKey: ["obras-dashboard"] });
 			toast.success("Obra eliminada");
-			router.push("/excel");
+			push("/excel");
 		} catch (error) {
 			console.error(error);
 			toast.error(
@@ -3058,7 +3050,7 @@ function ObraDetailPageContent() {
 	const memoriaHeader = (
 		<div className="flex items-center justify-between gap-2">
 			<div className="flex items-center gap-2">
-				<StickyNote className="h-4 w-4 text-primary" />
+				<StickyNote className="size-4 text-primary" />
 				<h2 className="text-sm font-semibold">Memoria descriptiva de la obra</h2>
 			</div>
 		</div>
@@ -3144,7 +3136,7 @@ function ObraDetailPageContent() {
 						>
 							<div className="flex items-center justify-between gap-2">
 								<div className="flex items-center gap-2">
-									<div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
+									<div className="size-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary capitalize">
 										{(note.userName || "?")
 											.split(" ")
 											.filter(Boolean)
@@ -3377,7 +3369,7 @@ function ObraDetailPageContent() {
 			tour: null,
 			tourStage: null,
 		});
-		router.push("/macro?tour=macro-overview");
+		push("/macro?tour=macro-overview");
 	}, [setQueryParams, router]);
 
 	return (
@@ -3548,7 +3540,7 @@ function ObraDetailPageContent() {
 										<Tooltip>
 											<TooltipTrigger asChild>
 												<Badge className="bg-amber-100 text-amber-800 border-amber-200 rounded-md py-1.5">
-													<AlertTriangle className="h-3.5 w-3.5 mr-1" />
+													<AlertTriangle className="size-3.5 mr-1" />
 													{obraDelay}% atrasada
 												</Badge>
 											</TooltipTrigger>
@@ -3565,9 +3557,9 @@ function ObraDetailPageContent() {
 										variant="outline"
 										size="sm"
 										className="h-8 gap-2"
-										onClick={() => router.push(`/document-generation?workId=${obraId}`)}
+										onClick={() => push(`/document-generation?workId=${obraId}`)}
 									>
-										<FilePlus2 className="h-4 w-4" />
+										<FilePlus2 className="size-4" />
 										<span className="text-base md:text-sm">Generar documento</span>
 									</Button> */}
 									{/* {isTenantAdmin && ( */}
@@ -3579,7 +3571,7 @@ function ObraDetailPageContent() {
 												className="h-8 gap-2"
 												onClick={handleOpenObrasTrashPage}
 											>
-												<Trash2 className="h-4 w-4" />
+												<Trash2 className="size-4" />
 												<span className="text-base md:text-sm">Papelera obras</span>
 											</Button> */}
 									{/* <Button
@@ -3590,7 +3582,7 @@ function ObraDetailPageContent() {
 												onClick={() => void handleDeleteObra()}
 												disabled={isDeletingObra}
 											>
-												<Trash2 className="h-4 w-4" />
+												<Trash2 className="size-4" />
 												<span className="text-base md:text-sm">
 													{isDeletingObra ? "Eliminando..." : "Borrar obra"}
 												</span>
@@ -3613,7 +3605,7 @@ function ObraDetailPageContent() {
 														aria-pressed={!isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(false)}
 													>
-														<Eye className="h-4 w-4" />
+														<Eye className="size-4" />
 														<span className={cn("hidden sm:inline text-base md:text-sm", !isGeneralTabEditMode ? "inline" : "hidden")}>Vista previa</span>
 													</Button>
 													<Button
@@ -3624,7 +3616,7 @@ function ObraDetailPageContent() {
 														aria-pressed={isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(true)}
 													>
-														<Pencil className="h-4 w-4" />
+														<Pencil className="size-4" />
 														<span className={cn("hidden sm:inline text-base md:text-sm", isGeneralTabEditMode ? "inline" : "hidden")}>Edición</span>
 													</Button>
 												</div>
@@ -3636,7 +3628,7 @@ function ObraDetailPageContent() {
 												className="gap-2"
 												aria-label="Memoria"
 											>
-												<StickyNote className="h-4 w-4" />
+												<StickyNote className="size-4" />
 												<span className="hidden sm:inline">Memoria</span>
 											</Button>
 										</>
@@ -3650,7 +3642,7 @@ function ObraDetailPageContent() {
 												className="h-8 gap-2"
 												onClick={handleOpenDocumentsRecovery}
 											>
-												<RotateCcw className="h-4 w-4" />
+												<RotateCcw className="size-4" />
 												<span className="text-base md:text-sm">Recuperar</span>
 											</Button>
 											<Button
@@ -3660,7 +3652,7 @@ function ObraDetailPageContent() {
 												className="h-8 gap-2"
 												onClick={handleOpenDocumentsTrashPage}
 											>
-												<Trash2 className="h-4 w-4" />
+												<Trash2 className="size-4" />
 												<span className="text-base md:text-sm">Papelera</span>
 											</Button>
 										</>
@@ -3978,7 +3970,7 @@ function ObraDetailPageContent() {
 
 export default function ObraDetailPage() {
 	return (
-		<Suspense fallback={<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">Cargando obra...</div>}>
+		<Suspense fallback={<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">Cargando obra?</div>}>
 			<ObraDetailPageContent />
 		</Suspense>
 	);

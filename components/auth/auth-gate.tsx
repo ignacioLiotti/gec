@@ -19,6 +19,7 @@ export default function AuthGate({
 	allowAnonymous?: boolean;
 }) {
 	const router = useRouter();
+  const { push } = router;
 	const pathname = usePathname();
 	const [isChecking, setIsChecking] = useState(true);
 
@@ -75,7 +76,7 @@ export default function AuthGate({
 					console.log(
 						"[AUTH-GATE] Session exists but no tenant, redirecting to onboarding",
 					);
-					router.push("/onboarding");
+					push("/onboarding");
 				}
 
 				setIsChecking(false);

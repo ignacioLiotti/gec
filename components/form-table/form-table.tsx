@@ -161,9 +161,9 @@ export function FormTableToolbar() {
 									)}
 								>
 									{filters.isProcessing ? (
-										<Loader2 className="h-4 w-4 animate-spin" />
+										<Loader2 className="size-4 animate-spin" />
 									) : (
-										<Filter className="h-4 w-4" />
+										<Filter className="size-4" />
 									)}
 									<span>Filtros</span>
 									{filters.activeCount > 0 && (
@@ -182,8 +182,8 @@ export function FormTableToolbar() {
 							<div className="shrink-0 border-b bg-gradient-to-br from-muted/50 to-background px-6 py-5">
 								<SheetHeader className="space-y-1">
 									<div className="flex items-center gap-3">
-										<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-											<Filter className="h-4 w-4 text-primary" />
+										<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+											<Filter className="size-4 text-primary" />
 										</div>
 										<div>
 											<SheetTitle className="text-lg">Filtros avanzados</SheetTitle>
@@ -235,7 +235,7 @@ export function FormTableToolbar() {
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button type="button" variant="outline" className="gap-2">
-								<MoreHorizontal className="h-4 w-4" />
+								<MoreHorizontal className="size-4" />
 								Extras
 							</Button>
 						</DropdownMenuTrigger>
@@ -250,9 +250,9 @@ export function FormTableToolbar() {
 										className="gap-2"
 									>
 										{filters.isProcessing ? (
-											<Loader2 className="h-4 w-4 animate-spin" />
+											<Loader2 className="size-4 animate-spin" />
 										) : (
-											<Filter className="h-4 w-4" />
+											<Filter className="size-4" />
 										)}
 										<span>Filtros</span>
 										{filters.activeCount > 0 && (
@@ -273,7 +273,7 @@ export function FormTableToolbar() {
 								}}
 								className="gap-2"
 							>
-								<Download className="h-4 w-4" />
+								<Download className="size-4" />
 								Exportar tabla
 							</DropdownMenuItem>
 							{config.toolbarActions && (
@@ -303,19 +303,19 @@ export function FormTableToolbar() {
 								: "border-primary/20 bg-primary/5 text-primary"
 						)}
 					>
-						<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						<Loader2 className="size-3.5 animate-spin" />
 						<span>{getTableActivityMessage(meta.activityKind, meta.isSlowOperation)}</span>
 					</div>
 				)}
 				{!isExtrasToolbar && (
 					<Button type="button" variant="outline" className="gap-2" onClick={() => void actions.exportCsv()}>
-						<Download className="h-4 w-4" />
+						<Download className="size-4" />
 						Exportar tabla
 					</Button>
 				)}
 				{sorting.state.columnId && (
 					<Button type="button" variant="ghost" className="gap-1" onClick={sorting.clear}>
-						<Minus className="h-4 w-4" />
+						<Minus className="size-4" />
 						Limpiar orden
 					</Button>
 				)}
@@ -608,7 +608,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 			<div className={cn("relative rounded-none overflow-x-auto w-full bg-white flex-1", className)}>
 				{isServerPaging && isFetching && tableRows.length === 0 && (
 					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm">
-						<Loader2 className="h-6 w-6 animate-spin text-primary" />
+						<Loader2 className="size-6 animate-spin text-primary" />
 						<p className="text-sm font-medium text-muted-foreground">Sincronizando con el servidor…</p>
 					</div>
 				)}
@@ -624,7 +624,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									: "border-primary/20 bg-background/90 text-primary"
 							)}
 						>
-							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+							<Loader2 className="size-3.5 animate-spin" />
 							<span>{getTableActivityMessage(activityKind, isSlowOperation)}</span>
 						</div>
 					</div>
@@ -673,7 +673,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 															rowSpan={2}
 															{...getStickyProps(
 																column.id,
-																"relative px-4 py-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]"
+																"relative p-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]"
 															)}
 														>
 															<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
@@ -689,16 +689,16 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 																				<span className="text-muted-foreground flex items-center gap-2">
 																					{isSortProcessing &&
 																						(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
-																							<Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+																							<Loader2 className="size-3.5 animate-spin text-primary" />
 																						)}
 																					{sortState.columnId === column.id ? (
 																						sortState.direction === "asc" ? (
-																							<ArrowUp className="h-3.5 w-3.5" />
+																							<ArrowUp className="size-3.5" />
 																						) : (
-																							<ArrowDown className="h-3.5 w-3.5" />
+																							<ArrowDown className="size-3.5" />
 																						)
 																					) : (
-																						<ArrowUpDown className="h-3.5 w-3.5" />
+																						<ArrowUpDown className="size-3.5" />
 																					)}
 																				</span>
 																			</button>
@@ -749,7 +749,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											{showActionsColumn && (
 												<th
 													rowSpan={2}
-													className="relative px-4 py-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker"
+													className="relative p-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker"
 												>
 													<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-end gap-2">
 														<span>Acciones</span>
@@ -769,7 +769,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									if (!groupedColumnLookup.has(column.id)) return null;
 
 									const baseClassName = cn(
-										"relative px-4 py-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker"
+										"relative p-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker"
 									);
 									const isSortable = column.enableSort !== false;
 
@@ -788,16 +788,16 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 																<span className="text-muted-foreground">
 																	{isSortProcessing &&
 																		(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
-																			<Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin text-primary" />
+																			<Loader2 className="mr-1 inline size-3.5 animate-spin text-primary" />
 																		)}
 																	{sortState.columnId === column.id ? (
 																		sortState.direction === "asc" ? (
-																			<ArrowUp className="inline h-3.5 w-3.5" />
+																			<ArrowUp className="inline size-3.5" />
 																		) : (
-																			<ArrowDown className="inline h-3.5 w-3.5" />
+																			<ArrowDown className="inline size-3.5" />
 																		)
 																	) : (
-																		<ArrowUpDown className="h-3.5 w-3.5" />
+																		<ArrowUpDown className="size-3.5" />
 																	)}
 																</span>
 															</button>
@@ -991,7 +991,7 @@ export function FormTablePagination() {
 			{paginationDisabled ? (
 				(isLoading || filters.activeCount > 0) && (
 					<div className="flex items-center gap-4 text-foreground">
-						{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+						{isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
 						{filters.activeCount > 0 && (
 							<p className="text-xs text-muted-foreground">
 								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
@@ -1002,7 +1002,7 @@ export function FormTablePagination() {
 			) : hideFooterPaginationSummary ? (
 				(isLoading || filters.activeCount > 0) && (
 					<div className="flex items-center gap-4 text-foreground">
-						{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+						{isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
 						{filters.activeCount > 0 && (
 							<p className="text-xs text-muted-foreground">
 								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
@@ -1035,7 +1035,7 @@ export function FormTablePagination() {
 							</SelectContent>
 						</Select>
 					)}
-					{isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+					{isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						{totalRowCount > 0 && (
 							<div className="flex items-center text-sm text-muted-foreground gap-4">
@@ -1081,7 +1081,7 @@ export function FormTablePagination() {
 
 						className="gap-2"
 					>
-						{meta.isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+						{meta.isSaving && <Loader2 className="size-4 animate-spin" />}
 						{meta.isSaving ? "Guardando..." : "Guardar cambios"}
 					</Button>
 				) : null}
@@ -1095,7 +1095,7 @@ export function FormTablePagination() {
 					disabled={page <= 1 || isLoading}
 					className="gap-1"
 				>
-					<ChevronsLeft className="h-4 w-4" />
+					<ChevronsLeft className="size-4" />
 					Primera
 				</Button> */}
 					<Button
@@ -1106,7 +1106,7 @@ export function FormTablePagination() {
 						disabled={!hasPreviousPage || isLoading}
 						className="gap-1"
 					>
-						<ChevronLeft className="h-4 w-4" />
+						<ChevronLeft className="size-4" />
 						Anterior
 					</Button>
 					<span className="min-w-[120px] text-center text-xs text-muted-foreground">
@@ -1121,7 +1121,7 @@ export function FormTablePagination() {
 						className="gap-1"
 					>
 						Siguiente
-						<ChevronRight className="h-4 w-4" />
+						<ChevronRight className="size-4" />
 					</Button>
 					{/* <Button
 					type="button"
@@ -1131,7 +1131,7 @@ export function FormTablePagination() {
 					className="gap-1"
 				>
 					Ultima
-					<ChevronsRight className="h-4 w-4" />
+					<ChevronsRight className="size-4" />
 				</Button> */}
 				</div>
 			) : null}

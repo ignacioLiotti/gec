@@ -144,7 +144,7 @@ function PreviewActionBar({
 	return (
 		<div className="absolute right-4 top-4 z-20">
 			<Button variant="default" size="sm" onClick={() => onDownload(document)}>
-				<Download className="mr-2 h-4 w-4" />
+				<Download className="mr-2 size-4" />
 				Descargar
 			</Button>
 		</div>
@@ -164,10 +164,10 @@ function PreviewFallback({
 		<div className="relative flex h-full flex-col">
 			<PreviewActionBar document={document} onDownload={onDownload} />
 			<div className="flex flex-1 flex-col items-center justify-center p-4 text-stone-400">
-				<FileText className="mb-4 h-16 w-16 opacity-20" />
+				<FileText className="mb-4 size-16 opacity-20" />
 				<p>{message}</p>
 				<Button variant="outline" size="sm" onClick={() => onDownload(document)} className="mt-4">
-					<Download className="mr-2 h-4 w-4" />
+					<Download className="mr-2 size-4" />
 					Descargar para ver
 				</Button>
 			</div>
@@ -259,8 +259,8 @@ function SpreadsheetLikePreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
-					<Loader2 className="h-4 w-4 animate-spin" />
-					Cargando vista previa...
+					<Loader2 className="size-4 animate-spin" />
+					Cargando vista previa&hellip;
 				</div>
 			</div>
 		);
@@ -271,7 +271,7 @@ function SpreadsheetLikePreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center text-stone-500">
-					<AlertCircle className="h-10 w-10 text-amber-500" />
+					<AlertCircle className="size-10 text-amber-500" />
 					<p>{error}</p>
 				</div>
 			</div>
@@ -425,8 +425,8 @@ function WordDocumentPreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
-					<Loader2 className="h-4 w-4 animate-spin" />
-					Renderizando documento...
+					<Loader2 className="size-4 animate-spin" />
+					Renderizando documento&hellip;
 				</div>
 			</div>
 		);
@@ -577,6 +577,16 @@ function WordDocumentPreview({
 	);
 }
 
+function waitForManifestRetry(
+	ms: number,
+	waitTimeouts: ReturnType<typeof setTimeout>[]
+) {
+	return new Promise((resolve) => {
+		const timeout = setTimeout(resolve, ms);
+		waitTimeouts.push(timeout);
+	});
+}
+
 function ModelDocumentPreview({
 	document,
 	onDownload,
@@ -584,15 +594,16 @@ function ModelDocumentPreview({
 	document: FileSystemItem;
 	onDownload: (doc: FileSystemItem) => void;
 }) {
-	const [resolvedUrn, setResolvedUrn] = useState<string | null>(document.apsUrn ?? null);
-	const [isLoading, setIsLoading] = useState(Boolean(document.storagePath || document.apsUrn));
-	const [status, setStatus] = useState<string | null>(document.apsUrn ? "checking" : null);
+	const { apsUrn, name, storagePath } = document;
+	const [resolvedUrn, setResolvedUrn] = useState<string | null>(apsUrn ?? null);
+	const [isLoading, setIsLoading] = useState(Boolean(storagePath || apsUrn));
+	const [status, setStatus] = useState<string | null>(apsUrn ? "checking" : null);
 	const [progressLabel, setProgressLabel] = useState<string | null>(null);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
-		const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+		const waitTimeouts: ReturnType<typeof setTimeout>[] = [];
 
 		const pollManifest = async (urn: string) => {
 			for (let attempt = 0; attempt < 18; attempt += 1) {
@@ -638,7 +649,7 @@ function ModelDocumentPreview({
 				setStatus("processing");
 				setProgressLabel(manifestProgress);
 				setErrorMessage(null);
-				await wait(4000);
+				await waitForManifestRetry(4000, waitTimeouts);
 				if (cancelled) return;
 			}
 
@@ -649,7 +660,7 @@ function ModelDocumentPreview({
 		};
 
 		const ensureModelUrn = async () => {
-			if (!document.storagePath && !document.apsUrn) {
+			if (!storagePath && !apsUrn) {
 				setResolvedUrn(null);
 				setStatus("missing");
 				setErrorMessage("Este archivo no tiene una ruta válida para generar la vista 3D.");
@@ -662,11 +673,11 @@ function ModelDocumentPreview({
 			setProgressLabel(null);
 
 			try {
-				let urn = document.apsUrn ?? null;
+				let urn = apsUrn ?? null;
 
-				if (!urn && document.storagePath) {
+				if (!urn && storagePath) {
 					const modelResponse = await fetch(
-						`/api/aps/models?filePath=${encodeURIComponent(document.storagePath)}`,
+						`/api/aps/models?filePath=${encodeURIComponent(storagePath)}`,
 						{ cache: "no-store" }
 					);
 					const modelPayload = await modelResponse.json().catch(() => null);
@@ -677,11 +688,11 @@ function ModelDocumentPreview({
 					}
 				}
 
-				if (!urn && document.storagePath) {
+				if (!urn && storagePath) {
 					setStatus("uploading");
 					const formData = new FormData();
-					formData.append("storagePath", document.storagePath);
-					formData.append("fileName", document.name);
+					formData.append("storagePath", storagePath);
+					formData.append("fileName", name);
 
 					const uploadResponse = await fetch("/api/aps/upload", {
 						method: "POST",
@@ -728,8 +739,9 @@ function ModelDocumentPreview({
 		void ensureModelUrn();
 		return () => {
 			cancelled = true;
+			waitTimeouts.forEach(clearTimeout);
 		};
-	}, [document.apsUrn, document.name, document.storagePath]);
+	}, [apsUrn, name, storagePath]);
 
 	if (resolvedUrn && status === "ready") {
 		return (
@@ -747,7 +759,7 @@ function ModelDocumentPreview({
 			<div className="relative flex h-full flex-col">
 				<PreviewActionBar document={document} onDownload={onDownload} />
 				<div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-stone-500">
-					<Loader2 className="h-4 w-4 animate-spin" />
+					<Loader2 className="size-4 animate-spin" />
 					<p>
 						{status === "uploading"
 							? "Enviando modelo a APS..."
@@ -782,7 +794,7 @@ export const DocumentPreview = memo(function DocumentPreview({
 	if (!document) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center text-stone-400">
-				<Eye className="mb-4 h-16 w-16 opacity-20" />
+				<Eye className="mb-4 size-16 opacity-20" />
 				<p>Selecciona un documento para previsualizar</p>
 			</div>
 		);

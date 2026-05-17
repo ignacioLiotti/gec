@@ -133,7 +133,7 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 						className
 					)}
 				>
-					<Sparkles className="-mr-1 -ml-1 h-3 w-3 py-0.5 font-normal" />
+					<Sparkles className="-mr-1 -ml-1 size-3 py-0.5 font-normal" />
 					Sugerencia
 				</Button>
 			</PopoverTrigger>
@@ -152,7 +152,7 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 							</p>
 							<p className="mt-0.5 truncate font-medium text-foreground">{suggestion.sourceInput}</p>
 						</div>
-						<ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+						<ArrowRight className="size-4 shrink-0 text-muted-foreground" />
 						<div className="min-w-0 flex-1 rounded-lg border-2 border-orange-300 bg-orange-50 px-3 py-2">
 							<p className="text-[10px] uppercase tracking-wide text-orange-600">
 								Sugerido
@@ -309,7 +309,7 @@ function DateCellEditor<Row extends FormTableRow>({
 							"h-full rounded-none border-none px-0 has-[>svg]:px-1 py-1 font-normal shrink-0"
 						)}
 					>
-						<CalendarDays className="h-4 w-4 shrink-0 opacity-70" />
+						<CalendarDays className="size-4 shrink-0 opacity-70" />
 					</Button>
 				</PopoverTrigger>
 				<PopoverContent className="w-auto p-0" align="start">
@@ -470,7 +470,7 @@ export type EditableContentArgs<Row extends FormTableRow> = {
 	highlightQuery: string;
 };
 
-export type RenderCellArgs<Row extends FormTableRow> = {
+type RenderCellArgs<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
 	row: Row;
 	rowId: string;
@@ -572,7 +572,7 @@ function renderSelectOptionBadge(
 				option.color ? SELECT_BADGE_CLASS_BY_COLOR[option.color] : null
 			)}
 		>
-			{IconComponent ? <IconComponent className="h-3 w-3" /> : null}
+			{IconComponent ? <IconComponent className="size-3" /> : null}
 			<HighlightedText text={option.text} query={highlightQuery} />
 		</Badge>
 	);
@@ -673,7 +673,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 					className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
 				>
 					<HighlightedText text={text} query={highlightQuery} />
-					{config.target === "_blank" && <ExternalLink className="w-3 h-3" />}
+					{config.target === "_blank" && <ExternalLink className="size-3" />}
 				</a>
 			);
 		}
@@ -684,7 +684,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 					? config.avatarFallback(row)
 					: config.avatarFallback || text.substring(0, 2).toUpperCase();
 			return (
-				<Avatar className="w-8 h-8">
+				<Avatar className="size-8">
 					<AvatarImage src={text} alt={fallback} />
 					<AvatarFallback>{fallback}</AvatarFallback>
 				</Avatar>
@@ -697,7 +697,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 				<img
 					src={src}
 					alt="Vista previa"
-					className="w-10 h-10 object-cover rounded"
+					className="size-10 object-cover rounded"
 				/>
 			);
 		}
@@ -997,7 +997,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 									return (
 										<SelectItem key={optionId} value={optionId}>
 											<span className="inline-flex items-center gap-2">
-												{IconComponent ? <IconComponent className="h-3 w-3" /> : null}
+												{IconComponent ? <IconComponent className="size-3" /> : null}
 												<span>{option.text}</span>
 											</span>
 										</SelectItem>
@@ -1073,7 +1073,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 			);
 	}
 }
-export function renderCellByType<Row extends FormTableRow>({
+function renderCellByType<Row extends FormTableRow>({
 	column,
 	row,
 	rowId,

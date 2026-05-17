@@ -292,13 +292,13 @@ const ConfigTableRow = memo(function ConfigTableRow({
 			{/* Orden */}
 			<td className="px-5 py-4">
 				<div className="flex flex-col items-center gap-0.5">
-					<Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => onMoveUp(index)}>
+					<Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => onMoveUp(index)}>
 						<span className="sr-only">Mover hacia arriba</span>
-						<ArrowUp className="h-3.5 w-3.5" />
+						<ArrowUp className="size-3.5" />
 					</Button>
-					<Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => onMoveDown(index)}>
+					<Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => onMoveDown(index)}>
 						<span className="sr-only">Mover hacia abajo</span>
-						<ArrowDown className="h-3.5 w-3.5" />
+						<ArrowDown className="size-3.5" />
 					</Button>
 				</div>
 			</td>
@@ -411,7 +411,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 												)?.label;
 												return (
 													<div className="flex items-center gap-2 text-sm">
-														<IconComponent className="h-3.5 w-3.5" />
+														<IconComponent className="size-3.5" />
 														<span>{iconLabel ?? "Icono"}</span>
 													</div>
 												);
@@ -426,7 +426,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 													<div className="flex items-center gap-2">
 														{(() => {
 															const IconComponent = SELECT_ICON_BY_NAME[iconOption.value];
-															return <IconComponent className="h-3.5 w-3.5" />;
+															return <IconComponent className="size-3.5" />;
 														})()}
 														<span>{iconOption.label}</span>
 													</div>
@@ -448,7 +448,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 															option.color ? SELECT_BADGE_CLASS_BY_COLOR[option.color] : null
 														)}
 													>
-														{IconComponent ? <IconComponent className="h-3 w-3" /> : null}
+														{IconComponent ? <IconComponent className="size-3" /> : null}
 														<span>{option.text || "Sin titulo"}</span>
 													</Badge>
 												</>
@@ -459,17 +459,17 @@ const ConfigTableRow = memo(function ConfigTableRow({
 										type="button"
 										variant="ghost"
 										size="icon"
-										className="h-8 w-8"
+										className="size-8"
 										onClick={() => removeSelectOptionAt(optionIndex)}
 									>
 										<span className="sr-only">Eliminar opción</span>
-										<Trash2 className="h-4 w-4 text-destructive" />
+										<Trash2 className="size-4 text-destructive" />
 									</Button>
 								</div>
 							))
 						)}
 						<Button type="button" variant="outline" size="sm" onClick={addSelectOption}>
-							<Plus className="mr-1 h-3.5 w-3.5" />
+							<Plus className="mr-1 size-3.5" />
 							Agregar opcion
 						</Button>
 					</div>
@@ -586,7 +586,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 							type="button"
 							variant="ghost"
 							size="icon"
-							className="h-8 w-8"
+							className="size-8"
 							onClick={() => {
 								const confirmed = window.confirm("¿Eliminar esta columna de la configuración?");
 								if (!confirmed) return;
@@ -594,7 +594,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 							}}
 						>
 							<span className="sr-only">Eliminar columna</span>
-							<Trash2 className="h-4 w-4 text-destructive" />
+							<Trash2 className="size-4 text-destructive" />
 						</Button>
 					</td>
 				</>
@@ -827,7 +827,7 @@ export default function AdminMainTableConfigPage() {
 	if (loading) {
 		return (
 			<div className="flex items-center gap-2 p-8 text-sm text-muted-foreground">
-				<Loader2 className="h-4 w-4 animate-spin" />
+				<Loader2 className="size-4 animate-spin" />
 				Cargando configuración…
 			</div>
 		);
@@ -922,7 +922,7 @@ export default function AdminMainTableConfigPage() {
 								disabled={!newBaseColumnId}
 								className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
 							>
-								<Plus className="h-4 w-4 mr-1" />
+								<Plus className="size-4 mr-1" />
 								Agregar
 							</Button>
 						</div>
@@ -985,7 +985,7 @@ export default function AdminMainTableConfigPage() {
 								onClick={addFormulaColumn}
 								className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
 							>
-								<Plus className="h-4 w-4 mr-1" />
+								<Plus className="size-4 mr-1" />
 								Agregar calculada
 							</Button>
 						</div>
@@ -1043,7 +1043,7 @@ export default function AdminMainTableConfigPage() {
 								onClick={addCustomColumn}
 								className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
 							>
-								<Plus className="h-4 w-4 mr-1" />
+								<Plus className="size-4 mr-1" />
 								Agregar personalizada
 							</Button>
 						</div>
@@ -1134,9 +1134,9 @@ export default function AdminMainTableConfigPage() {
 						className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
 					>
 						{saving ? (
-							<Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+							<Loader2 className="size-4 mr-1.5 animate-spin" />
 						) : (
-							<Save className="h-4 w-4 mr-1.5" />
+							<Save className="size-4 mr-1.5" />
 						)}
 						{saving ? "Guardando…" : "Guardar configuración"}
 					</Button>

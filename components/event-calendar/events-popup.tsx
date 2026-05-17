@@ -106,7 +106,7 @@ export function EventsPopup({
           className="hover:bg-muted rounded-full p-1"
           aria-label="Close"
         >
-          <XIcon className="h-4 w-4" />
+          <XIcon className="size-4" />
         </button>
       </div>
 

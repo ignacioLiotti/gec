@@ -485,9 +485,9 @@ function ReportTableInner<Row>({
 										<span>{col.label}</span>
 										{sortColumnId === col.id && (
 											sortDirection === "asc" ? (
-												<ChevronUp className="h-3 w-3 opacity-60" />
+												<ChevronUp className="size-3 opacity-60" />
 											) : (
-												<ChevronDown className="h-3 w-3 opacity-60" />
+												<ChevronDown className="size-3 opacity-60" />
 											)
 										)}
 									</div>

@@ -63,13 +63,13 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                className="size-10 rounded-lg flex items-center justify-center"
                 style={{
                   backgroundColor: `${role.color || "#6366f1"}20`,
                 }}
               >
                 <Shield
-                  className="h-5 w-5"
+                  className="size-5"
                   style={{ color: role.color || "#6366f1" }}
                 />
               </div>
@@ -90,19 +90,19 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <MoreVertical className="h-4 w-4" />
+                  <MoreVertical className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => onEdit(role)}>
-                  <Pencil className="h-4 w-4 mr-2" />
+                  <Pencil className="size-4 mr-2" />
                   Editar
                 </DropdownMenuItem>
                 {onViewUsers && (
                   <DropdownMenuItem onClick={() => onViewUsers(role)}>
-                    <Users className="h-4 w-4 mr-2" />
+                    <Users className="size-4 mr-2" />
                     Ver Usuarios
                   </DropdownMenuItem>
                 )}
@@ -111,7 +111,7 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
                   onClick={() => setIsDeleteOpen(true)}
                   className="text-red-600 dark:text-red-400"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <Trash2 className="size-4 mr-2" />
                   Eliminar
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -128,7 +128,7 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Shield className="h-4 w-4" />
+              <Shield className="size-4" />
               <span>{role.permission_count || 0} permisos</span>
             </div>
             <NavigationAccessBadges
@@ -143,7 +143,7 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
             onClick={() => onEdit(role)}
           >
             Configurar permisos
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="size-4" />
           </Button>
         </CardContent>
       </Card>
@@ -195,13 +195,13 @@ export function RoleListItem({
       }`}
     >
       <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+        className="size-8 rounded-lg flex items-center justify-center flex-shrink-0"
         style={{
           backgroundColor: `${role.color || "#6366f1"}20`,
         }}
       >
         <Shield
-          className="h-4 w-4"
+          className="size-4"
           style={{ color: role.color || "#6366f1" }}
         />
       </div>
@@ -211,7 +211,7 @@ export function RoleListItem({
           {role.permission_count || 0} permisos
         </div>
       </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
     </button>
   );
 }

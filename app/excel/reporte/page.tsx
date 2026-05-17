@@ -11,33 +11,35 @@ import {
 
 function ReportePageContent() {
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 
 	// Initialize filters from URL params
 	const initialFilters: Partial<ObraFilters> = {
-		supMin: searchParams.get("supMin") || "",
-		supMax: searchParams.get("supMax") || "",
-		entidadContains: searchParams.get("entidadContains") || "",
-		mesYear: searchParams.get("mesYear") || "",
-		mesContains: searchParams.get("mesContains") || "",
-		iniYear: searchParams.get("iniYear") || "",
-		iniContains: searchParams.get("iniContains") || "",
-		cmaMin: searchParams.get("cmaMin") || "",
-		cmaMax: searchParams.get("cmaMax") || "",
-		cafMin: searchParams.get("cafMin") || "",
-		cafMax: searchParams.get("cafMax") || "",
-		sacMin: searchParams.get("sacMin") || "",
-		sacMax: searchParams.get("sacMax") || "",
-		scMin: searchParams.get("scMin") || "",
-		scMax: searchParams.get("scMax") || "",
-		paMin: searchParams.get("paMin") || "",
-		paMax: searchParams.get("paMax") || "",
-		ptMin: searchParams.get("ptMin") || "",
-		ptMax: searchParams.get("ptMax") || "",
-		ptrMin: searchParams.get("ptrMin") || "",
-		ptrMax: searchParams.get("ptrMax") || "",
-		porcentajeMin: searchParams.get("porcentajeMin") || "",
-		porcentajeMax: searchParams.get("porcentajeMax") || "",
-		estado: (searchParams.get("estado") as ObraFilters["estado"]) || "all",
+		supMin: getSearchParam("supMin") || "",
+		supMax: getSearchParam("supMax") || "",
+		entidadContains: getSearchParam("entidadContains") || "",
+		mesYear: getSearchParam("mesYear") || "",
+		mesContains: getSearchParam("mesContains") || "",
+		iniYear: getSearchParam("iniYear") || "",
+		iniContains: getSearchParam("iniContains") || "",
+		cmaMin: getSearchParam("cmaMin") || "",
+		cmaMax: getSearchParam("cmaMax") || "",
+		cafMin: getSearchParam("cafMin") || "",
+		cafMax: getSearchParam("cafMax") || "",
+		sacMin: getSearchParam("sacMin") || "",
+		sacMax: getSearchParam("sacMax") || "",
+		scMin: getSearchParam("scMin") || "",
+		scMax: getSearchParam("scMax") || "",
+		paMin: getSearchParam("paMin") || "",
+		paMax: getSearchParam("paMax") || "",
+		ptMin: getSearchParam("ptMin") || "",
+		ptMax: getSearchParam("ptMax") || "",
+		ptrMin: getSearchParam("ptrMin") || "",
+		ptrMax: getSearchParam("ptrMax") || "",
+		porcentajeMin: getSearchParam("porcentajeMin") || "",
+		porcentajeMax: getSearchParam("porcentajeMax") || "",
+		estado: (getSearchParam("estado") as ObraFilters["estado"]) || "all",
 	};
 
 	return (
@@ -51,7 +53,7 @@ function ReportePageContent() {
 
 export default function Page() {
 	return (
-		<Suspense fallback={<div className="flex items-center justify-center h-screen">Cargando...</div>}>
+		<Suspense fallback={<div className="flex items-center justify-center h-screen">Cargando?</div>}>
 			<ReportePageContent />
 		</Suspense>
 	);

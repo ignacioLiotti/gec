@@ -5,6 +5,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { auth } from "@/lib/auth";
 
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,6 +47,8 @@ export async function createTenantAction(
 	errorPath: string,
 	formData: FormData
 ) {
+	const session = await auth();
+	if (!session.data.user) redirect("/");
 	const { user } = await resolveUser();
 	const name = String(formData.get("name") ?? "").trim();
 
@@ -96,6 +99,8 @@ export async function joinTenantAction(
 	errorPath: string,
 	formData: FormData
 ) {
+	const session = await auth();
+	if (!session.data.user) redirect("/");
 	const { supabase, user } = await resolveUser();
 	const tenantId = String(formData.get("tenant_id") ?? "").trim();
 

@@ -7,6 +7,7 @@ import {
 	resolveSubscriptionGraceDays,
 	resolveSubscriptionPendingGraceMinutes,
 } from "@/lib/billing/subscription-access";
+import { supabaseServerFetch } from "@/utils/supabase/fetch";
 
 const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
@@ -199,6 +200,9 @@ export async function proxy(req: NextRequest) {
 		process.env.NEXT_PUBLIC_SUPABASE_URL!,
 		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 		{
+			global: {
+				fetch: supabaseServerFetch,
+			},
 			cookies: {
 				getAll() {
 					return req.cookies.getAll().map((cookie) => ({

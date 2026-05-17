@@ -172,6 +172,7 @@ type ObraTablaApiItem = {
 };
 
 const DATA_TYPES: MacroTableDataType[] = ["text", "number", "currency", "boolean", "date"];
+const DATA_TYPE_SET = new Set<MacroTableDataType>(DATA_TYPES);
 
 type MacroTableWithDetails = MacroTable & {
   sources: (MacroTableSource & {
@@ -187,6 +188,7 @@ type MacroTableWithDetails = MacroTable & {
 
 export default function EditMacroTablePage() {
   const router = useRouter();
+  const { push } = router;
   const params = useParams();
   const id = params?.id as string;
 
@@ -388,7 +390,7 @@ export default function EditMacroTablePage() {
     } catch (error) {
       console.error(error);
       toast.error("Error cargando macro tabla");
-      router.push("/admin/macro-tables");
+      push("/admin/macro-tables");
     }
   }, [id, router]);
 
@@ -565,11 +567,12 @@ export default function EditMacroTablePage() {
       if (!template) return;
 
       const matchingTables: SelectedSource[] = [];
+      const onlyTableNameSet = new Set(onlyTableNames);
       for (const obra of obras) {
         for (const tabla of obra.tablas) {
           if (!matchesTemplate(tabla, template)) continue;
           const baseName = extractBaseTableName(tabla.name);
-          if (onlyTableNames.length > 0 && !onlyTableNames.includes(baseName)) continue;
+          if (onlyTableNameSet.size > 0 && !onlyTableNameSet.has(baseName)) continue;
           matchingTables.push({
             obraId: obra.id,
             obraName: obra.designacionYUbicacion,
@@ -627,7 +630,7 @@ export default function EditMacroTablePage() {
         byKey.set(col.fieldKey, {
           key: col.fieldKey,
           label: col.label || col.fieldKey,
-          dataType: (DATA_TYPES.includes(col.dataType as MacroTableDataType)
+          dataType: (DATA_TYPE_SET.has(col.dataType as MacroTableDataType)
             ? col.dataType
             : "text") as MacroTableDataType,
         });
@@ -649,7 +652,7 @@ export default function EditMacroTablePage() {
       byKey.set(obraColumn.fieldKey, {
         key: obraColumn.fieldKey,
         label: obraColumn.label || obraColumn.fieldKey,
-        dataType: (DATA_TYPES.includes(obraColumn.dataType as MacroTableDataType)
+        dataType: (DATA_TYPE_SET.has(obraColumn.dataType as MacroTableDataType)
           ? obraColumn.dataType
           : "text") as MacroTableDataType,
       });
@@ -939,7 +942,7 @@ export default function EditMacroTablePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -952,9 +955,9 @@ export default function EditMacroTablePage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push("/admin/macro-tables")}
+            onClick={() => push("/admin/macro-tables")}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Editar macro tabla</h1>
@@ -964,10 +967,10 @@ export default function EditMacroTablePage() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => router.push(`/macro?macroId=${id}`)}
+            onClick={() => push(`/macro?macroId=${id}`)}
             className="gap-2"
           >
-            <Eye className="h-4 w-4" />
+            <Eye className="size-4" />
             Ver datos
           </Button>
           <Button
@@ -976,9 +979,9 @@ export default function EditMacroTablePage() {
             className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
           >
             {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Save className="h-4 w-4" />
+              <Save className="size-4" />
             )}
             Guardar cambios
           </Button>
@@ -988,15 +991,15 @@ export default function EditMacroTablePage() {
       <Tabs defaultValue="info" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="info" className="gap-2">
-            <Layers className="h-4 w-4" />
+            <Layers className="size-4" />
             Información
           </TabsTrigger>
           <TabsTrigger value="sources" className="gap-2">
-            <Database className="h-4 w-4" />
+            <Database className="size-4" />
             Tablas fuente
           </TabsTrigger>
           <TabsTrigger value="columns" className="gap-2">
-            <Columns3 className="h-4 w-4" />
+            <Columns3 className="size-4" />
             Columnas
           </TabsTrigger>
         </TabsList>
@@ -1037,7 +1040,7 @@ export default function EditMacroTablePage() {
             <Card className="border-purple-500/20">
               <CardHeader>
                 <div className="flex items-center gap-2">
-                  <PanelLeft className="h-5 w-5 text-purple-500" />
+                  <PanelLeft className="size-5 text-purple-500" />
                   <div>
                     <CardTitle className="text-lg">Visibilidad en Sidebar</CardTitle>
                     <CardDescription>
@@ -1091,9 +1094,9 @@ export default function EditMacroTablePage() {
                     className="gap-2 bg-purple-600 hover:bg-purple-700"
                   >
                     {isSavingSidebar ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="size-4 animate-spin" />
                     ) : (
-                      <Save className="h-4 w-4" />
+                      <Save className="size-4" />
                     )}
                     Guardar visibilidad
                   </Button>
@@ -1114,7 +1117,7 @@ export default function EditMacroTablePage() {
                   </CardDescription>
                 </div>
                 <Badge variant="secondary" className="gap-1">
-                  <Database className="h-3 w-3" />
+                  <Database className="size-3" />
                   {selectedSources.length} seleccionadas
                 </Badge>
               </div>
@@ -1124,7 +1127,7 @@ export default function EditMacroTablePage() {
               {templates.length > 0 && (
                 <div className="p-4 rounded-lg border border-amber-500/30 bg-gradient-to-r from-amber-50/50 to-orange-50/30 dark:from-amber-950/20 dark:to-orange-950/10">
                   <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="h-4 w-4 text-amber-600" />
+                    <Sparkles className="size-4 text-amber-600" />
                     <span className="font-medium text-amber-800 dark:text-amber-300">
                       Selección rápida por plantilla
                     </span>
@@ -1151,7 +1154,7 @@ export default function EditMacroTablePage() {
                           )}
                           disabled={matchCount === 0}
                         >
-                          <FileStack className="h-3.5 w-3.5" />
+                          <FileStack className="size-3.5" />
                           {template.name}
                           <Badge
                             variant={isSelected ? "secondary" : "outline"}
@@ -1230,7 +1233,7 @@ export default function EditMacroTablePage() {
 
               {obras.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <Database className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                  <Database className="size-12 mx-auto mb-3 opacity-20" />
                   <p>No hay tablas disponibles.</p>
                 </div>
               ) : (
@@ -1251,7 +1254,7 @@ export default function EditMacroTablePage() {
                           className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            <Building2 className="size-4 text-muted-foreground" />
                             <span className="font-medium">{obra.designacionYUbicacion}</span>
                             <Badge variant="outline" className="text-xs">
                               {obra.tablas.length} tablas
@@ -1263,9 +1266,9 @@ export default function EditMacroTablePage() {
                             )}
                           </div>
                           {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            <ChevronDown className="size-4 text-muted-foreground" />
                           ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            <ChevronRight className="size-4 text-muted-foreground" />
                           )}
                         </button>
                         <div className="px-3 pb-2 -mt-1 flex items-center justify-end gap-2">
@@ -1359,11 +1362,11 @@ export default function EditMacroTablePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={addSourceColumn} className="gap-1">
-                    <Plus className="h-4 w-4" />
+                    <Plus className="size-4" />
                     Columna fuente
                   </Button>
                   <Button variant="outline" size="sm" onClick={addCustomColumn} className="gap-1">
-                    <Plus className="h-4 w-4" />
+                    <Plus className="size-4" />
                     Columna personalizada
                   </Button>
                 </div>
@@ -1435,7 +1438,7 @@ export default function EditMacroTablePage() {
                                               aria-label="Reordenar columna"
                                               className="absolute left-0 top-0 h-full w-6 shrink-0 rounded-none border border-dashed border-border/70 text-muted-foreground"
                                             >
-                                              <GripVertical className="h-4 w-4" />
+                                              <GripVertical className="size-4" />
                                             </SortableItemHandle>
                                             <div className="flex-1 space-y-1">
                                               <p className="truncate font-semibold leading-tight">
@@ -1469,7 +1472,7 @@ export default function EditMacroTablePage() {
                                               onPointerDown={(event) => startResize(col.id, event)}
                                               onClick={(event) => event.stopPropagation()}
                                             >
-                                              <MoveHorizontal className="h-4 w-4" />
+                                              <MoveHorizontal className="size-4" />
                                             </button>
                                           </div>
                                         </th>
@@ -1600,7 +1603,7 @@ export default function EditMacroTablePage() {
                                 onClick={() => moveColumn(selectedColumn.id, "up")}
                                 aria-label="Mover columna arriba"
                               >
-                                <ArrowUp className="h-4 w-4" />
+                                <ArrowUp className="size-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -1608,7 +1611,7 @@ export default function EditMacroTablePage() {
                                 onClick={() => moveColumn(selectedColumn.id, "down")}
                                 aria-label="Mover columna abajo"
                               >
-                                <ArrowDown className="h-4 w-4" />
+                                <ArrowDown className="size-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -1617,7 +1620,7 @@ export default function EditMacroTablePage() {
                                 onClick={() => removeColumn(selectedColumn.id)}
                                 aria-label="Eliminar columna seleccionada"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="size-4" />
                               </Button>
                             </div>
                           </div>

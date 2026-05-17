@@ -370,10 +370,10 @@ export function ContextualWizard({
             <button
               type="button"
               aria-label="Cerrar"
-              className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-white transition-colors hover:bg-black/30 hover:text-white bg-black/70 border border-black/50 cursor-pointer"
+              className="absolute right-2 top-2 inline-flex size-5 items-center justify-center rounded-full text-white transition-colors hover:bg-black/30 hover:text-white bg-black/70 border border-black/50 cursor-pointer"
               onClick={() => onOpenChange(false)}
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </button>
           ) : null}
 
@@ -404,7 +404,7 @@ export function ContextualWizard({
                       >
                         <div
                           className={cn(
-                            "flex h-5 w-5 items-center justify-center rounded-full border-2 text-[9px] font-semibold transition-all duration-200",
+                            "flex size-5 items-center justify-center rounded-full border-2 text-[9px] font-semibold transition-all duration-200",
                             isComplete
                               ? "border-orange-500 bg-orange-500 text-white"
                               : isActive
@@ -413,7 +413,7 @@ export function ContextualWizard({
                           )}
                         >
                           {isComplete ? (
-                            <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
+                            <svg className="size-2.5" viewBox="0 0 12 12" fill="none">
                               <path
                                 d="M2 6.5l2.5 2.5 5.5-5.5"
                                 stroke="currentColor"
@@ -463,7 +463,7 @@ export function ContextualWizard({
 
           {!targetReady && (
             <p className="mt-3 rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-700">
-              Esperando el elemento objetivo en pantalla...
+              Esperando el elemento objetivo en pantalla&hellip;
             </p>
           )}
           {step.requiredAction === "click_target" && !actionDone && (

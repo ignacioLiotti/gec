@@ -58,7 +58,7 @@ export function AgendaView({
     <div className="border-border/70 border-t px-4">
       {hasPastIncomplete && (
         <div className="text-destructive mb-4 mt-6 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-1 text-xs font-medium">
-          <span className="h-2 w-2 rounded-full bg-destructive" />
+          <span className="size-2 rounded-full bg-destructive" />
           Hay pendientes anteriores sin completar
         </div>
       )}

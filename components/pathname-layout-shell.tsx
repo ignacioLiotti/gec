@@ -63,6 +63,7 @@ export function PathnameLayoutShell({
 }) {
 	const pathname = usePathname();
 	const router = useRouter();
+  const { replace } = router;
 	const isMarketingRoot = pathname === "/";
 	const isStandaloneDemoRoute = pathname?.startsWith("/demo/") ?? false;
 	const isDemoMode = userRoles?.actorType === "demo";
@@ -72,7 +73,7 @@ export function PathnameLayoutShell({
 
 	useEffect(() => {
 		if (isMarketingRoot && user?.email) {
-			router.replace("/dashboard");
+			replace("/dashboard");
 		}
 	}, [isMarketingRoot, user?.email, router]);
 
@@ -88,7 +89,7 @@ export function PathnameLayoutShell({
 		if (!isDemoMode || !pathname) return;
 		if (isStandaloneDemoRoute) return;
 		if (isDemoPathAllowed(pathname, demoCapabilities)) return;
-		router.replace(getDefaultDemoAppPath(demoCapabilities));
+		replace(getDefaultDemoAppPath(demoCapabilities));
 	}, [demoCapabilities, isDemoMode, isStandaloneDemoRoute, pathname, router]);
 
 	if (isMarketingRoot || isStandaloneDemoRoute) {

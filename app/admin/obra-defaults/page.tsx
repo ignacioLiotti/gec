@@ -847,15 +847,15 @@ function buildFolderUpdatePayload(
 function getDataTypeIcon(dataType: string) {
   switch (dataType) {
     case "number":
-      return <Hash className="h-3 w-3" />;
+      return <Hash className="size-3" />;
     case "currency":
-      return <DollarSign className="h-3 w-3" />;
+      return <DollarSign className="size-3" />;
     case "date":
-      return <Calendar className="h-3 w-3" />;
+      return <Calendar className="size-3" />;
     case "boolean":
-      return <ToggleLeft className="h-3 w-3" />;
+      return <ToggleLeft className="size-3" />;
     default:
-      return <Type className="h-3 w-3" />;
+      return <Type className="size-3" />;
   }
 }
 
@@ -891,8 +891,8 @@ function FolderRow({
         transition={{ delay: index * 0.03 }}
         className="group flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
       >
-        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-          <Folder className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+        <div className="flex items-center justify-center size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+          <Folder className="size-5 text-amber-600 dark:text-amber-400" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -916,7 +916,7 @@ function FolderRow({
           className="opacity-0 group-hover:opacity-100 transition-opacity"
           aria-label="Editar carpeta"
         >
-          <Pencil className="h-4 w-4" />
+          <Pencil className="size-4" />
         </Button>
         <Button
           variant="ghost"
@@ -924,7 +924,7 @@ function FolderRow({
           onClick={onDelete}
           className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="size-4" />
         </Button>
       </m.div>
     );
@@ -942,8 +942,8 @@ function FolderRow({
         <div className="rounded-lg border bg-card overflow-hidden border-amber-200 dark:border-amber-800">
           <CollapsibleTrigger asChild>
             <div className="group flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                <Table2 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <div className="flex items-center justify-center size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                <Table2 className="size-5 text-amber-600 dark:text-amber-400" />
               </div>
 
               <div className="flex-1 min-w-0">
@@ -983,7 +983,7 @@ function FolderRow({
                   className="opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label="Editar carpeta"
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="size-4" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -994,12 +994,12 @@ function FolderRow({
                   }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                 </Button>
                 {isOpen ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  <ChevronUp className="size-4 text-muted-foreground" />
                 ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  <ChevronDown className="size-4 text-muted-foreground" />
                 )}
               </div>
             </div>
@@ -1011,7 +1011,7 @@ function FolderRow({
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Plantilla de extracción</p>
                   <div className="flex items-center gap-2 text-sm">
-                    <ScanLine className="h-4 w-4 text-purple-500" />
+                    <ScanLine className="size-4 text-purple-500" />
                     <span>{folder.ocrTemplateName}</span>
                   </div>
                 </div>
@@ -1182,8 +1182,8 @@ function OcrTemplateCard({
         <div className="rounded-lg border bg-card overflow-hidden">
           <CollapsibleTrigger asChild>
             <div className="flex items-center gap-3 p-4 cursor-pointer hover:bg-accent/50 transition-colors">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                <ScanLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <div className="flex items-center justify-center size-10 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                <ScanLine className="size-5 text-purple-600 dark:text-purple-400" />
               </div>
 
               <div className="flex-1 min-w-0">
@@ -1208,7 +1208,7 @@ function OcrTemplateCard({
                     onEdit();
                   }}
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="size-4" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -1219,12 +1219,12 @@ function OcrTemplateCard({
                   }}
                   className="text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                 </Button>
                 {isOpen ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  <ChevronUp className="size-4 text-muted-foreground" />
                 ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  <ChevronDown className="size-4 text-muted-foreground" />
                 )}
               </div>
             </div>
@@ -1243,7 +1243,7 @@ function OcrTemplateCard({
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Archivo de plantilla</p>
                   <div className="flex items-center gap-2 text-sm">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <FileText className="size-4 text-muted-foreground" />
                     <span className="font-mono text-xs">{template.template_file_name}</span>
                   </div>
                 </div>
@@ -1259,9 +1259,9 @@ function OcrTemplateCard({
                         className="flex items-start gap-2 p-2 rounded bg-background border text-sm"
                       >
                         {region.type === "table" ? (
-                          <TableProperties className="h-4 w-4 text-blue-500 mt-0.5" />
+                          <TableProperties className="size-4 text-blue-500 mt-0.5" />
                         ) : (
-                          <div className="h-4 w-4 rounded border-2 border-purple-500 mt-0.5" />
+                          <div className="size-4 rounded border-2 border-purple-500 mt-0.5" />
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -2301,7 +2301,7 @@ export default function ObraDefaultsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -2335,8 +2335,8 @@ export default function ObraDefaultsPage() {
                 {normalFolders.length} carpetas normales y {dataFolders.length} carpetas de datos
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-              <FolderPlus className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+              <FolderPlus className="size-5" />
             </div>
           </div>
         </div>
@@ -2349,8 +2349,8 @@ export default function ObraDefaultsPage() {
                 carpetas con esquema y captura lista para OCR o planillas
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-              <Sparkles className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+              <Sparkles className="size-5" />
             </div>
           </div>
         </div>
@@ -2363,8 +2363,8 @@ export default function ObraDefaultsPage() {
                 regiones y campos reutilizables para lectura visual
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
-              <ScanLine className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+              <ScanLine className="size-5" />
             </div>
           </div>
         </div>
@@ -2377,8 +2377,8 @@ export default function ObraDefaultsPage() {
                 secuencias de carga para procesos repetitivos
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
-              <Zap className="h-5 w-5" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+              <Zap className="size-5" />
             </div>
           </div>
         </div>
@@ -2395,19 +2395,19 @@ export default function ObraDefaultsPage() {
             </div>
             <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40 p-1 lg:w-auto">
               <TabsTrigger value="structure" className="gap-2">
-                <Folder className="h-4 w-4" />
+                <Folder className="size-4" />
                 Estructura
               </TabsTrigger>
               <TabsTrigger value="extraction" className="gap-2">
-                <Table2 className="h-4 w-4" />
+                <Table2 className="size-4" />
                 Extracción
               </TabsTrigger>
               <TabsTrigger value="templates" className="gap-2">
-                <ScanLine className="h-4 w-4" />
+                <ScanLine className="size-4" />
                 Plantillas
               </TabsTrigger>
               <TabsTrigger value="actions" className="gap-2">
-                <Zap className="h-4 w-4" />
+                <Zap className="size-4" />
                 Flujos guiados
               </TabsTrigger>
             </TabsList>
@@ -2428,7 +2428,7 @@ export default function ObraDefaultsPage() {
                   onClick={() => openCreateFolder("normal")}
                   className="bg-amber-500 hover:bg-amber-600 text-white"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="size-4 mr-2" />
                   Nueva carpeta
                 </Button>
               </div>
@@ -2436,7 +2436,7 @@ export default function ObraDefaultsPage() {
               <div className="space-y-2">
                 {folders.length === 0 ? (
                   <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-                    <FolderPlus className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                    <FolderPlus className="size-12 mx-auto opacity-20 mb-2" />
                     <p className="text-sm font-medium">Sin estructura configurada</p>
                     <p className="text-xs">Agregá carpetas para definir el esqueleto base de cada obra.</p>
                   </div>
@@ -2480,7 +2480,7 @@ export default function ObraDefaultsPage() {
                   </div>
                 </div>
                 <Button variant="outline" onClick={() => openCreateFolder("data")} className="w-full">
-                  <Table2 className="h-4 w-4 mr-2" />
+                  <Table2 className="size-4 mr-2" />
                   Crear carpeta de datos
                 </Button>
               </div>
@@ -2504,14 +2504,14 @@ export default function ObraDefaultsPage() {
                     className="bg-amber-500 hover:bg-amber-600 text-white"
                     data-testid="open-data-folder-dialog"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
+                    <Plus className="size-4 mr-2" />
                     Nueva carpeta de datos
                   </Button>
                   <Button
                     variant="outline"
                     onClick={openCreateFolderFromDefinition}
                   >
-                    <FileText className="h-4 w-4 mr-2" />
+                    <FileText className="size-4 mr-2" />
                     Importar JSON
                   </Button>
                 </div>
@@ -2520,7 +2520,7 @@ export default function ObraDefaultsPage() {
               <div className="space-y-2">
                 {dataFolders.length === 0 ? (
                   <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-                    <Table2 className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                    <Table2 className="size-12 mx-auto opacity-20 mb-2" />
                     <p className="text-sm font-medium">Sin configuración de extracción</p>
                     <p className="text-xs">Creá una carpeta de datos para empezar a definir tablas por defecto.</p>
                   </div>
@@ -2583,7 +2583,7 @@ export default function ObraDefaultsPage() {
               }}
               className="bg-purple-500 hover:bg-purple-600 text-white"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               Nueva plantilla
             </Button>
           </div>
@@ -2591,7 +2591,7 @@ export default function ObraDefaultsPage() {
           <div className="space-y-3">
             {ocrTemplates.length === 0 ? (
               <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-                <ScanLine className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <ScanLine className="size-12 mx-auto opacity-20 mb-2" />
                 <p className="text-sm font-medium">Sin plantillas configuradas</p>
                 <p className="text-xs">Creá una plantilla para empezar a extraer datos de tus documentos.</p>
               </div>
@@ -2623,7 +2623,7 @@ export default function ObraDefaultsPage() {
               onClick={() => setIsAddQuickActionOpen(true)}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               Nueva acción
             </Button>
           </div>
@@ -2631,7 +2631,7 @@ export default function ObraDefaultsPage() {
           <div className="space-y-2">
             {quickActions.length === 0 ? (
               <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-                <Zap className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <Zap className="size-12 mx-auto opacity-20 mb-2" />
                 <p className="text-sm font-medium">Sin flujos configurados</p>
                 <p className="text-xs">Agregá acciones para acelerar cargas frecuentes.</p>
               </div>
@@ -2659,7 +2659,7 @@ export default function ObraDefaultsPage() {
                         onClick={() => handleDeleteQuickAction(action.id)}
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="size-4" />
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -2770,8 +2770,8 @@ export default function ObraDefaultsPage() {
         <section className="space-y-4 flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <FolderPlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <div className="size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <FolderPlus className="size-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <h2 className="text-xl font-semibold">Carpetas Predeterminadas</h2>
@@ -2787,7 +2787,7 @@ export default function ObraDefaultsPage() {
               }}
               className="bg-amber-500 hover:bg-amber-600 text-white"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               Nueva carpeta
             </Button>
           </div>
@@ -2795,7 +2795,7 @@ export default function ObraDefaultsPage() {
           <div className="space-y-2">
             {folders.length === 0 ? (
               <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-                <FolderPlus className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <FolderPlus className="size-12 mx-auto opacity-20 mb-2" />
                 <p className="text-sm font-medium">Sin carpetas configuradas</p>
                 <p className="text-xs">Agregá carpetas para organizar los documentos de tus obras</p>
               </div>
@@ -2820,8 +2820,8 @@ export default function ObraDefaultsPage() {
         <section className="space-y-4 flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                <Zap className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              <div className="size-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                <Zap className="size-5 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
                 <h2 className="text-xl font-semibold">Acciones rápidas</h2>
@@ -2834,7 +2834,7 @@ export default function ObraDefaultsPage() {
               onClick={() => setIsAddQuickActionOpen(true)}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               Nueva acción
             </Button>
           </div>
@@ -2842,7 +2842,7 @@ export default function ObraDefaultsPage() {
           <div className="space-y-2">
             {quickActions.length === 0 ? (
               <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-                <Zap className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <Zap className="size-12 mx-auto opacity-20 mb-2" />
                 <p className="text-sm font-medium">Sin acciones configuradas</p>
                 <p className="text-xs">Agregá acciones para acelerar cargas frecuentes</p>
               </div>
@@ -2870,7 +2870,7 @@ export default function ObraDefaultsPage() {
                         onClick={() => handleDeleteQuickAction(action.id)}
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="size-4" />
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -2891,8 +2891,8 @@ export default function ObraDefaultsPage() {
         <section className="space-y-4 flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <ScanLine className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <div className="size-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <ScanLine className="size-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
                 <h2 className="text-xl font-semibold">Plantillas de Extracción</h2>
@@ -2905,7 +2905,7 @@ export default function ObraDefaultsPage() {
               onClick={() => setIsOcrConfigOpen(true)}
               className="bg-purple-500 hover:bg-purple-600 text-white"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="size-4 mr-2" />
               Nueva plantilla
             </Button>
           </div>
@@ -2913,7 +2913,7 @@ export default function ObraDefaultsPage() {
           <div className="space-y-3">
             {ocrTemplates.length === 0 ? (
               <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
-                <ScanLine className="h-12 w-12 mx-auto opacity-20 mb-2" />
+                <ScanLine className="size-12 mx-auto opacity-20 mb-2" />
                 <p className="text-sm font-medium">Sin plantillas configuradas</p>
                 <p className="text-xs">Creá una plantilla para empezar a extraer datos de tus documentos</p>
               </div>
@@ -2942,8 +2942,8 @@ export default function ObraDefaultsPage() {
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto px-4">
           <DialogHeader className="px-0">
             <DialogTitle className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-orange-100 dark:bg-orange-900/30">
-                <Zap className="h-4 w-4 text-orange-600" />
+              <div className="size-8 rounded-lg flex items-center justify-center bg-orange-100 dark:bg-orange-900/30">
+                <Zap className="size-4 text-orange-600" />
               </div>
               Nueva acción rápida
             </DialogTitle>
@@ -3007,7 +3007,7 @@ export default function ObraDefaultsPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${isActive
+                          className={`flex size-8 items-center justify-center rounded-full text-xs font-semibold ${isActive
                             ? "bg-amber-500 text-white"
                             : isComplete
                               ? "bg-emerald-500 text-white"
@@ -3039,8 +3039,8 @@ export default function ObraDefaultsPage() {
                         }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-stone-900 text-white">
-                          <Folder className="h-5 w-5" />
+                        <div className="flex size-11 items-center justify-center rounded-2xl bg-stone-900 text-white">
+                          <Folder className="size-5" />
                         </div>
                         <div>
                           <p className="text-base font-semibold">Carpeta normal</p>
@@ -3060,8 +3060,8 @@ export default function ObraDefaultsPage() {
                         }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500 text-white">
-                          <Table2 className="h-5 w-5" />
+                        <div className="flex size-11 items-center justify-center rounded-2xl bg-amber-500 text-white">
+                          <Table2 className="size-5" />
                         </div>
                         <div>
                           <p className="text-base font-semibold">Carpeta de datos</p>
@@ -3158,8 +3158,8 @@ export default function ObraDefaultsPage() {
                         onClick={() => toggleQuickActionFolder(folder.path)}
                         className={`w-full rounded-lg border p-3 flex items-center gap-3 text-left transition-colors ${isSelected ? "border-orange-500 bg-orange-50" : "hover:bg-accent/50"}`}
                       >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
-                          {folder.isOcr ? <Table2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                        <div className="flex size-9 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                          {folder.isOcr ? <Table2 className="size-4" /> : <Folder className="size-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{folder.name}</p>
@@ -3220,7 +3220,7 @@ export default function ObraDefaultsPage() {
                       className="flex-1"
                       disabled={Boolean(editingFolderId)}
                     >
-                      <Folder className="h-4 w-4 mr-2" />
+                      <Folder className="size-4 mr-2" />
                       Solo guardar archivos
                     </Button>
                     <Button
@@ -3231,7 +3231,7 @@ export default function ObraDefaultsPage() {
                       className="flex-1"
                       disabled={Boolean(editingFolderId)}
                     >
-                      <Table2 className="h-4 w-4 mr-2" />
+                      <Table2 className="size-4 mr-2" />
                       Guardar archivos y capturar datos
                     </Button>
                   </div>
@@ -3308,7 +3308,7 @@ export default function ObraDefaultsPage() {
                             onClick={handleImportDefinitionJson}
                             className="bg-amber-500 hover:bg-amber-600"
                           >
-                            <Sparkles className="h-4 w-4 mr-2" />
+                            <Sparkles className="size-4 mr-2" />
                             Importar definicion
                           </Button>
                         </div>
@@ -3445,7 +3445,7 @@ export default function ObraDefaultsPage() {
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={handleAddColumn}>
-                      <Plus className="h-4 w-4 mr-1" />
+                      <Plus className="size-4 mr-1" />
                       Agregar
                     </Button>
                   </div>
@@ -3508,9 +3508,9 @@ export default function ObraDefaultsPage() {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleRemoveColumn(col.id)}
-                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              className="size-8 text-destructive hover:text-destructive"
                             >
-                              <X className="h-4 w-4" />
+                              <X className="size-4" />
                             </Button>
                           </div>
                           <Textarea
@@ -3642,8 +3642,8 @@ export default function ObraDefaultsPage() {
                           onClick={() => toggleQuickActionFolder(folder.path)}
                           className={`w-full rounded-lg border p-3 flex items-center gap-3 text-left transition-colors ${isSelected ? "border-orange-500 bg-orange-50" : "hover:bg-accent/50"}`}
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
-                            {folder.isOcr ? <Table2 className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                          <div className="flex size-9 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground">
+                            {folder.isOcr ? <Table2 className="size-4" /> : <Folder className="size-4" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{folder.name}</p>
@@ -3676,9 +3676,9 @@ export default function ObraDefaultsPage() {
               className="bg-orange-500 hover:bg-orange-600"
             >
               {isSubmittingQuickAction ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <Loader2 className="size-4 animate-spin mr-2" />
               ) : (
-                <Zap className="h-4 w-4 mr-2" />
+                <Zap className="size-4 mr-2" />
               )}
               Crear acción
             </Button>
@@ -3717,7 +3717,7 @@ export default function ObraDefaultsPage() {
                       >
                         <div
                           className={[
-                            "flex h-7 w-7 items-center justify-center rounded-full border-2 text-[11px] font-semibold transition-all duration-200",
+                            "flex size-7 items-center justify-center rounded-full border-2 text-[11px] font-semibold transition-all duration-200",
                             isComplete
                               ? "border-orange-500 bg-orange-500 text-white"
                               : isActive
@@ -3726,7 +3726,7 @@ export default function ObraDefaultsPage() {
                           ].join(" ")}
                         >
                           {isComplete ? (
-                            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                            <svg className="size-3" viewBox="0 0 12 12" fill="none">
                               <path d="M2 6.5l2.5 2.5 5.5-5.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           ) : (
@@ -3792,9 +3792,9 @@ export default function ObraDefaultsPage() {
                           Solo guarda archivos
                         </p>
                       </div>
-                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-150 ${folderMode === "normal" ? "border-orange-500" : "border-stone-300"
+                      <div className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-150 ${folderMode === "normal" ? "border-orange-500" : "border-stone-300"
                         }`}>
-                        {folderMode === "normal" ? <div className="h-2 w-2 rounded-full bg-orange-500" /> : null}
+                        {folderMode === "normal" ? <div className="size-2 rounded-full bg-orange-500" /> : null}
                       </div>
                     </div>
                   </button>
@@ -3817,9 +3817,9 @@ export default function ObraDefaultsPage() {
                           Guarda archivos y captura datos
                         </p>
                       </div>
-                      <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-150 ${folderMode === "data" ? "border-orange-500" : "border-stone-300"
+                      <div className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-150 ${folderMode === "data" ? "border-orange-500" : "border-stone-300"
                         }`}>
-                        {folderMode === "data" ? <div className="h-2 w-2 rounded-full bg-orange-500" /> : null}
+                        {folderMode === "data" ? <div className="size-2 rounded-full bg-orange-500" /> : null}
                       </div>
                     </div>
                   </button>
@@ -3975,8 +3975,8 @@ export default function ObraDefaultsPage() {
                       <div className={`rounded-3xl border ${newFolderAcceptsPdfImage ? "border-orange-500" : "border-border"}`}>
                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                           <div className="flex items-start gap-3">
-                            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-orange-50 text-orange-500">
-                              <FileText className="h-4 w-4" />
+                            <div className="mt-0.5 flex size-7 items-center justify-center rounded-md bg-orange-50 text-orange-500">
+                              <FileText className="size-4" />
                             </div>
                             <div>
                               <p className="text-base font-semibold">PDF / image</p>
@@ -4058,8 +4058,8 @@ export default function ObraDefaultsPage() {
                       <div className={`rounded-3xl border ${newFolderAcceptsSpreadsheet ? "border-orange-500" : "border-border"}`}>
                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                           <div className="flex items-start gap-3">
-                            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                              <Table2 className="h-4 w-4" />
+                            <div className="mt-0.5 flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                              <Table2 className="size-4" />
                             </div>
                             <div>
                               <p className="text-base font-semibold">XLSX / CSV</p>
@@ -4103,8 +4103,8 @@ export default function ObraDefaultsPage() {
                       <div className={`rounded-3xl border ${newFolderAllowsManualEntry ? "border-orange-500" : "border-border"}`}>
                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                           <div className="flex items-start gap-3">
-                            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                              <Pencil className="h-4 w-4" />
+                            <div className="mt-0.5 flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                              <Pencil className="size-4" />
                             </div>
                             <div>
                               <p className="text-base font-semibold">Carga manual</p>
@@ -4203,7 +4203,7 @@ export default function ObraDefaultsPage() {
                               onClick={() => handleRemoveColumn(col.id)}
                               className="text-destructive hover:text-destructive"
                             >
-                              <X className="h-4 w-4" />
+                              <X className="size-4" />
                             </Button>
                           </div>
                         </div>
@@ -4312,7 +4312,7 @@ export default function ObraDefaultsPage() {
                     data-testid="folder-wizard-save"
                   >
                     {isSubmittingFolder ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 size-4 animate-spin" />
                     ) : null}
                     {editingFolderId ? "Guardar cambios" : folderMode === "data" ? "Crear carpeta de datos" : "Crear carpeta"}
                   </Button>
@@ -4342,7 +4342,7 @@ export default function ObraDefaultsPage() {
                   className="flex-1"
                   disabled={Boolean(editingFolderId)}
                 >
-                  <Folder className="h-4 w-4 mr-2" />
+                  <Folder className="size-4 mr-2" />
                   Carpeta normal
                 </Button>
                 <Button
@@ -4353,7 +4353,7 @@ export default function ObraDefaultsPage() {
                   className="flex-1"
                   disabled={Boolean(editingFolderId)}
                 >
-                  <Table2 className="h-4 w-4 mr-2" />
+                  <Table2 className="size-4 mr-2" />
                   Carpeta de datos
                 </Button>
               </div>
@@ -4431,7 +4431,7 @@ export default function ObraDefaultsPage() {
                             onClick={handleImportDefinitionJson}
                             className="bg-amber-500 hover:bg-amber-600"
                           >
-                            <Sparkles className="h-4 w-4 mr-2" />
+                            <Sparkles className="size-4 mr-2" />
                             Importar definicion
                           </Button>
                         </div>
@@ -4448,7 +4448,7 @@ export default function ObraDefaultsPage() {
                         </p>
                       </div>
                       <Button type="button" variant="outline" size="sm" onClick={handleAddExtractedTable}>
-                        <Plus className="h-4 w-4 mr-1" />
+                        <Plus className="size-4 mr-1" />
                         Agregar tabla
                       </Button>
                     </div>
@@ -4524,7 +4524,7 @@ export default function ObraDefaultsPage() {
                                 onClick={() => handleRemoveExtractedTable(table.id)}
                                 className="text-destructive hover:text-destructive"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="size-4" />
                               </Button>
                             </div>
                             <div className="grid gap-3 md:grid-cols-2">
@@ -4619,7 +4619,7 @@ export default function ObraDefaultsPage() {
                             {ocrTemplates.map((template) => (
                               <SelectItem key={template.id} value={template.id}>
                                 <span className="flex items-center gap-2">
-                                  <ScanLine className="h-4 w-4 text-purple-500" />
+                                  <ScanLine className="size-4 text-purple-500" />
                                   {template.name} ({template.columns.length} campos)
                                 </span>
                               </SelectItem>
@@ -4686,7 +4686,7 @@ export default function ObraDefaultsPage() {
                         size="sm"
                         onClick={handleAddColumn}
                       >
-                        <Plus className="h-4 w-4 mr-1" />
+                        <Plus className="size-4 mr-1" />
                         Agregar
                       </Button>
                     </div>
@@ -4752,9 +4752,9 @@ export default function ObraDefaultsPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleRemoveColumn(col.id)}
-                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                className="size-8 text-destructive hover:text-destructive"
                               >
-                                <X className="h-4 w-4" />
+                                <X className="size-4" />
                               </Button>
                             </div>
                             <Textarea
@@ -4805,11 +4805,11 @@ export default function ObraDefaultsPage() {
                 className="bg-amber-500 hover:bg-amber-600"
               >
                 {isSubmittingFolder ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <Loader2 className="size-4 animate-spin mr-2" />
                 ) : folderMode === "data" ? (
-                  <Table2 className="h-4 w-4 mr-2" />
+                  <Table2 className="size-4 mr-2" />
                 ) : (
-                  <FolderPlus className="h-4 w-4 mr-2" />
+                  <FolderPlus className="size-4 mr-2" />
                 )}
                 {editingFolderId
                   ? "Guardar cambios"

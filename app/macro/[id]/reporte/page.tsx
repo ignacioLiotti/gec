@@ -39,14 +39,17 @@ function MacroTableReportContent() {
 	const params = useParams();
 	const id = params?.id as string;
 	const router = useRouter();
+  const { push } = router;
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 
 	const [macroTable, setMacroTable] =
 		useState<MacroTableResponse["macroTable"] | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const isMacroReportTour = searchParams.get("tour") === "macro-report";
+	const isMacroReportTour = getSearchParam("tour") === "macro-report";
 
 	useEffect(() => {
 		if (!id) return;
@@ -135,13 +138,13 @@ function MacroTableReportContent() {
 	}, [isMacroReportTour]);
 
 	const finishMacroReportTour = useCallback(() => {
-		router.push("/dashboard?tour=demo-conclusion");
-	}, [router]);
+		push("/dashboard?tour=demo-conclusion");
+	}, [push]);
 
 	if (isLoading) {
 		return (
 			<div className="flex items-center justify-center h-[70vh]">
-				<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+				<Loader2 className="size-6 animate-spin text-muted-foreground" />
 			</div>
 		);
 	}
@@ -149,7 +152,7 @@ function MacroTableReportContent() {
 	if (error || !reportConfig) {
 		return (
 			<div className="flex flex-col items-center justify-center h-[70vh] gap-3 text-muted-foreground">
-				<AlertCircle className="h-10 w-10" />
+				<AlertCircle className="size-10" />
 				<p>
 					{error ??
 						"No se pudo generar el reporte para esta macro tabla."}
@@ -189,7 +192,7 @@ export default function MacroTableReportPage() {
 		<Suspense
 			fallback={
 				<div className="flex items-center justify-center h-screen">
-					Cargando...
+					Cargando?
 				</div>
 			}
 		>

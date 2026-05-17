@@ -28,13 +28,13 @@ export function ViewsMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <LayoutGrid className="h-4 w-4" />
+          <LayoutGrid className="size-4" />
           Vistas
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuItem onClick={saveCurrentAsView} className="gap-2">
-          <Save className="h-4 w-4" />
+          <Save className="size-4" />
           Guardar vista actual…
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -48,21 +48,21 @@ export function ViewsMenu({
         ) : (
           <div className="max-h-[200px] overflow-y-auto">
             {views.map((v) => (
-              <div key={v.name} className="flex items-center justify-between gap-2 px-2 py-2 hover:bg-muted/50 rounded-sm transition-colors group">
-                <button 
-                  type="button" 
-                  className="flex-1 text-left text-sm hover:underline truncate" 
+              <div key={v.name} className="flex items-center justify-between gap-2 p-2 hover:bg-muted/50 rounded-sm transition-colors group">
+                <button
+                  type="button"
+                  className="flex-1 text-left text-sm hover:underline truncate"
                   onClick={() => applyView(v)}
                 >
                   {v.name}
                 </button>
-                <button 
-                  type="button" 
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all" 
+                <button
+                  type="button"
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                   onClick={() => deleteView(v.name)}
                   title="Eliminar vista"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="size-3.5" />
                 </button>
               </div>
             ))}

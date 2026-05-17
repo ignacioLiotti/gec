@@ -8,7 +8,7 @@ import { AnimatePresence, m } from "framer-motion";
 export function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
       <Input
         placeholder="Buscar en todas las columnas..."
         value={value}
@@ -26,7 +26,7 @@ export function SearchInput({ value, onChange }: { value: string; onChange: (v: 
             className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             onClick={() => onChange("")}
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </m.button>
         )}
       </AnimatePresence>

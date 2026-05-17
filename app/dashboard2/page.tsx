@@ -296,7 +296,7 @@ function KpiCard(props: { title: string; value: string; hint?: string; icon: Rea
     <Card className='rounded-xl border-stone-200'>
       <CardHeader className='pb-2'>
         <CardDescription className='flex items-center gap-2 text-xs uppercase tracking-wide text-stone-500'>
-          <Icon className='h-3.5 w-3.5' />
+          <Icon className='size-3.5' />
           {props.title}
         </CardDescription>
       </CardHeader>
@@ -441,7 +441,7 @@ export default function Dashboard2Page() {
   }, [obras, deepRows]);
 
   if (obrasQuery.isLoading) {
-    return <div className='p-6 text-sm text-stone-600'>Cargando dashboard...</div>;
+    return <div className='p-6 text-sm text-stone-600'>Cargando dashboard?</div>;
   }
 
   if (!isAuthenticated) {
@@ -483,7 +483,7 @@ export default function Dashboard2Page() {
               Completadas: {numberFmt.format(model.completedRows.length)}
             </Badge>
             {isDeepLoading ? (
-              <Badge className='bg-amber-100 text-amber-800'>Actualizando metricas derivadas...</Badge>
+              <Badge className='bg-amber-100 text-amber-800'>Actualizando metricas derivadas?</Badge>
             ) : (
               <Badge className='bg-emerald-100 text-emerald-800'>Metricas derivadas listas</Badge>
             )}

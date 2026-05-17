@@ -174,6 +174,8 @@ function extractAmountArs(plan: SubscriptionPlan) {
 
 export function BillingClient() {
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const [data, setData] = useState<SubscriptionResponse | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -181,9 +183,9 @@ export function BillingClient() {
 	const [cancelPending, setCancelPending] = useState(false);
 	const [debugOpen, setDebugOpen] = useState(false);
 
-	const blockedFromQuery = searchParams.get("blocked") === "1";
-	const blockedReason = searchParams.get("reason");
-	const returnTo = searchParams.get("returnTo");
+	const blockedFromQuery = getSearchParam("blocked") === "1";
+	const blockedReason = getSearchParam("reason");
+	const returnTo = getSearchParam("returnTo");
 	const isDevBuild = process.env.NODE_ENV !== "production";
 
 	const loadSubscription = useCallback(async () => {
@@ -358,7 +360,7 @@ export function BillingClient() {
 								className="sm:min-w-[210px]"
 							>
 								{cancelPending
-									? "Programando cancelacion..."
+									? "Programando cancelacion?"
 									: cancelAtPeriodEnd
 										? "Cancelacion ya programada"
 										: "Cancelar al finalizar ciclo"}
@@ -598,7 +600,7 @@ export function BillingClient() {
 										{isPending ? (
 											<>
 												<Loader2 className="size-4 animate-spin" />
-												Redirigiendo a MercadoPago...
+												Redirigiendo a MercadoPago?
 											</>
 										) : isCurrentPlan && !data?.paywall?.blocked ? (
 											<>

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { evaluateMathExpression } from "@/lib/safe-math-expression";
 import { toNumericValue as parseNumericValue } from "@/lib/tablas";
 
 export type DataFlowBuilderSourceType = "table" | "macro_table";
@@ -1422,20 +1423,7 @@ function evaluateExpression(
     return { value: null, errorMessage: "La expresion contiene caracteres no permitidos." };
   }
 
-  try {
-    const aliases = Object.keys(variables);
-    const fn = new Function(...aliases, `return (${trimmed});`);
-    const result = fn(...aliases.map((alias) => variables[alias]));
-    const parsed = coerceBuilderNumericValue(result);
-    return parsed == null
-      ? { value: null, errorMessage: "La expresion no devolvio un numero valido." }
-      : { value: parsed, errorMessage: null };
-  } catch (error) {
-    return {
-      value: null,
-      errorMessage: error instanceof Error ? error.message : "No se pudo evaluar la expresion.",
-    };
-  }
+  return evaluateMathExpression(trimmed, variables);
 }
 
 function getTextTemplateAliases(template: string) {

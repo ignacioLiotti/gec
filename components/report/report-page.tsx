@@ -195,6 +195,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	readOnly = false,
 }: ReportPageProps<Row, Filters>) {
 	const router = useRouter();
+  const { back, push } = router;
 	const reportContentRef = useRef<HTMLDivElement>(null);
 	const localStorageKey = `report:last:${config.id}`;
 
@@ -833,9 +834,9 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	// Handle back navigation
 	const handleBack = useCallback(() => {
 		if (backUrl) {
-			router.push(backUrl);
+			push(backUrl);
 		} else {
-			router.back();
+			back();
 		}
 	}, [backUrl, router]);
 
@@ -852,7 +853,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 							onClick={handleBack}
 							className="gap-1.5 text-[#2b2f36] dark:text-zinc-300 hover:bg-[#d9dde4] dark:hover:bg-zinc-700"
 						>
-							<ChevronLeft className="h-4 w-4" />
+							<ChevronLeft className="size-4" />
 							Volver
 						</Button>
 						<div
@@ -866,7 +867,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 								disabled={isLoading}
 								className="gap-2"
 							>
-								<FileSpreadsheet className="h-4 w-4" />
+								<FileSpreadsheet className="size-4" />
 								CSV
 							</Button>
 							<Button
@@ -877,9 +878,9 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 								className="gap-2"
 							>
 								{isExportingXlsx ? (
-									<Loader2 className="h-4 w-4 animate-spin" />
+									<Loader2 className="size-4 animate-spin" />
 								) : (
-									<FileSpreadsheet className="h-4 w-4" />
+									<FileSpreadsheet className="size-4" />
 								)}
 								Excel
 							</Button>
@@ -890,9 +891,9 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 								className="gap-2 bg-[#2b2f36] hover:bg-[#1f2328] text-[#f7f7f8] dark:bg-zinc-600 dark:hover:bg-zinc-500"
 							>
 								{isGeneratingPdf ? (
-									<Loader2 className="h-4 w-4 animate-spin" />
+									<Loader2 className="size-4 animate-spin" />
 								) : (
-									<FileDown className="h-4 w-4" />
+									<FileDown className="size-4" />
 								)}
 								{isGeneratingPdf ? "Generando..." : "Descargar PDF"}
 							</Button>
@@ -905,7 +906,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 							{isLoading ? (
 								<div className="report-paper pdf-preview ">
 									<div className="report-body flex items-center justify-center py-16">
-										<Loader2 className="h-6 w-6 animate-spin text-[#7a8088]" />
+										<Loader2 className="size-6 animate-spin text-[#7a8088]" />
 									</div>
 								</div>
 							) : groupedData.length === 0 ? (
@@ -979,7 +980,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									data-wizard-target="report-tab-settings"
 									className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600"
 								>
-									<Settings className="h-3.5 w-3.5" />
+									<Settings className="size-3.5" />
 									Configuracion
 								</TabsTrigger>
 								<TabsTrigger
@@ -987,7 +988,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									data-wizard-target="report-tab-filters"
 									className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600"
 								>
-									<Filter className="h-3.5 w-3.5" />
+									<Filter className="size-3.5" />
 									Filtros
 								</TabsTrigger>
 								{/* <TabsTrigger value="visual" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
@@ -1314,7 +1315,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														<SelectValue placeholder="Seleccionar filtro guardado" />
 													</SelectTrigger>
 													<SelectContent>
-														<SelectItem value="__none__">Seleccionar...</SelectItem>
+														<SelectItem value="__none__">Seleccionar?</SelectItem>
 														{presets.map((preset) => (
 															<SelectItem key={preset.id} value={preset.id}>
 																{preset.name}

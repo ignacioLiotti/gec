@@ -46,10 +46,10 @@ export function DemoFlowShell({
 								Lo que vas a ver
 							</p>
 							<ul className="space-y-3">
-								{flow.features.map((feature, i) => (
-									<li key={i} className="flex items-start gap-3">
-										<span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100">
-											<Check className="h-3 w-3 text-orange-600" strokeWidth={2.5} />
+								{flow.features.map((feature) => (
+									<li key={feature} className="flex items-start gap-3">
+										<span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-100">
+											<Check className="size-3 text-orange-600" strokeWidth={2.5} />
 										</span>
 										<span className="text-sm leading-6 text-stone-600">
 											{feature}
@@ -68,10 +68,10 @@ export function DemoFlowShell({
 								className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-stone-800 active:bg-stone-950"
 							>
 								{primaryStep.ctaLabel}
-								<ArrowRight className="h-4 w-4" />
+								<ArrowRight className="size-4" />
 							</Link>
 							<p className="flex items-center justify-center gap-1.5 text-xs text-stone-400">
-								<Clock className="h-3.5 w-3.5" />
+								<Clock className="size-3.5" />
 								Duración estimada: 5 minutos
 							</p>
 						</div>

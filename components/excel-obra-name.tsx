@@ -77,6 +77,7 @@ function getObraLabel(obra: ObraSummary) {
 export function ExcelObraName() {
   const pathname = usePathname();
   const router = useRouter();
+  const { prefetch, push } = router;
   const { prefetchObra } = usePrefetchObra();
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
@@ -145,7 +146,7 @@ export function ExcelObraName() {
   const prefetchObraRoute = useCallback(
     (targetObra: ObraSummary | null | undefined) => {
       if (!targetObra?.id) return;
-      router.prefetch(getObraHref(targetObra.id));
+      prefetch(getObraHref(targetObra.id));
       prefetchObra(targetObra.id);
     },
     [prefetchObra, router]
@@ -155,7 +156,7 @@ export function ExcelObraName() {
     if (!targetObra?.id) return;
     prefetchObraRoute(targetObra);
     setIsSelectorOpen(false);
-    router.push(getObraHref(targetObra.id));
+    push(getObraHref(targetObra.id));
   };
 
   const displayName = obraId ? obraState.obraName : pageName;
@@ -174,7 +175,7 @@ export function ExcelObraName() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+          className="size-8 rounded-full text-muted-foreground hover:text-foreground"
           onMouseEnter={() => prefetchObraRoute(obraState.previousObra)}
           onFocus={() => prefetchObraRoute(obraState.previousObra)}
           onClick={() => handleNavigateToObra(obraState.previousObra)}
@@ -185,7 +186,7 @@ export function ExcelObraName() {
               : "Ir a la obra anterior"
           }
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="size-4" />
         </Button>
       ) : null}
 
@@ -224,7 +225,7 @@ export function ExcelObraName() {
               disabled={isLoading || obraState.obras.length === 0}
               aria-label="Seleccionar otra obra"
             >
-              <Search className="h-4 w-4" />
+              <Search className="size-4" />
               <span className="hidden sm:inline">Ir a obra</span>
             </Button>
           </PopoverTrigger>
@@ -251,7 +252,7 @@ export function ExcelObraName() {
                         {obra.designacionYUbicacion || "Obra sin nombre"}
                       </span>
                       {isCurrentObra ? (
-                        <Check className="ml-auto h-4 w-4 text-primary" />
+                        <Check className="ml-auto size-4 text-primary" />
                       ) : null}
                     </CommandItem>
                   );
@@ -267,7 +268,7 @@ export function ExcelObraName() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+          className="size-8 rounded-full text-muted-foreground hover:text-foreground"
           onMouseEnter={() => prefetchObraRoute(obraState.nextObra)}
           onFocus={() => prefetchObraRoute(obraState.nextObra)}
           onClick={() => handleNavigateToObra(obraState.nextObra)}
@@ -278,7 +279,7 @@ export function ExcelObraName() {
               : "Ir a la obra siguiente"
           }
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="size-4" />
         </Button>
       ) : null}
     </div>

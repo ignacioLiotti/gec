@@ -297,7 +297,7 @@ export function EventCalendar({
               className="h-8 rounded-xl border-zinc-200 px-3 text-xs text-zinc-700 hover:bg-zinc-50 sm:h-9 sm:text-sm"
               onClick={handleToday}
             >
-              <RiCalendarCheckLine className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              <RiCalendarCheckLine className="mr-1.5 size-4" aria-hidden="true" />
               Hoy
             </Button>
             <div className="flex items-center rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">

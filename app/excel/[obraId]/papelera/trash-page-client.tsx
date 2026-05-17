@@ -70,6 +70,7 @@ function statusVariant(status: DeletedDocumentEntry["status"]) {
 
 export function TrashPageClient({ obraId }: { obraId: string }) {
 	const router = useRouter();
+  const { push } = router;
 	const [tab, setTab] = useState<TrashView>("active");
 	const [activeItems, setActiveItems] = useState<DeletedDocumentEntry[]>([]);
 	const [historyItems, setHistoryItems] = useState<DeletedDocumentEntry[]>([]);
@@ -160,9 +161,9 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 						type="button"
 						variant="ghost"
 						className="h-8 px-2 text-xs"
-						onClick={() => router.push(`/excel/${encodeURIComponent(obraId)}?tab=documentos`)}
+						onClick={() => push(`/excel/${encodeURIComponent(obraId)}?tab=documentos`)}
 					>
-						<ArrowLeft className="mr-1 h-3.5 w-3.5" />
+						<ArrowLeft className="mr-1 size-3.5" />
 						Volver a documentos
 					</Button>
 					<h1 className="text-2xl font-semibold text-stone-900">Papelera</h1>
@@ -171,7 +172,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 					</p>
 				</div>
 				<Button type="button" variant="outline" onClick={() => void refreshCurrentView()} disabled={loading}>
-					{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+					{loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
 					Actualizar
 				</Button>
 			</div>
@@ -185,7 +186,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 				<TabsContent value="active" className="mt-4">
 					<Card className="p-0 overflow-hidden">
 						{loading ? (
-							<div className="p-8 text-sm text-stone-500 text-center">Cargando...</div>
+							<div className="p-8 text-sm text-stone-500 text-center">Cargando?</div>
 						) : activeItems.length === 0 ? (
 							<div className="p-8 text-sm text-stone-500 text-center">
 								No hay elementos en papelera.
@@ -223,12 +224,12 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 										>
 											{restoringId === item.id ? (
 												<>
-													<Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-													Restaurando...
+													<Loader2 className="mr-2 size-3.5 animate-spin" />
+													Restaurando&hellip;
 												</>
 											) : item.recoverable ? (
 												<>
-													<RotateCcw className="mr-2 h-3.5 w-3.5" />
+													<RotateCcw className="mr-2 size-3.5" />
 													Restaurar
 												</>
 											) : (
@@ -245,7 +246,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 				<TabsContent value="history" className="mt-4">
 					<Card className="p-0 overflow-hidden">
 						{loading ? (
-							<div className="p-8 text-sm text-stone-500 text-center">Cargando...</div>
+							<div className="p-8 text-sm text-stone-500 text-center">Cargando?</div>
 						) : historyItems.length === 0 ? (
 							<div className="p-8 text-sm text-stone-500 text-center">
 								No hay eventos historicos para mostrar.
@@ -297,7 +298,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 
 			<div className="flex items-center justify-between text-xs text-stone-500">
 				<div className="flex items-center gap-2">
-					<Trash2 className="h-3.5 w-3.5" />
+					<Trash2 className="size-3.5" />
 					<span>Vista actual: {tab === "active" ? "Papelera" : "Historial"}</span>
 				</div>
 				<span>{currentCount} elementos</span>

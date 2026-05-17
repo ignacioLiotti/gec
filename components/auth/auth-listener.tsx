@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 export default function SupabaseAuthListener() {
   const router = useRouter();
+  const { refresh } = router;
   const listenerSetup = useRef(false);
   const refreshTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -15,10 +16,10 @@ export default function SupabaseAuthListener() {
       clearTimeout(refreshTimeout.current);
     }
     refreshTimeout.current = setTimeout(() => {
-      console.log("[AUTH-LISTENER] Executing debounced router.refresh()");
-      router.refresh();
+      console.log("[AUTH-LISTENER] Executing debounced refresh()");
+      refresh();
     }, delay);
-  }, [router]);
+  }, [refresh]);
 
   useEffect(() => {
     console.log("[AUTH-LISTENER] useEffect running, listenerSetup.current:", listenerSetup.current);
@@ -49,18 +50,18 @@ export default function SupabaseAuthListener() {
 
       if (event === 'SIGNED_OUT') {
         // Sign out is immediate, no delay needed
-        console.log("[AUTH-LISTENER] Calling router.refresh() for SIGNED_OUT");
-        router.refresh();
+        console.log("[AUTH-LISTENER] Calling refresh() for SIGNED_OUT");
+        refresh();
       } else if (event === 'SIGNED_IN') {
         // For SIGNED_IN, use debounce to allow cookies to propagate
         // This handles both OAuth callback and client-side PKCE flow
         console.log("[AUTH-LISTENER] Scheduling debounced refresh for SIGNED_IN");
         debouncedRefresh(500);
       } else if (event === 'TOKEN_REFRESHED') {
-        console.log("[AUTH-LISTENER] Calling router.refresh() for TOKEN_REFRESHED");
-        router.refresh();
+        console.log("[AUTH-LISTENER] Calling refresh() for TOKEN_REFRESHED");
+        refresh();
       } else {
-        console.log("[AUTH-LISTENER] Skipping router.refresh() for event:", event);
+        console.log("[AUTH-LISTENER] Skipping refresh() for event:", event);
       }
     });
 
@@ -76,5 +77,4 @@ export default function SupabaseAuthListener() {
 
   return null;
 }
-
 

@@ -172,7 +172,7 @@ export default function CertExamplePlaygroundPage() {
 			{/* Header */}
 			<div>
 				<div className="flex items-center gap-3">
-					<FileSpreadsheet className="h-7 w-7 text-orange-500" />
+					<FileSpreadsheet className="size-7 text-orange-500" />
 					<h1 className="text-2xl font-bold">
 						Playground: Parsing de Certificados Excel
 					</h1>
@@ -254,9 +254,9 @@ export default function CertExamplePlaygroundPage() {
 								Ver hojas crudas ({parseResult.sheets.length})
 							</span>
 							{showDebug ? (
-								<ChevronDown className="h-4 w-4" />
+								<ChevronDown className="size-4" />
 							) : (
-								<ChevronRight className="h-4 w-4" />
+								<ChevronRight className="size-4" />
 							)}
 						</Button>
 						{showDebug && (

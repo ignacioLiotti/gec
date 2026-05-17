@@ -16,6 +16,7 @@ export function useColumnResize(columnIds: string[]) {
     setColumnWidths((prev) => {
       let changed = false;
       const next: ColumnWidthMap = { ...prev };
+      const columnIdSet = new Set(columnIds);
 
       for (const id of columnIds) {
         if (next[id] === undefined) {
@@ -25,7 +26,7 @@ export function useColumnResize(columnIds: string[]) {
       }
 
       for (const id of Object.keys(next)) {
-        if (!columnIds.includes(id)) {
+        if (!columnIdSet.has(id)) {
           delete next[id];
           changed = true;
         }

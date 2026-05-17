@@ -276,7 +276,7 @@ export default async function AuditLogPage({
               name="tech"
               value="1"
               defaultChecked={showTechnical}
-              className="h-4 w-4 rounded border-orange-primary/40"
+              className="size-4 rounded border-orange-primary/40"
             />
             Mostrar eventos técnicos/estructurales
           </label>
@@ -306,12 +306,12 @@ export default async function AuditLogPage({
             {groupedEntries.map((group) => (
               <tr key={group.key} className="border-t align-top">
                 <MomentCell value={group.primary.created_at} />
-                <td className="px-3 py-3">
+                <td className="p-3">
                   <code className="rounded bg-muted/60 px-1.5 py-0.5 text-xs">
                     {group.primary.table_name}
                   </code>
                 </td>
-                <td className="px-3 py-3">
+                <td className="p-3">
                   <Badge
                     variant={
                       group.primary.action === "DELETE"
@@ -324,7 +324,7 @@ export default async function AuditLogPage({
                     {group.primary.action}
                   </Badge>
                 </td>
-                <td className="px-3 py-3">
+                <td className="p-3">
                   <div className="font-medium">
                     {group.primary.actor_email ?? group.primary.actor_id ?? "Sistema"}
                   </div>
@@ -334,7 +334,7 @@ export default async function AuditLogPage({
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-3">
+                <td className="p-3">
                   <div className="text-sm font-medium">{buildGroupSummary(group, obraNamesById)}</div>
                   {renderGroupHighlights(group)}
                   {(group.primary.before_data || group.primary.after_data) && (

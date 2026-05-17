@@ -242,6 +242,7 @@ export default function DesktopExcelPageClient({
 	initialLoadMode,
 }: ExcelPageClientProps) {
 	const router = useRouter();
+  const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
@@ -306,7 +307,7 @@ export default function DesktopExcelPageClient({
 		params.delete("tour");
 		params.delete("tourStage");
 		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
-		router.replace(nextUrl, { scroll: false });
+		replace(nextUrl, { scroll: false });
 	}, [pathname, router, searchParams]);
 
 	useEffect(() => {
@@ -661,20 +662,20 @@ export default function DesktopExcelPageClient({
 									onClick={handleImportClick}
 									disabled={isImporting}
 								>
-									<Upload className="h-4 w-4" />
+									<Upload className="size-4" />
 									{isImporting ? "Importando..." : "Importar CSV"}
 								</Button>
 							</>
 							<Button variant="outline" asChild>
 								<Link href="/excel/reporte" prefetch={false} className="gap-2">
-									<FileText className="h-4 w-4" />
+									<FileText className="size-4" />
 									Generar Reporte
 								</Link>
 							</Button>
 							{isTenantAdmin && (
 								<Button variant="outline" asChild>
 									<Link href="/excel/papelera-obras" prefetch={false} className="gap-2">
-										<Trash2 className="h-4 w-4" />
+										<Trash2 className="size-4" />
 										Papelera obras
 									</Link>
 								</Button>

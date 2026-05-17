@@ -119,14 +119,14 @@ export default function MobileExcelPageClient({
 						<div className="flex items-center gap-2">
 							<Button variant="outline" size="sm" asChild className={toolButtonClass}>
 								<Link href="/excel/reporte" prefetch={false} className="gap-2">
-									<FileText className="h-4 w-4" />
+									<FileText className="size-4" />
 									Reporte
 								</Link>
 							</Button>
 							{isTenantAdmin && (
 								<Button variant="outline" size="sm" asChild className={toolButtonClass}>
 									<Link href="/excel/papelera-obras" prefetch={false} className="gap-2">
-										<Trash2 className="h-4 w-4" />
+										<Trash2 className="size-4" />
 										Papelera
 									</Link>
 								</Button>
@@ -135,7 +135,7 @@ export default function MobileExcelPageClient({
 					</div>
 					{isLoading ? (
 						<div className="rounded-xl border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-sm text-[#999]">
-							Cargando obras...
+							Cargando obras&hellip;
 						</div>
 					) : (
 						<div className="grid grid-cols-1 gap-3">

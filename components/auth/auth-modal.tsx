@@ -14,8 +14,11 @@ type AuthModalProps = {
 
 function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
   const router = useRouter();
+  const { push, refresh } = router;
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryParams = new URLSearchParams(searchParams);
+  const getSearchParam = (key: string): string | null => queryParams.get(key);
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,10 +26,8 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
   const [error, setError] = useState<string | null>(null);
   const [showOtherMethods, setShowOtherMethods] = useState(false);
 
-  const returnTo =
-    searchParams?.get("returnTo") && searchParams.get("returnTo")!.startsWith("/")
-      ? searchParams.get("returnTo")!
-      : null;
+  const returnToParam = getSearchParam("returnTo");
+  const returnTo = returnToParam?.startsWith("/") ? returnToParam : null;
 
   const currentPathWithQuery = (() => {
     const current = `${pathname ?? "/"}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
@@ -65,16 +66,16 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         console.log("[AUTH-MODAL] Cookies after delay:", document.cookie);
 
         // Refresh server state to pick up new session
-        console.log("[AUTH-MODAL] Calling router.refresh()...");
-        router.refresh();
-        console.log("[AUTH-MODAL] router.refresh() called");
+        console.log("[AUTH-MODAL] Calling refresh()...");
+        refresh();
+        console.log("[AUTH-MODAL] refresh() called");
 
         // Close modal after session is synced
         onOpenChange(false);
         setEmail("");
         setPassword("");
         if (returnTo) {
-          router.push(returnTo);
+          push(returnTo);
         }
         console.log("[AUTH-MODAL] Modal closed, login flow complete");
       } else {
@@ -92,7 +93,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // After sign-up route to onboarding to pick a tenant
-        router.push("/onboarding");
+        push("/onboarding");
         onOpenChange(false);
         setEmail("");
         setPassword("");
@@ -178,7 +179,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
               disabled={loading}
               className="inline-flex w-full items-center justify-center gap-2 rounded-none border border-input bg-black px-4 py-2 text-sm font-medium shadow-sm text-white hover:bg-black/90 disabled:opacity-50"
             >
-              <svg className="h-5 w-5" viewBox="0 0 24 24">
+              <svg className="size-5" viewBox="0 0 24 24">
                 <path
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                   fill="#4285F4"

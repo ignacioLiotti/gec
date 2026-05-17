@@ -130,7 +130,7 @@ export default function DemoLinksPanel({
 						Genera un acceso sin login para {tenantName}. El token se muestra una sola vez.
 					</p>
 				</div>
-				<div className="grid gap-4 px-4 py-4 md:grid-cols-2">
+				<div className="grid gap-4 p-4 md:grid-cols-2">
 					<label className="space-y-1 text-sm">
 						<span className="font-medium">Etiqueta</span>
 						<input
@@ -180,7 +180,7 @@ export default function DemoLinksPanel({
 					) : null}
 				</div>
 				{resultUrl ? (
-					<div className="border-t bg-muted/30 px-4 py-4">
+					<div className="border-t bg-muted/30 p-4">
 						<p className="text-sm font-medium">URL generada</p>
 						<p className="mt-2 break-all rounded-md border bg-background px-3 py-2 text-xs">
 							{resultUrl}

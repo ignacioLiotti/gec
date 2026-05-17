@@ -33,7 +33,7 @@ export default function RolePermissions({ roleId, allPermissions }: { roleId: st
 
   return (
     <div className="space-y-2">
-      {loading && <div className="text-xs text-foreground/60">Loading permissions...</div>}
+      {loading && <div className="text-xs text-foreground/60">Loading permissions?</div>}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {allPermissions.map((p) => (
           <label key={p.id} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">

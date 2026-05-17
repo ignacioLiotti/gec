@@ -667,7 +667,7 @@ export function OcrTemplateConfigurator({
 			<DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col px-4">
 				<DialogHeader className="px-0">
 					<DialogTitle className="flex items-center gap-2">
-						<FileText className="h-5 w-5 text-purple-500" />
+						<FileText className="size-5 text-purple-500" />
 						Configurar Plantilla de Extracción
 					</DialogTitle>
 					<DialogDescription>
@@ -744,15 +744,15 @@ export function OcrTemplateConfigurator({
 								<p className="text-sm font-medium">Checklist</p>
 								<div className="mt-3 space-y-2 text-sm">
 									<div className="flex items-center gap-2">
-										<CheckCircle2 className="h-4 w-4 text-emerald-500" />
+										<CheckCircle2 className="size-4 text-emerald-500" />
 										<span>Usar un documento representativo</span>
 									</div>
 									<div className="flex items-center gap-2">
-										<CheckCircle2 className="h-4 w-4 text-emerald-500" />
+										<CheckCircle2 className="size-4 text-emerald-500" />
 										<span>Nombrar cada región por su significado</span>
 									</div>
 									<div className="flex items-center gap-2">
-										<CheckCircle2 className="h-4 w-4 text-emerald-500" />
+										<CheckCircle2 className="size-4 text-emerald-500" />
 										<span>Separar campos únicos y tablas</span>
 									</div>
 								</div>
@@ -767,7 +767,7 @@ export function OcrTemplateConfigurator({
 							<div className="flex items-center gap-2 flex-wrap">
 								<Button asChild variant="outline" size="sm" className="relative">
 									<label>
-										<Upload className="h-4 w-4 mr-2" />
+										<Upload className="size-4 mr-2" />
 										{image ? "Cambiar ejemplo" : existingTemplate ? "Subir nuevo ejemplo" : "Subir documento ejemplo"}
 										<input
 											type="file"
@@ -789,28 +789,28 @@ export function OcrTemplateConfigurator({
 										>
 											{isDrawModeEnabled ? (
 												<>
-													<Pencil className="h-4 w-4 mr-1" />
+													<Pencil className="size-4 mr-1" />
 													Dibujar
 												</>
 											) : (
 												<>
-													<Move className="h-4 w-4 mr-1" />
+													<Move className="size-4 mr-1" />
 													Navegar
 												</>
 											)}
 										</Button>
 										<div className="h-6 w-px bg-border" />
 										<Button variant="outline" size="icon" onClick={() => setScale((s) => Math.max(0.25, s - 0.25))}>
-											<ZoomOut className="h-4 w-4" />
+											<ZoomOut className="size-4" />
 										</Button>
 										<span className="text-xs font-mono w-12 text-center">
 											{Math.round(scale * 100)}%
 										</span>
 										<Button variant="outline" size="icon" onClick={() => setScale((s) => Math.min(3, s + 0.25))}>
-											<ZoomIn className="h-4 w-4" />
+											<ZoomIn className="size-4" />
 										</Button>
 										<Button variant="outline" size="icon" onClick={() => setScale(1)}>
-											<RotateCcw className="h-4 w-4" />
+											<RotateCcw className="size-4" />
 										</Button>
 										{documentKind === "pdf" && pageCount > 1 && (
 											<>
@@ -821,7 +821,7 @@ export function OcrTemplateConfigurator({
 													onClick={() => setSelectedPageNumber((page) => Math.max(1, page - 1))}
 													disabled={selectedPageNumber <= 1 || isRenderingPdf}
 												>
-													<ChevronLeft className="h-4 w-4" />
+													<ChevronLeft className="size-4" />
 												</Button>
 												<span className="text-xs font-medium min-w-[88px] text-center">
 													Pág. {selectedPageNumber} / {pageCount}
@@ -832,7 +832,7 @@ export function OcrTemplateConfigurator({
 													onClick={() => setSelectedPageNumber((page) => Math.min(pageCount, page + 1))}
 													disabled={selectedPageNumber >= pageCount || isRenderingPdf}
 												>
-													<ChevronRight className="h-4 w-4" />
+													<ChevronRight className="size-4" />
 												</Button>
 											</>
 										)}
@@ -847,7 +847,7 @@ export function OcrTemplateConfigurator({
 								{isRenderingPdf && (
 									<div className="sticky top-0 z-10 flex items-center justify-end p-3">
 										<div className="rounded-full border bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
-											Renderizando PDF...
+											Renderizando PDF&hellip;
 										</div>
 									</div>
 								)}
@@ -896,7 +896,7 @@ export function OcrTemplateConfigurator({
 									</div>
 								) : (
 									<div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
-										<Upload className="h-16 w-16 mb-4 opacity-30" />
+										<Upload className="size-16 mb-4 opacity-30" />
 										<p className="font-medium">Subí un documento de ejemplo</p>
 										<p className="text-sm opacity-70">PNG, JPG, WebP o PDF</p>
 									</div>
@@ -1019,7 +1019,7 @@ export function OcrTemplateConfigurator({
 						</div>
 						<div className="rounded-xl border bg-muted/20 p-4">
 							<div className="flex items-center gap-2">
-								<Sparkles className="h-4 w-4 text-purple-500" />
+								<Sparkles className="size-4 text-purple-500" />
 								<p className="text-sm font-medium">Columnas derivadas</p>
 							</div>
 							<div className="mt-3 flex flex-wrap gap-2">
@@ -1039,7 +1039,7 @@ export function OcrTemplateConfigurator({
 
 				{/*
 
-				
+
 				<div className="rounded-md bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 p-3 my-4">
 					<p className="text-sm text-purple-800 dark:text-purple-200">
 						<strong>¿Qué es una plantilla de extracción?</strong> Es una configuración que le indica al sistema qué información extraer de un documento.
@@ -1056,13 +1056,13 @@ export function OcrTemplateConfigurator({
 				)}
 
 				<div className="flex-1 grid lg:grid-cols-[1fr_320px] gap-4 overflow-hidden">
-					
+
 					<div className="flex flex-col gap-3 min-h-0">
-						
+
 						<div className="flex items-center gap-2 flex-wrap">
 							<Button asChild variant="outline" size="sm" className="relative">
 								<label>
-									<Upload className="h-4 w-4 mr-2" />
+									<Upload className="size-4 mr-2" />
 									{image ? "Cambiar" : "Subir documento"}
 									<input
 										type="file"
@@ -1084,12 +1084,12 @@ export function OcrTemplateConfigurator({
 									>
 										{isDrawModeEnabled ? (
 											<>
-												<Pencil className="h-4 w-4 mr-1" />
+												<Pencil className="size-4 mr-1" />
 												Dibujando
 											</>
 										) : (
 											<>
-												<Move className="h-4 w-4 mr-1" />
+												<Move className="size-4 mr-1" />
 												Navegar
 											</>
 										)}
@@ -1100,7 +1100,7 @@ export function OcrTemplateConfigurator({
 										size="icon"
 										onClick={() => setScale((s) => Math.max(0.25, s - 0.25))}
 									>
-										<ZoomOut className="h-4 w-4" />
+										<ZoomOut className="size-4" />
 									</Button>
 									<span className="text-xs font-mono w-12 text-center">
 										{Math.round(scale * 100)}%
@@ -1110,14 +1110,14 @@ export function OcrTemplateConfigurator({
 										size="icon"
 										onClick={() => setScale((s) => Math.min(3, s + 0.25))}
 									>
-										<ZoomIn className="h-4 w-4" />
+										<ZoomIn className="size-4" />
 									</Button>
 									<Button
 										variant="outline"
 										size="icon"
 										onClick={() => setScale(1)}
 									>
-										<RotateCcw className="h-4 w-4" />
+										<RotateCcw className="size-4" />
 									</Button>
 								</>
 							)}
@@ -1129,7 +1129,7 @@ export function OcrTemplateConfigurator({
 							)}
 						</div>
 
-						
+
 						<div
 							ref={containerRef}
 							className="flex-1 bg-muted/30 rounded-lg border-2 border-dashed border-muted-foreground/20 overflow-auto"
@@ -1156,7 +1156,7 @@ export function OcrTemplateConfigurator({
 								</div>
 							) : (
 								<div className="flex flex-col items-center justify-center h-full min-h-[300px] text-muted-foreground">
-									<Upload className="h-16 w-16 mb-4 opacity-30" />
+									<Upload className="size-16 mb-4 opacity-30" />
 									<p className="font-medium">Subí un documento de ejemplo</p>
 									<p className="text-sm opacity-70">PNG, JPG o WebP</p>
 								</div>
@@ -1164,9 +1164,9 @@ export function OcrTemplateConfigurator({
 						</div>
 					</div>
 
-					
+
 					<div className="flex flex-col gap-3 min-h-0">
-						
+
 						<div className="space-y-2">
 							<Label>Nombre de la plantilla</Label>
 							<Input
@@ -1176,7 +1176,7 @@ export function OcrTemplateConfigurator({
 							/>
 						</div>
 
-						
+
 						<div className="flex-1 min-h-0">
 							<Label className="mb-2 block">
 								Regiones ({regions.length})
@@ -1248,9 +1248,9 @@ export function OcrTemplateConfigurator({
 							className="bg-purple-600 hover:bg-purple-700"
 						>
 							{isSaving ? (
-								<Loader2 className="h-4 w-4 animate-spin" />
+								<Loader2 className="size-4 animate-spin" />
 							) : (
-								<Save className="h-4 w-4" />
+								<Save className="size-4" />
 							)}
 							{existingTemplate ? "Guardar cambios" : "Guardar plantilla"}
 						</Button>
@@ -1328,7 +1328,7 @@ function RegionItem({
 							}`}
 						title="Valor único"
 					>
-						<Type className="h-3 w-3" />
+						<Type className="size-3" />
 					</button>
 					<button
 						onClick={(e) => {
@@ -1342,7 +1342,7 @@ function RegionItem({
 							}`}
 						title="Tabla (múltiples filas)"
 					>
-						<Table2 className="h-3 w-3" />
+						<Table2 className="size-3" />
 					</button>
 				</div>
 
@@ -1353,9 +1353,9 @@ function RegionItem({
 						e.stopPropagation();
 						onDelete();
 					}}
-					className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+					className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
 				>
-					<X className="h-4 w-4" />
+					<X className="size-4" />
 				</Button>
 			</div>
 			<div className="mt-2" onClick={(e) => e.stopPropagation()}>
@@ -1414,7 +1414,7 @@ function RegionItem({
 									onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
 								/>
 								<Button size="sm" onClick={handleAddColumn} className="h-7 px-2">
-									<Plus className="h-3 w-3" />
+									<Plus className="size-3" />
 								</Button>
 							</div>
 						</div>

@@ -45,7 +45,7 @@ export default function UserAssignments({ users, tenantId }: { users: { user_id:
             <option key={u.user_id} value={u.user_id}>{u.full_name ?? u.email ?? u.user_id}</option>
           ))}
         </select>
-        {loading && <span className="text-xs text-foreground/60">Loading...</span>}
+        {loading && <span className="text-xs text-foreground/60">Loading?</span>}
       </div>
       <div className="overflow-hidden rounded-md border">
         <table className="w-full text-sm">

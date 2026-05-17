@@ -78,7 +78,7 @@ function SectionShell({
 }) {
   return (
     <section className="overflow-hidden rounded-lg border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-      <header className="flex flex-col gap-3 border-b border-stone-200/80 bg-stone-50 px-5 py-5 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-3 border-b border-stone-200/80 bg-stone-50 p-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 rounded-md bg-white p-1.5 ring-1 ring-stone-200/80">
             <MailOpen className="size-4 text-stone-600" />

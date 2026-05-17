@@ -22,11 +22,13 @@ function ObraDocumentsTabContent({
 	recoveryRequestToken = 0,
 }: DocumentsTabProps) {
 	const router = useRouter();
+  const { replace } = router;
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
 
-	const folderParam = searchParams?.get?.("folder") || null;
-	const fileParam = searchParams?.get?.("file") || null;
+	const folderParam = queryParams.get("folder") || null;
+	const fileParam = queryParams.get("file") || null;
 
 	const updateDocumentsQuery = useCallback(
 		(patch: { folder?: string | null; file?: string | null }) => {
@@ -46,7 +48,7 @@ function ObraDocumentsTabContent({
 			}
 
 			const qs = params.toString();
-			router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+			replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
 		},
 		[pathname, router, searchParams]
 	);
@@ -78,7 +80,7 @@ function ObraDocumentsTabContent({
 
 export function ObraDocumentsTab(props: DocumentsTabProps) {
 	return (
-		<Suspense fallback={<TabsContent value="documentos" className="space-y-6"><div className="p-4 text-sm text-muted-foreground">Cargando documentos...</div></TabsContent>}>
+		<Suspense fallback={<TabsContent value="documentos" className="space-y-6"><div className="p-4 text-sm text-muted-foreground">Cargando documentos?</div></TabsContent>}>
 			<ObraDocumentsTabContent {...props} />
 		</Suspense>
 	);

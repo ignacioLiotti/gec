@@ -32,17 +32,20 @@ export function DemoPageTour({
 }: DemoPageTourProps) {
 	const pathname = usePathname();
 	const router = useRouter();
+  const { replace } = router;
 	const searchParams = useSearchParams();
+	const queryParams = new URLSearchParams(searchParams);
+	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const [open, setOpen] = useState(false);
 	const preserveClearRef = useRef(false);
-	const activeTourId = searchParams.get("tour");
+	const activeTourId = getSearchParam("tour");
 
 	const clearTourQuery = useCallback(() => {
 		if (activeTourId !== flow.id) return;
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("tour");
 		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
-		router.replace(nextUrl, { scroll: false });
+		replace(nextUrl, { scroll: false });
 	}, [activeTourId, flow.id, pathname, router, searchParams]);
 
 	useEffect(() => {

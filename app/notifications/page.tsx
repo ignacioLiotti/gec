@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HydratedDateText } from "@/components/ui/hydrated-date-text";
 import { Badge } from "@/components/ui/badge";
 import { parseLocalDate, formatLocalDate } from "@/utils/date";
 import { revalidatePath } from "next/cache";
@@ -8,8 +9,6 @@ import { addHours } from "date-fns";
 import { Info } from "lucide-react";
 import { PendientesCalendar, type CalendarEventPayload } from "./_components/pendientes-calendar";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
-import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
 
 type NotificationRow = {
   id: string;
@@ -490,31 +489,6 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
     revalidatePath("/notifications");
   }
 
-  const DS = {
-    page: "bg-stone-100",
-    frame: "rounded-3xl border border-stone-200/70 bg-white p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]",
-    frameInner: "rounded-2xl border ",
-    panel: "rounded-2xl border border-stone-200 bg-stone-50/60",
-    card: "rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]",
-  };
-
-  function Framed({
-    className,
-    innerClassName,
-    children,
-  }: {
-    className?: string;
-    innerClassName?: string;
-    children: ReactNode;
-  }) {
-    return (
-      <div className={cn(DS.frame, className)}>
-        <div className={cn(DS.frameInner, innerClassName)}>{children}</div>
-      </div>
-    );
-  }
-
-
   return (
     <div className="flex min-h-svh flex-col gap-6 p-6">
       <div className="flex items-center justify-between gap-2">
@@ -538,7 +512,7 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
                 <CardHeader className="space-y-0 pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xs font-medium text-zinc-700">{metric.title}</CardTitle>
-                    <Info className="h-3.5 w-3.5 text-zinc-400" />
+                    <Info className="size-3.5 text-zinc-400" />
                   </div>
                   <p className="text-[11px] text-zinc-400">{metric.subtitle}</p>
                 </CardHeader>
@@ -566,14 +540,16 @@ export default async function NotificationsIndexPage({ searchParams }: { searchP
                               className="flex items-center justify-between gap-2 text-[11px] pl-1.5 pr-1"
                             >
                               <span className="truncate text-zinc-600">{event.title}</span>
-                              <span className="shrink-0 tabular-nums text-zinc-400">
-                                {new Date(event.start).toLocaleString("es-AR", {
+                              <HydratedDateText
+                                value={event.start}
+                                className="shrink-0 tabular-nums text-zinc-400"
+                                options={{
                                   day: "2-digit",
                                   month: "2-digit",
                                   hour: "2-digit",
                                   minute: "2-digit",
-                                })}
-                              </span>
+                                }}
+                              />
                             </div>
                           ))
                         )}

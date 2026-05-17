@@ -36,6 +36,7 @@ function saveDismissed(set: Set<string>) {
 
 export default function NotificationsListener() {
   const router = useRouter();
+  const { push } = router;
   const [userId, setUserId] = useState<string | null>(null);
   const dismissedRef = useRef<Set<string>>(new Set());
   const [ready, setReady] = useState(false);
@@ -82,7 +83,7 @@ export default function NotificationsListener() {
               label: "Ver",
               onClick: async () => {
                 await markRead();
-                router.push(row.action_url as string);
+                push(row.action_url as string);
               },
             }
           : undefined,
@@ -141,7 +142,7 @@ export default function NotificationsListener() {
       )
       .subscribe();
     return () => {
-      supabase.removeChannel(channel);
+      void channel.unsubscribe();
     };
   }, [userId, showToast]);
 

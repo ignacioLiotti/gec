@@ -317,12 +317,12 @@ function TableRowInner<Row extends FormTableRow>({
 									>
 										{isExpanded ? (
 											<>
-												<ChevronDown className="h-4 w-4" />
+												<ChevronDown className="size-4" />
 												<span>{`Ocultar ${accordionLabel}`}</span>
 											</>
 										) : (
 											<>
-												<ChevronRight className="h-4 w-4" />
+												<ChevronRight className="size-4" />
 												<span>{`Ver ${accordionLabel}`}</span>
 											</>
 										)}
