@@ -10,7 +10,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ColGroup, ColumnResizer } from "@/components/ui/column-resizer";
-import { InBodyStates } from "./InBodyStates";
+import { RefreshCw } from "lucide-react";
 import { CustomInput } from "./CustomInput";
 import { Input } from "@/components/ui/input";
 import { AnimatePresence, m } from "framer-motion";
@@ -417,14 +417,25 @@ export function ObrasTable(props: ObrasTableProps) {
           </thead>
           <tbody>
             {(tableError || visible.length === 0) ? (
-              <InBodyStates
-                isLoading={isLoading}
-                tableError={tableError}
-                colspan={16}
-                empty={visible.length === 0}
-                onRetry={onRetry}
-                emptyText={emptyText}
-              />
+              <tr>
+                <td colSpan={16} className="px-4 py-16 text-center border-t border-border">
+                  {isLoading && visible.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                      <p className="text-sm text-muted-foreground">Cargando datos...</p>
+                    </div>
+                  ) : tableError ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <p className="text-sm text-destructive">Error al cargar los datos: {tableError}</p>
+                      <button type="button" onClick={onRetry} className="inline-flex items-center gap-2 rounded-lg border border-black/15 bg-white px-3 py-1.5 text-xs font-medium shadow-[0_1px_2px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,.80)] hover:bg-stone-50">
+                        <RefreshCw className="h-3.5 w-3.5" />Reintentar
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{emptyText}</p>
+                  )}
+                </td>
+              </tr>
             ) : (
               visible.map(({ index }, visualIndex) => (
                 <React.Fragment key={index}>

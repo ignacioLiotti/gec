@@ -148,6 +148,33 @@ function clonePdfBytes(pdfBytes: Uint8Array) {
   return pdfBytes.slice();
 }
 
+type PdfViewport = {
+  width: number;
+  height: number;
+};
+
+type PdfPageProxy = {
+  getViewport(options: { scale: number }): PdfViewport;
+  render(params: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }): { promise: Promise<void> };
+};
+
+type PdfDocumentProxy = {
+  numPages: number;
+  getPage(pageNumber: number): Promise<PdfPageProxy>;
+  destroy?: () => void | Promise<void>;
+};
+
+type PdfJsModule = {
+  getDocument(params: { data: Uint8Array; disableWorker: boolean }): { promise: Promise<PdfDocumentProxy> };
+};
+
+let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
+
+function loadPdfJs() {
+  pdfJsModulePromise ??= import('pdfjs-dist/legacy/build/pdf.mjs').then((pdfjs) => pdfjs as unknown as PdfJsModule);
+  return pdfJsModulePromise;
+}
+
 const DATA_TYPE_LABELS: Record<TablaColumnDataType, string> = {
   text: 'Texto',
   number: 'Número',
@@ -784,14 +811,7 @@ const FileThumbnail = memo(function FileThumbnail({
             return;
           }
 
-          // @ts-ignore - pdfjs types are not required for client-side rasterization
-          const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
-          if (pdfjs?.GlobalWorkerOptions) {
-            pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-              'pdfjs-dist/build/pdf.worker.min.mjs',
-              import.meta.url
-            ).toString();
-          }
+          const pdfjs = await loadPdfJs();
           const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes), disableWorker: true });
           const pdf = await loadingTask.promise;
           const page = await pdf.getPage(1);
@@ -2946,18 +2966,6 @@ function FileManagerContent({
     resolver(selectedTableIds.length > 0 ? selectedTableIds : null);
   }, [selectedTableIds]);
 
-  const loadPdfJs = useCallback(async () => {
-    // @ts-ignore - pdfjs types are not required for client-side rasterization
-    const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
-    if (pdfjs?.GlobalWorkerOptions) {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url
-      ).toString();
-    }
-    return pdfjs;
-  }, []);
-
   const getPdfPageCount = useCallback(async (pdfBytes: Uint8Array) => {
     const pdfjs = await loadPdfJs();
     const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes), disableWorker: true });
@@ -2969,7 +2977,7 @@ function FileManagerContent({
         pdf.destroy();
       }
     }
-  }, [loadPdfJs]);
+  }, []);
 
   const rasterizePdfPagesToDataUrl = useCallback(
     async (pdfBytes: Uint8Array, pageNumbers: number[]) => {
@@ -3039,7 +3047,7 @@ function FileManagerContent({
         }
       }
     },
-    [loadPdfJs]
+    []
   );
 
   const loadStoredDocumentBytes = useCallback(
@@ -6313,11 +6321,11 @@ function FileManagerContent({
 
       {/* Main Layout */}
       <div className={`flex-1 min-h-0 transition-all duration-300 ease-in-out lg:max-h-[calc(90vh-9rem)] ${selectedFolder || selectedDocument
-        ? 'grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4'
+        ? 'h-full gap-4'
         : ''
         }`}>
         {/* Tree View Sidebar */}
-        <div data-wizard-target="documents-sidebar">
+        {/* <div data-wizard-target="documents-sidebar">
           <FileTreeSidebar
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
@@ -6332,11 +6340,11 @@ function FileManagerContent({
             onRefresh={handleManualRefresh}
             isRefreshing={isRefreshing}
           />
-        </div>
+        </div> */}
 
         {/* Main Content */}
         {(selectedFolder || selectedDocument) && (
-          <div className="overflow-auto overflow-x-auto transition-all duration-300 ease-in-out shadow-[0_1px_0_0_#fff9_inset,_0_0_0_1px_#ffffff4d_inset,0_0.7px_0.9px_-1px_#09090b14,0_3px_4px_-2px_#09090b24] rounded-lg">
+          <div className="overflow-auto overflow-x-auto transition-all duration-300 ease-in-out shadow-[0_1px_0_0_#fff9_inset,_0_0_0_1px_#ffffff4d_inset,0_0.7px_0.9px_-1px_#09090b14,0_3px_4px_-2px_#09090b24] rounded-lg h-full">
             {renderMainContent()}
           </div>
         )}
@@ -8061,14 +8069,7 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
         if (!isMounted || !pdfBytes) return;
 
         try {
-          // @ts-ignore - pdfjs types are not required for client-side rasterization
-          const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf');
-          if (pdfjs?.GlobalWorkerOptions) {
-            pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-              'pdfjs-dist/build/pdf.worker.min.mjs',
-              import.meta.url
-            ).toString();
-          }
+          const pdfjs = await loadPdfJs();
           const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes), disableWorker: true });
           const pdf = await loadingTask.promise;
           const page = await pdf.getPage(1);

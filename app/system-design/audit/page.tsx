@@ -44,12 +44,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-// ─── Lazy-imported feature components ─────────────────────────────────────────
-import { SearchInput } from '@/app/excel/_components/SearchInput';
-import { CustomInput } from '@/app/excel/_components/CustomInput';
-import { InBodyStates } from '@/app/excel/_components/InBodyStates';
-import { ColumnsMenu } from '@/app/excel/_components/ColumnsMenu';
-import { ViewsMenu } from '@/app/excel/_components/ViewsMenu';
+// ─── Inline preview implementations (source files deleted as part of migration) ─
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -122,48 +117,63 @@ function Preview_Input() {
   );
 }
 
+// SearchInput — inlined (file deleted, merged into Input)
 function Preview_SearchInput() {
   const [val, setVal] = useState('');
   return (
-    <PreviewShell label="app/excel/_components/SearchInput.tsx">
+    <PreviewShell label="ELIMINADO → extender Input con prop clearable">
       <div className="space-y-2 w-full">
-        <SearchInput value={val} onChange={setVal} />
-        {val && <p className="text-xs text-stone-400">valor: &quot;{val}&quot;</p>}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Buscar en todas las columnas..."
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            className="w-[280px] pl-9 pr-9"
+          />
+          {val && (
+            <button type="button" onClick={() => setVal('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-sm text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <p className="text-[10px] text-stone-400">Lógica inlineada en Input — archivo original eliminado</p>
       </div>
     </PreviewShell>
   );
 }
 
+// CustomInput — sigue en ObrasTable, pendiente de migrar al refactor de BaseDataTable
 function Preview_CustomInput() {
   const [variant, setVariant] = useState<'default' | 'cammo' | 'show-empty'>('default');
   const [val, setVal] = useState('');
   return (
-    <PreviewShell label="app/excel/_components/CustomInput.tsx">
+    <PreviewShell label="app/excel/_components/CustomInput.tsx (activo — pendiente BaseDataTable)">
       <div className="w-full space-y-3">
         <div className="flex gap-2">
           {(['default', 'cammo', 'show-empty'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setVariant(v)}
-              className={cn(
-                'rounded-md border px-2 py-1 text-[10px] transition-colors',
-                variant === v ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-stone-200 text-stone-500',
-              )}
-            >
+            <button key={v} type="button" onClick={() => setVariant(v)}
+              className={cn('rounded-md border px-2 py-1 text-[10px] transition-colors',
+                variant === v ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-stone-200 text-stone-500')}>
               {v}
             </button>
           ))}
         </div>
         <div className="rounded border border-stone-100 bg-stone-50 px-2 py-1.5">
-          <CustomInput
-            variant={variant}
+          <input
+            className={cn(
+              'w-full font-mono text-sm bg-transparent border-none outline-none px-0 focus:ring-0',
+              variant === 'default' && 'border-b border-stone-200',
+              variant === 'cammo' && 'bg-transparent',
+              variant === 'show-empty' && cn('border-b border-stone-200', !val && 'bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(0,0,0,0.05)_4px,rgba(0,0,0,0.05)_5px)]'),
+            )}
             value={val}
             onChange={(e) => setVal(e.target.value)}
             placeholder={variant === 'show-empty' ? '(vacío = dashed)' : 'Escribí algo...'}
           />
         </div>
-        <p className="text-[10px] text-stone-400">variant=&quot;{variant}&quot; — usado en celdas de tabla inline</p>
+        <p className="text-[10px] text-stone-400">variant=&quot;{variant}&quot; — se migra a Input variant=&quot;cell&quot; junto con ObrasTable</p>
       </div>
     </PreviewShell>
   );
@@ -215,14 +225,28 @@ function Preview_InBodyStates() {
         <div className="overflow-hidden rounded-lg border border-stone-200">
           <table className="w-full">
             <tbody>
-              <InBodyStates
-                isLoading={mode === 'loading'}
-                tableError={mode === 'error' ? 'Error de conexión' : null}
-                colspan={3}
-                empty={mode !== 'loading' || true}
-                onRetry={() => {}}
-                emptyText="No hay obras que coincidan"
-              />
+              {/* InBodyStates inlineado — archivo eliminado, lógica ahora en ObrasTable */}
+              {mode === 'loading' ? (
+                <tr><td colSpan={3} className="px-4 py-10 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                    <p className="text-xs text-muted-foreground">Cargando datos...</p>
+                  </div>
+                </td></tr>
+              ) : mode === 'error' ? (
+                <tr><td colSpan={3} className="px-4 py-10 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-xs text-destructive">Error al cargar los datos</p>
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-black/15 bg-white px-2.5 py-1.5 text-xs font-medium shadow-sm">
+                      Reintentar
+                    </button>
+                  </div>
+                </td></tr>
+              ) : (
+                <tr><td colSpan={3} className="px-4 py-10 text-center">
+                  <p className="text-xs text-muted-foreground">No hay obras que coincidan</p>
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -300,24 +324,34 @@ const MOCK_COLUMNS = [
   { index: 4, label: 'Estado' },
 ];
 
+// ColumnsMenu — inlined (file deleted, merged into DataGridMenu proposal)
 function Preview_ColumnsMenu() {
   const [hidden, setHidden] = useState<number[]>([]);
   const [pinned, setPinned] = useState<number[]>([0]);
-
   return (
-    <PreviewShell label="app/excel/_components/ColumnsMenu.tsx">
+    <PreviewShell label="ELIMINADO → reemplazar con DataGridMenu genérico">
       <div className="space-y-2">
-        <ColumnsMenu
-          allColumns={MOCK_COLUMNS}
-          hiddenCols={hidden}
-          setHiddenCols={setHidden}
-          pinnedColumns={pinned}
-          togglePinColumn={(i) => setPinned((p) => p.includes(i) ? p.filter((x) => x !== i) : [...p, i])}
-          onBalanceColumns={() => {}}
-        />
-        <p className="text-[10px] text-stone-400">
-          Props: allColumns, hiddenCols, setHiddenCols, pinnedColumns, togglePinColumn, onBalanceColumns
-        </p>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Columns3 className="h-4 w-4" /> Columnas
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Visibilidad</DropdownMenuLabel>
+            {MOCK_COLUMNS.map((col) => (
+              <div key={col.index} className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-sm">
+                <input type="checkbox" checked={!hidden.includes(col.index)}
+                  onChange={(e) => setHidden((h) => e.target.checked ? h.filter((x) => x !== col.index) : [...h, col.index])}
+                  className="h-3.5 w-3.5 rounded" />
+                <Pin className={cn('h-3 w-3 cursor-pointer', pinned.includes(col.index) ? 'text-primary' : 'text-muted-foreground')}
+                  onClick={() => setPinned((p) => p.includes(col.index) ? p.filter((x) => x !== col.index) : [...p, col.index])} />
+                <span className="text-sm">{col.label}</span>
+              </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <p className="text-[10px] text-stone-400">Archivo eliminado — lógica ahora en DropdownMenu directo</p>
       </div>
     </PreviewShell>
   );
@@ -328,20 +362,34 @@ const MOCK_VIEWS = [
   { name: 'Vista Contable', columns: [0, 3, 4] },
 ];
 
+// ViewsMenu — inlined (file deleted)
 function Preview_ViewsMenu() {
   const [views, setViews] = useState(MOCK_VIEWS);
   return (
-    <PreviewShell label="app/excel/_components/ViewsMenu.tsx">
+    <PreviewShell label="ELIMINADO → reemplazar con DataGridMenu genérico">
       <div className="space-y-2">
-        <ViewsMenu
-          views={views}
-          saveCurrentAsView={() => setViews((v) => [...v, { name: `Vista ${v.length + 1}`, columns: [0] }])}
-          applyView={() => {}}
-          deleteView={(name) => setViews((v) => v.filter((x) => x.name !== name))}
-        />
-        <p className="text-[10px] text-stone-400">
-          Props: views[], saveCurrentAsView, applyView, deleteView — mismo patrón que ColumnsMenu
-        </p>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <LayoutGrid className="h-4 w-4" /> Vistas
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={() => setViews((v) => [...v, { name: `Vista ${v.length + 1}`, columns: [0] }])}>
+              Guardar vista actual…
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Vistas guardadas</DropdownMenuLabel>
+            {views.map((v) => (
+              <div key={v.name} className="flex items-center justify-between px-2 py-1.5 hover:bg-muted/50 rounded-sm group">
+                <span className="text-sm">{v.name}</span>
+                <Trash2 className="h-3 w-3 opacity-0 group-hover:opacity-100 text-muted-foreground cursor-pointer"
+                  onClick={() => setViews((vs) => vs.filter((x) => x.name !== v.name))} />
+              </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <p className="text-[10px] text-stone-400">Archivo eliminado — mismo patrón que ColumnsMenu</p>
       </div>
     </PreviewShell>
   );

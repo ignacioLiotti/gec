@@ -102,12 +102,15 @@ const ObraFlujoTab = dynamic(
 	}
 );
 
-import { DocumentsTabSkeleton } from "./tabs/documents-tab-skeleton";
-
 const ObraDocumentsTab = dynamic(
 	() => import("./tabs/documents-tab").then((mod) => mod.ObraDocumentsTab),
 	{
-		loading: () => <DocumentsTabSkeleton />,
+		loading: () => (
+			<div className="flex h-[600px] animate-pulse gap-4">
+				<div className="w-64 shrink-0 rounded-lg border bg-stone-100" />
+				<div className="flex-1 rounded-lg border bg-stone-100" />
+			</div>
+		),
 	}
 );
 
@@ -3469,7 +3472,7 @@ function ObraDetailPageContent() {
 									<>
 										<Button
 											type="button"
-											variant="outline"
+											variant="secondary"
 											size="sm"
 											className="h-8 gap-2"
 											onClick={handleOpenDocumentsRecovery}
