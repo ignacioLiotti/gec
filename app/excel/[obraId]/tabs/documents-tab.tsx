@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback } from "react";
+import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { FileManager, type FileManagerSelectionChange } from "./file-manager/file-manager";
@@ -21,8 +21,7 @@ function ObraDocumentsTabContent({
 	refreshMaterialOrders,
 	recoveryRequestToken = 0,
 }: DocumentsTabProps) {
-	const router = useRouter();
-  const { replace } = router;
+	const { replace } = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const queryParams = new URLSearchParams(searchParams);
@@ -50,7 +49,7 @@ function ObraDocumentsTabContent({
 			const qs = params.toString();
 			replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
 		},
-		[pathname, router, searchParams]
+		[pathname, replace, searchParams]
 	);
 
 	const handleSelectionChange = useCallback(
@@ -79,9 +78,5 @@ function ObraDocumentsTabContent({
 }
 
 export function ObraDocumentsTab(props: DocumentsTabProps) {
-	return (
-		<Suspense fallback={<TabsContent value="documentos" className="space-y-6"><div className="p-4 text-sm text-muted-foreground">Cargando documentos?</div></TabsContent>}>
-			<ObraDocumentsTabContent {...props} />
-		</Suspense>
-	);
+	return <ObraDocumentsTabContent {...props} />;
 }

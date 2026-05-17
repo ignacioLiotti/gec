@@ -14,6 +14,13 @@ const tabs = [
 	{ value: "documentos", label: "Documentos", icon: Folder },
 ];
 
+let documentsTabPreloadPromise: Promise<unknown> | null = null;
+
+function preloadDocumentsTab() {
+	documentsTabPreloadPromise ??= import("@/app/excel/[obraId]/tabs/documents-tab");
+	return documentsTabPreloadPromise;
+}
+
 export function ExcelPageTabs({
 	tabBadges,
 }: {
@@ -27,6 +34,7 @@ export function ExcelPageTabs({
 	const handleDocumentsPrefetch = useCallback(() => {
 		if (!obraId || prefetchedRef.current) return;
 		prefetchedRef.current = true;
+		void preloadDocumentsTab();
 		void prefetchDocuments(obraId);
 	}, [obraId]);
 

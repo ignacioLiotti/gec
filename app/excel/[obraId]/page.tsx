@@ -56,6 +56,7 @@ import {
 	SheetContent,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { HydratedDateText } from "@/components/ui/hydrated-date-text";
 import {
 	Tooltip,
 	TooltipContent,
@@ -841,9 +842,12 @@ function getRowFieldValueByCandidates(
 	}
 
 	if (tokenGroups.length > 0) {
+		const normalizedTokenGroups = tokenGroups.map((group) =>
+			group.map((token) => normalizeFieldKey(token)),
+		);
 		for (const [key, value] of normalizedEntries) {
 			const tokenSet = key.split("_").filter(Boolean);
-			for (const group of tokenGroups) {
+			for (const group of normalizedTokenGroups) {
 				if (group.every((token) => tokenSet.some((entry) => entry.includes(token)))) {
 					return value;
 				}
@@ -1064,8 +1068,8 @@ function buildCurvePoints(
 		}
 	}
 
-	const sortedPoints = [...points.values()]
-		.sort((a, b) => a.sortOrder - b.sortOrder)
+	const sortedPoints = Array.from(points.values())
+		.toSorted((a, b) => a.sortOrder - b.sortOrder)
 		.map((point) => ({
 			...point,
 			periodKey: point.periodKey ?? curveSortOrderToPeriodKey(point.sortOrder),
@@ -1209,6 +1213,7 @@ function ObraDetailPageContent() {
 	const isDocumentsTabActive = activeTab === "documentos";
 	const isFlujoTabActive = activeTab === "flujo";
 	const isCertificatesTabActive = activeTab === "certificates";
+	const [deferredGeneralQueriesObraId, setDeferredGeneralQueriesObraId] = useState<string | null>(null);
 
 	// React Query hooks for cached data fetching
 	// Core obra data - always fetch
@@ -1219,6 +1224,36 @@ function ObraDetailPageContent() {
 		staleTime: 5 * 60 * 1000,
 		refetchOnWindowFocus: false,
 	});
+	const deferredGeneralQueriesReady = deferredGeneralQueriesObraId === obraId;
+	const shouldLoadGeneralExtras =
+		isValidObraId &&
+		isGeneralTabActive &&
+		obraQuery.isSuccess &&
+		deferredGeneralQueriesReady;
+
+	useEffect(() => {
+		if (
+			!isValidObraId ||
+			!obraId ||
+			!isGeneralTabActive ||
+			!obraQuery.isSuccess ||
+			deferredGeneralQueriesReady
+		) {
+			return;
+		}
+
+		const timeoutId = window.setTimeout(() => {
+			setDeferredGeneralQueriesObraId(obraId);
+		}, 0);
+
+		return () => window.clearTimeout(timeoutId);
+	}, [
+		deferredGeneralQueriesReady,
+		isGeneralTabActive,
+		isValidObraId,
+		obraId,
+		obraQuery.isSuccess,
+	]);
 
 	// Memoria notes - always fetch (lightweight)
 	const memoriaQuery = useQuery({
@@ -1255,21 +1290,21 @@ function ObraDetailPageContent() {
 	const ocrLinksQuery = useQuery({
 		queryKey: ['obra', obraId, 'ocr-links'],
 		queryFn: () => fetchOcrLinks(obraId!),
-		enabled: isValidObraId && isGeneralTabActive,
+		enabled: shouldLoadGeneralExtras,
 		staleTime: 5 * 60 * 1000,
 	});
 
 	const dataFlowSuggestionsQuery = useQuery({
 		queryKey: ["obra", obraId, "data-flow-suggestions"],
 		queryFn: () => fetchDataFlowSuggestions(obraId!),
-		enabled: isValidObraId && isGeneralTabActive,
+		enabled: shouldLoadGeneralExtras,
 		staleTime: 30 * 1000,
 	});
 
 	const dataFlowConfigQuery = useQuery({
 		queryKey: ["obra", obraId, "data-flow-config", "effective"],
 		queryFn: () => fetchObraDataFlowConfig(obraId!),
-		enabled: isValidObraId && isGeneralTabActive,
+		enabled: shouldLoadGeneralExtras,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1291,7 +1326,7 @@ function ObraDetailPageContent() {
 
 	const tablasQuery = useQuery({
 		queryKey: ["obra-tablas", obraId],
-		enabled: isValidObraId,
+		enabled: shouldLoadGeneralExtras,
 		queryFn: async () => {
 			const res = await fetch(`/api/obras/${obraId}/tablas`);
 			if (!res.ok) throw new Error("No se pudieron cargar las tablas");
@@ -1395,7 +1430,7 @@ function ObraDetailPageContent() {
 	}, [tablasQuery.data]);
 	const curveRulesConfigQuery = useQuery({
 		queryKey: ["obra", obraId, "curve-rules-config"],
-		enabled: isValidObraId && isGeneralTabActive,
+		enabled: shouldLoadGeneralExtras,
 		queryFn: async () => fetchRulesConfig(obraId!),
 		staleTime: 60 * 1000,
 	});
@@ -1534,7 +1569,7 @@ function ObraDetailPageContent() {
 
 	const defaultsQuery = useQuery({
 		queryKey: ["obra-defaults", obraId],
-		enabled: isValidObraId && isGeneralTabActive,
+		enabled: shouldLoadGeneralExtras,
 		queryFn: async () => {
 			const res = await fetch(
 				`/api/obra-defaults?obraId=${encodeURIComponent(String(obraId))}`
@@ -2175,11 +2210,11 @@ function ObraDetailPageContent() {
 					throw new Error([result.error ?? "No se pudo actualizar la obra", details].filter(Boolean).join(": "));
 				}
 
-				setInitialFormValues({
-					...initialFormValues,
+				setInitialFormValues((previous) => ({
+					...previous,
 					...value,
 					id: obraId,
-				});
+				}));
 				setDerivedCertificadosNotice(null);
 				setPendingDerivedFieldValues((previous) =>
 					Object.keys(previous).length === 0 ? previous : {},
@@ -3159,7 +3194,10 @@ function ObraDetailPageContent() {
 									</div>
 								</div>
 								<span className="text-[10px] text-muted-foreground">
-									{new Date(note.createdAt).toLocaleDateString("es-AR")}
+									<HydratedDateText
+										value={note.createdAt}
+										options={{ day: "2-digit", month: "2-digit", year: "numeric" }}
+									/>
 								</span>
 							</div>
 							<p className="text-foreground leading-relaxed">{note.text}</p>
@@ -3477,7 +3515,7 @@ function ObraDetailPageContent() {
 											className="h-8 gap-2"
 											onClick={handleOpenDocumentsRecovery}
 										>
-											<RotateCcw className="h-4 w-4" />
+											<RotateCcw className="size-4" />
 											<span className="text-base md:text-sm">Recuperar</span>
 										</Button>
 										<Button
@@ -3487,7 +3525,7 @@ function ObraDetailPageContent() {
 											className="h-8 gap-2"
 											onClick={handleOpenDocumentsTrashPage}
 										>
-											<Trash2 className="h-4 w-4" />
+											<Trash2 className="size-4" />
 											<span className="text-base md:text-sm">Papelera</span>
 										</Button>
 									</>
@@ -3501,7 +3539,7 @@ function ObraDetailPageContent() {
 										onClick={() => void handleDeleteObra()}
 										disabled={isDeletingObra}
 									>
-										<Trash2 className="h-4 w-4" />
+										<Trash2 className="size-4" />
 										<span className="text-base md:text-sm">
 											{isDeletingObra ? "Eliminando..." : "Borrar obra"}
 										</span>

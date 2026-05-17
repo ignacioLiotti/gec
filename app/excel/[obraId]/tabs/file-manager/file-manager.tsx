@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
-import { Suspense, useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { FormTable } from '@/components/form-table/form-table';
 import { createSupabaseBrowserClient } from '@/utils/supabase/client';
@@ -284,11 +284,12 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'heic',
   'heif',
 ]);
+const MODEL_FILE_EXTENSIONS = new Set(['nwc', 'nwd', 'rvt', 'dwg', 'ifc', 'zip']);
 
 // Utility function to check if a file is a 3D model
 const is3DModelFile = (fileName: string): boolean => {
   const ext = fileName.toLowerCase().split('.').pop();
-  return ['nwc', 'nwd', 'rvt', 'dwg', 'ifc', 'zip'].includes(ext || '');
+  return MODEL_FILE_EXTENSIONS.has(ext || '');
 };
 
 
@@ -547,7 +548,7 @@ function sortTableLinksForSelector(links: OcrFolderLink[]): OcrFolderLink[] {
     return 2;
   };
 
-  return [...links].sort((left, right) => {
+  return links.toSorted((left, right) => {
     const scoreDiff = score(left) - score(right);
     if (scoreDiff !== 0) return scoreDiff;
     return (left.tablaName ?? '').localeCompare(right.tablaName ?? '', 'es', { sensitivity: 'base' });
@@ -712,7 +713,7 @@ const FileThumbnail = memo(function FileThumbnail({
   const fileExt = item.name.toLowerCase().split('.').pop() ?? '';
   const isImageFile =
     Boolean(item.mimetype?.startsWith('image/')) ||
-    ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'heic', 'heif'].includes(fileExt);
+    IMAGE_FILE_EXTENSIONS.has(fileExt);
   const isPdfFile = item.mimetype === 'application/pdf' || fileExt === 'pdf';
   const isPreviewableFile = isImageFile || isPdfFile;
   // Check blob cache first, then signed URL cache
@@ -721,20 +722,27 @@ const FileThumbnail = memo(function FileThumbnail({
       ? (pdfThumbnailCache.get(storagePath) ?? null)
       : (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath)))
     : null;
-  const [thumbUrl, setThumbUrl] = useState<string | null>(initialUrl);
-  const [retryCount, setRetryCount] = useState(0);
+  const [thumbState, setThumbState] = useState<{
+    storagePath: string | null;
+    url: string | null;
+    retryCount: number;
+  }>({
+    storagePath: storagePath ?? null,
+    url: initialUrl,
+    retryCount: 0,
+  });
+  const activeThumbState = thumbState.storagePath === (storagePath ?? null) ? thumbState : null;
+  const thumbUrl = activeThumbState?.url ?? initialUrl;
+  const retryCount = activeThumbState?.retryCount ?? 0;
 
   useEffect(() => {
     if (!storagePath || !isPreviewableFile) {
-      setThumbUrl(null);
-      setRetryCount(0);
       return;
     }
 
     if (isPdfFile) {
       const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
       if (cachedPdfThumb) {
-        setThumbUrl(cachedPdfThumb);
         return;
       }
     }
@@ -742,17 +750,15 @@ const FileThumbnail = memo(function FileThumbnail({
     // Check blob cache first (instant, no network)
     const cachedBlob = getCachedBlobUrl(storagePath);
     if (cachedBlob && isImageFile) {
-      setThumbUrl(cachedBlob);
       return;
     }
 
     // Check signed URL cache
     const cachedSignedUrl = getCachedSignedUrl(storagePath);
     if (cachedSignedUrl && isImageFile) {
-      setThumbUrl(cachedSignedUrl);
       // Preload to blob cache in background
       preloadAndCacheFile(cachedSignedUrl, storagePath).then((blobUrl) => {
-        setThumbUrl(blobUrl);
+        setThumbState({ storagePath, url: blobUrl, retryCount: 0 });
       });
       return;
     }
@@ -773,7 +779,13 @@ const FileThumbnail = memo(function FileThumbnail({
           // Fresh uploads can take a short moment before signed URL is available.
           if (isMounted && retryCount < 5) {
             const retryTimeout = scheduleThumbnailRetry(() => {
-              if (isMounted) setRetryCount((prev) => prev + 1);
+              if (isMounted) {
+                setThumbState((prev) => ({
+                  storagePath,
+                  url: prev.storagePath === storagePath ? prev.url : null,
+                  retryCount: (prev.storagePath === storagePath ? prev.retryCount : 0) + 1,
+                }));
+              }
             });
             retryTimeouts.push(retryTimeout);
           }
@@ -804,7 +816,13 @@ const FileThumbnail = memo(function FileThumbnail({
           if (!pdfBytes) {
             if (isMounted && retryCount < 5) {
               const retryTimeout = scheduleThumbnailRetry(() => {
-                if (isMounted) setRetryCount((prev) => prev + 1);
+                if (isMounted) {
+                  setThumbState((prev) => ({
+                    storagePath,
+                    url: prev.storagePath === storagePath ? prev.url : null,
+                    retryCount: (prev.storagePath === storagePath ? prev.retryCount : 0) + 1,
+                  }));
+                }
               });
               retryTimeouts.push(retryTimeout);
             }
@@ -829,7 +847,7 @@ const FileThumbnail = memo(function FileThumbnail({
           const dataUrl = canvas.toDataURL('image/png');
           pdfThumbnailCache.set(storagePath, dataUrl);
           if (isMounted) {
-            setThumbUrl(dataUrl);
+            setThumbState({ storagePath, url: dataUrl, retryCount: 0 });
           }
           if (typeof pdf.destroy === 'function') {
             pdf.destroy();
@@ -837,7 +855,7 @@ const FileThumbnail = memo(function FileThumbnail({
         } catch (error) {
           console.error('PDF thumbnail generation failed:', error);
           if (isMounted) {
-            setThumbUrl(null);
+            setThumbState({ storagePath, url: null, retryCount: 0 });
           }
         }
         return;
@@ -846,11 +864,11 @@ const FileThumbnail = memo(function FileThumbnail({
       const signedUrl = await getSignedUrl();
       if (!isMounted || !signedUrl) return;
       // Set signed URL first for immediate display
-      setThumbUrl(signedUrl);
+      setThumbState({ storagePath, url: signedUrl, retryCount: 0 });
       // Then preload to blob cache
       const blobUrl = await preloadAndCacheFile(signedUrl, storagePath);
       if (isMounted) {
-        setThumbUrl(blobUrl);
+        setThumbState({ storagePath, url: blobUrl, retryCount: 0 });
       }
     })();
 
@@ -1153,12 +1171,14 @@ function FileManagerContent({
   const [tableSelectionFileName, setTableSelectionFileName] = useState('');
   const [tableSelectionEntries, setTableSelectionEntries] = useState<TableSelectionEntry[]>([]);
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+  const selectedTableIdSet = useMemo(() => new Set(selectedTableIds), [selectedTableIds]);
   const [tableSelectionMode, setTableSelectionMode] = useState<'ocr' | 'spreadsheet'>('ocr');
   const tableSelectionResolverRef = useRef<((tablaIds: string[] | null) => void) | null>(null);
   const [isPdfPageSelectionOpen, setIsPdfPageSelectionOpen] = useState(false);
   const [pdfPageSelectionFileName, setPdfPageSelectionFileName] = useState('');
   const [pdfPageSelectionPageCount, setPdfPageSelectionPageCount] = useState(0);
   const [selectedPdfPages, setSelectedPdfPages] = useState<number[]>([]);
+  const selectedPdfPageSet = useMemo(() => new Set(selectedPdfPages), [selectedPdfPages]);
   const pdfPageSelectionResolverRef = useRef<((pages: number[] | null) => void) | null>(null);
   const rateLimitUntilRef = useRef<number>(0);
   const documentsTreeRequestRef = useRef<Promise<{ tree: FileSystemItem | null; links: OcrFolderLink[] } | null> | null>(null);
@@ -3260,8 +3280,9 @@ function FileManagerContent({
       toast.error('No hay un archivo almacenado para completar esta importacion.');
       return false;
     }
+    const excludedTablaIdSet = new Set(excludedSpreadsheetPreviewTablaIds);
     const selectedTablaIds = spreadsheetPreviewPayload.tablaIds.filter(
-      (tablaId) => !excludedSpreadsheetPreviewTablaIds.includes(tablaId)
+      (tablaId) => !excludedTablaIdSet.has(tablaId)
     );
     if (selectedTablaIds.length === 0) {
       toast.error('No hay secciones seleccionadas para importar.');
@@ -3556,7 +3577,8 @@ function FileManagerContent({
             fd.append('existingBucket', 'obra-documents');
             fd.append('existingPath', filePath);
             fd.append('existingFileName', storageFileName);
-            fd.append('tablaIds', JSON.stringify(selectedTablaIds.filter((id) => uniqueTablaIds.includes(id))));
+            const uniqueTablaIdSet = new Set(uniqueTablaIds);
+            fd.append('tablaIds', JSON.stringify(selectedTablaIds.filter((id) => uniqueTablaIdSet.has(id))));
             const importRes = await fetch(
               `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
               {
@@ -4449,7 +4471,10 @@ function FileManagerContent({
   const activeDocumentOcrLink = useMemo(() => {
     if (activeDocumentOcrLinks.length === 0) return null;
     if (activeDocumentTablaIdOverride) {
-      const selected = activeDocumentOcrLinks.find((link) => link.tablaId === activeDocumentTablaIdOverride);
+      const activeDocumentLinksByTablaId = new Map(
+        activeDocumentOcrLinks.map((link) => [link.tablaId, link]),
+      );
+      const selected = activeDocumentLinksByTablaId.get(activeDocumentTablaIdOverride);
       if (selected) return selected;
     }
     const firstWithRows = activeDocumentOcrLinks.find((link) => {
@@ -4667,7 +4692,10 @@ function FileManagerContent({
   const activeFolderLink = useMemo(() => {
     if (activeFolderLinks.length === 0) return null;
     if (activeOcrTablaIdOverride) {
-      const selectedLink = activeFolderLinks.find((link) => link.tablaId === activeOcrTablaIdOverride);
+      const activeFolderLinksByTablaId = new Map(
+        activeFolderLinks.map((link) => [link.tablaId, link]),
+      );
+      const selectedLink = activeFolderLinksByTablaId.get(activeOcrTablaIdOverride);
       if (selectedLink) return selectedLink;
     }
     return activeFolderLinks[0] ?? null;
@@ -5574,7 +5602,8 @@ function FileManagerContent({
             return;
           }
         }
-        formData.append('tablaIds', JSON.stringify(selectedTablaIds.filter((id) => uniqueTablaIds.includes(id))));
+        const uniqueTablaIdSet = new Set(uniqueTablaIds);
+        formData.append('tablaIds', JSON.stringify(selectedTablaIds.filter((id) => uniqueTablaIdSet.has(id))));
 
         const response = await fetch(
           `/api/obras/${obraId}/tablas/import/ocr-multi?skipStorage=1`,
@@ -6919,7 +6948,7 @@ function FileManagerContent({
           <div className="space-y-3">
             <div className="max-h-64 overflow-auto space-y-2 px-6 py-3">
               {tableSelectionEntries.map((entry, index) => {
-                const checked = selectedTableIds.includes(entry.tablaId);
+                const checked = selectedTableIdSet.has(entry.tablaId);
                 return (
                   <label
                     key={entry.tablaId}
@@ -7013,7 +7042,7 @@ function FileManagerContent({
             <div className="max-h-72 overflow-auto rounded-md border p-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {buildPdfPageNumbers(pdfPageSelectionPageCount).map((pageNumber) => {
-                  const checked = selectedPdfPages.includes(pageNumber);
+                  const checked = selectedPdfPageSet.has(pageNumber);
                   return (
                     <label
                       key={pageNumber}
@@ -7924,51 +7953,8 @@ function FileManagerContent({
   );
 }
 
-function FileManagerSkeleton() {
-  return (
-    <div className="flex gap-4 h-[600px]">
-      {/* File tree sidebar skeleton */}
-      <div className="w-64 shrink-0 border rounded-lg p-3 space-y-2 hidden md:block animate-pulse">
-        <div className="h-5 w-32 bg-stone-200 rounded mb-4" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-2 py-1.5">
-            <div className="size-4 bg-stone-200 rounded" />
-            <div className="h-4 bg-stone-200 rounded" style={{ width: `${60 + Math.random() * 30}%` }} />
-          </div>
-        ))}
-      </div>
-      {/* Main content area */}
-      <div className="flex-1 border rounded-lg p-4 space-y-4 animate-pulse">
-        <div className="flex items-center justify-between gap-4 pb-3 border-b">
-          <div className="flex items-center gap-2">
-            <div className="size-9 bg-stone-200 rounded" />
-            <div className="h-5 w-40 bg-stone-200 rounded" />
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-24 bg-stone-200 rounded" />
-            <div className="size-9 bg-stone-200 rounded" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="border rounded-lg p-3 space-y-2">
-              <div className="aspect-square w-full bg-stone-100 rounded" />
-              <div className="h-4 w-3/4 bg-stone-200 rounded" />
-              <div className="h-3 w-1/2 bg-stone-200 rounded" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function FileManager(props: FileManagerProps) {
-  return (
-    <Suspense fallback={<FileManagerSkeleton />}>
-      <FileManagerContent {...props} />
-    </Suspense>
-  );
+  return <FileManagerContent {...props} />;
 }
 
 type OcrDocumentSourceCellProps = {

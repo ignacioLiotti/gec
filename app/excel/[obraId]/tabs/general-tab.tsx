@@ -1,6 +1,7 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { memo, useMemo } from "react";
 import type { ComponentType, ReactNode } from "react";
 import { m } from "framer-motion";
 import {
@@ -170,6 +171,11 @@ type GeneralTabProps = {
 	isResolvingDataFlowSuggestion?: boolean;
 };
 
+const EMPTY_MAIN_TABLE_COLUMNS: MainTableColumnConfig[] = [];
+const EMPTY_MAIN_TABLE_COLUMN_VALUES: Record<string, unknown> = {};
+const EMPTY_CERTIFICADOS_ROWS: TablaDataRow[] = [];
+const EMPTY_DATA_FLOW_SUGGESTIONS: DataFlowSuggestion[] = [];
+
 const STATIC_GENERAL_FIELD_IDS = new Set([
 	"porcentaje",
 	"designacionYUbicacion",
@@ -186,6 +192,96 @@ const STATIC_GENERAL_FIELD_IDS = new Set([
 	"plazoTotal",
 	"plazoTransc",
 ]);
+
+const DATA_FLOW_FIELD_ALIASES: Record<string, string[]> = {
+	certificadoALaFecha: ["certificado_a_la_fecha"],
+	saldoACertificar: ["saldo_a_certificar"],
+	contratoMasAmpliaciones: ["contrato_mas_ampliaciones"],
+	designacionYUbicacion: ["designacion_y_ubicacion"],
+	entidadContratante: ["entidad_contratante"],
+	mesBasicoDeContrato: ["mes_basico_de_contrato"],
+	supDeObraM2: ["sup_de_obra_m2"],
+	segunContrato: ["segun_contrato"],
+	prorrogasAcordadas: ["prorrogas_acordadas"],
+	plazoTotal: ["plazo_total"],
+	plazoTransc: ["plazo_transc"],
+};
+
+function formatSuggestionValue(value: unknown, formatted: string | null) {
+	return formatted ?? (typeof value === "number" ? formatCurrency(value) : String(value ?? "-"));
+}
+
+function getDataFlowSuggestionForField(
+	fieldId: string,
+	suggestionByFieldId: Map<string, DataFlowSuggestion>,
+) {
+	const candidateIds = [fieldId, ...(DATA_FLOW_FIELD_ALIASES[fieldId] ?? []), `custom:${fieldId}`];
+	for (const candidateId of candidateIds) {
+		const suggestion = suggestionByFieldId.get(candidateId);
+		if (suggestion) return suggestion;
+	}
+	return null;
+}
+
+function hasVisibleDataFlowSuggestion(suggestion: DataFlowSuggestion | null, currentValue: unknown) {
+	if (!suggestion) return false;
+	if (typeof currentValue === "number" || typeof suggestion.suggested_value === "number") {
+		const current = Number(currentValue ?? 0);
+		const suggested = Number(suggestion.suggested_value ?? 0);
+		if (!Number.isFinite(current) || !Number.isFinite(suggested)) return true;
+		return Math.abs(current - suggested) > 0.01;
+	}
+	return String(currentValue ?? "") !== String(suggestion.suggested_value ?? "");
+}
+
+const DataFlowSuggestionNotice = memo(function DataFlowSuggestionNotice({
+	fieldId,
+	currentValue,
+	suggestionByFieldId,
+	onDecision,
+	isResolving,
+}: {
+	fieldId: string;
+	currentValue: unknown;
+	suggestionByFieldId: Map<string, DataFlowSuggestion>;
+	onDecision?: (suggestionId: string, decision: "accept" | "reject") => void | Promise<void>;
+	isResolving: boolean;
+}) {
+	const suggestion = getDataFlowSuggestionForField(fieldId, suggestionByFieldId);
+	if (!hasVisibleDataFlowSuggestion(suggestion, currentValue)) return null;
+
+	return (
+		<div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+			<p className="text-xs font-medium text-emerald-700">
+				Valor recomendado: {formatSuggestionValue(suggestion.suggested_value, suggestion.formatted_value)}
+			</p>
+			{onDecision ? (
+				<div className="flex gap-2">
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						className="h-7 border-emerald-200 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+						disabled={isResolving}
+						onClick={() => void onDecision(suggestion.id, "accept")}
+					>
+						Aplicar recomendacion
+					</Button>
+					<Button
+						type="button"
+						size="sm"
+						variant="ghost"
+						className="h-7 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+						disabled={isResolving}
+						onClick={() => void onDecision(suggestion.id, "reject")}
+					>
+						Rechazar
+					</Button>
+				</div>
+			) : null}
+		</div>
+	);
+});
 
 const CircularProgress = ({ value }: { value: number }) => {
 	const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
@@ -491,6 +587,9 @@ function findRecordValueByCandidates(
 		value,
 	] as const);
 	const normalizedCandidates = new Set(keys.map((key) => normalizeCertificateRecordKey(key)));
+	const normalizedTokenGroups = tokenGroups.map((tokens) =>
+		tokens.map((token) => normalizeCertificateRecordKey(token)),
+	);
 
 	for (const [key, value] of normalizedEntries) {
 		if (normalizedCandidates.has(key)) return value;
@@ -498,7 +597,7 @@ function findRecordValueByCandidates(
 
 	for (const [key, value] of normalizedEntries) {
 		if (
-			tokenGroups.some((tokens) => tokens.every((token) => key.includes(normalizeCertificateRecordKey(token))))
+			normalizedTokenGroups.some((tokens) => tokens.every((token) => key.includes(token)))
 		) {
 			return value;
 		}
@@ -669,7 +768,9 @@ function GeneralInfoCard({
 	values,
 	isFieldDirty,
 	className,
-	renderSuggestion,
+	suggestionByFieldId,
+	onDataFlowSuggestionDecision,
+	isResolvingDataFlowSuggestion,
 }: {
 	values: Pick<
 		Obra,
@@ -682,7 +783,9 @@ function GeneralInfoCard({
 	>;
 	isFieldDirty: (field: keyof Obra) => boolean;
 	className?: string;
-	renderSuggestion?: (fieldId: string, currentValue: unknown) => ReactNode;
+	suggestionByFieldId: Map<string, DataFlowSuggestion>;
+	onDataFlowSuggestionDecision?: (suggestionId: string, decision: "accept" | "reject") => void | Promise<void>;
+	isResolvingDataFlowSuggestion: boolean;
 }) {
 	return (
 		<ShellCard title="Información General" icon={Landmark} className={className}>
@@ -693,7 +796,13 @@ function GeneralInfoCard({
 					value={values.designacionYUbicacion || "No especificado"}
 					highlighted={isFieldDirty("designacionYUbicacion")}
 				>
-					{renderSuggestion?.("designacionYUbicacion", values.designacionYUbicacion)}
+					<DataFlowSuggestionNotice
+						fieldId="designacionYUbicacion"
+						currentValue={values.designacionYUbicacion}
+						suggestionByFieldId={suggestionByFieldId}
+						onDecision={onDataFlowSuggestionDecision}
+						isResolving={isResolvingDataFlowSuggestion}
+					/>
 				</MiniField>
 				<MiniField
 					icon={Building2}
@@ -701,7 +810,13 @@ function GeneralInfoCard({
 					value={values.entidadContratante || "No especificado"}
 					highlighted={isFieldDirty("entidadContratante")}
 				>
-					{renderSuggestion?.("entidadContratante", values.entidadContratante)}
+					<DataFlowSuggestionNotice
+						fieldId="entidadContratante"
+						currentValue={values.entidadContratante}
+						suggestionByFieldId={suggestionByFieldId}
+						onDecision={onDataFlowSuggestionDecision}
+						isResolving={isResolvingDataFlowSuggestion}
+					/>
 				</MiniField>
 				<MiniField
 					icon={Calendar}
@@ -709,7 +824,13 @@ function GeneralInfoCard({
 					value={values.mesBasicoDeContrato || "No especificado"}
 					highlighted={isFieldDirty("mesBasicoDeContrato")}
 				>
-					{renderSuggestion?.("mesBasicoDeContrato", values.mesBasicoDeContrato)}
+					<DataFlowSuggestionNotice
+						fieldId="mesBasicoDeContrato"
+						currentValue={values.mesBasicoDeContrato}
+						suggestionByFieldId={suggestionByFieldId}
+						onDecision={onDataFlowSuggestionDecision}
+						isResolving={isResolvingDataFlowSuggestion}
+					/>
 				</MiniField>
 				<MiniField
 					icon={Calendar}
@@ -717,7 +838,13 @@ function GeneralInfoCard({
 					value={values.iniciacion || "No especificado"}
 					highlighted={isFieldDirty("iniciacion")}
 				>
-					{renderSuggestion?.("iniciacion", values.iniciacion)}
+					<DataFlowSuggestionNotice
+						fieldId="iniciacion"
+						currentValue={values.iniciacion}
+						suggestionByFieldId={suggestionByFieldId}
+						onDecision={onDataFlowSuggestionDecision}
+						isResolving={isResolvingDataFlowSuggestion}
+					/>
 				</MiniField>
 				<MiniField
 					icon={Hash}
@@ -725,7 +852,13 @@ function GeneralInfoCard({
 					value={`#${values.n ?? 0}`}
 					highlighted={isFieldDirty("n")}
 				>
-					{renderSuggestion?.("n", values.n)}
+					<DataFlowSuggestionNotice
+						fieldId="n"
+						currentValue={values.n}
+						suggestionByFieldId={suggestionByFieldId}
+						onDecision={onDataFlowSuggestionDecision}
+						isResolving={isResolvingDataFlowSuggestion}
+					/>
 				</MiniField>
 				<MiniField
 					icon={Ruler}
@@ -733,7 +866,13 @@ function GeneralInfoCard({
 					value={`${formatNumber(values.supDeObraM2, " m²")}`}
 					highlighted={isFieldDirty("supDeObraM2")}
 				>
-					{renderSuggestion?.("supDeObraM2", values.supDeObraM2)}
+					<DataFlowSuggestionNotice
+						fieldId="supDeObraM2"
+						currentValue={values.supDeObraM2}
+						suggestionByFieldId={suggestionByFieldId}
+						onDecision={onDataFlowSuggestionDecision}
+						isResolving={isResolvingDataFlowSuggestion}
+					/>
 				</MiniField>
 			</div>
 		</ShellCard>
@@ -752,14 +891,14 @@ export function ObraGeneralTab({
 	getErrorMessage,
 	quickActionsAllData,
 	reportsData,
-	mainTableColumns = [],
-	mainTableColumnValues = {},
+	mainTableColumns = EMPTY_MAIN_TABLE_COLUMNS,
+	mainTableColumnValues = EMPTY_MAIN_TABLE_COLUMN_VALUES,
 	setCustomMainColumnValue,
-	certificadosExtraidosRows = [],
+	certificadosExtraidosRows = EMPTY_CERTIFICADOS_ROWS,
 	certificadoContableMacro = null,
 	curveImportConfig,
 	derivedCertificadosNotice = null,
-	dataFlowSuggestions = [],
+	dataFlowSuggestions = EMPTY_DATA_FLOW_SUGGESTIONS,
 	dataFlowSuggestionsError = null,
 	onDataFlowSuggestionDecision,
 	isResolvingDataFlowSuggestion = false,
@@ -833,82 +972,15 @@ export function ObraGeneralTab({
 		if (!Number.isFinite(current)) return true;
 		return Math.abs(current - recommended) > 0.01;
 	};
-	const pendingDataFlowSuggestions = dataFlowSuggestions.filter((suggestion) => suggestion.status === "pending");
-	const dataFlowSuggestionByFieldId = new Map<string, DataFlowSuggestion>();
-	for (const suggestion of pendingDataFlowSuggestions) {
-		if (!dataFlowSuggestionByFieldId.has(suggestion.field_id)) {
-			dataFlowSuggestionByFieldId.set(suggestion.field_id, suggestion);
+	const dataFlowSuggestionByFieldId = useMemo(() => {
+		const next = new Map<string, DataFlowSuggestion>();
+		for (const suggestion of dataFlowSuggestions) {
+			if (suggestion.status === "pending" && !next.has(suggestion.field_id)) {
+				next.set(suggestion.field_id, suggestion);
+			}
 		}
-	}
-	const dataFlowFieldAliases: Record<string, string[]> = {
-		certificadoALaFecha: ["certificado_a_la_fecha"],
-		saldoACertificar: ["saldo_a_certificar"],
-		contratoMasAmpliaciones: ["contrato_mas_ampliaciones"],
-		designacionYUbicacion: ["designacion_y_ubicacion"],
-		entidadContratante: ["entidad_contratante"],
-		mesBasicoDeContrato: ["mes_basico_de_contrato"],
-		supDeObraM2: ["sup_de_obra_m2"],
-		segunContrato: ["segun_contrato"],
-		prorrogasAcordadas: ["prorrogas_acordadas"],
-		plazoTotal: ["plazo_total"],
-		plazoTransc: ["plazo_transc"],
-	};
-	const formatSuggestionValue = (value: unknown, formatted: string | null) =>
-		formatted ?? (typeof value === "number" ? formatCurrency(value) : String(value ?? "-"));
-	const getDataFlowSuggestionForField = (fieldId: string) => {
-		const candidateIds = [fieldId, ...(dataFlowFieldAliases[fieldId] ?? []), `custom:${fieldId}`];
-		for (const candidateId of candidateIds) {
-			const suggestion = dataFlowSuggestionByFieldId.get(candidateId);
-			if (suggestion) return suggestion;
-		}
-		return null;
-	};
-	const hasVisibleDataFlowSuggestion = (suggestion: DataFlowSuggestion | null, currentValue: unknown) => {
-		if (!suggestion) return false;
-		if (typeof currentValue === "number" || typeof suggestion.suggested_value === "number") {
-			const current = Number(currentValue ?? 0);
-			const suggested = Number(suggestion.suggested_value ?? 0);
-			if (!Number.isFinite(current) || !Number.isFinite(suggested)) return true;
-			return Math.abs(current - suggested) > 0.01;
-		}
-		return String(currentValue ?? "") !== String(suggestion.suggested_value ?? "");
-	};
-	const renderDataFlowSuggestion = (fieldId: string, currentValue: unknown) => {
-		const suggestion = getDataFlowSuggestionForField(fieldId);
-		if (!suggestion) return null;
-		if (!hasVisibleDataFlowSuggestion(suggestion, currentValue)) return null;
-		return (
-			<div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5">
-				<p className="text-xs font-medium text-emerald-700">
-					Valor recomendado: {formatSuggestionValue(suggestion.suggested_value, suggestion.formatted_value)}
-				</p>
-				{onDataFlowSuggestionDecision ? (
-					<div className="flex gap-2">
-						<Button
-							type="button"
-							size="sm"
-							variant="outline"
-							className="h-7 border-emerald-200 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
-							disabled={isResolvingDataFlowSuggestion}
-							onClick={() => void onDataFlowSuggestionDecision(suggestion.id, "accept")}
-						>
-							Aplicar recomendacion
-						</Button>
-						<Button
-							type="button"
-							size="sm"
-							variant="ghost"
-							className="h-7 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
-							disabled={isResolvingDataFlowSuggestion}
-							onClick={() => void onDataFlowSuggestionDecision(suggestion.id, "reject")}
-						>
-							Rechazar
-						</Button>
-					</div>
-				) : null}
-			</div>
-		);
-	};
+		return next;
+	}, [dataFlowSuggestions]);
 
 	return (
 		<TabsContent value="general" className="space-y-6 pt-4">
@@ -1041,7 +1113,15 @@ export function ObraGeneralTab({
 																Aplicar recomendacion
 															</Button>
 														</div>
-													) : renderDataFlowSuggestion("porcentaje", field.state.value)}
+													) : (
+														<DataFlowSuggestionNotice
+															fieldId="porcentaje"
+															currentValue={field.state.value}
+															suggestionByFieldId={dataFlowSuggestionByFieldId}
+															onDecision={onDataFlowSuggestionDecision}
+															isResolving={isResolvingDataFlowSuggestion}
+														/>
+													)}
 													{isDerivedFieldBlocked("porcentaje") && derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -1082,7 +1162,13 @@ export function ObraGeneralTab({
 															{getErrorMessage(field.state.meta.errors)}
 														</p>
 													)}
-													{renderDataFlowSuggestion("designacionYUbicacion", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="designacionYUbicacion"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1101,7 +1187,13 @@ export function ObraGeneralTab({
 														className={SURFACE_INPUT_CLASS}
 														placeholder="Nombre de la entidad"
 													/>
-													{renderDataFlowSuggestion("entidadContratante", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="entidadContratante"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1119,7 +1211,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
-													{renderDataFlowSuggestion("mesBasicoDeContrato", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="mesBasicoDeContrato"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1137,7 +1235,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
-													{renderDataFlowSuggestion("iniciacion", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="iniciacion"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1155,7 +1259,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
-													{renderDataFlowSuggestion("n", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="n"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1173,7 +1283,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={SURFACE_INPUT_CLASS}
 													/>
-													{renderDataFlowSuggestion("supDeObraM2", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="supDeObraM2"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1211,7 +1327,13 @@ export function ObraGeneralTab({
 														)}
 														placeholder="0.00"
 													/>
-													{renderDataFlowSuggestion("contratoMasAmpliaciones", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="contratoMasAmpliaciones"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 													{derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -1262,7 +1384,15 @@ export function ObraGeneralTab({
 																Aplicar recomendacion
 															</Button>
 														</div>
-													) : renderDataFlowSuggestion("certificadoALaFecha", field.state.value)}
+													) : (
+														<DataFlowSuggestionNotice
+															fieldId="certificadoALaFecha"
+															currentValue={field.state.value}
+															suggestionByFieldId={dataFlowSuggestionByFieldId}
+															onDecision={onDataFlowSuggestionDecision}
+															isResolving={isResolvingDataFlowSuggestion}
+														/>
+													)}
 												</div>
 											)}
 										</form.Field>
@@ -1309,7 +1439,15 @@ export function ObraGeneralTab({
 																Aplicar recomendacion
 															</Button>
 														</div>
-													) : renderDataFlowSuggestion("saldoACertificar", field.state.value)}
+													) : (
+														<DataFlowSuggestionNotice
+															fieldId="saldoACertificar"
+															currentValue={field.state.value}
+															suggestionByFieldId={dataFlowSuggestionByFieldId}
+															onDecision={onDataFlowSuggestionDecision}
+															isResolving={isResolvingDataFlowSuggestion}
+														/>
+													)}
 													{isDerivedFieldBlocked("saldoACertificar") && derivedCertificadosNotice?.warningMessage ? (
 														<p className="mt-2 text-xs text-[#b45309]">
 															{derivedCertificadosNotice.warningMessage}
@@ -1334,7 +1472,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
-													{renderDataFlowSuggestion("segunContrato", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="segunContrato"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1351,7 +1495,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
-													{renderDataFlowSuggestion("prorrogasAcordadas", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="prorrogasAcordadas"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1368,7 +1518,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
-													{renderDataFlowSuggestion("plazoTotal", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="plazoTotal"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1385,7 +1541,13 @@ export function ObraGeneralTab({
 														onBlur={field.handleBlur}
 														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
-													{renderDataFlowSuggestion("plazoTransc", field.state.value)}
+													<DataFlowSuggestionNotice
+														fieldId="plazoTransc"
+														currentValue={field.state.value}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</div>
 											)}
 										</form.Field>
@@ -1554,7 +1716,13 @@ export function ObraGeneralTab({
 																		className={SURFACE_INPUT_CLASS}
 																	/>
 																	)}
-																	{renderDataFlowSuggestion(column.id, liveValue)}
+																	<DataFlowSuggestionNotice
+																		fieldId={column.id}
+																		currentValue={liveValue}
+																		suggestionByFieldId={dataFlowSuggestionByFieldId}
+																		onDecision={onDataFlowSuggestionDecision}
+																		isResolving={isResolvingDataFlowSuggestion}
+																	/>
 																</>
 															)}
 														</form.Subscribe>
@@ -1775,30 +1943,39 @@ export function ObraGeneralTab({
 													value={formatCurrency(form.state.values.contratoMasAmpliaciones)}
 													highlighted={isContratoBlockingDerived}
 												>
-													{renderDataFlowSuggestion(
-														"contratoMasAmpliaciones",
-														form.state.values.contratoMasAmpliaciones
-													)}
+													<DataFlowSuggestionNotice
+														fieldId="contratoMasAmpliaciones"
+														currentValue={form.state.values.contratoMasAmpliaciones}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</KpiItem>
 												<KpiItem
 													label="Certificado a la fecha"
 													value={formatCurrency(form.state.values.certificadoALaFecha)}
 													highlighted={isDerivedFieldHighlighted("certificadoALaFecha")}
 												>
-													{renderDataFlowSuggestion(
-														"certificadoALaFecha",
-														form.state.values.certificadoALaFecha
-													)}
+													<DataFlowSuggestionNotice
+														fieldId="certificadoALaFecha"
+														currentValue={form.state.values.certificadoALaFecha}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</KpiItem>
 												<KpiItem
 													label="Saldo a certificar"
 													value={formatCurrency(form.state.values.saldoACertificar)}
 													highlighted={isDerivedFieldHighlighted("saldoACertificar")}
 												>
-													{renderDataFlowSuggestion(
-														"saldoACertificar",
-														form.state.values.saldoACertificar
-													)}
+													<DataFlowSuggestionNotice
+														fieldId="saldoACertificar"
+														currentValue={form.state.values.saldoACertificar}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</KpiItem>
 											</div>
 											<div className="h-px bg-[#f0f0f0]" />
@@ -1877,7 +2054,9 @@ export function ObraGeneralTab({
 											values={form.state.values}
 											isFieldDirty={isFieldDirty}
 											className="h-full"
-											renderSuggestion={renderDataFlowSuggestion}
+											suggestionByFieldId={dataFlowSuggestionByFieldId}
+											onDataFlowSuggestionDecision={onDataFlowSuggestionDecision}
+											isResolvingDataFlowSuggestion={isResolvingDataFlowSuggestion}
 										/>
 									</m.section>
 								) : null}
@@ -1897,10 +2076,13 @@ export function ObraGeneralTab({
 											value={form.state.values.designacionYUbicacion || "No especificado"}
 											highlighted={isFieldDirty("designacionYUbicacion")}
 										>
-											{renderDataFlowSuggestion(
-												"designacionYUbicacion",
-												form.state.values.designacionYUbicacion
-											)}
+											<DataFlowSuggestionNotice
+												fieldId="designacionYUbicacion"
+												currentValue={form.state.values.designacionYUbicacion}
+												suggestionByFieldId={dataFlowSuggestionByFieldId}
+												onDecision={onDataFlowSuggestionDecision}
+												isResolving={isResolvingDataFlowSuggestion}
+											/>
 										</MiniField>
 										<MiniField
 											icon={Building2}
@@ -1908,10 +2090,13 @@ export function ObraGeneralTab({
 											value={form.state.values.entidadContratante || "No especificado"}
 											highlighted={isFieldDirty("entidadContratante")}
 										>
-											{renderDataFlowSuggestion(
-												"entidadContratante",
-												form.state.values.entidadContratante
-											)}
+											<DataFlowSuggestionNotice
+												fieldId="entidadContratante"
+												currentValue={form.state.values.entidadContratante}
+												suggestionByFieldId={dataFlowSuggestionByFieldId}
+												onDecision={onDataFlowSuggestionDecision}
+												isResolving={isResolvingDataFlowSuggestion}
+											/>
 										</MiniField>
 										<MiniField
 											icon={Calendar}
@@ -1919,10 +2104,13 @@ export function ObraGeneralTab({
 											value={form.state.values.mesBasicoDeContrato || "No especificado"}
 											highlighted={isFieldDirty("mesBasicoDeContrato")}
 										>
-											{renderDataFlowSuggestion(
-												"mesBasicoDeContrato",
-												form.state.values.mesBasicoDeContrato
-											)}
+											<DataFlowSuggestionNotice
+												fieldId="mesBasicoDeContrato"
+												currentValue={form.state.values.mesBasicoDeContrato}
+												suggestionByFieldId={dataFlowSuggestionByFieldId}
+												onDecision={onDataFlowSuggestionDecision}
+												isResolving={isResolvingDataFlowSuggestion}
+											/>
 										</MiniField>
 										<MiniField
 											icon={Calendar}
@@ -1930,7 +2118,13 @@ export function ObraGeneralTab({
 											value={form.state.values.iniciacion || "No especificado"}
 											highlighted={isFieldDirty("iniciacion")}
 										>
-											{renderDataFlowSuggestion("iniciacion", form.state.values.iniciacion)}
+											<DataFlowSuggestionNotice
+												fieldId="iniciacion"
+												currentValue={form.state.values.iniciacion}
+												suggestionByFieldId={dataFlowSuggestionByFieldId}
+												onDecision={onDataFlowSuggestionDecision}
+												isResolving={isResolvingDataFlowSuggestion}
+											/>
 										</MiniField>
 										<MiniField
 											icon={Hash}
@@ -1938,7 +2132,13 @@ export function ObraGeneralTab({
 											value={`#${form.state.values.n ?? 0}`}
 											highlighted={isFieldDirty("n")}
 										>
-											{renderDataFlowSuggestion("n", form.state.values.n)}
+											<DataFlowSuggestionNotice
+												fieldId="n"
+												currentValue={form.state.values.n}
+												suggestionByFieldId={dataFlowSuggestionByFieldId}
+												onDecision={onDataFlowSuggestionDecision}
+												isResolving={isResolvingDataFlowSuggestion}
+											/>
 										</MiniField>
 										<MiniField
 											icon={Ruler}
@@ -1946,7 +2146,13 @@ export function ObraGeneralTab({
 											value={`${formatNumber(form.state.values.supDeObraM2, " m²")}`}
 											highlighted={isFieldDirty("supDeObraM2")}
 										>
-											{renderDataFlowSuggestion("supDeObraM2", form.state.values.supDeObraM2)}
+											<DataFlowSuggestionNotice
+												fieldId="supDeObraM2"
+												currentValue={form.state.values.supDeObraM2}
+												suggestionByFieldId={dataFlowSuggestionByFieldId}
+												onDecision={onDataFlowSuggestionDecision}
+												isResolving={isResolvingDataFlowSuggestion}
+											/>
 										</MiniField>
 									</div>
 								</ShellCard>
@@ -1972,7 +2178,13 @@ export function ObraGeneralTab({
 														column
 													)}
 												>
-													{renderDataFlowSuggestion(column.id, mainTableColumnValues[column.id])}
+													<DataFlowSuggestionNotice
+														fieldId={column.id}
+														currentValue={mainTableColumnValues[column.id]}
+														suggestionByFieldId={dataFlowSuggestionByFieldId}
+														onDecision={onDataFlowSuggestionDecision}
+														isResolving={isResolvingDataFlowSuggestion}
+													/>
 												</MiniField>
 											))}
 										</div>
