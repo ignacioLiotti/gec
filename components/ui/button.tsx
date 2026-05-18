@@ -24,6 +24,13 @@ const buttonVariants = cva(
           "bg-orange-primary text-[#FAF9F5] " +
           "shadow-[0_1px_3px_rgba(180,90,30,.35),0_2px_6px_rgba(180,90,30,.20),inset_0_1px_0_rgba(255,255,255,.15)] " +
           "hover:bg-orange-primary/80 hover:shadow-[0_2px_6px_rgba(180,90,30,.40),0_4px_10px_rgba(180,90,30,.25),inset_0_1px_0_rgba(255,255,255,.15)]",
+        // Peach secondary — vivid peach over warm white, burnt orange-red text (Sintesis .btn-default-secondary)
+        defaultSecondary:
+          "bg-[#FFE0CC] text-[#C43E00] " +
+          "border-[rgba(196,62,0,0.25)] " +
+          "shadow-[0_1px_3px_rgba(200,60,0,.28),0_2px_6px_rgba(200,60,0,.16),inset_0_1px_0_rgba(255,255,255,.85)] " +
+          "hover:bg-[#FFD1B3] hover:border-[rgba(196,62,0,0.34)] " +
+          "hover:shadow-[0_1px_3px_rgba(200,60,0,.36),0_4px_10px_rgba(200,60,0,.22),inset_0_1px_0_rgba(255,255,255,.90)]",
         // Dark — used for primary actions in dense app UI
         dark:
           "bg-stone-900 text-stone-50 " +

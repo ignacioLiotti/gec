@@ -5846,7 +5846,7 @@ function FileManagerContent({
         <div className="flex flex-wrap items-end justify-between gap-3">
           {/* LEFT TAB */}
           <div
-            className="relative z-10 flex items-center gap-3 border border-b-0 -mb-[2px] border-[#d9d9d9] bg-white h-full px-4 py-3 rounded-tr-md rounded-tl-xl overflow-visible"
+            className="relative z-10 flex items-center gap-3 border border-b-0 -mb-[2px] border-[#d9d9d9] bg-white h-full px-4 py-3 rounded-tr-0 rounded-tl-xl overflow-visible"
             style={
               {
                 "--notch-bg": "white",
@@ -5855,12 +5855,12 @@ function FileManagerContent({
             }
           >
             {/* Tail on the right */}
-            <NotchTail side="right" className="h-[76px] mb-[2px]" />
+            <NotchTail side="right" className="h-[57px] mb-[2px]" />
 
             {parentFolder && (
               <Button
                 type="button"
-                variant="ghost"
+                variant="defaultSecondary"
                 size="icon-sm"
                 className="shrink-0"
                 aria-label={`Volver a ${parentFolder.id === 'root' ? 'Todos los documentos' : parentFolder.name}`}
@@ -5870,11 +5870,11 @@ function FileManagerContent({
                 <ChevronLeft className="size-4" />
               </Button>
             )}
-            {selectedFolder.ocrEnabled ? (
+            {/* {selectedFolder.ocrEnabled ? (
               <Table2 className={`size-5 ${getFolderIconColor(activeFolderLink?.dataInputMethod)}`} />
             ) : (
               <Folder className="size-5 text-stone-500" />
-            )}
+            )} */}
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-baseline gap-2">
                 <h2 className="truncate text-xl font-semibold text-stone-900">
