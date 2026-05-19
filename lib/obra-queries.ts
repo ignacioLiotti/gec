@@ -305,8 +305,12 @@ export async function fetchCertificates(obraId: string): Promise<{ certificates:
 /**
  * Fetch OCR folder links for an obra
  */
-export async function fetchOcrLinks(obraId: string): Promise<OcrFolderLink[]> {
-  const response = await fetch(`/api/obras/${obraId}/tablas/ocr-links?limit=500`);
+export async function fetchOcrLinks(
+  obraId: string,
+  options?: { rowsLimit?: number }
+): Promise<OcrFolderLink[]> {
+  const rowsLimit = Math.max(1, Math.min(500, Math.round(options?.rowsLimit ?? 50)));
+  const response = await fetch(`/api/obras/${obraId}/tablas/ocr-links?limit=${rowsLimit}`);
   if (!response.ok) {
     throw new Error("Failed to load OCR links");
   }

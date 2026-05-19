@@ -174,6 +174,7 @@ function createFieldFromKey(key: string, existing?: TemplateField): TemplateFiel
     selectMode: existing?.selectMode,
     optionSource: existing?.optionSource,
     optionUnitTargetKey: existing?.optionUnitTargetKey,
+    extractionFieldKey: existing?.extractionFieldKey,
     autoPopulate: existing?.autoPopulate,
   };
 }
@@ -296,6 +297,44 @@ function getPreviewFieldValue(field: TemplateField): unknown {
           : field.label);
 }
 
+function buildDocumentFieldsReference(fields: TemplateField[]) {
+  return fields.map((field) => {
+    if (field.type === "table") {
+      return {
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        required: field.required,
+        extractionFieldKey: field.extractionFieldKey ?? null,
+        columns: (field.columns ?? []).map((column) => ({
+          key: column.key,
+          label: column.label,
+          type: column.type,
+          required: column.required,
+          extractionFieldKey: column.extractionFieldKey ?? null,
+        })),
+      };
+    }
+    return {
+      key: field.key,
+      label: field.label,
+      type: field.type,
+      required: field.required,
+      extractionFieldKey: field.extractionFieldKey ?? null,
+    };
+  });
+}
+
+function buildExtractedFieldsReference(fields: FolderFieldSuggestion[]) {
+  return fields.map((field) => ({
+    fieldKey: field.fieldKey,
+    label: field.label,
+    dataType: field.dataType,
+    required: field.required,
+    description: field.description,
+  }));
+}
+
 function getRepeatableGroups(fields: TemplateField[]) {
   const groups = new Map<string, { label: string; fields: TemplateField[] }>();
   for (const field of fields) {
@@ -308,6 +347,89 @@ function getRepeatableGroups(fields: TemplateField[]) {
     groups.set(field.repeatableGroup, current);
   }
   return Array.from(groups.entries());
+}
+
+function getExtractionFieldOptions(
+  suggestions: FolderFieldSuggestion[],
+  currentValue?: string | null,
+) {
+  const normalizedCurrent = normalizeFieldKey(currentValue ?? "");
+  const options = suggestions.map((field) => ({
+    value: normalizeFieldKey(field.fieldKey),
+    label: `${field.label} (${field.fieldKey})`,
+  }));
+  if (normalizedCurrent && !options.some((option) => option.value === normalizedCurrent)) {
+    return [{ value: normalizedCurrent, label: `${normalizedCurrent} (custom)` }, ...options];
+  }
+  return options;
+}
+
+function ExtractionFieldKeySelect({
+  value,
+  onChange,
+  suggestions,
+  fallbackKey,
+}: {
+  value?: string | null;
+  onChange: (value: string | null) => void;
+  suggestions: FolderFieldSuggestion[];
+  fallbackKey: string;
+}) {
+  const [customMode, setCustomMode] = useState(false);
+  const normalizedValue = normalizeFieldKey(value ?? "");
+  const options = getExtractionFieldOptions(suggestions, normalizedValue);
+
+  if (customMode || suggestions.length === 0) {
+    return (
+      <div className="flex gap-2">
+        <Input
+          value={normalizedValue}
+          onChange={(event) => onChange(normalizeFieldKey(event.target.value))}
+          className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+          placeholder={`Ej. ${fallbackKey}`}
+        />
+        {suggestions.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 rounded-lg"
+            onClick={() => setCustomMode(false)}
+          >
+            Lista
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-2">
+      <Select
+        value={normalizedValue || "__default__"}
+        onValueChange={(nextValue) => onChange(nextValue === "__default__" ? null : nextValue)}
+      >
+        <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+          <SelectValue placeholder="Usar variable HTML" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__default__">Usar variable HTML ({fallbackKey})</SelectItem>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-10 rounded-lg"
+        onClick={() => setCustomMode(true)}
+      >
+        Custom
+      </Button>
+    </div>
+  );
 }
 
 function escapeRegExp(value: string) {
@@ -342,7 +464,7 @@ function useDocumentTemplateConfig(workId: string) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [draft, setDraft] = useState<EditableTemplate | null>(null);
   const [expandedField, setExpandedField] = useState<string>("");
-  const [rightPanelMode, setRightPanelMode] = useState<"preview" | "html">("preview");
+  const [rightPanelMode, setRightPanelMode] = useState<"preview" | "fields" | "html">("preview");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -398,6 +520,14 @@ function useDocumentTemplateConfig(workId: string) {
       generatedAt: "29/04/2026",
     });
   }, [draft]);
+  const documentFieldsJson = useMemo(
+    () => JSON.stringify(buildDocumentFieldsReference(draft?.fields ?? []), null, 2),
+    [draft?.fields],
+  );
+  const extractedFieldsJson = useMemo(
+    () => JSON.stringify(buildExtractedFieldsReference(suggestedFields), null, 2),
+    [suggestedFields],
+  );
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -694,6 +824,7 @@ function useDocumentTemplateConfig(workId: string) {
             required: field.required,
             source: "folder",
             description: field.description ?? "",
+            extractionFieldKey: field.fieldKey,
           },
         ],
       };
@@ -801,6 +932,8 @@ function useDocumentTemplateConfig(workId: string) {
     setRightPanelMode,
     saving,
     previewHtml,
+    documentFieldsJson,
+    extractedFieldsJson,
     updateField,
     updateSelectOption,
     addSelectOption,
@@ -953,6 +1086,8 @@ export function TemplateConfigEditorPanel() {
     setRightPanelMode,
     saving,
     previewHtml,
+    documentFieldsJson,
+    extractedFieldsJson,
     updateField,
     updateSelectOption,
     addSelectOption,
@@ -1048,7 +1183,12 @@ export function TemplateConfigEditorPanel() {
             <>
 
 
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
+              <div className={cn(
+                "grid gap-6",
+                rightPanelMode === "fields"
+                  ? "xl:grid-cols-1"
+                  : "xl:grid-cols-[minmax(0,620px)_minmax(0,1fr)]",
+              )}>
                 <div className="space-y-6">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
@@ -1071,7 +1211,7 @@ export function TemplateConfigEditorPanel() {
                           )
                         }
                       >
-                        <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
+                        <SelectTrigger className="">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1154,14 +1294,14 @@ export function TemplateConfigEditorPanel() {
                             setDraft((current) =>
                               current
                                 ? {
-                                    ...current,
-                                    documentNumberFieldKey: value === "__none__" ? "" : value,
-                                    fields: current.fields.map((field) =>
-                                      field.key === value
-                                        ? { ...field, autoPopulate: "next_sequence_number" }
-                                        : field,
-                                    ),
-                                  }
+                                  ...current,
+                                  documentNumberFieldKey: value === "__none__" ? "" : value,
+                                  fields: current.fields.map((field) =>
+                                    field.key === value
+                                      ? { ...field, autoPopulate: "next_sequence_number" }
+                                      : field,
+                                  ),
+                                }
                                 : current,
                             )
                           }
@@ -1499,6 +1639,29 @@ export function TemplateConfigEditorPanel() {
                                       </div>
                                       {field.type !== "table" ? (
                                         <div className="space-y-2 md:col-span-3">
+                                          <Label>Columna de datos extraidos</Label>
+                                          <ExtractionFieldKeySelect
+                                            value={field.extractionFieldKey}
+                                            suggestions={suggestedFields}
+                                            fallbackKey={field.key}
+                                            onChange={(value) =>
+                                              updateField(index, {
+                                                extractionFieldKey: value,
+                                              })
+                                            }
+                                          />
+                                          <p className="text-xs text-stone-500">
+                                            Vincula esta variable del documento con una columna de la tabla extraida. Si se deja vacio, se usa la variable HTML.
+                                          </p>
+                                          {draft.targetFolderPath ? null : (
+                                            <p className="text-xs text-amber-700">
+                                              Selecciona una carpeta destino para ver sus columnas extraidas.
+                                            </p>
+                                          )}
+                                        </div>
+                                      ) : null}
+                                      {field.type !== "table" ? (
+                                        <div className="space-y-2 md:col-span-3">
                                           <Label>Autocompletar</Label>
                                           <Select
                                             value={field.autoPopulate ?? "none"}
@@ -1767,6 +1930,27 @@ export function TemplateConfigEditorPanel() {
                                                       placeholder="Opcional"
                                                     />
                                                   </div>
+                                                  <div className="space-y-1 md:col-span-2">
+                                                    <Label>Columna de datos extraidos</Label>
+                                                    <ExtractionFieldKeySelect
+                                                      value={column.extractionFieldKey}
+                                                      suggestions={suggestedFields}
+                                                      fallbackKey={column.key}
+                                                      onChange={(value) =>
+                                                        updateTableColumn(index, columnIndex, {
+                                                          extractionFieldKey: value,
+                                                        })
+                                                      }
+                                                    />
+                                                    <p className="text-xs text-stone-500">
+                                                      Vincula esta columna del detalle con una columna de la tabla extraida.
+                                                    </p>
+                                                    {draft.targetFolderPath ? null : (
+                                                      <p className="text-xs text-amber-700">
+                                                        Selecciona una carpeta destino para ver sus columnas extraidas.
+                                                      </p>
+                                                    )}
+                                                  </div>
                                                 </div>
                                                 {column.type === "select" ? (
                                                   <div className="mt-3 rounded-md border border-stone-200 bg-white p-3">
@@ -1975,9 +2159,14 @@ export function TemplateConfigEditorPanel() {
 
                 </div>
 
-                <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+                <div className={cn(
+                  "space-y-3",
+                  rightPanelMode === "fields" ? "" : "xl:sticky xl:top-4 xl:self-start",
+                )}>
                   <div className="flex items-center justify-between gap-3">
-                    <Label>{rightPanelMode === "preview" ? "Preview" : "HTML"}</Label>
+                    <Label>
+                      {rightPanelMode === "preview" ? "Preview" : rightPanelMode === "html" ? "HTML" : "Campos"}
+                    </Label>
                     <div className="inline-flex rounded-full border border-stone-200 bg-stone-50 p-1">
                       <Button
                         type="button"
@@ -1987,6 +2176,15 @@ export function TemplateConfigEditorPanel() {
                         className="h-8 rounded-full"
                       >
                         Preview
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={rightPanelMode === "fields" ? "secondary" : "ghost"}
+                        size="sm"
+                        onClick={() => setRightPanelMode("fields")}
+                        className="h-8 rounded-full"
+                      >
+                        Campos
                       </Button>
                       <Button
                         type="button"
@@ -2005,7 +2203,7 @@ export function TemplateConfigEditorPanel() {
                         <div className="" dangerouslySetInnerHTML={{ __html: previewHtml }} />
                       </div>
                     </div>
-                  ) : (
+                  ) : rightPanelMode === "html" ? (
                     <div className="space-y-2 rounded-xl border border-stone-200 bg-white p-4 shadow-[var(--shadow-card)]">
                       <Textarea
                         rows={28}
@@ -2018,6 +2216,65 @@ export function TemplateConfigEditorPanel() {
                       <p className="text-xs text-stone-500">
                         Variables simples: `{"{{campo}}"}`. Tablas repetibles: `{"{{#items}}"}...{"{{/items}}"}`.
                       </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-[var(--shadow-card)] lg:grid-cols-2">
+                      <div className="min-w-0 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-stone-950">Campos del documento</p>
+                            <p className="text-xs text-stone-500">Variables HTML y mapeos actuales.</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-md"
+                            onClick={() => void navigator.clipboard.writeText(documentFieldsJson).then(
+                              () => toast.success("Campos del documento copiados."),
+                              () => toast.error("No se pudieron copiar los campos."),
+                            )}
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copiar
+                          </Button>
+                        </div>
+                        <Textarea
+                          readOnly
+                          value={documentFieldsJson}
+                          className="min-h-[640px] rounded-xl border-stone-200 bg-stone-50 font-mono text-xs shadow-none"
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-stone-950">Columnas extraidas</p>
+                            <p className="text-xs text-stone-500">
+                              {draft.targetFolderPath
+                                ? `Carpeta: ${draft.targetFolderPath}`
+                                : "Selecciona una carpeta destino para ver columnas."}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-md"
+                            onClick={() => void navigator.clipboard.writeText(extractedFieldsJson).then(
+                              () => toast.success("Columnas extraidas copiadas."),
+                              () => toast.error("No se pudieron copiar las columnas."),
+                            )}
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copiar
+                          </Button>
+                        </div>
+                        <Textarea
+                          readOnly
+                          value={extractedFieldsJson}
+                          className="min-h-[640px] rounded-xl border-stone-200 bg-stone-50 font-mono text-xs shadow-none"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>

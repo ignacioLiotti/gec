@@ -241,15 +241,13 @@ export default function DesktopExcelPageClient({
 	initialObras,
 	initialLoadMode,
 }: ExcelPageClientProps) {
-	const router = useRouter();
-	const { replace } = router;
+	const { replace } = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
 	const [isImporting, setIsImporting] = useState(false);
-	const [mainTableColumnsConfig] = useState<MainTableColumnConfig[] | null>(
-		initialMainTableColumnsConfig as MainTableColumnConfig[] | null
-	);
+	const mainTableColumnsConfig =
+		initialMainTableColumnsConfig as MainTableColumnConfig[] | null;
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 	const [previewRows, setPreviewRows] = useState<CsvPreviewRow[]>([]);
@@ -308,7 +306,7 @@ export default function DesktopExcelPageClient({
 		params.delete("tourStage");
 		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
 		replace(nextUrl, { scroll: false });
-	}, [pathname, router, searchParams]);
+	}, [pathname, replace, searchParams]);
 
 	useEffect(() => {
 		setHydratedRows(initialObras.map(mapObraToDetailRow));
@@ -324,7 +322,6 @@ export default function DesktopExcelPageClient({
 			: {
 				...baseConfig,
 				defaultRows: hydratedRows,
-				fetchAfterDefaultRows: true,
 			};
 	}, [hydratedRows, mainTableColumnsConfig]);
 

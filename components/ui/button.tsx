@@ -59,6 +59,15 @@ const buttonVariants = cva(
           "bg-red-50 text-red-700 border-red-200 " +
           "shadow-[0_1px_2px_rgba(150,30,35,.08),inset_0_1px_0_rgba(255,255,255,.60)] " +
           "hover:bg-red-100",
+        // Success — solid green CTA (Sintesis tn-success-solid)
+        success:
+          "bg-[#2E7D4F] text-[#F2FBF5] border-[rgba(0,0,0,0.18)] " +
+          "shadow-[0_1px_3px_rgba(30,100,55,.38),0_2px_6px_rgba(30,100,55,.22),inset_0_1px_0_rgba(255,255,255,.18)] " +
+          "hover:bg-[#276B44] hover:shadow-[0_2px_6px_rgba(30,100,55,.40),0_4px_10px_rgba(30,100,55,.25),inset_0_1px_0_rgba(255,255,255,.18)]",
+        successSecondary:
+          "bg-green-50 text-green-700 border-green-200 " +
+          "shadow-[0_1px_2px_rgba(30,150,35,.08),inset_0_1px_0_rgba(255,255,255,.60)] " +
+          "hover:bg-green-100",
         // Ghost — no background, hover fill
         ghost:
           "border-transparent bg-transparent text-stone-700 shadow-none " +

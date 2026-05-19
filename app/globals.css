@@ -46,8 +46,8 @@
 	--radius-xl: calc(var(--radius) + 4px);
 
 	/* Sintesis DS — typography scale */
-	--text-xs: 0.6875rem;   /* 11px — dense labels, badges */
-	--text-sm: 0.8125rem;   /* 13px — default UI text */
+	--text-xs: 0.6875rem; /* 11px — dense labels, badges */
+	--text-sm: 0.8125rem; /* 13px — default UI text */
 
 	--color-orange-primary: #ff5800;
 
@@ -184,6 +184,7 @@
 .report-paper {
 	width: 210mm;
 	max-width: 100%;
+	--document-oc-font-size: 8.5px;
 	box-sizing: border-box;
 	background: #f7f7f8;
 	color: #1f2328;
@@ -193,11 +194,15 @@
 		inset 0 0 60px 0 rgba(120, 128, 138, 0.06);
 	border: 1px solid #d5d7dd;
 	position: relative;
-	font-size: 11px;
+	font-size: 14px;
 	line-height: 1.6;
 	display: inline-block;
 	height: fit-content;
 	align-self: flex-start;
+}
+
+.report-paper .oc {
+	font-size: var(--oc-font-size, var(--document-oc-font-size, 8.5px)) !important;
 }
 
 .report-preview-container {
@@ -208,7 +213,7 @@
 	display: block;
 	width: 100%;
 	max-width: none;
-	font-size: clamp(7px, 1.55cqw, 11px);
+	font-size: 20px;
 	line-height: 1.45;
 	overflow: hidden;
 }
@@ -461,17 +466,41 @@
 
 .inline-document-editor .inline-doc-combobox .inline-doc-field {
 	width: 100%;
-	padding-right: 18px;
+	padding-right: 32px;
+}
+
+.inline-document-editor .inline-doc-combobox .inline-doc-combo-select {
+	position: absolute;
+	inset: 0 0 0 auto;
+	z-index: 2;
+	width: 32px;
+	min-width: 32px;
+	height: 100%;
+	border: 0;
+	border-bottom: 1px solid rgba(120, 113, 108, 0.38);
+	background: transparent;
+	color: transparent;
+	padding: 0;
+	cursor: pointer;
+}
+
+.inline-document-editor .inline-doc-combobox .inline-doc-combo-select:focus {
+	box-shadow: none !important;
+}
+
+.inline-document-editor .inline-doc-combobox .inline-doc-combo-select option {
+	color: #111827;
 }
 
 .inline-document-editor .inline-doc-combobox-arrow {
 	pointer-events: none;
 	position: absolute;
-	right: 3px;
+	right: 5px;
 	top: 50%;
 	transform: translateY(-48%);
-	color: #78716c;
-	font-size: 0.9em;
+	color: #57534e;
+	font-size: 1.05em;
+	font-weight: 700;
 	line-height: 1;
 }
 

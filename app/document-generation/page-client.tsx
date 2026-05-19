@@ -1,14 +1,13 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Building2,
   CalendarDays,
   Check,
-  ChevronsUpDown,
   Copy,
   Download,
   Eye,
@@ -37,10 +36,12 @@ import {
   escapeHtml,
   renderDocumentHtml,
   type TemplateField,
+  type TemplateSelectOption,
   validateTemplateInput,
   type ValidationError,
 } from "@/lib/document-generation";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
@@ -63,6 +64,9 @@ type BootstrapResponse = {
   works: WorkOption[];
   folderConfigs: FolderConfig[];
   templates: DocumentTemplateSummary[];
+  dynamicOptions?: {
+    tenantUsers?: TemplateSelectOption[];
+  };
   context: {
     workId: string | null;
     workLabel: string | null;
@@ -146,6 +150,16 @@ type ValidationIssue = {
   message: string;
 };
 
+type DynamicFieldOptions = {
+  tenantUsers: TemplateSelectOption[];
+};
+
+type OptionAddition = {
+  fieldKey: string;
+  tableKey?: string;
+  option: TemplateSelectOption;
+};
+
 function getRepeatableGroups(fields: TemplateField[]): RepeatableGroupDescriptor[] {
   const groups = new Map<string, { label: string; fields: TemplateField[] }>();
 
@@ -176,6 +190,122 @@ function getRepeatableGroups(fields: TemplateField[]): RepeatableGroupDescriptor
 
 function createRepeatableRow(fields: TemplateField[]) {
   return Object.fromEntries(fields.map((field) => [field.key, field.defaultValue ?? ""]));
+}
+
+function mergeSelectOptions(...groups: Array<TemplateSelectOption[] | undefined>) {
+  const seen = new Set<string>();
+  const options: TemplateSelectOption[] = [];
+  for (const group of groups) {
+    for (const option of group ?? []) {
+      const value = String(option.value ?? "").trim();
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      options.push({
+        value,
+        label: option.label?.trim() || value,
+        unit: option.unit ?? null,
+      });
+    }
+  }
+  return options;
+}
+
+function resolveFieldDynamicOptions(field: TemplateField, dynamicOptions: DynamicFieldOptions): TemplateField {
+  const resolvedOptions =
+    field.type === "select" && field.optionSource === "tenant_users"
+      ? mergeSelectOptions(dynamicOptions.tenantUsers, field.options)
+      : field.options;
+
+  return {
+    ...field,
+    options: resolvedOptions,
+    columns: field.columns?.map((column) => resolveFieldDynamicOptions(column, dynamicOptions)),
+  };
+}
+
+function getSelectControlOptions(field: TemplateField, value: unknown) {
+  const options = (field.options ?? []).map((option) => ({
+    value: option.value,
+    label: option.label,
+  }));
+  const currentValue = String(value ?? "").trim();
+  if (currentValue && !options.some((option) => option.value === currentValue)) {
+    return [{ value: currentValue, label: currentValue }, ...options];
+  }
+  return options;
+}
+
+function hasKnownSelectOption(field: TemplateField, value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  return (field.options ?? []).some(
+    (option) =>
+      option.value.trim().toLowerCase() === normalized ||
+      option.label.trim().toLowerCase() === normalized,
+  );
+}
+
+function collectCreatableOptionAdditions(fields: TemplateField[], inputData: Record<string, unknown>) {
+  const additions: OptionAddition[] = [];
+  const addFieldValue = (field: TemplateField, value: unknown, tableKey?: string) => {
+    if (field.type !== "select" || field.selectMode !== "creatable") return;
+    const rawValue = String(value ?? "").trim();
+    if (!rawValue || hasKnownSelectOption(field, rawValue)) return;
+    additions.push({
+      fieldKey: field.key,
+      tableKey,
+      option: {
+        label: rawValue,
+        value: rawValue,
+      },
+    });
+  };
+
+  for (const field of fields) {
+    if (field.type === "table") {
+      const rows = readRepeatableRows(inputData, field.key);
+      for (const row of rows) {
+        if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+        const rowData = row as Record<string, unknown>;
+        for (const column of field.columns ?? []) {
+          addFieldValue(column, rowData[column.key], field.key);
+        }
+      }
+      continue;
+    }
+    if (field.repeatableGroup) continue;
+    addFieldValue(field, inputData[field.key]);
+  }
+
+  return additions;
+}
+
+function applyOptionAdditionsToFields(fields: TemplateField[], additions: OptionAddition[]) {
+  const addToField = (field: TemplateField, tableKey?: string): TemplateField => {
+    if (field.type !== "select") return field;
+    const matching = additions.filter(
+      (addition) =>
+        addition.fieldKey === field.key &&
+        (!addition.tableKey || !tableKey || addition.tableKey === tableKey),
+    );
+    if (matching.length === 0) return field;
+    return {
+      ...field,
+      options: mergeSelectOptions(field.options, matching.map((addition) => addition.option)),
+    };
+  };
+
+  return fields.map((field) => {
+    if (field.type === "table") {
+      return {
+        ...field,
+        columns: (field.columns ?? []).map((column) => addToField(column, field.key)),
+      };
+    }
+    return addToField(field);
+  });
 }
 
 function readRepeatableRows(inputData: Record<string, unknown>, groupKey: string) {
@@ -314,6 +444,10 @@ function collectRenderedFieldKeys(templateHtml: string, fields: TemplateField[])
   return rendered;
 }
 
+function buildInlineDatalistId(errorKey: string) {
+  return `inline-doc-options-${errorKey.replace(/[^a-zA-Z0-9_-]+/g, "_")}`;
+}
+
 function renderInlineFieldControl(
   field: TemplateField,
   value: unknown,
@@ -343,10 +477,21 @@ function renderInlineFieldControl(
   const label = escapeHtml(field.label);
   const currentValue = escapeHtml(value ?? "");
 
-  if (field.type === "select" && field.options?.length) {
+  if (field.type === "select" && field.selectMode === "creatable") {
+    const datalistId = buildInlineDatalistId(errorKey);
+    const options = (field.options ?? [])
+      .map((option) => `<option value="${escapeHtml(option.value)}" label="${escapeHtml(option.label)}"></option>`)
+      .join("");
+    return [
+      `<input class="${escapeHtml(className)} inline-doc-combobox-input" ${dataAttrs} ${required} aria-label="${label}" type="text" list="${datalistId}" value="${currentValue}" />`,
+      `<datalist id="${datalistId}">${options}</datalist>`,
+    ].join("");
+  }
+
+  if (field.type === "select") {
     const options = [
       `<option value="">${label}</option>`,
-      ...field.options.map((option) => {
+      ...(field.options ?? []).map((option) => {
         const selected = String(value ?? "") === option.value ? "selected" : "";
         return `<option value="${escapeHtml(option.value)}" ${selected}>${escapeHtml(option.label)}</option>`;
       }),
@@ -467,7 +612,7 @@ function iconForContextField(kind: "work" | "type" | "folder" | "template") {
 
 function controlBaseClass(error?: boolean) {
   return cn(
-    "h-11 w-full rounded-md border bg-white px-3 text-sm text-stone-900 outline-none transition",
+    "h-11 w-full min-w-0 max-w-full rounded-md border bg-white px-3 text-sm text-stone-900 outline-none transition",
     "placeholder:text-stone-400 focus:border-[#ff5800] focus:ring-4 focus:ring-[#ff5800]/10",
     error ? "border-red-200" : "border-stone-200",
   );
@@ -596,7 +741,7 @@ function FormField({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("min-w-0 space-y-2", className)}>
       <label className="flex items-center gap-1 text-[12px] font-semibold text-stone-800">
         {label}
         {required ? <span className="text-[#ff5800]">*</span> : null}
@@ -619,6 +764,7 @@ function NativeSelect({
   onChange,
   options,
   placeholder,
+  emptyPlaceholder,
   icon,
   error,
   disabled,
@@ -627,35 +773,44 @@ function NativeSelect({
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   placeholder?: string;
+  emptyPlaceholder?: string;
   icon?: React.ReactNode;
   error?: boolean;
   disabled?: boolean;
 }) {
+  const hasOptions = options.length > 0;
+  const isDisabled = disabled || !hasOptions;
+  const resolvedPlaceholder = hasOptions ? placeholder : (emptyPlaceholder ?? "Sin opciones disponibles");
+
   return (
-    <div className="relative">
-      {icon ? (
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-500">
-          {icon}
-        </span>
-      ) : null}
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        disabled={disabled}
-        className={cn(
-          controlBaseClass(error),
-          "appearance-none pr-10 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500",
-          icon ? "pl-9" : "pl-3",
-        )}
-      >
-        {placeholder ? <option value="">{placeholder}</option> : null}
-        {options.map((option) => (
-          <option key={`${option.value}-${option.label}`} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronsUpDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+    <div className="min-w-0 max-w-full">
+      <Select value={value || undefined} onValueChange={onChange} disabled={isDisabled}>
+        <SelectTrigger
+          className={cn(
+            controlBaseClass(error),
+            "relative min-w-0 max-w-full justify-between disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500",
+            icon ? "pl-9" : "pl-3",
+          )}
+        >
+          {icon ? (
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-500">
+              {icon}
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1 truncate text-left">
+            <SelectValue placeholder={resolvedPlaceholder} />
+          </span>
+        </SelectTrigger>
+        {hasOptions ? (
+          <SelectContent align="start">
+            {options.map((option) => (
+              <SelectItem key={`${option.value}-${option.label}`} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        ) : null}
+      </Select>
     </div>
   );
 }
@@ -696,37 +851,70 @@ function TextInput({
 }
 
 function CreatableCombobox({
-  fieldKey,
   value,
   onChange,
   options,
   placeholder,
   error,
 }: {
-  fieldKey: string;
   value: string;
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   placeholder?: string;
   error?: boolean;
 }) {
-  const listId = `document-field-options-${fieldKey}`;
+  const [open, setOpen] = useState(false);
+  const normalizedValue = value.trim().toLowerCase();
+  const filteredOptions = options.filter((option) => {
+    if (!normalizedValue) return true;
+    return (
+      option.label.toLowerCase().includes(normalizedValue) ||
+      option.value.toLowerCase().includes(normalizedValue)
+    );
+  });
+
   return (
-    <div>
+    <div className="relative">
       <input
-        list={listId}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         placeholder={placeholder}
-        className={cn(controlBaseClass(error), "pl-3")}
+        className={cn(controlBaseClass(error), "pr-10 pl-3")}
       />
-      <datalist id={listId}>
-        {options.map((option) => (
-          <option key={`${option.value}-${option.label}`} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </datalist>
+      <button
+        type="button"
+        className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded text-stone-500 hover:bg-stone-100"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          setOpen((current) => !current);
+        }}
+        aria-label="Mostrar opciones"
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open && filteredOptions.length > 0 ? (
+        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-stone-200 bg-white p-1 shadow-lg">
+          {filteredOptions.map((option) => (
+            <button
+              key={`${option.value}-${option.label}`}
+              type="button"
+              className="block w-full truncate rounded-md px-3 py-2 text-left text-sm text-stone-800 hover:bg-stone-100"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -761,15 +949,24 @@ export function DocumentGenerationPageClient({
 }) {
   const router = useRouter();
   const { push, replace } = router;
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const queryParams = new URLSearchParams(searchParams);
-  const getSearchParam = (key: string): string | null => queryParams.get(key);
+  const [initialQuery] = useState(() => {
+    const queryParams = new URLSearchParams(searchParams);
+    return {
+      workId: queryParams.get("workId") ?? "",
+      folderPath: queryParams.get("folder") ?? queryParams.get("folderPath") ?? "",
+      documentType: normalizeDocumentType(queryParams.get("documentType")),
+      draftId: queryParams.get("draftId") ?? "",
+      generatedId: queryParams.get("generatedId") ?? "",
+    };
+  });
 
-  const initialWorkId = getSearchParam("workId") ?? "";
-  const initialFolderPath = getSearchParam("folder") ?? getSearchParam("folderPath") ?? "";
-  const initialDocumentType = normalizeDocumentType(getSearchParam("documentType"));
-  const initialDraftId = getSearchParam("draftId") ?? "";
-  const initialGeneratedId = getSearchParam("generatedId") ?? "";
+  const initialWorkId = initialQuery.workId;
+  const initialFolderPath = initialQuery.folderPath;
+  const initialDocumentType = initialQuery.documentType;
+  const initialDraftId = initialQuery.draftId;
+  const initialGeneratedId = initialQuery.generatedId;
 
   const [workId, setWorkId] = useState(initialWorkId);
   const [folderPath, setFolderPath] = useState(initialFolderPath);
@@ -780,6 +977,7 @@ export function DocumentGenerationPageClient({
   const [existingSequenceCount, setExistingSequenceCount] = useState(0);
   const [folderConfigs, setFolderConfigs] = useState<FolderConfig[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);
+  const [dynamicOptions, setDynamicOptions] = useState<DynamicFieldOptions>({ tenantUsers: [] });
   const [inputData, setInputData] = useState<Record<string, unknown>>({});
   const [draftId, setDraftId] = useState<string>(initialDraftId);
   const [editingGeneratedId, setEditingGeneratedId] = useState<string>(initialGeneratedId);
@@ -794,6 +992,8 @@ export function DocumentGenerationPageClient({
   const [previewZoom, setPreviewZoom] = useState(112);
   const [showValidationReview, setShowValidationReview] = useState(false);
   const [editorMode, setEditorMode] = useState<"inline" | "form">("inline");
+  const inlineDocumentRootRef = useRef<HTMLDivElement | null>(null);
+  const inlineInputDataRef = useRef<Record<string, unknown>>({});
 
   const loadBootstrap = useCallback(
     async (
@@ -803,11 +1003,9 @@ export function DocumentGenerationPageClient({
       setLoading(true);
       try {
         const query = new URLSearchParams();
-        if (params?.workId ?? workId) query.set("workId", params?.workId ?? workId);
-        if (params?.folderPath ?? folderPath) query.set("folderPath", params?.folderPath ?? folderPath);
-        if (params?.documentType ?? documentType) {
-          query.set("documentType", params?.documentType ?? String(documentType));
-        }
+        if (params?.workId) query.set("workId", params.workId);
+        if (params?.folderPath) query.set("folderPath", params.folderPath);
+        if (params?.documentType) query.set("documentType", params.documentType);
 
         const response = await fetch(`/api/document-generation/bootstrap?${query.toString()}`);
         const payload = (await response.json()) as BootstrapResponse & { error?: string };
@@ -820,7 +1018,8 @@ export function DocumentGenerationPageClient({
         setExistingSequenceCount(payload.context.existingSequenceCount ?? payload.context.existingDocumentCount ?? 0);
         setFolderConfigs(payload.folderConfigs);
         setTemplates(payload.templates);
-        setFolderPath(payload.context.folderPath ?? (params?.folderPath ?? folderPath));
+        setDynamicOptions({ tenantUsers: payload.dynamicOptions?.tenantUsers ?? [] });
+        setFolderPath(payload.context.folderPath ?? (params?.folderPath ?? ""));
         setDocumentType(payload.context.documentType ?? "");
         setTemplateId(options?.templateId ?? payload.context.selectedTemplate?.id ?? "");
         setInputData((current) =>
@@ -834,7 +1033,7 @@ export function DocumentGenerationPageClient({
         setLoading(false);
       }
     },
-    [documentType, folderPath, workId],
+    [],
   );
 
   useEffect(() => {
@@ -958,9 +1157,10 @@ export function DocumentGenerationPageClient({
     return () => {
       cancelled = true;
     };
-  }, [initialDocumentType, initialDraftId, initialFolderPath, initialGeneratedId, initialWorkId, loadBootstrap, router]);
+  }, [initialDocumentType, initialDraftId, initialFolderPath, initialGeneratedId, initialWorkId, loadBootstrap, replace]);
 
   useEffect(() => {
+    if (pathname !== "/document-generation") return;
     const query = new URLSearchParams();
     if (workId) query.set("workId", workId);
     if (folderPath) query.set("folder", folderPath);
@@ -968,27 +1168,63 @@ export function DocumentGenerationPageClient({
     if (draftId) query.set("draftId", draftId);
     if (editingGeneratedId) query.set("generatedId", editingGeneratedId);
     const next = query.toString();
+    if (searchParams.toString() === next) return;
     replace(`/document-generation${next ? `?${next}` : ""}`, { scroll: false });
-  }, [documentType, draftId, editingGeneratedId, folderPath, router, workId]);
+  }, [documentType, draftId, editingGeneratedId, folderPath, pathname, replace, searchParams, workId]);
+
+  useEffect(() => {
+    inlineInputDataRef.current = inputData;
+  }, [inputData]);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === templateId) ?? null,
     [templateId, templates],
   );
+  const selectedTemplateFields = useMemo(
+    () => selectedTemplate?.schema.fields.map((field) => resolveFieldDynamicOptions(field, dynamicOptions)) ?? [],
+    [dynamicOptions, selectedTemplate],
+  );
 
   const visibleFolderOptions = useMemo(() => {
     if (!documentType) return folderConfigs;
-    return folderConfigs.filter((config) => config.allowedDocumentTypes.includes(documentType));
+    return folderConfigs.filter(
+      (config) => config.allowedDocumentTypes.length === 0 || config.allowedDocumentTypes.includes(documentType),
+    );
   }, [documentType, folderConfigs]);
+  const documentTypeOptions = useMemo(() => {
+    const selectedFolderConfig = folderConfigs.find((config) => config.path === folderPath) ?? null;
+    const configuredTypes = new Set<DocumentType>();
+    const sourceTypes =
+      selectedFolderConfig?.allowedDocumentTypes.length
+        ? selectedFolderConfig.allowedDocumentTypes
+        : folderConfigs.flatMap((config) => config.allowedDocumentTypes);
+
+    for (const configuredType of sourceTypes) {
+      configuredTypes.add(configuredType);
+    }
+    if (configuredTypes.size === 0) {
+      for (const template of templates) {
+        configuredTypes.add(template.documentType);
+      }
+    }
+    if (documentType) {
+      configuredTypes.add(documentType);
+    }
+
+    return Array.from(configuredTypes).map((value) => ({
+      value,
+      label: DOCUMENT_TYPE_LABELS[value] ?? value,
+    }));
+  }, [documentType, folderConfigs, folderPath, templates]);
 
   const standaloneFields = useMemo(
-    () => selectedTemplate?.schema.fields.filter((field) => !field.repeatableGroup && field.type !== "table") ?? [],
-    [selectedTemplate],
+    () => selectedTemplateFields.filter((field) => !field.repeatableGroup && field.type !== "table"),
+    [selectedTemplateFields],
   );
 
   const repeatableGroups = useMemo(
-    () => getRepeatableGroups(selectedTemplate?.schema.fields ?? []),
-    [selectedTemplate],
+    () => getRepeatableGroups(selectedTemplateFields),
+    [selectedTemplateFields],
   );
   const deferredInputData = useDeferredValue(inputData);
 
@@ -1018,7 +1254,7 @@ export function DocumentGenerationPageClient({
     const currentWorkLabel = works.find((work) => work.id === workId)?.label ?? "";
     return renderEditableDocumentHtml(
       selectedTemplate.contentHtml,
-      selectedTemplate.schema.fields,
+      selectedTemplateFields,
       inputData,
       {
         workName: currentWorkLabel,
@@ -1026,11 +1262,11 @@ export function DocumentGenerationPageClient({
       },
       invalidInlineFieldKeys,
     );
-  }, [inputData, invalidInlineFieldKeys, selectedTemplate, workId, works]);
+  }, [inputData, invalidInlineFieldKeys, selectedTemplate, selectedTemplateFields, workId, works]);
 
   const templateTokens = useMemo(
-    () => collectRenderedFieldKeys(selectedTemplate?.contentHtml ?? "", selectedTemplate?.schema.fields ?? []),
-    [selectedTemplate],
+    () => collectRenderedFieldKeys(selectedTemplate?.contentHtml ?? "", selectedTemplateFields),
+    [selectedTemplate, selectedTemplateFields],
   );
 
   const pendingFieldCount = useMemo(() => {
@@ -1066,21 +1302,39 @@ export function DocumentGenerationPageClient({
 
   const handleDocumentTypeChange = async (value: string) => {
     const nextType = normalizeDocumentType(value) ?? "";
+    const nextFolderPath =
+      nextType && folderPath
+        ? folderConfigs.find((config) => config.path === folderPath)?.allowedDocumentTypes ?? []
+        : [];
+    const shouldKeepFolder =
+      !nextType ||
+      !folderPath ||
+      nextFolderPath.length === 0 ||
+      nextFolderPath.includes(nextType);
+    const resolvedFolderPath = shouldKeepFolder ? folderPath : "";
     setDocumentType(nextType);
+    setFolderPath(resolvedFolderPath);
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
     setValidationErrors([]);
-    await loadBootstrap({ workId, folderPath, documentType: nextType || undefined });
+    await loadBootstrap({ workId, folderPath: resolvedFolderPath, documentType: nextType || undefined });
   };
 
   const handleFolderChange = async (value: string) => {
+    const nextFolderConfig = folderConfigs.find((config) => config.path === value) ?? null;
+    const nextDocumentType =
+      documentType &&
+        (!nextFolderConfig?.allowedDocumentTypes.length || nextFolderConfig.allowedDocumentTypes.includes(documentType))
+        ? documentType
+        : "";
     setFolderPath(value);
+    setDocumentType(nextDocumentType);
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
     setValidationErrors([]);
-    await loadBootstrap({ workId, folderPath: value, documentType: documentType || undefined });
+    await loadBootstrap({ workId, folderPath: value, documentType: nextDocumentType || undefined });
   };
 
   const handleTemplateChange = (value: string) => {
@@ -1099,20 +1353,14 @@ export function DocumentGenerationPageClient({
   };
 
   const handleFieldChange = (field: TemplateField, value: string) => {
-    setInputData((current) => ({
+    setInputData((current) => (current[field.key] === value ? current : {
       ...current,
       [field.key]: value,
     }));
-    setValidationErrors((current) => current.filter((error) => error.key !== field.key));
-  };
-
-  const handleInlineFieldChange = (field: TemplateField, value: string, token?: string) => {
-    setInputData((current) => ({
-      ...current,
-      [field.key]: value,
-      ...(token && token !== field.key ? { [token]: value } : {}),
-    }));
-    setValidationErrors((current) => current.filter((error) => error.key !== field.key));
+    setValidationErrors((current) => {
+      const next = current.filter((error) => error.key !== field.key);
+      return next.length === current.length ? current : next;
+    });
   };
 
   const handleRepeatableFieldChange = (
@@ -1134,36 +1382,108 @@ export function DocumentGenerationPageClient({
             row && typeof row === "object" && !Array.isArray(row)
               ? (row as Record<string, unknown>)
               : {};
-          return index === rowIndex
-            ? { ...rowData, [field.key]: value, ...(token && token !== field.key ? { [token]: value } : {}) }
-            : rowData;
+          if (index !== rowIndex) return rowData;
+          const tokenMatches = !token || token === field.key || rowData[token] === value;
+          if (rowData[field.key] === value && tokenMatches) return rowData;
+          return { ...rowData, [field.key]: value, ...(token && token !== field.key ? { [token]: value } : {}) };
         }),
       };
     });
-    setValidationErrors((current) =>
-      current.filter((error) => error.key !== `${groupKey}.${rowIndex}.${field.key}` && error.key !== groupKey),
-    );
+    setValidationErrors((current) => {
+      const next = current.filter((error) => error.key !== `${groupKey}.${rowIndex}.${field.key}` && error.key !== groupKey);
+      return next.length === current.length ? current : next;
+    });
   };
 
-  const handleInlineDocumentCommit = (event: FormEvent<HTMLDivElement>) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+  const buildInlineDraftData = useCallback((
+    target: HTMLInputElement | HTMLSelectElement,
+    nextValue: string,
+  ) => {
     const fieldKey = target.dataset.inlineField;
-    if (!fieldKey) return;
+    if (!fieldKey) return null;
     const token = target.dataset.inlineToken;
     const groupKey = target.dataset.inlineGroup;
     const rowIndex = Number(target.dataset.inlineRow ?? "");
-    const field = selectedTemplate?.schema.fields.find((entry) => entry.key === fieldKey);
+    const field = selectedTemplateFields.find((entry) => entry.key === fieldKey);
     const groupField = groupKey
       ? repeatableGroups.find((group) => group.key === groupKey)?.fields.find((entry) => entry.key === fieldKey)
       : null;
     const targetField = groupField ?? field;
-    if (!targetField) return;
+    if (!targetField) return null;
+
+    const current = inlineInputDataRef.current;
     if (groupKey && Number.isInteger(rowIndex)) {
-      handleRepeatableFieldChange(groupKey, rowIndex, targetField, target.value, token);
+      const rows = readRepeatableRows(current, groupKey).slice();
+      while (rows.length <= rowIndex) {
+        rows.push({});
+      }
+      return {
+        changedFieldKey: targetField.key,
+        changedErrorKeys: [`${groupKey}.${rowIndex}.${targetField.key}`, groupKey],
+        data: {
+          ...current,
+          [groupKey]: rows.map((row, index) => {
+            const rowData =
+              row && typeof row === "object" && !Array.isArray(row)
+                ? (row as Record<string, unknown>)
+                : {};
+            if (index !== rowIndex) return rowData;
+            const tokenMatches = !token || token === targetField.key || rowData[token] === nextValue;
+            if (rowData[targetField.key] === nextValue && tokenMatches) return rowData;
+            return { ...rowData, [targetField.key]: nextValue, ...(token && token !== targetField.key ? { [token]: nextValue } : {}) };
+          }),
+        },
+      };
+    }
+
+    const tokenMatches = !token || token === targetField.key || current[token] === nextValue;
+    return {
+      changedFieldKey: targetField.key,
+      changedErrorKeys: [targetField.key],
+      data:
+        current[targetField.key] === nextValue && tokenMatches
+          ? current
+          : {
+            ...current,
+            [targetField.key]: nextValue,
+            ...(token && token !== targetField.key ? { [token]: nextValue } : {}),
+          },
+    };
+  }, [repeatableGroups, selectedTemplateFields]);
+
+  const syncInlineDraftValue = useCallback((target: HTMLInputElement | HTMLSelectElement, nextValue: string) => {
+    const next = buildInlineDraftData(target, nextValue);
+    if (!next) return null;
+    inlineInputDataRef.current = next.data;
+    return next;
+  }, [buildInlineDraftData]);
+
+  const flushInlineDraftData = useCallback((changedErrorKeys: string[] = []) => {
+    const nextData = inlineInputDataRef.current;
+    setInputData((current) => (current === nextData ? current : nextData));
+    if (changedErrorKeys.length === 0) return;
+    setValidationErrors((current) => {
+      const next = current.filter((error) => !changedErrorKeys.includes(error.key));
+      return next.length === current.length ? current : next;
+    });
+  }, []);
+
+  const handleInlineDocumentBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+    syncInlineDraftValue(target, target.value);
+  };
+
+  const handleInlineDocumentChange = (event: FormEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+    if (
+      target instanceof HTMLInputElement &&
+      !target.hasAttribute("list")
+    ) {
       return;
     }
-    handleInlineFieldChange(targetField, target.value, token);
+    syncInlineDraftValue(target, target.value);
   };
 
   const addRepeatableRow = (groupKey: string, fields: TemplateField[]) => {
@@ -1193,7 +1513,43 @@ export function DocumentGenerationPageClient({
     }));
   };
 
+  const persistCreatableOptions = async (data: Record<string, unknown>) => {
+    if (!templateId) return;
+    const additions = collectCreatableOptionAdditions(selectedTemplateFields, data);
+    if (additions.length === 0) return;
+
+    try {
+      const response = await fetch("/api/document-generation/templates/options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId, additions }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudieron guardar las opciones nuevas");
+      }
+
+      setTemplates((current) =>
+        current.map((template) =>
+          template.id === templateId
+            ? {
+              ...template,
+              schema: {
+                ...template.schema,
+                fields: applyOptionAdditionsToFields(template.schema.fields, additions),
+              },
+            }
+            : template,
+        ),
+      );
+    } catch (error) {
+      toast.warning(error instanceof Error ? error.message : "No se pudieron guardar las opciones nuevas");
+    }
+  };
+
   const handleSaveDraft = async () => {
+    const currentInputData = inlineInputDataRef.current;
+    flushInlineDraftData();
     if (editingGeneratedId) {
       toast.error("Los documentos emitidos se actualizan directo al guardar cambios.");
       return;
@@ -1214,7 +1570,7 @@ export function DocumentGenerationPageClient({
           folderPath,
           documentType,
           templateId,
-          inputData,
+          inputData: currentInputData,
         }),
       });
       const payload = (await response.json()) as DraftResponse & { error?: string };
@@ -1225,7 +1581,8 @@ export function DocumentGenerationPageClient({
       setDraftId(payload.draft.id);
       setDraftStatus(payload.draft.status);
       setValidationErrors(payload.draft.validation_errors ?? []);
-      setInputData(payload.draft.input_data ?? inputData);
+      setInputData(payload.draft.input_data ?? currentInputData);
+      await persistCreatableOptions(payload.draft.input_data ?? currentInputData);
       toast.success("Borrador guardado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo guardar el borrador");
@@ -1235,8 +1592,10 @@ export function DocumentGenerationPageClient({
   };
 
   const handleGenerate = async () => {
+    const currentInputData = inlineInputDataRef.current;
+    flushInlineDraftData();
     const clientValidationErrors = selectedTemplate
-      ? validateTemplateInput(selectedTemplate.schema, inputData)
+      ? validateTemplateInput(selectedTemplate.schema, currentInputData)
       : [];
     setValidationErrors(clientValidationErrors);
 
@@ -1258,7 +1617,7 @@ export function DocumentGenerationPageClient({
           folderPath,
           documentType,
           templateId,
-          inputData,
+          inputData: currentInputData,
         }),
       });
       const payload = (await response.json()) as GeneratedDocumentResponse & {
@@ -1277,6 +1636,7 @@ export function DocumentGenerationPageClient({
       }
       setValidationErrors([]);
       setShowValidationReview(false);
+      await persistCreatableOptions(currentInputData);
       toast.success(editingGeneratedId ? "Documento actualizado." : "Documento generado y guardado en la carpeta.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo generar el documento");
@@ -1327,14 +1687,10 @@ export function DocumentGenerationPageClient({
     }
 
     if (field.type === "select") {
-      const options = (field.options ?? []).map((option) => ({
-        value: option.value,
-        label: option.label,
-      }));
+      const options = getSelectControlOptions(field, value);
       if (field.selectMode === "creatable") {
         return (
           <CreatableCombobox
-            fieldKey={field.key}
             value={String(value ?? "")}
             onChange={onChange}
             placeholder={`Seleccionar o crear ${field.label.toLowerCase()}`}
@@ -1439,461 +1795,199 @@ export function DocumentGenerationPageClient({
       </div>
 
       {editorMode === "inline" ? (
-      <div className="min-h-[calc(100vh-162px)] bg-[#e9e7e1] px-3 py-4 sm:px-6">
-        <div className="mx-auto grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_220px]">
-          <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:self-start">
-            <div className="grid gap-3">
-              <FormField label="Obra" required>
-                <NativeSelect
-                  value={workId}
-                  onChange={(value) => void handleWorkChange(value)}
-                  icon={iconForContextField("work")}
-                  options={works.map((work) => ({ value: work.id, label: work.label }))}
-                  placeholder="Seleccionar obra"
-                  disabled={isEditingGeneratedDocument}
-                />
-              </FormField>
-              <FormField label="Tipo documental" required>
-                <NativeSelect
-                  value={documentType}
-                  onChange={(value) => void handleDocumentTypeChange(value)}
-                  icon={iconForContextField("type")}
-                  options={Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => ({
-                    value,
-                    label,
-                  }))}
-                  placeholder="Seleccionar tipo"
-                  disabled={isEditingGeneratedDocument}
-                />
-              </FormField>
-              <FormField label="Carpeta destino" required>
-                <NativeSelect
-                  value={folderPath}
-                  onChange={(value) => void handleFolderChange(value)}
-                  icon={iconForContextField("folder")}
-                  options={visibleFolderOptions.map((folder) => ({
-                    value: folder.path,
-                    label: `${folder.path} - ${folder.name}`,
-                  }))}
-                  placeholder="Seleccionar carpeta"
-                  disabled={isEditingGeneratedDocument}
-                />
-              </FormField>
-              <FormField label="Plantilla" required>
-                <NativeSelect
-                  value={templateId}
-                  onChange={handleTemplateChange}
-                  icon={iconForContextField("template")}
-                  options={templates.map((template) => ({
-                    value: template.id,
-                    label: template.name,
-                  }))}
-                  placeholder="Seleccionar plantilla"
-                />
-              </FormField>
-            </div>
-          </section>
-
-          <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:col-start-2 xl:row-span-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
-                  Editor del documento
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-semibold tracking-tight text-stone-950">
-                    {selectedTemplate?.name ?? "Selecciona una plantilla"}
-                  </h1>
-                  <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-medium text-[#b54708]">
-                    {pendingFieldCount} pendientes
-                  </span>
-                  <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] font-medium text-stone-600">
-                    borrador {draftStatusLabel}
-                  </span>
-                  <span className="rounded-full border border-stone-200 bg-white px-3 py-1 font-mono text-[11px] text-stone-500">
-                    {documentCode}
-                  </span>
-                  {editingGeneratedId ? (
-                    <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-600">
-                      {humanizeStatus(editingGeneratedStatus)}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <PreviewToolButton
-                  onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
-                  disabled={!selectedTemplate}
-                >
-                  <ZoomOut className="h-3.5 w-3.5" />
-                </PreviewToolButton>
-                <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
-                  {previewZoom}%
-                </span>
-                <PreviewToolButton
-                  onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
-                  disabled={!selectedTemplate}
-                >
-                  <ZoomIn className="h-3.5 w-3.5" />
-                </PreviewToolButton>
-              </div>
-            </div>
-
-            <div className="overflow-auto bg-[#d8d4c6] px-2 py-5 sm:px-5 max-h-[calc(100vh-200px)]">
-              {selectedTemplate ? (
-                <div className="mx-auto w-fit pb-6">
-                  <div
-                    className="origin-top rounded-sm bg-white shadow-[0_1px_0_rgba(0,0,0,0.04),0_18px_50px_-18px_rgba(0,0,0,0.28)]"
-                    style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: "top center" }}
-                  >
-                    <div
-                      className="report-paper inline-document-editor bg-white"
-                      onBlur={handleInlineDocumentCommit}
-                      onChange={handleInlineDocumentCommit}
-                      dangerouslySetInnerHTML={{ __html: editableDocumentHtml }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid min-h-[560px] place-items-center rounded-xl border border-dashed border-stone-300 bg-white px-6 text-center">
-                  <div>
-                    <FileText className="mx-auto h-8 w-8 text-stone-400" />
-                    <p className="mt-3 text-sm font-medium text-stone-800">
-                      Elige una plantilla para escribir directo sobre el documento.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {repeatableGroups.length > 0 ? (
-            <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:col-start-3 xl:row-start-1 xl:self-start">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
-                Tablas
-              </p>
-              <div className="flex flex-wrap gap-2 xl:flex-col">
-                {repeatableGroups.map((group) => (
-                  <Button
-                    key={group.key}
-                    type="button"
-                    variant="outline"
-                    className="rounded-md"
-                    onClick={() => addRepeatableRow(group.key, group.fields)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Agregar {group.label}
-                  </Button>
-                ))}
+        <div className="min-h-[calc(100vh-162px)] bg-[#e9e7e1] px-3 py-4 sm:px-6">
+          <div className="mx-auto grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_220px]">
+            <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:self-start">
+              <div className="grid gap-3">
+                <FormField label="Obra" required>
+                  <NativeSelect
+                    value={workId}
+                    onChange={(value) => void handleWorkChange(value)}
+                    icon={iconForContextField("work")}
+                    options={works.map((work) => ({ value: work.id, label: work.label }))}
+                    placeholder="Seleccionar obra"
+                    disabled={isEditingGeneratedDocument}
+                  />
+                </FormField>
+                <FormField label="Tipo documental" required>
+                  <NativeSelect
+                    value={documentType}
+                    onChange={(value) => void handleDocumentTypeChange(value)}
+                    icon={iconForContextField("type")}
+                    options={documentTypeOptions}
+                    placeholder="Seleccionar tipo"
+                    disabled={isEditingGeneratedDocument}
+                  />
+                </FormField>
+                <FormField label="Carpeta destino" required>
+                  <NativeSelect
+                    value={folderPath}
+                    onChange={(value) => void handleFolderChange(value)}
+                    icon={iconForContextField("folder")}
+                    options={visibleFolderOptions.map((folder) => ({
+                      value: folder.path,
+                      label: `${folder.path} - ${folder.name}`,
+                    }))}
+                    placeholder="Seleccionar carpeta"
+                    emptyPlaceholder={
+                      documentType
+                        ? "No hay carpetas para este tipo"
+                        : "Elegí un tipo documental primero"
+                    }
+                    disabled={isEditingGeneratedDocument}
+                  />
+                </FormField>
+                <FormField label="Plantilla" required>
+                  <NativeSelect
+                    value={templateId}
+                    onChange={handleTemplateChange}
+                    icon={iconForContextField("template")}
+                    options={templates.map((template) => ({
+                      value: template.id,
+                      label: template.name,
+                    }))}
+                    placeholder="Seleccionar plantilla"
+                  />
+                </FormField>
               </div>
             </section>
-          ) : null}
 
-          {standaloneFields.some((field) => !templateTokens.has(field.key)) ? (
-            <div className="xl:col-start-2">
-              <SectionCard title="Campos adicionales">
-                <div className="grid gap-4 md:grid-cols-3">
-                  {standaloneFields
-                    .filter((field) => !templateTokens.has(field.key))
-                    .map((field) => {
-                      const value = inputData[field.key];
-                      const error = validationErrorsByKey.get(field.key);
-                      return (
-                        <FormField
-                          key={field.key}
-                          label={field.label}
-                          required={field.required}
-                          hint={field.description || undefined}
-                          error={error}
-                          className={getTemplateFieldSpan(field)}
-                        >
-                          {renderFieldControl(field, value, (nextValue) => handleFieldChange(field, nextValue))}
-                        </FormField>
-                      );
-                    })}
-                </div>
-              </SectionCard>
-            </div>
-          ) : null}
-
-          {showValidationReview && validationIssues.length > 0 ? (
-            <div className="xl:col-start-2">
-              <SectionCard title="Revision incompleta">
-                {validationIssues.length === 0 ? (
-                  <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                    <Check className="h-4 w-4 text-emerald-700" />
-                    <p className="text-sm font-medium text-emerald-800">
-                      Todo lo obligatorio esta completo. Ya puedes generar el documento.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-                    {validationIssues.map((issue, index) => (
-                      <div
-                        key={`${issue.kind}-${issue.message}-${index}`}
-                        className="flex items-center gap-3 border-t border-stone-100 px-4 py-3 text-sm text-stone-700 first:border-t-0"
-                      >
-                        <span
-                          className={cn(
-                            "h-2 w-2 rounded-full",
-                            issue.kind === "error" ? "bg-red-500" : "bg-amber-500",
-                          )}
-                        />
-                        {issue.message}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </SectionCard>
-            </div>
-          ) : null}
-
-          {generatedDocument ? (
-            <div className="xl:col-start-2">
-              <SectionCard
-                eyebrow="Documento generado"
-                title={generatedDocument.generatedDocument.file_name}
-                hint={`Guardado en ${generatedDocument.relativeFolderPath}.`}
-                rightSlot={
-                  generatedDocument.generatedDocument.status === "APPROVED" ? (
-                    <DocumentApprovedSeal status={generatedDocument.generatedDocument.status} />
-                  ) : (
-                    <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-700">
-                      {humanizeStatus(generatedDocument.generatedDocument.status)}
-                    </span>
-                  )
-                }
-              >
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" onClick={openInWork} className="rounded-md">
-                    Ver en la obra
-                  </Button>
-                  <Button asChild type="button" variant="outline" className="rounded-md">
-                    <Link
-                      href={`/excel/${workId}?tab=documentos&folder=${encodeURIComponent(generatedDocument.relativeFolderPath)}&file=${encodeURIComponent(generatedDocument.relativeFilePath)}`}
-                    >
-                      Abrir documento
-                    </Link>
-                  </Button>
-                  <Button type="button" variant="outline" onClick={downloadGeneratedDocument} className="rounded-md">
-                    <Download className="mr-2 h-4 w-4" />
-                    Descargar
-                  </Button>
-                  <Button asChild type="button" variant="outline" className="rounded-md">
-                    <Link href="/document-generation/review">Ir a revision</Link>
-                  </Button>
-                </div>
-              </SectionCard>
-            </div>
-          ) : null}
-        </div>
-      </div>
-      ) : (
-
-      <div className="grid min-h-[calc(100vh-162px)] grid-cols-1 xl:grid-cols-[minmax(480px,1fr)_minmax(0,0.5fr)]">
-        <div className="overflow-y-auto border-r ">
-          <div className="px-4 pb-5 sm:px-6">
-            <div className="mx-auto flex flex-col gap-4 mt-4">
-              <SectionCard
-                title="Contexto del documento"
-              >
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Obra" required>
-                    <NativeSelect
-                      value={workId}
-                      onChange={(value) => void handleWorkChange(value)}
-                      icon={iconForContextField("work")}
-                      options={works.map((work) => ({ value: work.id, label: work.label }))}
-                      placeholder="Seleccionar obra"
-                      disabled={isEditingGeneratedDocument}
-                    />
-                  </FormField>
-
-                  <FormField label="Tipo documental" required>
-                    <NativeSelect
-                      value={documentType}
-                      onChange={(value) => void handleDocumentTypeChange(value)}
-                      icon={iconForContextField("type")}
-                      options={Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => ({
-                        value,
-                        label,
-                      }))}
-                      placeholder="Seleccionar tipo"
-                      disabled={isEditingGeneratedDocument}
-                    />
-                  </FormField>
-
-                  <FormField label="Carpeta destino" required>
-                    <NativeSelect
-                      value={folderPath}
-                      onChange={(value) => void handleFolderChange(value)}
-                      icon={iconForContextField("folder")}
-                      options={visibleFolderOptions.map((folder) => ({
-                        value: folder.path,
-                        label: `${folder.path} · ${folder.name}`,
-                      }))}
-                      placeholder="Seleccionar carpeta"
-                      disabled={isEditingGeneratedDocument}
-                    />
-                  </FormField>
-
-                  <FormField
-                    label="Plantilla"
-                    required
-                    hint="La plantilla define los campos del paso siguiente."
-                  >
-                    <NativeSelect
-                      value={templateId}
-                      onChange={handleTemplateChange}
-                      icon={iconForContextField("template")}
-                      options={templates.map((template) => ({
-                        value: template.id,
-                        label: template.name,
-                      }))}
-                      placeholder="Seleccionar plantilla"
-                    />
-                  </FormField>
-                </div>
-              </SectionCard>
-
-              <SectionCard
-                title="Datos del documento"
-                rightSlot={
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-[11px] font-medium text-[#d65a07]">
+            <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:col-start-2 xl:row-span-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+                    Editor del documento
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <h1 className="text-xl font-semibold tracking-tight text-stone-950">
+                      {selectedTemplate?.name ?? "Selecciona una plantilla"}
+                    </h1>
+                    <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-medium text-[#b54708]">
                       {pendingFieldCount} pendientes
                     </span>
-                    <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-600">
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] font-medium text-stone-600">
                       borrador {draftStatusLabel}
                     </span>
+                    <span className="rounded-full border border-stone-200 bg-white px-3 py-1 font-mono text-[11px] text-stone-500">
+                      {documentCode}
+                    </span>
+                    {editingGeneratedId ? (
+                      <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-600">
+                        {humanizeStatus(editingGeneratedStatus)}
+                      </span>
+                    ) : null}
                   </div>
-                }
-              >
+                </div>
+                <div className="flex items-center gap-2">
+                  <PreviewToolButton
+                    onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
+                    disabled={!selectedTemplate}
+                  >
+                    <ZoomOut className="h-3.5 w-3.5" />
+                  </PreviewToolButton>
+                  <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
+                    {previewZoom}%
+                  </span>
+                  <PreviewToolButton
+                    onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
+                    disabled={!selectedTemplate}
+                  >
+                    <ZoomIn className="h-3.5 w-3.5" />
+                  </PreviewToolButton>
+                </div>
+              </div>
+
+              <div className="overflow-auto bg-[#d8d4c6] px-2 py-5 sm:px-5 max-h-[calc(100vh-200px)]">
                 {selectedTemplate ? (
-                  <div className="grid gap-4 md:grid-cols-3">
-                    {standaloneFields.map((field) => {
-                      const value = inputData[field.key];
-                      const error = validationErrorsByKey.get(field.key);
-                      return (
-                        <FormField
-                          key={field.key}
-                          label={field.label}
-                          required={field.required}
-                          hint={field.description || undefined}
-                          error={error}
-                          className={getTemplateFieldSpan(field)}
-                        >
-                          {renderFieldControl(field, value, (nextValue) => handleFieldChange(field, nextValue))}
-                        </FormField>
-                      );
-                    })}
+                  <div className="mx-auto w-fit pb-6">
+                    <div
+                      className="origin-top rounded-sm bg-white shadow-[0_1px_0_rgba(0,0,0,0.04),0_18px_50px_-18px_rgba(0,0,0,0.28)]"
+                      style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: "top center" }}
+                    >
+                      <div
+                        ref={inlineDocumentRootRef}
+                        className="report-paper inline-document-editor bg-white"
+                        style={{ "--oc-font-size": "13px" } as CSSProperties}
+                        onBlur={handleInlineDocumentBlur}
+                        onChange={handleInlineDocumentChange}
+                        dangerouslySetInnerHTML={{ __html: editableDocumentHtml }}
+                      />
+                    </div>
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
-                    Selecciona una plantilla para mostrar los campos del documento.
+                  <div className="grid min-h-[560px] place-items-center rounded-xl border border-dashed border-stone-300 bg-white px-6 text-center">
+                    <div>
+                      <FileText className="mx-auto h-8 w-8 text-stone-400" />
+                      <p className="mt-3 text-sm font-medium text-stone-800">
+                        Elige una plantilla para escribir directo sobre el documento.
+                      </p>
+                    </div>
                   </div>
                 )}
-              </SectionCard>
+              </div>
+            </section>
 
-              {repeatableGroups.map((group) => {
-                const rows = readRepeatableRows(inputData, group.key);
-                const safeRows = rows.length > 0 ? rows : [createRepeatableRow(group.fields)];
-                const filledRows = countFilledRows(rows);
+            {repeatableGroups.length > 0 ? (
+              <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:col-start-3 xl:row-start-1 xl:self-start">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+                  Tablas
+                </p>
+                <div className="flex flex-wrap gap-2 xl:flex-col">
+                  {repeatableGroups.map((group) => (
+                    <Button
+                      key={group.key}
+                      type="button"
+                      variant="outline"
+                      className="rounded-md"
+                      onClick={() => addRepeatableRow(group.key, group.fields)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Agregar {group.label}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
-                return (
-                  <SectionCard
-                    key={group.key}
-                    title={group.label}
-                    rightSlot={
-                      <button
-                        type="button"
-                        onClick={() => addRepeatableRow(group.key, group.fields)}
-                        className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
-                      >
-                        <Plus className="size-3.5" />
-                        Agregar fila
-                      </button>
-                    }
-                  >
-                    <div className="space-y-4">
-                      <div className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] font-medium text-stone-600">
-                        {filledRows} fila{filledRows === 1 ? "" : "s"} con datos
-                      </div>
-
-                      <div className="overflow-hidden rounded-lg border border-stone-200 bg-white overflow-x-scroll">
-                        <div
-                          className="grid items-center bg-[#f1f3f6] text-[10px] font-bold uppercase tracking-[0.12em] text-[#5b616b]"
-                          style={{
-                            gridTemplateColumns: `40px repeat(${Math.max(group.fields.length, 1)}, minmax(120px, 1fr)) 40px`,
-                          }}
-                        >
-                          <div className="px-3 py-2 text-center">#</div>
-                          {group.fields.map((field) => (
-                            <div key={`${group.key}-head-${field.key}`} className="px-3 py-2">
-                              {field.label}
-                            </div>
-                          ))}
-                          <div className="px-3 py-2 text-center" />
-                        </div>
-
-                        {safeRows.map((row, rowIndex) => {
-                          const rowData =
-                            row && typeof row === "object" && !Array.isArray(row)
-                              ? (row as Record<string, unknown>)
-                              : {};
-                          return (
-                            <div
-                              key={`${group.key}-${rowIndex}`}
-                              className="grid items-start border-t border-stone-200 bg-white"
-                              style={{
-                                gridTemplateColumns: `40px repeat(${Math.max(group.fields.length, 1)}, minmax(120px, 1fr)) 40px`,
-                              }}
-                            >
-                              <div className="px-3 py-4 text-center font-mono text-xs text-stone-400">
-                                {String(rowIndex + 1).padStart(2, "0")}
-                              </div>
-                              {group.fields.map((field) => (
-                                <div key={`${group.key}-${rowIndex}-${field.key}`} className="p-2">
-                                  {renderFieldControl(field, rowData[field.key], (nextValue) =>
-                                    handleRepeatableFieldChange(group.key, rowIndex, field, nextValue),
-                                  )}
-                                </div>
-                              ))}
-                              <div className="px-2 py-3">
-                                <RepeatableRowMenu
-                                  onDuplicate={() => duplicateRepeatableRow(group.key, rowIndex)}
-                                  onRemove={() => removeRepeatableRow(group.key, rowIndex)}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </SectionCard>
-                );
-              })}
-
-              <SectionCard
-                title="Revision"
-              >
-                {validationIssues.length === 0 ? (
-                  <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                    <Check className="size-4 text-emerald-700" />
-                    <p className="text-sm font-medium text-emerald-800">
-                      Todo lo obligatorio esta completo. Ya puedes generar el documento.
-                    </p>
+            {standaloneFields.some((field) => !templateTokens.has(field.key)) ? (
+              <div className="xl:col-start-2">
+                <SectionCard title="Campos adicionales">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {standaloneFields
+                      .filter((field) => !templateTokens.has(field.key))
+                      .map((field) => {
+                        const value = inputData[field.key];
+                        const error = validationErrorsByKey.get(field.key);
+                        return (
+                          <FormField
+                            key={field.key}
+                            label={field.label}
+                            required={field.required}
+                            hint={field.description || undefined}
+                            error={error}
+                            className={getTemplateFieldSpan(field)}
+                          >
+                            {renderFieldControl(field, value, (nextValue) => handleFieldChange(field, nextValue))}
+                          </FormField>
+                        );
+                      })}
                   </div>
-                ) : (
-                  <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-                    <div className="flex items-center gap-2 border-b border-stone-200 bg-stone-50 px-4 py-3">
-                      <Info className="size-4 text-stone-600" />
-                      <p className="text-sm font-medium text-stone-900">Revisa antes de generar</p>
-                      <span className="ml-auto font-mono text-xs text-stone-500">
-                        {validationIssues.length} pendiente{validationIssues.length === 1 ? "" : "s"}
-                      </span>
+                </SectionCard>
+              </div>
+            ) : null}
+
+            {showValidationReview && validationIssues.length > 0 ? (
+              <div className="xl:col-start-2">
+                <SectionCard title="Revision incompleta">
+                  {validationIssues.length === 0 ? (
+                    <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                      <Check className="h-4 w-4 text-emerald-700" />
+                      <p className="text-sm font-medium text-emerald-800">
+                        Todo lo obligatorio esta completo. Ya puedes generar el documento.
+                      </p>
                     </div>
-                    <div>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
                       {validationIssues.map((issue, index) => (
                         <div
                           key={`${issue.kind}-${issue.message}-${index}`}
@@ -1909,11 +2003,13 @@ export function DocumentGenerationPageClient({
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </SectionCard>
+                  )}
+                </SectionCard>
+              </div>
+            ) : null}
 
-              {generatedDocument ? (
+            {generatedDocument ? (
+              <div className="xl:col-start-2">
                 <SectionCard
                   eyebrow="Documento generado"
                   title={generatedDocument.generatedDocument.file_name}
@@ -1939,89 +2035,355 @@ export function DocumentGenerationPageClient({
                         Abrir documento
                       </Link>
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={downloadGeneratedDocument}
-                      className="rounded-md"
-                    >
-                      <Download className="mr-2 size-4" />
+                    <Button type="button" variant="outline" onClick={downloadGeneratedDocument} className="rounded-md">
+                      <Download className="mr-2 h-4 w-4" />
                       Descargar
                     </Button>
                     <Button asChild type="button" variant="outline" className="rounded-md">
-                      <Link href="/document-generation/review">
-                        Ir a revision
-                      </Link>
+                      <Link href="/document-generation/review">Ir a revision</Link>
                     </Button>
                   </div>
                 </SectionCard>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </div>
         </div>
+      ) : (
 
-        <aside className="sticky top-0 flex max-h-[100vh] min-h-[640px] flex-col overflow-hidden bg-[#e9e7e1]">
-          <div className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-3">
-            <div className="flex items-center gap-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
-                Vista previa
-              </p>
-              <span className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1 font-mono text-[11px] text-stone-600">
-                <span className="size-1.5 rounded-full bg-[#ff5800]" />
-                en vivo
-              </span>
-            </div>
+        <div className="grid min-h-[calc(100vh-162px)] grid-cols-1 xl:grid-cols-[minmax(480px,1fr)_minmax(0,0.5fr)]">
+          <div className="overflow-y-auto border-r ">
+            <div className="px-4 pb-5 sm:px-6">
+              <div className="mx-auto flex flex-col gap-4 mt-4">
+                <SectionCard
+                  title="Contexto del documento"
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField label="Obra" required>
+                      <NativeSelect
+                        value={workId}
+                        onChange={(value) => void handleWorkChange(value)}
+                        icon={iconForContextField("work")}
+                        options={works.map((work) => ({ value: work.id, label: work.label }))}
+                        placeholder="Seleccionar obra"
+                        disabled={isEditingGeneratedDocument}
+                      />
+                    </FormField>
 
-            <div className="flex items-center gap-2">
-              <PreviewToolButton
-                onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
-                disabled={!selectedTemplate}
-              >
-                <ZoomOut className="size-3.5" />
-              </PreviewToolButton>
-              <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
-                {previewZoom}%
-              </span>
-              <PreviewToolButton
-                onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
-                disabled={!selectedTemplate}
-              >
-                <ZoomIn className="size-3.5" />
-              </PreviewToolButton>
-              <div className="mx-1 h-5 w-px bg-stone-200" />
-              <PreviewToolButton onClick={() => setPreviewDialogOpen(true)} disabled={!selectedTemplate}>
-                <Eye className="size-3.5" />
-              </PreviewToolButton>
+                    <FormField label="Tipo documental" required>
+                      <NativeSelect
+                        value={documentType}
+                        onChange={(value) => void handleDocumentTypeChange(value)}
+                        icon={iconForContextField("type")}
+                        options={documentTypeOptions}
+                        placeholder="Seleccionar tipo"
+                        disabled={isEditingGeneratedDocument}
+                      />
+                    </FormField>
+
+                    <FormField label="Carpeta destino" required>
+                      <NativeSelect
+                        value={folderPath}
+                        onChange={(value) => void handleFolderChange(value)}
+                        icon={iconForContextField("folder")}
+                        options={visibleFolderOptions.map((folder) => ({
+                          value: folder.path,
+                          label: `${folder.path} · ${folder.name}`,
+                        }))}
+                        placeholder="Seleccionar carpeta"
+                        emptyPlaceholder={
+                          documentType
+                            ? "No hay carpetas para este tipo"
+                            : "Elegí un tipo documental primero"
+                        }
+                        disabled={isEditingGeneratedDocument}
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="Plantilla"
+                      required
+                      hint="La plantilla define los campos del paso siguiente."
+                    >
+                      <NativeSelect
+                        value={templateId}
+                        onChange={handleTemplateChange}
+                        icon={iconForContextField("template")}
+                        options={templates.map((template) => ({
+                          value: template.id,
+                          label: template.name,
+                        }))}
+                        placeholder="Seleccionar plantilla"
+                      />
+                    </FormField>
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  title="Datos del documento"
+                  rightSlot={
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-[11px] font-medium text-[#d65a07]">
+                        {pendingFieldCount} pendientes
+                      </span>
+                      <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-600">
+                        borrador {draftStatusLabel}
+                      </span>
+                    </div>
+                  }
+                >
+                  {selectedTemplate ? (
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {standaloneFields.map((field) => {
+                        const value = inputData[field.key];
+                        const error = validationErrorsByKey.get(field.key);
+                        return (
+                          <FormField
+                            key={field.key}
+                            label={field.label}
+                            required={field.required}
+                            hint={field.description || undefined}
+                            error={error}
+                            className={getTemplateFieldSpan(field)}
+                          >
+                            {renderFieldControl(field, value, (nextValue) => handleFieldChange(field, nextValue))}
+                          </FormField>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
+                      Selecciona una plantilla para mostrar los campos del documento.
+                    </div>
+                  )}
+                </SectionCard>
+
+                {repeatableGroups.map((group) => {
+                  const rows = readRepeatableRows(inputData, group.key);
+                  const safeRows = rows.length > 0 ? rows : [createRepeatableRow(group.fields)];
+                  const filledRows = countFilledRows(rows);
+
+                  return (
+                    <SectionCard
+                      key={group.key}
+                      title={group.label}
+                      rightSlot={
+                        <button
+                          type="button"
+                          onClick={() => addRepeatableRow(group.key, group.fields)}
+                          className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
+                        >
+                          <Plus className="size-3.5" />
+                          Agregar fila
+                        </button>
+                      }
+                    >
+                      <div className="space-y-4">
+                        <div className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[11px] font-medium text-stone-600">
+                          {filledRows} fila{filledRows === 1 ? "" : "s"} con datos
+                        </div>
+
+                        <div className="overflow-hidden rounded-lg border border-stone-200 bg-white overflow-x-scroll">
+                          <div
+                            className="grid items-center bg-[#f1f3f6] text-[10px] font-bold uppercase tracking-[0.12em] text-[#5b616b]"
+                            style={{
+                              gridTemplateColumns: `40px repeat(${Math.max(group.fields.length, 1)}, minmax(120px, 1fr)) 40px`,
+                            }}
+                          >
+                            <div className="px-3 py-2 text-center">#</div>
+                            {group.fields.map((field) => (
+                              <div key={`${group.key}-head-${field.key}`} className="px-3 py-2">
+                                {field.label}
+                              </div>
+                            ))}
+                            <div className="px-3 py-2 text-center" />
+                          </div>
+
+                          {safeRows.map((row, rowIndex) => {
+                            const rowData =
+                              row && typeof row === "object" && !Array.isArray(row)
+                                ? (row as Record<string, unknown>)
+                                : {};
+                            return (
+                              <div
+                                key={`${group.key}-${rowIndex}`}
+                                className="grid items-start border-t border-stone-200 bg-white"
+                                style={{
+                                  gridTemplateColumns: `40px repeat(${Math.max(group.fields.length, 1)}, minmax(120px, 1fr)) 40px`,
+                                }}
+                              >
+                                <div className="px-3 py-4 text-center font-mono text-xs text-stone-400">
+                                  {String(rowIndex + 1).padStart(2, "0")}
+                                </div>
+                                {group.fields.map((field) => (
+                                  <div key={`${group.key}-${rowIndex}-${field.key}`} className="p-2">
+                                    {renderFieldControl(field, rowData[field.key], (nextValue) =>
+                                      handleRepeatableFieldChange(group.key, rowIndex, field, nextValue),
+                                    )}
+                                  </div>
+                                ))}
+                                <div className="px-2 py-3">
+                                  <RepeatableRowMenu
+                                    onDuplicate={() => duplicateRepeatableRow(group.key, rowIndex)}
+                                    onRemove={() => removeRepeatableRow(group.key, rowIndex)}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </SectionCard>
+                  );
+                })}
+
+                <SectionCard
+                  title="Revision"
+                >
+                  {validationIssues.length === 0 ? (
+                    <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                      <Check className="size-4 text-emerald-700" />
+                      <p className="text-sm font-medium text-emerald-800">
+                        Todo lo obligatorio esta completo. Ya puedes generar el documento.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+                      <div className="flex items-center gap-2 border-b border-stone-200 bg-stone-50 px-4 py-3">
+                        <Info className="size-4 text-stone-600" />
+                        <p className="text-sm font-medium text-stone-900">Revisa antes de generar</p>
+                        <span className="ml-auto font-mono text-xs text-stone-500">
+                          {validationIssues.length} pendiente{validationIssues.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <div>
+                        {validationIssues.map((issue, index) => (
+                          <div
+                            key={`${issue.kind}-${issue.message}-${index}`}
+                            className="flex items-center gap-3 border-t border-stone-100 px-4 py-3 text-sm text-stone-700 first:border-t-0"
+                          >
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                issue.kind === "error" ? "bg-red-500" : "bg-amber-500",
+                              )}
+                            />
+                            {issue.message}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </SectionCard>
+
+                {generatedDocument ? (
+                  <SectionCard
+                    eyebrow="Documento generado"
+                    title={generatedDocument.generatedDocument.file_name}
+                    hint={`Guardado en ${generatedDocument.relativeFolderPath}.`}
+                    rightSlot={
+                      generatedDocument.generatedDocument.status === "APPROVED" ? (
+                        <DocumentApprovedSeal status={generatedDocument.generatedDocument.status} />
+                      ) : (
+                        <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-700">
+                          {humanizeStatus(generatedDocument.generatedDocument.status)}
+                        </span>
+                      )
+                    }
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="secondary" onClick={openInWork} className="rounded-md">
+                        Ver en la obra
+                      </Button>
+                      <Button asChild type="button" variant="outline" className="rounded-md">
+                        <Link
+                          href={`/excel/${workId}?tab=documentos&folder=${encodeURIComponent(generatedDocument.relativeFolderPath)}&file=${encodeURIComponent(generatedDocument.relativeFilePath)}`}
+                        >
+                          Abrir documento
+                        </Link>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={downloadGeneratedDocument}
+                        className="rounded-md"
+                      >
+                        <Download className="mr-2 size-4" />
+                        Descargar
+                      </Button>
+                      <Button asChild type="button" variant="outline" className="rounded-md">
+                        <Link href="/document-generation/review">
+                          Ir a revision
+                        </Link>
+                      </Button>
+                    </div>
+                  </SectionCard>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          <div className="report-preview-container flex-1 overflow-auto p-6">
-            {selectedTemplate ? (
-              <div className="relative max-h-full">
-                <DocumentApprovedSeal
-                  status={generatedDocument?.generatedDocument.status ?? null}
-                  size="sm"
-                  className="absolute left-5 top-5 z-20 w-full"
-                />
-                <div className="report-paper report-paper-fit-preview bg-white ">
-                  <div dangerouslySetInnerHTML={{ __html: previewHtml }} className="" />
-                </div>
+          <aside className="sticky top-0 flex max-h-[100vh] min-h-[640px] flex-col overflow-hidden bg-[#e9e7e1]">
+            <div className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-3">
+              <div className="flex items-center gap-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">
+                  Vista previa
+                </p>
+                <span className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1 font-mono text-[11px] text-stone-600">
+                  <span className="size-1.5 rounded-full bg-[#ff5800]" />
+                  en vivo
+                </span>
               </div>
-            ) : (
-              <div className="grid min-h-[560px] place-items-center rounded-xl border border-dashed border-stone-300 bg-white px-6 text-center">
-                <div>
-                  <p className="text-sm font-medium text-stone-800">
-                    La vista previa aparece aca.
-                  </p>
-                  <p className="mt-2 text-sm text-stone-500">
-                    Elige obra, tipo documental y plantilla para renderizar el documento.
-                  </p>
-                </div>
+
+              <div className="flex items-center gap-2">
+                <PreviewToolButton
+                  onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
+                  disabled={!selectedTemplate}
+                >
+                  <ZoomOut className="size-3.5" />
+                </PreviewToolButton>
+                <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
+                  {previewZoom}%
+                </span>
+                <PreviewToolButton
+                  onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
+                  disabled={!selectedTemplate}
+                >
+                  <ZoomIn className="size-3.5" />
+                </PreviewToolButton>
+                <div className="mx-1 h-5 w-px bg-stone-200" />
+                <PreviewToolButton onClick={() => setPreviewDialogOpen(true)} disabled={!selectedTemplate}>
+                  <Eye className="size-3.5" />
+                </PreviewToolButton>
               </div>
-            )}
-          </div>
-        </aside>
-      </div>
+            </div>
+
+            <div className="report-preview-container flex-1 overflow-auto p-6">
+              {selectedTemplate ? (
+                <div className="relative max-h-full">
+                  <DocumentApprovedSeal
+                    status={generatedDocument?.generatedDocument.status ?? null}
+                    size="sm"
+                    className="absolute left-5 top-5 z-20 w-full"
+                  />
+                  <div className="report-paper report-paper-fit-preview bg-white ">
+                    <div dangerouslySetInnerHTML={{ __html: previewHtml }} className="" />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid min-h-[560px] place-items-center rounded-xl border border-dashed border-stone-300 bg-white px-6 text-center">
+                  <div>
+                    <p className="text-sm font-medium text-stone-800">
+                      La vista previa aparece aca.
+                    </p>
+                    <p className="mt-2 text-sm text-stone-500">
+                      Elige obra, tipo documental y plantilla para renderizar el documento.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
       )}
 
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>

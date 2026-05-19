@@ -270,6 +270,10 @@ function normalizeTemplateField(field: TemplateField, index: number): TemplateFi
       typeof field.optionUnitTargetKey === "string" && field.optionUnitTargetKey.trim().length > 0
         ? normalizeFieldKey(field.optionUnitTargetKey)
         : null,
+    extractionFieldKey:
+      typeof field.extractionFieldKey === "string" && field.extractionFieldKey.trim().length > 0
+        ? normalizeFieldKey(field.extractionFieldKey)
+        : null,
     autoPopulate: normalizeAutoPopulate(field.autoPopulate),
     repeatableGroup:
       typeof field.repeatableGroup === "string" && field.repeatableGroup.trim().length > 0

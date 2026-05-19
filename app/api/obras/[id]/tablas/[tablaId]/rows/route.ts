@@ -54,6 +54,7 @@ export async function GET(request: Request, context: RowsContext) {
 			200,
 			Math.max(1, Number(url.searchParams.get("limit")) || 50)
 		);
+		const includeCount = url.searchParams.get("includeCount") !== "0";
 		const from = (page - 1) * limit;
 		const to = from + limit - 1;
 		const docPath = url.searchParams.get("docPath");
@@ -98,14 +99,23 @@ export async function GET(request: Request, context: RowsContext) {
 		const { data, error } = await rowsQuery;
 		if (error) throw error;
 
-		let countQuery = supabase
-			.from("obra_tabla_rows")
-			.select("id", { count: "exact", head: true })
-			.eq("tabla_id", tablaId);
-		if (docPath) {
-			countQuery = countQuery.contains("data", { __docPath: docPath });
+		let count: number | null = null;
+		if (includeCount) {
+			let countQuery = supabase
+				.from("obra_tabla_rows")
+				.select("id", { count: "exact", head: true })
+				.eq("tabla_id", tablaId);
+			if (docPath) {
+				countQuery = countQuery.contains("data", { __docPath: docPath });
+			}
+			const countResult = await countQuery;
+			count = countResult.count;
 		}
-		const { count } = await countQuery;
+		const hasNextPage = includeCount
+			? count
+				? to + 1 < count
+				: false
+			: (data?.length ?? 0) === limit;
 
 		return NextResponse.json({
 			rows: data ?? [],
@@ -114,7 +124,7 @@ export async function GET(request: Request, context: RowsContext) {
 				limit,
 				total: count ?? 0,
 				totalPages: count ? Math.max(1, Math.ceil(count / limit)) : 1,
-				hasNextPage: count ? to + 1 < count : false,
+				hasNextPage,
 				hasPreviousPage: page > 1,
 			},
 		});

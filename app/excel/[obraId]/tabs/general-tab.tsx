@@ -141,6 +141,7 @@ type GeneralTabProps = {
 	getErrorMessage: (errors: unknown) => string;
 	quickActionsAllData?: GeneralTabQuickActions;
 	reportsData?: GeneralTabReportsData;
+	isReportsLoading?: boolean;
 	mainTableColumns?: MainTableColumnConfig[];
 	mainTableColumnValues?: Record<string, unknown>;
 	setCustomMainColumnValue?: (columnId: string, value: unknown) => void;
@@ -175,6 +176,75 @@ const EMPTY_MAIN_TABLE_COLUMNS: MainTableColumnConfig[] = [];
 const EMPTY_MAIN_TABLE_COLUMN_VALUES: Record<string, unknown> = {};
 const EMPTY_CERTIFICADOS_ROWS: TablaDataRow[] = [];
 const EMPTY_DATA_FLOW_SUGGESTIONS: DataFlowSuggestion[] = [];
+
+function CurveChartLoadingState() {
+	const gridColumns = Array.from({ length: 7 }, (_, index) => index);
+	const lineSegments = [
+		{ left: "8%", bottom: "18%", width: "16%", rotate: "-10deg" },
+		{ left: "22%", bottom: "28%", width: "18%", rotate: "8deg" },
+		{ left: "38%", bottom: "36%", width: "17%", rotate: "-6deg" },
+		{ left: "54%", bottom: "46%", width: "18%", rotate: "10deg" },
+		{ left: "70%", bottom: "58%", width: "15%", rotate: "-8deg" },
+	];
+
+	return (
+		<div className="h-[274px] rounded-lg border border-[#ededed] bg-[#fcfcfc] p-4">
+			<div className="mb-4 flex items-center justify-between gap-4">
+				<div className="h-3 w-32 rounded-full bg-[#e8e8e8]" />
+				<div className="flex items-center gap-3">
+					<div className="flex items-center gap-2">
+						<div className="size-2 rounded-full bg-[#d8d8d8]" />
+						<div className="h-2 w-14 rounded-full bg-[#ececec]" />
+					</div>
+					<div className="flex items-center gap-2">
+						<div className="size-2 rounded-full bg-[#cfcfcf]" />
+						<div className="h-2 w-12 rounded-full bg-[#ececec]" />
+					</div>
+				</div>
+			</div>
+			<div className="relative h-[210px] overflow-hidden rounded-lg border border-[#f2f2f2] bg-white">
+				<div className="absolute inset-x-4 bottom-5 top-4 grid grid-cols-7 border-b border-l border-[#eeeeee]">
+					{gridColumns.map((column) => (
+						<div
+							key={column}
+							className="border-r border-[#f4f4f4]"
+						/>
+					))}
+				</div>
+				<div className="absolute inset-x-4 bottom-5 top-4 flex flex-col justify-between">
+					{[0, 1, 2, 3].map((row) => (
+						<div key={row} className="h-px bg-[#f4f4f4]" />
+					))}
+				</div>
+				<div className="absolute inset-0 animate-pulse">
+					{lineSegments.map((segment) => (
+						<div
+							key={`${segment.left}-${segment.bottom}`}
+							className="absolute h-1 rounded-full bg-[#dddddd]"
+							style={{
+								left: segment.left,
+								bottom: segment.bottom,
+								width: segment.width,
+								transform: `rotate(${segment.rotate})`,
+							}}
+						/>
+					))}
+					{[16, 31, 48, 65, 81].map((left, index) => (
+						<div
+							key={left}
+							className="absolute size-3 rounded-full border-2 border-white bg-[#d6d6d6] shadow-sm"
+							style={{
+								left: `${left}%`,
+								bottom: `${22 + index * 10}%`,
+							}}
+						/>
+					))}
+				</div>
+				<div className="absolute inset-y-0 left-0 w-24 animate-[pulse_1.8s_ease-in-out_infinite] bg-gradient-to-r from-white/10 via-white/70 to-white/10" />
+			</div>
+		</div>
+	);
+}
 
 const STATIC_GENERAL_FIELD_IDS = new Set([
 	"porcentaje",
@@ -894,6 +964,7 @@ export function ObraGeneralTab({
 	getErrorMessage,
 	quickActionsAllData,
 	reportsData,
+	isReportsLoading = false,
 	mainTableColumns = EMPTY_MAIN_TABLE_COLUMNS,
 	mainTableColumnValues = EMPTY_MAIN_TABLE_COLUMN_VALUES,
 	setCustomMainColumnValue,
@@ -911,9 +982,13 @@ export function ObraGeneralTab({
 		const sourceId = column.baseColumnId ?? column.id;
 		return !STATIC_GENERAL_FIELD_IDS.has(sourceId) && !STATIC_GENERAL_FIELD_IDS.has(column.id);
 	});
-	const obraCertificates = normalizeExtractedCertificateRows(
-		certificadosExtraidosRows,
-		certificadoContableMacro,
+	const obraCertificates = useMemo(
+		() =>
+			normalizeExtractedCertificateRows(
+				certificadosExtraidosRows,
+				certificadoContableMacro,
+			),
+		[certificadoContableMacro, certificadosExtraidosRows],
 	);
 	const hasCertificates = obraCertificates.length > 0;
 	const derivedFieldSet = new Set(derivedCertificadosNotice?.updatedFieldKeys ?? []);
@@ -1909,6 +1984,8 @@ export function ObraGeneralTab({
 												) : null}
 												<AdvanceCurveChart points={reportsData.curve.points} />
 											</div>
+										) : isReportsLoading ? (
+											<CurveChartLoadingState />
 										) : (
 											<div className="flex h-[274px] flex-col rounded-lg border border-dashed border-[#e8e8e8] p-4">
 												<div className="rounded-lg border border-[#f0f0f0] px-4 py-3 text-[13px] text-[#bbb]">

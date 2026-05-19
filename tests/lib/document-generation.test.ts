@@ -102,6 +102,18 @@ describe("document-generation helpers", () => {
     expect(html).toContain("<td>1</td><td>&lt;b&gt;Corte&lt;/b&gt;</td>");
   });
 
+  it("overrides oc template font size from the wrapper scale", () => {
+    const html = renderDocumentHtml(
+      '<div class="oc" style="--oc-font-size: 8.5px;"><style>.oc{font-size:1em}.oc .title{font-size:2em}</style><p>{{title}}</p></div>',
+      { title: "Orden" },
+    );
+
+    expect(html).toContain("data-document-generation-oc-font-scale");
+    expect(html).toContain("--oc-font-size: var(--document-oc-font-size");
+    expect(html).toContain("font-size: var(--oc-font-size)");
+    expect(html).toContain("!important");
+  });
+
   it("hydrates and validates table fields with configured columns", () => {
     const schema = normalizeTemplateSchema({
       fields: [
@@ -184,6 +196,97 @@ describe("document-generation helpers", () => {
         __docFileName: "oc-1.pdf",
       },
     ]);
+  });
+
+  it("maps extraction table columns through document field aliases", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "nro", label: "Nro", type: "text", required: true },
+        { key: "empresa_solicita", label: "Solicitante", type: "text", required: true },
+        { key: "gestor_compra", label: "Gestor", type: "text", required: false },
+        { key: "obra_destino", label: "Obra", type: "text", required: false },
+        {
+          key: "items",
+          label: "Items",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "cantidad", label: "Cantidad", type: "number", required: true },
+            { key: "detalle", label: "Detalle", type: "text", required: true },
+          ],
+        },
+      ],
+    });
+
+    const rows = buildDocumentGenerationExtractionRows({
+      schema,
+      inputData: {
+        nro: "1",
+        empresa_solicita: "Ignacio",
+        gestor_compra: "Dario",
+        obra_destino: "Obra Hospital",
+        items: [{ cantidad: "1", detalle: "Cemento" }],
+      },
+      columns: [
+        { fieldKey: "nro", dataType: "text", config: { ocrScope: "parent" } },
+        { fieldKey: "solicitante", dataType: "text", config: { ocrScope: "parent" } },
+        { fieldKey: "gestor", dataType: "text", config: { ocrScope: "parent" } },
+        { fieldKey: "obra", dataType: "text", config: { ocrScope: "parent" } },
+        { fieldKey: "detalle_descriptivo", dataType: "text", config: { ocrScope: "item" } },
+      ],
+      documentMeta: {
+        bucket: "obra-documents",
+        path: "obra-1/ordenes/oc-1.pdf",
+        fileName: "oc-1.pdf",
+      },
+    });
+
+    expect(rows[0]).toMatchObject({
+      nro: "1",
+      solicitante: "Ignacio",
+      gestor: "Dario",
+      obra: "Obra Hospital",
+      detalle_descriptivo: "Cemento",
+    });
+  });
+
+  it("maps extraction table columns through explicit template configuration", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "custom_requester", label: "Solicitante", type: "text", required: true, extractionFieldKey: "persona_pide" },
+        {
+          key: "items",
+          label: "Items",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "custom_detail", label: "Detalle", type: "text", required: true, extractionFieldKey: "concepto" },
+          ],
+        },
+      ],
+    });
+
+    const rows = buildDocumentGenerationExtractionRows({
+      schema,
+      inputData: {
+        custom_requester: "Laura",
+        items: [{ custom_detail: "Servicio especial" }],
+      },
+      columns: [
+        { fieldKey: "persona_pide", dataType: "text", config: { ocrScope: "parent" } },
+        { fieldKey: "concepto", dataType: "text", config: { ocrScope: "item" } },
+      ],
+      documentMeta: {
+        bucket: "obra-documents",
+        path: "obra-1/ordenes/oc-2.pdf",
+        fileName: "oc-2.pdf",
+      },
+    });
+
+    expect(rows[0]).toMatchObject({
+      persona_pide: "Laura",
+      concepto: "Servicio especial",
+    });
   });
 
   it("falls back to a single extraction row for flat schemas and computes formulas", () => {

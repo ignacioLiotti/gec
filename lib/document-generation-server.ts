@@ -620,7 +620,7 @@ export function resolveGenerationContext(args: {
     resolvedDocumentType == null
       ? []
       : args.folderConfigs.filter((config) =>
-          config.allowedDocumentTypes.includes(resolvedDocumentType),
+          config.allowedDocumentTypes.length === 0 || config.allowedDocumentTypes.includes(resolvedDocumentType),
         );
 
   const resolvedFolderPath =

@@ -21,6 +21,7 @@ import {
   syncGeneratedDocumentExtractionRows,
   validateGenerationTarget,
 } from "@/lib/document-generation-server";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type GenerateRequestBody = {
   draftId?: string;
@@ -44,6 +45,7 @@ async function rollbackGeneratedDocumentArtifacts(params: {
   tablaCount?: number;
 }) {
   const { supabase } = params.access;
+  const admin = createSupabaseAdminClient();
 
   if (params.generatedDocumentId) {
     const { error } = await supabase
@@ -71,7 +73,7 @@ async function rollbackGeneratedDocumentArtifacts(params: {
     console.error("[document-generation/generate] rollback upload tracking failed", uploadTrackingDeleteError);
   }
 
-  const { error: storageDeleteError } = await supabase.storage
+  const { error: storageDeleteError } = await admin.storage
     .from(DOCUMENTS_BUCKET)
     .remove([params.storagePath]);
   if (storageDeleteError) {
@@ -112,8 +114,13 @@ function buildDocumentFileName(params: {
 
 function isAlreadyExistsError(error: unknown) {
   const message = String((error as { message?: string })?.message ?? "").toLowerCase();
-  const statusCode = Number((error as { statusCode?: number })?.statusCode ?? 0);
-  return statusCode === 409 || message.includes("already exists") || message.includes("duplicate");
+  const statusCode = Number((error as { statusCode?: number | string })?.statusCode ?? 0);
+  return (
+    statusCode === 409 ||
+    message.includes("already exists") ||
+    message.includes("duplicate") ||
+    message.includes("resource already exists")
+  );
 }
 
 const REGENERATED_STATUS = "GENERATED";
@@ -139,20 +146,37 @@ async function ensureUploadTracking(params: {
     }
   }
 
-  const { error } = await params.supabase.from("obra_document_uploads").insert({
-    obra_id: params.workId,
-    storage_bucket: params.storageBucket,
-    storage_path: params.storagePath,
-    file_name: params.fileName,
-    uploaded_by: params.userId,
-  });
+  const { error } = await params.supabase.from("obra_document_uploads").upsert(
+    {
+      obra_id: params.workId,
+      storage_bucket: params.storageBucket,
+      storage_path: params.storagePath,
+      file_name: params.fileName,
+      uploaded_by: params.userId,
+    },
+    { onConflict: "storage_path" },
+  );
   if (error) throw error;
+}
+
+async function generatedStoragePathIsAvailable(
+  supabase: Awaited<ReturnType<typeof resolveRequestAccessContext>>["supabase"],
+  storagePath: string,
+) {
+  const [{ data: generated, error: generatedError }, { data: upload, error: uploadError }] = await Promise.all([
+    supabase.from("generated_documents").select("id").eq("storage_path", storagePath).maybeSingle(),
+    supabase.from("obra_document_uploads").select("id").eq("storage_path", storagePath).maybeSingle(),
+  ]);
+  if (generatedError) throw generatedError;
+  if (uploadError) throw uploadError;
+  return !generated && !upload;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const access = await resolveRequestAccessContext();
     const { supabase, user, tenantId, actorType } = access;
+    const admin = createSupabaseAdminClient();
 
     if (!user && actorType !== "demo") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -347,12 +371,13 @@ export async function POST(request: NextRequest) {
       workName,
       generatedAt: new Date().toLocaleDateString("es-AR"),
     });
+    const pdfHtml = `${html}<style>.oc{--oc-font-size:12px !important;}</style>`;
 
     const pdfResponse = await fetch(new URL("/api/pdf-render", request.url), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        html,
+        html: pdfHtml,
         options: {
           companyName: "Síntesis",
           reportTitle: String(template.name ?? "Documento"),
@@ -394,7 +419,7 @@ export async function POST(request: NextRequest) {
     if (editingGeneratedDocument) {
       storagePath = editingGeneratedDocument.storagePath;
       finalFileName = editingGeneratedDocument.fileName;
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await admin.storage
         .from(editingGeneratedDocument.storageBucket || DOCUMENTS_BUCKET)
         .upload(storagePath, pdfBytes, {
           contentType: "application/pdf",
@@ -404,16 +429,21 @@ export async function POST(request: NextRequest) {
         throw uploadError;
       }
     } else {
+      let uploaded = false;
       for (let attempt = 1; attempt <= 200; attempt += 1) {
         finalFileName = withNumericSuffix(baseFileName, attempt);
         storagePath = `${workId}/${folderPath}/${finalFileName}`;
-        const { error: uploadError } = await supabase.storage
+        if (!(await generatedStoragePathIsAvailable(supabase, storagePath))) {
+          continue;
+        }
+        const { error: uploadError } = await admin.storage
           .from(DOCUMENTS_BUCKET)
           .upload(storagePath, pdfBytes, {
             contentType: "application/pdf",
             upsert: false,
           });
         if (!uploadError) {
+          uploaded = true;
           break;
         }
         if (!isAlreadyExistsError(uploadError)) {
@@ -422,6 +452,9 @@ export async function POST(request: NextRequest) {
         if (attempt === 200) {
           throw uploadError;
         }
+      }
+      if (!uploaded) {
+        throw new Error("No se pudo encontrar un nombre disponible para guardar el documento.");
       }
     }
 

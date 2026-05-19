@@ -116,8 +116,8 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Button
           type="button"
-          variant="outline"
-          className="h-12 rounded-lg border-red-200 text-red-700 hover:bg-red-50 active:scale-[0.98]"
+          variant="destructive"
+          className="h-12 text-md"
           disabled={disabled || updating}
           onClick={() => onDecision("REJECTED", comment)}
         >
@@ -126,7 +126,8 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
         </Button>
         <Button
           type="button"
-          className="h-12 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98]"
+          variant="success"
+          className="h-12 text-md"
           disabled={disabled || updating}
           onClick={() => onDecision("APPROVED", comment)}
         >
