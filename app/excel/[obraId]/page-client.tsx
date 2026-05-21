@@ -239,6 +239,19 @@ const toIsoDateTime = (value: string | null) => {
 	return date.toISOString();
 };
 
+async function fetchPermissionChecks(keys: string[]): Promise<Record<string, boolean>> {
+	const params = new URLSearchParams();
+	for (const key of keys) params.append("key", key);
+	const response = await fetch(`/api/permissions/check?${params.toString()}`, {
+		cache: "no-store",
+	});
+	const payload = await response.json().catch(() => ({}));
+	if (!response.ok) {
+		throw new Error(payload.error ?? "No se pudieron consultar los permisos");
+	}
+	return payload.permissions ?? {};
+}
+
 async function fetchFindings(obraId: string, periodKey?: string): Promise<ReportFinding[]> {
 	const query = periodKey ? `?period=${encodeURIComponent(periodKey)}` : "";
 	const response = await fetch(`/api/obras/${obraId}/findings${query}`);
@@ -1272,6 +1285,14 @@ function ObraDetailPageContent({
 	const isDocumentsTabActive = activeTab === "documentos";
 	const isFlujoTabActive = activeTab === "flujo";
 	const isCertificatesTabActive = activeTab === "certificates";
+	const deletePermissionsQuery = useQuery({
+		queryKey: ["permissions-check", "obra-delete", activeTenantId],
+		queryFn: () => fetchPermissionChecks(["obras:delete"]),
+		enabled: !isTenantAdminStatusLoading,
+		staleTime: 5 * 60 * 1000,
+		refetchOnWindowFocus: false,
+	});
+	const canDeleteObra = Boolean(deletePermissionsQuery.data?.["obras:delete"]);
 
 	// React Query hooks for cached data fetching
 	// Core obra data - always fetch
@@ -2385,8 +2406,8 @@ function ObraDetailPageContent({
 	}, [buildDirtyObraPayload, form.state.values, initialFormValues, persistObra]);
 
 	const handleDeleteObra = useCallback(async () => {
-		if (!isTenantAdmin) {
-			toast.error("Solo administradores pueden borrar obras.");
+		if (!canDeleteObra) {
+			toast.error("No tenes permiso para borrar obras.");
 			return;
 		}
 
@@ -2424,7 +2445,7 @@ function ObraDetailPageContent({
 		} finally {
 			setIsDeletingObra(false);
 		}
-	}, [isTenantAdmin, obraId, push, queryClient]);
+	}, [canDeleteObra, obraId, push, queryClient]);
 
 	const activeMainTableColumns = useMemo(
 		() =>
@@ -3618,7 +3639,7 @@ function ObraDetailPageContent({
 										</Button>
 									</>
 								) : null}
-								{isTenantAdmin ? (
+								{canDeleteObra ? (
 									<Button
 										type="button"
 										variant="destructive"

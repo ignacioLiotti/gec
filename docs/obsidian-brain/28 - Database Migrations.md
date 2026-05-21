@@ -127,6 +127,15 @@ tags: #database #migrations #schema #history
 | 0085 | `audit_log_document_uploads.sql` | Adds audit trigger to obra_document_uploads |
 | 0086 | `audit_log_noise_reduction.sql` | Filters out high-frequency low-value audit events |
 
+### Phase 8 - Demo, Soft Delete, Data Flow & Document Generation (0087-0102)
+
+| # | File | What it does |
+|---|------|-------------|
+| 0089 | `document_soft_delete.sql` | `obra_document_deletes` trash lifecycle for files/folders |
+| 0090 | `obra_soft_delete.sql` | `obra_deletes` trash lifecycle for obras |
+| 0101 | `tenant_scoped_obra_document_storage_policies.sql` | Replaces broad `obra-documents` Storage policies with tenant/obra-scoped policies |
+| 0102 | `delete_lifecycle_permissions.sql` | Adds distinct role permissions for deleting obras, files, and folders |
+
 ---
 
 ## Key SQL Patterns

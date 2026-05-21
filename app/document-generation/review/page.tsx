@@ -16,7 +16,7 @@ export default async function DocumentGenerationReviewPage() {
   return (
     <DocumentGenerationShell permissions={access.permissions}>
       {access.permissions.canReview ? (
-        <DocumentReviewPageClient permissions={access.permissions} />
+        <DocumentReviewPageClient />
       ) : (
         <div className="p-6">
           <div className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-600">

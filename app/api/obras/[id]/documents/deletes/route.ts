@@ -116,6 +116,25 @@ function isKeepPlaceholderFile(
 	return normalizedPath === ".keep" || normalizedPath.endsWith("/.keep");
 }
 
+async function hasDocumentDeletePermission(
+	access: Awaited<ReturnType<typeof resolveRequestAccessContext>>,
+	itemType: DeleteItemType,
+) {
+	if (access.actorType !== "user" || !access.user || !access.tenantId) {
+		return false;
+	}
+	const permissionKey =
+		itemType === "folder"
+			? "documents:delete:folder"
+			: "documents:delete:file";
+	const { data, error } = await access.supabase.rpc("has_permission", {
+		tenant: access.tenantId,
+		perm_key: permissionKey,
+	});
+	if (error) throw error;
+	return data === true;
+}
+
 function buildFolderTreeEntries(folderPath: string, fileRows: DeleteRow[]) {
 	const normalizedFolderPath = folderPath.replace(/\/+$/, "");
 	const nestedFolderPaths = new Set<string>();
@@ -508,6 +527,18 @@ export async function POST(request: Request, context: RouteContext) {
 		}
 		if (!rawStoragePath) {
 			return NextResponse.json({ error: "Ruta inválida." }, { status: 400 });
+		}
+
+		if (!(await hasDocumentDeletePermission(access.access, itemType))) {
+			return NextResponse.json(
+				{
+					error:
+						itemType === "folder"
+							? "No tenes permiso para borrar carpetas."
+							: "No tenes permiso para borrar archivos.",
+				},
+				{ status: 403 },
+			);
 		}
 
 		const storagePath = normalizeStoragePath(rawStoragePath);

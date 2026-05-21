@@ -104,9 +104,12 @@ export async function GET() {
 		// For regular users, get tables based on their roles
 		const { data: userRoles, error: userRolesError } = await supabase
 			.from("user_roles")
-			.select("role_id")
+			.select(`
+				role_id,
+				roles!inner(tenant_id)
+			`)
 			.eq("user_id", user.id)
-			.eq("tenant_id", tenantId);
+			.eq("roles.tenant_id", tenantId);
 
 		if (userRolesError) {
 			console.warn("[sidebar-macro-tables] user role lookup failed", {

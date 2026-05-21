@@ -66,7 +66,7 @@ macro_table_permissions       — macro_table_id, (user_id OR role_id), permissi
 |-----|------------|
 | `viewer` | nav:dashboard, obras:read, certificados:read, macro:read |
 | `editor` | obras:read+edit, certificados:edit, macro:edit |
-| `obra_manager` | obras:admin, certificados:read |
+| `obra_manager` | obras:admin, obras:delete, documents:delete:file, documents:delete:folder, certificados:read |
 | `accountant` | certificados:admin |
 | `macro_analyst` | macro:admin |
 
@@ -86,6 +86,18 @@ Dashboard route access is available to all authenticated users and appears in th
 | `document_creator` | nav:document-generation, documents:create |
 | `document_reviewer` | nav:document-generation, documents:review |
 | `document_manager` | nav:document-generation, documents:create, documents:review, documents:templates, documents:drafts:all |
+
+### Delete lifecycle permissions
+
+Soft delete actions use explicit permissions so destructive capabilities can be assigned independently from broad admin access:
+
+| Permission | Meaning |
+|---|---|
+| `obras:delete` | Send obras to the obra trash |
+| `documents:delete:file` | Send individual document files to the document trash |
+| `documents:delete:folder` | Send folders and their descendants to the document trash |
+
+`owner` and `admin` memberships still bypass custom role restrictions through `has_permission`. Migration 0102 backfills these three permissions into roles that already had `obras:admin`, and the `obra_manager` template includes them for new tenants/roles.
 
 **Resolution:**
 ```typescript

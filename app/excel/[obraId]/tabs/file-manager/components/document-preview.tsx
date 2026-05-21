@@ -1,16 +1,28 @@
 "use client";
 
 import { memo, useEffect, useMemo, useState } from "react";
-import Papa from "papaparse";
+import dynamic from "next/dynamic";
 import { AlertCircle, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { cn } from "@/lib/utils";
-import { parseWorkbook, type SheetData } from "@/lib/excel-preview";
-import { ExcelGrid } from "@/components/excel-grid";
-import ForgeViewer from "@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer";
-import { EnhancedDocumentViewer } from "@/components/viewer/enhanced-document-viewer";
+import type { SheetData } from "@/lib/excel-preview";
 import type { FileSystemItem } from "../types";
+
+const ForgeViewer = dynamic(
+	() => import("@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer"),
+	{ ssr: false }
+);
+
+const EnhancedDocumentViewer = dynamic(
+	() => import("@/components/viewer/enhanced-document-viewer").then((mod) => mod.EnhancedDocumentViewer),
+	{ ssr: false }
+);
+
+const ExcelGrid = dynamic(
+	() => import("@/components/excel-grid").then((mod) => mod.ExcelGrid),
+	{ ssr: false }
+);
 
 type DocumentPreviewProps = {
 	document: FileSystemItem | null;
@@ -95,7 +107,8 @@ function getPreviewKind(document: FileSystemItem): PreviewKind {
 	return "unsupported";
 }
 
-function buildCsvSheet(text: string): SheetData {
+async function buildCsvSheet(text: string): Promise<SheetData> {
+	const Papa = (await import("papaparse")).default;
 	const parsed = Papa.parse<string[]>(text, {
 		skipEmptyLines: false,
 	});
@@ -206,6 +219,7 @@ function SpreadsheetLikePreview({
 				}
 
 				if (mode === "spreadsheet") {
+					const { parseWorkbook } = await import("@/lib/excel-preview");
 					const workbook = parseWorkbook(await response.arrayBuffer());
 					if (cancelled) return;
 					setSheets(workbook.sheets);
@@ -217,7 +231,8 @@ function SpreadsheetLikePreview({
 				const text = await response.text();
 				if (cancelled) return;
 				if (mode === "csv") {
-					const csvSheet = buildCsvSheet(text);
+					const csvSheet = await buildCsvSheet(text);
+					if (cancelled) return;
 					setSheets([csvSheet]);
 					setSelectedSheetName(csvSheet.name);
 					setTextPreview("");

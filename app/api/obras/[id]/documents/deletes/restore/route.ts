@@ -90,74 +90,7 @@ export async function POST(request: Request, context: RouteContext) {
 			);
 		}
 
-		const rowsToRestore: Array<{
-			id: string;
-			item_type: string;
-			file_size_bytes: number | null;
-		}> = [];
-		if (targetDelete.item_type === "folder") {
-			const { data: childrenRows, error: childrenRowsError } = await supabase
-				.from("obra_document_deletes")
-				.select("id, item_type, file_size_bytes")
-				.eq("tenant_id", tenantId)
-				.eq("obra_id", obraId)
-				.eq("root_folder_path", targetDelete.storage_path as string)
-				.is("restored_at", null)
-				.is("purged_at", null);
-			if (childrenRowsError) throw childrenRowsError;
-			rowsToRestore.push(...(childrenRows ?? []));
-		}
-
-		const { data: targetRows, error: targetRowsError } = await supabase
-			.from("obra_document_deletes")
-			.select("id, item_type, file_size_bytes")
-			.eq("id", deleteId)
-			.eq("tenant_id", tenantId)
-			.eq("obra_id", obraId)
-			.is("restored_at", null)
-			.is("purged_at", null);
-		if (targetRowsError) throw targetRowsError;
-		rowsToRestore.push(...(targetRows ?? []));
-
-		const restoredFileRowsPreview = rowsToRestore.filter((row) => row.item_type === "file");
-		const bytesRestored = restoredFileRowsPreview.reduce((sum, row) => {
-			const size =
-				typeof row.file_size_bytes === "number" && row.file_size_bytes > 0
-					? row.file_size_bytes
-					: 0;
-			return sum + size;
-		}, 0);
 		const plan = await fetchTenantPlan(supabase, tenantId);
-
-		if (bytesRestored > 0) {
-			try {
-				await incrementTenantUsage(
-					supabase,
-					tenantId,
-					{ storageBytes: bytesRestored },
-					plan.limits,
-				);
-				await logTenantUsageEvent(supabase, {
-					tenantId,
-					kind: "storage_bytes",
-					amount: bytesRestored,
-					context: "documents_restore",
-					metadata: {
-						obraId,
-						deleteId,
-						itemType: targetDelete.item_type,
-						storagePath: targetDelete.storage_path,
-						rowCount: rowsToRestore.length,
-					},
-				});
-			} catch (usageError) {
-				const err = usageError as Error & { code?: string };
-				return NextResponse.json(
-					{ error: err.message || "Superaste el limite de almacenamiento disponible." },
-					{ status: usageErrorToStatus(err.code) },
-				);
-			}
-		}
 
 		const nowIso = new Date().toISOString();
 		const restorePatch = {
@@ -194,30 +127,73 @@ export async function POST(request: Request, context: RouteContext) {
 			if (targetRestoreError) throw targetRestoreError;
 			restoredRows = [...restoredRows, ...(restoredTarget ?? [])];
 		} catch (restoreError) {
-			if (bytesRestored > 0) {
-				await incrementTenantUsage(
-					supabase,
-					tenantId,
-					{ storageBytes: -bytesRestored },
-					plan.limits,
-				).catch((rollbackError) =>
-					console.error(
-						"[documents:deletes:restore] failed to rollback storage usage",
-						rollbackError,
-					),
-				);
-				await logTenantUsageEvent(supabase, {
-					tenantId,
-					kind: "storage_bytes",
-					amount: -bytesRestored,
-					context: "documents_restore_rollback",
-					metadata: { obraId, deleteId },
-				});
-			}
 			throw restoreError;
 		}
 
 		const restoredFileRows = restoredRows.filter((row) => row.item_type === "file");
+		const bytesRestored = restoredFileRows.reduce((sum, row) => {
+			const size =
+				typeof row.file_size_bytes === "number" && row.file_size_bytes > 0
+					? row.file_size_bytes
+					: 0;
+			return sum + size;
+		}, 0);
+
+		if (bytesRestored > 0) {
+			try {
+				await incrementTenantUsage(
+					supabase,
+					tenantId,
+					{ storageBytes: bytesRestored },
+					plan.limits,
+				);
+			} catch (usageError) {
+				const restoredIds = restoredRows.map((row) => row.id).filter(Boolean);
+				if (restoredIds.length > 0) {
+					const { error: rollbackError } = await supabase
+						.from("obra_document_deletes")
+						.update({
+							restored_at: null,
+							restored_by: null,
+							restored_by_email: null,
+						})
+						.in("id", restoredIds)
+						.eq("tenant_id", tenantId)
+						.eq("obra_id", obraId)
+						.eq("restored_at", nowIso);
+					if (rollbackError) {
+						console.error(
+							"[documents:deletes:restore] failed to rollback restored rows after usage error",
+							rollbackError,
+						);
+					}
+				}
+				const err = usageError as Error & { code?: string };
+				return NextResponse.json(
+					{ error: err.message || "Superaste el limite de almacenamiento disponible." },
+					{ status: usageErrorToStatus(err.code) },
+				);
+			}
+
+			await logTenantUsageEvent(supabase, {
+				tenantId,
+				kind: "storage_bytes",
+				amount: bytesRestored,
+				context: "documents_restore",
+				metadata: {
+					obraId,
+					deleteId,
+					itemType: targetDelete.item_type,
+					storagePath: targetDelete.storage_path,
+					rowCount: restoredRows.length,
+				},
+			}).catch((usageLogError) =>
+				console.error(
+					"[documents:deletes:restore] failed to log storage usage event",
+					usageLogError,
+				),
+			);
+		}
 
 		return NextResponse.json({
 			ok: true,

@@ -1,23 +1,21 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Shield, Layout, Save, X } from "lucide-react";
+import { Shield, Save, X } from "lucide-react";
 import { PermissionMatrix } from "./permission-matrix";
-import { NavigationTree } from "./navigation-tree";
 import {
   createRoleWithPermissions,
   updateRoleWithPermissions,
@@ -42,28 +40,14 @@ export function RoleEditor({
   onOpenChange,
   onSaved,
 }: RoleEditorProps) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [color, setColor] = useState("#6366f1");
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [name, setName] = useState(role?.name ?? "");
+  const [description, setDescription] = useState(role?.description ?? "");
+  const [color, setColor] = useState(role?.color ?? "#6366f1");
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>(
+    role?.permissions ?? [],
+  );
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-
-  // Initialize form when role changes
-  useEffect(() => {
-    if (role) {
-      setName(role.name);
-      setDescription(role.description || "");
-      setColor(role.color || "#6366f1");
-      setSelectedPermissions(role.permissions || []);
-    } else {
-      setName("");
-      setDescription("");
-      setColor("#6366f1");
-      setSelectedPermissions([]);
-    }
-    setError(null);
-  }, [role, open]);
 
   const handleSubmit = () => {
     if (!name.trim()) {
@@ -106,30 +90,35 @@ export function RoleEditor({
   const isNew = !role;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-xl w-full flex flex-col px-4">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <Shield className="size-5" />
             {isNew ? "Crear Rol" : `Editar: ${role.name}`}
-          </SheetTitle>
-          <SheetDescription>
+          </DialogTitle>
+          <DialogDescription>
             {isNew
-              ? "Crea un nuevo rol con permisos personalizados"
-              : "Modifica los permisos y configuracion del rol"}
-          </SheetDescription>
-        </SheetHeader>
+              ? "Crea un rol definiendo que ve en la navegacion, a que pantallas entra y que acciones puede ejecutar. Los permisos no soportados como candados reales no se muestran."
+              : "Modifica la navegacion, pantallas y acciones/API habilitadas para este rol. Los permisos no soportados como candados reales no se muestran."}
+          </DialogDescription>
+        </DialogHeader>
 
-        <ScrollArea className="flex-1 -mx-6 px-6">
-          <div className="space-y-6 py-4">
+        <ScrollArea className="flex-1">
+          <div className="grid gap-6 p-4 lg:grid-cols-[320px_minmax(0,1fr)]">
             {error && (
-              <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950 p-3 rounded-lg">
+              <div className="rounded-lg bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950 lg:col-span-2">
                 {error}
               </div>
             )}
 
-            {/* Basic Info */}
-            <div className="space-y-4">
+            <div className="space-y-4 rounded-md border bg-card p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Identidad del rol</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Esto solo describe el rol. No cambia permisos hasta que marques capacidades a la derecha.
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Nombre del Rol</Label>
                 <Input
@@ -179,40 +168,17 @@ export function RoleEditor({
               </div>
             </div>
 
-            {/* Permissions */}
-            <div className="space-y-4 max-h-[45vh] overflow-y-auto">
-              <Tabs defaultValue="matrix">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="matrix" className="flex items-center gap-2">
-                    <Shield className="size-4" />
-                    Permisos
-                  </TabsTrigger>
-                  <TabsTrigger value="navigation" className="flex items-center gap-2">
-                    <Layout className="size-4" />
-                    Navegacion
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="matrix" className="mt-4 ">
-                  <PermissionMatrix
-                    permissionsByCategory={permissionsByCategory}
-                    selectedPermissions={selectedPermissions}
-                    onChange={setSelectedPermissions}
-                  />
-                </TabsContent>
-
-                <TabsContent value="navigation" className="mt-4 ">
-                  <NavigationTree
-                    selectedPermissions={selectedPermissions}
-                    onChange={setSelectedPermissions}
-                  />
-                </TabsContent>
-              </Tabs>
+            <div className="min-w-0">
+              <PermissionMatrix
+                permissionsByCategory={permissionsByCategory}
+                selectedPermissions={selectedPermissions}
+                onChange={setSelectedPermissions}
+              />
             </div>
           </div>
         </ScrollArea>
 
-        <SheetFooter className="pt-4 border-t">
+        <DialogFooter>
           <div className="flex items-center justify-between w-full">
             <div className="text-sm text-muted-foreground">
               {selectedPermissions.length} permisos seleccionados
@@ -228,8 +194,8 @@ export function RoleEditor({
               </Button>
             </div>
           </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

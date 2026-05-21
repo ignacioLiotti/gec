@@ -105,22 +105,28 @@ These functions run with elevated privileges (bypass RLS):
 
 ---
 
-## Storage Bucket RLS (migration 0014)
+## Storage Bucket RLS (migrations 0014, 0101)
 
 `obra-documents` bucket policies:
 ```sql
--- Users can only read files in their tenant's obras
-CREATE POLICY "tenant_read" ON storage.objects
+-- Users can only access files whose first path segment is an obra
+-- belonging to one of their tenant memberships.
+CREATE POLICY "obra-documents read" ON storage.objects
   FOR SELECT USING (
     bucket_id = 'obra-documents' AND
-    (storage.foldername(name))[1] IN (
-      SELECT o.id::text FROM obras o
-      JOIN memberships m ON m.tenant_id = o.tenant_id
-      WHERE m.user_id = auth.uid()
+    EXISTS (
+      SELECT 1
+      FROM obras o
+      WHERE o.id::text = (storage.foldername(name))[1]
+        AND public.is_member_of(o.tenant_id)
     )
   );
 
--- Same pattern for INSERT, UPDATE, DELETE
+-- INSERT/UPDATE also require the target obra to be active
+-- (`deleted_at IS NULL` and `purged_at IS NULL`).
+-- SELECT/UPDATE/DELETE also exclude paths with active rows in
+-- `obra_document_deletes`, including children of deleted folders.
+-- App UX should still use soft-delete APIs instead of direct Storage deletion.
 ```
 
 ---

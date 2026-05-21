@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -16,9 +16,7 @@ import {
 
 import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { Button } from "@/components/ui/button";
-import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
-import { DocumentGenerationNav } from "./document-nav";
 
 type GeneratedListItem = {
   id: string;
@@ -87,6 +85,9 @@ function eventComment(event: GeneratedEvent) {
   return typeof comment === "string" && comment.trim() ? comment.trim() : "";
 }
 
+const MIN_PREVIEW_ZOOM = 36;
+const MAX_PREVIEW_ZOOM = 400;
+
 const ReviewCommentActions = memo(function ReviewCommentActions({
   updating,
   disabled,
@@ -139,11 +140,7 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
   );
 });
 
-export function DocumentReviewPageClient({
-  permissions,
-}: {
-  permissions: DocumentGenerationPermissionMap;
-}) {
+export function DocumentReviewPageClient() {
   const [documents, setDocuments] = useState<GeneratedListItem[]>([]);
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [selectedId, setSelectedId] = useState("");
@@ -151,7 +148,27 @@ export function DocumentReviewPageClient({
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [zoom, setZoom] = useState(82);
+  const [zoom, setZoom] = useState(100);
+  const previewViewportRef = useRef<HTMLDivElement | null>(null);
+  const previewPaperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const viewport = previewViewportRef.current;
+    const paper = previewPaperRef.current;
+    if (!viewport || !paper || !detail?.document?.previewHtml) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const viewportStyles = window.getComputedStyle(viewport);
+      const horizontalPadding =
+        Number.parseFloat(viewportStyles.paddingLeft) + Number.parseFloat(viewportStyles.paddingRight);
+      const availableWidth = Math.max(1, viewport.clientWidth - horizontalPadding);
+      const paperWidth = Math.max(paper.scrollWidth, paper.offsetWidth, 1);
+      const fitZoom = Math.max(MIN_PREVIEW_ZOOM, Math.min(100, Math.floor((availableWidth / paperWidth) * 100)));
+      setZoom(fitZoom);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [detail?.document?.previewHtml]);
 
   const loadQueue = async (preferredId?: string) => {
     setLoadingQueue(true);
@@ -219,11 +236,6 @@ export function DocumentReviewPageClient({
 
   const selectedIndex = documents.findIndex((document) => document.id === selectedId);
   const currentDocument = detail?.document ?? documents[selectedIndex] ?? null;
-  const remainingDocuments = useMemo(
-    () => documents.filter((document) => document.id !== selectedId),
-    [documents, selectedId],
-  );
-  const nextDocument = remainingDocuments[0] ?? null;
   const reviewComments = useMemo(
     () => (detail?.events ?? []).filter((event) => eventComment(event)),
     [detail?.events],
@@ -258,18 +270,14 @@ export function DocumentReviewPageClient({
   };
 
   return (
-    <div className="flex min-h-[calc(100dvh-24px)] flex-col bg-[#fafafa] px-3 py-3 sm:px-4 sm:py-4">
+    <div className="flex min-h-[calc(100dvh-24px)] max-w-full flex-col overflow-x-hidden bg-[#fafafa] px-3 py-3 sm:px-4 sm:py-4">
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Revision documental</p>
-            <DocumentGenerationNav permissions={permissions} />
-          </div>
-          <h1 className="mt-2 text-xl font-semibold tracking-tight text-stone-950 sm:text-2xl">
+        <div className="min-w-0 flex-1">
+          <h1 className="break-words text-xl font-semibold tracking-tight text-stone-950 sm:text-2xl">
             {currentDocument?.fileName ?? "No hay documentos pendientes"}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-600">
             {counts.pending} pendientes
           </span>
@@ -280,7 +288,7 @@ export function DocumentReviewPageClient({
         </div>
       </header>
 
-      <main className="grid flex-1 gap-3 lg:min-h-0 lg:grid-cols-[280px_minmax(0,1fr)_320px]">
+      <main className="grid min-w-0 flex-1 gap-3 lg:min-h-0 lg:grid-cols-[280px_minmax(0,1fr)_320px]">
         <aside className="hidden min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-white lg:flex lg:flex-col">
           <div className="border-b border-stone-200 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Siguientes</p>
@@ -330,10 +338,10 @@ export function DocumentReviewPageClient({
           </div>
         </aside>
 
-        <section className="min-h-[60dvh] overflow-hidden rounded-xl border border-stone-200 bg-[#e9e7e1] lg:min-h-0">
-          <div className="flex items-center justify-between gap-2 border-b border-stone-200 bg-white px-3 py-2">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-stone-950">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-[#e9e7e1] lg:min-h-0">
+          <div className="flex items-start justify-between gap-2 border-b border-stone-200 bg-white px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-2 break-words text-sm font-semibold leading-5 text-stone-950 sm:truncate">
                 {currentDocument?.workLabel ?? "Documento"}
               </p>
               <p className="text-xs text-stone-500">{currentDocument ? statusLabel(currentDocument.status) : "Sin seleccion"}</p>
@@ -343,7 +351,7 @@ export function DocumentReviewPageClient({
                 type="button"
                 variant="outline"
                 className="h-9 w-9 rounded-md p-0"
-                onClick={() => setZoom((current) => Math.max(48, current - 8))}
+                onClick={() => setZoom((current) => Math.max(MIN_PREVIEW_ZOOM, current - 8))}
                 disabled={!currentDocument}
                 aria-label="Alejar"
               >
@@ -354,8 +362,8 @@ export function DocumentReviewPageClient({
                 type="button"
                 variant="outline"
                 className="h-9 w-9 rounded-md p-0"
-                onClick={() => setZoom((current) => Math.min(140, current + 8))}
-                disabled={!currentDocument}
+                onClick={() => setZoom((current) => Math.min(MAX_PREVIEW_ZOOM, current + 8))}
+                disabled={!currentDocument || zoom >= MAX_PREVIEW_ZOOM}
                 aria-label="Acercar"
               >
                 <Plus className="h-4 w-4" />
@@ -363,19 +371,19 @@ export function DocumentReviewPageClient({
             </div>
           </div>
 
-          <div className="h-[calc(100%-54px)] overflow-auto p-3 sm:p-5">
+          <div ref={previewViewportRef} className="min-h-[60dvh] overflow-auto p-3 sm:p-5 lg:min-h-0">
             {loadingDetail ? (
               <div className="grid min-h-[560px] place-items-center">
                 <Loader2 className="h-5 w-5 animate-spin text-stone-500" />
               </div>
             ) : detail?.document?.previewHtml ? (
-              <div className="mx-auto w-fit pb-10">
+              <div className="mx-auto max-w-full pb-10">
                 <div
-                  className="relative origin-top rounded-sm bg-white shadow-[0_1px_0_rgba(0,0,0,0.04),0_18px_50px_-18px_rgba(0,0,0,0.28)]"
-                  style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
+                  className="relative origin-top rounded-sm bg-white shadow-[0_1px_0_rgba(0,0,0,0.04),0_18px_50px_-18px_rgba(0,0,0,0.28)] "
+                  style={{ zoom: `${zoom}%` } as CSSProperties & { zoom: string }}
                 >
                   <DocumentApprovedSeal status={detail.document.status} size="md" className="absolute left-5 top-5 z-20" />
-                  <div className="report-paper bg-white">
+                  <div ref={previewPaperRef} className="report-paper bg-white w-full!">
                     <div dangerouslySetInnerHTML={{ __html: detail.document.previewHtml }} />
                   </div>
                 </div>
@@ -441,10 +449,10 @@ export function DocumentReviewPageClient({
             </Button>
           </div>
 
-          <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3 lg:hidden">
+          {/* <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3 lg:hidden">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">Proximo</p>
             <p className="mt-2 truncate text-sm font-medium text-stone-900">{nextDocument?.fileName ?? "No hay mas documentos"}</p>
-          </div>
+          </div> */}
 
           <div className="mt-5 min-h-0 flex-1 overflow-hidden border-t border-stone-200 pt-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Comentarios</p>

@@ -1,7 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import UserRow from "./user-row";
-import ImpersonateBanner from "./_components/impersonate-banner";
 import { InviteUsersDialog } from "./_components/invite-users-dialog";
 import { PendingInvitationsList } from "./_components/pending-invitations-list";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
@@ -39,7 +38,7 @@ export default async function AdminUsersPage() {
   if (!tenantId) return <div className="p-6 text-sm">No se encontró membresía de organización.</div>;
 
   let canAdmin: boolean | null = null;
-  let permError: any = null;
+  let permError: unknown = null;
   if (!isSuperAdmin) {
     const permResult = await supabase.rpc("has_permission", {
       tenant: tenantId,
@@ -104,7 +103,6 @@ export default async function AdminUsersPage() {
         <h1 className="text-2xl font-semibold">Usuarios</h1>
         <InviteUsersDialog tenantId={tenantId} />
       </div>
-      <ImpersonateBanner />
       <PendingInvitationsList tenantId={tenantId} />
       <UsersTable
         rows={users}
@@ -159,7 +157,4 @@ function UsersTable({
   );
 }
 
-// ImpersonateBanner moved to ./_components/impersonate-banner
-
 // UserRow moved to ./user-row (client component)
-

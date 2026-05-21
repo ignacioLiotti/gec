@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import { FormTable } from '@/components/form-table/form-table';
 import { createSupabaseBrowserClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, m } from 'framer-motion';
-import JSZip from 'jszip';
 import {
   ChevronRight,
   ChevronDown,
@@ -66,20 +66,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Sentry from '@sentry/nextjs';
-import { useQueryClient } from '@tanstack/react-query';
-import ForgeViewer from '@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DocumentApprovedSeal } from '@/components/document-approved-seal';
-import { EnhancedDocumentViewer } from '@/components/viewer/enhanced-document-viewer';
 import FolderFront from '@/components/ui/FolderFront';
-import { DocumentSheet } from './components/document-sheet';
-import { SpreadsheetGridPreview } from './components/spreadsheet-grid-preview';
 import { DocumentDataSheet } from './components/document-data-sheet';
 import { FileTreeSidebar } from './components/file-tree-sidebar';
-import { SpreadsheetAdjustmentDrawer } from './components/spreadsheet-adjustment-drawer';
-import { SpreadsheetImportSummaryModal } from './components/spreadsheet-import-summary-modal';
 import type { SpreadsheetPreviewPayload, SpreadsheetPreviewTable } from './components/spreadsheet-preview-types';
 import { useDocumentsStore, needsRefetch, markDocumentsFetched, setDocumentsLoading } from './hooks/useDocumentsStore';
-import { OcrTemplateConfigurator } from '@/app/admin/obra-defaults/_components/OcrTemplateConfigurator';
 import {
   normalizeFolderName,
   normalizeFolderPath,
@@ -141,8 +134,56 @@ import {
 } from '@/lib/demo-tours/excel-guided-flow';
 import { downloadDemoCertificadoPdf } from '@/lib/demo-tours/demo-certificado-pdf';
 
+const DocumentSheet = dynamic(
+  () => import('./components/document-sheet').then((mod) => mod.DocumentSheet),
+  { ssr: false },
+);
+
+const ForgeViewer = dynamic(
+  () => import('@/app/excel/[obraId]/tabs/file-manager/components/viewer/forgeviewer'),
+  { ssr: false },
+);
+
+const EnhancedDocumentViewer = dynamic(
+  () => import('@/components/viewer/enhanced-document-viewer').then((mod) => mod.EnhancedDocumentViewer),
+  { ssr: false },
+);
+
+const SpreadsheetGridPreview = dynamic(
+  () => import('./components/spreadsheet-grid-preview').then((mod) => mod.SpreadsheetGridPreview),
+  { ssr: false },
+);
+
+const SpreadsheetAdjustmentDrawer = dynamic(
+  () => import('./components/spreadsheet-adjustment-drawer').then((mod) => mod.SpreadsheetAdjustmentDrawer),
+  { ssr: false },
+);
+
+const SpreadsheetImportSummaryModal = dynamic(
+  () => import('./components/spreadsheet-import-summary-modal').then((mod) => mod.SpreadsheetImportSummaryModal),
+  { ssr: false },
+);
+
+const OcrTemplateConfigurator = dynamic(
+  () => import('@/app/admin/obra-defaults/_components/OcrTemplateConfigurator').then((mod) => mod.OcrTemplateConfigurator),
+  { ssr: false },
+);
+
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
+
+async function fetchPermissionChecks(keys: string[]): Promise<Record<string, boolean>> {
+  const params = new URLSearchParams();
+  for (const key of keys) params.append('key', key);
+  const response = await fetch(`/api/permissions/check?${params.toString()}`, {
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error ?? 'No se pudieron consultar los permisos');
+  }
+  return payload.permissions ?? {};
+}
 
 function clonePdfBytes(pdfBytes: Uint8Array) {
   return pdfBytes.slice();
@@ -931,6 +972,23 @@ function FileManagerContent({
 }: FileManagerProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const queryClient = useQueryClient();
+  const deletePermissionsQuery = useQuery({
+    queryKey: ['permissions-check', 'document-delete', obraId],
+    queryFn: () =>
+      fetchPermissionChecks(['documents:delete:file', 'documents:delete:folder']),
+    enabled: Boolean(obraId),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const canDeleteFile = Boolean(deletePermissionsQuery.data?.['documents:delete:file']);
+  const canDeleteFolder = Boolean(deletePermissionsQuery.data?.['documents:delete:folder']);
+  const canDeleteItem = useCallback(
+    (item: FileSystemItem | null | undefined) => {
+      if (!item || item.id === 'root') return false;
+      return item.type === 'folder' ? canDeleteFolder : canDeleteFile;
+    },
+    [canDeleteFile, canDeleteFolder]
+  );
   const usageInfoRef = useRef<TenantUsageInfo | null>(null);
   const mapUsagePayload = useCallback((payload: any): TenantUsageInfo | null => {
     if (!payload?.plan || !payload?.usage) {
@@ -2460,6 +2518,7 @@ function FileManagerContent({
     let downloadedCount = 0;
 
     try {
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
 
       for (const file of filesToDownload) {
@@ -3999,6 +4058,15 @@ function FileManagerContent({
 
   const handleDelete = async (item: FileSystemItem) => {
     try {
+      if (!canDeleteItem(item)) {
+        toast.error(
+          item.type === 'folder'
+            ? 'No tenes permiso para borrar carpetas.'
+            : 'No tenes permiso para borrar archivos.'
+        );
+        return;
+      }
+
       const storagePath = resolveItemStoragePath(item);
       if (!storagePath) {
         toast.error('No se pudo resolver la ruta del elemento');
@@ -4056,10 +4124,18 @@ function FileManagerContent({
     }
   };
   const confirmDelete = useCallback((item: FileSystemItem) => {
+    if (!canDeleteItem(item)) {
+      toast.error(
+        item.type === 'folder'
+          ? 'No tenes permiso para borrar carpetas.'
+          : 'No tenes permiso para borrar archivos.'
+      );
+      return;
+    }
     setItemToDelete(item);
     setIsDeleteDialogOpen(true);
     setContextMenu(null);
-  }, []);
+  }, [canDeleteItem]);
 
   const getTreeFileIcon = useCallback((mimetype?: string) => {
     if (!mimetype) return <File className="size-4 text-stone-400" />;
@@ -4239,7 +4315,7 @@ function FileManagerContent({
             </Tooltip>
           )}
 
-          {item.id !== 'root' && (
+          {canDeleteItem(item) && (
             <button
               type="button"
               className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-red-600"
@@ -4269,6 +4345,7 @@ function FileManagerContent({
       </div>
     );
   }, [
+    canDeleteItem,
     confirmDelete,
     draggedFolderId,
     expandedFolders,
@@ -7807,6 +7884,7 @@ function FileManagerContent({
             </Button>
             <Button
               variant="destructive"
+              disabled={!canDeleteItem(itemToDelete)}
               onClick={() => {
                 if (itemToDelete) {
                   handleDelete(itemToDelete);
@@ -7956,7 +8034,7 @@ function FileManagerContent({
                   Convertir a carpeta de extracción
                 </button>
               )} */}
-              {contextMenu.item.id !== 'root' && (
+              {canDeleteItem(contextMenu.item) && (
                 <button
                   className="w-full px-3 py-2 text-sm text-left hover:bg-stone-50 flex items-center gap-2 text-red-600"
                   onClick={() => confirmDelete(contextMenu.item)}

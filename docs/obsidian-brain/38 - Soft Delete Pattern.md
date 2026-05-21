@@ -4,7 +4,9 @@ tags: #database #patterns #data-integrity #schema
 
 ## Overview
 
-Instead of hard-deleting records, the app uses a **trigger-based soft delete** pattern. A `BEFORE DELETE` trigger intercepts the DELETE statement, converts it to an UPDATE setting `deleted_at`, and suppresses the actual deletion. Deleted records remain in the database but are excluded from all RLS queries.
+Instead of immediately hard-deleting user data, the app uses soft-delete lifecycles. Older tables use a **trigger-based soft delete** pattern. Newer obra and document trash flows write explicit delete-event rows with a 30-day recovery window and later maintenance purges.
+
+Deleted records remain in the database while recoverable and are excluded from normal application queries. Deleted documents are also hidden from the file tree and document access endpoints. Deleted obras are hidden from workspace/list endpoints via `deleted_at`.
 
 ---
 
@@ -129,16 +131,23 @@ The delete is fully auditable and shows who deleted the record and when.
 
 ## Restoring Soft-Deleted Records
 
-No built-in restore endpoint exists. To restore:
+The app has restore flows for the current trash systems:
 
-```sql
--- Via admin SQL (superadmin only)
-UPDATE obras
-SET deleted_at = NULL, deleted_by = NULL
-WHERE id = '<obra_id>';
-```
+- Delete actions are permission-gated: `obras:delete` for obras, `documents:delete:file` for files, and `documents:delete:folder` for folders. Tenant `owner`/`admin` still bypass custom role restrictions through `has_permission`.
+- Deleted obras are tracked in `obra_deletes` and can be restored by tenant admins within 30 days via `/api/obras/deletes/restore`.
+- Deleted files/folders are tracked in `obra_document_deletes` and can be restored within 30 days via `/api/obras/[id]/documents/deletes/restore`.
+- Expired delete events are not recoverable from the UI/API. Maintenance jobs mark them as purged after retention.
 
-The app UI has no restore functionality — deletion is intended to be final from a UX perspective.
+Manual SQL restore should be reserved for exceptional admin repair, because it can bypass audit fields, usage accounting, and delete-event state.
+
+## Purge Semantics
+
+Purge does not mean the same thing for every entity:
+
+- Document purge removes the physical Storage object and cleans known document-derived metadata such as upload tracking, OCR processing rows, and extracted rows linked by `__docPath`.
+- Obra purge removes files under the obra Storage prefix and marks the obra/delete event as purged. The obra row and related database records may remain for audit/history unless a future migration defines a stronger data-erasure contract.
+
+If product/legal requirements demand complete erasure of all obra child data, that needs a separate ADR and migration plan.
 
 ---
 

@@ -35,6 +35,21 @@ type ObraCompletionRecord = ObraStatusRecord & {
 	on_finish_second_send_at?: string | null;
 };
 
+async function hasTenantPermission(
+	access: Awaited<ReturnType<typeof resolveRequestAccessContext>>,
+	permissionKey: string,
+) {
+	if (access.actorType !== "user" || !access.user || !access.tenantId) {
+		return false;
+	}
+	const { data, error } = await access.supabase.rpc("has_permission", {
+		tenant: access.tenantId,
+		perm_key: permissionKey,
+	});
+	if (error) throw error;
+	return data === true;
+}
+
 const obraPatchSchema = obraSchema.omit({ id: true }).partial();
 
 function buildObraUpdatePayload(
@@ -612,14 +627,22 @@ export async function DELETE(
 	{ params }: { params: Promise<{ id: string }> }
 ) {
 	const { id: obraId } = await params;
-	const { supabase, user, tenantId } = await getAuthContext();
+	const access = await resolveRequestAccessContext();
+	const { supabase, user, tenantId, actorType } = access;
 
-	if (!user) {
+	if (!user || actorType !== "user") {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
 	if (!tenantId) {
 		return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	}
+
+	if (!(await hasTenantPermission(access, "obras:delete"))) {
+		return NextResponse.json(
+			{ error: "No tenes permiso para borrar obras." },
+			{ status: 403 },
+		);
 	}
 
 	if (!obraId || obraId === "undefined") {

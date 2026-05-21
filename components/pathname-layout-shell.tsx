@@ -16,6 +16,7 @@ import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-
 import type { Role } from "@/lib/route-access";
 import { track } from "@vercel/analytics";
 import { NavigationProgress } from "./navigation-progress";
+import { ImpersonateBanner } from "./auth/impersonate-banner";
 
 const DeferredAppSidebar = dynamic(
 	() => import("@/components/app-sidebar").then((mod) => mod.AppSidebar),
@@ -111,6 +112,7 @@ export function PathnameLayoutShell({
 					demoCapabilities={demoCapabilities}
 				/>
 				<SidebarInset>
+					<ImpersonateBanner />
 					<main className="flex flex-1 flex-col gap-4 bg-[#fafafa]">
 						{children}
 					</main>

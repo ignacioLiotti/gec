@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Shield, Layers, Sparkles, Users } from "lucide-react";
+import { Plus, Shield, Users } from "lucide-react";
 import { RoleCard } from "./role-card";
 import { RoleEditor } from "./role-editor";
 import UserAssignments from "./user-assignments";
@@ -28,9 +28,6 @@ type RolesPageClientProps = {
 export function RolesPageClient({
   roles,
   permissionsByCategory,
-  templates,
-  macroPermissions,
-  macroTables,
   users,
   tenantId,
 }: RolesPageClientProps) {
@@ -135,8 +132,9 @@ export function RolesPageClient({
         </TabsContent>
       </Tabs>
 
-      {/* Role Editor Sheet */}
+      {/* Role Editor Modal */}
       <RoleEditor
+        key={isCreating ? "new-role" : editingRole?.id ?? "closed"}
         role={isCreating ? null : editingRole}
         permissionsByCategory={permissionsByCategory}
         tenantId={tenantId}
