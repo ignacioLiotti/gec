@@ -21,6 +21,18 @@ async function getAuthContext() {
 	};
 }
 
+async function canManageObraDefaults(
+	supabase: Awaited<ReturnType<typeof resolveRequestAccessContext>>["supabase"],
+	tenantId: string,
+) {
+	const { data, error } = await supabase.rpc("has_permission", {
+		tenant: tenantId,
+		perm_key: "admin:obra-defaults",
+	});
+	if (error) throw error;
+	return data === true;
+}
+
 export async function GET() {
 	const access = await getAuthContext();
 	const { supabase, user, tenantId, actorType } = access;
@@ -65,6 +77,13 @@ export async function POST(request: Request) {
 
 	if (!tenantId) {
 		return NextResponse.json({ error: "No tenant found" }, { status: 400 });
+	}
+
+	if (!(await canManageObraDefaults(supabase, tenantId))) {
+		return NextResponse.json(
+			{ error: "No autorizado para editar configuracion de obras" },
+			{ status: 403 },
+		);
 	}
 
 	try {
@@ -164,6 +183,13 @@ export async function PUT(request: Request) {
 
 	if (!tenantId) {
 		return NextResponse.json({ error: "No tenant found" }, { status: 400 });
+	}
+
+	if (!(await canManageObraDefaults(supabase, tenantId))) {
+		return NextResponse.json(
+			{ error: "No autorizado para editar configuracion de obras" },
+			{ status: 403 },
+		);
 	}
 
 	try {
@@ -279,6 +305,13 @@ export async function DELETE(request: Request) {
 
 	if (!tenantId) {
 		return NextResponse.json({ error: "No tenant found" }, { status: 400 });
+	}
+
+	if (!(await canManageObraDefaults(supabase, tenantId))) {
+		return NextResponse.json(
+			{ error: "No autorizado para editar configuracion de obras" },
+			{ status: 403 },
+		);
 	}
 
 	try {

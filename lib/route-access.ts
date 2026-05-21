@@ -50,6 +50,8 @@ export interface RouteAccessConfig {
 	allowedRoles: Role[];
 	/**
 	 * Permission keys required for non-admin users. Admin/owner/superadmin bypass remains.
+	 * When allowedRoles is non-empty, these permissions are an alternate access path:
+	 * a non-admin member can access the route if every required permission is granted.
 	 */
 	requiredPermissions?: string[];
 }
@@ -160,6 +162,7 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	{
 		path: "/admin/obra-defaults",
 		allowedRoles: ["admin"],
+		requiredPermissions: ["admin:obra-defaults"],
 	},
 	{
 		path: "/admin/document-flows",
@@ -172,10 +175,12 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	{
 		path: "/admin/obra-defaults/reporting",
 		allowedRoles: ["admin"],
+		requiredPermissions: ["admin:obra-defaults"],
 	},
 	{
 		path: "/admin/main-table-config",
 		allowedRoles: ["admin"],
+		requiredPermissions: ["admin:main-table-config"],
 	},
 	{
 		path: "/dev",

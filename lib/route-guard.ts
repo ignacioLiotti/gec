@@ -265,12 +265,6 @@ export async function canAccessRoute(path: string): Promise<boolean> {
 		return true;
 	}
 
-	// If no roles required, allow access (most routes)
-	// Fine-grained access is controlled via sidebar_macro_tables and macro_table_permissions
-	if (config.allowedRoles.length > 0) {
-		return false;
-	}
-
 	if (config.requiredPermissions?.length) {
 		const permissionResults = await Promise.all(
 			config.requiredPermissions.map((permissionKey) =>
@@ -278,6 +272,12 @@ export async function canAccessRoute(path: string): Promise<boolean> {
 			)
 		);
 		return permissionResults.every(Boolean);
+	}
+
+	// If no roles required, allow access (most routes). Fine-grained access is
+	// controlled via sidebar_macro_tables and macro_table_permissions.
+	if (config.allowedRoles.length > 0) {
+		return false;
 	}
 
 	return true;

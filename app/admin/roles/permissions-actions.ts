@@ -1000,7 +1000,12 @@ function getNavigationItems(): NavigationItem[] {
 			{
 				path: "/admin/main-table-config",
 				label: "Tabla Principal",
-				permission: "admin:roles",
+				permission: "admin:main-table-config",
+			},
+			{
+				path: "/admin/obra-defaults",
+				label: "Configuracion de Obras",
+				permission: "admin:obra-defaults",
 			},
 			{
 				path: "/admin/audit-log",

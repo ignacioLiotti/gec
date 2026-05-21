@@ -52,6 +52,18 @@ async function getTenantContext() {
 	};
 }
 
+async function canManageMainTableConfig(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	tenantId: string,
+) {
+	const { data, error } = await supabase.rpc("has_permission", {
+		tenant: tenantId,
+		perm_key: "admin:main-table-config",
+	});
+	if (error) throw error;
+	return data === true;
+}
+
 function sanitizeColumns(raw: unknown): MainTableColumnConfig[] {
 	if (!Array.isArray(raw)) return [];
 	const next: MainTableColumnConfig[] = [];
@@ -142,12 +154,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-	const { supabase, user, tenantId, role } = await getTenantContext();
+	const { supabase, user, tenantId } = await getTenantContext();
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	if (!tenantId) return NextResponse.json({ error: "Tenant no encontrado" }, { status: 400 });
 
-	const isAdmin = role === "owner" || role === "admin";
-	if (!isAdmin) {
+	if (!(await canManageMainTableConfig(supabase, tenantId))) {
 		return NextResponse.json({ error: "No autorizado para editar configuración" }, { status: 403 });
 	}
 

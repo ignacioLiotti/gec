@@ -99,6 +99,17 @@ Soft delete actions use explicit permissions so destructive capabilities can be 
 
 `owner` and `admin` memberships still bypass custom role restrictions through `has_permission`. Migration 0102 backfills these three permissions into roles that already had `obras:admin`, and the `obra_manager` template includes them for new tenants/roles.
 
+### Admin configuration permissions
+
+Some tenant admin pages can be delegated to custom roles without making the user a tenant `admin`/`owner`:
+
+| Permission | Meaning |
+|---|---|
+| `admin:obra-defaults` | View and mutate `/admin/obra-defaults` and `/admin/obra-defaults/reporting`, including default folders/tables, OCR templates, reporting defaults, and backfill/apply flows |
+| `admin:main-table-config` | View and mutate `/admin/main-table-config`, including main obras table columns and select/badge options |
+
+These permissions are alternatives to membership admin for the specific route/API surface. They do not grant access to users, roles, audit, billing, tenant secrets, or other admin pages.
+
 **Resolution:**
 ```typescript
 getUserRoles(userId, tenantId)
@@ -188,8 +199,8 @@ Returns `{ roles, roleIds, isAdmin, isSuperAdmin, tenantId }`:
 
 ### canAccessRoute(path)
 - Superadmin/admin always `true`
-- Checks `ROUTE_ACCESS_CONFIG` for required roles
-- Returns `true` if user has any matching role
+- Checks `ROUTE_ACCESS_CONFIG` for required roles and explicit required permissions
+- Returns `true` when the route is public to authenticated users, the user has a matching membership/custom role, or the user has every `requiredPermissions` key configured for that route
 
 ### canAccessMacroTable(macroTableId, requiredLevel)
 Permission levels: `read(1) < edit(2) < admin(3)`

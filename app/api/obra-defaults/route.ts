@@ -525,6 +525,18 @@ async function getAuthContext() {
 	return { supabase, user, tenantId: membership?.tenant_id ?? null };
 }
 
+async function canManageObraDefaults(
+	supabase: Awaited<ReturnType<typeof createClient>>,
+	tenantId: string,
+) {
+	const { data, error } = await supabase.rpc("has_permission", {
+		tenant: tenantId,
+		perm_key: "admin:obra-defaults",
+	});
+	if (error) throw error;
+	return data === true;
+}
+
 async function enqueueAndApplyDefaultFolderSync(params: {
 	supabase: Awaited<ReturnType<typeof createClient>>;
 	tenantId: string;
@@ -1077,6 +1089,13 @@ export async function POST(request: Request) {
 		);
 	}
 
+	if (!(await canManageObraDefaults(supabase, tenantId))) {
+		return NextResponse.json(
+			{ error: "No autorizado para editar configuracion de obras" },
+			{ status: 403 },
+		);
+	}
+
 	try {
 		const body = await request.json().catch(() => ({}));
 		const type = body.type as "folder" | "quick-action";
@@ -1507,6 +1526,13 @@ export async function PUT(request: Request) {
 		);
 	}
 
+	if (!(await canManageObraDefaults(supabase, tenantId))) {
+		return NextResponse.json(
+			{ error: "No autorizado para editar configuracion de obras" },
+			{ status: 403 },
+		);
+	}
+
 	try {
 		const body = await request.json().catch(() => ({}));
 		const type = body.type as "folder" | "quick-action";
@@ -1835,6 +1861,13 @@ export async function DELETE(request: Request) {
 
 	if (!tenantId) {
 		return NextResponse.json({ error: "No tenant found" }, { status: 400 });
+	}
+
+	if (!(await canManageObraDefaults(supabase, tenantId))) {
+		return NextResponse.json(
+			{ error: "No autorizado para editar configuracion de obras" },
+			{ status: 403 },
+		);
 	}
 
 	try {

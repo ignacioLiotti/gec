@@ -392,9 +392,10 @@ export async function proxy(req: NextRequest) {
 			return attachSecurityHeaders(res);
 		}
 
-		// For non-admin users, check role and feature-permission requirements.
+		// For non-admin users, allow public authenticated routes and explicit
+		// fine-grained permissions configured for admin surfaces.
 		let hasAccess = !config || config.allowedRoles.length === 0;
-		if (hasAccess && config?.requiredPermissions?.length) {
+		if (config?.requiredPermissions?.length) {
 			const permissionResults = await Promise.all(
 				config.requiredPermissions.map((permissionKey) =>
 					supabase.rpc("has_permission", {
@@ -403,12 +404,9 @@ export async function proxy(req: NextRequest) {
 					}),
 				),
 			);
-			for (const result of permissionResults) {
-				if (result.error || result.data !== true) {
-					hasAccess = false;
-					break;
-				}
-			}
+			hasAccess = permissionResults.every(
+				(result) => !result.error && result.data === true,
+			);
 		}
 
 		if (!hasAccess) {

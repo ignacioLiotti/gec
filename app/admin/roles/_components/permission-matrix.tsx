@@ -132,6 +132,8 @@ const PERMISSION_LABEL_OVERRIDES: Record<string, string> = {
   "admin:roles": "Administrar roles y permisos",
   "admin:users": "Administrar usuarios e invitaciones",
   "admin:audit": "Ver auditoria",
+  "admin:obra-defaults": "Administrar configuracion de obras",
+  "admin:main-table-config": "Administrar tabla principal",
   "data-flow:read": "Ver data-flow",
   "data-flow:edit": "Editar data-flow de obra",
   "data-flow:tenant-edit": "Editar defaults tenant de data-flow",
@@ -150,6 +152,7 @@ const PERMISSION_LABEL_OVERRIDES: Record<string, string> = {
 };
 
 const UNSUPPORTED_PERMISSION_KEYS = new Set([
+  "admin:settings",
   "obras:read",
   "obras:edit",
   "obras:admin",
@@ -197,6 +200,20 @@ function getPermissionHelp(permission: Permission) {
     return {
       summary: "Permite entrar a gestion de usuarios e invitaciones.",
       boundary: "No otorga permisos sobre obras, documentos o datos.",
+    };
+  }
+
+  if (permission.key === "admin:obra-defaults") {
+    return {
+      summary: "Permite ver y editar la configuracion tenant de obras.",
+      boundary: "No convierte al usuario en admin global del tenant.",
+    };
+  }
+
+  if (permission.key === "admin:main-table-config") {
+    return {
+      summary: "Permite ver y editar columnas/opciones de la tabla principal.",
+      boundary: "No otorga acceso a gestionar roles, usuarios ni otros ajustes admin.",
     };
   }
 

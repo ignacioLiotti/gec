@@ -124,11 +124,13 @@ const adminItems: NavItem[] = [
 		title: "Usuarios",
 		href: "/admin/users",
 		icon: Users,
+		requiredPermissions: ["admin:users"],
 	},
 	{
 		title: "Roles y Permisos",
 		href: "/admin/roles",
 		icon: ShieldCheck,
+		requiredPermissions: ["admin:roles"],
 	},
 	{
 		title: "Facturacion",
@@ -139,6 +141,7 @@ const adminItems: NavItem[] = [
 		title: "Configuracion de Obras",
 		href: "/admin/obra-defaults",
 		icon: Settings2,
+		requiredPermissions: ["admin:obra-defaults"],
 	},
 	{
 		title: "Flujos documentales",
@@ -154,6 +157,7 @@ const adminItems: NavItem[] = [
 		title: "Tabla Principal",
 		href: "/admin/main-table-config",
 		icon: Columns3Cog,
+		requiredPermissions: ["admin:main-table-config"],
 	},
 	{
 		title: "Demo Links",
@@ -164,6 +168,7 @@ const adminItems: NavItem[] = [
 		title: "Auditoria",
 		href: "/admin/audit-log",
 		icon: FileText,
+		requiredPermissions: ["admin:audit"],
 	},
 	{
 		title: "Macro Tablas",
@@ -472,6 +477,14 @@ export function AppSidebar({
 			}
 
 			if (config.allowedRoles.length > 0) {
+				if (
+					config.requiredPermissions?.length &&
+					config.requiredPermissions.every((permissionKey) =>
+						permissionKeySet.has(permissionKey),
+					)
+				) {
+					return true;
+				}
 				return config.allowedRoles.some((role) =>
 					userRoles?.roles.includes(role),
 				);
@@ -542,8 +555,15 @@ export function AppSidebar({
 
 	const filteredAdminItems = React.useMemo(
 		() =>
-			userRoles?.isAdmin || userRoles?.isSuperAdmin ? adminItems : [],
-		[userRoles],
+			adminItems.filter((item) => {
+				if (userRoles?.isAdmin || userRoles?.isSuperAdmin) return true;
+				if (!canAccessRoute(item.href)) return false;
+				if (!item.requiredPermissions?.length) return false;
+				return item.requiredPermissions.every((permissionKey) =>
+					permissionKeySet.has(permissionKey),
+				);
+			}),
+		[canAccessRoute, permissionKeySet, userRoles],
 	);
 
 	const filteredIgnacioItems = React.useMemo(

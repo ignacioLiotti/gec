@@ -53,7 +53,8 @@ const NAVIGATION_STRUCTURE: NavigationItem[] = [
     children: [
       { path: "/admin/users", label: "Usuarios", permission: "admin:users" },
       { path: "/admin/roles", label: "Roles y Permisos", permission: "admin:roles" },
-      { path: "/admin/main-table-config", label: "Tabla Principal", permission: "admin:roles" },
+      { path: "/admin/obra-defaults", label: "Configuracion de Obras", permission: "admin:obra-defaults" },
+      { path: "/admin/main-table-config", label: "Tabla Principal", permission: "admin:main-table-config" },
       { path: "/admin/audit-log", label: "Auditoria", permission: "admin:audit" },
     ],
   },

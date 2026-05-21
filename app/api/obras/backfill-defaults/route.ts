@@ -21,6 +21,21 @@ export async function POST(request: Request) {
 		);
 	}
 
+	const { data: canManageDefaults, error: permissionError } = await supabase.rpc(
+		"has_permission",
+		{
+			tenant: tenantId,
+			perm_key: "admin:obra-defaults",
+		},
+	);
+	if (permissionError) throw permissionError;
+	if (canManageDefaults !== true) {
+		return NextResponse.json(
+			{ error: "No autorizado para aplicar configuracion de obras" },
+			{ status: 403 },
+		);
+	}
+
 	let body: unknown;
 	try {
 		body = await request.json();

@@ -39,15 +39,24 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function hasTenantReportingAdminAccess(
+async function hasTenantReportingAdminAccess(
   access: Awaited<ReturnType<typeof resolveRequestAccessContext>>,
 ) {
   if (access.actorType !== "user") return false;
-  return (
+  if (
     access.isSuperAdmin ||
     access.membershipRole === "owner" ||
     access.membershipRole === "admin"
-  );
+  ) {
+    return true;
+  }
+  if (!access.tenantId) return false;
+  const { data, error } = await access.supabase.rpc("has_permission", {
+    tenant: access.tenantId,
+    perm_key: "admin:obra-defaults",
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 export async function GET() {
@@ -57,7 +66,7 @@ export async function GET() {
     if (!user || !tenantId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!hasTenantReportingAdminAccess(access)) {
+    if (!(await hasTenantReportingAdminAccess(access))) {
       return NextResponse.json(
         { error: "Only tenant admins can manage reporting defaults" },
         { status: 403 },
@@ -131,7 +140,7 @@ export async function PUT(request: Request) {
     if (!user || !tenantId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!hasTenantReportingAdminAccess(access)) {
+    if (!(await hasTenantReportingAdminAccess(access))) {
       return NextResponse.json(
         { error: "Only tenant admins can manage reporting defaults" },
         { status: 403 },
@@ -159,7 +168,7 @@ export async function DELETE() {
     if (!user || !tenantId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!hasTenantReportingAdminAccess(access)) {
+    if (!(await hasTenantReportingAdminAccess(access))) {
       return NextResponse.json(
         { error: "Only tenant admins can manage reporting defaults" },
         { status: 403 },
