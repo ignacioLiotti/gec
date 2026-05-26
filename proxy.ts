@@ -34,6 +34,11 @@ const autodeskSources = [
 	"https://developer.api.autodesk.com",
 	"https://*.autodesk.com",
 ];
+const reactScanSources =
+	process.env.NODE_ENV === "development" &&
+	process.env.NEXT_PUBLIC_ENABLE_REACT_SCAN !== "false"
+		? ["https://www.react-grab.com"]
+		: [];
 
 // WebSocket sources
 const wsSources = ["wss://*.supabase.co"];
@@ -56,7 +61,7 @@ const securityHeaders: Record<string, string> = {
 		`img-src ${trustedSources.concat(autodeskSources).join(" ")} data: blob:`,
 		`font-src ${trustedSources.concat(autodeskSources).join(" ")}`,
 		`connect-src ${trustedSources
-			.concat(sentrySources, autodeskSources)
+			.concat(sentrySources, autodeskSources, reactScanSources)
 			.join(" ")} ${wsSources.join(" ")} blob:`,
 		`media-src ${trustedSources.concat(autodeskSources).join(" ")} data: blob:`,
 		`worker-src ${trustedSources.concat(autodeskSources).join(" ")} blob:`,

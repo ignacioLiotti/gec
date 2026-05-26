@@ -11,6 +11,8 @@ import {
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
 import { softDeleteObraWithDocuments } from "@/lib/obras/delete-lifecycle";
+import { updateInsurancePoliciesForObraCompletion } from "@/lib/insurance-policies";
+import { syncInsurancePoliciesToMacroTable } from "@/lib/insurance-policies-macro";
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at, custom_data";
@@ -564,6 +566,43 @@ export async function GET(request: Request) {
 		numRange("ptMin", "ptMax", "plazo_total");
 		numRange("ptrMin", "ptrMax", "plazo_transc");
 
+		const numCondition = (
+			prefix: string,
+			column: keyof DbObraRow | string,
+		) => {
+			const condition = searchParams.get(`${prefix}Condition`);
+			const rawValue = searchParams.get(`${prefix}Value`);
+			const rawMin = searchParams.get(`${prefix}Min`);
+			const rawMax = searchParams.get(`${prefix}Max`);
+			const value = rawValue != null ? Number(rawValue) : null;
+			const min = rawMin != null ? Number(rawMin) : null;
+			const max = rawMax != null ? Number(rawMax) : null;
+			if (condition === "empty") {
+				query.is(String(column), null);
+				return;
+			}
+			if (condition === "not_empty") {
+				query.not(String(column), "is", null);
+				return;
+			}
+			if (condition === "equals" && value != null && Number.isFinite(value)) query.eq(String(column), value);
+			if (condition === "gt" && value != null && Number.isFinite(value)) query.gt(String(column), value);
+			if (condition === "gte" && value != null && Number.isFinite(value)) query.gte(String(column), value);
+			if (condition === "lt" && value != null && Number.isFinite(value)) query.lt(String(column), value);
+			if (condition === "lte" && value != null && Number.isFinite(value)) query.lte(String(column), value);
+			if ((!condition || condition === "between") && min != null && Number.isFinite(min)) query.gte(String(column), min);
+			if ((!condition || condition === "between") && max != null && Number.isFinite(max)) query.lte(String(column), max);
+		};
+
+		numCondition("sup", "sup_de_obra_m2");
+		numCondition("cma", "contrato_mas_ampliaciones");
+		numCondition("caf", "certificado_a_la_fecha");
+		numCondition("sac", "saldo_a_certificar");
+		numCondition("sc", "segun_contrato");
+		numCondition("pa", "prorrogas_acordadas");
+		numCondition("pt", "plazo_total");
+		numCondition("ptr", "plazo_transc");
+
 		const entidades = searchParams
 			.getAll("entidad")
 			.filter((v) => v.trim().length > 0);
@@ -587,6 +626,30 @@ export async function GET(request: Request) {
 		if (entidadContains && entidadContains.trim()) {
 			query.ilike("entidad_contratante", `%${entidadContains.trim()}%`);
 		}
+
+		const textCondition = (prefix: string, column: keyof DbObraRow | string) => {
+			const condition = searchParams.get(`${prefix}Condition`);
+			const rawValue = searchParams.get(`${prefix}Value`)?.trim() ?? "";
+			if (!condition) return;
+			if (condition === "empty") {
+				query.eq(String(column), "");
+				return;
+			}
+			if (condition === "not_empty") {
+				query.neq(String(column), "");
+				return;
+			}
+			if (!rawValue) return;
+			if (condition === "not_contains") query.not(String(column), "ilike", `%${rawValue}%`);
+			else if (condition === "equals") query.eq(String(column), rawValue);
+			else if (condition === "starts_with") query.ilike(String(column), `${rawValue}%`);
+			else if (condition === "ends_with") query.ilike(String(column), `%${rawValue}`);
+			else query.ilike(String(column), `%${rawValue}%`);
+		};
+
+		textCondition("entidad", "entidad_contratante");
+		textCondition("mes", "mes_basico_de_contrato");
+		textCondition("ini", "iniciacion");
 		numRange("porcentajeMin", "porcentajeMax", "porcentaje");
 
 		if (hasPagination) {
@@ -1116,6 +1179,27 @@ export async function PUT(request: Request) {
 				console.error(
 					"Obras PUT: error while executing flujo actions",
 					flujoError,
+				);
+			}
+
+			try {
+				if (ctx.obra.id) {
+					await updateInsurancePoliciesForObraCompletion({
+						supabase,
+						tenantId,
+						obraId: ctx.obra.id,
+						finishedAt: new Date().toISOString().slice(0, 10),
+					});
+					await syncInsurancePoliciesToMacroTable({
+						supabase,
+						tenantId,
+						obraIds: [ctx.obra.id],
+					});
+				}
+			} catch (insuranceError) {
+				console.error(
+					"Obras PUT: error recalculating insurance policy dates",
+					insuranceError,
 				);
 			}
 

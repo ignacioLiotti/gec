@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { toast } from "sonner";
 import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   FileText,
   Loader2,
   Minus,
@@ -14,8 +17,8 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { Button } from "@/components/ui/button";
+import { GENERATED_DOCUMENT_STATUS_LABELS } from "@/lib/document-generation";
 import { cn } from "@/lib/utils";
 
 type GeneratedListItem = {
@@ -68,16 +71,7 @@ function formatDate(value: string) {
 }
 
 function statusLabel(status: string) {
-  switch (status) {
-    case "APPROVED":
-      return "Aprobado";
-    case "REJECTED":
-      return "Rechazado";
-    case "UNDER_REVIEW":
-      return "En revision";
-    default:
-      return "Pendiente";
-  }
+  return GENERATED_DOCUMENT_STATUS_LABELS[status] ?? "Esperando revision";
 }
 
 function eventComment(event: GeneratedEvent) {
@@ -141,12 +135,15 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
 });
 
 export function DocumentReviewPageClient() {
+  const searchParams = useSearchParams();
+  const requestedDocumentId = searchParams.get("id") ?? "";
   const [documents, setDocuments] = useState<GeneratedListItem[]>([]);
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [selectedId, setSelectedId] = useState("");
   const [detail, setDetail] = useState<GeneratedDetailResponse | null>(null);
   const [loadingQueue, setLoadingQueue] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [updating, setUpdating] = useState(false);
   const [zoom, setZoom] = useState(100);
   const previewViewportRef = useRef<HTMLDivElement | null>(null);
@@ -184,6 +181,7 @@ export function DocumentReviewPageClient() {
       setCounts(payload.counts ?? { pending: 0, approved: 0, rejected: 0 });
       setSelectedId((current) => {
         if (preferredId && nextDocuments.some((document) => document.id === preferredId)) return preferredId;
+        if (preferredId) return preferredId;
         if (current && nextDocuments.some((document) => document.id === current)) return current;
         return nextDocuments[0]?.id ?? "";
       });
@@ -197,8 +195,8 @@ export function DocumentReviewPageClient() {
   };
 
   useEffect(() => {
-    void loadQueue();
-  }, []);
+    void loadQueue(requestedDocumentId || undefined);
+  }, [requestedDocumentId]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -216,11 +214,13 @@ export function DocumentReviewPageClient() {
         const payload = (await response.json()) as GeneratedDetailResponse & { error?: string };
         if (!response.ok) throw new Error(payload.error || "No se pudo cargar el documento");
         if (!cancelled) {
+          setDetailError("");
           setDetail(payload);
         }
       } catch (error) {
         if (!cancelled) {
           console.error("[document-review] detail failed", error);
+          setDetailError(error instanceof Error ? error.message : "No se pudo cargar el documento");
           setDetail(null);
         }
       } finally {
@@ -268,6 +268,19 @@ export function DocumentReviewPageClient() {
       setUpdating(false);
     }
   };
+
+  const copyReviewLink = async () => {
+    if (!currentDocument) return;
+    const reviewUrl = `${window.location.origin}/document-generation/review?id=${encodeURIComponent(currentDocument.id)}`;
+    try {
+      await navigator.clipboard.writeText(reviewUrl);
+      toast.success("Link de revision copiado.");
+    } catch {
+      toast.error("No se pudo copiar el link.");
+    }
+  };
+
+  const canDecide = currentDocument ? ["GENERATED", "UNDER_REVIEW"].includes(currentDocument.status) : false;
 
   return (
     <div className="flex min-h-[calc(100dvh-24px)] max-w-full flex-col overflow-x-hidden bg-[#fafafa] px-3 py-3 sm:px-4 sm:py-4">
@@ -382,7 +395,6 @@ export function DocumentReviewPageClient() {
                   className="relative origin-top rounded-sm bg-white shadow-[0_1px_0_rgba(0,0,0,0.04),0_18px_50px_-18px_rgba(0,0,0,0.28)] "
                   style={{ zoom: `${zoom}%` } as CSSProperties & { zoom: string }}
                 >
-                  <DocumentApprovedSeal status={detail.document.status} size="md" className="absolute left-5 top-5 z-20" />
                   <div ref={previewPaperRef} className="report-paper bg-white w-full!">
                     <div dangerouslySetInnerHTML={{ __html: detail.document.previewHtml }} />
                   </div>
@@ -393,7 +405,7 @@ export function DocumentReviewPageClient() {
                 <div>
                   <FileText className="mx-auto h-8 w-8 text-stone-400" />
                   <p className="mt-3 text-sm font-medium text-stone-800">
-                    {documents.length === 0 ? "No quedan documentos para revisar." : "Selecciona un documento."}
+                    {detailError || (documents.length === 0 ? "No quedan documentos para revisar." : "Selecciona un documento.")}
                   </p>
                 </div>
               </div>
@@ -417,14 +429,31 @@ export function DocumentReviewPageClient() {
                 </Link>
               </Button>
             ) : null}
+            {currentDocument ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-md"
+                onClick={() => void copyReviewLink()}
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Copiar link
+              </Button>
+            ) : null}
           </div>
 
-          <ReviewCommentActions
-            key={selectedId}
-            updating={updating}
-            disabled={!selectedId}
-            onDecision={(status, comment) => void handleDecision(status, comment)}
-          />
+          {canDecide ? (
+            <ReviewCommentActions
+              key={selectedId}
+              updating={updating}
+              disabled={!selectedId}
+              onDecision={(status, comment) => void handleDecision(status, comment)}
+            />
+          ) : (
+            <p className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-600">
+              Este documento ya tiene una decision registrada.
+            </p>
+          )}
 
           <div className="mt-3 flex gap-2 lg:hidden">
             <Button

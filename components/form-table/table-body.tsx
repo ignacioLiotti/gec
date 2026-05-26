@@ -56,6 +56,8 @@ type TableRowProps<Row extends FormTableRow> = {
 	dirtyCellIds: string;
 	hiddenColumnIdsKey: string;
 	showActionsColumn: boolean;
+	actionsColumnPosition: "start" | "end";
+	actionsColumnWidth: number;
 	canDeleteRows: boolean;
 	isColumnHidden: (columnId: string) => boolean;
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
@@ -96,6 +98,8 @@ function TableRowInner<Row extends FormTableRow>({
 	dirtyCellIds,
 	hiddenColumnIdsKey,
 	showActionsColumn,
+	actionsColumnPosition,
+	actionsColumnWidth,
 	canDeleteRows,
 	isColumnHidden,
 	isCellDirty,
@@ -134,6 +138,99 @@ function TableRowInner<Row extends FormTableRow>({
 		};
 	}, [cancelHoverIntent]);
 
+	const actionsCell = showActionsColumn ? (
+		<td
+			className={cn(
+				"whitespace-nowrap px-1 py-2 text-center outline outline-border border-border group-hover:bg-[#f5f5f5] space-y-2",
+				actionsColumnPosition === "end" && "px-4 text-right",
+				rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
+				colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
+				colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
+				resolvedRowClassName
+			)}
+			style={{
+				width: actionsColumnWidth,
+				minWidth: actionsColumnWidth,
+				maxWidth: actionsColumnWidth,
+			}}
+		>
+			{overlayBadges.length > 0 && (
+				<div className="pointer-events-none absolute right-2 top-1 z-20 flex flex-wrap justify-end gap-1">
+					{overlayBadges.map((badge) => (
+						<span
+							key={badge.id}
+							className={cn(
+								"rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm",
+								badge.tone === "red" && "bg-red-500",
+								badge.tone === "amber" && "bg-amber-500",
+								badge.tone === "green" && "bg-emerald-500",
+								badge.tone === "blue" && "bg-blue-500",
+								!badge.tone && "bg-slate-500"
+							)}
+						>
+							{badge.label}
+						</span>
+					))}
+				</div>
+			)}
+			{isRowDirty && (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-100 bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm">
+							Sin guardar
+						</div>
+					</TooltipTrigger>
+					<TooltipContent>
+						Los cambios de esta fila aÃºn no han sido guardados.
+					</TooltipContent>
+				</Tooltip>
+			)}
+			{accordionRowConfig && !accordionAlwaysOpen && (
+				<div className={cn("flex justify-center", actionsColumnPosition === "end" && "justify-end")}>
+					{accordionRowConfig.renderTrigger ? (
+						accordionRowConfig.renderTrigger({
+							row: rowData,
+							isOpen: isExpanded,
+							toggle: () => onToggleAccordion(rowData.id),
+						})
+					) : (
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							aria-expanded={isExpanded}
+							onClick={() => onToggleAccordion(rowData.id)}
+							className="gap-1 text-muted-foreground hover:text-foreground"
+						>
+							{isExpanded ? (
+								<>
+									<ChevronDown className="size-4" />
+									<span>{`Ocultar ${accordionLabel}`}</span>
+								</>
+							) : (
+								<>
+									<ChevronRight className="size-4" />
+									<span>{`Ver ${accordionLabel}`}</span>
+								</>
+							)}
+						</Button>
+					)}
+				</div>
+			)}
+			{canDeleteRows ? (
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					onClick={() => onDelete(rowData.id)}
+					className="text-destructive hover:text-destructive"
+				>
+					Eliminar
+				</Button>
+			) : null}
+		</td>
+	) : null;
+
 	return (
 		<Fragment>
 			<tr
@@ -148,13 +245,14 @@ function TableRowInner<Row extends FormTableRow>({
 				}}
 				className={cn(
 					"border-b group relative",
-					rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
+					rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
 					isRowDirty
 						? "group/row-dirty shadow-[inset_0_0_0_2px_rgba(217,119,6,0.85)] border border-amber-500 z-100"
 						: "",
 					colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 				)}
 			>
+				{actionsColumnPosition === "start" ? actionsCell : null}
 				{filteredCells.map((cell, cellIndex) => {
 					const columnId = cell.column.id;
 					const columnMeta = columnsById[columnId];
@@ -257,7 +355,7 @@ function TableRowInner<Row extends FormTableRow>({
 						</td>
 					);
 				})}
-				{showActionsColumn && (
+				{actionsColumnPosition === "end" && showActionsColumn && (
 					<td
 						className={cn(
 							"px-4 py-3 text-right outline outline-border border-border group-hover:bg-[hsl(50,17%,95%)] space-y-2",
@@ -383,6 +481,8 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		prevProps.isExpanded === nextProps.isExpanded &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
 		prevProps.showActionsColumn === nextProps.showActionsColumn &&
+		prevProps.actionsColumnPosition === nextProps.actionsColumnPosition &&
+		prevProps.actionsColumnWidth === nextProps.actionsColumnWidth &&
 		prevProps.canDeleteRows === nextProps.canDeleteRows &&
 		prevProps.isRowDirty === nextProps.isRowDirty &&
 		prevProps.dirtyCellIds === nextProps.dirtyCellIds &&

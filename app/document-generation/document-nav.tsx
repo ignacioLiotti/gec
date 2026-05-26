@@ -31,7 +31,7 @@ export function DocumentGenerationNav({
     },
     {
       href: "/document-generation/drafts",
-      label: "Borradores",
+      label: "Historial",
       show: Boolean(permissions?.canCreate || permissions?.canViewAllDrafts),
     },
     {

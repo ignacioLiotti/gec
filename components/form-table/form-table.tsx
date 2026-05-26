@@ -292,21 +292,7 @@ export function FormTableToolbar() {
 				)}
 			</div>
 			<div className="flex flex-wrap items-center gap-2 mr-[1px]">
-				{meta.isBusy && meta.activityKind && (
-					<div
-						role="status"
-						aria-live="polite"
-						className={cn(
-							"inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
-							meta.isSlowOperation
-								? "border-amber-300 bg-amber-50 text-amber-800"
-								: "border-primary/20 bg-primary/5 text-primary"
-						)}
-					>
-						<Loader2 className="size-3.5 animate-spin" />
-						<span>{getTableActivityMessage(meta.activityKind, meta.isSlowOperation)}</span>
-					</div>
-				)}
+
 				{!isExtrasToolbar && (
 					<Button type="button" variant="outline" className="gap-2" onClick={() => void actions.exportCsv()}>
 						<Download className="size-4" />
@@ -423,7 +409,13 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	const accordionAlwaysOpen = Boolean(accordionRowConfig?.alwaysOpen);
 	const isReadOnly = config.readOnly === true;
 	const showActionsColumn = config.showActionsColumn !== false;
-	const canDeleteRows = !isReadOnly;
+	const actionsColumnPosition = config.actionsColumnPosition ?? "end";
+	const actionsColumnWidth = config.actionsColumnWidth ?? 140;
+	const actionsColumnLabel = config.actionsColumnLabel === undefined ? "Acciones" : config.actionsColumnLabel;
+	const headerCellClassName = config.headerCellClassName;
+	const tableLayoutClassName = config.tableLayout === "auto" ? "table-auto" : "table-fixed";
+	const dataColumnIndexOffset = showActionsColumn && actionsColumnPosition === "start" ? 1 : 0;
+	const canDeleteRows = !isReadOnly && config.allowDeleteRows !== false;
 	const { serverError, activityKind, isBusy, isSlowOperation } = meta;
 	const { isServerPaging, isFetching } = pagination;
 	const {
@@ -549,6 +541,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 
 		const target = event.target as HTMLElement | null;
 		if (!target) return;
+		if (target.closest('[data-form-table-ignore-arrow-navigation="true"]')) return;
 		const currentCellElement = target.closest<HTMLElement>('td[data-form-table-cell="true"]');
 		const currentRowId = activeCell?.rowId ?? currentCellElement?.dataset.rowId ?? rowIds[0];
 		const currentColumnId = activeCell?.columnId ?? currentCellElement?.dataset.columnId ?? visibleColumnIds[0];
@@ -634,24 +627,35 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 					onPointerLeave={handleClearHoveredCell}
 					onKeyDownCapture={handleArrowNavigation}
 					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
-					<table ref={tableRef} data-table-id={tableId} className={cn("w-full table-fixed text-sm max-w-full relative", tableHeight)}>
+					<table ref={tableRef} data-table-id={tableId} className={cn("w-full text-sm max-w-full relative", tableLayoutClassName, tableHeight)}>
 						<colgroup className="max-w-full overflow-hidden">
+							{showActionsColumn && actionsColumnPosition === "start" && (
+								<col
+									style={{
+										width: `${actionsColumnWidth}px`,
+										minWidth: `${actionsColumnWidth}px`,
+										maxWidth: `${actionsColumnWidth}px`,
+									}}
+								/>
+							)}
 							{columnDefs.map((column, index) => (
 								<col
 									key={column.id}
 									ref={(el) => {
-										colRefs.current[index] = el;
+										colRefs.current[index + dataColumnIndexOffset] = el;
 									}}
 									style={{
-										width: `${colWidths[index] ?? DEFAULT_COL_WIDTH}px`,
+										width: `${colWidths[index + dataColumnIndexOffset] ?? DEFAULT_COL_WIDTH}px`,
 										display: isColumnHidden(column.id) ? "none" : undefined,
 									}}
 								/>
 							))}
-							{showActionsColumn && (
+							{showActionsColumn && actionsColumnPosition === "end" && (
 								<col
 									style={{
-										width: `${colWidths[columnDefs.length] ?? 140}px`,
+										width: `${actionsColumnWidth}px`,
+										minWidth: `${actionsColumnWidth}px`,
+										maxWidth: `${actionsColumnWidth}px`,
 									}}
 								/>
 							)}
@@ -662,6 +666,21 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									const emittedGroups = new Set<string>();
 									return (
 										<>
+											{showActionsColumn && actionsColumnPosition === "start" && (
+												<th
+													rowSpan={2}
+													className={cn("relative whitespace-nowrap p-0 text-center text-xs font-semibold uppercase outline outline-border bg-back-darker", headerCellClassName)}
+													style={{
+														width: actionsColumnWidth,
+														minWidth: actionsColumnWidth,
+														maxWidth: actionsColumnWidth,
+													}}
+												>
+													<div className="flex w-full h-full px-2 py-3 absolute top-0 left-0 items-center justify-center gap-2">
+														{actionsColumnLabel === null ? null : <span>{actionsColumnLabel}</span>}
+													</div>
+												</th>
+											)}
 											{columnDefs.map((column) => {
 												if (isColumnHidden(column.id)) return null;
 												const group = groupedColumnLookup.get(column.id);
@@ -673,7 +692,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 															rowSpan={2}
 															{...getStickyProps(
 																column.id,
-																"relative p-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]"
+																cn("relative p-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]", headerCellClassName)
 															)}
 														>
 															<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
@@ -722,7 +741,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 																)}
 															</div>
 															{enableResizing && column.enableResize !== false && (
-																<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id]} mode="fixed" />
+																<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id] + dataColumnIndexOffset} mode="fixed" />
 															)}
 														</th>
 													);
@@ -739,6 +758,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 														colSpan={visibleColumns.length}
 														className={cn(
 															"px-4 py-2 text-center text-xs font-semibold uppercase outline outline-border bg-back-darker",
+															headerCellClassName,
 															group.className
 														)}
 													>
@@ -746,16 +766,23 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 													</th>
 												);
 											})}
-											{showActionsColumn && (
+											{showActionsColumn && actionsColumnPosition === "end" && (
 												<th
 													rowSpan={2}
-													className="relative p-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker"
+													className={cn("relative p-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker", headerCellClassName)}
+													style={{
+														width: actionsColumnWidth,
+														minWidth: actionsColumnWidth,
+														maxWidth: actionsColumnWidth,
+													}}
 												>
 													<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-end gap-2">
-														<span>Acciones</span>
+														<span className={actionsColumnLabel === null ? "sr-only" : undefined}>
+															{actionsColumnLabel ?? "Acciones"}
+														</span>
 													</div>
 													{enableResizing && (
-														<ColumnResizer tableId={tableId} colIndex={columnDefs.length} mode="fixed" />
+														<ColumnResizer tableId={tableId} colIndex={columnDefs.length + dataColumnIndexOffset} mode="fixed" />
 													)}
 												</th>
 											)}
@@ -769,7 +796,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									if (!groupedColumnLookup.has(column.id)) return null;
 
 									const baseClassName = cn(
-										"relative p-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker"
+										"relative p-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker",
+										headerCellClassName
 									);
 									const isSortable = column.enableSort !== false;
 
@@ -821,7 +849,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												)}
 											</div>
 											{enableResizing && column.enableResize !== false && (
-												<ColumnResizer tableId={tableId} colIndex={colIndex} mode="fixed" />
+												<ColumnResizer tableId={tableId} colIndex={colIndex + dataColumnIndexOffset} mode="fixed" />
 											)}
 										</th>
 									);
@@ -881,6 +909,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												dirtyCellIds={dirtyCellIds}
 												hiddenColumnIdsKey={hiddenColumnIdsKey}
 												showActionsColumn={showActionsColumn}
+												actionsColumnPosition={actionsColumnPosition}
+												actionsColumnWidth={actionsColumnWidth}
 												canDeleteRows={canDeleteRows}
 												isColumnHidden={isColumnHidden}
 												isCellDirty={isCellDirty}
@@ -937,6 +967,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											dirtyCellIds={dirtyCellIds}
 											hiddenColumnIdsKey={hiddenColumnIdsKey}
 											showActionsColumn={showActionsColumn}
+											actionsColumnPosition={actionsColumnPosition}
+											actionsColumnWidth={actionsColumnWidth}
 											canDeleteRows={canDeleteRows}
 											isColumnHidden={isColumnHidden}
 											isCellDirty={isCellDirty}
@@ -1247,6 +1279,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const useServerDataMode = config.serverSideData === true && Boolean(fetchRowsFn);
 	const isEmbedded = variant === "embedded";
 	const isReadOnly = config.readOnly === true;
+	const dataColumnIndexOffset =
+		config.showActionsColumn !== false && config.actionsColumnPosition === "start" ? 1 : 0;
 	const initialSnapshot = useMemo(
 		() => buildFormSnapshot(config.defaultRows),
 		[config.defaultRows]
@@ -1977,13 +2011,14 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			if (isColumnHidden(columnId)) return;
 			const colIndex = columnIndexMap[columnId];
 			if (colIndex == null) return;
-			const colEl = colRefs.current[colIndex];
-			const width = colEl?.getBoundingClientRect().width || colWidths[colIndex] || DEFAULT_COL_WIDTH;
+			const physicalColIndex = colIndex + dataColumnIndexOffset;
+			const colEl = colRefs.current[physicalColIndex];
+			const width = colEl?.getBoundingClientRect().width || colWidths[physicalColIndex] || DEFAULT_COL_WIDTH;
 			offsets[columnId] = accumulator;
 			accumulator += width;
 		});
 		setColumnOffsets(offsets);
-	}, [pinnedColumnIds, isColumnHidden, columnIndexMap, colWidths]);
+	}, [pinnedColumnIds, isColumnHidden, columnIndexMap, colWidths, dataColumnIndexOffset]);
 
 	useEffect(() => {
 		recalcPinnedOffsets();
@@ -2046,8 +2081,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			hiddenColumnIds
 				.filter((columnId) => hideableColumns.has(columnId))
 				.map((columnId) => columnIndexMap[columnId])
-				.filter((value): value is number => typeof value === "number"),
-		[hiddenColumnIds, hideableColumns, columnIndexMap]
+				.filter((value): value is number => typeof value === "number")
+				.map((value) => value + dataColumnIndexOffset),
+		[hiddenColumnIds, hideableColumns, columnIndexMap, dataColumnIndexOffset]
 	);
 
 	const handleBalanceColumns = useCallback(() => {

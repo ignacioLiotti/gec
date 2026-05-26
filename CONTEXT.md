@@ -216,6 +216,14 @@ _Avoid_: formulario temporal sin trazabilidad
 Documento operativo creado por plantilla que termina persistido como archivo documental normal de la obra y conserva metadata de origen, version de plantilla y datos de entrada.
 _Avoid_: documento paralelo fuera del file manager
 
+**Revision de Documento Generado**:
+Ciclo de vida del documento operativo: al crearse queda `UNDER_REVIEW` (Esperando revision), puede editarse mientras espera revision o si fue rechazado, no puede editarse una vez aprobado, y las decisiones de aprobacion/rechazo se auditan como eventos.
+_Avoid_: editar aprobados o crear documentos nuevos al corregir rechazados
+
+**Firma Digital de Aprobacion**:
+Imagen de firma configurada por usuario revisor y aplicada al aprobar un documento generado; reemplaza el sello visual de aprobado en preview y PDF exportado.
+_Avoid_: aprobaciones sin evidencia de firmante cuando el flujo exige firma
+
 **Pipeline de Extraccion**:
 Secuencia operativa Documento -> OCR/manual/spreadsheet -> Tabla de Extraccion -> Lineage -> Consumidores.
 _Avoid_: importacion como evento aislado

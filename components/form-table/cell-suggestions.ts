@@ -97,7 +97,8 @@ function buildSelectSuggestion<Row extends FormTableRow>({
 	if (!sourceInput) return null;
 	const selectOptions = column.cellConfig?.selectOptions ?? [];
 	if (selectOptions.length === 0) return null;
-	if (resolveMainTableSelectOption(sourceInput, selectOptions, column.id)) return null;
+	const selectName = column.cellConfig?.selectName ?? column.id;
+	if (resolveMainTableSelectOption(sourceInput, selectOptions, selectName)) return null;
 
 	const closest = findClosestMainTableSelectOption(sourceInput, selectOptions);
 	if (!closest) return null;
@@ -106,7 +107,7 @@ function buildSelectSuggestion<Row extends FormTableRow>({
 	);
 	const suggestionValue =
 		optionIndex >= 0
-			? getMainTableSelectOptionId(closest.option, column.id, optionIndex)
+			? getMainTableSelectOptionId(closest.option, selectName, optionIndex)
 			: closest.option.text;
 
 	return {

@@ -11,8 +11,13 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ArrowDown,
   ArrowUpRight,
+  ArrowUp,
+  ArrowUpDown,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
   FileText,
   Layers,
   Loader2,
@@ -20,9 +25,11 @@ import {
   Settings,
   ToggleLeft,
   Type,
+  Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   FormTable,
   FormTableContent,
@@ -30,40 +37,55 @@ import {
   FormTableToolbar,
 } from "@/components/form-table/form-table";
 import {
+  BooleanConditionFilter,
+  DateConditionFilter,
+  EnumConditionFilter,
   FilterSection,
-  RangeInputGroup,
-  TextFilterInput,
+  NumberConditionFilter,
+  TextConditionFilter,
+  createDateFilterValue,
+  createEnumFilterValue,
+  createNumberFilterValue,
+  createTextFilterValue,
+  type DateFilterValue,
+  type EnumFilterOption,
+  type EnumFilterValue,
+  type NumberFilterValue,
+  type TextFilterValue,
 } from "@/components/form-table/filter-components";
 import type {
   ColumnDef,
   FetchRowsArgs,
   FilterRendererProps,
+  FormTableConfig,
 } from "@/components/form-table/types";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import {
   countActiveMacroFilters,
   isMacroFilterActive,
   matchesMacroFilters,
-  type MacroBooleanFilter,
   type MacroTableFilters,
 } from "@/lib/macro-table-filters";
 import type {
   MacroTable,
   MacroTableColumn,
   MacroTableDataType,
-  MacroTableOverrideConflict,
-  MacroTableOverrideSummary,
   MacroTableRow as MacroRow,
   MacroTableSource,
 } from "@/lib/macro-tables";
 import { macroOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
+import {
+  resolveMainTableSelectOption,
+  sanitizeMainTableSelectOptions,
+} from "@/lib/main-table-select";
 
 type MacroTableWithDetails = MacroTable & {
   sources: (MacroTableSource & {
@@ -77,7 +99,19 @@ type MacroTableWithDetails = MacroTable & {
   columns: MacroTableColumn[];
 };
 
+type MainTableColumnConfig = {
+  id: string;
+  label: string;
+  cellType?: string;
+  selectOptions?: unknown;
+};
+
 type MacroTableRowData = MacroRow & {
+  _macroAccordionGroup?: boolean;
+  _macroAccordionGroupColumnId?: string;
+  _macroAccordionGroupValue?: string;
+  _macroAccordionGroupCount?: number;
+  _macroAccordionRows?: MacroRow[];
   [key: string]: unknown;
 };
 
@@ -90,77 +124,22 @@ type MacroDisplayColumn = {
   config?: Record<string, unknown>;
 };
 
-const MACRO_BUSINESS_ID_COLUMN_ID = "_businessIdentityDisplay";
-const MACRO_DOCUMENT_COLUMN_ID = "_documentRef";
-const MACRO_CONTINUITY_COLUMN_ID = "_continuity";
-const MACRO_VERSION_COLUMN_ID = "_versionLabel";
+type MacroAccordionPlacement = "table" | "accordion" | "both";
+type MacroAccordionSort = {
+  columnId: string;
+  direction: "asc" | "desc";
+} | null;
 
-function normalizeMacroFieldKey(value: string | null | undefined) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-function shortTechnicalId(value: string | null | undefined, length = 8) {
-  const normalized = String(value ?? "").trim();
-  return normalized ? normalized.slice(0, length) : null;
-}
-
-function getContinuityBadges(row: MacroTableRowData) {
-  const badges: Array<{
-    key: string;
-    label: string;
-    className: string;
-  }> = [];
-
-  if (row._overrideBindingStatus === "conflict" || (row._overrideConflictCount ?? 0) > 0) {
-    badges.push({
-      key: "override-conflict",
-      label: "conflict",
-      className: "border-red-200 bg-red-50 text-red-700",
-    });
-  }
-
-  if (typeof row._lineageRowKey === "string" && row._lineageRowKey.startsWith("legacy:")) {
-    badges.push({
-      key: "lineage-legacy",
-      label: "legacy",
-      className: "border-stone-200 bg-stone-100 text-stone-700",
-    });
-  } else if (typeof row._lineageRowKey === "string" && row._lineageRowKey.length > 0) {
-    badges.push({
-      key: "lineage-stable",
-      label: "estable",
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    });
-  }
-
-  if (typeof row._materializationVersion === "number" && row._materializationVersion > 1) {
-    badges.push({
-      key: "rematerialized",
-      label: "rematerializada",
-      className: "border-sky-200 bg-sky-50 text-sky-700",
-    });
-  }
-
-  if (row._overrideBindingStatus === "stable") {
-    badges.push({
-      key: "override-stable",
-      label: "override estable",
-      className: "border-teal-200 bg-teal-50 text-teal-700",
-    });
-  } else if (row._overrideBindingStatus === "legacy") {
-    badges.push({
-      key: "override-legacy",
-      label: "override legacy",
-      className: "border-amber-200 bg-amber-50 text-amber-700",
-    });
-  }
-
-  return badges;
-}
+type InsurancePolicyPreviewRow = {
+  rowNumber: number;
+  obraId: string | null;
+  obraLabel: string;
+  policyNumber: string;
+  section: string;
+  coveragePeriod: string;
+  endDate: string | null;
+  errors: string[];
+};
 
 function getActiveMacroFilters(filters: MacroTableFilters | undefined): MacroTableFilters {
   if (!filters) return {};
@@ -212,7 +191,7 @@ function NotchTail({
 
 function mapDataTypeToCell(
   dataType: string
-): "text" | "number" | "currency" | "checkbox" | "date" {
+): "text" | "number" | "currency" | "checkbox" | "date" | "select" {
   switch (dataType) {
     case "number":
       return "number";
@@ -222,6 +201,8 @@ function mapDataTypeToCell(
       return "checkbox";
     case "date":
       return "date";
+    case "select":
+      return "select";
     default:
       return "text";
   }
@@ -240,31 +221,6 @@ function getFilterIcon(dataType: MacroTableDataType) {
     default:
       return Type;
   }
-}
-
-function BooleanFilterButtons({
-  value,
-  onChange,
-}: {
-  value: MacroBooleanFilter;
-  onChange: (next: MacroBooleanFilter) => void;
-}) {
-  return (
-    <div className="flex gap-2">
-      {(["all", "true", "false"] as MacroBooleanFilter[]).map((option) => (
-        <Button
-          key={option}
-          type="button"
-          size="sm"
-          variant={value === option ? "default" : "outline"}
-          className="flex-1"
-          onClick={() => onChange(option)}
-        >
-          {option === "all" ? "Todos" : option === "true" ? "Si" : "No"}
-        </Button>
-      ))}
-    </div>
-  );
 }
 
 const TruncatedTextWithTooltip = memo(function TruncatedTextWithTooltip({
@@ -295,16 +251,329 @@ const MacroObraLink = memo(function MacroObraLink({
   return (
     <Link
       href={`/excel/${obraId}`}
-      className="inline-flex h-full w-full items-center gap-2 p-2 font-semibold text-foreground group hover:text-primary"
+      className="group inline-flex h-full w-full items-center gap-2 px-1 py-1 font-semibold text-foreground hover:text-primary"
       onMouseEnter={() => prefetchObra(obraId)}
     >
-      <span className="inline-flex size-4 min-h-4 min-w-4 items-center justify-center rounded shadow-card text-primary/80 group-hover:bg-orange-primary/80 group-hover:text-white">
-        <ArrowUpRight className="size-3 text-muted-foreground group-hover:text-white" />
+      <span className="inline-flex size-5 min-h-5 min-w-5 items-center justify-center rounded-md border border-stone-200 bg-white text-muted-foreground shadow-sm group-hover:border-orange-primary/40 group-hover:text-primary">
+        <ArrowUpRight className="size-3" />
       </span>
       <TruncatedTextWithTooltip text={text} />
     </Link>
   );
 });
+
+function isMacroColumnManuallyEditable(column: MacroDisplayColumn) {
+  if (column.columnType === "custom") return true;
+  const allowManualEdit = column.config?.allowManualEdit;
+  return allowManualEdit === true || allowManualEdit === "true" || allowManualEdit === 1;
+}
+
+function normalizeEditableCellValue(value: unknown, dataType: MacroTableDataType) {
+  if (dataType === "boolean") {
+    return value === true || value === "true" || value === 1;
+  }
+  return value == null ? "" : String(value);
+}
+
+function getMacroSelectName(column: MacroDisplayColumn) {
+  if (column.columnType === "source" && column.sourceFieldKey?.startsWith("obra.")) {
+    return column.sourceFieldKey.slice("obra.".length);
+  }
+  return column.id;
+}
+
+function focusMacroAccordionCell(table: HTMLTableElement, rowIndex: number, columnIndex: number) {
+  const nextCell = table.querySelector<HTMLElement>(
+    `[data-macro-accordion-cell][data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`
+  );
+  if (!nextCell) return;
+  const focusTarget =
+    nextCell.querySelector<HTMLElement>(
+      'input:not([type="hidden"]), textarea, select, button, [contenteditable="true"]'
+    ) ?? nextCell;
+  focusTarget.focus({ preventScroll: true });
+}
+
+function handleMacroAccordionKeyDown(event: React.KeyboardEvent<HTMLTableElement>) {
+  if (
+    event.key !== "ArrowUp" &&
+    event.key !== "ArrowDown" &&
+    event.key !== "ArrowLeft" &&
+    event.key !== "ArrowRight"
+  ) {
+    return;
+  }
+  if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+
+  const cell = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+    "[data-macro-accordion-cell]"
+  );
+  if (!cell) return;
+
+  const table = event.currentTarget;
+  const rowIndex = Number(cell.dataset.rowIndex ?? 0);
+  const columnIndex = Number(cell.dataset.columnIndex ?? 0);
+  const rowCount = Number(table.dataset.rowCount ?? 0);
+  const columnCount = Number(table.dataset.columnCount ?? 0);
+  let nextRowIndex = rowIndex;
+  let nextColumnIndex = columnIndex;
+
+  if (event.key === "ArrowUp") nextRowIndex = Math.max(0, rowIndex - 1);
+  if (event.key === "ArrowDown") nextRowIndex = Math.min(rowCount - 1, rowIndex + 1);
+  if (event.key === "ArrowLeft") nextColumnIndex = Math.max(0, columnIndex - 1);
+  if (event.key === "ArrowRight") nextColumnIndex = Math.min(columnCount - 1, columnIndex + 1);
+  if (nextRowIndex === rowIndex && nextColumnIndex === columnIndex) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  focusMacroAccordionCell(table, nextRowIndex, nextColumnIndex);
+}
+
+function MacroAccordionCell({
+  row,
+  column,
+  editable,
+  onSave,
+}: {
+  row: MacroRow;
+  column: MacroDisplayColumn;
+  editable: boolean;
+  onSave: (args: { rowId: string; columnId: string; value: unknown }) => Promise<void>;
+}) {
+  const rawValue = row[column.id];
+  const [value, setValue] = useState(() =>
+    normalizeEditableCellValue(rawValue, column.dataType)
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(normalizeEditableCellValue(rawValue, column.dataType));
+  }, [column.dataType, rawValue]);
+
+  const commit = useCallback(
+    async (nextValue: unknown = value) => {
+      const normalizedOriginal = normalizeEditableCellValue(rawValue, column.dataType);
+      if (String(nextValue) === String(normalizedOriginal)) return;
+      setIsSaving(true);
+      try {
+        await onSave({
+          rowId: row.id,
+          columnId: column.id,
+          value: nextValue,
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [column.dataType, column.id, onSave, rawValue, row.id, value]
+  );
+
+  if (!editable) {
+    return <>{formatMacroAccordionValue(rawValue, column)}</>;
+  }
+
+  if (column.dataType === "boolean") {
+    const checked = value === true;
+    return (
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={isSaving}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.checked;
+          setValue(nextValue);
+          void commit(nextValue);
+        }}
+        className="size-4 rounded border-stone-300"
+      />
+    );
+  }
+
+  return (
+    <Input
+      type={column.dataType === "date" ? "date" : "text"}
+      value={String(value)}
+      disabled={isSaving}
+      onChange={(event) => setValue(event.currentTarget.value)}
+      onBlur={() => void commit()}
+      className="h-8 min-w-36 bg-white"
+    />
+  );
+}
+
+function getMacroAccordionSortValue(row: MacroRow, column: MacroDisplayColumn) {
+  const value = row[column.id];
+  if (value === null || typeof value === "undefined" || value === "") return null;
+
+  if (column.dataType === "select") {
+    const matched = resolveMainTableSelectOption(
+      value,
+      sanitizeMainTableSelectOptions(column.config?.selectOptions),
+      getMacroSelectName(column)
+    );
+    return matched?.text ?? String(value);
+  }
+
+  if (column.dataType === "number" || column.dataType === "currency") {
+    const numeric = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(numeric) ? numeric : String(value);
+  }
+
+  if (column.dataType === "date") {
+    const time = new Date(String(value)).getTime();
+    return Number.isFinite(time) ? time : String(value);
+  }
+
+  if (column.dataType === "boolean") {
+    return value === true || value === "true" || value === 1 ? 1 : 0;
+  }
+
+  return String(value);
+}
+
+function compareMacroAccordionValues(
+  left: ReturnType<typeof getMacroAccordionSortValue>,
+  right: ReturnType<typeof getMacroAccordionSortValue>,
+  direction: "asc" | "desc"
+) {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+
+  let result = 0;
+  if (typeof left === "number" && typeof right === "number") {
+    result = left - right;
+  } else {
+    result = String(left).localeCompare(String(right), "es-AR", {
+      numeric: true,
+      sensitivity: "base",
+    });
+  }
+
+  return direction === "asc" ? result : -result;
+}
+
+function MacroAccordionDetailTable({
+  rows,
+  columns,
+  isEditableColumn,
+  onSaveCell,
+}: {
+  rows: MacroRow[];
+  columns: MacroDisplayColumn[];
+  isEditableColumn: (column: MacroDisplayColumn) => boolean;
+  onSaveCell: (args: { rowId: string; columnId: string; value: unknown }) => Promise<void>;
+}) {
+  const [sort, setSort] = useState<MacroAccordionSort>(null);
+  const sortedRows = useMemo(() => {
+    if (!sort) return rows;
+    const column = columns.find((item) => item.id === sort.columnId);
+    if (!column) return rows;
+    return rows
+      .map((row, index) => ({ row, index }))
+      .sort((left, right) => {
+        const comparison = compareMacroAccordionValues(
+          getMacroAccordionSortValue(left.row, column),
+          getMacroAccordionSortValue(right.row, column),
+          sort.direction
+        );
+        return comparison === 0 ? left.index - right.index : comparison;
+      })
+      .map((item) => item.row);
+  }, [columns, rows, sort]);
+
+  const toggleSort = useCallback((columnId: string) => {
+    setSort((current) => {
+      if (!current || current.columnId !== columnId) {
+        return { columnId, direction: "asc" };
+      }
+      if (current.direction === "asc") {
+        return { columnId, direction: "desc" };
+      }
+      return null;
+    });
+  }, []);
+
+  return (
+    <div
+      data-form-table-ignore-arrow-navigation="true"
+      className="overflow-hidden rounded-lg border border-stone-200 bg-white"
+    >
+      <div className="max-h-[360px] overflow-auto">
+        <table
+          className="w-full min-w-max text-sm"
+          data-row-count={sortedRows.length}
+          data-column-count={columns.length}
+          onKeyDownCapture={handleMacroAccordionKeyDown}
+        >
+          <thead className="sticky top-0 bg-white text-left text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+            <tr>
+              {columns.map((column) => {
+                const isSorted = sort?.columnId === column.id;
+                const SortIcon = !isSorted
+                  ? ArrowUpDown
+                  : sort.direction === "asc"
+                    ? ArrowUp
+                    : ArrowDown;
+                return (
+                  <th
+                    key={column.id}
+                    className="border-b border-stone-200 px-3 py-2"
+                    aria-sort={
+                      isSorted
+                        ? sort.direction === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(column.id)}
+                      className={cn(
+                        "inline-flex w-full items-center justify-between gap-3 text-left transition-colors hover:text-stone-900",
+                        isSorted ? "text-stone-900" : "text-stone-500"
+                      )}
+                    >
+                      <span>{column.label}</span>
+                      <SortIcon className="size-3 shrink-0" />
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRows.map((childRow, rowIndex) => (
+              <tr
+                key={childRow.id}
+                className={rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}
+              >
+                {columns.map((column, columnIndex) => (
+                  <td
+                    key={column.id}
+                    data-macro-accordion-cell="true"
+                    data-row-index={rowIndex}
+                    data-column-index={columnIndex}
+                    tabIndex={-1}
+                    className="border-b border-stone-100 px-3 py-2 focus:outline focus:outline-2 focus:outline-orange-primary"
+                  >
+                    <MacroAccordionCell
+                      row={childRow}
+                      column={column}
+                      editable={isEditableColumn(column)}
+                      onSave={onSaveCell}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function MacroFiltersContent({
   filters,
@@ -323,6 +592,41 @@ function MacroFiltersContent({
     },
     [onChange]
   );
+  const resetFilter = useCallback(
+    (columnId: string) => {
+      onChange((prev) => ({ ...prev, [columnId]: {} }));
+    },
+    [onChange]
+  );
+  const toTextValue = (columnId: string): TextFilterValue => ({
+    ...createTextFilterValue("contains"),
+    condition: filters[columnId]?.textCondition ?? "contains",
+    value: filters[columnId]?.value ?? "",
+  });
+  const toNumberValue = (columnId: string): NumberFilterValue => ({
+    ...createNumberFilterValue("between"),
+    condition: filters[columnId]?.numberCondition ?? "between",
+    value: filters[columnId]?.value ?? "",
+    min: filters[columnId]?.min ?? "",
+    max: filters[columnId]?.max ?? "",
+  });
+  const toDateValue = (columnId: string): DateFilterValue => ({
+    ...createDateFilterValue("between"),
+    condition: filters[columnId]?.dateCondition ?? "between",
+    value: filters[columnId]?.value ?? "",
+    start: filters[columnId]?.from ?? "",
+    end: filters[columnId]?.to ?? "",
+  });
+  const toEnumValue = (columnId: string): EnumFilterValue => ({
+    ...createEnumFilterValue("include"),
+    mode: filters[columnId]?.enumMode ?? "include",
+    values: filters[columnId]?.values ?? [],
+  });
+  const getEnumOptions = (column: MacroDisplayColumn): EnumFilterOption[] =>
+    sanitizeMainTableSelectOptions(column.config?.selectOptions).map((option) => ({
+      value: option.text,
+      label: option.text,
+    }));
 
   return (
     <div className="space-y-3">
@@ -339,61 +643,76 @@ function MacroFiltersContent({
             activeCount={isMacroFilterActive(filter) ? 1 : 0}
           >
             {column.dataType === "number" || column.dataType === "currency" ? (
-              <RangeInputGroup
+              <NumberConditionFilter
                 label={column.dataType === "currency" ? "Importe" : "Valor"}
-                minValue={filter.min ?? ""}
-                maxValue={filter.max ?? ""}
-                onMinChange={(value) => updateFilter(column.id, { min: value })}
-                onMaxChange={(value) => updateFilter(column.id, { max: value })}
-                minPlaceholder="Minimo"
-                maxPlaceholder="Maximo"
+                value={toNumberValue(column.id)}
+                onChange={(value) =>
+                  updateFilter(column.id, {
+                    numberCondition: value.condition,
+                    value: value.value,
+                    min: value.min,
+                    max: value.max,
+                  })
+                }
+                onClear={() => resetFilter(column.id)}
               />
             ) : null}
 
             {column.dataType === "date" ? (
-              <div className="space-y-2">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Rango
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      value={filter.from ?? ""}
-                      onChange={(event) =>
-                        updateFilter(column.id, { from: event.target.value })
-                      }
-                    />
-                    <span className="text-muted-foreground">a</span>
-                    <Input
-                      type="date"
-                      value={filter.to ?? ""}
-                      onChange={(event) =>
-                        updateFilter(column.id, { to: event.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
+              <DateConditionFilter
+                label={column.label}
+                value={toDateValue(column.id)}
+                onChange={(value) =>
+                  updateFilter(column.id, {
+                    dateCondition: value.condition,
+                    value: value.value,
+                    from: value.start,
+                    to: value.end,
+                  })
+                }
+                onClear={() => resetFilter(column.id)}
+              />
             ) : null}
 
             {column.dataType === "boolean" ? (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Estado
-                </p>
-                <BooleanFilterButtons
-                  value={filter.state ?? "all"}
-                  onChange={(state) => updateFilter(column.id, { state })}
-                />
-              </div>
+              <BooleanConditionFilter
+                label={column.label}
+                value={filter.state === "true" ? "yes" : filter.state === "false" ? "no" : "all"}
+                onChange={(value) =>
+                  updateFilter(column.id, {
+                    state: value === "yes" ? "true" : value === "no" ? "false" : "all",
+                  })
+                }
+                onClear={() => resetFilter(column.id)}
+              />
+            ) : null}
+
+            {column.dataType === "select" ? (
+              <EnumConditionFilter
+                label={column.label}
+                value={toEnumValue(column.id)}
+                options={getEnumOptions(column)}
+                onChange={(value) =>
+                  updateFilter(column.id, {
+                    enumMode: value.mode,
+                    values: value.values,
+                  })
+                }
+                onClear={() => resetFilter(column.id)}
+              />
             ) : null}
 
             {column.dataType === "text" ? (
-              <TextFilterInput
-                label="Contiene"
-                value={filter.value ?? ""}
-                onChange={(value) => updateFilter(column.id, { value })}
+              <TextConditionFilter
+                label={column.label}
+                value={toTextValue(column.id)}
+                onChange={(value) =>
+                  updateFilter(column.id, {
+                    textCondition: value.condition,
+                    value: value.value,
+                  })
+                }
+                onClear={() => resetFilter(column.id)}
                 placeholder={`Filtrar ${column.label.toLowerCase()}...`}
               />
             ) : null}
@@ -404,103 +723,45 @@ function MacroFiltersContent({
   );
 }
 
-function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) {
+function MacroTablePanel({
+  macroTable,
+  mainTableColumnById,
+}: {
+  macroTable: MacroTableWithDetails;
+  mainTableColumnById: Map<string, MainTableColumnConfig>;
+}) {
   const router = useRouter();
-  const { push, replace } = router;
+  const { push } = router;
   const searchParams = useSearchParams();
   const queryParams = new URLSearchParams(searchParams);
   const getSearchParam = (key: string): string | null => queryParams.get(key);
   const queryClient = useQueryClient();
-  const [overrideSummary, setOverrideSummary] = useState<MacroTableOverrideSummary>({
-    totalRecords: 0,
-    appliedStable: 0,
-    appliedLegacy: 0,
-    conflicts: 0,
-    rowsWithOverrides: 0,
-    rowsWithConflicts: 0,
-  });
-  const [overrideConflicts, setOverrideConflicts] = useState<MacroTableOverrideConflict[]>([]);
-  const [overrideBanner, setOverrideBanner] = useState<string | null>(null);
-  const columns = macroTable.columns ?? [];
-  const hasObraColumn = columns.some(
-    (column) =>
-      column.columnType === "computed" &&
-      column.label.toLowerCase().includes("obra")
-  );
+  const columns = useMemo(() => macroTable.columns ?? [], [macroTable.columns]);
   const displayColumns = useMemo<MacroDisplayColumn[]>(() => {
-    const next = columns.map((column) => ({
-      id: column.id,
-      label: column.label,
-      dataType: column.dataType,
-      columnType: column.columnType,
-      sourceFieldKey: column.sourceFieldKey,
-      config: column.config ?? {},
-    }));
-
-    if (!hasObraColumn) {
-      next.unshift({
-        id: "_obraName",
-        label: "Obra",
-        dataType: "text",
-        columnType: "computed",
-        sourceFieldKey: null,
-        config: {},
-      });
-    }
-
-    const hasBusinessIdentityColumn = next.some((column) => {
-      const sourceFieldKey = normalizeMacroFieldKey(column.sourceFieldKey);
-      const label = normalizeMacroFieldKey(column.label);
-      return (
-        sourceFieldKey === "nro" ||
-        sourceFieldKey === "numero" ||
-        sourceFieldKey === "nro_orden" ||
-        sourceFieldKey === "numero_orden" ||
-        label === "nro" ||
-        label === "numero"
-      );
-    });
-
-    if (!hasBusinessIdentityColumn) {
-      next.splice(hasObraColumn ? 0 : 1, 0, {
-        id: MACRO_BUSINESS_ID_COLUMN_ID,
-        label: "NRO",
-        dataType: "text",
-        columnType: "computed",
-        sourceFieldKey: null,
-        config: {},
-      });
-    }
-
-    next.push(
-      {
-        id: MACRO_DOCUMENT_COLUMN_ID,
-        label: "Documento",
-        dataType: "text",
-        columnType: "computed",
-        sourceFieldKey: null,
-        config: {},
-      },
-      {
-        id: MACRO_CONTINUITY_COLUMN_ID,
-        label: "Continuidad",
-        dataType: "text",
-        columnType: "computed",
-        sourceFieldKey: null,
-        config: {},
-      },
-      {
-        id: MACRO_VERSION_COLUMN_ID,
-        label: "Version",
-        dataType: "text",
-        columnType: "computed",
-        sourceFieldKey: null,
-        config: {},
+    return columns.map((column) => {
+      const config = { ...(column.config ?? {}) };
+      let dataType = column.dataType;
+      if (column.columnType === "source" && column.sourceFieldKey?.startsWith("obra.")) {
+        const mainColumnId = column.sourceFieldKey.slice("obra.".length);
+        const mainColumn = mainTableColumnById.get(mainColumnId);
+        const liveSelectOptions = sanitizeMainTableSelectOptions(mainColumn?.selectOptions);
+        if (liveSelectOptions.length > 0 || mainColumn?.cellType === "select") {
+          dataType = "select";
+          config.selectOptions = liveSelectOptions;
+        } else {
+          delete config.selectOptions;
+        }
       }
-    );
-
-    return next;
-  }, [columns, hasObraColumn]);
+      return {
+        id: column.id,
+        label: column.label,
+        dataType,
+        columnType: column.columnType,
+        sourceFieldKey: column.sourceFieldKey,
+        config,
+      };
+    });
+  }, [columns, mainTableColumnById]);
   const isObraRedirectColumn = useCallback(
     (column: MacroDisplayColumn) =>
       column.id === "_obraName" ||
@@ -509,19 +770,17 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
     []
   );
   const isManuallyEditableColumn = useCallback((column: MacroDisplayColumn) => {
-    if (column.columnType === "custom") return true;
-    const allowManualEdit = column.config?.allowManualEdit;
-    return allowManualEdit === true || allowManualEdit === "true" || allowManualEdit === 1;
-  }, []);
-
-  const macroTableIdRef = useRef(macroTable.id);
-  macroTableIdRef.current = macroTable.id;
-
-  const columnsRef = useRef(columns);
-  columnsRef.current = columns;
-
-  const displayColumnsRef = useRef(displayColumns);
-  displayColumnsRef.current = displayColumns;
+    if (displayColumns.some(isMacroAccordionGroupColumn)) return false;
+    return isMacroColumnManuallyEditable(column);
+  }, [displayColumns]);
+  const isAccordionEditableColumn = useCallback(
+    (column: MacroDisplayColumn) => isMacroColumnManuallyEditable(column),
+    []
+  );
+  const accordionGroupColumn = useMemo(
+    () => displayColumns.find(isMacroAccordionGroupColumn) ?? null,
+    [displayColumns]
+  );
 
   const fetchRows = useCallback(
     async ({
@@ -530,7 +789,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
       filters,
       search,
     }: FetchRowsArgs<MacroTableFilters>) => {
-      const tableId = macroTableIdRef.current;
+      const tableId = macroTable.id;
       const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
@@ -545,27 +804,18 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         params.set("filters", JSON.stringify(activeFilters));
       }
 
+      if (accordionGroupColumn) {
+        params.set("groupBy", accordionGroupColumn.id);
+      }
+
       const res = await fetch(`/api/macro-tables/${tableId}/rows?${params.toString()}`, {
         cache: "no-store",
       });
       const data = await res.json();
       if (!res.ok) {
         const message = data?.error ?? "Failed to fetch rows";
-        setOverrideConflicts(Array.isArray(data?.overrideConflicts) ? data.overrideConflicts : []);
         throw new Error(message);
       }
-      setOverrideSummary(
-        data.overrideSummary ?? {
-          totalRecords: 0,
-          appliedStable: 0,
-          appliedLegacy: 0,
-          conflicts: 0,
-          rowsWithOverrides: 0,
-          rowsWithConflicts: 0,
-        }
-      );
-      setOverrideConflicts(Array.isArray(data.overrideConflicts) ? data.overrideConflicts : []);
-      setOverrideBanner(null);
       const rows: MacroTableRowData[] = (data.rows ?? []).map((row: MacroRow) => ({
         ...row,
         id: row.id,
@@ -581,32 +831,22 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         _docFileName: row._docFileName,
         _overrideBindingStatus: row._overrideBindingStatus,
         _overrideConflictCount: row._overrideConflictCount,
-        [MACRO_BUSINESS_ID_COLUMN_ID]: row._businessIdentity ?? null,
-        [MACRO_DOCUMENT_COLUMN_ID]: row._docFileName ?? row._docPath ?? null,
-        [MACRO_CONTINUITY_COLUMN_ID]: [
-          typeof row._lineageRowKey === "string" && row._lineageRowKey.startsWith("legacy:")
-            ? "legacy"
-            : row._lineageRowKey
-              ? "estable"
-              : null,
-          typeof row._materializationVersion === "number" && row._materializationVersion > 1
-            ? "rematerializada"
-            : null,
-          row._overrideBindingStatus === "stable"
-            ? "override estable"
-            : row._overrideBindingStatus === "legacy"
-              ? "override legacy"
-              : row._overrideBindingStatus === "conflict"
-                ? "override conflict"
-                : null,
-          row._extractionId ? `ext ${shortTechnicalId(row._extractionId)}` : null,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        [MACRO_VERSION_COLUMN_ID]:
-          typeof row._materializationVersion === "number"
-            ? `v${row._materializationVersion}`
-            : null,
+        _macroAccordionGroup: row._macroAccordionGroup === true,
+        _macroAccordionGroupColumnId:
+          typeof row._macroAccordionGroupColumnId === "string"
+            ? row._macroAccordionGroupColumnId
+            : undefined,
+        _macroAccordionGroupValue:
+          typeof row._macroAccordionGroupValue === "string"
+            ? row._macroAccordionGroupValue
+            : undefined,
+        _macroAccordionGroupCount:
+          typeof row._macroAccordionGroupCount === "number"
+            ? row._macroAccordionGroupCount
+            : undefined,
+        _macroAccordionRows: Array.isArray(row._macroAccordionRows)
+          ? (row._macroAccordionRows as MacroRow[])
+          : undefined,
       }));
 
       return {
@@ -614,15 +854,14 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         pagination: data.pagination,
       };
     },
-    []
+    [accordionGroupColumn, macroTable.id]
   );
 
   const onSave = useCallback(
     async ({ dirtyRows }: { dirtyRows: MacroTableRowData[] }) => {
-      const tableId = macroTableIdRef.current;
-      const cols = columnsRef.current;
+      const tableId = macroTable.id;
       const editableColumnIds = new Set(
-        cols
+        columns
           .filter((column) => {
             if (column.columnType === "custom") return true;
             const allowManualEdit = column.config?.allowManualEdit;
@@ -660,32 +899,55 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        if (res.status === 409 && Array.isArray(data.conflicts)) {
-          setOverrideConflicts(data.conflicts);
-          setOverrideBanner(
-            "Se detecto un conflicto de reattach por lineage. El override no se guardo hasta resolver la ambiguedad."
-          );
-        }
         throw new Error(data.error ?? "Error guardando cambios");
       }
 
-      const data = await res.json().catch(() => ({}));
-      const stableWrites = Number(data?.bindingSummary?.stable ?? 0);
-      const legacyWrites = Number(data?.bindingSummary?.legacy ?? 0);
-      setOverrideBanner(
-        stableWrites > 0
-          ? `Override guardado con binding estable${legacyWrites > 0 ? " (con fallback legacy parcial)." : "."}`
-          : "Override guardado con binding legacy."
-      );
       queryClient.invalidateQueries({ queryKey: ["macro-table-rows", tableId] });
     },
-    [queryClient]
+    [columns, macroTable.id, queryClient]
   );
 
-  const config = useMemo(() => {
-    if (displayColumns.length === 0) return null;
+  const saveAccordionCell = useCallback(
+    async ({
+      rowId,
+      columnId,
+      value,
+    }: {
+      rowId: string;
+      columnId: string;
+      value: unknown;
+    }) => {
+      const res = await fetch(`/api/macro-tables/${macroTable.id}/rows`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customValues: [{ sourceRowId: rowId, columnId, value }],
+        }),
+      });
 
-    const columnDefs: ColumnDef<MacroTableRowData>[] = displayColumns.map((column) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Error guardando cambios");
+        throw new Error(data.error ?? "Error guardando cambios");
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["macro-table-rows", macroTable.id] });
+    },
+    [macroTable.id, queryClient]
+  );
+
+  const tableColumns = useMemo(
+    () => displayColumns.filter((column) => !isMacroAccordionOnlyColumn(column)),
+    [displayColumns]
+  );
+  const accordionDetailColumns = useMemo(
+    () => displayColumns.filter(isMacroAccordionDetailColumn),
+    [displayColumns]
+  );
+  const config = useMemo<FormTableConfig<MacroTableRowData, MacroTableFilters> | null>(() => {
+    if (tableColumns.length === 0) return null;
+
+    const columnDefs: ColumnDef<MacroTableRowData>[] = tableColumns.map((column) => {
       const isEditable = isManuallyEditableColumn(column);
       const cellType = mapDataTypeToCell(column.dataType);
       const renderAsObraLink = isObraRedirectColumn(column);
@@ -696,12 +958,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         field: column.id as never,
         editable: isEditable,
         cellType,
-        cellClassName:
-          column.columnType === "custom"
-            ? "bg-[#fff8ef] group-hover:bg-[#fff3e3] shadow-[inset_0_0_0_1px_rgba(245,158,11,0.18)]"
-            : column.columnType === "computed"
-              ? "bg-[#f7f4ee]"
-              : undefined,
+        cellClassName: renderAsObraLink ? "bg-white group-hover:bg-white" : undefined,
         cellConfig:
           renderAsObraLink
             ? {
@@ -720,126 +977,24 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
                 return <MacroObraLink obraId={String(row._obraId ?? "")} text={text} />;
               },
             }
-            : column.id === MACRO_BUSINESS_ID_COLUMN_ID
-              ? {
-                renderReadOnly: ({ value, row }: { value: unknown; row: MacroTableRowData }) => {
-                  const text = String(value ?? "").trim();
-                  if (!text) {
-                    return <span className="text-muted-foreground">-</span>;
-                  }
-
-                  return (
-                    <div className="flex min-w-0 flex-col px-2 py-1">
-                      <span className="truncate font-semibold text-stone-900" title={text}>
-                        {text}
-                      </span>
-                      {typeof row._sourceTablaName === "string" && row._sourceTablaName.trim().length > 0 ? (
-                        <span className="truncate text-[11px] text-stone-500" title={row._sourceTablaName}>
-                          {row._sourceTablaName}
-                        </span>
-                      ) : null}
-                    </div>
-                  );
-                },
-              }
-              : column.id === MACRO_DOCUMENT_COLUMN_ID
+            : cellType === "currency"
+              ? { currencyCode: "ARS", currencyLocale: "es-AR" }
+              : cellType === "select"
                 ? {
-                  renderReadOnly: ({ row }: { value: unknown; row: MacroTableRowData }) => {
-                    const fileName = String(row._docFileName ?? "").trim();
-                    const docPath = String(row._docPath ?? "").trim();
-                    if (!fileName && !docPath) {
-                      return <span className="text-muted-foreground">-</span>;
-                    }
-
-                    return (
-                      <div className="flex min-w-0 flex-col px-2 py-1">
-                        <span
-                          className="truncate font-medium text-stone-800"
-                          title={fileName || docPath}
-                        >
-                          {fileName || docPath}
-                        </span>
-                        {docPath ? (
-                          <span className="truncate text-[11px] text-stone-500" title={docPath}>
-                            {docPath}
-                          </span>
-                        ) : null}
-                      </div>
-                    );
-                  },
+                  selectOptions: sanitizeMainTableSelectOptions(column.config?.selectOptions),
+                  selectName: getMacroSelectName(column),
                 }
-                : column.id === MACRO_CONTINUITY_COLUMN_ID
+                : cellType === "text"
                   ? {
-                    renderReadOnly: ({ row }: { value: unknown; row: MacroTableRowData }) => {
-                      const badges = getContinuityBadges(row);
-                      const extractionId = shortTechnicalId(
-                        typeof row._extractionId === "string" ? row._extractionId : null
-                      );
-                      const lineagePreview =
-                        typeof row._lineageRowKey === "string" && row._lineageRowKey.length > 0
-                          ? row._lineageRowKey.slice(0, 18)
-                          : null;
-
-                      return (
-                        <div className="flex min-w-0 flex-col gap-1 px-2 py-1">
-                          <div className="flex flex-wrap gap-1">
-                            {badges.length > 0 ? (
-                              badges.map((badge) => (
-                                <Badge
-                                  key={badge.key}
-                                  variant="outline"
-                                  className={cn("rounded-full px-2 py-0.5 text-[11px]", badge.className)}
-                                >
-                                  {badge.label}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span className="text-xs text-muted-foreground">sin estado</span>
-                            )}
-                          </div>
-                          {(extractionId || lineagePreview) ? (
-                            <div className="flex min-w-0 flex-col text-[11px] text-stone-500">
-                              {extractionId ? <span title={String(row._extractionId ?? "")}>ext {extractionId}</span> : null}
-                              {lineagePreview ? (
-                                <span title={String(row._lineageRowKey ?? "")}>
-                                  lineage {lineagePreview}
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
+                    renderReadOnly: ({ value }: { value: unknown }) => {
+                      const text = String(value ?? "");
+                      if (!text) {
+                        return <span className="text-muted-foreground">-</span>;
+                      }
+                      return <TruncatedTextWithTooltip text={text} />;
                     },
                   }
-                  : column.id === MACRO_VERSION_COLUMN_ID
-                    ? {
-                      renderReadOnly: ({ row }: { value: unknown; row: MacroTableRowData }) => {
-                        if (typeof row._materializationVersion !== "number") {
-                          return <span className="text-muted-foreground">-</span>;
-                        }
-
-                        return (
-                          <div className="flex items-center px-2 py-1">
-                            <Badge variant="outline" className="rounded-full border-sky-200 bg-sky-50 text-sky-700">
-                              v{row._materializationVersion}
-                            </Badge>
-                          </div>
-                        );
-                      },
-                    }
-                    : cellType === "currency"
-                      ? { currencyCode: "ARS", currencyLocale: "es-AR" }
-                      : cellType === "text"
-                        ? {
-                          renderReadOnly: ({ value }: { value: unknown }) => {
-                            const text = String(value ?? "");
-                            if (!text) {
-                              return <span className="text-muted-foreground">-</span>;
-                            }
-                            return <TruncatedTextWithTooltip text={text} />;
-                          },
-                        }
-                        : undefined,
+                  : undefined,
         enableHide: true,
         enablePin: column.id !== "_obraName",
       };
@@ -852,6 +1007,7 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         macroTable.description ??
         "Vista agregada de certificados contables con navegacion tipo spreadsheet.",
       enableColumnResizing: true,
+      tableLayout: "auto",
       columns: columnDefs,
       fetchRows,
       onSave,
@@ -863,23 +1019,114 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         <MacroFiltersContent {...props} columns={displayColumns} />
       ),
       applyFilters: (row: MacroTableRowData, filters: MacroTableFilters) =>
-        matchesMacroFilters(row, displayColumnsRef.current, filters),
+        matchesMacroFilters(row, displayColumns, filters),
       countActiveFilters: (filters: MacroTableFilters) =>
         countActiveMacroFilters(filters),
       emptyStateMessage: "No hay datos disponibles en las tablas fuente.",
+      headerCellClassName: "bg-white text-stone-600",
+      accordionRow:
+        accordionDetailColumns.length > 0 || accordionGroupColumn
+          ? {
+            triggerLabel: "detalle",
+            contentClassName: "bg-white",
+            renderTrigger: ({
+              row,
+              isOpen,
+              toggle,
+            }: {
+              row: MacroTableRowData;
+              isOpen: boolean;
+              toggle: () => void;
+            }) => {
+              const rowCount =
+                typeof row._macroAccordionGroupCount === "number"
+                  ? row._macroAccordionGroupCount
+                  : null;
+
+              return (
+                <Button
+                  type="button"
+                  variant="defaultTertiary"
+                  size="icon-sm"
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? "Cerrar detalle" : "Abrir detalle"}
+                  onClick={toggle}
+                  className="size-5 rounded-md"
+                >
+                  {isOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                  {rowCount !== null ? <span className="sr-only">{rowCount} filas</span> : null}
+                </Button>
+              );
+            },
+            renderContent: (row: MacroTableRowData) => {
+              const childRows = Array.isArray(row._macroAccordionRows)
+                ? row._macroAccordionRows
+                : [];
+              const detailColumns =
+                accordionDetailColumns.length > 0 ? accordionDetailColumns : tableColumns;
+
+              if (childRows.length > 0) {
+                return (
+                  <MacroAccordionDetailTable
+                    rows={childRows}
+                    columns={detailColumns}
+                    isEditableColumn={isAccordionEditableColumn}
+                    onSaveCell={saveAccordionCell}
+                  />
+                );
+              }
+
+              return (
+                <div
+                  data-form-table-ignore-arrow-navigation="true"
+                  className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3"
+                >
+                  {detailColumns.map((column) => (
+                    <div
+                      key={column.id}
+                      className="min-w-0 rounded-lg border border-stone-200 bg-white px-3 py-2"
+                    >
+                      <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+                        {column.label}
+                      </p>
+                      <p className="mt-1 break-words text-stone-900">
+                        <MacroAccordionCell
+                          row={row}
+                          column={column}
+                          editable={isAccordionEditableColumn(column)}
+                          onSave={saveAccordionCell}
+                        />
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              );
+            },
+          }
+          : undefined,
       showInlineSearch: true,
-      showActionsColumn: false,
+      showActionsColumn: accordionDetailColumns.length > 0 || Boolean(accordionGroupColumn),
+      actionsColumnPosition: "start",
+      actionsColumnWidth: 36,
+      actionsColumnLabel: null,
+      allowDeleteRows: false,
       allowAddRows: false,
+      editMode: "active-cell",
     };
   }, [
+    accordionDetailColumns,
+    accordionGroupColumn,
     displayColumns,
     fetchRows,
+    isAccordionEditableColumn,
     isManuallyEditableColumn,
     isObraRedirectColumn,
     macroTable.description,
     macroTable.id,
     macroTable.name,
     onSave,
+    saveAccordionCell,
+    tableColumns,
   ]);
 
   if (!config) {
@@ -962,57 +1209,9 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
         </div>
         <div
           data-wizard-target="macro-page-table"
-          className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none"
+          className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pr-0 pt-3.5 shadow-card xl:rounded-t-none"
         >
-          <div className="grid gap-3 lg:grid-cols-4">
-            <div className="rounded-lg border border-stone-200 bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Overrides estables</p>
-              <p className="mt-2 text-2xl font-semibold text-stone-900">{overrideSummary.appliedStable}</p>
-              <p className="mt-1 text-xs text-stone-500">Se reatachan por `lineage_row_key` tras reimport.</p>
-            </div>
-            <div className="rounded-lg border border-stone-200 bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Fallback legacy</p>
-              <p className="mt-2 text-2xl font-semibold text-stone-900">{overrideSummary.appliedLegacy}</p>
-              <p className="mt-1 text-xs text-stone-500">Siguen atados a `source_row_id` mientras dura la transicion.</p>
-            </div>
-            <div className="rounded-lg border border-stone-200 bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Conflictos</p>
-              <p className="mt-2 text-2xl font-semibold text-red-700">{overrideSummary.conflicts}</p>
-              <p className="mt-1 text-xs text-stone-500">Si hay ambiguedad, no se reaplica el override automaticamente.</p>
-            </div>
-            <div className="rounded-lg border border-stone-200 bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Filas con continuidad</p>
-              <p className="mt-2 text-2xl font-semibold text-stone-900">{overrideSummary.rowsWithOverrides}</p>
-              <p className="mt-1 text-xs text-stone-500">Incluye rows reimportadas donde el override siguio vivo.</p>
-            </div>
-          </div>
-          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-            La macrotabla esta mostrando vista historica completa. Usa `NRO`, `Documento`, `Continuidad` y `Version` para distinguir entidades de negocio distintas de rematerializaciones mas nuevas.
-          </div>
-          {overrideBanner ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              {overrideBanner}
-            </div>
-          ) : null}
-          {overrideConflicts.length > 0 ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-              <p className="text-sm font-semibold text-red-800">Conflictos de reattach visibles</p>
-              <div className="mt-2 space-y-2">
-                {overrideConflicts.slice(0, 5).map((conflict) => (
-                  <div
-                    key={`${conflict.rowId}:${conflict.columnId}:${conflict.candidateOverrideIds.join(",")}`}
-                    className="rounded-md border border-red-200 bg-white/80 p-2"
-                  >
-                    <p className="text-xs font-medium text-red-800">
-                      columna {conflict.columnId} · lineage {conflict.lineageRowKey ?? "legacy"}
-                    </p>
-                    <p className="mt-1 text-xs text-red-700">{conflict.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))] my-0 overflow-hidden rounded-lg shadow-card" />
+          <FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[calc(100vh-400px)]" />
           <Separator className="bg-border" />
           <FormTablePagination />
         </div>
@@ -1023,12 +1222,14 @@ function MacroTablePanel({ macroTable }: { macroTable: MacroTableWithDetails }) 
 
 function MacroTablesPageContent() {
   const searchParams = useSearchParams();
-  const queryParams = new URLSearchParams(searchParams);
-  const getSearchParam = (key: string): string | null => queryParams.get(key);
   const router = useRouter();
   const { push, replace } = router;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set());
+  const insuranceFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [insurancePreviewRows, setInsurancePreviewRows] = useState<InsurancePolicyPreviewRow[]>([]);
+  const [isInsuranceImportOpen, setIsInsuranceImportOpen] = useState(false);
+  const [isInsuranceImporting, setIsInsuranceImporting] = useState(false);
 
   const macroTablesQuery = useQuery<MacroTableWithDetails[]>({
     queryKey: ["macro-tables"],
@@ -1041,11 +1242,70 @@ function MacroTablesPageContent() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const macroTables = macroTablesQuery.data ?? [];
+  const macroTables = useMemo(
+    () => macroTablesQuery.data ?? [],
+    [macroTablesQuery.data]
+  );
+  const mainTableColumnsQuery = useQuery<MainTableColumnConfig[]>({
+    queryKey: ["main-table-config", "macro-live-source-config"],
+    queryFn: async () => {
+      const res = await fetch("/api/main-table-config", { cache: "no-store" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data.columns) ? data.columns : [];
+    },
+    staleTime: 30 * 1000,
+  });
+  const mainTableColumnById = useMemo(() => {
+    const map = new Map<string, MainTableColumnConfig>();
+    for (const column of mainTableColumnsQuery.data ?? []) {
+      if (typeof column.id === "string") map.set(column.id, column);
+    }
+    return map;
+  }, [mainTableColumnsQuery.data]);
+  const hasInsurancePreviewErrors = insurancePreviewRows.some((row) => row.errors.length > 0);
+
+  const previewInsuranceImport = async (file: File) => {
+    setIsInsuranceImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/insurance-policies/import", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "No se pudo leer el Excel");
+      setInsurancePreviewRows(data.preview ?? []);
+      setIsInsuranceImportOpen(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo leer el Excel");
+    } finally {
+      setIsInsuranceImporting(false);
+      if (insuranceFileInputRef.current) insuranceFileInputRef.current.value = "";
+    }
+  };
+
+  const confirmInsuranceImport = async () => {
+    const response = await fetch("/api/insurance-policies/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: insurancePreviewRows }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      toast.error(data.error ?? "No se pudo importar");
+      return;
+    }
+    setIsInsuranceImportOpen(false);
+    setInsurancePreviewRows([]);
+    await macroTablesQuery.refetch();
+    toast.success(`${data.imported ?? 0} pólizas importadas`);
+  };
 
   useEffect(() => {
     if (macroTables.length === 0) return;
-    const queryMacroId = getSearchParam("macroId");
+    const queryMacroId = new URLSearchParams(searchParams).get("macroId");
     if (queryMacroId && macroTables.some((macroTable) => macroTable.id === queryMacroId)) {
       setSelectedId((prev) => (prev === queryMacroId ? prev : queryMacroId));
     } else if (!selectedId) {
@@ -1100,19 +1360,78 @@ function MacroTablesPageContent() {
 
   if (macroTables.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 gap-4 text-center">
-        <Layers className="size-12 text-muted-foreground opacity-30" />
-        <div>
-          <h2 className="text-lg font-semibold">No hay macro tablas</h2>
-          <p className="text-muted-foreground">
-            Crea una macro tabla para agregar datos de multiples fuentes.
-          </p>
+      <>
+        <div className="flex flex-col items-center justify-center p-12 gap-4 text-center">
+          <Layers className="size-12 text-muted-foreground opacity-30" />
+          <div>
+            <h2 className="text-lg font-semibold">No hay macro tablas</h2>
+            <p className="text-muted-foreground">
+              Importá pólizas para crear la macrotabla automáticamente o creá una manual.
+            </p>
+          </div>
+          <input
+            ref={insuranceFileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) void previewInsuranceImport(file);
+            }}
+          />
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button onClick={() => insuranceFileInputRef.current?.click()} className="gap-2" disabled={isInsuranceImporting}>
+              <Upload className="size-4" />
+              Importar pólizas
+            </Button>
+            <Button onClick={() => push("/admin/macro-tables/new")} variant="outline" className="gap-2">
+              <Plus className="size-4" />
+              Nueva macro tabla
+            </Button>
+          </div>
         </div>
-        <Button onClick={() => push("/admin/macro-tables/new")} className="gap-2">
-          <Plus className="size-4" />
-          Nueva macro tabla
-        </Button>
-      </div>
+        <Dialog open={isInsuranceImportOpen} onOpenChange={setIsInsuranceImportOpen}>
+          <DialogContent className="max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>Revisar importación de pólizas</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[520px] overflow-auto border border-stone-200">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fila</TableHead>
+                    <TableHead>Obra detectada</TableHead>
+                    <TableHead>Póliza</TableHead>
+                    <TableHead>Sección</TableHead>
+                    <TableHead>Vigencia</TableHead>
+                    <TableHead>Errores</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {insurancePreviewRows.map((row) => (
+                    <TableRow key={`${row.rowNumber}-${row.policyNumber}`}>
+                      <TableCell>{row.rowNumber}</TableCell>
+                      <TableCell>{row.obraId ? row.obraLabel : "-"}</TableCell>
+                      <TableCell>{row.policyNumber || "-"}</TableCell>
+                      <TableCell>{row.section || "-"}</TableCell>
+                      <TableCell>{row.coveragePeriod || row.endDate || "-"}</TableCell>
+                      <TableCell className={row.errors.length ? "text-red-600" : "text-stone-500"}>
+                        {row.errors.length ? row.errors.join(" ") : "OK"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsInsuranceImportOpen(false)}>Cancelar</Button>
+              <Button onClick={() => void confirmInsuranceImport()} disabled={hasInsurancePreviewErrors || insurancePreviewRows.length === 0}>
+                Confirmar importación
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
@@ -1132,7 +1451,30 @@ function MacroTablesPageContent() {
               Filtra, busca y actualiza tus macrotablas desde una vista unificada.
             </p>
           </div>
-          <div data-wizard-target="macro-page-tabs">
+          <div className="flex flex-col gap-2 sm:items-end" data-wizard-target="macro-page-tabs">
+            <div className="flex flex-wrap justify-end gap-2">
+              <input
+                ref={insuranceFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) void previewInsuranceImport(file);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={toolButtonClass}
+                onClick={() => insuranceFileInputRef.current?.click()}
+                disabled={isInsuranceImporting}
+              >
+                <Upload className="size-4" />
+                Importar pólizas
+              </Button>
+            </div>
             <TabsList className={cn("flex justify-start rounded-lg p-1 h-11")}>
               {macroTables.map((macroTable) => (
                 <TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
@@ -1151,14 +1493,100 @@ function MacroTablesPageContent() {
           >
             <div className={macroTable.id === selectedId ? "" : "hidden"}>
               {mountedTabs.has(macroTable.id) ? (
-                <MacroTablePanel macroTable={macroTable} />
+                <MacroTablePanel macroTable={macroTable} mainTableColumnById={mainTableColumnById} />
               ) : null}
             </div>
           </TabsContent>
         ))}
       </div>
+      <Dialog open={isInsuranceImportOpen} onOpenChange={setIsInsuranceImportOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Revisar importación de pólizas</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[520px] overflow-auto border border-stone-200">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fila</TableHead>
+                  <TableHead>Obra detectada</TableHead>
+                  <TableHead>Póliza</TableHead>
+                  <TableHead>Sección</TableHead>
+                  <TableHead>Vigencia</TableHead>
+                  <TableHead>Errores</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {insurancePreviewRows.map((row) => (
+                  <TableRow key={`${row.rowNumber}-${row.policyNumber}`}>
+                    <TableCell>{row.rowNumber}</TableCell>
+                    <TableCell>{row.obraId ? row.obraLabel : "-"}</TableCell>
+                    <TableCell>{row.policyNumber || "-"}</TableCell>
+                    <TableCell>{row.section || "-"}</TableCell>
+                    <TableCell>{row.coveragePeriod || row.endDate || "-"}</TableCell>
+                    <TableCell className={row.errors.length ? "text-red-600" : "text-stone-500"}>
+                      {row.errors.length ? row.errors.join(" ") : "OK"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsInsuranceImportOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void confirmInsuranceImport()} disabled={hasInsurancePreviewErrors || insurancePreviewRows.length === 0}>
+              Confirmar importación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Tabs>
   );
+}
+
+function getMacroAccordionPlacement(
+  column: Pick<MacroDisplayColumn, "config">
+): MacroAccordionPlacement {
+  const placement = column.config?.macroAccordionPlacement;
+  if (placement === "accordion" || placement === "both") return placement;
+  return "table";
+}
+
+function isMacroAccordionDetailColumn(column: MacroDisplayColumn) {
+  const placement = getMacroAccordionPlacement(column);
+  return placement === "accordion" || placement === "both";
+}
+
+function isMacroAccordionOnlyColumn(column: MacroDisplayColumn) {
+  return getMacroAccordionPlacement(column) === "accordion";
+}
+
+function isMacroAccordionGroupColumn(column: MacroDisplayColumn) {
+  return column.config?.macroAccordionGroupBy === true;
+}
+
+function formatMacroAccordionValue(value: unknown, column: MacroDisplayColumn) {
+  if (value === null || typeof value === "undefined" || value === "") return "-";
+  if (column.dataType === "select") {
+    const matched = resolveMainTableSelectOption(
+      value,
+      sanitizeMainTableSelectOptions(column.config?.selectOptions),
+      getMacroSelectName(column)
+    );
+    if (matched) return matched.text;
+  }
+  if (column.dataType === "boolean") return value === true ? "Si" : "No";
+  if (column.dataType === "currency") {
+    const numeric = typeof value === "number" ? value : Number(value);
+    if (Number.isFinite(numeric)) {
+      return new Intl.NumberFormat("es-AR", {
+        style: "currency",
+        currency: "ARS",
+        maximumFractionDigits: 2,
+      }).format(numeric);
+    }
+  }
+  return String(value);
 }
 
 export default function MacroTablesPage() {

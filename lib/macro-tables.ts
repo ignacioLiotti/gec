@@ -2,7 +2,7 @@
 
 export type MacroTableColumnType = 'source' | 'custom' | 'computed';
 
-export type MacroTableDataType = 'text' | 'number' | 'currency' | 'boolean' | 'date';
+export type MacroTableDataType = 'text' | 'number' | 'currency' | 'boolean' | 'date' | 'select';
 
 export type MacroTableColumn = {
   id: string;
@@ -100,6 +100,7 @@ const VALID_DATA_TYPES = new Set<MacroTableDataType>([
   'currency',
   'boolean',
   'date',
+  'select',
 ]);
 
 export function ensureMacroDataType(value: string | undefined): MacroTableDataType {
@@ -110,37 +111,45 @@ export function ensureMacroDataType(value: string | undefined): MacroTableDataTy
 }
 
 // Map database column record to API response format
-export function mapColumnToResponse(record: any): MacroTableColumn {
+export function mapColumnToResponse(record: Record<string, unknown>): MacroTableColumn {
   return {
     id: record.id as string,
     macroTableId: record.macro_table_id as string,
     columnType: record.column_type as MacroTableColumnType,
     sourceFieldKey: record.source_field_key as string | null,
     label: record.label as string,
-    dataType: ensureMacroDataType(record.data_type),
-    position: record.position ?? 0,
-    config: record.config ?? {},
+    dataType: ensureMacroDataType(
+      typeof record.data_type === "string" ? record.data_type : undefined,
+    ),
+    position: typeof record.position === "number" ? record.position : 0,
+    config:
+      record.config && typeof record.config === "object" && !Array.isArray(record.config)
+        ? (record.config as Record<string, unknown>)
+        : {},
   };
 }
 
 // Map database source record to API response format
-export function mapSourceToResponse(record: any): MacroTableSource {
+export function mapSourceToResponse(record: Record<string, unknown>): MacroTableSource {
   return {
     id: record.id as string,
     macroTableId: record.macro_table_id as string,
     obraTablaId: record.obra_tabla_id as string,
-    position: record.position ?? 0,
+    position: typeof record.position === "number" ? record.position : 0,
   };
 }
 
 // Map database macro table record to API response format
-export function mapMacroTableToResponse(record: any): MacroTable {
+export function mapMacroTableToResponse(record: Record<string, unknown>): MacroTable {
   return {
     id: record.id as string,
     tenantId: record.tenant_id as string,
     name: record.name as string,
     description: record.description as string | null,
-    settings: record.settings ?? {},
+    settings:
+      record.settings && typeof record.settings === "object" && !Array.isArray(record.settings)
+        ? (record.settings as Record<string, unknown>)
+        : {},
     createdAt: record.created_at as string,
     updatedAt: record.updated_at as string,
   };

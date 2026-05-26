@@ -18,6 +18,8 @@ import {
 	hasAnyDemoCapability,
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
+import { updateInsurancePoliciesForObraCompletion } from "@/lib/insurance-policies";
+import { syncInsurancePoliciesToMacroTable } from "@/lib/insurance-policies-macro";
 
 type RouteContext = {
 	params: Promise<{
@@ -199,6 +201,25 @@ async function handleObraCompletionTransitions({
 					console.error(
 						"Obras [id] PUT: error while executing flujo actions",
 						flujoError
+					);
+				}
+
+				try {
+					await updateInsurancePoliciesForObraCompletion({
+						supabase,
+						obraId,
+						tenantId,
+						finishedAt: new Date().toISOString().slice(0, 10),
+					});
+					await syncInsurancePoliciesToMacroTable({
+						supabase,
+						tenantId,
+						obraIds: [obraId],
+					});
+				} catch (insuranceError) {
+					console.error(
+						"Obras [id] PUT: error recalculating insurance policy dates",
+						insuranceError
 					);
 				}
 			}

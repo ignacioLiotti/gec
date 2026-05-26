@@ -8,6 +8,7 @@ import {
   Building2,
   CalendarDays,
   Check,
+  ChevronsUpDown,
   Copy,
   Download,
   Eye,
@@ -28,6 +29,7 @@ import { toast } from "sonner";
 
 import {
   DOCUMENT_TYPE_LABELS,
+  GENERATED_DOCUMENT_STATUS_LABELS,
   applyTemplateAutoInputData,
   buildInitialInputData,
   type DocumentTemplateSummary,
@@ -41,8 +43,15 @@ import {
   type ValidationError,
 } from "@/lib/document-generation";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
@@ -323,7 +332,7 @@ function countFilledRows(rows: unknown[]) {
 }
 
 function humanizeStatus(status: string) {
-  return status.toLowerCase().replace(/_/g, " ");
+  return GENERATED_DOCUMENT_STATUS_LABELS[status] ?? status.toLowerCase().replace(/_/g, " ");
 }
 
 function getDocumentCode(inputData: Record<string, unknown>) {
@@ -812,6 +821,90 @@ function NativeSelect({
         ) : null}
       </Select>
     </div>
+  );
+}
+
+function WorkCombobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  emptyPlaceholder,
+  icon,
+  error,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder?: string;
+  emptyPlaceholder?: string;
+  icon?: React.ReactNode;
+  error?: boolean;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedOption = options.find((option) => option.value === value) ?? null;
+  const hasOptions = options.length > 0;
+  const isDisabled = disabled || !hasOptions;
+  const resolvedPlaceholder = hasOptions ? placeholder : (emptyPlaceholder ?? "Sin obras disponibles");
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={isDisabled}
+          className={cn(
+            controlBaseClass(error),
+            "relative justify-between px-3 font-normal shadow-none disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500",
+            icon ? "pl-9" : "pl-3",
+          )}
+        >
+          {icon ? (
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-500">
+              {icon}
+            </span>
+          ) : null}
+          <span className={cn("min-w-0 flex-1 truncate text-left", !selectedOption && "text-stone-400")}>
+            {selectedOption?.label ?? resolvedPlaceholder}
+          </span>
+          <ChevronsUpDown className="ml-2 size-4 shrink-0 text-stone-400" />
+        </Button>
+      </PopoverTrigger>
+      {hasOptions ? (
+        <PopoverContent align="start" className="w-[min(36rem,calc(100vw-2rem))] p-0">
+          <Command>
+            <CommandInput placeholder="Buscar obra..." />
+            <CommandList className="max-h-[22rem] overflow-x-auto">
+              <CommandEmpty>No se encontro ninguna obra.</CommandEmpty>
+              {options.map((option) => (
+                <CommandItem
+                  key={`${option.value}-${option.label}`}
+                  value={`${option.label} ${option.value}`}
+                  onSelect={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className="w-max min-w-full gap-3 px-3 py-2 whitespace-nowrap"
+                >
+                  <Check
+                    className={cn(
+                      "size-4 shrink-0 text-[#ff5800]",
+                      value === option.value ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span>{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      ) : null}
+    </Popover>
   );
 }
 
@@ -1671,6 +1764,17 @@ export function DocumentGenerationPageClient({
     anchor.remove();
   };
 
+  const copyGeneratedReviewLink = async () => {
+    if (!generatedDocument?.generatedDocument.id) return;
+    const reviewUrl = `${window.location.origin}/document-generation/review?id=${encodeURIComponent(generatedDocument.generatedDocument.id)}`;
+    try {
+      await navigator.clipboard.writeText(reviewUrl);
+      toast.success("Link de revision copiado.");
+    } catch {
+      toast.error("No se pudo copiar el link.");
+    }
+  };
+
   const renderFieldControl = (
     field: TemplateField,
     value: unknown,
@@ -1800,7 +1904,7 @@ export function DocumentGenerationPageClient({
             <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:self-start">
               <div className="grid gap-3">
                 <FormField label="Obra" required>
-                  <NativeSelect
+                  <WorkCombobox
                     value={workId}
                     onChange={(value) => void handleWorkChange(value)}
                     icon={iconForContextField("work")}
@@ -2015,13 +2119,9 @@ export function DocumentGenerationPageClient({
                   title={generatedDocument.generatedDocument.file_name}
                   hint={`Guardado en ${generatedDocument.relativeFolderPath}.`}
                   rightSlot={
-                    generatedDocument.generatedDocument.status === "APPROVED" ? (
-                      <DocumentApprovedSeal status={generatedDocument.generatedDocument.status} />
-                    ) : (
-                      <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-700">
-                        {humanizeStatus(generatedDocument.generatedDocument.status)}
-                      </span>
-                    )
+                    <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-700">
+                      {humanizeStatus(generatedDocument.generatedDocument.status)}
+                    </span>
                   }
                 >
                   <div className="flex flex-wrap gap-2">
@@ -2038,6 +2138,10 @@ export function DocumentGenerationPageClient({
                     <Button type="button" variant="outline" onClick={downloadGeneratedDocument} className="rounded-md">
                       <Download className="mr-2 h-4 w-4" />
                       Descargar
+                    </Button>
+                    <Button type="button" variant="outline" onClick={copyGeneratedReviewLink} className="rounded-md">
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copiar link de revision
                     </Button>
                     <Button asChild type="button" variant="outline" className="rounded-md">
                       <Link href="/document-generation/review">Ir a revision</Link>
@@ -2059,7 +2163,7 @@ export function DocumentGenerationPageClient({
                 >
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField label="Obra" required>
-                      <NativeSelect
+                      <WorkCombobox
                         value={workId}
                         onChange={(value) => void handleWorkChange(value)}
                         icon={iconForContextField("work")}
@@ -2281,13 +2385,9 @@ export function DocumentGenerationPageClient({
                     title={generatedDocument.generatedDocument.file_name}
                     hint={`Guardado en ${generatedDocument.relativeFolderPath}.`}
                     rightSlot={
-                      generatedDocument.generatedDocument.status === "APPROVED" ? (
-                        <DocumentApprovedSeal status={generatedDocument.generatedDocument.status} />
-                      ) : (
-                        <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium capitalize text-stone-700">
-                          {humanizeStatus(generatedDocument.generatedDocument.status)}
-                        </span>
-                      )
+                      <span className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-medium text-stone-700">
+                        {humanizeStatus(generatedDocument.generatedDocument.status)}
+                      </span>
                     }
                   >
                     <div className="flex flex-wrap gap-2">
@@ -2309,6 +2409,10 @@ export function DocumentGenerationPageClient({
                       >
                         <Download className="mr-2 size-4" />
                         Descargar
+                      </Button>
+                      <Button type="button" variant="outline" onClick={copyGeneratedReviewLink} className="rounded-md">
+                        <Copy className="mr-2 size-4" />
+                        Copiar link de revision
                       </Button>
                       <Button asChild type="button" variant="outline" className="rounded-md">
                         <Link href="/document-generation/review">
@@ -2360,11 +2464,6 @@ export function DocumentGenerationPageClient({
             <div className="report-preview-container flex-1 overflow-auto p-6">
               {selectedTemplate ? (
                 <div className="relative max-h-full">
-                  <DocumentApprovedSeal
-                    status={generatedDocument?.generatedDocument.status ?? null}
-                    size="sm"
-                    className="absolute left-5 top-5 z-20 w-full"
-                  />
                   <div className="report-paper report-paper-fit-preview bg-white ">
                     <div dangerouslySetInnerHTML={{ __html: previewHtml }} className="" />
                   </div>
@@ -2398,11 +2497,6 @@ export function DocumentGenerationPageClient({
             {selectedTemplate ? (
               <div className="mx-auto w-fit rounded-xl border border-stone-300 bg-[#e9e7e1] p-8 shadow-[0_4px_12px_rgba(31,35,40,0.06)]">
                 <div className="relative report-paper min-w-max bg-white">
-                  <DocumentApprovedSeal
-                    status={generatedDocument?.generatedDocument.status ?? null}
-                    size="md"
-                    className="absolute left-5 top-5 z-20"
-                  />
                   <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
                 </div>
               </div>

@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowRight, FilePenLine, Loader2, RefreshCcw } from "lucide-react";
+import { ArrowRight, Copy, FilePenLine, Loader2, RefreshCcw } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { GENERATED_DOCUMENT_STATUS_LABELS } from "@/lib/document-generation";
 import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
 import { DocumentGenerationNav } from "./document-nav";
 
-type DraftListItem = {
+type HistoryListItem = {
   id: string;
   workId: string;
   workLabel: string;
@@ -17,25 +19,18 @@ type DraftListItem = {
   documentType: string;
   templateId: string;
   templateName: string | null;
+  sourceDraftId: string | null;
+  fileName: string;
   status: string;
   inputData: Record<string, unknown>;
-  validationErrors: Array<{ key: string; message: string }>;
-  rejection: DraftRejection | null;
-  createdAt: string;
+  generatedAt: string;
   updatedAt: string;
   createdBy: { id: string; fullName: string | null; email: string | null; label: string } | null;
   canEdit: boolean;
 };
 
-type DraftRejection = {
-  generatedDocumentId: string;
-  comment: string;
-  rejectedAt: string;
-  rejectedBy: { id: string; fullName: string | null; email: string | null; label: string } | null;
-};
-
-type DraftsResponse = {
-  drafts: DraftListItem[];
+type HistoryResponse = {
+  documents: HistoryListItem[];
   works: Array<{ id: string; label: string }>;
   creators: Array<{ id: string; label: string }>;
 };
@@ -53,23 +48,26 @@ function formatDate(value: string) {
   });
 }
 
-function statusBadgeClasses(status: string, rejection?: DraftRejection | null) {
-  if (rejection) return "border-red-200 bg-red-50 text-red-700";
+function statusBadgeClasses(status: string) {
   switch (status) {
-    case "READY_TO_GENERATE":
+    case "APPROVED":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    default:
+    case "REJECTED":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "UNDER_REVIEW":
+    case "GENERATED":
       return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-stone-200 bg-stone-50 text-stone-700";
   }
 }
 
-function statusLabel(draft: DraftListItem) {
-  if (draft.rejection) return "Rechazado";
-  return draft.status === "READY_TO_GENERATE" ? "Listo" : "En borrador";
+function statusLabel(status: string) {
+  return GENERATED_DOCUMENT_STATUS_LABELS[status] ?? status;
 }
 
 export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Props) {
-  const [drafts, setDrafts] = useState<DraftListItem[]>([]);
+  const [documents, setDocuments] = useState<HistoryListItem[]>([]);
   const [works, setWorks] = useState<Array<{ id: string; label: string }>>([]);
   const [creators, setCreators] = useState<Array<{ id: string; label: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -95,30 +93,28 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
         if (filters.from) query.set("from", filters.from);
         if (filters.to) query.set("to", filters.to);
 
-        const response = await fetch(`/api/document-generation/drafts?${query.toString()}`, {
+        const response = await fetch(`/api/document-generation/generated?${query.toString()}`, {
           cache: "no-store",
         });
-        const payload = (await response.json()) as DraftsResponse & { error?: string };
-        if (!response.ok) throw new Error(payload.error || "No se pudieron cargar los borradores");
+        const payload = (await response.json()) as HistoryResponse & { error?: string };
+        if (!response.ok) throw new Error(payload.error || "No se pudo cargar el historial");
         if (cancelled) return;
 
-        setDrafts(payload.drafts ?? []);
+        const nextDocuments = payload.documents ?? [];
+        setDocuments(nextDocuments);
         setWorks(payload.works ?? []);
         setCreators(payload.creators ?? []);
-        setSelectedId((current) => {
-          const nextId = payload.drafts?.[0]?.id ?? "";
-          return payload.drafts?.some((draft) => draft.id === current) ? current : nextId;
-        });
+        setSelectedId((current) =>
+          nextDocuments.some((document) => document.id === current) ? current : nextDocuments[0]?.id ?? "",
+        );
       } catch (error) {
         if (!cancelled) {
-          console.error("[document-drafts] load failed", error);
-          setDrafts([]);
+          console.error("[document-history] load failed", error);
+          setDocuments([]);
           setSelectedId("");
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -128,10 +124,21 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
     };
   }, [canViewAllDrafts, filters]);
 
-  const selectedDraft = useMemo(
-    () => drafts.find((draft) => draft.id === selectedId) ?? null,
-    [drafts, selectedId],
+  const selectedDocument = useMemo(
+    () => documents.find((document) => document.id === selectedId) ?? null,
+    [documents, selectedId],
   );
+
+  const copyReviewLink = async () => {
+    if (!selectedDocument) return;
+    const reviewUrl = `${window.location.origin}/document-generation/review?id=${encodeURIComponent(selectedDocument.id)}`;
+    try {
+      await navigator.clipboard.writeText(reviewUrl);
+      toast.success("Link de revision copiado.");
+    } catch {
+      toast.error("No se pudo copiar el link.");
+    }
+  };
 
   return (
     <div className="grid gap-6 px-4 py-6 sm:px-6 xl:grid-cols-[minmax(0,1.1fr)_420px]">
@@ -139,15 +146,15 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
         <div className="border-b border-stone-200 bg-[linear-gradient(180deg,#ffffff_0%,#fafaf9_100%)] px-5 py-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Borradores</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Historial</p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
-                  Retoma documentos sin terminar.
+                  Documentos creados.
                 </h1>
                 <DocumentGenerationNav permissions={permissions} />
               </div>
               <p className="mt-1 text-sm text-stone-500">
-                Filtra por fecha, obra y estado para volver a editar un documento.
+                Filtra por fecha, obra y estado para revisar o editar documentos disponibles.
               </p>
             </div>
             <Button
@@ -170,8 +177,9 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
               className="h-10 rounded-md border border-stone-200 bg-white px-3 text-sm"
             >
               <option value="ALL">Todos los estados</option>
-              <option value="DRAFT">Incompletos</option>
-              <option value="READY_TO_GENERATE">Listos para generar</option>
+              <option value="UNDER_REVIEW">Esperando revision</option>
+              <option value="APPROVED">Aprobado</option>
+              <option value="REJECTED">Rechazado</option>
             </select>
             <select
               value={filters.workId}
@@ -221,9 +229,9 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
             <div className="grid min-h-[420px] place-items-center">
               <Loader2 className="size-5 animate-spin text-stone-400" />
             </div>
-          ) : drafts.length === 0 ? (
+          ) : documents.length === 0 ? (
             <div className="grid min-h-[420px] place-items-center px-6 text-center text-sm text-stone-500">
-              No encontramos borradores con esos filtros.
+              No encontramos documentos con esos filtros.
             </div>
           ) : (
             <table className="w-full min-w-[860px]">
@@ -237,27 +245,29 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
                 </tr>
               </thead>
               <tbody>
-                {drafts.map((draft) => (
+                {documents.map((document) => (
                   <tr
-                    key={draft.id}
+                    key={document.id}
                     className={cn(
                       "cursor-pointer border-b border-stone-100 transition hover:bg-stone-50/70",
-                      selectedId === draft.id && "bg-stone-50",
+                      selectedId === document.id && "bg-stone-50",
                     )}
-                    onClick={() => setSelectedId(draft.id)}
+                    onClick={() => setSelectedId(document.id)}
                   >
                     <td className="px-5 py-4">
-                      <p className="text-sm font-semibold text-stone-900">{draft.templateName ?? draft.documentType}</p>
-                      <p className="mt-1 text-sm text-stone-500">{draft.folderPath}</p>
+                      <p className="text-sm font-semibold text-stone-900">
+                        {document.fileName || document.templateName || document.documentType}
+                      </p>
+                      <p className="mt-1 text-sm text-stone-500">{document.folderPath}</p>
                     </td>
-                    <td className="px-5 py-4 text-sm text-stone-700">{draft.workLabel}</td>
-                    <td className="px-5 py-4 text-sm text-stone-700">{draft.createdBy?.label ?? "Usuario"}</td>
+                    <td className="px-5 py-4 text-sm text-stone-700">{document.workLabel}</td>
+                    <td className="px-5 py-4 text-sm text-stone-700">{document.createdBy?.label ?? "Usuario"}</td>
                     <td className="px-5 py-4">
-                      <span className={cn("rounded-full border px-3 py-1 text-xs font-medium", statusBadgeClasses(draft.status, draft.rejection))}>
-                        {statusLabel(draft)}
+                      <span className={cn("rounded-full border px-3 py-1 text-xs font-medium", statusBadgeClasses(document.status))}>
+                        {statusLabel(document.status)}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-sm text-stone-700">{formatDate(draft.updatedAt)}</td>
+                    <td className="px-5 py-4 text-sm text-stone-700">{formatDate(document.updatedAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -268,75 +278,53 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
 
       <aside className="space-y-4">
         <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-          {selectedDraft ? (
+          {selectedDocument ? (
             <>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Detalle</p>
               <h2 className="mt-2 text-xl font-semibold tracking-tight text-stone-950">
-                {selectedDraft.templateName ?? selectedDraft.documentType}
+                {selectedDocument.fileName || selectedDocument.templateName || selectedDocument.documentType}
               </h2>
               <div className="mt-4 space-y-3 text-sm text-stone-600">
-                <p><strong className="text-stone-900">Obra:</strong> {selectedDraft.workLabel}</p>
-                <p><strong className="text-stone-900">Carpeta:</strong> {selectedDraft.folderPath}</p>
-                <p><strong className="text-stone-900">Creado por:</strong> {selectedDraft.createdBy?.label ?? "Usuario"}</p>
-                <p><strong className="text-stone-900">Actualizado:</strong> {formatDate(selectedDraft.updatedAt)}</p>
+                <p><strong className="text-stone-900">Obra:</strong> {selectedDocument.workLabel}</p>
+                <p><strong className="text-stone-900">Carpeta:</strong> {selectedDocument.folderPath}</p>
+                <p><strong className="text-stone-900">Creado por:</strong> {selectedDocument.createdBy?.label ?? "Usuario"}</p>
+                <p><strong className="text-stone-900">Creado:</strong> {formatDate(selectedDocument.generatedAt)}</p>
+                <p><strong className="text-stone-900">Actualizado:</strong> {formatDate(selectedDocument.updatedAt)}</p>
                 <p>
                   <strong className="text-stone-900">Estado:</strong>{" "}
-                  <span className={selectedDraft.rejection ? "font-medium text-red-700" : undefined}>
-                    {statusLabel(selectedDraft)}
+                  <span className={selectedDocument.status === "REJECTED" ? "font-medium text-red-700" : undefined}>
+                    {statusLabel(selectedDocument.status)}
                   </span>
                 </p>
-                <p><strong className="text-stone-900">Campos con error:</strong> {selectedDraft.validationErrors.length}</p>
               </div>
 
-              {selectedDraft.rejection ? (
-                <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-700">
-                    Comentario de rechazo
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-red-950">
-                    {selectedDraft.rejection.comment || "Sin comentario."}
-                  </p>
-                  <p className="mt-2 text-xs text-red-800/80">
-                    {selectedDraft.rejection.rejectedBy?.label ?? "Usuario"} · {formatDate(selectedDraft.rejection.rejectedAt)}
-                  </p>
-                </div>
-              ) : null}
-
               <div className="mt-5 flex flex-wrap gap-2">
-                <Button asChild className="rounded-md">
-                  <Link href={`/document-generation?draftId=${encodeURIComponent(selectedDraft.id)}`}>
-                    <FilePenLine className="mr-2 size-4" />
-                    Continuar edicion
-                  </Link>
-                </Button>
+                {selectedDocument.canEdit ? (
+                  <Button asChild className="rounded-md">
+                    <Link href={`/document-generation?generatedId=${encodeURIComponent(selectedDocument.id)}`}>
+                      <FilePenLine className="mr-2 size-4" />
+                      Editar
+                    </Link>
+                  </Button>
+                ) : null}
                 <Button asChild variant="outline" className="rounded-md">
-                  <Link href={`/document-generation?draftId=${encodeURIComponent(selectedDraft.id)}`}>
+                  <Link href={`/document-generation/review?id=${encodeURIComponent(selectedDocument.id)}`}>
                     Abrir documento
                     <ArrowRight className="ml-2 size-4" />
                   </Link>
+                </Button>
+                <Button type="button" variant="outline" className="rounded-md" onClick={() => void copyReviewLink()}>
+                  <Copy className="mr-2 size-4" />
+                  Copiar link de revision
                 </Button>
               </div>
             </>
           ) : (
             <div className="grid min-h-[220px] place-items-center text-center text-sm text-stone-500">
-              Selecciona un borrador para ver su detalle.
+              Selecciona un documento para ver su detalle.
             </div>
           )}
         </div>
-
-        {selectedDraft?.validationErrors?.length ? (
-          <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Pendientes</p>
-            <div className="mt-4 space-y-3">
-              {selectedDraft.validationErrors.map((error) => (
-                <div key={`${error.key}-${error.message}`} className="flex items-start gap-2 text-sm text-stone-700">
-                  <AlertCircle className="mt-0.5 size-4 text-amber-600" />
-                  <span>{error.message}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </aside>
     </div>
   );

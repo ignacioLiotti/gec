@@ -970,7 +970,7 @@ function getNavigationItems(): NavigationItem[] {
 			},
 			{
 				path: "/document-generation/drafts",
-				label: "Borradores",
+				label: "Historial",
 				permission: "documents:create",
 			},
 			{

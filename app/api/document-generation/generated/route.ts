@@ -49,8 +49,8 @@ export async function GET(request: NextRequest) {
       userId: user.id,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canReview) {
-      return NextResponse.json({ error: "Sin permisos para revisar documentos." }, { status: 403 });
+    if (!permissions.canReview && !permissions.canCreate && !permissions.canViewAllDrafts) {
+      return NextResponse.json({ error: "Sin permisos para ver documentos generados." }, { status: 403 });
     }
 
     const workId = request.nextUrl.searchParams.get("workId")?.trim();
@@ -76,6 +76,7 @@ export async function GET(request: NextRequest) {
     if (createdBy) query = query.eq("generated_by", createdBy);
     if (documentType) query = query.eq("document_type", documentType);
     if (statusFilter.length > 0) query = query.in("status", statusFilter);
+    if (!permissions.canReview && !permissions.canViewAllDrafts) query = query.eq("generated_by", user.id);
     if (from) query = query.gte("generated_at", `${from}T00:00:00.000Z`);
     if (to) query = query.lte("generated_at", `${to}T23:59:59.999Z`);
 

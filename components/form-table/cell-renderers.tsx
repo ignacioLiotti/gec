@@ -722,7 +722,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 			const text = String(value || "").trim();
 			if (!text) return <span>-</span>;
 			const selectOptions = config.selectOptions ?? [];
-			const matched = resolveMainTableSelectOption(text, selectOptions, column.id);
+			const matched = resolveMainTableSelectOption(text, selectOptions, config.selectName ?? column.id);
 			if (matched) {
 				return renderSelectOptionBadge(matched, highlightQuery);
 			}
@@ -943,7 +943,8 @@ export function renderEditableContent<Row extends FormTableRow>({
 		case "select": {
 			const selectOptions = config.selectOptions ?? [];
 			const currentText = String(value ?? "").trim();
-			const matched = resolveMainTableSelectOption(currentText, selectOptions, column.id);
+			const selectName = config.selectName ?? column.id;
+			const matched = resolveMainTableSelectOption(currentText, selectOptions, selectName);
 			const closest =
 				currentText && !matched
 					? findClosestMainTableSelectOption(currentText, selectOptions)
@@ -955,7 +956,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 			const clearValue = "__clear__";
 			const resolvedValue =
 				matched && matchedIndex >= 0
-					? getMainTableSelectOptionId(matched, column.id, matchedIndex)
+					? getMainTableSelectOptionId(matched, selectName, matchedIndex)
 					: unresolvedValue;
 			return withReadOnlyLayer(
 				<div className="children-input-hidden absolute inset-0 flex h-full w-full items-center px-2">
@@ -991,7 +992,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 										: null;
 									const optionId = getMainTableSelectOptionId(
 										option,
-										column.id,
+										selectName,
 										optionIndex
 									);
 									return (

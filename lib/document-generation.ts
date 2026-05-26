@@ -124,6 +124,16 @@ export type ExtractionTableColumn = {
 	config?: Record<string, unknown> | null;
 };
 
+export const GENERATED_DOCUMENT_STATUS_LABELS: Record<string, string> = {
+	DRAFT: "Borrador",
+	READY_TO_GENERATE: "Listo para generar",
+	GENERATED: "Esperando revision",
+	UNDER_REVIEW: "Esperando revision",
+	APPROVED: "Aprobado",
+	REJECTED: "Rechazado",
+	CANCELLED: "Cancelado",
+};
+
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 	PURCHASE_ORDER: "Orden de compra",
 	INVOICE: "Factura interna",
@@ -779,6 +789,26 @@ export function renderDocumentHtml(
 		},
 	);
 	return applyDocumentTemplateOverrides(templateHtml, renderedHtml);
+}
+
+export function appendApprovalSignatureHtml(
+	html: string,
+	signature: {
+		dataUrl: string;
+		signerLabel?: string | null;
+		signedAt?: string | null;
+	},
+) {
+	const signerLabel = escapeHtml(signature.signerLabel ?? "Aprobado");
+	const signedAt = escapeHtml(signature.signedAt ?? "");
+	return `${html}
+<section data-document-approval-signature style="margin:32px 40px 24px auto; width:220px; text-align:center; font-family: Arial, sans-serif; color:#1f2937;">
+  <img src="${escapeHtml(signature.dataUrl)}" alt="Firma digital" style="display:block; max-width:190px; max-height:82px; object-fit:contain; margin:0 auto 8px;" />
+  <div style="border-top:1px solid #374151; padding-top:6px; font-size:12px; line-height:1.35;">
+    <strong>${signerLabel}</strong>
+    ${signedAt ? `<br /><span style="color:#6b7280;">${signedAt}</span>` : ""}
+  </div>
+</section>`;
 }
 
 function formatTemplateValue(value: unknown): string {

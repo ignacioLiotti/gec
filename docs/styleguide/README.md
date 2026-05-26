@@ -17,4 +17,8 @@ Document patterns for:
 - sidebars
 - reusable components
 
+Current pattern notes:
+
+- [Table filters](./table-filters.md)
+
 Add or update styleguide docs when a change introduces or changes a reusable UI pattern.

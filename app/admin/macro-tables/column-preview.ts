@@ -6,6 +6,7 @@ const PREVIEW_VALUES: Record<MacroTableDataType, [string, string, string]> = {
   currency: ["$ 1.250.000", "$ 980.500", "$ 654.000"],
   boolean: ["Sí", "No", "Sí"],
   date: ["12/01/2025", "18/01/2025", "26/01/2025"],
+  select: ["Activo", "Pendiente", "Cerrado"],
 };
 
 const CUSTOM_VALUES: [string, string, string] = [

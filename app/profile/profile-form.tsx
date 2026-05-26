@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import { m } from "framer-motion";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+
+import { updateDigitalSignature, updateEmail, updateProfile } from "@/app/profile/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { toast } from "sonner";
-import { updateEmail, updatePassword, updateProfile } from "@/app/profile/actions";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type ProfileFormProps = {
   user: {
@@ -17,18 +17,18 @@ type ProfileFormProps = {
   };
   profile: {
     full_name: string | null;
+    digital_signature_data_url: string | null;
   } | null;
 };
 
 export function ProfileForm({ user, profile }: ProfileFormProps) {
   const [fullName, setFullName] = React.useState(profile?.full_name ?? "");
+  const [signatureDataUrl, setSignatureDataUrl] = React.useState(profile?.digital_signature_data_url ?? "");
   const [email, setEmail] = React.useState(user.email ?? "");
-  const [password, setPassword] = React.useState("");
-  const [passwordConfirm, setPasswordConfirm] = React.useState("");
 
   const [isSavingProfile, startSaveProfile] = React.useTransition();
   const [isSavingEmail, startSaveEmail] = React.useTransition();
-  const [isSavingPassword, startSavePassword] = React.useTransition();
+  const [isSavingSignature, startSaveSignature] = React.useTransition();
 
   const onSubmitProfile = (event: React.FormEvent) => {
     event.preventDefault();
@@ -47,13 +47,12 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
 
     const trimmed = email.trim();
     if (!trimmed) {
-      toast.error("El email no puede estar vacío.");
+      toast.error("El email no puede estar vacio.");
       return;
     }
-    // Reutilizamos validación simple de email similar al diálogo de invitaciones
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmed)) {
-      toast.error("Ingresá un email válido.");
+      toast.error("Ingresa un email valido.");
       return;
     }
 
@@ -62,40 +61,38 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
       if ("error" in result && result.error) {
         toast.error(result.error);
       } else {
-        toast.success(
-          result.message ??
-          "Email actualizado. Revisá tu bandeja de entrada para confirmar el cambio."
-        );
+        toast.success(result.message ?? "Email actualizado. Revisa tu bandeja de entrada para confirmar el cambio.");
       }
     });
   };
 
-  const onSubmitPassword = (event: React.FormEvent) => {
+  const onSignatureFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      toast.error("La firma debe ser PNG, JPG o WebP.");
+      return;
+    }
+    if (file.size > 500_000) {
+      toast.error("La firma debe pesar menos de 500 KB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSignatureDataUrl(typeof reader.result === "string" ? reader.result : "");
+    };
+    reader.onerror = () => toast.error("No se pudo leer la imagen.");
+    reader.readAsDataURL(file);
+  };
+
+  const onSubmitSignature = (event: React.FormEvent) => {
     event.preventDefault();
-
-    if (!password) {
-      toast.error("Ingresá una nueva contraseña.");
-      return;
-    }
-
-    if (password.length < 6) {
-      toast.error("La contraseña debe tener al menos 6 caracteres.");
-      return;
-    }
-
-    if (password !== passwordConfirm) {
-      toast.error("Las contraseñas no coinciden.");
-      return;
-    }
-
-    startSavePassword(async () => {
-      const result = await updatePassword({ password });
+    startSaveSignature(async () => {
+      const result = await updateDigitalSignature({ signatureDataUrl: signatureDataUrl || null });
       if ("error" in result && result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Contraseña actualizada");
-        setPassword("");
-        setPasswordConfirm("");
+        toast.success("Firma digital actualizada");
       }
     });
   };
@@ -107,12 +104,11 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
       >
-        <Card className="p-6 space-y-4">
+        <Card className="space-y-4 p-6">
           <div>
-            <h2 className="text-lg font-semibold">Información básica</h2>
+            <h2 className="text-lg font-semibold">Informacion basica</h2>
             <p className="text-sm text-muted-foreground">
-              Estos datos se usan para personalizar tu experiencia en la
-              aplicación.
+              Estos datos se usan para personalizar tu experiencia en la aplicacion.
             </p>
           </div>
           <form onSubmit={onSubmitProfile} className="space-y-4">
@@ -138,14 +134,63 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
       <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, delay: 0.03 }}
+      >
+        <Card className="space-y-4 p-6">
+          <div>
+            <h2 className="text-lg font-semibold">Firma digital</h2>
+            <p className="text-sm text-muted-foreground">
+              Esta firma se inserta al aprobar documentos generados.
+            </p>
+          </div>
+          <form onSubmit={onSubmitSignature} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="digital_signature">Imagen de firma</Label>
+              <Input
+                id="digital_signature"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={onSignatureFileChange}
+              />
+            </div>
+            {signatureDataUrl ? (
+              <div className="rounded-md border border-stone-200 bg-white p-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={signatureDataUrl}
+                  alt="Vista previa de firma digital"
+                  className="max-h-24 max-w-full object-contain"
+                />
+              </div>
+            ) : (
+              <p className="rounded-md border border-dashed border-stone-200 px-4 py-6 text-center text-sm text-muted-foreground">
+                No hay firma configurada.
+              </p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              {signatureDataUrl ? (
+                <Button type="button" variant="outline" onClick={() => setSignatureDataUrl("")}>
+                  Quitar firma
+                </Button>
+              ) : null}
+              <Button type="submit" disabled={isSavingSignature}>
+                {isSavingSignature ? "Guardando..." : "Guardar firma"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </m.div>
+
+      <m.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, delay: 0.05 }}
       >
-        <Card className="p-6 space-y-4">
+        <Card className="space-y-4 p-6">
           <div>
             <h2 className="text-lg font-semibold">Cuenta</h2>
             <p className="text-sm text-muted-foreground">
-              Actualizá el email asociado a tu cuenta. Es posible que debas
-              confirmar el cambio desde tu correo.
+              Actualiza el email asociado a tu cuenta. Es posible que debas confirmar el cambio desde tu correo.
             </p>
           </div>
           <form onSubmit={onSubmitEmail} className="space-y-4">
@@ -159,8 +204,8 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
                 autoComplete="email"
               />
             </div>
-            <div className="flex justify-between items-center gap-3 text-xs text-muted-foreground">
-              <span>Este es el email que usás para iniciar sesión.</span>
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>Este es el email que usas para iniciar sesion.</span>
               <Button type="submit" size="sm" disabled={isSavingEmail}>
                 {isSavingEmail ? "Actualizando..." : "Actualizar email"}
               </Button>
@@ -168,58 +213,6 @@ export function ProfileForm({ user, profile }: ProfileFormProps) {
           </form>
         </Card>
       </m.div>
-
-      {/* <m.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, delay: 0.1 }}
-      >
-        <Card className="p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold">Seguridad</h2>
-            <p className="text-sm text-muted-foreground">
-              Cambiá tu contraseña periódicamente para mantener tu cuenta
-              segura.
-            </p>
-          </div>
-          <form onSubmit={onSubmitPassword} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="password">Nueva contraseña</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password_confirm">Repetir contraseña</Label>
-                <Input
-                  id="password_confirm"
-                  type="password"
-                  value={passwordConfirm}
-                  onChange={(event) => setPasswordConfirm(event.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-            </div>
-            <Separator />
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={isSavingPassword}
-              >
-                {isSavingPassword ? "Actualizando..." : "Actualizar contraseña"}
-              </Button>
-            </div>
-          </form>
-        </Card>
-      </m.div> */}
     </div>
   );
 }
-
-

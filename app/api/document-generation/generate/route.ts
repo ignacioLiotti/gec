@@ -123,7 +123,7 @@ function isAlreadyExistsError(error: unknown) {
   );
 }
 
-const REGENERATED_STATUS = "GENERATED";
+const REGENERATED_STATUS = "UNDER_REVIEW";
 
 async function ensureUploadTracking(params: {
   supabase: Awaited<ReturnType<typeof resolveRequestAccessContext>>["supabase"];

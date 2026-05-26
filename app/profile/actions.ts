@@ -36,6 +36,52 @@ export async function updateProfile({ fullName }: { fullName: string }) {
 	return { success: true };
 }
 
+export async function updateDigitalSignature({
+	signatureDataUrl,
+}: {
+	signatureDataUrl: string | null;
+}) {
+	const session = await auth();
+	if (!session.data.user) {
+		return { error: "No estÃƒÂ¡s autenticado." };
+	}
+	const supabase = await createClient();
+	const {
+		data: { user },
+		error: authError,
+	} = await supabase.auth.getUser();
+
+	if (authError || !user) {
+		return { error: "No estÃ¡s autenticado." };
+	}
+
+	const normalizedSignature =
+		typeof signatureDataUrl === "string" ? signatureDataUrl.trim() : "";
+	if (
+		normalizedSignature &&
+		(!/^data:image\/(png|jpeg|webp);base64,/i.test(normalizedSignature) ||
+			normalizedSignature.length > 750_000)
+	) {
+		return { error: "SubÃ­ una firma PNG, JPG o WebP de menos de 500 KB." };
+	}
+
+	const { error } = await supabase
+		.from("profiles")
+		.update({
+			digital_signature_data_url: normalizedSignature || null,
+		})
+		.eq("user_id", user.id);
+
+	if (error) {
+		console.error("[profile] updateDigitalSignature error", error);
+		return { error: "No se pudo actualizar la firma digital." };
+	}
+
+	revalidatePath("/profile");
+
+	return { success: true };
+}
+
 export async function updateEmail({ email }: { email: string }) {
 	const session = await auth();
 	if (!session.data.user) {

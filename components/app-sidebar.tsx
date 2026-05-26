@@ -103,7 +103,7 @@ const navItems: NavItem[] = [
 		icon: FileText,
 	},
 	{
-		title: "Borradores Doc.",
+		title: "Historial Doc.",
 		href: "/document-generation/drafts",
 		icon: FileText,
 	},

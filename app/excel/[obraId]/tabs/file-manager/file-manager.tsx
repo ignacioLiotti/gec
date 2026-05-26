@@ -5,7 +5,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import dynamic from 'next/dynamic';
-import { FormTable } from '@/components/form-table/form-table';
 import { createSupabaseBrowserClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,7 +69,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DocumentApprovedSeal } from '@/components/document-approved-seal';
 import FolderFront from '@/components/ui/FolderFront';
 import { DocumentDataSheet } from './components/document-data-sheet';
-import { FileTreeSidebar } from './components/file-tree-sidebar';
 import type { SpreadsheetPreviewPayload, SpreadsheetPreviewTable } from './components/spreadsheet-preview-types';
 import { useDocumentsStore, needsRefetch, markDocumentsFetched, setDocumentsLoading } from './hooks/useDocumentsStore';
 import {
@@ -117,6 +115,7 @@ import {
   setCachedOcrLinks,
 } from './cache';
 import { CellType, FormTableConfig, FormTableRow, ColumnDef, ColumnField } from '@/components/form-table/types';
+import type { FormTable as FormTableComponent } from '@/components/form-table/form-table';
 import { createRowFromColumns } from '@/components/form-table/table-utils';
 import { FilterSection, RangeInputGroup, TextFilterInput } from '@/components/form-table/filter-components';
 import { FileText as FileTextIcon2, Hash, Type, DollarSign as DollarSignIcon, ToggleLeft } from 'lucide-react';
@@ -168,6 +167,17 @@ const OcrTemplateConfigurator = dynamic(
   () => import('@/app/admin/obra-defaults/_components/OcrTemplateConfigurator').then((mod) => mod.OcrTemplateConfigurator),
   { ssr: false },
 );
+
+const FormTable = dynamic(
+  () => import('@/components/form-table/form-table').then((mod) => mod.FormTable),
+  {
+    loading: () => (
+      <div className="flex min-h-[240px] items-center justify-center rounded-lg border bg-stone-50 text-sm text-stone-500">
+        Cargando tabla...
+      </div>
+    ),
+  },
+) as typeof FormTableComponent;
 
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
@@ -1117,10 +1127,6 @@ function FileManagerContent({
     [fetchUsageInfo]
   );
 
-  useEffect(() => {
-    void fetchUsageInfo();
-  }, [fetchUsageInfo]);
-
   const router = useRouter();
   const { push, replace } = router;
   const pathname = usePathname();
@@ -2027,7 +2033,6 @@ function FileManagerContent({
     };
 
     void bootstrap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraId, fileTree, buildFileTree]);
 
   // OCR links are now fetched alongside the tree; no separate re-hydration loop needed.

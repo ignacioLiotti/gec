@@ -14,10 +14,19 @@ import {
 } from "@/components/form-table/types";
 import { requiredValidator } from "@/components/form-table/form-table";
 import { renderReadOnlyValue } from "@/components/form-table/cell-renderers";
-import { FilterSection, RangeInputGroup } from "@/components/form-table/filter-components";
+import {
+	FilterSection,
+	NumberConditionFilter,
+	TextConditionFilter,
+	createNumberFilterValue,
+	createTextFilterValue,
+	type NumberFilterCondition,
+	type NumberFilterValue,
+	type TextFilterCondition,
+	type TextFilterValue,
+} from "@/components/form-table/filter-components";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -127,25 +136,47 @@ const ObraDetailShortcut = memo(function ObraDetailShortcut({
 export type DetailAdvancedFilters = {
 	supMin: string;
 	supMax: string;
+	supCondition: NumberFilterCondition;
+	supValue: string;
 	entidades: string[];
+	entidadCondition: TextFilterCondition;
+	entidadValue: string;
 	mesYear: string;
 	mesContains: string;
+	mesCondition: TextFilterCondition;
+	mesValue: string;
 	iniYear: string;
 	iniContains: string;
+	iniCondition: TextFilterCondition;
+	iniValue: string;
 	cmaMin: string;
 	cmaMax: string;
+	cmaCondition: NumberFilterCondition;
+	cmaValue: string;
 	cafMin: string;
 	cafMax: string;
+	cafCondition: NumberFilterCondition;
+	cafValue: string;
 	sacMin: string;
 	sacMax: string;
+	sacCondition: NumberFilterCondition;
+	sacValue: string;
 	scMin: string;
 	scMax: string;
+	scCondition: NumberFilterCondition;
+	scValue: string;
 	paMin: string;
 	paMax: string;
+	paCondition: NumberFilterCondition;
+	paValue: string;
 	ptMin: string;
 	ptMax: string;
+	ptCondition: NumberFilterCondition;
+	ptValue: string;
 	ptrMin: string;
 	ptrMax: string;
+	ptrCondition: NumberFilterCondition;
+	ptrValue: string;
 };
 
 const BUILT_IN_DETAIL_ROW_KEYS = new Set<string>([
@@ -189,7 +220,8 @@ const API_SORT_BY_COLUMN_ID: Record<string, string> = {
 	porcentaje: "porcentaje",
 };
 
-type RangeFilterKey = Exclude<keyof DetailAdvancedFilters, "entidades">;
+type TextFilterKey = "entidad" | "mes" | "ini";
+type NumberFilterKey = "sup" | "cma" | "caf" | "sac" | "sc" | "pa" | "pt" | "ptr";
 
 export type ObrasDetalleRow = FormTableRow & {
 	n?: number | string | null;
@@ -2208,26 +2240,131 @@ const tabFilters: TabFilterOption<ObrasDetalleRow>[] = [
 const createFilters = (): DetailAdvancedFilters => ({
 	supMin: "",
 	supMax: "",
+	supCondition: "between",
+	supValue: "",
 	entidades: [],
+	entidadCondition: "contains",
+	entidadValue: "",
 	mesYear: "",
 	mesContains: "",
+	mesCondition: "contains",
+	mesValue: "",
 	iniYear: "",
 	iniContains: "",
+	iniCondition: "contains",
+	iniValue: "",
 	cmaMin: "",
 	cmaMax: "",
+	cmaCondition: "between",
+	cmaValue: "",
 	cafMin: "",
 	cafMax: "",
+	cafCondition: "between",
+	cafValue: "",
 	sacMin: "",
 	sacMax: "",
+	sacCondition: "between",
+	sacValue: "",
 	scMin: "",
 	scMax: "",
+	scCondition: "between",
+	scValue: "",
 	paMin: "",
 	paMax: "",
+	paCondition: "between",
+	paValue: "",
 	ptMin: "",
 	ptMax: "",
+	ptCondition: "between",
+	ptValue: "",
 	ptrMin: "",
 	ptrMax: "",
+	ptrCondition: "between",
+	ptrValue: "",
 });
+
+const numberFilterValue = (filters: DetailAdvancedFilters, key: NumberFilterKey): NumberFilterValue => ({
+	...createNumberFilterValue("between"),
+	condition: filters[`${key}Condition` as keyof DetailAdvancedFilters] as NumberFilterCondition,
+	value: filters[`${key}Value` as keyof DetailAdvancedFilters] as string,
+	min: filters[`${key}Min` as keyof DetailAdvancedFilters] as string,
+	max: filters[`${key}Max` as keyof DetailAdvancedFilters] as string,
+});
+
+const textFilterValue = (filters: DetailAdvancedFilters, key: TextFilterKey): TextFilterValue => {
+	if (key === "entidad") {
+		return {
+			...createTextFilterValue("contains"),
+			condition: filters.entidadCondition,
+			value: filters.entidadValue || filters.entidades.join(", "),
+		};
+	}
+	return {
+		...createTextFilterValue("contains"),
+		condition: filters[`${key}Condition` as keyof DetailAdvancedFilters] as TextFilterCondition,
+		value:
+			(filters[`${key}Value` as keyof DetailAdvancedFilters] as string) ||
+			(filters[`${key}Contains` as keyof DetailAdvancedFilters] as string) ||
+			(filters[`${key}Year` as keyof DetailAdvancedFilters] as string) ||
+			"",
+	};
+};
+
+const numberFilterIsActive = (filters: DetailAdvancedFilters, key: NumberFilterKey) => {
+	const value = numberFilterValue(filters, key);
+	return (
+		value.condition === "empty" ||
+		value.condition === "not_empty" ||
+		(value.condition === "between"
+			? value.min.trim().length > 0 || value.max.trim().length > 0
+			: value.value.trim().length > 0)
+	);
+};
+
+const textFilterIsActive = (filters: DetailAdvancedFilters, key: TextFilterKey) => {
+	const value = textFilterValue(filters, key);
+	return (
+		value.condition === "empty" ||
+		value.condition === "not_empty" ||
+		value.value.trim().length > 0
+	);
+};
+
+const updateNumberFilter = (
+	prev: DetailAdvancedFilters,
+	key: NumberFilterKey,
+	value: NumberFilterValue,
+): DetailAdvancedFilters => ({
+	...prev,
+	[`${key}Condition`]: value.condition,
+	[`${key}Value`]: value.value,
+	[`${key}Min`]: value.min,
+	[`${key}Max`]: value.max,
+});
+
+const updateTextFilter = (
+	prev: DetailAdvancedFilters,
+	key: TextFilterKey,
+	value: TextFilterValue,
+): DetailAdvancedFilters => {
+	if (key === "entidad") {
+		return {
+			...prev,
+			entidades: value.condition === "equals"
+				? value.value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean)
+				: [],
+			entidadCondition: value.condition,
+			entidadValue: value.value,
+		};
+	}
+	return {
+		...prev,
+		[`${key}Condition`]: value.condition,
+		[`${key}Value`]: value.value,
+		[`${key}Year`]: "",
+		[`${key}Contains`]: "",
+	};
+};
 
 
 
@@ -2238,219 +2375,145 @@ const renderFilters = ({
 	filters: DetailAdvancedFilters;
 	onChange: (updater: (prev: DetailAdvancedFilters) => DetailAdvancedFilters) => void;
 }): ReactNode => {
-	const handleRangeChange = (key: RangeFilterKey, value: string) => {
-		onChange((prev) => ({ ...prev, [key]: value }));
+	const setNumberFilter = (key: NumberFilterKey, value: NumberFilterValue) => {
+		onChange((prev) => updateNumberFilter(prev, key, value));
+	};
+	const setTextFilter = (key: TextFilterKey, value: TextFilterValue) => {
+		onChange((prev) => updateTextFilter(prev, key, value));
+	};
+	const resetNumberFilter = (key: NumberFilterKey) => {
+		onChange((prev) => updateNumberFilter(prev, key, createNumberFilterValue("between")));
+	};
+	const resetTextFilter = (key: TextFilterKey) => {
+		onChange((prev) => updateTextFilter(prev, key, createTextFilterValue("contains")));
 	};
 
-	// Count active filters per section
-	const superficieActive = [filters.supMin, filters.supMax].filter(Boolean).length;
-	const entidadesActive = filters.entidades.length > 0 ? 1 : 0;
-	const fechasActive = [filters.mesYear, filters.mesContains, filters.iniYear, filters.iniContains].filter(Boolean).length;
-	const importesActive = [
-		filters.cmaMin, filters.cmaMax,
-		filters.cafMin, filters.cafMax,
-		filters.sacMin, filters.sacMax,
-	].filter(Boolean).length;
-	const plazosActive = [
-		filters.scMin, filters.scMax,
-		filters.paMin, filters.paMax,
-		filters.ptMin, filters.ptMax,
-		filters.ptrMin, filters.ptrMax,
-	].filter(Boolean).length;
+	const superficieActive = numberFilterIsActive(filters, "sup") ? 1 : 0;
+	const entidadesActive = textFilterIsActive(filters, "entidad") ? 1 : 0;
+	const fechasActive = [textFilterIsActive(filters, "mes"), textFilterIsActive(filters, "ini")].filter(Boolean).length;
+	const importesActive = (["cma", "caf", "sac"] as NumberFilterKey[]).filter((key) => numberFilterIsActive(filters, key)).length;
+	const plazosActive = (["sc", "pa", "pt", "ptr"] as NumberFilterKey[]).filter((key) => numberFilterIsActive(filters, key)).length;
 
 	return (
 		<div className="space-y-3">
-			{/* Superficie */}
-			<FilterSection
-				title="Superficie"
-				icon={Ruler}
-				activeCount={superficieActive}
-				defaultOpen
-			>
-				<RangeInputGroup
-					label="Superficie de obra (m²)"
-					minValue={filters.supMin}
-					maxValue={filters.supMax}
-					onMinChange={(v) => handleRangeChange("supMin", v)}
-					onMaxChange={(v) => handleRangeChange("supMax", v)}
-					minPlaceholder="100"
-					maxPlaceholder="10000"
+			<FilterSection title="Superficie" icon={Ruler} activeCount={superficieActive} defaultOpen>
+				<NumberConditionFilter
+					label="Superficie de obra (m2)"
+					value={numberFilterValue(filters, "sup")}
+					onChange={(value) => setNumberFilter("sup", value)}
+					onClear={() => resetNumberFilter("sup")}
+					placeholder="10000"
 				/>
 			</FilterSection>
 
-			{/* Entidades */}
-			<FilterSection
-				title="Entidad contratante"
-				icon={Building2}
-				activeCount={entidadesActive}
-				defaultOpen
-			>
-				<div className="space-y-1.5">
-					<Label className="text-xs text-muted-foreground">
-						Filtrar por entidades (una por linea o separadas por coma)
-					</Label>
-					<Textarea
-						value={filters.entidades.join("\n")}
-						onChange={(event) => {
-							const values = event.currentTarget.value
-								.split(/\r?\n|,/)
-								.map((value) => value.trim())
-								.filter(Boolean);
-							onChange((prev) => ({ ...prev, entidades: values }));
-						}}
-						placeholder="Municipalidad de Buenos Aires&#10;Gobierno de la Provincia..."
-						className="min-h-[80px] text-sm resize-none"
-					/>
-					{filters.entidades.length > 0 && (
-						<p className="text-[10px] text-muted-foreground">
-							{filters.entidades.length} entidad{filters.entidades.length > 1 ? "es" : ""} seleccionada{filters.entidades.length > 1 ? "s" : ""}
-						</p>
-					)}
-				</div>
+			<FilterSection title="Entidad contratante" icon={Building2} activeCount={entidadesActive} defaultOpen>
+				<TextConditionFilter
+					label="Entidad contratante"
+					value={textFilterValue(filters, "entidad")}
+					onChange={(value) => setTextFilter("entidad", value)}
+					onClear={() => resetTextFilter("entidad")}
+					placeholder="Buscar entidad..."
+				/>
 			</FilterSection>
 
-			{/* Fechas */}
-			<FilterSection
-				title="Fechas"
-				icon={Calendar}
-				activeCount={fechasActive}
-				defaultOpen
-			>
+			<FilterSection title="Fechas" icon={Calendar} activeCount={fechasActive} defaultOpen>
 				<div className="space-y-3">
-					<div className="space-y-1.5">
-						<Label className="text-xs text-muted-foreground">Mes basico de contrato</Label>
-						<div className="grid grid-cols-2 gap-2">
-							<Input
-								value={filters.mesYear}
-								onChange={(e) => handleRangeChange("mesYear", e.target.value)}
-								placeholder="Año (2024)"
-								className="h-8 text-sm"
-							/>
-							<Input
-								value={filters.mesContains}
-								onChange={(e) => handleRangeChange("mesContains", e.target.value)}
-								placeholder="Contiene (enero)"
-								className="h-8 text-sm"
-							/>
-						</div>
-					</div>
-					<div className="space-y-1.5">
-						<Label className="text-xs text-muted-foreground">Fecha de iniciacion</Label>
-						<div className="grid grid-cols-2 gap-2">
-							<Input
-								value={filters.iniYear}
-								onChange={(e) => handleRangeChange("iniYear", e.target.value)}
-								placeholder="Año (2024)"
-								className="h-8 text-sm"
-							/>
-							<Input
-								value={filters.iniContains}
-								onChange={(e) => handleRangeChange("iniContains", e.target.value)}
-								placeholder="Contiene (marzo)"
-								className="h-8 text-sm"
-							/>
-						</div>
-					</div>
-				</div>
-			</FilterSection>
-
-			{/* Importes */}
-			<FilterSection
-				title="Importes"
-				icon={DollarSign}
-				activeCount={importesActive}
-				defaultOpen
-			>
-				<div className="space-y-3">
-					<RangeInputGroup
-						label="Contrato + Ampliaciones"
-						minValue={filters.cmaMin}
-						maxValue={filters.cmaMax}
-						onMinChange={(v) => handleRangeChange("cmaMin", v)}
-						onMaxChange={(v) => handleRangeChange("cmaMax", v)}
+					<TextConditionFilter
+						label="Mes basico de contrato"
+						value={textFilterValue(filters, "mes")}
+						onChange={(value) => setTextFilter("mes", value)}
+						onClear={() => resetTextFilter("mes")}
+						placeholder="2024, enero..."
 					/>
-					<RangeInputGroup
-						label="Certificado a la fecha"
-						minValue={filters.cafMin}
-						maxValue={filters.cafMax}
-						onMinChange={(v) => handleRangeChange("cafMin", v)}
-						onMaxChange={(v) => handleRangeChange("cafMax", v)}
-					/>
-					<RangeInputGroup
-						label="Saldo a certificar"
-						minValue={filters.sacMin}
-						maxValue={filters.sacMax}
-						onMinChange={(v) => handleRangeChange("sacMin", v)}
-						onMaxChange={(v) => handleRangeChange("sacMax", v)}
+					<TextConditionFilter
+						label="Fecha de iniciacion"
+						value={textFilterValue(filters, "ini")}
+						onChange={(value) => setTextFilter("ini", value)}
+						onClear={() => resetTextFilter("ini")}
+						placeholder="2024, marzo..."
 					/>
 				</div>
 			</FilterSection>
 
-			{/* Plazos */}
-			<FilterSection
-				title="Plazos"
-				icon={Clock}
-				activeCount={plazosActive}
-				defaultOpen
-			>
+			<FilterSection title="Importes" icon={DollarSign} activeCount={importesActive} defaultOpen>
 				<div className="space-y-3">
-					<RangeInputGroup
-						label="Segun contrato (meses)"
-						minValue={filters.scMin}
-						maxValue={filters.scMax}
-						onMinChange={(v) => handleRangeChange("scMin", v)}
-						onMaxChange={(v) => handleRangeChange("scMax", v)}
-					/>
-					<RangeInputGroup
-						label="Prorrogas acordadas"
-						minValue={filters.paMin}
-						maxValue={filters.paMax}
-						onMinChange={(v) => handleRangeChange("paMin", v)}
-						onMaxChange={(v) => handleRangeChange("paMax", v)}
-					/>
-					<RangeInputGroup
-						label="Plazo total"
-						minValue={filters.ptMin}
-						maxValue={filters.ptMax}
-						onMinChange={(v) => handleRangeChange("ptMin", v)}
-						onMaxChange={(v) => handleRangeChange("ptMax", v)}
-					/>
-					<RangeInputGroup
-						label="Plazo transcurrido"
-						minValue={filters.ptrMin}
-						maxValue={filters.ptrMax}
-						onMinChange={(v) => handleRangeChange("ptrMin", v)}
-						onMaxChange={(v) => handleRangeChange("ptrMax", v)}
-					/>
+					<NumberConditionFilter label="Contrato + Ampliaciones" value={numberFilterValue(filters, "cma")} onChange={(value) => setNumberFilter("cma", value)} onClear={() => resetNumberFilter("cma")} />
+					<NumberConditionFilter label="Certificado a la fecha" value={numberFilterValue(filters, "caf")} onChange={(value) => setNumberFilter("caf", value)} onClear={() => resetNumberFilter("caf")} />
+					<NumberConditionFilter label="Saldo a certificar" value={numberFilterValue(filters, "sac")} onChange={(value) => setNumberFilter("sac", value)} onClear={() => resetNumberFilter("sac")} />
+				</div>
+			</FilterSection>
+
+			<FilterSection title="Plazos" icon={Clock} activeCount={plazosActive} defaultOpen>
+				<div className="space-y-3">
+					<NumberConditionFilter label="Segun contrato (meses)" value={numberFilterValue(filters, "sc")} onChange={(value) => setNumberFilter("sc", value)} onClear={() => resetNumberFilter("sc")} />
+					<NumberConditionFilter label="Prorrogas acordadas" value={numberFilterValue(filters, "pa")} onChange={(value) => setNumberFilter("pa", value)} onClear={() => resetNumberFilter("pa")} />
+					<NumberConditionFilter label="Plazo total" value={numberFilterValue(filters, "pt")} onChange={(value) => setNumberFilter("pt", value)} onClear={() => resetNumberFilter("pt")} />
+					<NumberConditionFilter label="Plazo transcurrido" value={numberFilterValue(filters, "ptr")} onChange={(value) => setNumberFilter("ptr", value)} onClear={() => resetNumberFilter("ptr")} />
 				</div>
 			</FilterSection>
 		</div>
 	);
 };
+const matchesNumberCondition = (value: string | number | null | undefined, filter: NumberFilterValue) => {
+	if (filter.condition === "empty") return value == null || value === "";
+	if (filter.condition === "not_empty") return value != null && value !== "";
+	const numValue = toNumber(value);
+	const single = filter.value ? Number(filter.value) : null;
+	const min = filter.min ? Number(filter.min) : null;
+	const max = filter.max ? Number(filter.max) : null;
+	if (filter.condition === "equals") return single == null || numValue === single;
+	if (filter.condition === "gt") return single == null || numValue > single;
+	if (filter.condition === "gte") return single == null || numValue >= single;
+	if (filter.condition === "lt") return single == null || numValue < single;
+	if (filter.condition === "lte") return single == null || numValue <= single;
+	if (min != null && Number.isFinite(min) && numValue < min) return false;
+	if (max != null && Number.isFinite(max) && numValue > max) return false;
+	return true;
+};
+
+const normalizeFilterText = (value: unknown) =>
+	String(value ?? "")
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase();
+
+const matchesTextCondition = (value: string | null | undefined, filter: TextFilterValue) => {
+	const raw = String(value ?? "");
+	const cell = normalizeFilterText(raw);
+	const needle = normalizeFilterText(filter.value).trim();
+	if (filter.condition === "empty") return raw.trim().length === 0;
+	if (filter.condition === "not_empty") return raw.trim().length > 0;
+	if (!needle) return true;
+	if (filter.condition === "not_contains") return !cell.includes(needle);
+	if (filter.condition === "equals") return cell === needle;
+	if (filter.condition === "starts_with") return cell.startsWith(needle);
+	if (filter.condition === "ends_with") return cell.endsWith(needle);
+	return cell.includes(needle);
+};
 
 const applyFilters = (row: ObrasDetalleRow, filters: DetailAdvancedFilters) => {
-	const matchesRange = (value: string | number | null | undefined, minStr: string, maxStr: string) => {
-		const numValue = toNumber(value);
-		const min = minStr ? Number(minStr) : null;
-		const max = maxStr ? Number(maxStr) : null;
-		if (min != null && numValue < min) return false;
-		if (max != null && numValue > max) return false;
-		return true;
-	};
+	if (!matchesNumberCondition(row.supDeObraM2, numberFilterValue(filters, "sup"))) return false;
+	if (!matchesNumberCondition(row.contratoMasAmpliaciones, numberFilterValue(filters, "cma"))) return false;
+	if (!matchesNumberCondition(computeCertificado(row), numberFilterValue(filters, "caf"))) return false;
+	if (!matchesNumberCondition(computeSaldo(row), numberFilterValue(filters, "sac"))) return false;
+	if (!matchesNumberCondition(row.segunContrato, numberFilterValue(filters, "sc"))) return false;
+	if (!matchesNumberCondition(row.prorrogasAcordadas, numberFilterValue(filters, "pa"))) return false;
+	if (!matchesNumberCondition(row.plazoTotal, numberFilterValue(filters, "pt"))) return false;
+	if (!matchesNumberCondition(row.plazoTransc, numberFilterValue(filters, "ptr"))) return false;
 
-	if (!matchesRange(row.supDeObraM2, filters.supMin, filters.supMax)) return false;
-	if (!matchesRange(row.contratoMasAmpliaciones, filters.cmaMin, filters.cmaMax)) return false;
-	if (!matchesRange(computeCertificado(row), filters.cafMin, filters.cafMax)) return false;
-	if (!matchesRange(computeSaldo(row), filters.sacMin, filters.sacMax)) return false;
-	if (!matchesRange(row.segunContrato, filters.scMin, filters.scMax)) return false;
-	if (!matchesRange(row.prorrogasAcordadas, filters.paMin, filters.paMax)) return false;
-	if (!matchesRange(row.plazoTotal, filters.ptMin, filters.ptMax)) return false;
-	if (!matchesRange(row.plazoTransc, filters.ptrMin, filters.ptrMax)) return false;
-
-	if (filters.entidades.length > 0) {
+	if (textFilterIsActive(filters, "entidad")) {
+		if (!matchesTextCondition(row.entidadContratante, textFilterValue(filters, "entidad"))) return false;
+	} else if (filters.entidades.length > 0) {
 		const entidad = (row.entidadContratante || "").toLowerCase().trim();
 		const allowed = filters.entidades.some((value) => entidad === value.toLowerCase().trim());
 		if (!allowed) return false;
+	}
+
+	if (textFilterIsActive(filters, "mes")) {
+		if (!matchesTextCondition(row.mesBasicoDeContrato, textFilterValue(filters, "mes"))) return false;
+	}
+	if (textFilterIsActive(filters, "ini")) {
+		if (!matchesTextCondition(row.iniciacion, textFilterValue(filters, "ini"))) return false;
 	}
 
 	if (filters.mesYear) {
@@ -2491,25 +2554,36 @@ const countActiveFilters = (filters: DetailAdvancedFilters) => {
 
 	tally(filters.supMin);
 	tally(filters.supMax);
+	if (numberFilterIsActive(filters, "sup") && !filters.supMin && !filters.supMax) count += 1;
 	tally(filters.entidades);
+	if (textFilterIsActive(filters, "entidad") && filters.entidades.length === 0) count += 1;
 	tally(filters.mesYear);
 	tally(filters.mesContains);
+	if (textFilterIsActive(filters, "mes") && !filters.mesYear && !filters.mesContains) count += 1;
 	tally(filters.iniYear);
 	tally(filters.iniContains);
+	if (textFilterIsActive(filters, "ini") && !filters.iniYear && !filters.iniContains) count += 1;
 	tally(filters.cmaMin);
 	tally(filters.cmaMax);
+	if (numberFilterIsActive(filters, "cma") && !filters.cmaMin && !filters.cmaMax) count += 1;
 	tally(filters.cafMin);
 	tally(filters.cafMax);
+	if (numberFilterIsActive(filters, "caf") && !filters.cafMin && !filters.cafMax) count += 1;
 	tally(filters.sacMin);
 	tally(filters.sacMax);
+	if (numberFilterIsActive(filters, "sac") && !filters.sacMin && !filters.sacMax) count += 1;
 	tally(filters.scMin);
 	tally(filters.scMax);
+	if (numberFilterIsActive(filters, "sc") && !filters.scMin && !filters.scMax) count += 1;
 	tally(filters.paMin);
 	tally(filters.paMax);
+	if (numberFilterIsActive(filters, "pa") && !filters.paMin && !filters.paMax) count += 1;
 	tally(filters.ptMin);
 	tally(filters.ptMax);
+	if (numberFilterIsActive(filters, "pt") && !filters.ptMin && !filters.ptMax) count += 1;
 	tally(filters.ptrMin);
 	tally(filters.ptrMax);
+	if (numberFilterIsActive(filters, "ptr") && !filters.ptrMin && !filters.ptrMax) count += 1;
 	return count;
 };
 
@@ -2601,6 +2675,20 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 			if (!normalized) return;
 			params.set(queryKey, normalized);
 		};
+		const appendNumberFilter = (key: NumberFilterKey) => {
+			const filter = numberFilterValue(filters, key);
+			if (!numberFilterIsActive(filters, key)) return;
+			params.set(`${key}Condition`, filter.condition);
+			if (filter.value.trim()) params.set(`${key}Value`, filter.value.trim());
+			if (filter.min.trim()) params.set(`${key}Min`, filter.min.trim());
+			if (filter.max.trim()) params.set(`${key}Max`, filter.max.trim());
+		};
+		const appendTextFilter = (key: TextFilterKey) => {
+			const filter = textFilterValue(filters, key);
+			if (!textFilterIsActive(filters, key)) return;
+			params.set(`${key}Condition`, filter.condition);
+			if (filter.value.trim()) params.set(`${key}Value`, filter.value.trim());
+		};
 
 		appendFilterValue("supMin");
 		appendFilterValue("supMax");
@@ -2622,6 +2710,9 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 		appendFilterValue("ptMax");
 		appendFilterValue("ptrMin");
 		appendFilterValue("ptrMax");
+		(["sup", "cma", "caf", "sac", "sc", "pa", "pt", "ptr"] as NumberFilterKey[])
+			.forEach(appendNumberFilter);
+		(["entidad", "mes", "ini"] as TextFilterKey[]).forEach(appendTextFilter);
 
 		if (Array.isArray(filters.entidades)) {
 			for (const entidad of filters.entidades) {

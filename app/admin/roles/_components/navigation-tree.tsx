@@ -40,7 +40,7 @@ const NAVIGATION_STRUCTURE: NavigationItem[] = [
     icon: "FileText",
     children: [
       { path: "/document-generation", label: "Generar documentos", permission: "documents:create" },
-      { path: "/document-generation/drafts", label: "Borradores", permission: "documents:create" },
+      { path: "/document-generation/drafts", label: "Historial", permission: "documents:create" },
       { path: "/document-generation/review", label: "Revision", permission: "documents:review" },
       { path: "/document-generation/config", label: "Configuracion", permission: "documents:templates" },
     ],

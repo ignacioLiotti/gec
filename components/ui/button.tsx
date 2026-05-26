@@ -32,6 +32,11 @@ const buttonVariants = cva(
           "hover:bg-[#FFD1B3] hover:border-[rgba(196,62,0,0.34)] " +
           "hover:shadow-[0_1px_3px_rgba(200,60,0,.36),0_4px_10px_rgba(200,60,0,.22),inset_0_1px_0_rgba(255,255,255,.90)]",
         // Dark — used for primary actions in dense app UI
+        defaultTertiary:
+          "bg-stone-100 text-stone-700 " +
+          "shadow-[0_1px_2px_rgba(0,0,0,.06),0_1px_3px_rgba(0,0,0,.04),inset_0_1px_0_rgba(255,255,255,.70)] " +
+          "hover:bg-stone-200 hover:shadow-[0_2px_4px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,.70)] " +
+          "border-orange-primary/40 bg-white text-orange-primary p-0 shadow-sm hover:bg-orange-primary hover:text-white",
         dark:
           "bg-stone-900 text-stone-50 " +
           "shadow-[0_1px_3px_rgba(0,0,0,.35),0_2px_6px_rgba(0,0,0,.20),inset_0_1px_0_rgba(255,255,255,.10)] " +

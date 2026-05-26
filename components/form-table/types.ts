@@ -103,6 +103,7 @@ export type CellConfig<Row extends FormTableRow> = {
 	badgeVariant?: "default" | "secondary" | "outline" | "destructive";
 	badgeMap?: Record<string, { label: string; variant: string }>;
 	selectOptions?: MainTableSelectOption[];
+	selectName?: string;
 	suggestionDetection?: CellSuggestionKind | "auto" | false;
 	suggestionDetectors?: Array<CellSuggestionDetector<Row>>;
 	renderReadOnly?: (args: {
@@ -224,6 +225,10 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	/** Collapses filters, columns, export and toolbarActions under a single "Extras" dropdown. */
 	toolbarMode?: "default" | "extras";
 	headerGroups?: HeaderGroup[];
+	/** Optional class applied to every header cell. */
+	headerCellClassName?: string;
+	/** CSS table layout mode. Defaults to fixed for spreadsheet-like tables. */
+	tableLayout?: "fixed" | "auto";
 	tabFilters?: TabFilterOption<Row>[];
 	searchPlaceholder?: string;
 	defaultPageSize?: number;
@@ -255,6 +260,14 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	footerActions?: ReactNode;
 	/** Whether to show the actions column (delete button, accordion toggle). Defaults to true. */
 	showActionsColumn?: boolean;
+	/** Where to render the actions column. Defaults to the end of the row. */
+	actionsColumnPosition?: "start" | "end";
+	/** Fixed width for the actions column in pixels. Defaults to 140. */
+	actionsColumnWidth?: number;
+	/** Header label for the actions column. Use null to render a visually hidden label only. */
+	actionsColumnLabel?: string | null;
+	/** Whether the actions column may show row deletion. Defaults to true when rows are editable. */
+	allowDeleteRows?: boolean;
 	/** Controls whether the default toolbar should show the "Agregar fila" button. Defaults to true. */
 	allowAddRows?: boolean;
 	/** When true, clears view constraints (search/filters/sort/tab) after adding a row so the new row is visible immediately. */

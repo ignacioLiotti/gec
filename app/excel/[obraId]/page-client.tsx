@@ -125,6 +125,15 @@ const ObraDocumentsTab = dynamic(
 	}
 );
 
+const InsurancePoliciesTab = dynamic(
+	() => import("./tabs/insurance-policies-tab").then((mod) => mod.InsurancePoliciesTab),
+	{
+		loading: () => (
+			<div className="h-[420px] animate-pulse rounded-lg border bg-stone-100" />
+		),
+	}
+);
+
 const EMPTY_GENERAL_REPORTS_DATA: GeneralTabReportsData = { findings: [], curve: null };
 const EMPTY_DATA_FLOW_SUGGESTIONS: DataFlowSuggestion[] = [];
 const EMPTY_MATERIAL_ORDERS: MaterialOrder[] = [];
@@ -1283,6 +1292,7 @@ function ObraDetailPageContent({
 	const [activeTab, setActiveTab] = useState(resolvedInitialTab);
 	const isGeneralTabActive = activeTab === "general";
 	const isDocumentsTabActive = activeTab === "documentos";
+	const isInsurancePoliciesTabActive = activeTab === "polizas";
 	const isFlujoTabActive = activeTab === "flujo";
 	const isCertificatesTabActive = activeTab === "certificates";
 	const deletePermissionsQuery = useQuery({
@@ -4047,6 +4057,10 @@ function ObraDetailPageContent({
 										flujoActions={flujoActions}
 										isLoadingFlujoActions={isLoadingFlujoActions}
 									/>
+								) : null}
+
+								{isInsurancePoliciesTabActive && obraId ? (
+									<InsurancePoliciesTab obraId={obraId} />
 								) : null}
 
 								{/* <ObraCertificatesTab

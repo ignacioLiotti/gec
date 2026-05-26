@@ -30,6 +30,7 @@ CREATE INDEX IF NOT EXISTS obras_porcentaje_idx ON public.obras(porcentaje);
 ALTER TABLE public.obras ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for obras
+DROP POLICY IF EXISTS "Users can view obras from their tenant" ON public.obras;
 CREATE POLICY "Users can view obras from their tenant"
   ON public.obras
   FOR SELECT
@@ -40,6 +41,7 @@ CREATE POLICY "Users can view obras from their tenant"
     )
   );
 
+DROP POLICY IF EXISTS "Users can insert obras in their tenant" ON public.obras;
 CREATE POLICY "Users can insert obras in their tenant"
   ON public.obras
   FOR INSERT
@@ -50,6 +52,7 @@ CREATE POLICY "Users can insert obras in their tenant"
     )
   );
 
+DROP POLICY IF EXISTS "Users can update obras in their tenant" ON public.obras;
 CREATE POLICY "Users can update obras in their tenant"
   ON public.obras
   FOR UPDATE
@@ -60,6 +63,7 @@ CREATE POLICY "Users can update obras in their tenant"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete obras in their tenant" ON public.obras;
 CREATE POLICY "Users can delete obras in their tenant"
   ON public.obras
   FOR DELETE
@@ -80,6 +84,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create trigger to automatically update updated_at
+DROP TRIGGER IF EXISTS update_obras_updated_at_trigger ON public.obras;
 CREATE TRIGGER update_obras_updated_at_trigger
   BEFORE UPDATE ON public.obras
   FOR EACH ROW

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import {
 	Dialog,
@@ -236,6 +237,13 @@ export default function UserMenu({
 							)}
 						</div>
 						<Separator />
+						<Link
+							href="/profile"
+							onClick={() => setMenuOpen(false)}
+							className="block w-full px-3 py-2 text-left text-sm hover:bg-foreground/10"
+						>
+							Perfil
+						</Link>
 						<button
 							onClick={() => {
 								setDialogOpen(true);

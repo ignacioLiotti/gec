@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
-import { renderDocumentHtml } from "@/lib/document-generation";
+import { appendApprovalSignatureHtml, renderDocumentHtml } from "@/lib/document-generation";
 import {
   canEditGeneratedDocument,
   formatWorkLabel,
@@ -107,6 +107,51 @@ async function insertReviewEvent(params: {
   if (error) throw error;
 }
 
+async function insertDocumentDecisionNotification(params: {
+  tenantId: string;
+  userId: string;
+  documentId: string;
+  fileName: string;
+  status: "APPROVED" | "REJECTED";
+}) {
+  const admin = createSupabaseAdminClient();
+  const statusLabel = params.status === "APPROVED" ? "aprobado" : "rechazado";
+  const { error } = await admin.from("notifications").insert({
+    tenant_id: params.tenantId,
+    user_id: params.userId,
+    title: `Documento ${statusLabel}`,
+    body: params.fileName
+      ? `${params.fileName} fue ${statusLabel}.`
+      : `Tu documento fue ${statusLabel}.`,
+    type: params.status === "APPROVED" ? "success" : "warning",
+    action_url: `/document-generation/review?id=${encodeURIComponent(params.documentId)}`,
+    data: {
+      documentId: params.documentId,
+      status: params.status,
+      source: "document-generation",
+    },
+  });
+  if (error) throw error;
+}
+
+async function loadReviewerSignature(userId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("profiles")
+    .select("full_name, digital_signature_data_url")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  const signatureDataUrl =
+    typeof data?.digital_signature_data_url === "string"
+      ? data.digital_signature_data_url.trim()
+      : "";
+  return {
+    signatureDataUrl,
+    signerLabel: typeof data?.full_name === "string" && data.full_name.trim() ? data.full_name.trim() : "Aprobado",
+  };
+}
+
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
@@ -169,12 +214,37 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       document.input_data && typeof document.input_data === "object" && !Array.isArray(document.input_data)
         ? (document.input_data as Record<string, unknown>)
         : {};
-    const previewHtml = template?.content_html
+    const latestApprovalSignature = (((document.generated_document_events as Array<Record<string, unknown>> | null) ?? []))
+      .filter((event) => event.to_status === "APPROVED")
+      .sort((left, right) => String(right.created_at ?? "").localeCompare(String(left.created_at ?? "")))
+      .map((event) =>
+        event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+          ? (event.payload as Record<string, unknown>)
+          : {},
+      )
+      .find((payload) => typeof payload.signatureDataUrl === "string");
+    const renderedPreviewHtml = template?.content_html
       ? renderDocumentHtml(template.content_html, inputData, {
           workName: obra ? formatWorkLabel(obra) : "",
           generatedAt: String(document.generated_at ?? ""),
         })
       : "";
+    const previewHtml =
+      document.status === "APPROVED" &&
+      latestApprovalSignature &&
+      typeof latestApprovalSignature.signatureDataUrl === "string"
+        ? appendApprovalSignatureHtml(renderedPreviewHtml, {
+            dataUrl: latestApprovalSignature.signatureDataUrl,
+            signerLabel:
+              typeof latestApprovalSignature.signerLabel === "string"
+                ? latestApprovalSignature.signerLabel
+                : null,
+            signedAt:
+              typeof latestApprovalSignature.signedAt === "string"
+                ? latestApprovalSignature.signedAt
+                : null,
+          })
+        : renderedPreviewHtml;
 
     return NextResponse.json({
       document: {
@@ -249,13 +319,88 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const { data: current, error: currentError } = await supabase
       .from("generated_documents")
       .select(
-        "id, tenant_id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, input_data, generated_by, status",
+        "id, tenant_id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_bucket, storage_path, file_name, input_data, generated_by, status, generated_at, obras(n, designacion_y_ubicacion), document_generation_templates(content_html)",
       )
       .eq("id", id)
       .maybeSingle();
     if (currentError) throw currentError;
     if (!current) {
       return NextResponse.json({ error: "Documento generado no encontrado" }, { status: 404 });
+    }
+    const currentStatus = String(current.status ?? "");
+    if ((nextStatus === "APPROVED" || nextStatus === "REJECTED") && !["GENERATED", "UNDER_REVIEW"].includes(currentStatus)) {
+      return NextResponse.json(
+        { error: "Solo se pueden aprobar o rechazar documentos en espera de revision." },
+        { status: 400 },
+      );
+    }
+
+    let signaturePayload: Record<string, unknown> = {};
+    if (nextStatus === "APPROVED") {
+      const reviewerSignature = await loadReviewerSignature(user.id);
+      if (!reviewerSignature.signatureDataUrl) {
+        return NextResponse.json(
+          { error: "Configura tu firma digital en Perfil antes de aprobar documentos." },
+          { status: 400 },
+        );
+      }
+      signaturePayload = {
+        signatureDataUrl: reviewerSignature.signatureDataUrl,
+        signerLabel: reviewerSignature.signerLabel,
+        signedAt: new Date().toISOString(),
+      };
+
+      const template = readSingleRelation(current.document_generation_templates) as { content_html?: string | null } | null;
+      const obra = readSingleRelation(current.obras) as { n: number | null; designacion_y_ubicacion: string | null } | null;
+      const inputData =
+        current.input_data && typeof current.input_data === "object" && !Array.isArray(current.input_data)
+          ? (current.input_data as Record<string, unknown>)
+          : {};
+      const html = template?.content_html
+        ? appendApprovalSignatureHtml(
+            renderDocumentHtml(template.content_html, inputData, {
+              workName: obra ? formatWorkLabel(obra) : "",
+              generatedAt: String(current.generated_at ?? ""),
+            }),
+            {
+              dataUrl: reviewerSignature.signatureDataUrl,
+              signerLabel: reviewerSignature.signerLabel,
+              signedAt: String(signaturePayload.signedAt),
+            },
+          )
+        : "";
+      if (html && current.storage_path) {
+        const pdfResponse = await fetch(new URL("/api/pdf-render", request.url), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            html,
+            options: {
+              companyName: "Sintesis",
+              reportTitle: String(current.file_name ?? "Documento"),
+              date: new Date().toLocaleDateString("es-AR"),
+              format: "A4",
+              landscape: false,
+            },
+          }),
+        });
+        if (!pdfResponse.ok) {
+          const payload = await pdfResponse.json().catch(() => ({}));
+          return NextResponse.json(
+            { error: typeof payload.error === "string" ? payload.error : "No se pudo insertar la firma en el PDF." },
+            { status: 500 },
+          );
+        }
+        const pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());
+        const admin = createSupabaseAdminClient();
+        const { error: uploadError } = await admin.storage
+          .from(String(current.storage_bucket ?? "obra-documents"))
+          .upload(String(current.storage_path), pdfBytes, {
+            contentType: "application/pdf",
+            upsert: true,
+          });
+        if (uploadError) throw uploadError;
+      }
     }
 
     const { data, error } = await supabase
@@ -295,10 +440,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       tenantId,
       userId: user.id,
       eventType: "GeneratedDocumentStatusChanged",
-      payload: { status: nextStatus, comment, reopenedDraftId },
+      payload: { status: nextStatus, comment, reopenedDraftId, ...signaturePayload },
       fromStatus: String(current.status ?? ""),
       toStatus: nextStatus,
     });
+
+    if (nextStatus === "APPROVED" || nextStatus === "REJECTED") {
+      try {
+        await insertDocumentDecisionNotification({
+          tenantId,
+          userId: String(current.generated_by),
+          documentId: id,
+          fileName: String(current.file_name ?? ""),
+          status: nextStatus,
+        });
+      } catch (notificationError) {
+        console.error("[document-generation/generated-status] notification failed", notificationError);
+      }
+    }
 
     return NextResponse.json({ generatedDocument: data });
   } catch (error) {

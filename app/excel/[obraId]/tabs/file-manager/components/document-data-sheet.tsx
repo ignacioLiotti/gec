@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
 	Sheet,
 	SheetContent,
@@ -9,24 +10,35 @@ import {
 } from "@/components/ui/sheet";
 import type { ReactNode } from "react";
 import type { FileSystemItem } from "../types";
-import { FormTable } from "@/components/form-table/form-table";
 import type { FormTableConfig, FormTableRow } from "@/components/form-table/types";
+import type { FormTable as FormTableComponent } from "@/components/form-table/form-table";
 
-type DocumentDataSheetProps = {
+const FormTable = dynamic(
+	() => import("@/components/form-table/form-table").then((mod) => mod.FormTable),
+	{
+		loading: () => (
+			<div className="flex min-h-[220px] items-center justify-center rounded-lg border bg-stone-50 text-sm text-stone-500">
+				Cargando tabla...
+			</div>
+		),
+	},
+) as typeof FormTableComponent;
+
+type DocumentDataSheetProps<Row extends FormTableRow, Filters> = {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
 	document: FileSystemItem | null;
-	tableConfig: FormTableConfig<FormTableRow, any> | null;
+	tableConfig: FormTableConfig<Row, Filters> | null;
 	dataTableSelector?: ReactNode;
 };
 
-export function DocumentDataSheet({
+export function DocumentDataSheet<Row extends FormTableRow, Filters>({
 	isOpen,
 	onOpenChange,
 	document,
 	tableConfig,
 	dataTableSelector,
-}: DocumentDataSheetProps) {
+}: DocumentDataSheetProps<Row, Filters>) {
 	if (!document || !tableConfig) return null;
 
 	return (

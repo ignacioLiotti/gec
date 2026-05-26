@@ -44,6 +44,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_MAIN_TABLE_SELECT_OPTIONS,
+  MAIN_TABLE_SELECT_COLOR_OPTIONS,
+  cloneMainTableSelectOptions,
+  sanitizeMainTableSelectOptions,
+  type MainTableSelectOption,
+} from "@/lib/main-table-select";
+import {
   Sortable,
   SortableContent,
   SortableItem,
@@ -74,6 +81,7 @@ type MainTableColumnConfig = {
   enabled: boolean;
   formulaFormat?: "number" | "currency";
   cellType?: string;
+  selectOptions?: MainTableSelectOption[];
 };
 
 const normalizeTemplateName = (value: string) =>
@@ -120,6 +128,8 @@ type ObraTablaColumn = {
   fieldKey: string;
   label: string;
   dataType: string;
+  config?: Record<string, unknown> | null;
+  selectOptions?: MainTableSelectOption[];
 };
 
 type ObraTabla = {
@@ -157,6 +167,7 @@ type AvailableSourceColumn = {
   key: string;
   label: string;
   dataType: MacroTableDataType;
+  selectOptions?: MainTableSelectOption[];
 };
 
 type ObraApiItem = {
@@ -171,8 +182,43 @@ type ObraTablaApiItem = {
   columns?: ObraTablaColumn[];
 };
 
-const DATA_TYPES: MacroTableDataType[] = ["text", "number", "currency", "boolean", "date"];
+const DATA_TYPES: MacroTableDataType[] = ["text", "number", "currency", "boolean", "date", "select"];
 const DATA_TYPE_SET = new Set<MacroTableDataType>(DATA_TYPES);
+const DATA_TYPE_OPTIONS: Array<{ value: MacroTableDataType; label: string }> = [
+  { value: "text", label: "Texto" },
+  { value: "number", label: "Numero" },
+  { value: "currency", label: "Moneda" },
+  { value: "boolean", label: "Booleano" },
+  { value: "date", label: "Fecha" },
+  { value: "select", label: "Select" },
+];
+const SELECT_BADGE_CLASS_BY_COLOR: Record<string, string> = {
+  slate: "border-slate-300 bg-slate-100 text-slate-800",
+  blue: "border-blue-300 bg-blue-100 text-blue-800",
+  green: "border-emerald-300 bg-emerald-100 text-emerald-800",
+  amber: "border-amber-300 bg-amber-100 text-amber-800",
+  red: "border-red-300 bg-red-100 text-red-800",
+  violet: "border-violet-300 bg-violet-100 text-violet-800",
+};
+const createDefaultSelectOptions = () =>
+  cloneMainTableSelectOptions(DEFAULT_MAIN_TABLE_SELECT_OPTIONS);
+const ACCORDION_PLACEMENTS = [
+  { value: "table", label: "Solo tabla" },
+  { value: "both", label: "Tabla + acordeón" },
+  { value: "accordion", label: "Solo acordeón" },
+] as const;
+const GROUP_SUMMARY_OPTIONS = [
+  { value: "latest", label: "Último cargado" },
+  { value: "oldest", label: "Primero cargado" },
+  { value: "max", label: "Más alto" },
+  { value: "min", label: "Más bajo" },
+  { value: "sum", label: "Suma" },
+  { value: "count", label: "Cantidad" },
+] as const;
+const SORT_DIRECTIONS = [
+  { value: "desc", label: "Descendente" },
+  { value: "asc", label: "Ascendente" },
+] as const;
 
 type MacroTableWithDetails = MacroTable & {
   sources: (MacroTableSource & {
@@ -246,11 +292,13 @@ export default function EditMacroTablePage() {
 
   const mapMainColumnTypeToMacroType = useCallback(
     (column: MainTableColumnConfig): MacroTableDataType => {
+      if (sanitizeMainTableSelectOptions(column.selectOptions).length > 0) return "select";
       if (column.formulaFormat === "currency") return "currency";
       if (column.formulaFormat === "number") return "number";
       if (column.cellType === "currency") return "currency";
       if (column.cellType === "number") return "number";
       if (column.cellType === "date") return "date";
+      if (column.cellType === "select") return "select";
       if (
         column.cellType === "boolean" ||
         column.cellType === "checkbox" ||
@@ -390,9 +438,9 @@ export default function EditMacroTablePage() {
     } catch (error) {
       console.error(error);
       toast.error("Error cargando macro tabla");
-      push("/admin/macro-tables");
+      push("/macro");
     }
-  }, [id, router]);
+  }, [id, push]);
 
   // Fetch obras and their tables
   const fetchObrasWithTablas = useCallback(async () => {
@@ -417,7 +465,16 @@ export default function EditMacroTablePage() {
                 name: t.name,
                 defaultTablaId:
                   typeof t?.settings?.defaultTablaId === "string" ? t.settings.defaultTablaId : null,
-                columns: t.columns ?? [],
+                columns: (t.columns ?? []).map((column) => {
+                  const selectOptions = sanitizeMainTableSelectOptions(
+                    column.selectOptions ?? column.config?.selectOptions
+                  );
+                  return {
+                    ...column,
+                    dataType: selectOptions.length > 0 ? "select" : column.dataType,
+                    selectOptions,
+                  };
+                }),
               })),
             };
           } catch {
@@ -460,6 +517,7 @@ export default function EditMacroTablePage() {
           fieldKey: `obra.${column.id}`,
           label: `Obra · ${column.label || column.id}`,
           dataType: mapMainColumnTypeToMacroType(column),
+          selectOptions: sanitizeMainTableSelectOptions(column.selectOptions),
         }));
       setObrasTableSourceColumns(mapped);
     } catch (error) {
@@ -633,12 +691,50 @@ export default function EditMacroTablePage() {
           dataType: (DATA_TYPE_SET.has(col.dataType as MacroTableDataType)
             ? col.dataType
             : "text") as MacroTableDataType,
+          selectOptions: col.selectOptions,
         });
       }
     }
 
     return Array.from(byKey.values());
   }, [selectedSources]);
+
+  useEffect(() => {
+    if (obras.length === 0 || selectedSources.length === 0) return;
+
+    const tablaById = new Map<string, { obra: Obra; tabla: ObraTabla }>();
+    for (const obra of obras) {
+      for (const tabla of obra.tablas) {
+        tablaById.set(tabla.id, { obra, tabla });
+      }
+    }
+
+    setSelectedSources((prev) => {
+      let changed = false;
+      const next = prev.map((source) => {
+        const resolved = tablaById.get(source.tablaId);
+        if (!resolved) return source;
+        const { obra, tabla } = resolved;
+        const sameColumns =
+          source.columns.length === tabla.columns.length &&
+          source.columns.every((column, index) => column.fieldKey === tabla.columns[index]?.fieldKey);
+        const sameMetadata =
+          source.obraId === obra.id &&
+          source.obraName === obra.designacionYUbicacion &&
+          source.tablaName === tabla.name;
+        if (sameColumns && sameMetadata) return source;
+        changed = true;
+        return {
+          ...source,
+          obraId: obra.id,
+          obraName: obra.designacionYUbicacion,
+          tablaName: tabla.name,
+          columns: tabla.columns,
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [obras, selectedSources]);
 
   const availableSourceColumns = useMemo(() => {
     const byKey = new Map<string, AvailableSourceColumn>();
@@ -655,6 +751,7 @@ export default function EditMacroTablePage() {
         dataType: (DATA_TYPE_SET.has(obraColumn.dataType as MacroTableDataType)
           ? obraColumn.dataType
           : "text") as MacroTableDataType,
+        selectOptions: obraColumn.selectOptions,
       });
     }
 
@@ -664,17 +761,25 @@ export default function EditMacroTablePage() {
   // Keep source columns in sync with selected source tables (prefill only table columns),
   // while preserving manually added source columns from other available origins (e.g. obra.*).
   useEffect(() => {
+    if (
+      selectedSources.length > 0 &&
+      selectedSources.some((source) => source.columns.length === 0)
+    ) {
+      return;
+    }
+
     const fieldEntries = selectedTableSourceColumns.map((sourceColumn) => [
       sourceColumn.key,
-      { label: sourceColumn.label, dataType: sourceColumn.dataType },
+      {
+        label: sourceColumn.label,
+        dataType: sourceColumn.dataType,
+        selectOptions: sourceColumn.selectOptions,
+      },
     ] as const);
     const availableOptionsByKey = new Map(availableSourceColumns.map((column) => [column.key, column]));
 
     setColumns((prev) => {
-      if (selectedSources.length === 0) {
-        const withoutSource = prev.filter((column) => column.columnType !== "source");
-        return withoutSource.length === prev.length ? prev : withoutSource;
-      }
+      if (selectedSources.length === 0) return prev;
 
       const sourceByFieldKey = new Map(
         prev
@@ -686,9 +791,7 @@ export default function EditMacroTablePage() {
 
       const syncedSourceColumns: ColumnConfig[] = fieldEntries.map(([fieldKey, info]) => {
         const existing = sourceByFieldKey.get(fieldKey);
-        if (existing) {
-          return { ...existing, dataType: info.dataType };
-        }
+        if (existing) return existing;
         return {
           id: crypto.randomUUID(),
           columnType: "source",
@@ -722,9 +825,7 @@ export default function EditMacroTablePage() {
         }
 
         const availableOption = availableOptionsByKey.get(column.sourceFieldKey);
-        if (availableOption) {
-          next.push({ ...column, dataType: availableOption.dataType });
-        }
+        if (availableOption) next.push(column);
       }
 
       for (const [fieldKey, syncedColumn] of syncedSourceByFieldKey) {
@@ -748,7 +849,7 @@ export default function EditMacroTablePage() {
         });
       return same ? prev : next;
     });
-  }, [availableSourceColumns, selectedSources.length, selectedTableSourceColumns]);
+  }, [availableSourceColumns, selectedSources, selectedTableSourceColumns]);
 
   // Add custom column
   const addCustomColumn = () => {
@@ -797,6 +898,37 @@ export default function EditMacroTablePage() {
       prev.map((c) => (c.id === colId ? { ...c, ...updates } : c))
     );
   };
+
+  const updateColumnConfig = (colId: string, updates: Record<string, unknown>) => {
+    setColumns((prev) =>
+      prev.map((column) =>
+        column.id === colId
+          ? { ...column, config: { ...(column.config ?? {}), ...updates } }
+          : column
+      )
+    );
+  };
+
+  const getColumnSelectOptions = (column: ColumnConfig): MainTableSelectOption[] =>
+    sanitizeMainTableSelectOptions(column.config?.selectOptions);
+
+  const updateColumnSelectOptions = (column: ColumnConfig, options: MainTableSelectOption[]) => {
+    updateColumnConfig(column.id, { selectOptions: options });
+  };
+
+  const getEffectiveColumnSelectOptions = (column: ColumnConfig): MainTableSelectOption[] => {
+    if (column.columnType === "source" && column.sourceFieldKey) {
+      return sanitizeMainTableSelectOptions(
+        availableFieldOptionsByKey.get(column.sourceFieldKey)?.selectOptions
+      );
+    }
+    return getColumnSelectOptions(column);
+  };
+
+  const getEffectiveColumnDataType = (column: ColumnConfig): MacroTableDataType =>
+    column.columnType === "source" && getEffectiveColumnSelectOptions(column).length > 0
+      ? "select"
+      : column.dataType;
 
   const handleSelectColumn = (columnId: string) => {
     setSelectedColumnId(columnId);
@@ -911,6 +1043,9 @@ export default function EditMacroTablePage() {
                 nextConfig.allowManualEdit === true ||
                 nextConfig.allowManualEdit === "true" ||
                 nextConfig.allowManualEdit === 1;
+              if (c.columnType === "source") {
+                delete nextConfig.selectOptions;
+              }
             } else {
               delete nextConfig.allowManualEdit;
             }
@@ -955,7 +1090,7 @@ export default function EditMacroTablePage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => push("/admin/macro-tables")}
+            onClick={() => push(`/macro?macroId=${id}`)}
           >
             <ArrowLeft className="size-4" />
           </Button>
@@ -1641,9 +1776,16 @@ export default function EditMacroTablePage() {
                               <Label>Campo de origen</Label>
                               <Select
                                 value={selectedColumn.sourceFieldKey ?? ""}
-                                onValueChange={(value) =>
-                                  updateColumn(selectedColumn.id, { sourceFieldKey: value })
-                                }
+                                onValueChange={(value) => {
+                                  const option = availableFieldOptionsByKey.get(value);
+                                  const nextConfig = { ...(selectedColumn.config ?? {}) };
+                                  delete nextConfig.selectOptions;
+                                  updateColumn(selectedColumn.id, {
+                                    sourceFieldKey: value,
+                                    dataType: option?.dataType ?? selectedColumn.dataType,
+                                    config: nextConfig,
+                                  });
+                                }}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Seleccioná un campo" />
@@ -1662,24 +1804,300 @@ export default function EditMacroTablePage() {
                           <div className="space-y-2">
                             <Label>Tipo de dato</Label>
                             <Select
-                              value={selectedColumn.dataType}
-                              onValueChange={(value) =>
+                              value={getEffectiveColumnDataType(selectedColumn)}
+                              onValueChange={(value) => {
+                                const nextDataType = value as MacroTableDataType;
+                                const nextConfig = { ...(selectedColumn.config ?? {}) };
+                                if (
+                                  selectedColumn.columnType !== "source" &&
+                                  nextDataType === "select" &&
+                                  getColumnSelectOptions(selectedColumn).length === 0
+                                ) {
+                                  nextConfig.selectOptions = createDefaultSelectOptions();
+                                }
                                 updateColumn(selectedColumn.id, {
-                                  dataType: value as MacroTableDataType,
-                                })
-                              }
+                                  dataType: nextDataType,
+                                  config: nextConfig,
+                                });
+                              }}
                             >
                               <SelectTrigger>
                                 <SelectValue placeholder="Tipo de dato" />
                               </SelectTrigger>
                               <SelectContent>
-                                {DATA_TYPES.map((type) => (
-                                  <SelectItem key={type} value={type}>
-                                    {type}
+                                {DATA_TYPE_OPTIONS.map((type) => (
+                                  <SelectItem key={type.value} value={type.value}>
+                                    {type.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
+                          </div>
+
+                          {getEffectiveColumnDataType(selectedColumn) === "select" ? (
+                            <div className="space-y-3 rounded-lg border border-border/70 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <Label>Opciones del select</Label>
+                                {selectedColumn.columnType === "source" ? (
+                                  <span className="text-xs text-muted-foreground">Se sincroniza desde el origen</span>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const options = getEffectiveColumnSelectOptions(selectedColumn);
+                                      updateColumnSelectOptions(selectedColumn, [
+                                        ...options,
+                                        { text: `Opcion ${options.length + 1}`, color: "slate" },
+                                      ]);
+                                    }}
+                                  >
+                                    <Plus className="mr-1 size-3.5" />
+                                    Agregar
+                                  </Button>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                {getEffectiveColumnSelectOptions(selectedColumn).map((option, optionIndex) => (
+                                  <div
+                                    key={`${selectedColumn.id}-select-${optionIndex}`}
+                                    className="grid grid-cols-[1fr_120px_160px_32px] items-center gap-2"
+                                  >
+                                    <Input
+                                      value={option.text}
+                                      disabled={selectedColumn.columnType === "source"}
+                                      onChange={(event) => {
+                                        const options = getEffectiveColumnSelectOptions(selectedColumn);
+                                        options[optionIndex] = { ...option, text: event.target.value };
+                                        updateColumnSelectOptions(selectedColumn, options);
+                                      }}
+                                      placeholder="Titulo de opcion"
+                                    />
+                                    <Select
+                                      value={option.color ?? "slate"}
+                                      disabled={selectedColumn.columnType === "source"}
+                                      onValueChange={(value) => {
+                                        const options = getEffectiveColumnSelectOptions(selectedColumn);
+                                        options[optionIndex] = {
+                                          ...option,
+                                          color: value as MainTableSelectOption["color"],
+                                        };
+                                        updateColumnSelectOptions(selectedColumn, options);
+                                      }}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {MAIN_TABLE_SELECT_COLOR_OPTIONS.map((colorOption) => (
+                                          <SelectItem key={colorOption.value} value={colorOption.value}>
+                                            {colorOption.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <div className="flex items-center rounded-md border px-2 py-2">
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "max-w-[130px] overflow-hidden text-ellipsis whitespace-nowrap",
+                                          option.color ? SELECT_BADGE_CLASS_BY_COLOR[option.color] : null
+                                        )}
+                                      >
+                                        {option.text || "Sin titulo"}
+                                      </Badge>
+                                    </div>
+                                    {selectedColumn.columnType === "source" ? (
+                                      <span />
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8"
+                                        onClick={() => {
+                                          const options = getEffectiveColumnSelectOptions(selectedColumn);
+                                          updateColumnSelectOptions(
+                                            selectedColumn,
+                                            options.filter((_, idx) => idx !== optionIndex)
+                                          );
+                                        }}
+                                      >
+                                        <span className="sr-only">Eliminar opcion</span>
+                                        <Trash2 className="size-4 text-destructive" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <div className="space-y-3 rounded-lg border border-border/70 p-3">
+                            <div className="space-y-2">
+                              <Label>Ubicación en la vista</Label>
+                              <Select
+                                value={
+                                  typeof selectedColumn.config.macroAccordionPlacement === "string"
+                                    ? selectedColumn.config.macroAccordionPlacement
+                                    : "table"
+                                }
+                                onValueChange={(value) =>
+                                  updateColumn(selectedColumn.id, {
+                                    config: {
+                                      ...(selectedColumn.config ?? {}),
+                                      macroAccordionPlacement: value,
+                                    },
+                                  })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Dónde mostrar esta columna" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {ACCORDION_PLACEMENTS.map((placement) => (
+                                    <SelectItem key={placement.value} value={placement.value}>
+                                      {placement.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <label className="flex items-start gap-2">
+                              <Checkbox
+                                checked={selectedColumn.config.macroAccordionTrigger === true}
+                                onCheckedChange={(checked) => {
+                                  setColumns((prev) =>
+                                    prev.map((column) => ({
+                                      ...column,
+                                      config: {
+                                        ...(column.config ?? {}),
+                                        macroAccordionTrigger:
+                                          column.id === selectedColumn.id && checked === true,
+                                      },
+                                    }))
+                                  );
+                                }}
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                Usar esta columna como texto del botón que abre el acordeón.
+                              </span>
+                            </label>
+                            <label className="flex items-start gap-2">
+                              <Checkbox
+                                checked={selectedColumn.config.macroAccordionGroupBy === true}
+                                onCheckedChange={(checked) => {
+                                  setColumns((prev) =>
+                                    prev.map((column) => ({
+                                      ...column,
+                                      config: {
+                                        ...(column.config ?? {}),
+                                        macroAccordionGroupBy:
+                                          column.id === selectedColumn.id && checked === true,
+                                      },
+                                    }))
+                                  );
+                                }}
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                Agrupar filas por esta columna. Cada valor único se muestra como
+                                una fila acordeón y sus filas originales quedan dentro.
+                              </span>
+                            </label>
+                            <div className="space-y-2">
+                              <Label>Valor en fila agrupada</Label>
+                              <Select
+                                value={
+                                  typeof selectedColumn.config.macroGroupSummary === "string"
+                                    ? selectedColumn.config.macroGroupSummary
+                                    : "latest"
+                                }
+                                onValueChange={(value) =>
+                                  updateColumn(selectedColumn.id, {
+                                    config: {
+                                      ...(selectedColumn.config ?? {}),
+                                      macroGroupSummary: value,
+                                    },
+                                  })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Cómo resumir el grupo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {GROUP_SUMMARY_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {selectedColumn.config.macroAccordionGroupBy === true ? (
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label>Ordenar acordeón por</Label>
+                                  <Select
+                                    value={
+                                      typeof selectedColumn.config.macroAccordionSortColumnId === "string"
+                                        ? selectedColumn.config.macroAccordionSortColumnId
+                                        : "__default__"
+                                    }
+                                    onValueChange={(value) =>
+                                      updateColumn(selectedColumn.id, {
+                                        config: {
+                                          ...(selectedColumn.config ?? {}),
+                                          macroAccordionSortColumnId:
+                                            value === "__default__" ? undefined : value,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Columna" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__default__">Orden de carga</SelectItem>
+                                      {columns.map((column) => (
+                                        <SelectItem key={column.id} value={column.id}>
+                                          {column.label || "Sin nombre"}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Dirección</Label>
+                                  <Select
+                                    value={
+                                      selectedColumn.config.macroAccordionSortDirection === "asc"
+                                        ? "asc"
+                                        : "desc"
+                                    }
+                                    onValueChange={(value) =>
+                                      updateColumn(selectedColumn.id, {
+                                        config: {
+                                          ...(selectedColumn.config ?? {}),
+                                          macroAccordionSortDirection: value,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Dirección" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {SORT_DIRECTIONS.map((direction) => (
+                                        <SelectItem key={direction.value} value={direction.value}>
+                                          {direction.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
 
                           {selectedColumn.columnType !== "custom" && (

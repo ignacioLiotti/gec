@@ -29,7 +29,7 @@ export function AppHeaderTitle({ documentPermissions }: Props) {
     { href: "/document-generation", label: "Generar", show: Boolean(permissions?.canCreate) },
     {
       href: "/document-generation/drafts",
-      label: "Borradores",
+      label: "Historial",
       show: Boolean(permissions?.canCreate || permissions?.canViewAllDrafts),
     },
     { href: "/document-generation/review", label: "Revision", show: Boolean(permissions?.canReview) },

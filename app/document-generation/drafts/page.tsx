@@ -6,7 +6,7 @@ export default async function DocumentGenerationDraftsPage() {
   const access = await resolveDocumentAccess();
 
   if (!access.user) {
-    return <div className="p-6 text-sm">Inicia sesion para ver borradores.</div>;
+    return <div className="p-6 text-sm">Inicia sesion para ver el historial.</div>;
   }
 
   if (!access.tenantId) {
@@ -23,7 +23,7 @@ export default async function DocumentGenerationDraftsPage() {
       ) : (
         <div className="p-6">
           <div className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-600">
-            No tienes permisos para ver borradores.
+            No tienes permisos para ver el historial.
           </div>
         </div>
       )}

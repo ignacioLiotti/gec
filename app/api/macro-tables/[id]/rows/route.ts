@@ -6,6 +6,7 @@ import {
 } from "@/lib/macro-table-filters";
 import {
   mapColumnToResponse,
+  type MacroTableColumn,
   type MacroTableOverrideBindingStatus,
   type MacroTableOverrideConflict,
   type MacroTableOverrideSummary,
@@ -454,6 +455,105 @@ function resolveOverrideBindings(args: {
   };
 }
 
+function normalizeGroupValue(value: unknown) {
+  if (value === null || typeof value === "undefined" || value === "") return "(Sin valor)";
+  return String(value);
+}
+
+function toComparableNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(",", ".").replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function isPresentGroupValue(value: unknown) {
+  return value !== null && typeof value !== "undefined" && value !== "";
+}
+
+function summarizeGroupColumnValue(
+  rows: MacroTableRow[],
+  column: MacroTableColumn,
+  groupColumnId: string
+) {
+  if (column.id === groupColumnId) return normalizeGroupValue(rows[0]?.[column.id]);
+
+  const values = rows.map((row) => row[column.id]).filter(isPresentGroupValue);
+  const summary = column.config?.macroGroupSummary;
+  if (summary === "count") return values.length;
+  if (values.length === 0) return null;
+  if (summary === "oldest") return values[values.length - 1] ?? null;
+  if (summary === "min" || summary === "max" || summary === "sum") {
+    const numericValues = values.map(toComparableNumber).filter((value): value is number => value !== null);
+    if (numericValues.length === 0) return values[0] ?? null;
+    if (summary === "min") return Math.min(...numericValues);
+    if (summary === "max") return Math.max(...numericValues);
+    return numericValues.reduce((total, value) => total + value, 0);
+  }
+  return values[0] ?? null;
+}
+
+function compareMacroRowValues(a: unknown, b: unknown, direction: "asc" | "desc") {
+  const aNumber = toComparableNumber(a);
+  const bNumber = toComparableNumber(b);
+  const multiplier = direction === "desc" ? -1 : 1;
+  if (aNumber !== null && bNumber !== null) return (aNumber - bNumber) * multiplier;
+  return String(a ?? "").localeCompare(String(b ?? ""), "es", { numeric: true }) * multiplier;
+}
+
+function sortGroupRows(rows: MacroTableRow[], groupColumn: MacroTableColumn) {
+  const sortColumnId =
+    typeof groupColumn.config?.macroAccordionSortColumnId === "string"
+      ? groupColumn.config.macroAccordionSortColumnId
+      : "";
+  if (!sortColumnId) return rows;
+  const direction =
+    groupColumn.config?.macroAccordionSortDirection === "asc" ? "asc" : "desc";
+  return [...rows].sort((a, b) => compareMacroRowValues(a[sortColumnId], b[sortColumnId], direction));
+}
+
+function groupMacroRowsByColumn(
+  rows: MacroTableRow[],
+  columnId: string,
+  columns: MacroTableColumn[]
+): MacroTableRow[] {
+  const groupColumn = columns.find((column) => column.id === columnId);
+  const groups = new Map<string, MacroTableRow[]>();
+
+  for (const row of rows) {
+    const groupValue = normalizeGroupValue(row[columnId]);
+    const existing = groups.get(groupValue);
+    if (existing) {
+      existing.push(row);
+    } else {
+      groups.set(groupValue, [row]);
+    }
+  }
+
+  return Array.from(groups.entries()).map(([groupValue, groupRows]) => {
+    const sortedGroupRows = groupColumn ? sortGroupRows(groupRows, groupColumn) : groupRows;
+    const firstRow = sortedGroupRows[0];
+    const groupRow: MacroTableRow = {
+      ...firstRow,
+      id: `macro-group:${columnId}:${encodeURIComponent(groupValue)}`,
+      [columnId]: groupValue,
+      _macroAccordionGroup: true,
+      _macroAccordionGroupColumnId: columnId,
+      _macroAccordionGroupValue: groupValue,
+      _macroAccordionGroupCount: sortedGroupRows.length,
+      _macroAccordionRows: sortedGroupRows,
+    };
+
+    for (const column of columns) {
+      groupRow[column.id] = summarizeGroupColumnValue(sortedGroupRows, column, columnId);
+    }
+
+    return groupRow;
+  });
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const access = await resolveRequestAccessContext();
@@ -463,6 +563,7 @@ export async function GET(request: Request, context: RouteContext) {
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
   const obraIdFilter = url.searchParams.get("obraId")?.trim() ?? "";
   const query = url.searchParams.get("q")?.trim() ?? "";
+  const groupByColumnId = url.searchParams.get("groupBy")?.trim() ?? "";
   const rawFilters = url.searchParams.get("filters");
   let parsedFilters: unknown = {};
   if (rawFilters) {
@@ -890,11 +991,15 @@ export async function GET(request: Request, context: RouteContext) {
         matchesMacroFilters(row, displayColumns, filters)
     );
 
-    const total = filteredRows.length;
+    const groupedRows = groupByColumnId
+      ? groupMacroRowsByColumn(filteredRows, groupByColumnId, columns)
+      : filteredRows;
+
+    const total = groupedRows.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const safePage = Math.min(page, totalPages);
     const from = (safePage - 1) * limit;
-    const pagedRows = filteredRows.slice(from, from + limit);
+    const pagedRows = groupedRows.slice(from, from + limit);
 
     return NextResponse.json({
       rows: pagedRows,

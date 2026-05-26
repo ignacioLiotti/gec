@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from "react";
+import { Suspense, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { FileManager, type FileManagerSelectionChange } from "./file-manager/file-manager";
@@ -78,5 +78,15 @@ function ObraDocumentsTabContent({
 }
 
 export function ObraDocumentsTab(props: DocumentsTabProps) {
-	return <ObraDocumentsTabContent {...props} />;
+	return (
+		<Suspense
+			fallback={
+				<TabsContent value="documentos" className="space-y-6">
+					<div className="h-[420px] animate-pulse rounded-lg border bg-stone-100" />
+				</TabsContent>
+			}
+		>
+			<ObraDocumentsTabContent {...props} />
+		</Suspense>
+	);
 }

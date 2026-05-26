@@ -84,6 +84,7 @@ type StaticReadOnlyCellContentProps<Row extends FormTableRow> = {
 	isCellDirty: boolean;
 	/** When true, this cell receives programmatic focus (read-only columns) and Enter can activate nested links. */
 	focusAsPassiveCell?: boolean;
+	suppressSuggestions?: boolean;
 };
 
 function handleFormTableEnterNavigateLink(event: ReactKeyboardEvent<HTMLElement>) {
@@ -285,6 +286,7 @@ function StaticReadOnlyCellContent<Row extends FormTableRow>({
 	isRowDirty,
 	isCellDirty,
 	focusAsPassiveCell,
+	suppressSuggestions = false,
 }: StaticReadOnlyCellContentProps<Row>) {
 	const cellType = (column.cellType ?? "text") as NonNullable<ColumnDef<Row>["cellType"]> | "text";
 	// For date cells, use the formatted display value so ISO strings ("2023-05-03") don't
@@ -298,6 +300,7 @@ function StaticReadOnlyCellContent<Row extends FormTableRow>({
 		return String(value);
 	}, [value, cellType]);
 	const suggestion = useMemo(() => {
+		if (suppressSuggestions) return null;
 		if (!rawValue.trim()) return null;
 		return resolveCellSuggestion({
 			rawValue,
@@ -306,7 +309,7 @@ function StaticReadOnlyCellContent<Row extends FormTableRow>({
 			column,
 			row,
 		});
-	}, [rawValue, value, cellType, column, row]);
+	}, [suppressSuggestions, rawValue, value, cellType, column, row]);
 
 	return (
 		<div
@@ -383,6 +386,7 @@ function TableCellInner<Row extends FormTableRow>({
 				isRowDirty={isRowDirty}
 				isCellDirty={isCellDirty}
 				focusAsPassiveCell
+				suppressSuggestions
 			/>
 		);
 	}
