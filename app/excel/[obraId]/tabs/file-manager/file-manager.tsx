@@ -6474,7 +6474,7 @@ function FileManagerContent({
         </div> */}
 
         {/* Main Content */}
-        {(selectedFolder || selectedDocument) && (
+        {(loading || selectedFolder || selectedDocument) && (
           <div className="overflow-auto overflow-x-auto transition-all duration-300 ease-in-out shadow-[0_1px_0_0_#fff9_inset,_0_0_0_1px_#ffffff4d_inset,0_0.7px_0.9px_-1px_#09090b14,0_3px_4px_-2px_#09090b24] rounded-lg h-full">
             {renderMainContent()}
           </div>
