@@ -179,6 +179,9 @@ const FormTable = dynamic(
   },
 ) as typeof FormTableComponent;
 
+const DOCUMENTS_TREE_ENABLED = false;
+const DOCUMENTS_LIST_ENABLED = true;
+
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
 
@@ -216,13 +219,23 @@ type PdfDocumentProxy = {
 };
 
 type PdfJsModule = {
+  GlobalWorkerOptions?: { workerSrc: string };
   getDocument(params: { data: Uint8Array; disableWorker: boolean }): { promise: Promise<PdfDocumentProxy> };
 };
 
 let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
 
 function loadPdfJs() {
-  pdfJsModulePromise ??= import('pdfjs-dist/legacy/build/pdf.mjs').then((pdfjs) => pdfjs as unknown as PdfJsModule);
+  pdfJsModulePromise ??= import('pdfjs-dist/legacy/build/pdf.mjs').then((pdfjsModule) => {
+    const pdfjs = pdfjsModule as unknown as PdfJsModule;
+    if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url,
+      ).toString();
+    }
+    return pdfjs;
+  });
   return pdfJsModulePromise;
 }
 
@@ -1170,7 +1183,7 @@ function FileManagerContent({
   const [searchQuery, setSearchQuery] = useState('');
   // Loading state is derived from global store + local refreshing state
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const loading = isStoreLoading || (needsRefetch(obraId) && !fileTree);
+  const loading = (DOCUMENTS_TREE_ENABLED || DOCUMENTS_LIST_ENABLED) && (isStoreLoading || (needsRefetch(obraId) && !fileTree));
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [createFolderParent, setCreateFolderParent] = useState<FileSystemItem | null>(null);
@@ -1254,22 +1267,44 @@ function FileManagerContent({
 
   const ocrFolderLinksMap = useMemo(() => {
     const map = new Map<string, OcrFolderLink[]>();
-    ocrFolderLinks.forEach((link) => {
-      const normalizedPath = normalizeFolderPath(link.folderName);
+    const addLink = (key: string, link: OcrFolderLink) => {
+      if (!key) return;
+      const existing = map.get(key) ?? [];
+      existing.push(link);
+      map.set(key, existing);
+    };
+    const getLookupKeys = (value: string) => {
+      const keys = new Set<string>();
+      const normalizedPath = normalizeFolderPath(value);
       if (normalizedPath) {
-        const existing = map.get(normalizedPath) ?? [];
-        existing.push(link);
-        map.set(normalizedPath, existing);
+        keys.add(normalizedPath);
+        if (normalizedPath === obraId) {
+          keys.add('');
+        } else if (normalizedPath.startsWith(`${obraId}/`)) {
+          keys.add(normalizedPath.slice(obraId.length + 1));
+        }
       }
-      const normalizedFlat = normalizeFolderName(link.folderName);
-      if (normalizedFlat && normalizedFlat !== normalizedPath) {
-        const existing = map.get(normalizedFlat) ?? [];
-        existing.push(link);
-        map.set(normalizedFlat, existing);
+      const normalizedFlat = normalizeFolderName(value);
+      if (normalizedFlat) keys.add(normalizedFlat);
+      for (const key of Array.from(keys)) {
+        const flat = normalizeFolderName(key);
+        if (flat) keys.add(flat);
+      }
+      return Array.from(keys).filter(Boolean);
+    };
+    ocrFolderLinks.forEach((link) => {
+      for (const key of getLookupKeys(link.folderName)) {
+        addLink(key, link);
+      }
+      const folderLabel = (link as OcrFolderLink & { folderLabel?: unknown }).folderLabel;
+      if (typeof folderLabel === 'string') {
+        for (const key of getLookupKeys(folderLabel)) {
+          addLink(key, link);
+        }
       }
     });
     return map;
-  }, [ocrFolderLinks]);
+  }, [obraId, ocrFolderLinks]);
 
   const ocrFolderMap = useMemo(() => {
     const map = new Map<string, OcrFolderLink>();
@@ -1323,6 +1358,8 @@ function FileManagerContent({
   const [ocrViewMode, setOcrViewMode] = useState<'table' | 'documents'>('table');
   const [activeOcrTablaIdOverride, setActiveOcrTablaIdOverride] = useState<string | null>(null);
   const [activeDocumentTablaIdOverride, setActiveDocumentTablaIdOverride] = useState<string | null>(null);
+  const [lazyOcrRowsByTablaId, setLazyOcrRowsByTablaId] = useState<Map<string, TablaDataRow[]>>(new Map());
+  const [loadingOcrRowsTablaId, setLoadingOcrRowsTablaId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const ITEMS_PER_PAGE = 24;
 
@@ -1821,13 +1858,21 @@ function FileManagerContent({
 
   const fetchDocumentsTreePayload = useCallback(async () => {
     if (!obraId) return null;
+    // documents-tree stays disabled; folders/documents now load from a lightweight
+    // endpoint that includes OCR folder/table metadata but not extracted rows.
+    const documentsEndpoint = DOCUMENTS_TREE_ENABLED
+      ? `/api/obras/${obraId}/documents-tree?limit=500`
+      : DOCUMENTS_LIST_ENABLED
+        ? `/api/obras/${obraId}/documents/list`
+        : null;
+    if (!documentsEndpoint) return null;
     if (Date.now() < rateLimitUntilRef.current) return null;
     if (documentsTreeRequestRef.current) {
       return documentsTreeRequestRef.current;
     }
 
     const request = (async () => {
-      const res = await fetch(`/api/obras/${obraId}/documents-tree?limit=500`, {
+      const res = await fetch(documentsEndpoint, {
         cache: 'no-store',
       });
       if (res.status === 429) {
@@ -2009,6 +2054,9 @@ function FileManagerContent({
 
   useEffect(() => {
     if (!obraId) return;
+    // documents-tree is intentionally not bootstrapped. The tab still needs the
+    // lightweight storage list so folders and files remain visible.
+    if (!DOCUMENTS_TREE_ENABLED && !DOCUMENTS_LIST_ENABLED) return;
     const shouldRefetchTree = needsRefetch(obraId) || !fileTree;
 
     // `buildFileTree` returns both the tree and OCR links. An empty links array is
@@ -4785,6 +4833,49 @@ function FileManagerContent({
 
   const activeOcrTablaId = activeFolderLink?.tablaId ?? null;
 
+  useEffect(() => {
+    if (!obraId || !selectedFolder?.ocrEnabled || documentViewMode !== 'table' || !activeOcrTablaId) {
+      return;
+    }
+    if (lazyOcrRowsByTablaId.has(activeOcrTablaId)) {
+      return;
+    }
+    const controller = new AbortController();
+    const loadRows = async () => {
+      setLoadingOcrRowsTablaId(activeOcrTablaId);
+      try {
+        const res = await fetch(
+          `/api/obras/${obraId}/tablas/${activeOcrTablaId}/rows?limit=200&includeCount=0`,
+          {
+            cache: 'no-store',
+            signal: controller.signal,
+          }
+        );
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(text || 'No se pudieron cargar las filas extraidas');
+        }
+        const payload = await res.json().catch(() => ({}));
+        const rows = Array.isArray(payload?.rows) ? (payload.rows as TablaDataRow[]) : [];
+        setLazyOcrRowsByTablaId((current) => {
+          const next = new Map(current);
+          next.set(activeOcrTablaId, rows);
+          return next;
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error('Error loading extracted rows', error);
+        toast.error('No se pudieron cargar los datos extraidos');
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingOcrRowsTablaId(null);
+        }
+      }
+    };
+    void loadRows();
+    return () => controller.abort();
+  }, [activeOcrTablaId, documentViewMode, lazyOcrRowsByTablaId, obraId, selectedFolder?.ocrEnabled]);
+
   const handleOpenOcrReport = useCallback(() => {
     if (!obraId || !activeOcrTablaId) return;
     const shouldOpenMaterialsGuide =
@@ -4906,7 +4997,9 @@ function FileManagerContent({
 
   const ocrTableRows = useMemo<OcrDocumentTableRow[]>(() => {
     if (!selectedFolder?.ocrEnabled) return [];
-    const tablaRows = (activeFolderLink?.rows || []) as TablaDataRow[];
+    const tablaRows = (activeFolderLink?.tablaId
+      ? lazyOcrRowsByTablaId.get(activeFolderLink.tablaId) ?? activeFolderLink.rows
+      : activeFolderLink?.rows || []) as TablaDataRow[];
     const columns = activeFolderLink?.columns || [];
     if (tablaRows.length === 0 || columns.length === 0) return [];
     return tablaRows.map((row) => {
@@ -4944,7 +5037,7 @@ function FileManagerContent({
       }
       return mapped;
     });
-  }, [activeFolderLink, selectedFolder]);
+  }, [activeFolderLink, lazyOcrRowsByTablaId, selectedFolder]);
 
   const ocrFilteredRowCount = useMemo(() => {
     if (!selectedFolder?.ocrEnabled) return 0;
@@ -5215,7 +5308,9 @@ function FileManagerContent({
       : [...tablaColumnDefs];
     const allowInlineAddRows = canEditTabla && activeFolderLink?.dataInputMethod !== 'ocr';
     const emptyStateMessage =
-      activeFolderLink?.dataInputMethod === 'manual'
+      loadingOcrRowsTablaId === activeOcrTablaId
+        ? 'Cargando datos extraidos...'
+        : activeFolderLink?.dataInputMethod === 'manual'
         ? 'Sin filas todavía. Usá "Agregar fila" para crear una fila vacía.'
         : activeFolderLink?.dataInputMethod === 'both'
           ? 'Sin datos todavía. Podés agregar una fila vacía o subir un documento.'
@@ -5574,7 +5669,7 @@ function FileManagerContent({
         </div>
       ) : null,
     };
-  }, [activeFolderLink, activeFolderLinks, activeOcrTablaId, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleOpenOcrReport, handleQuickUploadClick, handleSaveTablaRows, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
+  }, [activeFolderLink, activeFolderLinks, activeOcrTablaId, clearOcrDocumentFilter, documentViewMode, documentsByStoragePath, handleFilterRowsByDocument, handleOpenDocumentSheetByPath, handleOpenOcrReport, handleQuickUploadClick, handleSaveTablaRows, loadingOcrRowsTablaId, mapDataTypeToCellType, obraId, ocrDocumentFilterName, ocrDocumentFilterPath, ocrTableRows, selectedFolder?.id, supabase]);
 
   const handleRetryDocumentOcr = useCallback(
     async (doc: FileSystemItem | null) => {
@@ -5922,7 +6017,18 @@ function FileManagerContent({
     const showArchivosTablaToggle = selectedFolder.ocrEnabled && hasTablaSchema && activeFolderLink?.dataInputMethod !== "manual";
     const folderLabel = selectedFolder.id === 'root' ? 'Todos los documentos' : selectedFolder.name;
     const showDownloadAllButton = collectFolderDownloadEntries(selectedFolder).length > 0;
-    const parentFolder = parentMapRef.current.get(selectedFolder.id) ?? null;
+    const selectedFolderRelativePath = normalizeFolderPath(
+      selectedFolder.relativePath ??
+      (selectedFolder.storagePath?.startsWith(`${obraId}/`)
+        ? selectedFolder.storagePath.slice(obraId.length + 1)
+        : '')
+    );
+    const parentSegments = selectedFolderRelativePath.split('/').filter(Boolean).slice(0, -1);
+    const parentFolder = selectedFolder.id === 'root'
+      ? null
+      : parentMapRef.current.get(selectedFolder.id) ??
+        findFolderBySegments(parentSegments) ??
+        fileTree;
     const folderContentHeader = (
       <div className="mb-0">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -5939,7 +6045,7 @@ function FileManagerContent({
             {/* Tail on the right */}
             <NotchTail side="right" className="h-[57px] mb-[2px]" />
 
-            {parentFolder && (
+            {selectedFolder.id !== 'root' && parentFolder && (
               <Button
                 type="button"
                 variant="defaultSecondary"

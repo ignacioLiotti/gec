@@ -2,7 +2,6 @@
 
 import { useMemo, useSyncExternalStore } from "react";
 import type { FileSystemItem, OcrFolderLink } from "../types";
-import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import {
 	getCachedFileTree,
 	setCachedFileTree,
@@ -156,8 +155,15 @@ export function useDocumentsStore() {
 
 // Prefetch function - call this early to start loading documents in background
 let prefetchPromise: Promise<void> | null = null;
+const DOCUMENTS_TREE_PREFETCH_ENABLED = false;
 
 export async function prefetchDocuments(obraId: string): Promise<void> {
+	// documents-tree is intentionally disabled: the document tree is no longer
+	// rendered, so prefetching it only delays the documentos tab.
+	if (!DOCUMENTS_TREE_PREFETCH_ENABLED) {
+		return;
+	}
+
 	// Skip if we already have fresh data
 	if (!needsRefetch(obraId)) {
 		return;
@@ -173,8 +179,6 @@ export async function prefetchDocuments(obraId: string): Promise<void> {
 			// Update state to indicate we're loading for this obra
 			globalState = { ...globalState, obraId, isLoading: true };
 			emitChange();
-
-			const supabase = createSupabaseBrowserClient();
 
 			// Fetch APS models (for 3D viewer)
 			let apsModels = getCachedApsModels(obraId);
