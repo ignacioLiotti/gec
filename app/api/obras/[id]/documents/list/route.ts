@@ -17,6 +17,7 @@ type FileSystemItem = {
 	mimetype?: string;
 	storagePath?: string;
 	relativePath?: string;
+	apsUrn?: string;
 	ocrEnabled?: boolean;
 	dataInputMethod?: DataInputMethod;
 	ocrTablaId?: string;
@@ -25,6 +26,20 @@ type FileSystemItem = {
 	ocrTablaColumns?: OcrColumn[];
 	ocrTablaRows?: unknown[];
 	extractedData?: unknown[];
+	ocrDocumentStatus?: string;
+	ocrDocumentId?: string;
+	ocrDocumentError?: string | null;
+	ocrErrorCode?: string | null;
+	ocrRowsExtracted?: number | null;
+	ocrExtractionId?: string | null;
+	ocrFileFingerprint?: string | null;
+	ocrContentFingerprintNormalized?: string | null;
+	ocrFingerprintStatus?: string | null;
+	ocrFingerprintError?: Record<string, unknown> | null;
+	uploadedAt?: string | null;
+	uploadedByUserId?: string | null;
+	uploadedByLabel?: string | null;
+	generatedDocumentStatus?: string | null;
 };
 
 type DataInputMethod = "ocr" | "manual" | "both";
@@ -48,8 +63,25 @@ type OcrLink = {
 	columns: OcrColumn[];
 	rows: unknown[];
 	orders: unknown[];
-	documents: unknown[];
+	documents: OcrDocumentStatus[];
 	dataInputMethod: DataInputMethod;
+};
+
+type OcrDocumentStatus = {
+	id: string;
+	tabla_id: string;
+	source_bucket: string;
+	source_path: string;
+	source_file_name: string;
+	status: string;
+	error_message: string | null;
+	error_code?: string | null;
+	rows_extracted: number | null;
+	extraction_id?: string | null;
+	file_fingerprint?: string | null;
+	content_fingerprint_normalized?: string | null;
+	fingerprint_status?: string | null;
+	fingerprint_error?: Record<string, unknown> | null;
 };
 
 const DOCUMENTS_BUCKET = "obra-documents";
@@ -227,6 +259,31 @@ export async function GET(_request: Request, context: RouteContext) {
 			}
 		}
 
+		const documentsByTabla = new Map<string, OcrDocumentStatus[]>();
+		const docsByPath = new Map<string, OcrDocumentStatus>();
+		if (tablaIds.length > 0) {
+			const { data: documents, error: documentsError } = await supabase
+				.from("ocr_document_processing")
+				.select(
+					"id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, error_code, rows_extracted, extraction_id, file_fingerprint, content_fingerprint_normalized, fingerprint_status, fingerprint_error"
+				)
+				.eq("obra_id", obraId)
+				.in("tabla_id", tablaIds)
+				.order("created_at", { ascending: false });
+			if (documentsError) throw documentsError;
+			for (const doc of documents ?? []) {
+				const sourcePath = typeof doc.source_path === "string" ? doc.source_path : "";
+				if (!sourcePath || isDeletedPath(sourcePath)) continue;
+				const tablaId = doc.tabla_id as string;
+				const mapped = doc as OcrDocumentStatus;
+				if (!documentsByTabla.has(tablaId)) documentsByTabla.set(tablaId, []);
+				documentsByTabla.get(tablaId)?.push(mapped);
+				if (!docsByPath.has(sourcePath)) {
+					docsByPath.set(sourcePath, mapped);
+				}
+			}
+		}
+
 		const ocrLinks: OcrLink[] = (tablas ?? []).flatMap((tabla) => {
 				const settings = (tabla.settings as Record<string, unknown>) ?? {};
 				const folderName = typeof settings.ocrFolder === "string" ? settings.ocrFolder : "";
@@ -243,7 +300,7 @@ export async function GET(_request: Request, context: RouteContext) {
 					columns: columnsByTabla.get(tabla.id as string) ?? [],
 					rows: [],
 					orders: [],
-					documents: [],
+					documents: documentsByTabla.get(tabla.id as string) ?? [],
 					dataInputMethod: normalizeDataInputMethod(settings.dataInputMethod),
 				};
 				return [link];
@@ -272,6 +329,7 @@ export async function GET(_request: Request, context: RouteContext) {
 			storagePath: obraId,
 		};
 		const folderNodeByPath = new Map<string, FileSystemItem>([["", root]]);
+		const fileNodeByPath = new Map<string, FileSystemItem>();
 		const warnings: string[] = [];
 
 		const buildFolderNode = (relativeFolderPath: string): FileSystemItem => {
@@ -331,6 +389,115 @@ export async function GET(_request: Request, context: RouteContext) {
 			ensureFolderPath(folderPath);
 		}
 
+		const uploadTrackingByPath = new Map<
+			string,
+			{ uploadedBy: string | null; uploadedAt: string | null }
+		>();
+		const { data: trackedUploads, error: trackedUploadsError } = await supabase
+			.from("obra_document_uploads")
+			.select("storage_path, uploaded_by, uploaded_at")
+			.eq("obra_id", obraId);
+		if (trackedUploadsError) throw trackedUploadsError;
+		for (const upload of trackedUploads ?? []) {
+			const storagePath = typeof upload.storage_path === "string" ? upload.storage_path : null;
+			if (!storagePath || isDeletedPath(storagePath)) continue;
+			uploadTrackingByPath.set(storagePath, {
+				uploadedBy: typeof upload.uploaded_by === "string" ? upload.uploaded_by : null,
+				uploadedAt: typeof upload.uploaded_at === "string" ? upload.uploaded_at : null,
+			});
+		}
+
+		const generatedDocumentStatusByPath = new Map<string, string>();
+		const { data: generatedDocuments, error: generatedDocumentsError } = await supabase
+			.from("generated_documents")
+			.select("storage_path, status, updated_at")
+			.eq("obra_id", obraId)
+			.order("updated_at", { ascending: false });
+		if (generatedDocumentsError) throw generatedDocumentsError;
+		for (const generatedDocument of generatedDocuments ?? []) {
+			const storagePath =
+				typeof generatedDocument.storage_path === "string"
+					? generatedDocument.storage_path
+					: null;
+			const status =
+				typeof generatedDocument.status === "string"
+					? generatedDocument.status
+					: null;
+			if (!storagePath || !status || generatedDocumentStatusByPath.has(storagePath)) {
+				continue;
+			}
+			generatedDocumentStatusByPath.set(storagePath, status);
+		}
+
+		const apsUrnByPath = new Map<string, string>();
+		const { data: apsModels, error: apsModelsError } = await supabase
+			.from("aps_models")
+			.select("file_path, aps_urn")
+			.eq("obra_id", obraId);
+		if (apsModelsError) throw apsModelsError;
+		for (const model of apsModels ?? []) {
+			const filePath = typeof model.file_path === "string" ? model.file_path : null;
+			const apsUrn = typeof model.aps_urn === "string" ? model.aps_urn : null;
+			if (!filePath || !apsUrn || isDeletedPath(filePath)) continue;
+			apsUrnByPath.set(filePath, apsUrn);
+		}
+
+		const buildFileNode = (
+			storagePath: string,
+			parentNode: FileSystemItem,
+			options?: {
+				fileName?: string | null;
+				size?: number | null;
+				mimetype?: string | null;
+			},
+		) => {
+			const existing = fileNodeByPath.get(storagePath);
+			if (existing) return existing;
+			const docStatus = docsByPath.get(storagePath);
+			const trackedUpload = uploadTrackingByPath.get(storagePath);
+			const fileName =
+				options?.fileName ??
+				(typeof docStatus?.source_file_name === "string" ? docStatus.source_file_name : null) ??
+				storagePath.split("/").pop() ??
+				"archivo";
+			const fileItem: FileSystemItem = {
+				id: `file-${storagePath}`,
+				name: fileName,
+				type: "file",
+				storagePath,
+				apsUrn: apsUrnByPath.get(storagePath) ?? undefined,
+				size: options?.size ?? undefined,
+				mimetype: options?.mimetype ?? undefined,
+				ocrDocumentStatus: docStatus
+					? docStatus.status
+					: parentNode.ocrEnabled
+						? "unprocessed"
+						: undefined,
+				ocrDocumentId: docStatus?.id,
+				ocrDocumentError: docStatus?.error_message ?? null,
+				ocrErrorCode: typeof docStatus?.error_code === "string" ? docStatus.error_code : null,
+				ocrRowsExtracted: docStatus?.rows_extracted ?? null,
+				ocrExtractionId: docStatus?.extraction_id ?? null,
+				ocrFileFingerprint: docStatus?.file_fingerprint ?? null,
+				ocrContentFingerprintNormalized: docStatus?.content_fingerprint_normalized ?? null,
+				ocrFingerprintStatus: docStatus?.fingerprint_status ?? null,
+				ocrFingerprintError:
+					docStatus && typeof docStatus.fingerprint_error === "object"
+						? docStatus.fingerprint_error
+						: null,
+				uploadedAt: trackedUpload?.uploadedAt ?? null,
+				uploadedByUserId: trackedUpload?.uploadedBy ?? null,
+				uploadedByLabel:
+					trackedUpload?.uploadedBy && user?.id && trackedUpload.uploadedBy === user.id
+						? "Vos"
+						: trackedUpload?.uploadedBy ?? null,
+				generatedDocumentStatus: generatedDocumentStatusByPath.get(storagePath) ?? null,
+			};
+			parentNode.children?.push(fileItem);
+			fileNodeByPath.set(storagePath, fileItem);
+			return fileItem;
+		};
+
 		const queue: string[] = [""];
 		const seen = new Set<string>([""]);
 		while (queue.length > 0) {
@@ -371,15 +538,44 @@ export async function GET(_request: Request, context: RouteContext) {
 					: `${obraId}/${item.name}`;
 				if (isDeletedPath(storagePath)) continue;
 
-				parentNode.children?.push({
-					id: `file-${storagePath}`,
-					name: item.name,
-					type: "file",
-					storagePath,
+				const fileNode = buildFileNode(storagePath, parentNode, {
+					fileName: item.name,
 					size: item.metadata?.size ?? undefined,
 					mimetype: item.metadata?.mimetype ?? undefined,
 				});
+				if (!fileNode.uploadedAt) {
+					const fallbackUploadedAt =
+						typeof item.created_at === "string"
+							? item.created_at
+							: typeof item.updated_at === "string"
+								? item.updated_at
+								: typeof item.last_accessed_at === "string"
+									? item.last_accessed_at
+									: null;
+					fileNode.uploadedAt = fallbackUploadedAt;
+				}
 			}
+		}
+
+		const fallbackPaths = new Set<string>([
+			...docsByPath.keys(),
+			...uploadTrackingByPath.keys(),
+			...generatedDocumentStatusByPath.keys(),
+			...apsUrnByPath.keys(),
+		]);
+		for (const storagePath of fallbackPaths) {
+			if (!storagePath || !storagePath.startsWith(`${obraId}/`) || isDeletedPath(storagePath)) {
+				continue;
+			}
+			if (fileNodeByPath.has(storagePath)) continue;
+			const relativePath = storagePath.slice(`${obraId}/`.length);
+			if (!relativePath) continue;
+			const segments = relativePath.split("/").filter(Boolean);
+			if (segments.length === 0) continue;
+			const fileName = segments.pop() ?? relativePath;
+			const folderPath = segments.join("/");
+			const parentNode = ensureFolderPath(folderPath);
+			buildFileNode(storagePath, parentNode, { fileName });
 		}
 
 		const sortTree = (node: FileSystemItem) => {
