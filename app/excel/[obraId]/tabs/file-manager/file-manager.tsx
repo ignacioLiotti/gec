@@ -1159,7 +1159,15 @@ function FileManagerContent({
   const { setFileTree, setSelectedFolder, setSelectedDocument, setSheetDocument, setExpandedFolderIds, resetDocumentsStore } = documentsActions;
   const updateExpandedFolders = useCallback(
     (updater: (prev: Set<string>) => Set<string>) => {
-      setExpandedFolderIds(updater(new Set(expandedFolderIds)));
+      const prev = new Set(expandedFolderIds);
+      const next = updater(prev);
+      if (
+        next.size === expandedFolderIds.size &&
+        Array.from(next).every((id) => expandedFolderIds.has(id))
+      ) {
+        return;
+      }
+      setExpandedFolderIds(next);
     },
     [expandedFolderIds, setExpandedFolderIds]
   );
@@ -1258,7 +1266,7 @@ function FileManagerContent({
   const selectedPdfPageSet = useMemo(() => new Set(selectedPdfPages), [selectedPdfPages]);
   const pdfPageSelectionResolverRef = useRef<((pages: number[] | null) => void) | null>(null);
   const rateLimitUntilRef = useRef<number>(0);
-  const documentsTreeRequestRef = useRef<Promise<{ tree: FileSystemItem | null; links: OcrFolderLink[] } | null> | null>(null);
+  const documentsTreeRequestRef = useRef<Promise<{ tree: FileSystemItem | null; folder?: FileSystemItem | null; links: OcrFolderLink[] } | null> | null>(null);
 
   useEffect(() => {
     if (!obraId) return;
@@ -1478,7 +1486,7 @@ function FileManagerContent({
       }
       return next;
     });
-  }, []);
+  }, [updateExpandedFolders]);
 
   const getPathSegments = useCallback((item: FileSystemItem | null | undefined) => {
     if (!item) return [] as string[];
@@ -1817,6 +1825,29 @@ function FileManagerContent({
     return null;
   }, []);
 
+  const replaceFolderInTree = useCallback((tree: FileSystemItem | null, folder: FileSystemItem | null) => {
+    if (!tree || !folder) return tree;
+    if (tree.id === folder.id) return folder;
+    const walk = (node: FileSystemItem): FileSystemItem => {
+      const children = node.children ?? [];
+      let changed = false;
+      const nextChildren = children.map((child) => {
+        if (child.id === folder.id) {
+          changed = true;
+          return folder;
+        }
+        if (child.type === 'folder') {
+          const nextChild = walk(child);
+          if (nextChild !== child) changed = true;
+          return nextChild;
+        }
+        return child;
+      });
+      return changed ? { ...node, children: nextChildren } : node;
+    };
+    return walk(tree);
+  }, []);
+
   const getExpandedFoldersForTree = useCallback(
     (
       tree: FileSystemItem | null,
@@ -1856,18 +1887,18 @@ function FileManagerContent({
     [findFolderInTreeById]
   );
 
-  const fetchDocumentsTreePayload = useCallback(async () => {
+  const fetchDocumentsTreePayload = useCallback(async (options: { path?: string } = {}) => {
     if (!obraId) return null;
     // documents-tree stays disabled; folders/documents now load from a lightweight
     // endpoint that includes OCR folder/table metadata but not extracted rows.
     const documentsEndpoint = DOCUMENTS_TREE_ENABLED
       ? `/api/obras/${obraId}/documents-tree?limit=500`
       : DOCUMENTS_LIST_ENABLED
-        ? `/api/obras/${obraId}/documents/list`
+        ? `/api/obras/${obraId}/documents/list${options.path ? `?path=${encodeURIComponent(options.path)}` : ''}`
         : null;
     if (!documentsEndpoint) return null;
     if (Date.now() < rateLimitUntilRef.current) return null;
-    if (documentsTreeRequestRef.current) {
+    if (!options.path && documentsTreeRequestRef.current) {
       return documentsTreeRequestRef.current;
     }
 
@@ -1886,16 +1917,19 @@ function FileManagerContent({
       const payload = await res.json().catch(() => ({}));
       return {
         tree: (payload?.tree ?? null) as FileSystemItem | null,
+        folder: (payload?.folder ?? null) as FileSystemItem | null,
         links: Array.isArray(payload?.links) ? (payload.links as OcrFolderLink[]) : [],
       };
     })();
 
-    documentsTreeRequestRef.current = request;
+    if (!options.path) {
+      documentsTreeRequestRef.current = request;
+    }
 
     try {
       return await request;
     } finally {
-      if (documentsTreeRequestRef.current === request) {
+      if (!options.path && documentsTreeRequestRef.current === request) {
         documentsTreeRequestRef.current = null;
       }
     }
@@ -2212,6 +2246,39 @@ function FileManagerContent({
     setOcrDocumentFilter({ path: docPath, name: docName ?? null });
   }, []);
 
+  const loadFolderChildren = useCallback(async (folder: FileSystemItem) => {
+    if (!DOCUMENTS_LIST_ENABLED || folder.childrenLoaded) return folder;
+    const folderPath = normalizeFolderPath(
+      folder.relativePath ??
+      (folder.storagePath?.startsWith(`${obraId}/`)
+        ? folder.storagePath.slice(obraId.length + 1)
+        : '')
+    );
+    try {
+      const payload = await fetchDocumentsTreePayload({ path: folderPath });
+      const loadedFolder = payload?.folder ?? null;
+      if (!loadedFolder || !fileTree) return folder;
+      const nextTree = replaceFolderInTree(fileTree, loadedFolder);
+      if (!nextTree) return loadedFolder;
+      rebuildParentMap(nextTree);
+      setFileTree(nextTree);
+      setCachedFileTree(obraId, nextTree);
+      setSelectedFolder(loadedFolder);
+      setExpandedFolderIds(
+        getExpandedFoldersForTree(nextTree, expandedFolderIds, loadedFolder.id)
+      );
+      if (payload?.links) {
+        setCachedOcrLinks(obraId, payload.links);
+        setOcrFolderLinks(payload.links);
+      }
+      return loadedFolder;
+    } catch (error) {
+      console.error('Error loading folder children:', error);
+      toast.error('No se pudo cargar la carpeta');
+      return folder;
+    }
+  }, [expandedFolderIds, fetchDocumentsTreePayload, fileTree, getExpandedFoldersForTree, obraId, rebuildParentMap, replaceFolderInTree, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedFolder]);
+
   const handleFolderClick = useCallback((folder: FileSystemItem, options: SelectionChangeOptions = {}) => {
     setSelectedFolder(folder);
     setSelectedDocument(null);
@@ -2221,6 +2288,7 @@ function FileManagerContent({
       clearOcrDocumentFilter();
     }
     ensureAncestorsExpanded(folder);
+    void loadFolderChildren(folder);
 
     if (options.emitSelection === false) {
       return;
@@ -2233,7 +2301,7 @@ function FileManagerContent({
       document: null,
       documentPath: [],
     });
-  }, [clearOcrDocumentFilter, ensureAncestorsExpanded, getPathSegments, onSelectionChange, selectedFolder?.id]);
+  }, [clearOcrDocumentFilter, ensureAncestorsExpanded, getPathSegments, loadFolderChildren, onSelectionChange, selectedFolder?.id]);
 
   const handleDocumentClick = useCallback(async (document: FileSystemItem, parentFolder?: FileSystemItem, options: SelectionChangeOptions = {}) => {
     setSelectedDocument(document);
@@ -4214,6 +4282,7 @@ function FileManagerContent({
   }, []);
 
   const getFolderFileCount = useCallback((folder: FileSystemItem) => {
+    if (typeof folder.fileCount === 'number') return folder.fileCount;
     const children = folder.children ?? [];
     return children.filter((child) => child.type === 'file' && child.name !== '.keep').length;
   }, []);
@@ -4236,7 +4305,9 @@ function FileManagerContent({
     const isManualOnly = Boolean(folderLink && folderLink.dataInputMethod === 'manual');
     const rowCount = isManualOnly ? (folderLink?.rows?.length ?? 0) : 0;
     const fileCount = isFolder ? getFolderFileCount(item) : 0;
-    const countValue = isFolder && item.id !== 'root' ? (isManualOnly ? rowCount : fileCount) : null;
+    const countValue: number | 'has-files' | null = isFolder && item.id !== 'root'
+      ? (isManualOnly ? rowCount : item.childrenLoaded ? fileCount : item.hasFiles ? 'has-files' : null)
+      : null;
     const countLabel = isManualOnly ? 'filas' : 'archivos';
 
     const handleItemClick = () => {
@@ -4359,11 +4430,11 @@ function FileManagerContent({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
-                  {countValue}
+                  {countValue === 'has-files' ? '•' : countValue}
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {countValue} {countLabel}
+                {countValue === 'has-files' ? `Tiene ${countLabel}` : `${countValue} ${countLabel}`}
               </TooltipContent>
             </Tooltip>
           )}
@@ -6276,8 +6347,13 @@ function FileManagerContent({
                     const isManualOnly = Boolean(folderLink && folderLink.dataInputMethod === 'manual');
                     const rowCount = isManualOnly ? (folderLink?.rows?.length ?? 0) : 0;
                     const fileCount = getFolderFileCount(item);
-                    const countValue = isManualOnly ? rowCount : fileCount;
-                    const countLabel = isManualOnly ? 'filas' : 'archivos';
+                    const countValue: number | 'has-files' | null = isManualOnly
+                      ? rowCount
+                      : item.childrenLoaded
+                        ? fileCount
+                        : item.hasFiles
+                          ? 'has-files'
+                          : null;
                     const isOcrEnabled = item.ocrEnabled;
                     return (
                       <div key={item.id} className="group cursor-default transition-colors flex flex-col items-center justify-end gap-2 shrink-0 h-[105px]">
@@ -6300,7 +6376,7 @@ function FileManagerContent({
                           onDragEnd={handleFolderMoveDragEnd}
                         >
                           <div className="flex flex-col items-center justify-end w-full h-full">
-                            {countValue > 0 && (
+                            {countValue !== null && countValue !== 0 && (
                               <span className={cn("bg-stone-100 bg-linear-to-b from-stone-100 to-stone-200 border  w-[100px] h-[80px] group-hover:-top-4 -top-2 absolute left-1/2 -translate-x-1/2 transition-all ease-in-out duration-[200ms]", isDragTarget ? 'border-2 border-amber-500 -top-4' : '')} />
                             )}
                             <FolderFront

@@ -11,6 +11,9 @@ export type FileSystemItem = {
 	type: "folder" | "file";
 	icon?: string;
 	children?: FileSystemItem[];
+	childrenLoaded?: boolean;
+	hasFiles?: boolean;
+	fileCount?: number;
 	ocrEnabled?: boolean;
 	dataInputMethod?: DataInputMethod;
 	ocrTablaId?: string;

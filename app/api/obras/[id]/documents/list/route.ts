@@ -13,6 +13,9 @@ type FileSystemItem = {
 	name: string;
 	type: "folder" | "file";
 	children?: FileSystemItem[];
+	childrenLoaded?: boolean;
+	hasFiles?: boolean;
+	fileCount?: number;
 	size?: number;
 	mimetype?: string;
 	storagePath?: string;
@@ -153,6 +156,8 @@ export async function GET(_request: Request, context: RouteContext) {
 	}
 
 	try {
+		const url = new URL(_request.url);
+		const requestedPath = normalizeFolderPath(url.searchParams.get("path") ?? "");
 		const access = await resolveRequestAccessContext();
 		const { supabase, user, tenantId, actorType } = access;
 
@@ -213,6 +218,16 @@ export async function GET(_request: Request, context: RouteContext) {
 					legacyNormalizedStoragePath.startsWith(`${folderPath}/`),
 			);
 		};
+		const isInRequestedFolder = (storagePath: string) => {
+			if (!storagePath.startsWith(`${obraId}/`)) return false;
+			const relativePath = storagePath.slice(`${obraId}/`.length);
+			const segments = relativePath.split("/").filter(Boolean);
+			segments.pop();
+			return segments.join("/") === requestedPath;
+		};
+		const scopedStorageLikePrefix = requestedPath
+			? `${obraId}/${requestedPath}/%`
+			: `${obraId}/%`;
 
 		const { data: defaultFolders, error: defaultFoldersError } = await supabase
 			.from("obra_default_folders")
@@ -261,6 +276,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 		const documentsByTabla = new Map<string, OcrDocumentStatus[]>();
 		const docsByPath = new Map<string, OcrDocumentStatus>();
+		const knownDocumentPaths: string[] = [];
 		if (tablaIds.length > 0) {
 			const { data: documents, error: documentsError } = await supabase
 				.from("ocr_document_processing")
@@ -269,11 +285,14 @@ export async function GET(_request: Request, context: RouteContext) {
 				)
 				.eq("obra_id", obraId)
 				.in("tabla_id", tablaIds)
+				.like("source_path", scopedStorageLikePrefix)
 				.order("created_at", { ascending: false });
 			if (documentsError) throw documentsError;
 			for (const doc of documents ?? []) {
 				const sourcePath = typeof doc.source_path === "string" ? doc.source_path : "";
 				if (!sourcePath || isDeletedPath(sourcePath)) continue;
+				knownDocumentPaths.push(sourcePath);
+				if (!isInRequestedFolder(sourcePath)) continue;
 				const tablaId = doc.tabla_id as string;
 				const mapped = doc as OcrDocumentStatus;
 				if (!documentsByTabla.has(tablaId)) documentsByTabla.set(tablaId, []);
@@ -326,6 +345,9 @@ export async function GET(_request: Request, context: RouteContext) {
 			name: "Documentos",
 			type: "folder",
 			children: [],
+			childrenLoaded: false,
+			hasFiles: false,
+			fileCount: 0,
 			storagePath: obraId,
 		};
 		const folderNodeByPath = new Map<string, FileSystemItem>([["", root]]);
@@ -347,6 +369,9 @@ export async function GET(_request: Request, context: RouteContext) {
 				name: displayNameByPath.get(normalizedRelative) ?? humanizeFolderSegment(fallbackSegmentName),
 				type: "folder",
 				children: [],
+				childrenLoaded: false,
+				hasFiles: false,
+				fileCount: 0,
 				storagePath: normalizedRelative ? `${obraId}/${normalizedRelative}` : obraId,
 				relativePath: normalizedRelative,
 				ocrEnabled: Boolean(linkedTabla),
@@ -377,16 +402,57 @@ export async function GET(_request: Request, context: RouteContext) {
 			return folderNode;
 		};
 
+		const markFolderHasFile = (folderPath: string) => {
+			const normalizedFolderPath = normalizeFolderPath(folderPath);
+			if (!normalizedFolderPath && requestedPath) return;
+			const folderNode = ensureFolderPath(normalizedFolderPath);
+			folderNode.hasFiles = true;
+		};
+
+		const markKnownFilePath = (storagePath: string) => {
+			if (!storagePath.startsWith(`${obraId}/`)) return;
+			const relativePath = storagePath.slice(`${obraId}/`.length);
+			const segments = relativePath.split("/").filter(Boolean);
+			if (segments.length <= 1) return;
+			const fileParentPath = segments.slice(0, -1).join("/");
+			if (fileParentPath === requestedPath) return;
+			if (requestedPath && !fileParentPath.startsWith(`${requestedPath}/`)) return;
+			const remainder = requestedPath
+				? fileParentPath.slice(requestedPath.length + 1)
+				: fileParentPath;
+			const nextSegment = remainder.split("/").filter(Boolean)[0];
+			if (!nextSegment) return;
+			markFolderHasFile(requestedPath ? `${requestedPath}/${nextSegment}` : nextSegment);
+		};
+
+		for (const storagePath of knownDocumentPaths) {
+			markKnownFilePath(storagePath);
+		}
+
+		const addKnownFolderForCurrentLevel = (knownFolderPath: string) => {
+			const folderPath = normalizeFolderPath(knownFolderPath);
+			if (!folderPath || isDeletedPath(`${obraId}/${folderPath}`)) return;
+			if (folderPath === requestedPath) {
+				ensureFolderPath(folderPath);
+				return;
+			}
+			if (requestedPath && !folderPath.startsWith(`${requestedPath}/`)) return;
+			const remainder = requestedPath
+				? folderPath.slice(requestedPath.length + 1)
+				: folderPath;
+			const nextSegment = remainder.split("/").filter(Boolean)[0];
+			if (!nextSegment) return;
+			ensureFolderPath(requestedPath ? `${requestedPath}/${nextSegment}` : nextSegment);
+		};
+
 		for (const folder of defaultFolders ?? []) {
 			const folderPath = typeof folder.path === "string" ? normalizeFolderPath(folder.path) : "";
-			if (!folderPath || isDeletedPath(`${obraId}/${folderPath}`)) continue;
-			ensureFolderPath(folderPath);
+			addKnownFolderForCurrentLevel(folderPath);
 		}
 
 		for (const link of ocrLinks) {
 			const folderPath = normalizeFolderPath(link.folderName);
-			if (!folderPath || isDeletedPath(`${obraId}/${folderPath}`)) continue;
-			ensureFolderPath(folderPath);
+			addKnownFolderForCurrentLevel(folderPath);
 		}
 
 		const uploadTrackingByPath = new Map<
@@ -396,11 +462,14 @@ export async function GET(_request: Request, context: RouteContext) {
 		const { data: trackedUploads, error: trackedUploadsError } = await supabase
 			.from("obra_document_uploads")
 			.select("storage_path, uploaded_by, uploaded_at")
-			.eq("obra_id", obraId);
+			.eq("obra_id", obraId)
+			.like("storage_path", scopedStorageLikePrefix);
 		if (trackedUploadsError) throw trackedUploadsError;
 		for (const upload of trackedUploads ?? []) {
 			const storagePath = typeof upload.storage_path === "string" ? upload.storage_path : null;
 			if (!storagePath || isDeletedPath(storagePath)) continue;
+			markKnownFilePath(storagePath);
+			if (!isInRequestedFolder(storagePath)) continue;
 			uploadTrackingByPath.set(storagePath, {
 				uploadedBy: typeof upload.uploaded_by === "string" ? upload.uploaded_by : null,
 				uploadedAt: typeof upload.uploaded_at === "string" ? upload.uploaded_at : null,
@@ -412,6 +481,7 @@ export async function GET(_request: Request, context: RouteContext) {
 			.from("generated_documents")
 			.select("storage_path, status, updated_at")
 			.eq("obra_id", obraId)
+			.like("storage_path", scopedStorageLikePrefix)
 			.order("updated_at", { ascending: false });
 		if (generatedDocumentsError) throw generatedDocumentsError;
 		for (const generatedDocument of generatedDocuments ?? []) {
@@ -423,9 +493,13 @@ export async function GET(_request: Request, context: RouteContext) {
 				typeof generatedDocument.status === "string"
 					? generatedDocument.status
 					: null;
-			if (!storagePath || !status || generatedDocumentStatusByPath.has(storagePath)) {
+			if (!storagePath || !status || !isInRequestedFolder(storagePath) || generatedDocumentStatusByPath.has(storagePath)) {
+				if (storagePath && !isDeletedPath(storagePath)) {
+					markKnownFilePath(storagePath);
+				}
 				continue;
 			}
+			markKnownFilePath(storagePath);
 			generatedDocumentStatusByPath.set(storagePath, status);
 		}
 
@@ -433,12 +507,15 @@ export async function GET(_request: Request, context: RouteContext) {
 		const { data: apsModels, error: apsModelsError } = await supabase
 			.from("aps_models")
 			.select("file_path, aps_urn")
-			.eq("obra_id", obraId);
+			.eq("obra_id", obraId)
+			.like("file_path", scopedStorageLikePrefix);
 		if (apsModelsError) throw apsModelsError;
 		for (const model of apsModels ?? []) {
 			const filePath = typeof model.file_path === "string" ? model.file_path : null;
 			const apsUrn = typeof model.aps_urn === "string" ? model.aps_urn : null;
 			if (!filePath || !apsUrn || isDeletedPath(filePath)) continue;
+			markKnownFilePath(filePath);
+			if (!isInRequestedFolder(filePath)) continue;
 			apsUrnByPath.set(filePath, apsUrn);
 		}
 
@@ -494,16 +571,16 @@ export async function GET(_request: Request, context: RouteContext) {
 				generatedDocumentStatus: generatedDocumentStatusByPath.get(storagePath) ?? null,
 			};
 			parentNode.children?.push(fileItem);
+			parentNode.hasFiles = true;
+			parentNode.fileCount = (parentNode.fileCount ?? 0) + 1;
 			fileNodeByPath.set(storagePath, fileItem);
 			return fileItem;
 		};
 
-		const queue: string[] = [""];
-		const seen = new Set<string>([""]);
-		while (queue.length > 0) {
-			const currentRelative = queue.shift() ?? "";
+		const listFolderContents = async (currentRelative: string) => {
 			const storagePrefix = currentRelative ? `${obraId}/${currentRelative}` : obraId;
 			const parentNode = ensureFolderPath(currentRelative);
+			parentNode.childrenLoaded = true;
 			const { data: folderContents, error: folderError } = await supabase.storage
 				.from(DOCUMENTS_BUCKET)
 				.list(storagePrefix, {
@@ -512,7 +589,7 @@ export async function GET(_request: Request, context: RouteContext) {
 				});
 			if (folderError) {
 				warnings.push(`${storagePrefix}: ${folderError.message ?? "storage_list_failed"}`);
-				continue;
+				return;
 			}
 
 			for (const item of folderContents ?? []) {
@@ -526,10 +603,6 @@ export async function GET(_request: Request, context: RouteContext) {
 					const childStoragePath = normalizedChild ? `${obraId}/${normalizedChild}` : obraId;
 					if (isDeletedPath(childStoragePath)) continue;
 					ensureFolderPath(normalizedChild);
-					if (!seen.has(normalizedChild)) {
-						seen.add(normalizedChild);
-						queue.push(normalizedChild);
-					}
 					continue;
 				}
 
@@ -555,7 +628,42 @@ export async function GET(_request: Request, context: RouteContext) {
 					fileNode.uploadedAt = fallbackUploadedAt;
 				}
 			}
-		}
+		};
+
+		await listFolderContents(requestedPath);
+
+		const markDirectChildFolderContents = async (parentNode: FileSystemItem) => {
+			const childFolders = (parentNode.children ?? []).filter(
+				(child) => child.type === "folder" && !child.hasFiles,
+			);
+			await Promise.all(
+				childFolders.map(async (child) => {
+					const childRelative = normalizeFolderPath(
+						child.relativePath ??
+							(child.storagePath?.startsWith(`${obraId}/`)
+								? child.storagePath.slice(`${obraId}/`.length)
+								: ""),
+					);
+					if (!childRelative) return;
+					const storagePrefix = `${obraId}/${childRelative}`;
+					const { data: childContents, error: childError } = await supabase.storage
+						.from(DOCUMENTS_BUCKET)
+						.list(storagePrefix, {
+							limit: 2,
+							sortBy: { column: "name", order: "asc" },
+						});
+					if (childError) {
+						warnings.push(`${storagePrefix}: ${childError.message ?? "storage_list_failed"}`);
+						return;
+					}
+					child.hasFiles = (childContents ?? []).some(
+						(item) => item.name !== ".emptyFolderPlaceholder" && item.name !== ".keep",
+					);
+				}),
+			);
+		};
+
+		await markDirectChildFolderContents(ensureFolderPath(requestedPath));
 
 		const fallbackPaths = new Set<string>([
 			...docsByPath.keys(),
@@ -574,6 +682,7 @@ export async function GET(_request: Request, context: RouteContext) {
 			if (segments.length === 0) continue;
 			const fileName = segments.pop() ?? relativePath;
 			const folderPath = segments.join("/");
+			if (folderPath !== requestedPath) continue;
 			const parentNode = ensureFolderPath(folderPath);
 			buildFileNode(storagePath, parentNode, { fileName });
 		}
@@ -589,6 +698,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 		return NextResponse.json({
 			tree: root,
+			folder: ensureFolderPath(requestedPath),
 			links: ocrLinks,
 			warnings,
 		});
