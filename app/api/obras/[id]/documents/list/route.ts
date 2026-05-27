@@ -637,61 +637,39 @@ export async function GET(_request: Request, context: RouteContext) {
 			}
 		};
 
-		await listFolderContents(requestedPath);
-
-		const markDirectChildFolderContents = async (parentNode: FileSystemItem) => {
-			const childFolders = (parentNode.children ?? []).filter(
-				(child) => child.type === "folder" && !child.hasFiles,
-			);
-			await Promise.all(
-				childFolders.map(async (child) => {
-					const childRelative = normalizeFolderPath(
-						child.relativePath ??
-							(child.storagePath?.startsWith(`${obraId}/`)
-								? child.storagePath.slice(`${obraId}/`.length)
-								: ""),
-					);
-					if (!childRelative) return;
-					const storagePrefix = `${obraId}/${childRelative}`;
-					const { data: childContents, error: childError } = await supabase.storage
-						.from(DOCUMENTS_BUCKET)
-						.list(storagePrefix, {
-							limit: 2,
-							sortBy: { column: "name", order: "asc" },
-						});
-					if (childError) {
-						warnings.push(`${storagePrefix}: ${childError.message ?? "storage_list_failed"}`);
-						return;
-					}
-					child.hasFiles = (childContents ?? []).some(
-						(item) => item.name !== ".emptyFolderPlaceholder" && item.name !== ".keep",
-					);
-				}),
-			);
-		};
-
-		await markDirectChildFolderContents(ensureFolderPath(requestedPath));
-
 		const fallbackPaths = new Set<string>([
 			...docsByPath.keys(),
 			...uploadTrackingByPath.keys(),
 			...generatedDocumentStatusByPath.keys(),
 			...apsUrnByPath.keys(),
 		]);
-		for (const storagePath of fallbackPaths) {
-			if (!storagePath || !storagePath.startsWith(`${obraId}/`) || isDeletedPath(storagePath)) {
-				continue;
+		const buildFallbackFiles = () => {
+			for (const storagePath of fallbackPaths) {
+				if (!storagePath || !storagePath.startsWith(`${obraId}/`) || isDeletedPath(storagePath)) {
+					continue;
+				}
+				if (fileNodeByPath.has(storagePath)) continue;
+				const relativePath = storagePath.slice(`${obraId}/`.length);
+				if (!relativePath) continue;
+				const segments = relativePath.split("/").filter(Boolean);
+				if (segments.length === 0) continue;
+				const fileName = segments.pop() ?? relativePath;
+				const folderPath = segments.join("/");
+				if (folderPath !== requestedPath) continue;
+				const parentNode = ensureFolderPath(folderPath);
+				buildFileNode(storagePath, parentNode, { fileName });
 			}
-			if (fileNodeByPath.has(storagePath)) continue;
-			const relativePath = storagePath.slice(`${obraId}/`.length);
-			if (!relativePath) continue;
-			const segments = relativePath.split("/").filter(Boolean);
-			if (segments.length === 0) continue;
-			const fileName = segments.pop() ?? relativePath;
-			const folderPath = segments.join("/");
-			if (folderPath !== requestedPath) continue;
-			const parentNode = ensureFolderPath(folderPath);
-			buildFileNode(storagePath, parentNode, { fileName });
+		};
+
+		if (requestedPath) {
+			buildFallbackFiles();
+			if (fallbackPaths.size === 0) {
+				await listFolderContents(requestedPath);
+			} else {
+				ensureFolderPath(requestedPath).childrenLoaded = true;
+			}
+		} else {
+			root.childrenLoaded = true;
 		}
 
 		const sortTree = (node: FileSystemItem) => {
