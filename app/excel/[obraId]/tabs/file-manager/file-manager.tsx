@@ -220,7 +220,7 @@ type PdfDocumentProxy = {
 
 type PdfJsModule = {
   GlobalWorkerOptions?: { workerSrc: string };
-  getDocument(params: { data: Uint8Array; disableWorker: boolean }): { promise: Promise<PdfDocumentProxy> };
+  getDocument(params: { data: Uint8Array; disableWorker?: boolean }): { promise: Promise<PdfDocumentProxy> };
 };
 
 let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
@@ -237,6 +237,77 @@ function loadPdfJs() {
     return pdfjs;
   });
   return pdfJsModulePromise;
+}
+
+const PDF_THUMBNAIL_MAX_SIZE = 220;
+const PDF_THUMBNAIL_IDLE_TIMEOUT_MS = 1_500;
+const PDF_THUMBNAIL_FALLBACK_DELAY_MS = 250;
+let activePdfThumbnailTasks = 0;
+const pendingPdfThumbnailTasks: Array<() => void> = [];
+
+function enqueuePdfThumbnailTask<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      activePdfThumbnailTasks += 1;
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          activePdfThumbnailTasks = Math.max(0, activePdfThumbnailTasks - 1);
+          const nextTask = pendingPdfThumbnailTasks.shift();
+          if (nextTask) nextTask();
+        });
+    };
+
+    if (activePdfThumbnailTasks < 1) {
+      run();
+    } else {
+      pendingPdfThumbnailTasks.push(run);
+    }
+  });
+}
+
+function scheduleIdleThumbnailTask(callback: () => void) {
+  if (typeof window === 'undefined') return () => {};
+  const idleWindow = window as typeof window & {
+    requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(callback, { timeout: PDF_THUMBNAIL_IDLE_TIMEOUT_MS });
+    return () => idleWindow.cancelIdleCallback?.(handle);
+  }
+
+  const timeout = window.setTimeout(callback, PDF_THUMBNAIL_FALLBACK_DELAY_MS);
+  return () => window.clearTimeout(timeout);
+}
+
+async function renderPdfFirstPageThumbnail(pdfBytes: Uint8Array) {
+  const pdfjs = await loadPdfJs();
+  const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes) });
+  const pdf = await loadingTask.promise;
+
+  try {
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1 });
+    const scale = Math.min(
+      PDF_THUMBNAIL_MAX_SIZE / viewport.width,
+      PDF_THUMBNAIL_MAX_SIZE / viewport.height,
+      1
+    );
+    const scaledViewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    canvas.width = Math.max(1, Math.floor(scaledViewport.width));
+    canvas.height = Math.max(1, Math.floor(scaledViewport.height));
+    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+    return canvas.toDataURL('image/png');
+  } finally {
+    if (typeof pdf.destroy === 'function') {
+      await pdf.destroy();
+    }
+  }
 }
 
 const DATA_TYPE_LABELS: Record<TablaColumnDataType, string> = {
@@ -765,6 +836,63 @@ function scheduleThumbnailRetry(callback: () => void) {
   return setTimeout(callback, 800);
 }
 
+function sortFileManagerChildren(children: FileSystemItem[]) {
+  return [...children].sort((left, right) => {
+    if (left.type !== right.type) return left.type === 'folder' ? -1 : 1;
+    return left.name.localeCompare(right.name, 'es', { sensitivity: 'base' });
+  });
+}
+
+function upsertFilesIntoFolderTree(
+  tree: FileSystemItem,
+  folderId: string,
+  files: FileSystemItem[],
+  markFolderLoaded: boolean
+): FileSystemItem {
+  if (files.length === 0) return tree;
+
+  const upsertIntoFolder = (folder: FileSystemItem) => {
+    const currentChildren = folder.children ?? [];
+    const incomingPaths = new Set(files.map((file) => file.storagePath).filter(Boolean));
+    const incomingIds = new Set(files.map((file) => file.id));
+    const preservedChildren = currentChildren.filter((child) => {
+      if (child.type !== 'file') return true;
+      if (incomingIds.has(child.id)) return false;
+      return !child.storagePath || !incomingPaths.has(child.storagePath);
+    });
+    const nextChildren = sortFileManagerChildren([...preservedChildren, ...files]);
+    const fileCount = nextChildren.filter((child) => child.type === 'file').length;
+    return {
+      ...folder,
+      children: nextChildren,
+      childrenLoaded: markFolderLoaded || folder.childrenLoaded,
+      hasFiles: fileCount > 0 || Boolean(folder.hasFiles),
+      fileCount,
+    };
+  };
+
+  if (tree.id === folderId) {
+    return upsertIntoFolder(tree);
+  }
+
+  const walk = (node: FileSystemItem): FileSystemItem => {
+    if (node.type !== 'folder' || !node.children) return node;
+    let changed = false;
+    const nextChildren = node.children.map((child) => {
+      if (child.id === folderId && child.type === 'folder') {
+        changed = true;
+        return upsertIntoFolder(child);
+      }
+      const nextChild = walk(child);
+      if (nextChild !== child) changed = true;
+      return nextChild;
+    });
+    return changed ? { ...node, children: nextChildren } : node;
+  };
+
+  return walk(tree);
+}
+
 function useNearViewport<T extends HTMLElement>(rootMargin = '360px') {
   const ref = useRef<T | null>(null);
   const [isNearViewport, setIsNearViewport] = useState(false);
@@ -808,7 +936,7 @@ const FileThumbnail = memo(function FileThumbnail({
     Boolean(item.mimetype?.startsWith('image/')) ||
     IMAGE_FILE_EXTENSIONS.has(fileExt);
   const isPdfFile = item.mimetype === 'application/pdf' || fileExt === 'pdf';
-  const isPreviewableFile = isImageFile;
+  const isPreviewableFile = isImageFile || isPdfFile;
   // Check blob cache first, then signed URL cache
   const initialUrl = storagePath
     ? (isPdfFile
@@ -834,6 +962,16 @@ const FileThumbnail = memo(function FileThumbnail({
       return;
     }
 
+    if (isPdfFile) {
+      const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
+      if (cachedPdfThumb) {
+        queueMicrotask(() => {
+          setThumbState({ storagePath, url: cachedPdfThumb, retryCount: 0 });
+        });
+        return;
+      }
+    }
+
     // Check blob cache first (instant, no network)
     const cachedBlob = getCachedBlobUrl(storagePath);
     if (cachedBlob && isImageFile) {
@@ -853,53 +991,94 @@ const FileThumbnail = memo(function FileThumbnail({
     let isMounted = true;
     const retryTimeouts: ReturnType<typeof setTimeout>[] = [];
 
-    (async () => {
-      const getSignedUrl = async () => {
-        let signedUrl: string | null = null;
-        try {
-          signedUrl = await getDocumentSignedUrl(storagePath, 3600);
-        } catch (error) {
-          console.warn('Document thumbnail access failed:', error);
-          return null;
-        }
-        if (!isMounted || !signedUrl) {
-          // Fresh uploads can take a short moment before signed URL is available.
-          if (isMounted && retryCount < 5) {
-            const retryTimeout = scheduleThumbnailRetry(() => {
-              if (isMounted) {
-                setThumbState((prev) => ({
-                  storagePath,
-                  url: prev.storagePath === storagePath ? prev.url : null,
-                  retryCount: (prev.storagePath === storagePath ? prev.retryCount : 0) + 1,
-                }));
-              }
-            });
-            retryTimeouts.push(retryTimeout);
+    const cancelIdleTask = scheduleIdleThumbnailTask(() => {
+      void (async () => {
+        const getSignedUrl = async () => {
+          let signedUrl: string | null = null;
+          try {
+            signedUrl = await getDocumentSignedUrl(storagePath, 3600);
+          } catch (error) {
+            console.warn('Document thumbnail access failed:', error);
+            return null;
           }
-          return null;
-        }
-        return signedUrl;
-      };
+          if (!isMounted || !signedUrl) {
+            // Fresh uploads can take a short moment before signed URL is available.
+            if (isMounted && retryCount < 5) {
+              const retryTimeout = scheduleThumbnailRetry(() => {
+                if (isMounted) {
+                  setThumbState((prev) => ({
+                    storagePath,
+                    url: prev.storagePath === storagePath ? prev.url : null,
+                    retryCount: (prev.storagePath === storagePath ? prev.retryCount : 0) + 1,
+                  }));
+                }
+              });
+              retryTimeouts.push(retryTimeout);
+            }
+            return null;
+          }
+          return signedUrl;
+        };
 
-      const signedUrl = await getSignedUrl();
-      if (!isMounted || !signedUrl) return;
-      // Set signed URL first for immediate display
-      setThumbState({ storagePath, url: signedUrl, retryCount: 0 });
-      // Then preload to blob cache
-      const blobUrl = await preloadAndCacheFile(signedUrl, storagePath);
-      if (isMounted) {
-        setThumbState({ storagePath, url: blobUrl, retryCount: 0 });
-      }
-    })();
+        const signedUrl = await getSignedUrl();
+        if (!isMounted || !signedUrl) return;
+
+        if (isPdfFile) {
+          try {
+            const dataUrl = await enqueuePdfThumbnailTask(async () => {
+              const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
+              if (cachedPdfThumb) return cachedPdfThumb;
+
+              let pdfBytes: Uint8Array | null = null;
+              try {
+                const response = await fetch(signedUrl, { cache: 'force-cache' });
+                if (response.ok) {
+                  pdfBytes = new Uint8Array(await response.arrayBuffer());
+                }
+              } catch {
+                // Fall back to direct storage download below.
+              }
+
+              if (!pdfBytes) {
+                pdfBytes = await downloadStoredDocumentBytes(storagePath).catch(() => null);
+              }
+              if (!pdfBytes) return null;
+
+              const thumbnail = await renderPdfFirstPageThumbnail(pdfBytes);
+              if (thumbnail) {
+                pdfThumbnailCache.set(storagePath, thumbnail);
+              }
+              return thumbnail;
+            });
+            if (isMounted && dataUrl) {
+              setThumbState({ storagePath, url: dataUrl, retryCount: 0 });
+            }
+          } catch (error) {
+            console.warn('PDF thumbnail generation failed:', error);
+          }
+          return;
+        }
+
+        // Set signed URL first for immediate display
+        setThumbState({ storagePath, url: signedUrl, retryCount: 0 });
+        // Then preload to blob cache
+        const blobUrl = await preloadAndCacheFile(signedUrl, storagePath);
+        if (isMounted) {
+          setThumbState({ storagePath, url: blobUrl, retryCount: 0 });
+        }
+      })();
+    });
 
     return () => {
       isMounted = false;
+      cancelIdleTask();
       retryTimeouts.forEach(clearTimeout);
     };
   }, [
     downloadStoredDocumentBytes,
     getDocumentSignedUrl,
     isImageFile,
+    isPdfFile,
     isPreviewableFile,
     retryCount,
     shouldLoadThumbnail,
@@ -1114,6 +1293,10 @@ function FileManagerContent({
   const { fileTree, selectedFolder, selectedDocument, sheetDocument, expandedFolderIds, isLoading: isStoreLoading, lastFetchedAt } = documentsState;
   const expandedFolders = expandedFolderIds;
   const { setFileTree, setSelectedFolder, setSelectedDocument, setSheetDocument, setExpandedFolderIds, resetDocumentsStore } = documentsActions;
+  const fileTreeRef = useRef<FileSystemItem | null>(fileTree);
+  useEffect(() => {
+    fileTreeRef.current = fileTree;
+  }, [fileTree]);
   const updateExpandedFolders = useCallback(
     (updater: (prev: Set<string>) => Set<string>) => {
       const prev = new Set(expandedFolderIds);
@@ -2250,6 +2433,32 @@ function FileManagerContent({
       });
     }
   }, [expandedFolderIds, fetchDocumentsTreePayload, fileTree, getExpandedFoldersForTree, obraId, rebuildParentMap, replaceFolderInTree, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedFolder]);
+
+  const addUploadedFilesToTree = useCallback((folder: FileSystemItem | null | undefined, files: FileSystemItem[]) => {
+    if (!folder || folder.type !== 'folder' || files.length === 0) return;
+    const currentTree = fileTreeRef.current;
+    if (!currentTree) return;
+    const nextTree = upsertFilesIntoFolderTree(
+      currentTree,
+      folder.id,
+      files,
+      selectedFolder?.id === folder.id || folder.childrenLoaded === true
+    );
+    if (nextTree === currentTree) return;
+
+    fileTreeRef.current = nextTree;
+    rebuildParentMap(nextTree);
+    setFileTree(nextTree);
+    setCachedFileTree(obraId, nextTree);
+
+    const selectedFolderId = selectedFolder?.id;
+    if (selectedFolderId) {
+      const nextSelectedFolder = findFolderInTreeById(nextTree, selectedFolderId);
+      if (nextSelectedFolder) {
+        setSelectedFolder(nextSelectedFolder);
+      }
+    }
+  }, [findFolderInTreeById, obraId, rebuildParentMap, selectedFolder?.id, setFileTree, setSelectedFolder]);
 
   const handleFolderClick = useCallback((folder: FileSystemItem, options: SelectionChangeOptions = {}) => {
     setSelectedFolder(folder);
@@ -3602,6 +3811,17 @@ function FileManagerContent({
           const localBlobUrl = URL.createObjectURL(file);
           setCachedBlobUrl(filePath, localBlobUrl);
         }
+        addUploadedFilesToTree(folderForUpload ?? fileTree ?? null, [{
+          id: `file-${filePath}`,
+          name: storageFileName,
+          type: 'file',
+          storagePath: filePath,
+          size: file.size,
+          mimetype: file.type || (ext === 'pdf' ? 'application/pdf' : undefined),
+          uploadedAt: new Date().toISOString(),
+          uploadedByLabel: 'Subido recien',
+          ocrDocumentStatus: isOcrFolder ? 'pending' : undefined,
+        }]);
 
         if (is3DModelFile(file.name)) {
           try {
@@ -3791,7 +4011,10 @@ function FileManagerContent({
 
       toast.success(`${filesArray.length} archivo(s) subido(s) correctamente`);
 
-      await refreshFileTreeDerivedData();
+      if (isOcrFolder) {
+        void refreshOcrFolderLinks({ skipCache: true });
+        void queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'general-reports'] });
+      }
       void fetchUsageInfo();
       if (completedGuidedFolderKeys.size > 0) {
         setGuidedImportedFolderKeys((current) => {
@@ -3811,7 +4034,7 @@ function FileManagerContent({
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
     }
-  }, [buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, fetchUsageInfo, getAutoSelectedSpreadsheetTablaIds, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, sanitizeStorageFileName, selectedFolder]);
+  }, [addUploadedFilesToTree, buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, fetchUsageInfo, getAutoSelectedSpreadsheetTablaIds, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, queryClient, refreshOcrFolderLinks, sanitizeStorageFileName, selectedFolder]);
 
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (containsFolderMove(event.dataTransfer)) return;
@@ -8340,27 +8563,10 @@ const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
         if (!isMounted || !pdfBytes) return;
 
         try {
-          const pdfjs = await loadPdfJs();
-          const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes), disableWorker: true });
-          const pdf = await loadingTask.promise;
-          const page = await pdf.getPage(1);
-          const viewport = page.getViewport({ scale: 1 });
-          const maxWidth = 220;
-          const maxHeight = 220;
-          const scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height, 1);
-          const scaledViewport = page.getViewport({ scale });
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          canvas.width = Math.max(1, Math.floor(scaledViewport.width));
-          canvas.height = Math.max(1, Math.floor(scaledViewport.height));
-          await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-          const dataUrl = canvas.toDataURL('image/png');
+          const dataUrl = await enqueuePdfThumbnailTask(() => renderPdfFirstPageThumbnail(pdfBytes));
+          if (!dataUrl) return;
           pdfThumbnailCache.set(storagePath, dataUrl);
           applyPreview(dataUrl);
-          if (typeof pdf.destroy === 'function') {
-            pdf.destroy();
-          }
         } catch (error) {
           console.error('OCR source PDF preview generation failed:', error);
           applyPreview(null);

@@ -17,7 +17,6 @@ import {
   assertWorkInTenant,
   canEditGeneratedDocument,
   insertGeneratedDocumentEvent,
-  loadDocumentGenerationPermissions,
   syncGeneratedDocumentExtractionRows,
   validateGenerationTarget,
 } from "@/lib/document-generation-server";
@@ -190,11 +189,6 @@ export async function POST(request: NextRequest) {
       tenantId,
       userId: user.id,
     };
-    const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canCreate) {
-      return NextResponse.json({ error: "Sin permisos para generar documentos." }, { status: 403 });
-    }
-
     const body = (await request.json().catch(() => ({}))) as GenerateRequestBody;
     if (body.draftId && body.generatedDocumentId) {
       return NextResponse.json(
@@ -259,7 +253,7 @@ export async function POST(request: NextRequest) {
       }
       if (
         !canEditGeneratedDocument({
-          canCreate: permissions.canCreate,
+          canCreate: true,
           userId: user.id,
           generatedBy:
             typeof existingGeneratedDocument.generated_by === "string"

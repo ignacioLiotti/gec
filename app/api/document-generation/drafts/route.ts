@@ -100,9 +100,6 @@ export async function GET(request: NextRequest) {
       userId: user.id,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canCreate && !permissions.canViewAllDrafts) {
-      return NextResponse.json({ error: "Sin permisos para ver borradores." }, { status: 403 });
-    }
 
     const draftId = request.nextUrl.searchParams.get("id")?.trim();
     const workId = request.nextUrl.searchParams.get("workId")?.trim();
@@ -176,7 +173,7 @@ export async function GET(request: NextRequest) {
         updatedAt: String(row.updated_at ?? ""),
         createdBy: actor,
         rejection: rejectionByDraftId.get(String(row.id)) ?? null,
-        canEdit: permissions.canCreate && String(row.created_by ?? "") === user.id,
+        canEdit: String(row.created_by ?? "") === user.id,
       };
     });
 
@@ -223,10 +220,6 @@ export async function POST(request: NextRequest) {
       tenantId,
       userId: user.id,
     };
-    const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canCreate) {
-      return NextResponse.json({ error: "Sin permisos para crear o editar borradores." }, { status: 403 });
-    }
 
     const body = (await request.json().catch(() => ({}))) as DraftRequestBody;
     const workId = typeof body.workId === "string" ? body.workId : "";

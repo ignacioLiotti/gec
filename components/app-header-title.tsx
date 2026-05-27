@@ -26,11 +26,11 @@ export function AppHeaderTitle({ documentPermissions }: Props) {
 
   const permissions = documentPermissions;
   const items: NavItem[] = [
-    { href: "/document-generation", label: "Generar", show: Boolean(permissions?.canCreate) },
+    { href: "/document-generation", label: "Generar", show: true },
     {
       href: "/document-generation/drafts",
       label: "Historial",
-      show: Boolean(permissions?.canCreate || permissions?.canViewAllDrafts),
+      show: true,
     },
     { href: "/document-generation/review", label: "Revision", show: Boolean(permissions?.canReview) },
     {

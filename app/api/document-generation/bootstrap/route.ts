@@ -9,7 +9,6 @@ import {
 } from "@/lib/document-generation";
 import {
   assertWorkInTenant,
-  loadDocumentGenerationPermissions,
   loadFolderGenerationConfigs,
   loadTenantUserOptions,
   loadTemplates,
@@ -34,11 +33,6 @@ export async function GET(request: NextRequest) {
       tenantId,
       userId: user?.id ?? null,
     };
-    const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canCreate) {
-      return NextResponse.json({ error: "Sin permisos para crear documentos." }, { status: 403 });
-    }
-
     const workId = request.nextUrl.searchParams.get("workId");
     const folderPath = normalizeFolderGenerationPath(request.nextUrl.searchParams.get("folderPath"));
     const documentType = normalizeDocumentType(request.nextUrl.searchParams.get("documentType"));

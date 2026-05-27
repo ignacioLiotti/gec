@@ -171,9 +171,6 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       userId: user.id,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canReview && !permissions.canCreate) {
-      return NextResponse.json({ error: "Sin permisos para ver documentos generados." }, { status: 403 });
-    }
 
     const { data: document, error } = await supabase
       .from("generated_documents")
@@ -187,7 +184,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Documento generado no encontrado" }, { status: 404 });
     }
     const canEdit = canEditGeneratedDocument({
-      canCreate: permissions.canCreate,
+      canCreate: true,
       userId: user.id,
       generatedBy: typeof document.generated_by === "string" ? document.generated_by : null,
       status: typeof document.status === "string" ? document.status : null,

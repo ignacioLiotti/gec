@@ -97,23 +97,26 @@ const navItems: NavItem[] = [
 		href: "/notifications",
 		icon: Bell,
 	},
+];
+
+const documentNavItems: NavItem[] = [
 	{
 		title: "Generar Documentos",
 		href: "/document-generation",
 		icon: FileText,
 	},
 	{
-		title: "Historial Doc.",
+		title: "Historial",
 		href: "/document-generation/drafts",
 		icon: FileText,
 	},
 	{
-		title: "Revision Doc.",
+		title: "Revision",
 		href: "/document-generation/review",
 		icon: FileText,
 	},
 	{
-		title: "Config. Doc.",
+		title: "Configuracion",
 		href: "/document-generation/config",
 		icon: FileText,
 	},
@@ -244,7 +247,7 @@ const SidebarPrefetchLink = React.forwardRef<
 	ref,
 ) {
 	const router = useRouter();
-  const { prefetch } = router;
+	const { prefetch } = router;
 	const { prefetchObra } = usePrefetchObra();
 	const prefetchedRef = React.useRef(false);
 	const hrefValue = typeof href === "string" ? href : href.toString();
@@ -450,6 +453,7 @@ export function AppSidebar({
 		activeMacroTableId &&
 		macroTables.some((table) => table.id === activeMacroTableId),
 	);
+	const isDocumentSectionActive = pathname?.startsWith("/document-generation") ?? false;
 
 	const canAccessRoute = React.useCallback(
 		(href: string): boolean => {
@@ -506,30 +510,40 @@ export function AppSidebar({
 			if (!href.startsWith("/document-generation")) return true;
 			if (demoMode) return false;
 			if (userRoles?.isAdmin || userRoles?.isSuperAdmin) return true;
-			if (!documentPermissions?.canSeeNavigation) return false;
 
 			switch (href) {
 				case "/document-generation":
-					return documentPermissions.canCreate;
 				case "/document-generation/drafts":
-					return (
-						documentPermissions.canCreate ||
-						documentPermissions.canViewAllDrafts
-					);
+					return Boolean(user);
 				case "/document-generation/review":
-					return documentPermissions.canReview;
+					return Boolean(documentPermissions?.canReview);
 				case "/document-generation/config":
-					return documentPermissions.canManageTemplates;
+					return Boolean(documentPermissions?.canManageTemplates);
 				default:
 					return false;
 			}
 		},
-		[demoMode, documentPermissions, userRoles],
+		[demoMode, documentPermissions, user, userRoles],
 	);
 
 	const filteredNavItems = React.useMemo(
 		() =>
 			navItems.filter(
+				(item) =>
+					canAccessRoute(item.href) &&
+					canAccessDocumentNav(item.href) &&
+					(!item.requiredPermissions?.length ||
+						userRoles?.isAdmin ||
+						userRoles?.isSuperAdmin ||
+						item.requiredPermissions.every((permissionKey) =>
+							permissionKeySet.has(permissionKey),
+						)),
+			),
+		[canAccessDocumentNav, canAccessRoute, permissionKeySet, userRoles],
+	);
+	const filteredDocumentItems = React.useMemo(
+		() =>
+			documentNavItems.filter(
 				(item) =>
 					canAccessRoute(item.href) &&
 					canAccessDocumentNav(item.href) &&
@@ -767,19 +781,19 @@ export function AppSidebar({
 																		pathname === "/macro" &&
 																		activeMacroTableId === table.id;
 																	return (
-<DropdownMenuItem key={table.id} asChild>
-																				<SidebarPrefetchLink
-																					href={tableHref}
-																					className={
-																						isTableActive ? "font-semibold" : undefined
-																					}
-																					navIcon={<Columns3 className="size-4" />}
-																				>
-																					<span className="truncate">
-																						{table.name}
-																					</span>
-																				</SidebarPrefetchLink>
-																			</DropdownMenuItem>
+																		<DropdownMenuItem key={table.id} asChild>
+																			<SidebarPrefetchLink
+																				href={tableHref}
+																				className={
+																					isTableActive ? "font-semibold" : undefined
+																				}
+																				navIcon={<Columns3 className="size-4" />}
+																			>
+																				<span className="truncate">
+																					{table.name}
+																				</span>
+																			</SidebarPrefetchLink>
+																		</DropdownMenuItem>
 																	);
 																})}
 															</DropdownMenuContent>
@@ -813,14 +827,14 @@ export function AppSidebar({
 																			activeMacroTableId === table.id;
 																		return (
 																			<SidebarMenuSubItem key={table.id}>
-<SidebarMenuSubButton
-																						asChild
-																						isActive={isTableActive}
-																					>
-																						<SidebarPrefetchLink href={tableHref} navIcon={<Columns3 className="size-4" />}>
-																							{table.name}
-																						</SidebarPrefetchLink>
-																					</SidebarMenuSubButton>
+																				<SidebarMenuSubButton
+																					asChild
+																					isActive={isTableActive}
+																				>
+																					<SidebarPrefetchLink href={tableHref} navIcon={<Columns3 className="size-4" />}>
+																						{table.name}
+																					</SidebarPrefetchLink>
+																				</SidebarMenuSubButton>
 																			</SidebarMenuSubItem>
 																		);
 																	})}
@@ -835,14 +849,94 @@ export function AppSidebar({
 													isActive={isActive}
 													tooltip={item.title}
 												>
-<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
-															<span>{item.title}</span>
-														</SidebarPrefetchLink>
-													</SidebarMenuButton>
-												</SidebarMenuItem>
-											</React.Fragment>
+													<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+														<span>{item.title}</span>
+													</SidebarPrefetchLink>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										</React.Fragment>
 									);
 								})}
+								{filteredDocumentItems.length > 0 &&
+									(state === "collapsed" ? (
+										<SidebarMenuItem>
+											<DropdownMenu>
+												<DropdownMenuTrigger asChild>
+													<SidebarMenuButton
+														asChild
+														isActive={isDocumentSectionActive}
+														tooltip="Documentos"
+													>
+														<button type="button">
+															<FileText className="size-4" />
+														</button>
+													</SidebarMenuButton>
+												</DropdownMenuTrigger>
+												<DropdownMenuContent
+													side="right"
+													align="start"
+													className="w-72"
+												>
+													<DropdownMenuLabel>Documentos</DropdownMenuLabel>
+													<DropdownMenuSeparator />
+													{filteredDocumentItems.map((item) => {
+														const isActive = pathname === item.href;
+														return (
+															<DropdownMenuItem key={item.href} asChild>
+																<SidebarPrefetchLink
+																	href={item.href}
+																	className={isActive ? "font-semibold" : undefined}
+																	navIcon={<item.icon className="size-4" />}
+																>
+																	<span className="truncate">{item.title}</span>
+																</SidebarPrefetchLink>
+															</DropdownMenuItem>
+														);
+													})}
+												</DropdownMenuContent>
+											</DropdownMenu>
+										</SidebarMenuItem>
+									) : (
+										<Collapsible
+											defaultOpen={isDocumentSectionActive}
+											className="group/collapsible"
+										>
+											<SidebarMenuItem>
+												<CollapsibleTrigger asChild>
+													<SidebarMenuButton
+														asChild
+														isActive={isDocumentSectionActive}
+														tooltip="Documentos"
+													>
+														<button type="button">
+															<FileText className="size-4" />
+															<span>Documentos</span>
+															<ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+														</button>
+													</SidebarMenuButton>
+												</CollapsibleTrigger>
+												<CollapsibleContent>
+													<SidebarMenuSub>
+														{filteredDocumentItems.map((item) => {
+															const isActive = pathname === item.href;
+															return (
+																<SidebarMenuSubItem key={item.href}>
+																	<SidebarMenuSubButton
+																		asChild
+																		isActive={isActive}
+																	>
+																		<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+																			{item.title}
+																		</SidebarPrefetchLink>
+																	</SidebarMenuSubButton>
+																</SidebarMenuSubItem>
+															);
+														})}
+													</SidebarMenuSub>
+												</CollapsibleContent>
+											</SidebarMenuItem>
+										</Collapsible>
+									))}
 							</SidebarMenu>
 						</SidebarGroupContent>
 					</SidebarGroup>
@@ -865,20 +959,20 @@ export function AppSidebar({
 													isActive={isActive}
 													tooltip={item.title}
 												>
-<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
-															<span>{item.title}</span>
-														</SidebarPrefetchLink>
-													</SidebarMenuButton>
-												</SidebarMenuItem>
-											);
-										})}
-									</SidebarMenu>
-								</SidebarGroupContent>
-							</SidebarGroup>
-						</>
-					)}
+													<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+														<span>{item.title}</span>
+													</SidebarPrefetchLink>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					</>
+				)}
 
-					{filteredIgnacioItems.length > 0 && (
+				{filteredIgnacioItems.length > 0 && (
 					<>
 						<Separator />
 						<SidebarGroup className="rounded-lg bg-purple-500/20 p-2">
@@ -895,19 +989,19 @@ export function AppSidebar({
 													isActive={isActive}
 													tooltip={item.title}
 												>
-<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
-															<span>{item.title}</span>
-														</SidebarPrefetchLink>
-													</SidebarMenuButton>
-												</SidebarMenuItem>
-											);
-										})}
-									</SidebarMenu>
-								</SidebarGroupContent>
-							</SidebarGroup>
-						</>
-					)}
-				</SidebarContent>
+													<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+														<span>{item.title}</span>
+													</SidebarPrefetchLink>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					</>
+				)}
+			</SidebarContent>
 
 			<SidebarFooter>
 				{user ? (

@@ -27,12 +27,12 @@ export function DocumentGenerationNav({
     {
       href: "/document-generation",
       label: "Generar",
-      show: Boolean(permissions?.canCreate),
+      show: true,
     },
     {
       href: "/document-generation/drafts",
       label: "Historial",
-      show: Boolean(permissions?.canCreate || permissions?.canViewAllDrafts),
+      show: true,
     },
     {
       href: "/document-generation/review",

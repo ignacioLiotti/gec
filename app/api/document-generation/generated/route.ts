@@ -49,9 +49,6 @@ export async function GET(request: NextRequest) {
       userId: user.id,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canReview && !permissions.canCreate && !permissions.canViewAllDrafts) {
-      return NextResponse.json({ error: "Sin permisos para ver documentos generados." }, { status: 403 });
-    }
 
     const workId = request.nextUrl.searchParams.get("workId")?.trim();
     const createdBy = request.nextUrl.searchParams.get("createdBy")?.trim();
@@ -110,7 +107,7 @@ export async function GET(request: NextRequest) {
         updatedAt: String(row.updated_at ?? ""),
         createdBy: actor,
         canEdit: canEditGeneratedDocument({
-          canCreate: permissions.canCreate,
+          canCreate: true,
           userId: user.id,
           generatedBy: typeof row.generated_by === "string" ? row.generated_by : null,
           status: typeof row.status === "string" ? row.status : null,

@@ -7,7 +7,6 @@ import {
   type TemplateSchema,
   type TemplateSelectOption,
 } from "@/lib/document-generation";
-import { loadDocumentGenerationPermissions } from "@/lib/document-generation-server";
 import { normalizeFieldKey } from "@/lib/tablas";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
@@ -45,16 +44,6 @@ export async function POST(request: NextRequest) {
     }
     if (!tenantId) {
       return NextResponse.json({ error: "No tenant" }, { status: 400 });
-    }
-
-    const accessContext = {
-      supabase: access.supabase,
-      tenantId,
-      userId: user?.id ?? null,
-    };
-    const permissions = await loadDocumentGenerationPermissions(accessContext);
-    if (!permissions.canCreate) {
-      return NextResponse.json({ error: "Sin permisos para actualizar opciones de documentos." }, { status: 403 });
     }
 
     const body = (await request.json().catch(() => ({}))) as {
