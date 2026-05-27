@@ -228,6 +228,7 @@ export async function GET(_request: Request, context: RouteContext) {
 		const scopedStorageLikePrefix = requestedPath
 			? `${obraId}/${requestedPath}/%`
 			: `${obraId}/%`;
+		const shouldLoadFileMetadata = requestedPath.length > 0;
 
 		const { data: defaultFolders, error: defaultFoldersError } = await supabase
 			.from("obra_default_folders")
@@ -258,7 +259,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 		const tablaIds = (tablas ?? []).map((tabla) => tabla.id as string);
 		const columnsByTabla = new Map<string, OcrColumn[]>();
-		if (tablaIds.length > 0) {
+		if (shouldLoadFileMetadata && tablaIds.length > 0) {
 			const { data: columns, error: columnsError } = await supabase
 				.from("obra_tabla_columns")
 				.select("id, tabla_id, field_key, label, data_type, position, required, config")
@@ -459,64 +460,70 @@ export async function GET(_request: Request, context: RouteContext) {
 			string,
 			{ uploadedBy: string | null; uploadedAt: string | null }
 		>();
-		const { data: trackedUploads, error: trackedUploadsError } = await supabase
-			.from("obra_document_uploads")
-			.select("storage_path, uploaded_by, uploaded_at")
-			.eq("obra_id", obraId)
-			.like("storage_path", scopedStorageLikePrefix);
-		if (trackedUploadsError) throw trackedUploadsError;
-		for (const upload of trackedUploads ?? []) {
-			const storagePath = typeof upload.storage_path === "string" ? upload.storage_path : null;
-			if (!storagePath || isDeletedPath(storagePath)) continue;
-			markKnownFilePath(storagePath);
-			if (!isInRequestedFolder(storagePath)) continue;
-			uploadTrackingByPath.set(storagePath, {
-				uploadedBy: typeof upload.uploaded_by === "string" ? upload.uploaded_by : null,
-				uploadedAt: typeof upload.uploaded_at === "string" ? upload.uploaded_at : null,
-			});
+		if (shouldLoadFileMetadata) {
+			const { data: trackedUploads, error: trackedUploadsError } = await supabase
+				.from("obra_document_uploads")
+				.select("storage_path, uploaded_by, uploaded_at")
+				.eq("obra_id", obraId)
+				.like("storage_path", scopedStorageLikePrefix);
+			if (trackedUploadsError) throw trackedUploadsError;
+			for (const upload of trackedUploads ?? []) {
+				const storagePath = typeof upload.storage_path === "string" ? upload.storage_path : null;
+				if (!storagePath || isDeletedPath(storagePath)) continue;
+				markKnownFilePath(storagePath);
+				if (!isInRequestedFolder(storagePath)) continue;
+				uploadTrackingByPath.set(storagePath, {
+					uploadedBy: typeof upload.uploaded_by === "string" ? upload.uploaded_by : null,
+					uploadedAt: typeof upload.uploaded_at === "string" ? upload.uploaded_at : null,
+				});
+			}
 		}
 
 		const generatedDocumentStatusByPath = new Map<string, string>();
-		const { data: generatedDocuments, error: generatedDocumentsError } = await supabase
-			.from("generated_documents")
-			.select("storage_path, status, updated_at")
-			.eq("obra_id", obraId)
-			.like("storage_path", scopedStorageLikePrefix)
-			.order("updated_at", { ascending: false });
-		if (generatedDocumentsError) throw generatedDocumentsError;
-		for (const generatedDocument of generatedDocuments ?? []) {
-			const storagePath =
-				typeof generatedDocument.storage_path === "string"
-					? generatedDocument.storage_path
-					: null;
-			const status =
-				typeof generatedDocument.status === "string"
-					? generatedDocument.status
-					: null;
-			if (!storagePath || !status || !isInRequestedFolder(storagePath) || generatedDocumentStatusByPath.has(storagePath)) {
-				if (storagePath && !isDeletedPath(storagePath)) {
-					markKnownFilePath(storagePath);
+		if (shouldLoadFileMetadata) {
+			const { data: generatedDocuments, error: generatedDocumentsError } = await supabase
+				.from("generated_documents")
+				.select("storage_path, status, updated_at")
+				.eq("obra_id", obraId)
+				.like("storage_path", scopedStorageLikePrefix)
+				.order("updated_at", { ascending: false });
+			if (generatedDocumentsError) throw generatedDocumentsError;
+			for (const generatedDocument of generatedDocuments ?? []) {
+				const storagePath =
+					typeof generatedDocument.storage_path === "string"
+						? generatedDocument.storage_path
+						: null;
+				const status =
+					typeof generatedDocument.status === "string"
+						? generatedDocument.status
+						: null;
+				if (!storagePath || !status || !isInRequestedFolder(storagePath) || generatedDocumentStatusByPath.has(storagePath)) {
+					if (storagePath && !isDeletedPath(storagePath)) {
+						markKnownFilePath(storagePath);
+					}
+					continue;
 				}
-				continue;
+				markKnownFilePath(storagePath);
+				generatedDocumentStatusByPath.set(storagePath, status);
 			}
-			markKnownFilePath(storagePath);
-			generatedDocumentStatusByPath.set(storagePath, status);
 		}
 
 		const apsUrnByPath = new Map<string, string>();
-		const { data: apsModels, error: apsModelsError } = await supabase
-			.from("aps_models")
-			.select("file_path, aps_urn")
-			.eq("obra_id", obraId)
-			.like("file_path", scopedStorageLikePrefix);
-		if (apsModelsError) throw apsModelsError;
-		for (const model of apsModels ?? []) {
-			const filePath = typeof model.file_path === "string" ? model.file_path : null;
-			const apsUrn = typeof model.aps_urn === "string" ? model.aps_urn : null;
-			if (!filePath || !apsUrn || isDeletedPath(filePath)) continue;
-			markKnownFilePath(filePath);
-			if (!isInRequestedFolder(filePath)) continue;
-			apsUrnByPath.set(filePath, apsUrn);
+		if (shouldLoadFileMetadata) {
+			const { data: apsModels, error: apsModelsError } = await supabase
+				.from("aps_models")
+				.select("file_path, aps_urn")
+				.eq("obra_id", obraId)
+				.like("file_path", scopedStorageLikePrefix);
+			if (apsModelsError) throw apsModelsError;
+			for (const model of apsModels ?? []) {
+				const filePath = typeof model.file_path === "string" ? model.file_path : null;
+				const apsUrn = typeof model.aps_urn === "string" ? model.aps_urn : null;
+				if (!filePath || !apsUrn || isDeletedPath(filePath)) continue;
+				markKnownFilePath(filePath);
+				if (!isInRequestedFolder(filePath)) continue;
+				apsUrnByPath.set(filePath, apsUrn);
+			}
 		}
 
 		const buildFileNode = (

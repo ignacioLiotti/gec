@@ -765,6 +765,35 @@ function scheduleThumbnailRetry(callback: () => void) {
   return setTimeout(callback, 800);
 }
 
+function useNearViewport<T extends HTMLElement>(rootMargin = '360px') {
+  const ref = useRef<T | null>(null);
+  const [isNearViewport, setIsNearViewport] = useState(false);
+
+  useEffect(() => {
+    if (isNearViewport) return;
+    const element = ref.current;
+    if (!element) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      const timeout = setTimeout(() => setIsNearViewport(true), 0);
+      return () => clearTimeout(timeout);
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setIsNearViewport(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isNearViewport, rootMargin]);
+
+  return [ref, isNearViewport] as const;
+}
+
 const FileThumbnail = memo(function FileThumbnail({
   item,
   getDocumentSignedUrl,
@@ -779,7 +808,7 @@ const FileThumbnail = memo(function FileThumbnail({
     Boolean(item.mimetype?.startsWith('image/')) ||
     IMAGE_FILE_EXTENSIONS.has(fileExt);
   const isPdfFile = item.mimetype === 'application/pdf' || fileExt === 'pdf';
-  const isPreviewableFile = isImageFile || isPdfFile;
+  const isPreviewableFile = isImageFile;
   // Check blob cache first, then signed URL cache
   const initialUrl = storagePath
     ? (isPdfFile
@@ -798,17 +827,11 @@ const FileThumbnail = memo(function FileThumbnail({
   const activeThumbState = thumbState.storagePath === (storagePath ?? null) ? thumbState : null;
   const thumbUrl = activeThumbState?.url ?? initialUrl;
   const retryCount = activeThumbState?.retryCount ?? 0;
+  const [thumbnailRef, shouldLoadThumbnail] = useNearViewport<HTMLDivElement>();
 
   useEffect(() => {
-    if (!storagePath || !isPreviewableFile) {
+    if (!storagePath || !isPreviewableFile || !shouldLoadThumbnail) {
       return;
-    }
-
-    if (isPdfFile) {
-      const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
-      if (cachedPdfThumb) {
-        return;
-      }
     }
 
     // Check blob cache first (instant, no network)
@@ -858,73 +881,6 @@ const FileThumbnail = memo(function FileThumbnail({
         return signedUrl;
       };
 
-      if (isPdfFile) {
-        try {
-          const sourceUrl = getCachedSignedUrl(storagePath) ?? (await getSignedUrl());
-          if (!isMounted || !sourceUrl) return;
-
-          let pdfBytes: Uint8Array | null = null;
-          try {
-            const response = await fetch(sourceUrl, { cache: 'no-store' });
-            if (response.ok) {
-              pdfBytes = new Uint8Array(await response.arrayBuffer());
-            }
-          } catch {
-            // Fallback below
-          }
-
-          if (!pdfBytes) {
-            pdfBytes = await downloadStoredDocumentBytes(storagePath).catch(() => null);
-          }
-
-          if (!pdfBytes) {
-            if (isMounted && retryCount < 5) {
-              const retryTimeout = scheduleThumbnailRetry(() => {
-                if (isMounted) {
-                  setThumbState((prev) => ({
-                    storagePath,
-                    url: prev.storagePath === storagePath ? prev.url : null,
-                    retryCount: (prev.storagePath === storagePath ? prev.retryCount : 0) + 1,
-                  }));
-                }
-              });
-              retryTimeouts.push(retryTimeout);
-            }
-            return;
-          }
-
-          const pdfjs = await loadPdfJs();
-          const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes), disableWorker: true });
-          const pdf = await loadingTask.promise;
-          const page = await pdf.getPage(1);
-          const viewport = page.getViewport({ scale: 1 });
-          const maxWidth = 120;
-          const maxHeight = 145;
-          const scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height, 1);
-          const scaledViewport = page.getViewport({ scale });
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          canvas.width = Math.max(1, Math.floor(scaledViewport.width));
-          canvas.height = Math.max(1, Math.floor(scaledViewport.height));
-          await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-          const dataUrl = canvas.toDataURL('image/png');
-          pdfThumbnailCache.set(storagePath, dataUrl);
-          if (isMounted) {
-            setThumbState({ storagePath, url: dataUrl, retryCount: 0 });
-          }
-          if (typeof pdf.destroy === 'function') {
-            pdf.destroy();
-          }
-        } catch (error) {
-          console.error('PDF thumbnail generation failed:', error);
-          if (isMounted) {
-            setThumbState({ storagePath, url: null, retryCount: 0 });
-          }
-        }
-        return;
-      }
-
       const signedUrl = await getSignedUrl();
       if (!isMounted || !signedUrl) return;
       // Set signed URL first for immediate display
@@ -944,20 +900,21 @@ const FileThumbnail = memo(function FileThumbnail({
     downloadStoredDocumentBytes,
     getDocumentSignedUrl,
     isImageFile,
-    isPdfFile,
     isPreviewableFile,
     retryCount,
+    shouldLoadThumbnail,
     storagePath,
   ]);
 
   if (thumbUrl) {
     return (
-      <div className="relative w-full h-full">
+      <div ref={thumbnailRef} className="relative w-full h-full">
         <img
           src={thumbUrl}
           alt={item.name}
           className="w-full h-full object-cover rounded-none"
-          loading="lazy"
+          loading="eager"
+          decoding="async"
         />
         <div className="absolute right-2 top-2 z-20">
           {renderOcrStatusBadge(item, "thumbnail")}
@@ -975,7 +932,7 @@ const FileThumbnail = memo(function FileThumbnail({
   }
 
   return (
-    <div className="relative w-full h-full text-primary p-2">
+    <div ref={thumbnailRef} className="relative w-full h-full text-primary p-2">
       {getFileIcon(item.mimetype)}
       <div className="absolute left-2 top-2 z-20">
         {renderOcrStatusBadge(item, "thumbnail")}
@@ -1230,6 +1187,7 @@ function FileManagerContent({
   const [restoringDeleteId, setRestoringDeleteId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
   const [draggedMoveFolderId, setDraggedMoveFolderId] = useState<string | null>(null);
+  const [loadingFolderIds, setLoadingFolderIds] = useState<Set<string>>(() => new Set());
   const [currentUploadFolder, setCurrentUploadFolder] = useState<FileSystemItem | null>(null);
   // ocrFolderLinks now comes from the global store (documentsState)
   const ocrFolderLinks = documentsState.ocrFolderLinks;
@@ -1271,6 +1229,7 @@ function FileManagerContent({
   useEffect(() => {
     if (!obraId) return;
     resetDocumentsStore(obraId);
+    setLoadingFolderIds(new Set());
   }, [obraId, resetDocumentsStore]);
 
   const ocrFolderLinksMap = useMemo(() => {
@@ -2254,6 +2213,12 @@ function FileManagerContent({
         ? folder.storagePath.slice(obraId.length + 1)
         : '')
     );
+    setLoadingFolderIds((prev) => {
+      if (prev.has(folder.id)) return prev;
+      const next = new Set(prev);
+      next.add(folder.id);
+      return next;
+    });
     try {
       const payload = await fetchDocumentsTreePayload({ path: folderPath });
       const loadedFolder = payload?.folder ?? null;
@@ -2276,6 +2241,13 @@ function FileManagerContent({
       console.error('Error loading folder children:', error);
       toast.error('No se pudo cargar la carpeta');
       return folder;
+    } finally {
+      setLoadingFolderIds((prev) => {
+        if (!prev.has(folder.id)) return prev;
+        const next = new Set(prev);
+        next.delete(folder.id);
+        return next;
+      });
     }
   }, [expandedFolderIds, fetchDocumentsTreePayload, fileTree, getExpandedFoldersForTree, obraId, rebuildParentMap, replaceFolderInTree, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedFolder]);
 
@@ -6082,6 +6054,9 @@ function FileManagerContent({
     const items = selectedFolder.children || [];
     const folders = items.filter(item => item.type === 'folder');
     const files = items.filter(item => item.type === 'file' && item.name !== '.keep');
+    const isSelectedFolderLoading =
+      DOCUMENTS_LIST_ENABLED &&
+      (!selectedFolder.childrenLoaded || loadingFolderIds.has(selectedFolder.id));
 
     // Unified folder header (tab style) for both OCR and normal folders
     const hasTablaSchema = Boolean(activeFolderLink?.columns && activeFolderLink.columns.length > 0);
@@ -6140,9 +6115,11 @@ function FileManagerContent({
                   {folderLabel}
                 </h2>
                 <span className="text-sm font-medium text-stone-500">
-                  {selectedFolder.ocrEnabled && documentViewMode === "table"
-                    ? `(${ocrFilteredRowCount} filas)`
-                    : `(${files.length} archivos)`}
+                  {isSelectedFolderLoading
+                    ? '(cargando...)'
+                    : selectedFolder.ocrEnabled && documentViewMode === "table"
+                      ? `(${ocrFilteredRowCount} filas)`
+                      : `(${files.length} archivos)`}
                 </span>
               </div>
             </div>
@@ -6302,6 +6279,29 @@ function FileManagerContent({
       );
     }
     const folderBody = (() => {
+      if (isSelectedFolderLoading) {
+        return (
+          <div className="@container h-full min-h-0 flex flex-col animate-pulse">
+            <div className="px-4 pt-4 pb-3 border-b border-[#d9d9d9]">
+              <div className="flex items-start gap-4 w-max px-2 pb-1">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="flex flex-col items-center justify-end gap-2 shrink-0 h-[105px]">
+                    <div className="w-[120px] h-[85px] rounded-lg border border-stone-200 bg-stone-100" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden p-4">
+              <div className="grid grid-cols-3 @min-[40rem]:grid-cols-4 @min-[48rem]:grid-cols-5 @min-[64rem]:grid-cols-7 @min-[80rem]:grid-cols-10 gap-4">
+                {Array.from({ length: 10 }).map((_, index) => (
+                  <div key={index} className="w-[120px] h-[145px] border border-stone-200 bg-stone-100" />
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       if (folders.length === 0 && files.length === 0) {
         return (
           <div
@@ -6633,7 +6633,7 @@ function FileManagerContent({
       />
 
       {/* Main Layout */}
-      <div className={`flex-1 min-h-0 transition-all duration-300 ease-in-out lg:max-h-[calc(90vh-9rem)] ${selectedFolder || selectedDocument
+      <div className={`flex-1 min-h-0 lg:max-h-[calc(90vh-9rem)] ${selectedFolder || selectedDocument
         ? 'h-full gap-4'
         : ''
         }`}>
@@ -6657,7 +6657,7 @@ function FileManagerContent({
 
         {/* Main Content */}
         {(loading || selectedFolder || selectedDocument) && (
-          <div className="overflow-auto overflow-x-auto transition-all duration-300 ease-in-out shadow-[0_1px_0_0_#fff9_inset,_0_0_0_1px_#ffffff4d_inset,0_0.7px_0.9px_-1px_#09090b14,0_3px_4px_-2px_#09090b24] rounded-lg h-full">
+          <div className="overflow-auto overflow-x-auto shadow-[0_1px_0_0_#fff9_inset,_0_0_0_1px_#ffffff4d_inset,0_0.7px_0.9px_-1px_#09090b14,0_3px_4px_-2px_#09090b24] rounded-lg h-full">
             {renderMainContent()}
           </div>
         )}
