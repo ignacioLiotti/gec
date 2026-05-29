@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
         updatedAt: String(row.updated_at ?? ""),
         createdBy: actor,
         canEdit: canEditGeneratedDocument({
-          canCreate: true,
+          canCreate: permissions.canCreate,
           userId: user.id,
           generatedBy: typeof row.generated_by === "string" ? row.generated_by : null,
           status: typeof row.status === "string" ? row.status : null,

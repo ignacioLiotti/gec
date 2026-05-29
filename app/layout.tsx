@@ -80,7 +80,7 @@ const FULL_DOCUMENT_PERMISSIONS = {
 	canCreate: true,
 	canReview: true,
 	canManageTemplates: true,
-	canViewAllDrafts: true,
+	canViewAllDrafts: false,
 };
 
 function warnSupabaseError(

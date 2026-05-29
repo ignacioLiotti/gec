@@ -83,9 +83,8 @@ Data-flow now uses explicit capability permissions:
 | `data-flow:auto-write` | Allow data-flow results to automatically overwrite obra fields |
 
 Dashboard route access is available to all authenticated users and appears in the sidebar for regular members.
-| `document_creator` | nav:document-generation, documents:create |
-| `document_reviewer` | nav:document-generation, documents:review |
-| `document_manager` | nav:document-generation, documents:create, documents:review, documents:templates, documents:drafts:all |
+| `document_reviewer` | documents:review |
+| `document_manager` | documents:review, documents:templates |
 
 ### Delete lifecycle permissions
 
@@ -147,11 +146,9 @@ const visibleNavItems = navItems.filter(item => {
 
 For document generation there is an additional feature-level filter on top of route access:
 
-- `nav:document-generation` enables the document surfaces in the sidebar
-- `documents:create` shows `Generar` and allows editing own drafts
+- `Generar` and `Historial` are available to authenticated tenant members
 - `documents:review` shows `Revision`
 - `documents:templates` shows `Plantillas` and `Configuracion`
-- `documents:drafts:all` allows seeing drafts created by other users
 
 This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document capabilities server-side and the sidebar only renders the allowed screens.
 
@@ -159,28 +156,25 @@ This means `/document-generation` is no longer one flat screen from an authoriza
 
 ## Document Generation Permissions
 
-Document generation now has explicit feature permissions:
+Document generation now gives tenant members baseline creation access and keeps explicit feature permissions for review/config:
 
 | Permission | Purpose |
 |------|-------------|
-| `nav:document-generation` | Show document generation entries in the sidebar |
-| `documents:create` | Create documents, save drafts, resume own drafts |
 | `documents:review` | Access the review queue and approve/reject documents |
 | `documents:templates` | Access template/configuration screens and mutate template overrides |
-| `documents:drafts:all` | View drafts created by other users in the tenant |
 
-**Screens gated by these permissions:**
+**Screen access model:**
 
-- `/document-generation` â†’ `documents:create`
-- `/document-generation/drafts` â†’ `documents:create` or `documents:drafts:all`
+- `/document-generation` -> authenticated tenant member
+- `/document-generation/drafts` -> authenticated tenant member, own drafts only
 - `/document-generation/review` â†’ `documents:review`
 - `/document-generation/templates` â†’ `documents:templates`
 - `/document-generation/config` â†’ `documents:templates`
 
-**API routes gated by these permissions:**
+**API access model:**
 
-- `bootstrap`, `drafts POST`, `generate` â†’ `documents:create`
-- `drafts GET` â†’ `documents:create` for own drafts, `documents:drafts:all` for cross-user visibility
+- `bootstrap`, `drafts POST`, `generate` -> authenticated tenant member
+- `drafts GET` -> authenticated tenant member, own drafts only
 - `generated GET/PATCH` â†’ `documents:review`
 - `templates GET/PUT` â†’ `documents:templates`
 

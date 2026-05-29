@@ -17,6 +17,7 @@ import {
   assertWorkInTenant,
   canEditGeneratedDocument,
   insertGeneratedDocumentEvent,
+  loadDocumentGenerationPermissions,
   syncGeneratedDocumentExtractionRows,
   validateGenerationTarget,
 } from "@/lib/document-generation-server";
@@ -189,6 +190,7 @@ export async function POST(request: NextRequest) {
       tenantId,
       userId: user.id,
     };
+    const permissions = await loadDocumentGenerationPermissions(accessContext);
     const body = (await request.json().catch(() => ({}))) as GenerateRequestBody;
     if (body.draftId && body.generatedDocumentId) {
       return NextResponse.json(
@@ -253,7 +255,7 @@ export async function POST(request: NextRequest) {
       }
       if (
         !canEditGeneratedDocument({
-          canCreate: true,
+          canCreate: permissions.canCreate,
           userId: user.id,
           generatedBy:
             typeof existingGeneratedDocument.generated_by === "string"

@@ -184,7 +184,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Documento generado no encontrado" }, { status: 404 });
     }
     const canEdit = canEditGeneratedDocument({
-      canCreate: true,
+      canCreate: permissions.canCreate,
       userId: user.id,
       generatedBy: typeof document.generated_by === "string" ? document.generated_by : null,
       status: typeof document.status === "string" ? document.status : null,
