@@ -136,6 +136,11 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
+		path: "/admin/whatsapp",
+		allowedRoles: ["admin"],
+		requiredPermissions: ["admin:whatsapp"],
+	},
+	{
 		path: "/admin/demo-links",
 		allowedRoles: ["admin"],
 	},

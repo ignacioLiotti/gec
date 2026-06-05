@@ -17,6 +17,7 @@ import {
 	Layers,
 	Loader2,
 	PlusCircle,
+	MessageCircle,
 	Settings2,
 	ShieldCheck,
 	Table2,
@@ -150,6 +151,12 @@ const adminItems: NavItem[] = [
 		title: "Flujos documentales",
 		href: "/admin/document-flows",
 		icon: Table2,
+	},
+	{
+		title: "WhatsApp",
+		href: "/admin/whatsapp",
+		icon: MessageCircle,
+		requiredPermissions: ["admin:whatsapp"],
 	},
 	{
 		title: "Document Flow 2",
