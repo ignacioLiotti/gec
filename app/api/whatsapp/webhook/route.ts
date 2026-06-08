@@ -14,10 +14,12 @@ import {
 import {
 	downloadWhatsAppMedia,
 	extractWebhookMessages,
+	sendWhatsAppList,
 	sendWhatsAppText,
 	verifyMetaWebhookSignature,
 	type WhatsAppWebhookMessage,
 } from "@/lib/whatsapp/meta";
+import { buildWhatsAppFlowResponseUrl } from "@/lib/whatsapp/recurring";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
@@ -140,6 +142,16 @@ async function handleMessage({
 
 	if (!contact || contact.status !== "active") {
 		await markMessageFailed(supabase, messageRowId, "contact_not_authorized");
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact?.id ?? null,
+			messageRowId,
+			actionType: "permission_check",
+			status: "failed",
+			userPrompt: message.textBody,
+			errorMessage: "contact_not_authorized",
+		});
 		await reply(
 			message.from,
 			account.phone_number_id,
@@ -167,6 +179,28 @@ async function handleMessage({
 	});
 	if (flowSubmission) return flowSubmission;
 
+	const selectedFlowId = readSelectedFlowId(message.raw);
+	if (selectedFlowId) {
+		return handleFlowSelection({
+			supabase,
+			account,
+			contact,
+			message,
+			messageRowId,
+			flowId: selectedFlowId,
+		});
+	}
+
+	if (isGreeting(message.textBody)) {
+		return sendFlowTestMenu({
+			supabase,
+			account,
+			contact,
+			message,
+			messageRowId,
+		});
+	}
+
 	await reply(
 		message.from,
 		account.phone_number_id,
@@ -174,6 +208,141 @@ async function handleMessage({
 	);
 	await markMessageProcessed(supabase, messageRowId, "ignored");
 	return { wamid: message.wamid, ok: true, status: "text_help" };
+}
+
+async function sendFlowTestMenu({
+	supabase,
+	account,
+	contact,
+	message,
+	messageRowId,
+}: {
+	supabase: ReturnType<typeof createSupabaseAdminClient>;
+	account: { id: string; tenant_id: string; phone_number_id: string };
+	contact: { id: string; phone_e164: string };
+	message: WhatsAppWebhookMessage;
+	messageRowId: string;
+}) {
+	if (!WHATSAPP_TOKEN) throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
+	const { data: flows, error } = await supabase
+		.from("whatsapp_flows")
+		.select("id, name, description, flow_type")
+		.eq("tenant_id", account.tenant_id)
+		.eq("status", "active")
+		.order("created_at", { ascending: false })
+		.limit(3);
+	if (error) throw error;
+	if (!flows?.length) {
+		await reply(
+			message.from,
+			account.phone_number_id,
+			"Todavia no hay flows activos para probar. Crealos en Sintesis > WhatsApp > Flows.",
+		);
+		await markMessageProcessed(supabase, messageRowId, "ignored");
+		return { wamid: message.wamid, ok: true, status: "no_flows" };
+	}
+
+	const result = await sendWhatsAppList({
+		phoneNumberId: account.phone_number_id,
+		accessToken: WHATSAPP_TOKEN,
+		to: message.from,
+		body: "Elegi un flow de Sintesis para probar.",
+		buttonText: "Ver flows",
+		sectionTitle: "Flows activos",
+		rows: flows.map((flow) => ({
+			id: `flow:${flow.id}`,
+			title: flow.name,
+			description: flow.description ?? flow.flow_type,
+		})),
+		graphApiVersion: GRAPH_API_VERSION,
+	});
+	await recordOutboundReply({
+		phoneNumberId: account.phone_number_id,
+		to: message.from,
+		body: "Menu de flows de Sintesis",
+		result,
+	});
+	await recordChatAction({
+		supabase,
+		tenantId: account.tenant_id,
+		contactId: contact.id,
+		messageRowId,
+		actionType: "template_response",
+		status: "pending",
+		userPrompt: message.textBody,
+		resultSummary: "Se envio menu de flows activos para prueba.",
+		parsedParams: { flowIds: flows.map((flow) => flow.id) },
+	});
+	await markMessageProcessed(supabase, messageRowId, "processed");
+	return { wamid: message.wamid, ok: true, status: "flow_menu_sent" };
+}
+
+async function handleFlowSelection({
+	supabase,
+	account,
+	contact,
+	message,
+	messageRowId,
+	flowId,
+}: {
+	supabase: ReturnType<typeof createSupabaseAdminClient>;
+	account: { id: string; tenant_id: string; phone_number_id: string };
+	contact: { id: string; phone_e164: string };
+	message: WhatsAppWebhookMessage;
+	messageRowId: string;
+	flowId: string;
+}) {
+	const { data: flow, error } = await supabase
+		.from("whatsapp_flows")
+		.select("id, name, status, definition")
+		.eq("tenant_id", account.tenant_id)
+		.eq("id", flowId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!flow || flow.status !== "active") {
+		await reply(message.from, account.phone_number_id, "Ese flow ya no esta activo.");
+		await markMessageFailed(supabase, messageRowId, "flow_not_active");
+		return { wamid: message.wamid, ok: false, status: "flow_not_active" };
+	}
+
+	const { data: run, error: runError } = await supabase
+		.from("whatsapp_flow_runs")
+		.insert({
+			tenant_id: account.tenant_id,
+			flow_id: flow.id,
+			contact_id: contact.id,
+			source_message_id: messageRowId,
+			status: "sent",
+			context: { source: "whatsapp_test_menu" },
+		})
+		.select("id")
+		.single();
+	if (runError) throw runError;
+	const responseUrl = buildWhatsAppFlowResponseUrl(run.id as string);
+	const { data: action } = await supabase
+		.from("whatsapp_chat_actions")
+		.insert({
+			tenant_id: account.tenant_id,
+			contact_id: contact.id,
+			source_message_id: messageRowId,
+			action_type: "template_response",
+			status: "pending",
+			result_summary: `Flow "${flow.name}" enviado para prueba.`,
+			parsed_params: { flowId: flow.id, flowRunId: run.id, responseUrl },
+		})
+		.select("id")
+		.single();
+	if (action?.id) {
+		await supabase.from("whatsapp_flow_runs").update({ chat_action_id: action.id }).eq("id", run.id);
+	}
+
+	await reply(
+		message.from,
+		account.phone_number_id,
+		`Abri este flow de prueba:\n${responseUrl}`,
+	);
+	await markMessageProcessed(supabase, messageRowId, "processed");
+	return { wamid: message.wamid, ok: true, status: "flow_test_sent" };
 }
 
 async function handleMediaUpload({
@@ -197,6 +366,16 @@ async function handleMediaUpload({
 }) {
 	if (!contact.can_upload_documents) {
 		await markMessageFailed(supabase, messageRowId, "missing_upload_permission");
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact.id,
+			messageRowId,
+			actionType: "upload_file",
+			status: "failed",
+			userPrompt: message.textBody,
+			errorMessage: "missing_upload_permission",
+		});
 		await reply(
 			message.from,
 			account.phone_number_id,
@@ -208,6 +387,17 @@ async function handleMediaUpload({
 	const instruction = parseUploadInstruction(message.textBody);
 	if (!instruction.obraQuery && instruction.obraNumber == null) {
 		await markMessageFailed(supabase, messageRowId, "missing_obra");
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact.id,
+			messageRowId,
+			actionType: "upload_file",
+			status: "failed",
+			userPrompt: message.textBody,
+			errorMessage: "missing_obra",
+			parsedParams: { instruction },
+		});
 		await reply(
 			message.from,
 			account.phone_number_id,
@@ -217,6 +407,17 @@ async function handleMediaUpload({
 	}
 	if (!instruction.folderQuery) {
 		await markMessageFailed(supabase, messageRowId, "missing_folder");
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact.id,
+			messageRowId,
+			actionType: "upload_file",
+			status: "failed",
+			userPrompt: message.textBody,
+			errorMessage: "missing_folder",
+			parsedParams: { instruction },
+		});
 		await reply(
 			message.from,
 			account.phone_number_id,
@@ -236,6 +437,17 @@ async function handleMediaUpload({
 	);
 	if (allowedObras.length === 0) {
 		await markMessageFailed(supabase, messageRowId, "obra_not_found_or_forbidden");
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact.id,
+			messageRowId,
+			actionType: "upload_file",
+			status: "failed",
+			userPrompt: message.textBody,
+			errorMessage: "obra_not_found_or_forbidden",
+			parsedParams: { instruction },
+		});
 		await reply(
 			message.from,
 			account.phone_number_id,
@@ -259,6 +471,17 @@ async function handleMediaUpload({
 			})),
 			context: { instruction, media: message.media },
 		});
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact.id,
+			messageRowId,
+			actionType: "upload_file",
+			status: "needs_review",
+			userPrompt: message.textBody,
+			resultSummary: "Se pidio seleccionar una obra porque hubo multiples coincidencias.",
+			parsedParams: { instruction, candidates: allowedObras.map((obra) => obra.id) },
+		});
 		await reply(
 			message.from,
 			account.phone_number_id,
@@ -278,6 +501,18 @@ async function handleMediaUpload({
 	});
 	if (folders.length === 0) {
 		await markMessageFailed(supabase, messageRowId, "folder_not_found");
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact.id,
+			messageRowId,
+			actionType: "upload_file",
+			status: "failed",
+			obraId: String(obra.id),
+			userPrompt: message.textBody,
+			errorMessage: "folder_not_found",
+			parsedParams: { instruction },
+		});
 		await reply(
 			message.from,
 			account.phone_number_id,
@@ -299,6 +534,18 @@ async function handleMediaUpload({
 				kind: folder.kind,
 			})),
 			context: { instruction, obraId: obra.id, media: message.media },
+		});
+		await recordChatAction({
+			supabase,
+			tenantId: account.tenant_id,
+			contactId: contact.id,
+			messageRowId,
+			actionType: "upload_file",
+			status: "needs_review",
+			obraId: String(obra.id),
+			userPrompt: message.textBody,
+			resultSummary: "Se pidio seleccionar una carpeta porque hubo multiples coincidencias.",
+			parsedParams: { instruction, candidates: folders.map((folder) => folder.path) },
 		});
 		await reply(
 			message.from,
@@ -322,6 +569,20 @@ async function handleMediaUpload({
 	});
 
 	await markMessageProcessed(supabase, messageRowId, "processed");
+	await recordChatAction({
+		supabase,
+		tenantId: account.tenant_id,
+		contactId: contact.id,
+		messageRowId,
+		actionType: "upload_file",
+		status: "completed",
+		obraId: String(obra.id),
+		folderPath: folder.path,
+		uploadId: upload.uploadId,
+		userPrompt: message.textBody,
+		resultSummary: `Archivo subido a ${obra.designacion_y_ubicacion} / ${folder.label}.`,
+		parsedParams: { instruction, storagePath: upload.storagePath },
+	});
 	await reply(
 		message.from,
 		account.phone_number_id,
@@ -402,7 +663,7 @@ async function handleManualFlowSubmission({
 	const status =
 		validation.errors.length > 0 ? "needs_review" : "ready_to_apply";
 
-	const { error: insertError } = await supabase
+	const { data: submission, error: insertError } = await supabase
 		.from("whatsapp_manual_submissions")
 		.insert({
 			tenant_id: account.tenant_id,
@@ -416,10 +677,29 @@ async function handleManualFlowSubmission({
 			parsed_values: validation.parsed,
 			validation_errors: validation.errors,
 			status,
-		});
+		})
+		.select("id")
+		.single();
 	if (insertError) throw insertError;
 
 	await markMessageProcessed(supabase, messageRowId, "processed");
+	await recordChatAction({
+		supabase,
+		tenantId: account.tenant_id,
+		contactId: contact.id,
+		messageRowId,
+		actionType: "manual_submission",
+		status: status === "ready_to_apply" ? "completed" : "needs_review",
+		obraId: form.obra_id ? String(form.obra_id) : null,
+		folderPath: form.folder_path ? String(form.folder_path) : null,
+		manualSubmissionId: submission.id as string,
+		userPrompt: message.textBody,
+		resultSummary:
+			status === "ready_to_apply"
+				? "Formulario recibido y listo para aplicar."
+				: "Formulario recibido con campos para revisar.",
+		parsedParams: { values, validationErrors: validation.errors },
+	});
 	await reply(
 		message.from,
 		account.phone_number_id,
@@ -486,7 +766,7 @@ async function uploadMediaToFolder(args: {
 		throw usageError;
 	}
 
-	const { error: trackingError } = await args.supabase
+	const { data: upload, error: trackingError } = await args.supabase
 		.from("whatsapp_document_uploads")
 		.insert({
 			tenant_id: args.tenantId,
@@ -499,10 +779,12 @@ async function uploadMediaToFolder(args: {
 			file_name: baseName,
 			mime_type: mimeType,
 			uploaded_bytes: uploadedBytes,
-		});
+		})
+		.select("id")
+		.single();
 	if (trackingError) throw trackingError;
 
-	return { storagePath };
+	return { storagePath, uploadId: upload.id as string };
 }
 
 async function resolveBusinessAccount(args: {
@@ -569,13 +851,77 @@ async function reply(to: string, phoneNumberId: string, body: string) {
 		console.warn("[whatsapp-webhook] WHATSAPP_ACCESS_TOKEN missing; reply skipped");
 		return;
 	}
-	await sendWhatsAppText({
+	const result = await sendWhatsAppText({
 		phoneNumberId,
 		accessToken: WHATSAPP_TOKEN,
 		to,
 		body,
 		graphApiVersion: GRAPH_API_VERSION,
 	});
+	await recordOutboundReply({
+		phoneNumberId,
+		to,
+		body,
+		result,
+	});
+}
+
+async function recordOutboundReply(args: {
+	phoneNumberId: string;
+	to: string;
+	body: string;
+	result: unknown;
+}) {
+	const supabase = createSupabaseAdminClient();
+	const { data: account, error: accountError } = await supabase
+		.from("whatsapp_business_accounts")
+		.select("id, tenant_id, phone_number_id")
+		.eq("phone_number_id", args.phoneNumberId)
+		.maybeSingle();
+	if (accountError || !account) {
+		console.warn("[whatsapp-webhook] outbound log skipped: account not found", {
+			phoneNumberId: args.phoneNumberId,
+			error: accountError,
+		});
+		return;
+	}
+
+	const normalizedTo = normalizePhone(args.to);
+	const { data: contact } = await supabase
+		.from("whatsapp_contacts")
+		.select("id")
+		.eq("tenant_id", account.tenant_id)
+		.eq("phone_e164", normalizedTo)
+		.maybeSingle();
+	const wamid = readOutboundMessageId(args.result);
+	const { error } = await supabase.from("whatsapp_messages").insert({
+		tenant_id: account.tenant_id,
+		business_account_id: account.id,
+		contact_id: contact?.id ?? null,
+		wamid,
+		direction: "outbound",
+		from_phone: account.phone_number_id,
+		to_phone: normalizedTo,
+		message_type: "text",
+		text_body: args.body,
+		status: "sent",
+		raw_payload: { provider: "meta_cloud", result: args.result },
+		processed_at: new Date().toISOString(),
+	});
+	if (error) {
+		console.warn("[whatsapp-webhook] outbound log failed", {
+			phoneNumberId: args.phoneNumberId,
+			to: normalizedTo,
+			error,
+		});
+	}
+}
+
+function readOutboundMessageId(result: unknown) {
+	const root = readRecord(result);
+	const messages = Array.isArray(root.messages) ? root.messages : [];
+	const firstMessage = readRecord(messages[0]);
+	return readString(firstMessage.id);
 }
 
 async function markMessageFailed(
@@ -626,6 +972,63 @@ async function createPendingSelection(args: {
 	if (error) throw error;
 }
 
+async function recordChatAction(args: {
+	supabase: ReturnType<typeof createSupabaseAdminClient>;
+	tenantId: string;
+	contactId?: string | null;
+	messageRowId?: string | null;
+	actionType:
+		| "upload_file"
+		| "manual_submission"
+		| "generate_document"
+		| "data_query"
+		| "template_response"
+		| "permission_check"
+		| "unknown";
+	status: "pending" | "in_progress" | "completed" | "needs_review" | "failed" | "cancelled";
+	obraId?: string | null;
+	folderPath?: string | null;
+	whatsappTemplateId?: string | null;
+	documentGenerationTemplateId?: string | null;
+	uploadId?: string | null;
+	manualSubmissionId?: string | null;
+	generatedDocumentId?: string | null;
+	userPrompt?: string | null;
+	parsedParams?: Record<string, unknown>;
+	resultSummary?: string | null;
+	errorMessage?: string | null;
+}) {
+	const { error } = await args.supabase.from("whatsapp_chat_actions").insert({
+		tenant_id: args.tenantId,
+		contact_id: args.contactId ?? null,
+		source_message_id: args.messageRowId ?? null,
+		action_type: args.actionType,
+		status: args.status,
+		obra_id: args.obraId ?? null,
+		folder_path: args.folderPath ?? null,
+		whatsapp_template_id: args.whatsappTemplateId ?? null,
+		document_generation_template_id: args.documentGenerationTemplateId ?? null,
+		upload_id: args.uploadId ?? null,
+		manual_submission_id: args.manualSubmissionId ?? null,
+		generated_document_id: args.generatedDocumentId ?? null,
+		user_prompt: args.userPrompt ?? null,
+		parsed_params: args.parsedParams ?? {},
+		result_summary: args.resultSummary ?? null,
+		error_message: args.errorMessage ?? null,
+		resolved_at:
+			args.status === "completed" || args.status === "failed" || args.status === "cancelled"
+				? new Date().toISOString()
+				: null,
+	});
+	if (error) {
+		console.warn("[whatsapp-webhook] chat action log failed", {
+			actionType: args.actionType,
+			status: args.status,
+			error,
+		});
+	}
+}
+
 function scrubRawPayload(raw: Record<string, unknown>) {
 	const clone = { ...raw };
 	delete clone.contacts;
@@ -644,6 +1047,18 @@ function readFlowResponseValues(raw: Record<string, unknown>) {
 	} catch {
 		return null;
 	}
+}
+
+function readSelectedFlowId(raw: Record<string, unknown>) {
+	const interactive = readRecord(raw.interactive);
+	const listReply = readRecord(interactive.list_reply);
+	const id = readString(listReply.id);
+	return id?.startsWith("flow:") ? id.slice("flow:".length) : null;
+}
+
+function isGreeting(text: string) {
+	const normalized = text.trim().toLowerCase();
+	return ["hola", "hi", "hello", "menu", "flows", "flow"].includes(normalized);
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
