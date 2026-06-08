@@ -94,6 +94,141 @@ function slugify(value: string) {
 		.slice(0, 80);
 }
 
+function nativePurchaseOrderFlowJson() {
+	return {
+		version: "7.3",
+		screens: [
+			{
+				id: "CHECKLIST",
+				title: "Orden de compra",
+				terminal: true,
+				success: true,
+				data: {
+					flow_run_id: { type: "string", __example__: "flow-run-id" },
+					sintesis_flow_id: { type: "string", __example__: "flow-id" },
+				},
+				layout: {
+					type: "SingleColumnLayout",
+					children: [
+						{ type: "TextHeading", text: "Confirmar recepcion" },
+						{ type: "TextBody", text: "Marca si los items llegaron correctamente a la obra." },
+						{
+							type: "RadioButtonsGroup",
+							name: "item_1_received",
+							label: "Item 1 recibido",
+							required: true,
+							"data-source": [
+								{ id: "true", title: "Si" },
+								{ id: "false", title: "No" },
+							],
+						},
+						{
+							type: "RadioButtonsGroup",
+							name: "item_2_received",
+							label: "Item 2 recibido",
+							required: true,
+							"data-source": [
+								{ id: "true", title: "Si" },
+								{ id: "false", title: "No" },
+							],
+						},
+						{
+							type: "TextArea",
+							name: "comment",
+							label: "Comentario si algo no llego",
+							required: false,
+						},
+						{
+							type: "Footer",
+							label: "Enviar",
+							"on-click-action": {
+								name: "complete",
+								payload: {
+									flow_run_id: "${data.flow_run_id}",
+									sintesis_flow_id: "${data.sintesis_flow_id}",
+									item_1_received: "${form.item_1_received}",
+									item_2_received: "${form.item_2_received}",
+									comment: "${form.comment}",
+								},
+							},
+						},
+					],
+				},
+			},
+		],
+	};
+}
+
+function nativeInvoiceFlowJson() {
+	return {
+		version: "7.3",
+		screens: [
+			{
+				id: "INVOICE",
+				title: "Carga de factura",
+				terminal: true,
+				success: true,
+				data: {
+					flow_run_id: { type: "string", __example__: "flow-run-id" },
+					sintesis_flow_id: { type: "string", __example__: "flow-id" },
+				},
+				layout: {
+					type: "SingleColumnLayout",
+					children: [
+						{ type: "TextHeading", text: "Nueva factura" },
+						{ type: "TextBody", text: "Completa los datos principales de la factura." },
+						{
+							type: "DatePicker",
+							name: "invoice_date",
+							label: "Fecha de factura",
+							required: true,
+						},
+						{
+							type: "Dropdown",
+							name: "invoice_type",
+							label: "Tipo de factura",
+							required: true,
+							"data-source": [
+								{ id: "A", title: "Factura A" },
+								{ id: "B", title: "Factura B" },
+								{ id: "C", title: "Factura C" },
+							],
+						},
+						{
+							type: "TextInput",
+							name: "amount",
+							label: "Monto",
+							"input-type": "number",
+							required: true,
+						},
+						{
+							type: "TextArea",
+							name: "comment",
+							label: "Comentario",
+							required: false,
+						},
+						{
+							type: "Footer",
+							label: "Enviar",
+							"on-click-action": {
+								name: "complete",
+								payload: {
+									flow_run_id: "${data.flow_run_id}",
+									sintesis_flow_id: "${data.sintesis_flow_id}",
+									invoice_date: "${form.invoice_date}",
+									invoice_type: "${form.invoice_type}",
+									amount: "${form.amount}",
+									comment: "${form.comment}",
+								},
+							},
+						},
+					],
+				},
+			},
+		],
+	};
+}
+
 export async function createBusinessAccountAction(formData: FormData) {
 	const { supabase, user, tenantId } = await requireAdminTenant(formData);
 	const phoneNumberId = String(formData.get("phoneNumberId") ?? "").trim();
@@ -369,6 +504,71 @@ export async function createStarterFlowsAction(formData: FormData) {
 			...flow,
 			status: "active",
 			settings: { showInTestMenu: true, starter: true },
+			created_by: user.id,
+		})),
+		{ onConflict: "tenant_id,slug" },
+	);
+	if (error) throw error;
+	revalidatePath("/admin/whatsapp");
+}
+
+export async function createNativeStarterFlowsAction(formData: FormData) {
+	const { supabase, user, tenantId } = await requireAdminTenant(formData);
+	const nativeFlows = [
+		{
+			name: "Nativo - confirmar orden de compra",
+			slug: "nativo_confirmar_orden_compra",
+			description: "Flow nativo de WhatsApp para confirmar recepcion de items.",
+			flow_type: "boolean_checklist",
+			definition: {
+				fields: [
+					{ key: "item_1_received", label: "Item 1 recibido", type: "boolean", required: true },
+					{ key: "item_2_received", label: "Item 2 recibido", type: "boolean", required: true },
+					{ key: "comment", label: "Comentario", type: "textarea", required: false },
+				],
+			},
+			settings: {
+				showInTestMenu: true,
+				native: {
+					enabled: true,
+					mode: "draft",
+					cta: "Responder",
+					screen: "CHECKLIST",
+					flowJson: nativePurchaseOrderFlowJson(),
+				},
+			},
+		},
+		{
+			name: "Nativo - carga de factura",
+			slug: "nativo_carga_factura",
+			description: "Flow nativo de WhatsApp para cargar fecha, tipo y monto.",
+			flow_type: "data_entry",
+			definition: {
+				fields: [
+					{ key: "invoice_date", label: "Fecha de factura", type: "date", required: true },
+					{ key: "invoice_type", label: "Tipo de factura", type: "select", required: true, options: ["A", "B", "C"] },
+					{ key: "amount", label: "Monto", type: "number", required: true },
+					{ key: "comment", label: "Comentario", type: "textarea", required: false },
+				],
+			},
+			settings: {
+				showInTestMenu: true,
+				native: {
+					enabled: true,
+					mode: "draft",
+					cta: "Cargar",
+					screen: "INVOICE",
+					flowJson: nativeInvoiceFlowJson(),
+				},
+			},
+		},
+	];
+
+	const { error } = await supabase.from("whatsapp_flows").upsert(
+		nativeFlows.map((flow) => ({
+			tenant_id: tenantId,
+			...flow,
+			status: "active",
 			created_by: user.id,
 		})),
 		{ onConflict: "tenant_id,slug" },

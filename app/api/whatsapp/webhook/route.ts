@@ -14,6 +14,7 @@ import {
 import {
 	downloadWhatsAppMedia,
 	extractWebhookMessages,
+	sendWhatsAppFlow,
 	sendWhatsAppList,
 	sendWhatsAppText,
 	verifyMetaWebhookSignature,
@@ -170,6 +171,15 @@ async function handleMessage({
 		});
 	}
 
+	const nativeFlowSubmission = await handleNativeFlowSubmission({
+		supabase,
+		account,
+		contact,
+		message,
+		messageRowId,
+	});
+	if (nativeFlowSubmission) return nativeFlowSubmission;
+
 	const flowSubmission = await handleManualFlowSubmission({
 		supabase,
 		account,
@@ -294,7 +304,7 @@ async function handleFlowSelection({
 }) {
 	const { data: flow, error } = await supabase
 		.from("whatsapp_flows")
-		.select("id, name, status, definition")
+		.select("id, name, status, definition, settings, meta_flow_id")
 		.eq("tenant_id", account.tenant_id)
 		.eq("id", flowId)
 		.maybeSingle();
@@ -334,6 +344,35 @@ async function handleFlowSelection({
 		.single();
 	if (action?.id) {
 		await supabase.from("whatsapp_flow_runs").update({ chat_action_id: action.id }).eq("id", run.id);
+	}
+
+	const nativeSettings = readNativeFlowSettings(flow.settings);
+	if (flow.meta_flow_id && nativeSettings?.enabled) {
+		if (!WHATSAPP_TOKEN) throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
+		const result = await sendWhatsAppFlow({
+			phoneNumberId: account.phone_number_id,
+			accessToken: WHATSAPP_TOKEN,
+			to: message.from,
+			flowId: flow.meta_flow_id,
+			flowToken: run.id as string,
+			body: flow.name,
+			cta: nativeSettings.cta,
+			screen: nativeSettings.screen,
+			mode: nativeSettings.mode,
+			data: {
+				flow_run_id: run.id,
+				sintesis_flow_id: flow.id,
+			},
+			graphApiVersion: GRAPH_API_VERSION,
+		});
+		await recordOutboundReply({
+			phoneNumberId: account.phone_number_id,
+			to: message.from,
+			body: `Flow nativo: ${flow.name}`,
+			result,
+		});
+		await markMessageProcessed(supabase, messageRowId, "processed");
+		return { wamid: message.wamid, ok: true, status: "native_flow_sent" };
 	}
 
 	await reply(
@@ -589,6 +628,101 @@ async function handleMediaUpload({
 		`Listo. Subi el archivo a "${obra.designacion_y_ubicacion}" en la carpeta "${folder.label}".`,
 	);
 	return { wamid: message.wamid, ok: true, status: "uploaded", path: upload.storagePath };
+}
+
+async function handleNativeFlowSubmission({
+	supabase,
+	account,
+	contact,
+	message,
+	messageRowId,
+}: {
+	supabase: ReturnType<typeof createSupabaseAdminClient>;
+	account: { id: string; tenant_id: string; phone_number_id: string };
+	contact: {
+		id: string;
+		can_submit_forms?: boolean;
+	};
+	message: WhatsAppWebhookMessage;
+	messageRowId: string;
+}) {
+	const flowValues = readFlowResponseValues(message.raw);
+	if (!flowValues) return null;
+
+	const flowRunId =
+		readString(flowValues.flow_run_id) ??
+		readString(flowValues.flowRunId) ??
+		readString(flowValues.flow_token) ??
+		readString(flowValues.flowToken);
+	if (!flowRunId) return null;
+
+	if (!contact.can_submit_forms) {
+		await markMessageFailed(supabase, messageRowId, "missing_form_permission");
+		await reply(
+			message.from,
+			account.phone_number_id,
+			"Tu contacto no tiene permiso para cargar formularios por WhatsApp.",
+		);
+		return { wamid: message.wamid, ok: false, status: "missing_form_permission" };
+	}
+
+	const { data: run, error: runError } = await supabase
+		.from("whatsapp_flow_runs")
+		.select("id, tenant_id, flow_id, contact_id, chat_action_id, status")
+		.eq("id", flowRunId)
+		.eq("tenant_id", account.tenant_id)
+		.maybeSingle();
+	if (runError) throw runError;
+	if (!run) return null;
+
+	const values = { ...flowValues };
+	delete values.flow_run_id;
+	delete values.flowRunId;
+	delete values.flow_token;
+	delete values.flowToken;
+	delete values.sintesis_flow_id;
+
+	const { data: submission, error: submissionError } = await supabase
+		.from("whatsapp_manual_submissions")
+		.insert({
+			tenant_id: account.tenant_id,
+			contact_id: contact.id,
+			source_message_id: messageRowId,
+			raw_values: values,
+			parsed_values: values,
+			validation_errors: [],
+			status: "ready_to_apply",
+		})
+		.select("id")
+		.single();
+	if (submissionError) throw submissionError;
+
+	await supabase
+		.from("whatsapp_flow_runs")
+		.update({
+			status: "completed",
+			response_values: values,
+			manual_submission_id: submission.id,
+			completed_at: new Date().toISOString(),
+		})
+		.eq("id", run.id);
+
+	if (run.chat_action_id) {
+		await supabase
+			.from("whatsapp_chat_actions")
+			.update({
+				status: "completed",
+				manual_submission_id: submission.id,
+				result_summary: "Flow nativo de WhatsApp respondido.",
+				parsed_params: { responseValues: values, flowRunId: run.id, flowId: run.flow_id },
+				resolved_at: new Date().toISOString(),
+			})
+			.eq("id", run.chat_action_id);
+	}
+
+	await markMessageProcessed(supabase, messageRowId, "processed");
+	await reply(message.from, account.phone_number_id, "Recibi el flow nativo. Quedo registrado en Sintesis.");
+	return { wamid: message.wamid, ok: true, status: "native_flow_received" };
 }
 
 async function handleManualFlowSubmission({
@@ -1059,6 +1193,22 @@ function readSelectedFlowId(raw: Record<string, unknown>) {
 function isGreeting(text: string) {
 	const normalized = text.trim().toLowerCase();
 	return ["hola", "hi", "hello", "menu", "flows", "flow"].includes(normalized);
+}
+
+function readNativeFlowSettings(settings: unknown) {
+	const root = readRecord(settings);
+	const native = readRecord(root.native);
+	if (native.enabled !== true) return null;
+	const cta = readString(native.cta) ?? "Responder";
+	const screen = readString(native.screen);
+	if (!screen) return null;
+	const rawMode = readString(native.mode);
+	return {
+		enabled: true,
+		cta,
+		screen,
+		mode: rawMode === "published" ? "published" as const : "draft" as const,
+	};
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
