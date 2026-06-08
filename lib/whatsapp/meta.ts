@@ -199,3 +199,101 @@ export async function sendWhatsAppText(args: {
 	}
 	return res.json() as Promise<unknown>;
 }
+
+export type WhatsAppTemplateParameter = {
+	type: "text";
+	text: string;
+};
+
+export async function sendWhatsAppTemplate(args: {
+	phoneNumberId: string;
+	accessToken: string;
+	to: string;
+	templateName: string;
+	language: string;
+	bodyParameters?: WhatsAppTemplateParameter[];
+	graphApiVersion?: string;
+}) {
+	const version = args.graphApiVersion ?? "v25.0";
+	const components = args.bodyParameters?.length
+		? [
+				{
+					type: "body",
+					parameters: args.bodyParameters,
+				},
+			]
+		: undefined;
+	const res = await fetch(
+		`https://graph.facebook.com/${version}/${args.phoneNumberId}/messages`,
+		{
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${args.accessToken}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				messaging_product: "whatsapp",
+				to: args.to,
+				type: "template",
+				template: {
+					name: args.templateName,
+					language: { code: args.language },
+					...(components ? { components } : {}),
+				},
+			}),
+		},
+	);
+	if (!res.ok) {
+		throw new Error(`whatsapp_template_send_failed:${res.status}:${await res.text()}`);
+	}
+	return res.json() as Promise<unknown>;
+}
+
+export async function sendWhatsAppList(args: {
+	phoneNumberId: string;
+	accessToken: string;
+	to: string;
+	body: string;
+	buttonText: string;
+	sectionTitle: string;
+	rows: { id: string; title: string; description?: string | null }[];
+	graphApiVersion?: string;
+}) {
+	const version = args.graphApiVersion ?? "v25.0";
+	const res = await fetch(
+		`https://graph.facebook.com/${version}/${args.phoneNumberId}/messages`,
+		{
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${args.accessToken}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				messaging_product: "whatsapp",
+				to: args.to,
+				type: "interactive",
+				interactive: {
+					type: "list",
+					body: { text: args.body },
+					action: {
+						button: args.buttonText,
+						sections: [
+							{
+								title: args.sectionTitle,
+								rows: args.rows.map((row) => ({
+									id: row.id,
+									title: row.title.slice(0, 24),
+									description: row.description?.slice(0, 72),
+								})),
+							},
+						],
+					},
+				},
+			}),
+		},
+	);
+	if (!res.ok) {
+		throw new Error(`whatsapp_list_send_failed:${res.status}:${await res.text()}`);
+	}
+	return res.json() as Promise<unknown>;
+}
