@@ -4,6 +4,7 @@ import {
 	createContactAction,
 	createFlowAction,
 	createManualFormAction,
+	createNativeStarterFlowsAction,
 	createRecurringAssignmentAction,
 	createStarterFlowsAction,
 	createTemplateAction,
@@ -183,6 +184,7 @@ type WhatsAppFlow = {
 	meta_flow_id: string | null;
 	version: number | null;
 	definition: unknown;
+	settings?: unknown;
 	created_at: string | null;
 };
 
@@ -369,7 +371,7 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps) {
 			.order("name", { ascending: true }),
 		supabase
 			.from("whatsapp_flows")
-			.select("id, name, slug, description, status, flow_type, meta_flow_id, version, definition, created_at")
+			.select("id, name, slug, description, status, flow_type, meta_flow_id, version, definition, settings, created_at")
 			.eq("tenant_id", activeTenantId)
 			.order("created_at", { ascending: false }),
 		supabase
@@ -829,6 +831,12 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps) {
 							<input type="hidden" name="tenantId" value={activeTenantId} />
 							<Button type="submit" size="sm" variant="outline">
 								Crear 3 flows de prueba
+							</Button>
+						</form>
+						<form action={createNativeStarterFlowsAction}>
+							<input type="hidden" name="tenantId" value={activeTenantId} />
+							<Button type="submit" size="sm" variant="outline">
+								Crear 2 flows nativos
 							</Button>
 						</form>
 						<FlowTable flows={flows} />
@@ -1613,9 +1621,20 @@ function FlowTable({ flows }: { flows: WhatsAppFlow[] }) {
 								<p className="font-medium">{flow.name}</p>
 								<p className="text-xs text-foreground/60">{flow.slug}</p>
 								{flow.meta_flow_id && <p className="mt-1 text-xs text-foreground/60">Meta: {flow.meta_flow_id}</p>}
+								{isNativeFlow(flow.settings) && <SmallPill>Nativo WhatsApp</SmallPill>}
 							</td>
 							<td className="px-3 py-3">{flowTypeLabel(flow.flow_type)}</td>
-							<td className="px-3 py-3 text-foreground/65">{flowFieldSummary(flow.definition)}</td>
+							<td className="px-3 py-3 text-foreground/65">
+								<p>{flowFieldSummary(flow.definition)}</p>
+								{nativeFlowJson(flow.settings) && (
+									<details className="mt-2">
+										<summary className="cursor-pointer text-xs font-medium text-foreground">JSON Meta</summary>
+										<pre className="mt-2 max-h-56 overflow-auto rounded-md bg-foreground/[0.04] p-2 text-xs">
+											{JSON.stringify(nativeFlowJson(flow.settings), null, 2)}
+										</pre>
+									</details>
+								)}
+							</td>
 							<td className="px-3 py-3"><StatusBadge status={flow.status} /></td>
 						</tr>
 					))}
@@ -1714,6 +1733,26 @@ function flowTypeLabel(type?: string | null) {
 		upload_request: "Pedido archivo",
 	};
 	return labels[type ?? ""] ?? "Flow";
+}
+
+function isNativeFlow(settings: unknown) {
+	const native = nativeFlowSettings(settings);
+	return native?.enabled === true;
+}
+
+function nativeFlowJson(settings: unknown) {
+	const native = nativeFlowSettings(settings);
+	return native?.flowJson ?? null;
+}
+
+function nativeFlowSettings(settings: unknown) {
+	const root = settings && typeof settings === "object" && !Array.isArray(settings)
+		? (settings as Record<string, unknown>)
+		: {};
+	const native = root.native && typeof root.native === "object" && !Array.isArray(root.native)
+		? (root.native as Record<string, unknown>)
+		: null;
+	return native;
 }
 
 function EntityList({

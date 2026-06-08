@@ -297,3 +297,61 @@ export async function sendWhatsAppList(args: {
 	}
 	return res.json() as Promise<unknown>;
 }
+
+export async function sendWhatsAppFlow(args: {
+	phoneNumberId: string;
+	accessToken: string;
+	to: string;
+	flowId: string;
+	flowToken: string;
+	body: string;
+	cta: string;
+	screen: string;
+	mode?: "draft" | "published";
+	header?: string | null;
+	footer?: string | null;
+	data?: Record<string, unknown>;
+	graphApiVersion?: string;
+}) {
+	const version = args.graphApiVersion ?? "v25.0";
+	const res = await fetch(
+		`https://graph.facebook.com/${version}/${args.phoneNumberId}/messages`,
+		{
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${args.accessToken}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				messaging_product: "whatsapp",
+				to: args.to,
+				type: "interactive",
+				interactive: {
+					type: "flow",
+					...(args.header ? { header: { type: "text", text: args.header } } : {}),
+					body: { text: args.body },
+					...(args.footer ? { footer: { text: args.footer } } : {}),
+					action: {
+						name: "flow",
+						parameters: {
+							flow_message_version: "3",
+							flow_id: args.flowId,
+							flow_token: args.flowToken,
+							flow_cta: args.cta.slice(0, 20),
+							flow_action: "navigate",
+							flow_action_payload: {
+								screen: args.screen,
+								data: args.data && Object.keys(args.data).length > 0 ? args.data : { flow_token: args.flowToken },
+							},
+							mode: args.mode ?? "draft",
+						},
+					},
+				},
+			}),
+		},
+	);
+	if (!res.ok) {
+		throw new Error(`whatsapp_flow_send_failed:${res.status}:${await res.text()}`);
+	}
+	return res.json() as Promise<unknown>;
+}
