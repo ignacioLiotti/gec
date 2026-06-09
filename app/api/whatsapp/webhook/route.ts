@@ -360,6 +360,7 @@ async function handleFlowSelection({
 			screen: nativeSettings.screen,
 			mode: nativeSettings.mode,
 			data: {
+				...nativeSettings.data,
 				flow_run_id: run.id,
 				sintesis_flow_id: flow.id,
 			},
@@ -1208,6 +1209,7 @@ function readNativeFlowSettings(settings: unknown) {
 		cta,
 		screen,
 		mode: rawMode === "published" ? "published" as const : "draft" as const,
+		data: readRecord(native.data),
 	};
 }
 

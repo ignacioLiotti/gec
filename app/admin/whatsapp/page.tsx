@@ -836,7 +836,7 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps) {
 						<form action={createNativeStarterFlowsAction}>
 							<input type="hidden" name="tenantId" value={activeTenantId} />
 							<Button type="submit" size="sm" variant="outline">
-								Crear 2 flows nativos
+								Crear 3 flows nativos
 							</Button>
 						</form>
 						<FlowTable flows={flows} />

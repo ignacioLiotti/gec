@@ -144,6 +144,24 @@ When an authorized contact sends `hola`, `menu`, `flow`, or `flows`, the webhook
 
 This is intentionally a Sintesis-hosted flow editor/tester. It does not yet publish or sync native Meta WhatsApp Flows JSON. A future Meta Flow sync can reuse `whatsapp_flows.meta_flow_id`, `definition`, and `settings` once the tenant has approved Meta templates that open native flows.
 
+### Reusable Native Flow Pattern
+
+For native WhatsApp demos, Sintesis can store a reusable Flow JSON under `whatsapp_flows.settings.native.flowJson` and runtime data under `settings.native.data`.
+
+The first reusable report flow is `Nativo - reporte semanal reusable`. It models a weekly obra report with:
+
+```text
+intro boolean
+date
+select
+number
+long text
+boolean
+optional comment
+```
+
+The same Meta Flow can be reused for different report prompts by changing `settings.native.data` labels and select options. When the user selects a flow with `meta_flow_id` and `settings.native.enabled = true`, the webhook sends a native `interactive.flow` message. The returned `nfm_reply` is saved into `whatsapp_flow_runs` and `whatsapp_manual_submissions`.
+
 ### Environment Variables
 
 - `WHATSAPP_VERIFY_TOKEN` - webhook subscription verification
