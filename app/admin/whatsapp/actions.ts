@@ -229,6 +229,176 @@ function nativeInvoiceFlowJson() {
 	};
 }
 
+function nativeWeeklyReportReusableFlowJson() {
+	return {
+		version: "7.3",
+		screens: [
+			{
+				id: "START",
+				title: "Reporte semanal",
+				data: {
+					flow_run_id: { type: "string", __example__: "flow-run-id" },
+					sintesis_flow_id: { type: "string", __example__: "flow-id" },
+					intro_title: { type: "string", __example__: "Seguimiento semanal de obra" },
+					intro_body: { type: "string", __example__: "Completa el formulario de seguimiento semanal." },
+					date_label: { type: "string", __example__: "Fecha de avance" },
+					select_label: { type: "string", __example__: "Estado general" },
+					select_options: {
+						type: "array",
+						items: {
+							type: "object",
+							properties: {
+								id: { type: "string" },
+								title: { type: "string" },
+							},
+						},
+						__example__: [
+							{ id: "sin_avance", title: "Sin avance" },
+							{ id: "normal", title: "Normal" },
+							{ id: "bloqueado", title: "Bloqueado" },
+						],
+					},
+					number_label: { type: "string", __example__: "Cantidad de obreros" },
+					text_label: { type: "string", __example__: "Descripcion de avance" },
+					boolean_label: { type: "string", __example__: "Hubo bloqueos" },
+				},
+				layout: {
+					type: "SingleColumnLayout",
+					children: [
+						{ type: "TextHeading", text: "${data.intro_title}" },
+						{ type: "TextBody", text: "${data.intro_body}" },
+						{
+							type: "RadioButtonsGroup",
+							name: "accepted",
+							label: "Queres iniciar?",
+							required: true,
+							"data-source": [
+								{ id: "yes", title: "Si" },
+								{ id: "no", title: "No" },
+							],
+						},
+						{
+							type: "Footer",
+							label: "Continuar",
+							"on-click-action": {
+								name: "navigate",
+								next: { type: "screen", name: "FORM" },
+								payload: {
+									flow_run_id: "${data.flow_run_id}",
+									sintesis_flow_id: "${data.sintesis_flow_id}",
+									accepted: "${form.accepted}",
+									date_label: "${data.date_label}",
+									select_label: "${data.select_label}",
+									select_options: "${data.select_options}",
+									number_label: "${data.number_label}",
+									text_label: "${data.text_label}",
+									boolean_label: "${data.boolean_label}",
+								},
+							},
+						},
+					],
+				},
+			},
+			{
+				id: "FORM",
+				title: "Completar reporte",
+				terminal: true,
+				success: true,
+				data: {
+					flow_run_id: { type: "string", __example__: "flow-run-id" },
+					sintesis_flow_id: { type: "string", __example__: "flow-id" },
+					accepted: { type: "string", __example__: "yes" },
+					date_label: { type: "string", __example__: "Fecha de avance" },
+					select_label: { type: "string", __example__: "Estado general" },
+					select_options: {
+						type: "array",
+						items: {
+							type: "object",
+							properties: {
+								id: { type: "string" },
+								title: { type: "string" },
+							},
+						},
+						__example__: [
+							{ id: "sin_avance", title: "Sin avance" },
+							{ id: "normal", title: "Normal" },
+							{ id: "bloqueado", title: "Bloqueado" },
+						],
+					},
+					number_label: { type: "string", __example__: "Cantidad de obreros" },
+					text_label: { type: "string", __example__: "Descripcion de avance" },
+					boolean_label: { type: "string", __example__: "Hubo bloqueos" },
+				},
+				layout: {
+					type: "SingleColumnLayout",
+					children: [
+						{
+							type: "DatePicker",
+							name: "progress_date",
+							label: "${data.date_label}",
+							required: true,
+						},
+						{
+							type: "Dropdown",
+							name: "progress_status",
+							label: "${data.select_label}",
+							required: true,
+							"data-source": "${data.select_options}",
+						},
+						{
+							type: "TextInput",
+							name: "worker_count",
+							label: "${data.number_label}",
+							"input-type": "number",
+							required: false,
+						},
+						{
+							type: "TextArea",
+							name: "progress_description",
+							label: "${data.text_label}",
+							required: true,
+						},
+						{
+							type: "RadioButtonsGroup",
+							name: "has_blockers",
+							label: "${data.boolean_label}",
+							required: true,
+							"data-source": [
+								{ id: "true", title: "Si" },
+								{ id: "false", title: "No" },
+							],
+						},
+						{
+							type: "TextArea",
+							name: "comment",
+							label: "Comentario adicional",
+							required: false,
+						},
+						{
+							type: "Footer",
+							label: "Enviar",
+							"on-click-action": {
+								name: "complete",
+								payload: {
+									flow_run_id: "${data.flow_run_id}",
+									sintesis_flow_id: "${data.sintesis_flow_id}",
+									accepted: "${data.accepted}",
+									progress_date: "${form.progress_date}",
+									progress_status: "${form.progress_status}",
+									worker_count: "${form.worker_count}",
+									progress_description: "${form.progress_description}",
+									has_blockers: "${form.has_blockers}",
+									comment: "${form.comment}",
+								},
+							},
+						},
+					],
+				},
+			},
+		],
+	};
+}
+
 export async function createBusinessAccountAction(formData: FormData) {
 	const { supabase, user, tenantId } = await requireAdminTenant(formData);
 	const phoneNumberId = String(formData.get("phoneNumberId") ?? "").trim();
@@ -559,6 +729,49 @@ export async function createNativeStarterFlowsAction(formData: FormData) {
 					cta: "Cargar",
 					screen: "INVOICE",
 					flowJson: nativeInvoiceFlowJson(),
+				},
+			},
+		},
+		{
+			name: "Nativo - reporte semanal reusable",
+			slug: "nativo_reporte_semanal_reusable",
+			description: "Flow nativo reusable para reportes semanales con fecha, select, numero, texto y booleano.",
+			flow_type: "review",
+			definition: {
+				fields: [
+					{ key: "accepted", label: "Acepto iniciar", type: "boolean", required: true },
+					{ key: "progress_date", label: "Fecha de avance", type: "date", required: true },
+					{ key: "progress_status", label: "Estado general", type: "select", required: true, options: ["sin_avance", "bajo", "normal", "alto", "bloqueado"] },
+					{ key: "worker_count", label: "Cantidad de obreros", type: "number", required: false },
+					{ key: "progress_description", label: "Descripcion de avance", type: "textarea", required: true },
+					{ key: "has_blockers", label: "Hubo bloqueos", type: "boolean", required: true },
+					{ key: "comment", label: "Comentario adicional", type: "textarea", required: false },
+				],
+			},
+			settings: {
+				showInTestMenu: true,
+				native: {
+					enabled: true,
+					mode: "draft",
+					cta: "Completar",
+					screen: "START",
+					data: {
+						intro_title: "Seguimiento semanal de obra",
+						intro_body: "Hola, completa el formulario semanal de avance de obra.",
+						date_label: "Fecha de avance",
+						select_label: "Estado general de avance",
+						select_options: [
+							{ id: "sin_avance", title: "Sin avance" },
+							{ id: "bajo", title: "Bajo" },
+							{ id: "normal", title: "Normal" },
+							{ id: "alto", title: "Alto" },
+							{ id: "bloqueado", title: "Bloqueado" },
+						],
+						number_label: "Cantidad de obreros",
+						text_label: "Descripcion de avance",
+						boolean_label: "Hubo bloqueos",
+					},
+					flowJson: nativeWeeklyReportReusableFlowJson(),
 				},
 			},
 		},
