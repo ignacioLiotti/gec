@@ -20,5 +20,6 @@ Document patterns for:
 Current pattern notes:
 
 - [Table filters](./table-filters.md)
+- [Table bulk edit](./table-bulk-edit.md)
 
 Add or update styleguide docs when a change introduces or changes a reusable UI pattern.

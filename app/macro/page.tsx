@@ -58,6 +58,7 @@ import type {
   FetchRowsArgs,
   FilterRendererProps,
   FormTableConfig,
+  FormTableCsvExport,
 } from "@/components/form-table/types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -70,6 +71,7 @@ import {
   countActiveMacroFilters,
   isMacroFilterActive,
   matchesMacroFilters,
+  matchesMacroSearch,
   type MacroTableFilters,
 } from "@/lib/macro-table-filters";
 import type {
@@ -150,6 +152,53 @@ function getActiveMacroFilters(filters: MacroTableFilters | undefined): MacroTab
     }
     return acc;
   }, {});
+}
+
+function buildMacroAccordionCsvExport({
+  rows,
+  tableColumns,
+  detailColumns,
+  fileName,
+}: {
+  rows: MacroTableRowData[];
+  tableColumns: MacroDisplayColumn[];
+  detailColumns: MacroDisplayColumn[];
+  fileName: string;
+}): FormTableCsvExport {
+  const effectiveDetailColumns = detailColumns.length > 0 ? detailColumns : tableColumns;
+  const columns = [
+    "Nivel",
+    ...tableColumns.map((column) => column.label),
+    ...effectiveDetailColumns.map((column) => column.label),
+  ];
+  const emptyTableValues = tableColumns.map(() => "");
+  const emptyDetailValues = effectiveDetailColumns.map(() => "");
+
+  return {
+    fileName,
+    columns,
+    rows: rows.flatMap((row) => {
+      const tableValues = tableColumns.map((column) =>
+        formatMacroAccordionValue(row[column.id], column)
+      );
+      const childRows = Array.isArray(row._macroAccordionRows) && row._macroAccordionRows.length > 0
+        ? row._macroAccordionRows
+        : effectiveDetailColumns.length > 0
+          ? [row]
+          : [];
+
+      return [
+        ["Acordeon", ...tableValues, ...emptyDetailValues],
+        ...childRows.map((childRow) => [
+          "- item",
+          ...emptyTableValues,
+          ...effectiveDetailColumns.map((column) =>
+            formatMacroAccordionValue(childRow[column.id], column)
+          ),
+        ]),
+      ];
+    }),
+  };
 }
 
 const toolButtonClass =
@@ -788,6 +837,7 @@ function MacroTablePanel({
       limit,
       filters,
       search,
+      sort,
     }: FetchRowsArgs<MacroTableFilters>) => {
       const tableId = macroTable.id;
       const params = new URLSearchParams({
@@ -806,6 +856,11 @@ function MacroTablePanel({
 
       if (accordionGroupColumn) {
         params.set("groupBy", accordionGroupColumn.id);
+      }
+
+      if (sort?.columnId) {
+        params.set("sortBy", sort.columnId);
+        params.set("sortDir", sort.direction);
       }
 
       const res = await fetch(`/api/macro-tables/${tableId}/rows?${params.toString()}`, {
@@ -855,6 +910,42 @@ function MacroTablePanel({
       };
     },
     [accordionGroupColumn, macroTable.id]
+  );
+  const fetchAllRowsForExport = useCallback(
+    async ({
+      filters,
+      search,
+      sort,
+    }: {
+      filters: MacroTableFilters | undefined;
+      search: string | undefined;
+      sort?: FetchRowsArgs<MacroTableFilters>["sort"];
+    }) => {
+      const limit = 200;
+      const firstPage = await fetchRows({
+        page: 1,
+        limit,
+        filters: filters ?? {},
+        search,
+        sort,
+      });
+      const allRows = [...firstPage.rows];
+      const totalPages = firstPage.pagination?.totalPages ?? 1;
+
+      for (let page = 2; page <= totalPages; page += 1) {
+        const result = await fetchRows({
+          page,
+          limit,
+          filters: filters ?? {},
+          search,
+          sort,
+        });
+        allRows.push(...result.rows);
+      }
+
+      return allRows;
+    },
+    [fetchRows]
   );
 
   const onSave = useCallback(
@@ -1010,6 +1101,7 @@ function MacroTablePanel({
       tableLayout: "auto",
       columns: columnDefs,
       fetchRows,
+      serverSideData: true,
       onSave,
       searchPlaceholder: "Buscar certificados, obras o estados...",
       defaultPageSize: 50,
@@ -1020,6 +1112,31 @@ function MacroTablePanel({
       ),
       applyFilters: (row: MacroTableRowData, filters: MacroTableFilters) =>
         matchesMacroFilters(row, displayColumns, filters),
+      csvExport:
+        accordionDetailColumns.length > 0 || accordionGroupColumn
+          ? {
+            buildExport: async ({ filters, search, sort }) => {
+              const exportRows = await fetchAllRowsForExport({ filters, search, sort });
+              const visibleRows = search.trim()
+                ? exportRows.filter((row) =>
+                  matchesMacroSearch(row, displayColumns, search) ||
+                  (Array.isArray(row._macroAccordionRows) &&
+                    row._macroAccordionRows.some((childRow) =>
+                      matchesMacroSearch(childRow, displayColumns, search)
+                    ))
+                )
+                : exportRows;
+
+              return buildMacroAccordionCsvExport({
+                rows: visibleRows,
+                tableColumns,
+                detailColumns:
+                  accordionDetailColumns.length > 0 ? accordionDetailColumns : tableColumns,
+                fileName: `macro-table-${macroTable.id}-accordion-all`,
+              });
+            },
+          }
+          : undefined,
       countActiveFilters: (filters: MacroTableFilters) =>
         countActiveMacroFilters(filters),
       emptyStateMessage: "No hay datos disponibles en las tablas fuente.",
@@ -1118,6 +1235,7 @@ function MacroTablePanel({
     accordionGroupColumn,
     displayColumns,
     fetchRows,
+    fetchAllRowsForExport,
     isAccordionEditableColumn,
     isManuallyEditableColumn,
     isObraRedirectColumn,
@@ -1263,7 +1381,7 @@ function MacroTablesPageContent() {
     }
     return map;
   }, [mainTableColumnsQuery.data]);
-  const hasInsurancePreviewErrors = insurancePreviewRows.some((row) => row.errors.length > 0);
+  const hasImportableInsurancePreviewRows = insurancePreviewRows.some((row) => row.policyNumber && row.errors.length === 0);
 
   const previewInsuranceImport = async (file: File) => {
     setIsInsuranceImporting(true);
@@ -1287,10 +1405,11 @@ function MacroTablesPageContent() {
   };
 
   const confirmInsuranceImport = async () => {
+    const validRows = insurancePreviewRows.filter((row) => row.policyNumber && row.errors.length === 0);
     const response = await fetch("/api/insurance-policies/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: insurancePreviewRows }),
+      body: JSON.stringify({ rows: validRows }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -1411,7 +1530,7 @@ function MacroTablesPageContent() {
                   {insurancePreviewRows.map((row) => (
                     <TableRow key={`${row.rowNumber}-${row.policyNumber}`}>
                       <TableCell>{row.rowNumber}</TableCell>
-                      <TableCell>{row.obraId ? row.obraLabel : "-"}</TableCell>
+                      <TableCell>{row.obraLabel || "-"}</TableCell>
                       <TableCell>{row.policyNumber || "-"}</TableCell>
                       <TableCell>{row.section || "-"}</TableCell>
                       <TableCell>{row.coveragePeriod || row.endDate || "-"}</TableCell>
@@ -1425,7 +1544,7 @@ function MacroTablesPageContent() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsInsuranceImportOpen(false)}>Cancelar</Button>
-              <Button onClick={() => void confirmInsuranceImport()} disabled={hasInsurancePreviewErrors || insurancePreviewRows.length === 0}>
+              <Button onClick={() => void confirmInsuranceImport()} disabled={!hasImportableInsurancePreviewRows}>
                 Confirmar importación
               </Button>
             </DialogFooter>
@@ -1520,7 +1639,7 @@ function MacroTablesPageContent() {
                 {insurancePreviewRows.map((row) => (
                   <TableRow key={`${row.rowNumber}-${row.policyNumber}`}>
                     <TableCell>{row.rowNumber}</TableCell>
-                    <TableCell>{row.obraId ? row.obraLabel : "-"}</TableCell>
+                    <TableCell>{row.obraLabel || "-"}</TableCell>
                     <TableCell>{row.policyNumber || "-"}</TableCell>
                     <TableCell>{row.section || "-"}</TableCell>
                     <TableCell>{row.coveragePeriod || row.endDate || "-"}</TableCell>
@@ -1534,7 +1653,7 @@ function MacroTablesPageContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsInsuranceImportOpen(false)}>Cancelar</Button>
-            <Button onClick={() => void confirmInsuranceImport()} disabled={hasInsurancePreviewErrors || insurancePreviewRows.length === 0}>
+            <Button onClick={() => void confirmInsuranceImport()} disabled={!hasImportableInsurancePreviewRows}>
               Confirmar importación
             </Button>
           </DialogFooter>

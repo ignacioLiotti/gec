@@ -1,13 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { ensureTablaDataType } from "@/lib/tablas";
+import { resolveDocumentSeries } from "@/lib/document-ai/continuity/resolve-document-series";
+import type { DocumentAiRow } from "@/lib/document-ai/schemas/types";
 
 import {
   buildInitialInputData,
   buildDocumentGenerationExtractionRows,
+  applyDocumentAiContextInputData,
   type FolderFieldSuggestion,
   type DocumentTemplateSummary,
   type DocumentType,
+  type DocumentAiHydrationResult,
+  type DocumentAiSourceRow,
   DOCUMENT_TYPES,
   type ExtractionTableColumn,
   normalizeDocumentType,
@@ -764,6 +769,190 @@ export async function syncGeneratedDocumentExtractionRows(params: {
   }
 
   return targets.length;
+}
+
+export async function buildDocumentAiInputFromExtractionContext(params: {
+  access: AccessContext;
+  workId: string;
+  folderPath: string;
+  documentType: DocumentType;
+  schema: TemplateSchema;
+  currentInputData: Record<string, unknown>;
+}): Promise<DocumentAiHydrationResult> {
+  const sourceRows = await loadDocumentAiSourceRows({
+    access: params.access,
+    workId: params.workId,
+    folderPath: params.folderPath,
+    documentType: params.documentType,
+  });
+
+  const hydrated = applyDocumentAiContextInputData({
+    schema: params.schema,
+    current: params.currentInputData,
+    sourceRows,
+  });
+  if (params.documentType !== "CERTIFICATE") return hydrated;
+
+  const series = resolveDocumentSeries(
+    sourceRows.map((row) => ({
+      id: row.id,
+      tenantId: params.access.tenantId,
+      obraId: params.workId,
+      tableId: row.tablaId,
+      tableName: row.tablaName ?? null,
+      documentType: "certificado_avance",
+      data: row.data,
+      createdAt: row.createdAt ?? null,
+      source: {
+        kind: "obra_tabla_row",
+        tenantId: params.access.tenantId,
+        obraId: params.workId,
+        tableId: row.tablaId,
+        rowId: row.id,
+        documentType: "certificado_avance",
+        documentPath: row.documentPath ?? null,
+        documentFileName: row.documentFileName ?? null,
+        lineageRowKey: row.lineageRowKey ?? null,
+        extractionId: row.extractionId ?? null,
+        confidence: 0.8,
+      },
+    }) satisfies DocumentAiRow),
+  );
+  if (!series?.nextDraft) return hydrated;
+
+  const nextInputData = applyCertificateSeriesDraftToInputData({
+    schema: params.schema,
+    inputData: hydrated.inputData,
+    nextNumber: series.nextDraft.number,
+    previousAccumulatedAmount: series.nextDraft.previousAccumulatedAmount,
+  });
+  const currentContext =
+    nextInputData.__documentAi && typeof nextInputData.__documentAi === "object" && !Array.isArray(nextInputData.__documentAi)
+      ? (nextInputData.__documentAi as Record<string, unknown>)
+      : {};
+
+  return {
+    ...hydrated,
+    inputData: {
+      ...nextInputData,
+      __documentAi: {
+        ...currentContext,
+        series,
+      },
+    },
+  };
+}
+
+function hasInputValue(value: unknown) {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function fieldMatches(fieldKey: string, aliases: string[]) {
+  const normalized = fieldKey
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return aliases.some((alias) => normalized.includes(alias));
+}
+
+function setFirstMatchingEmptyField(
+  schema: TemplateSchema,
+  inputData: Record<string, unknown>,
+  aliases: string[],
+  value: unknown,
+) {
+  if (value == null) return;
+  const field = schema.fields.find(
+    (entry) =>
+      entry.type !== "table" &&
+      !entry.repeatableGroup &&
+      fieldMatches(`${entry.key} ${entry.label} ${entry.extractionFieldKey ?? ""}`, aliases),
+  );
+  if (!field || hasInputValue(inputData[field.key])) return;
+  inputData[field.key] = value;
+}
+
+function applyCertificateSeriesDraftToInputData(params: {
+  schema: TemplateSchema;
+  inputData: Record<string, unknown>;
+  nextNumber: number | null;
+  previousAccumulatedAmount: number | null;
+}) {
+  const next = { ...params.inputData };
+  setFirstMatchingEmptyField(params.schema, next, ["numero_certificado", "nro_certificado", "certificado"], params.nextNumber);
+  setFirstMatchingEmptyField(
+    params.schema,
+    next,
+    ["acumulado_anterior", "monto_anterior", "previous_accumulated"],
+    params.previousAccumulatedAmount,
+  );
+  setFirstMatchingEmptyField(params.schema, next, ["monto_actual", "monto_certificado_actual"], null);
+  return next;
+}
+
+async function loadDocumentAiSourceRows(params: {
+  access: AccessContext;
+  workId: string;
+  folderPath: string;
+  documentType: DocumentType;
+}) {
+  const normalizedFolderPath = normalizeFolderGenerationPath(params.folderPath);
+  if (!normalizedFolderPath) return [] as DocumentAiSourceRow[];
+
+  const { data: tablas, error: tablasError } = await params.access.supabase
+    .from("obra_tablas")
+    .select("id, name, settings")
+    .eq("obra_id", params.workId)
+    .eq("source_type", "ocr");
+  if (tablasError) throw tablasError;
+
+  const matchingTablas = (tablas ?? []).filter((tabla) => {
+    const settings = readSettings(tabla.settings);
+    const tablaFolderPath = normalizeFolderGenerationPath(settings.ocrFolder);
+    if (tablaFolderPath !== normalizedFolderPath) return false;
+    const allowedDocumentTypes = mergeDocumentTypes(settings);
+    return allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes(params.documentType);
+  });
+  if (matchingTablas.length === 0) return [] as DocumentAiSourceRow[];
+
+  const tablaNameById = new Map(
+    matchingTablas.map((tabla) => [
+      String(tabla.id),
+      typeof tabla.name === "string" ? tabla.name : null,
+    ]),
+  );
+  const tablaIds = Array.from(tablaNameById.keys());
+  const { data: rows, error: rowsError } = await params.access.supabase
+    .from("obra_tabla_rows")
+    .select("id, tabla_id, data, lineage_row_key, extraction_id, created_at")
+    .in("tabla_id", tablaIds)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (rowsError) throw rowsError;
+
+  return ((rows ?? []) as Array<Record<string, unknown>>)
+    .map((row) => {
+      const data =
+        row.data && typeof row.data === "object" && !Array.isArray(row.data)
+          ? (row.data as Record<string, unknown>)
+          : {};
+      return {
+        id: String(row.id ?? ""),
+        tablaId: String(row.tabla_id ?? ""),
+        tablaName: tablaNameById.get(String(row.tabla_id ?? "")) ?? null,
+        data,
+        createdAt: typeof row.created_at === "string" ? row.created_at : null,
+        lineageRowKey: typeof row.lineage_row_key === "string" ? row.lineage_row_key : null,
+        extractionId: typeof row.extraction_id === "string" ? row.extraction_id : null,
+        documentPath: typeof data.__docPath === "string" ? data.__docPath : null,
+        documentFileName: typeof data.__docFileName === "string" ? data.__docFileName : null,
+        documentBucket: typeof data.__docBucket === "string" ? data.__docBucket : null,
+      } satisfies DocumentAiSourceRow;
+    })
+    .filter((row) => row.id && row.tablaId);
 }
 
 async function loadExtractionTargetsForGeneration(

@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, Fragment, useCallback, useEffect, useRef } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Row as TanStackRow } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,11 +24,30 @@ import { MemoizedTableCell } from "./table-cell";
 const HOVER_INTENT_DELAY_MS = 60;
 
 const TONE_CELL_CLASSES: Record<RowColorTone, string> = {
-	red: "bg-red-50 border-red-500 outline-red-600/50 z-100",
-	amber: "bg-amber-50 border-amber-500 outline-amber-600/50 z-100",
-	green: "bg-emerald-50 outline-emerald-600/50 z-100",
-	blue: "bg-blue-50 border-blue-500 outline-blue-600/50 z-100",
+	red: "bg-red-50 border-red-50 outline-red-200 z-[100]",
+	amber: "bg-amber-50 border-amber-500 outline-amber-600/50 z-[100]",
+	green: "bg-emerald-50 outline-emerald-200 z-[100]",
+	blue: "bg-blue-50 border-blue-500 outline-blue-600/50 z-[100]",
 };
+
+const COMPACT_EDITOR_CELL_TYPES = new Set([
+	"currency",
+	"number",
+	"date",
+	"boolean",
+	"checkbox",
+	"toggle",
+	"select",
+	"badge",
+	"avatar",
+	"image",
+]);
+
+function isInteractiveCellTarget(target: EventTarget | null) {
+	return target instanceof Element && Boolean(target.closest(
+		'input, textarea, select, button, a, [contenteditable="true"], [role="combobox"], [role="switch"], [role="checkbox"]'
+	));
+}
 
 type TableRowProps<Row extends FormTableRow> = {
 	row: TanStackRow<Row>;
@@ -37,6 +57,7 @@ type TableRowProps<Row extends FormTableRow> = {
 	setHoveredCell: (cell: { rowId: string; columnId: string } | null) => void;
 	columnsById: Record<string, ColumnDef<Row>>;
 	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
+	rowElementClassName?: (row: Row, rowIndex: number) => string | undefined;
 	rowColorInfo?: (row: Row, rowIndex: number) => RowColorInfo | undefined;
 	rowOverlayBadges?: (
 		row: Row,
@@ -46,8 +67,10 @@ type TableRowProps<Row extends FormTableRow> = {
 	tableReadOnly: boolean;
 	highlightQuery: string;
 	editMode: "always" | "active-cell";
+	editOnHover: boolean;
 	activeCell: { rowId: string; columnId: string } | null;
 	setActiveCell: (cell: { rowId: string; columnId: string } | null) => void;
+	onCommitCellValue?: (rowId: string, column: ColumnDef<Row>, value: unknown) => boolean;
 	hasInitialSnapshot: boolean;
 	accordionRowConfig?: AccordionRowConfig<Row>;
 	accordionAlwaysOpen: boolean;
@@ -55,12 +78,26 @@ type TableRowProps<Row extends FormTableRow> = {
 	isRowDirty: boolean;
 	dirtyCellIds: string;
 	hiddenColumnIdsKey: string;
+	stickyStateKey: string;
 	showActionsColumn: boolean;
 	actionsColumnPosition: "start" | "end";
 	actionsColumnWidth: number;
 	canDeleteRows: boolean;
-	isColumnHidden: (columnId: string) => boolean;
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
+	bulkSelectedColumnId: string | null;
+	bulkSelectedCount: number;
+	isRowBulkSelected: boolean;
+	onBulkSelectionStart: (
+		event: ReactMouseEvent<HTMLTableCellElement>,
+		rowId: string,
+		column: ColumnDef<Row>
+	) => void;
+	onBulkSelectionExtend: (
+		event: ReactMouseEvent<HTMLTableCellElement>,
+		rowId: string,
+		column: ColumnDef<Row>
+	) => void;
+	onBulkSelectionEnd: (event: ReactMouseEvent<HTMLTableCellElement>) => void;
 	getStickyProps: (columnId: string, baseClassName?: string) => {
 		className: string;
 		style?: React.CSSProperties;
@@ -72,6 +109,7 @@ type TableRowProps<Row extends FormTableRow> = {
 	onCopyCell: (value: unknown) => void;
 	onCopyColumn: (column: ColumnDef<Row>) => void;
 	onCopyRow: (row: Row) => void;
+	measureElement?: (element: HTMLTableRowElement | null) => void;
 };
 
 function TableRowInner<Row extends FormTableRow>({
@@ -82,14 +120,17 @@ function TableRowInner<Row extends FormTableRow>({
 	setHoveredCell,
 	columnsById,
 	rowClassName,
+	rowElementClassName,
 	rowColorInfo,
 	rowOverlayBadges,
 	FieldComponent,
 	tableReadOnly,
 	highlightQuery,
 	editMode,
+	editOnHover,
 	activeCell,
 	setActiveCell,
+	onCommitCellValue,
 	hasInitialSnapshot,
 	accordionRowConfig,
 	accordionAlwaysOpen,
@@ -97,12 +138,18 @@ function TableRowInner<Row extends FormTableRow>({
 	isRowDirty,
 	dirtyCellIds,
 	hiddenColumnIdsKey,
+	stickyStateKey,
 	showActionsColumn,
 	actionsColumnPosition,
 	actionsColumnWidth,
 	canDeleteRows,
-	isColumnHidden,
 	isCellDirty,
+	bulkSelectedColumnId,
+	bulkSelectedCount,
+	isRowBulkSelected,
+	onBulkSelectionStart,
+	onBulkSelectionExtend,
+	onBulkSelectionEnd,
 	getStickyProps,
 	onToggleAccordion,
 	onDelete,
@@ -111,20 +158,29 @@ function TableRowInner<Row extends FormTableRow>({
 	onCopyCell,
 	onCopyColumn,
 	onCopyRow,
+	measureElement,
 }: TableRowProps<Row>) {
 	void externalRefreshVersion;
 	// dirtyCellIds is used for memoization comparison (see MemoizedTableRow below)
 	void dirtyCellIds;
 	void hiddenColumnIdsKey;
-	const visibleCells = row.getVisibleCells();
-	const filteredCells = visibleCells.filter((cell) => !isColumnHidden(cell.column.id));
+	void stickyStateKey;
+	const filteredCells = row.getVisibleCells();
 	const visibleLeafCount = filteredCells.length;
 	const accordionLabel = accordionRowConfig?.triggerLabel ?? "detalles";
 	const rowData = row.original;
 	const resolvedRowClassName = rowClassName?.(rowData, rowIndex);
+	const resolvedRowElementClassName = rowElementClassName?.(rowData, rowIndex);
 	const colorInfo = rowColorInfo?.(rowData, rowIndex);
 	const overlayBadges = rowOverlayBadges?.(rowData, rowIndex) ?? [];
-	const shouldTrackHover = editMode === "active-cell" && !tableReadOnly;
+	const activeColumn =
+		activeCell?.rowId === rowData.id ? columnsById[activeCell.columnId] ?? null : null;
+	const shouldExpandActiveTextRow = Boolean(
+		activeColumn &&
+		activeColumn.editable !== false &&
+		!COMPACT_EDITOR_CELL_TYPES.has(activeColumn.cellType ?? "text")
+	);
+	const shouldTrackHover = editMode === "active-cell" && editOnHover && !tableReadOnly;
 	const hoverIntentTimeoutRef = useRef<number | null>(null);
 	const cancelHoverIntent = useCallback(() => {
 		if (hoverIntentTimeoutRef.current !== null) {
@@ -141,7 +197,7 @@ function TableRowInner<Row extends FormTableRow>({
 	const actionsCell = showActionsColumn ? (
 		<td
 			className={cn(
-				"whitespace-nowrap px-1 py-2 text-center outline outline-border border-border group-hover:bg-[#f5f5f5] space-y-2",
+				"whitespace-nowrap px-1 py-2 text-center outline outline-border border-border group-hover:bg-orange-50/45 space-y-2",
 				actionsColumnPosition === "end" && "px-4 text-right",
 				rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
 				colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
@@ -176,7 +232,7 @@ function TableRowInner<Row extends FormTableRow>({
 			{isRowDirty && (
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-100 bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm">
+						<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-[100] bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm">
 							Sin guardar
 						</div>
 					</TooltipTrigger>
@@ -234,6 +290,7 @@ function TableRowInner<Row extends FormTableRow>({
 	return (
 		<Fragment>
 			<tr
+				ref={measureElement}
 				data-index={rowIndex}
 				data-row-id={rowData.id}
 				onPointerLeave={() => {
@@ -247,9 +304,12 @@ function TableRowInner<Row extends FormTableRow>({
 					"border-b group relative",
 					rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
 					isRowDirty
-						? "group/row-dirty shadow-[inset_0_0_0_2px_rgba(217,119,6,0.85)] border border-amber-500 z-100"
+						? "group/row-dirty shadow-[inset_0_0_0_2px_rgba(217,119,6,0.85)] border border-amber-500 z-[100]"
 						: "",
 					colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
+					resolvedRowElementClassName,
+					shouldExpandActiveTextRow && " align-top",
+					" has-[textarea:focus]:align-top",
 				)}
 			>
 				{actionsColumnPosition === "start" ? actionsCell : null}
@@ -258,17 +318,23 @@ function TableRowInner<Row extends FormTableRow>({
 					const columnMeta = columnsById[columnId];
 					if (!columnMeta) return null;
 					const isEditableColumn = !tableReadOnly && columnMeta.editable !== false;
+					const cellBulkSelected = isRowBulkSelected && bulkSelectedColumnId === columnMeta.id;
+					const cellBulkEditing = cellBulkSelected && bulkSelectedCount > 1;
 
 					const baseClassName = cn(
 						"outline outline-border border-border relative h-8",
-						"focus-within:border-red-500 focus-within:after:w-full focus-within:after:h-full focus-within:after:border-orange-primary focus-within:after:border-2 focus-within:after:absolute focus-within:after:top-0 focus-within:after:pointer-events-none",
-						isEditableColumn && "group-hover:bg-[#fffaf5]",
+						// isActiveExpandedTextCell && "overflow-visible align-top",
+						"has-[textarea:focus]:h-auto has-[textarea:focus]:max-h-40 has-[textarea:focus]:overflow-visible has-[textarea:focus]:align-top",
+						!cellBulkSelected &&
+						"hover:shadow-[inset_0_0_0_2px_rgba(249,115,22,0.85)] hover:z-[1] focus-within:shadow-[inset_0_0_0_2px_var(--color-orange-primary)] focus-within:z-[1]",
 						rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
 						colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 						colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
+						!cellBulkSelected && "group-hover:bg-orange-50/45",
 						typeof columnMeta.cellClassName === "function"
 							? columnMeta.cellClassName(rowData)
-							: columnMeta.cellClassName
+							: columnMeta.cellClassName,
+						cellBulkSelected && "bg-orange-50 outline-orange-primary/80 shadow-[inset_0_0_0_2px_rgba(249,115,22,0.7)]",
 					);
 					const cellDirty = isCellDirty(rowData.id, columnMeta);
 
@@ -279,6 +345,18 @@ function TableRowInner<Row extends FormTableRow>({
 							data-row-id={rowData.id}
 							data-column-id={columnMeta.id}
 							{...getStickyProps(columnId, baseClassName)}
+							onMouseDownCapture={(event) => {
+								if (isInteractiveCellTarget(event.target)) return;
+								onBulkSelectionStart(event, rowData.id, columnMeta);
+							}}
+							onMouseOverCapture={(event) => {
+								if (isInteractiveCellTarget(event.target)) return;
+								onBulkSelectionExtend(event, rowData.id, columnMeta);
+							}}
+							onMouseUpCapture={(event) => {
+								if (isInteractiveCellTarget(event.target)) return;
+								onBulkSelectionEnd(event);
+							}}
 							onPointerEnter={() => {
 								if (!shouldTrackHover || !isEditableColumn) return;
 								if (
@@ -331,6 +409,7 @@ function TableRowInner<Row extends FormTableRow>({
 								tableReadOnly={tableReadOnly}
 								highlightQuery={highlightQuery}
 								editMode={editMode}
+								editOnHover={editOnHover}
 								isHovered={
 									isEditableColumn &&
 									hoveredCell?.rowId === rowData.id &&
@@ -338,6 +417,8 @@ function TableRowInner<Row extends FormTableRow>({
 								}
 								activeCell={activeCell}
 								setActiveCell={setActiveCell}
+								onCommitCellValue={onCommitCellValue}
+								isBulkEditing={cellBulkEditing}
 								isRowDirty={isRowDirty}
 								hasInitialSnapshot={hasInitialSnapshot}
 								isCellDirty={cellDirty}
@@ -358,7 +439,7 @@ function TableRowInner<Row extends FormTableRow>({
 				{actionsColumnPosition === "end" && showActionsColumn && (
 					<td
 						className={cn(
-							"px-4 py-3 text-right outline outline-border border-border group-hover:bg-[hsl(50,17%,95%)] space-y-2",
+							"px-4 py-3 text-right outline outline-border border-border group-hover:bg-orange-50/45 space-y-2",
 							rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
 							colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 							colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
@@ -387,7 +468,7 @@ function TableRowInner<Row extends FormTableRow>({
 						{isRowDirty && (
 							<Tooltip>
 								<TooltipTrigger asChild>
-									<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-100 bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm">
+									<div className="text-[10px] uppercase tracking-wide absolute p-0 h-5 text-transparent group-hover/row-dirty:text-primary group-hover/row-dirty:px-2 group-hover/row-dirty:py-1 group-hover/row-dirty:max-h-5 group-hover/row-dirty:-top-5 max-h-2 top-0 left-0 z-[100] bg-amber-300 group-hover/row-dirty:rounded-t-sm group-hover/row-dirty:rounded-b-none rounded-b-sm">
 										Sin guardar
 									</div>
 								</TooltipTrigger>
@@ -466,12 +547,14 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 	const prevHoveredAffectsRow =
 		prevProps.hoveredCell?.rowId === rowId || nextProps.hoveredCell?.rowId === rowId;
 	return (
-		prevProps.row === nextProps.row &&
+		prevProps.row.id === nextProps.row.id &&
+		prevProps.row.original === nextProps.row.original &&
 		prevProps.rowIndex === nextProps.rowIndex &&
 		prevProps.externalRefreshVersion === nextProps.externalRefreshVersion &&
 		prevProps.tableReadOnly === nextProps.tableReadOnly &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&
 		prevProps.editMode === nextProps.editMode &&
+		prevProps.editOnHover === nextProps.editOnHover &&
 		(!prevAffectsRow ||
 			(prevProps.activeCell?.rowId === nextProps.activeCell?.rowId &&
 				prevProps.activeCell?.columnId === nextProps.activeCell?.columnId)) &&
@@ -484,8 +567,18 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		prevProps.actionsColumnPosition === nextProps.actionsColumnPosition &&
 		prevProps.actionsColumnWidth === nextProps.actionsColumnWidth &&
 		prevProps.canDeleteRows === nextProps.canDeleteRows &&
+		prevProps.measureElement === nextProps.measureElement &&
+		prevProps.rowElementClassName === nextProps.rowElementClassName &&
 		prevProps.isRowDirty === nextProps.isRowDirty &&
 		prevProps.dirtyCellIds === nextProps.dirtyCellIds &&
-		prevProps.hiddenColumnIdsKey === nextProps.hiddenColumnIdsKey
+		prevProps.hiddenColumnIdsKey === nextProps.hiddenColumnIdsKey &&
+		prevProps.stickyStateKey === nextProps.stickyStateKey &&
+		prevProps.bulkSelectedColumnId === nextProps.bulkSelectedColumnId &&
+		prevProps.bulkSelectedCount === nextProps.bulkSelectedCount &&
+		prevProps.isRowBulkSelected === nextProps.isRowBulkSelected &&
+		prevProps.onCommitCellValue === nextProps.onCommitCellValue &&
+		prevProps.onBulkSelectionStart === nextProps.onBulkSelectionStart &&
+		prevProps.onBulkSelectionExtend === nextProps.onBulkSelectionExtend &&
+		prevProps.onBulkSelectionEnd === nextProps.onBulkSelectionEnd
 	);
 }) as typeof TableRowInner;

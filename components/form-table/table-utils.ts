@@ -3,19 +3,27 @@ import type { ColumnDef, ColumnField, FormTableRow, FormValues } from "./types";
 
 const FALLBACK_ID = () => `row-${Date.now()}-${Math.random()}`;
 
+function resolveDefaultValue(value: unknown | (() => unknown)) {
+	const resolved = typeof value === "function" ? (value as () => unknown)() : value;
+	if (Array.isArray(resolved)) return [...resolved];
+	if (resolved && typeof resolved === "object") return { ...(resolved as Record<string, unknown>) };
+	return resolved;
+}
+
 export function createRowFromColumns<Row extends FormTableRow>(columns: ColumnDef<Row>[]): Row {
 	const hasCrypto =
 		typeof crypto !== "undefined" && typeof crypto.randomUUID === "function";
 	const row: FormTableRow = {
 		id: hasCrypto ? crypto.randomUUID() : FALLBACK_ID(),
 	};
+	const writableRow = row as Record<string, unknown>;
 
 	columns.forEach((column) => {
 		if (!column.field) return;
 
 		const defaultValue = column.defaultValue;
 		if (typeof defaultValue !== "undefined") {
-			(row as any)[column.field] = defaultValue;
+			writableRow[column.field] = resolveDefaultValue(defaultValue);
 			return;
 		}
 
@@ -23,14 +31,14 @@ export function createRowFromColumns<Row extends FormTableRow>(columns: ColumnDe
 			case "boolean":
 			case "checkbox":
 			case "toggle":
-				(row as any)[column.field] = false;
+				writableRow[column.field] = false;
 				break;
 			case "currency":
 			case "number":
-				(row as any)[column.field] = 0;
+				writableRow[column.field] = 0;
 				break;
 			default:
-				(row as any)[column.field] = "";
+				writableRow[column.field] = "";
 		}
 	});
 
@@ -81,6 +89,11 @@ export function escapeRegExp(value: string) {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const defaultSortCollator = new Intl.Collator("es", {
+	sensitivity: "base",
+	numeric: true,
+});
+
 export function defaultSortByField<Row extends FormTableRow>(field: ColumnField<Row>) {
 	return (a: Row, b: Row) => {
 		const valueA = a[field];
@@ -89,10 +102,7 @@ export function defaultSortByField<Row extends FormTableRow>(field: ColumnField<
 			return valueA - valueB;
 		}
 
-		return String(valueA ?? "").localeCompare(String(valueB ?? ""), "es", {
-			sensitivity: "base",
-			numeric: true,
-		});
+		return defaultSortCollator.compare(String(valueA ?? ""), String(valueB ?? ""));
 	};
 }
 
@@ -121,9 +131,14 @@ export function tableRowToCsv<Row extends FormTableRow>(row: Row, cols: ColumnDe
 		return raw ?? "";
 	});
 
+	return valuesToCsvRow(values);
+}
+
+export function valuesToCsvRow(values: unknown[]) {
 	return values
 		.map((value) => {
-			const safe = String(value ?? "");
+			const raw = String(value ?? "");
+			const safe = /^[=+\-@]/.test(raw.trimStart()) ? `'${raw}` : raw;
 			return `"${safe.replace(/"/g, '""')}"`;
 		})
 		.join(";");

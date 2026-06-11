@@ -1,4 +1,5 @@
 import ObraDetailPage from "./page-client";
+import { getObraDetailInitialData } from "@/lib/excel/obra-detail-data";
 
 type ObraDetailRoutePageProps = {
 	params: Promise<{ obraId?: string }>;
@@ -19,12 +20,16 @@ export default async function ObraDetailRoutePage({
 		params,
 		searchParams ?? Promise.resolve(EMPTY_SEARCH_PARAMS),
 	]);
+	const obraId = resolvedParams.obraId;
 	const initialTab = firstParamValue(resolvedSearchParams.tab) ?? "general";
+	const initialData = await getObraDetailInitialData(obraId ?? "");
 
 	return (
 		<ObraDetailPage
-			initialObraId={resolvedParams.obraId}
+			initialObraId={obraId}
 			initialTab={initialTab}
+			initialObra={initialData.obra}
+			initialMainTableColumnsConfig={initialData.mainTableColumnsConfig}
 		/>
 	);
 }

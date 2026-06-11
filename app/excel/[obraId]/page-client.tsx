@@ -72,7 +72,6 @@ import {
 	fetchOcrLinks,
 	fetchObraRecipients,
 	fetchFlujoActions,
-	fetchPendingDocs,
 	fetchMacroTablesList,
 	fetchAllMacroTableRows,
 	normalizeForSearch,
@@ -82,7 +81,6 @@ import {
 	type DataFlowSuggestion,
 	type DerivedCertificadosNotice,
 	type DerivedCertificadosField,
-	type PendingDoc,
 	type ReportFinding,
 	type TablaRowRecord,
 	type GeneralReportCurvePoint,
@@ -125,6 +123,18 @@ const ObraDocumentsTab = dynamic(
 	}
 );
 
+const ObraDocumentsNewTab = dynamic(
+	() => import("./tabs/documents-new-tab").then((mod) => mod.ObraDocumentsNewTab),
+	{
+		loading: () => (
+			<div className="flex h-[600px] animate-pulse gap-4">
+				<div className="w-72 shrink-0 rounded-lg border bg-stone-100" />
+				<div className="flex-1 rounded-lg border bg-stone-100" />
+			</div>
+		),
+	}
+);
+
 const InsurancePoliciesTab = dynamic(
 	() => import("./tabs/insurance-policies-tab").then((mod) => mod.InsurancePoliciesTab),
 	{
@@ -141,6 +151,9 @@ const EMPTY_OBRA_ROLES: ObraRole[] = [];
 const EMPTY_OBRA_USERS: ObraUser[] = [];
 const EMPTY_OBRA_USER_ROLES: ObraUserRole[] = [];
 const EMPTY_FLUJO_ACTIONS: FlujoAction[] = [];
+const SECONDARY_TAB_WARMUP_DELAY_MS = 600;
+const SECONDARY_TAB_WARMUP_TIMEOUT_MS = 2500;
+const INITIAL_POLICY_PREFETCH_LIMIT = 100;
 
 const certificateFormDefault: NewCertificateFormState = {
 	n_exp: "",
@@ -247,6 +260,63 @@ const toIsoDateTime = (value: string | null) => {
 	if (Number.isNaN(date.getTime())) return null;
 	return date.toISOString();
 };
+
+function scheduleSecondaryTabWarmup(callback: () => void) {
+	if (typeof window === "undefined") return () => {};
+	const win = window as Window & {
+		requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+		cancelIdleCallback?: (handle: number) => void;
+	};
+
+	if (typeof win.requestIdleCallback === "function") {
+		const handle = win.requestIdleCallback(callback, { timeout: SECONDARY_TAB_WARMUP_TIMEOUT_MS });
+		return () => win.cancelIdleCallback?.(handle);
+	}
+
+	const handle = window.setTimeout(callback, SECONDARY_TAB_WARMUP_DELAY_MS);
+	return () => window.clearTimeout(handle);
+}
+
+async function fetchDocumentsNewRootListing(obraId: string) {
+	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/list`, {
+		cache: "no-store",
+	});
+	const payload = await response.json().catch(() => null);
+	if (!response.ok) {
+		throw new Error(
+			payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
+				? payload.error
+				: "No se pudieron precargar documentos"
+		);
+	}
+	return payload;
+}
+
+async function fetchInitialInsurancePolicies(obraId: string) {
+	const params = new URLSearchParams({
+		limit: String(INITIAL_POLICY_PREFETCH_LIMIT),
+		q: "",
+		status: "all",
+		orderBy: "policy_number",
+		orderDir: "asc",
+	});
+	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/insurance-policies?${params.toString()}`);
+	if (!response.ok) throw new Error("No se pudieron precargar las polizas");
+	return response.json();
+}
+
+async function fetchInsurancePolicyRecipients(obraId: string) {
+	const params = new URLSearchParams({ obraId });
+	const response = await fetch(`/api/obra-recipients?${params.toString()}`);
+	if (!response.ok) return { users: [] };
+	return response.json();
+}
+
+async function fetchInsurancePolicySettings() {
+	const response = await fetch("/api/insurance-policies/settings");
+	if (!response.ok) return { responsibleUserIds: [] };
+	return response.json();
+}
 
 async function fetchPermissionChecks(keys: string[]): Promise<Record<string, boolean>> {
 	const params = new URLSearchParams();
@@ -1260,11 +1330,15 @@ const evaluateMainFormula = (
 type ObraDetailPageClientProps = {
 	initialObraId?: string;
 	initialTab?: string;
+	initialObra?: Obra | null;
+	initialMainTableColumnsConfig?: MainTableColumnConfig[] | null;
 };
 
 function ObraDetailPageContent({
 	initialObraId,
 	initialTab = "general",
+	initialObra = null,
+	initialMainTableColumnsConfig = null,
 }: ObraDetailPageClientProps) {
 	const params = useParams();
 	const queryClient = useQueryClient();
@@ -1292,9 +1366,11 @@ function ObraDetailPageContent({
 	const [activeTab, setActiveTab] = useState(resolvedInitialTab);
 	const isGeneralTabActive = activeTab === "general";
 	const isDocumentsTabActive = activeTab === "documentos";
+	const isDocumentsNewTabActive = activeTab === "documentos-new";
 	const isInsurancePoliciesTabActive = activeTab === "polizas";
 	const isFlujoTabActive = activeTab === "flujo";
 	const isCertificatesTabActive = activeTab === "certificates";
+	const secondaryTabsWarmedForObraRef = useRef<string | null>(null);
 	const deletePermissionsQuery = useQuery({
 		queryKey: ["permissions-check", "obra-delete", activeTenantId],
 		queryFn: () => fetchPermissionChecks(["obras:delete"]),
@@ -1305,13 +1381,16 @@ function ObraDetailPageContent({
 	const canDeleteObra = Boolean(deletePermissionsQuery.data?.["obras:delete"]);
 
 	// React Query hooks for cached data fetching
-	// Core obra data - always fetch
+	// Core obra data - seeded from the server prefetch when available so the
+	// general tab renders without waiting for a client round trip.
 	const obraQuery = useQuery({
 		queryKey: ['obra', obraId],
 		queryFn: () => fetchObraDetail(obraId!),
 		enabled: !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
 		refetchOnWindowFocus: false,
+		initialData:
+			initialObra && initialObra.id === obraId ? initialObra : undefined,
 	});
 	const deferredGeneralQueriesReady = useDeferredGeneralExtrasReady({
 		obraId,
@@ -1325,11 +1404,13 @@ function ObraDetailPageContent({
 		obraQuery.isSuccess &&
 		deferredGeneralQueriesReady;
 
-	// Memoria notes - always fetch (lightweight)
+	// Memoria notes - only fetched when the panel opens (also prefetched
+	// during the idle warmup below so it's usually cached by then).
+	const [isMemoriaOpen, setIsMemoriaOpen] = useState(false);
 	const memoriaQuery = useQuery({
 		queryKey: ['obra', obraId, 'memoria'],
 		queryFn: () => fetchMemoriaNotes(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: isValidObraId && isMemoriaOpen,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1383,14 +1464,6 @@ function ObraDetailPageContent({
 		queryKey: ['obra', obraId, 'flujo-actions'],
 		queryFn: () => fetchFlujoActions(obraId!),
 		enabled: isValidObraId && isFlujoTabActive,
-		staleTime: 5 * 60 * 1000,
-	});
-
-	// Pendientes - always fetch (cached by React Query)
-	const pendientesQuery = useQuery({
-		queryKey: ['obra', obraId, 'pendientes'],
-		queryFn: () => fetchPendingDocs(obraId!),
-		enabled: isValidObraId,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1569,6 +1642,12 @@ function ObraDetailPageContent({
 	}, []);
 	const guidedTourStage = getGuidedExcelStage(searchParams);
 	const isGuidedExcelFlow = isGuidedExcelTour(searchParams);
+	const shouldLoadGeneralReports =
+		isValidObraId &&
+		isGeneralTabActive &&
+		obraQuery.isSuccess &&
+		tablasQuery.isSuccess &&
+		curveRulesConfigQuery.isSuccess;
 
 	const generalReportsQuery = useQuery({
 		queryKey: [
@@ -1580,12 +1659,7 @@ function ObraDetailPageContent({
 			selectedCurveTableRefs.pmcResumenId ?? "none",
 			periodKeyFromValue(obraQuery.data?.iniciacion) ?? "no-start-period",
 		],
-		enabled:
-			isValidObraId &&
-			isGeneralTabActive &&
-			obraQuery.isSuccess &&
-			tablasQuery.isSuccess &&
-			curveRulesConfigQuery.isSuccess,
+		enabled: shouldLoadGeneralReports,
 		queryFn: async () => {
 			const rulesConfig = curveRulesConfigQuery.data;
 			const curvaTableId = selectedCurveTableRefs.curvaPlanId;
@@ -1752,6 +1826,86 @@ function ObraDetailPageContent({
 	const isGeneralReportsInitialLoading =
 		generalReportsQuery.isLoading ||
 		(generalReportsQuery.isFetching && generalReportsQuery.data == null);
+	const isGeneralTabReadyForSecondaryWarmup =
+		isValidObraId &&
+		isGeneralTabActive &&
+		obraQuery.isSuccess &&
+		shouldLoadGeneralExtras &&
+		(ocrLinksQuery.isFetched || ocrLinksQuery.isError) &&
+		(dataFlowSuggestionsQuery.isFetched || dataFlowSuggestionsQuery.isError) &&
+		(dataFlowConfigQuery.isFetched || dataFlowConfigQuery.isError) &&
+		(tablasQuery.isFetched || tablasQuery.isError) &&
+		(curveRulesConfigQuery.isFetched || curveRulesConfigQuery.isError) &&
+		(defaultsQuery.isFetched || defaultsQuery.isError) &&
+		(!shouldLoadCertificadoContableMacro ||
+			certificadoContableMacroQuery.isFetched ||
+			certificadoContableMacroQuery.isError) &&
+		(!certRecommendationsMapping.certTableId ||
+			configuredCertRowsQuery.isFetched ||
+			configuredCertRowsQuery.isError) &&
+		(!shouldLoadGeneralReports ||
+			generalReportsQuery.isFetched ||
+			generalReportsQuery.isError);
+
+	useEffect(() => {
+		if (!isGeneralTabReadyForSecondaryWarmup || !obraId) return;
+		if (secondaryTabsWarmedForObraRef.current === obraId) return;
+		secondaryTabsWarmedForObraRef.current = obraId;
+
+		return scheduleSecondaryTabWarmup(() => {
+			void import("./tabs/flujo-tab");
+			void import("./tabs/documents-tab");
+			void import("./tabs/documents-new-tab");
+			void import("./tabs/insurance-policies-tab");
+
+			void queryClient
+				.prefetchQuery({
+					queryKey: ["obra", obraId, "documents-new", "folder", ""],
+					queryFn: () => fetchDocumentsNewRootListing(obraId),
+					staleTime: 10 * 60 * 1000,
+				})
+				.catch(() => undefined);
+			void queryClient
+				.prefetchQuery({
+					queryKey: ["obra", obraId, "flujo-actions"],
+					queryFn: () => fetchFlujoActions(obraId),
+					staleTime: 5 * 60 * 1000,
+				})
+				.catch(() => undefined);
+			void queryClient
+				.prefetchQuery({
+					queryKey: ["obra", obraId, "memoria"],
+					queryFn: () => fetchMemoriaNotes(obraId),
+					staleTime: 5 * 60 * 1000,
+				})
+				.catch(() => undefined);
+			void queryClient
+				.prefetchQuery({
+					queryKey: ["obra", obraId, "insurance-policies", "", "all", "policy", "asc"],
+					queryFn: () => fetchInitialInsurancePolicies(obraId),
+					staleTime: 5 * 60 * 1000,
+				})
+				.catch(() => undefined);
+			void queryClient
+				.prefetchQuery({
+					queryKey: ["obra", obraId, "insurance-policy-recipients"],
+					queryFn: () => fetchInsurancePolicyRecipients(obraId),
+					staleTime: 10 * 60 * 1000,
+				})
+				.catch(() => undefined);
+			void queryClient
+				.prefetchQuery({
+					queryKey: ["insurance-policies", "settings"],
+					queryFn: fetchInsurancePolicySettings,
+					staleTime: 10 * 60 * 1000,
+				})
+				.catch(() => undefined);
+		});
+	}, [
+		isGeneralTabReadyForSecondaryWarmup,
+		obraId,
+		queryClient,
+	]);
 	const hasMissingCurrentMonthFinding = generalReportsData.findings.some(
 		(finding) => finding.rule_key === "cert.missing_current_month",
 	);
@@ -1856,16 +2010,10 @@ function ObraDetailPageContent({
 	const [pendingDerivedFieldValues, setPendingDerivedFieldValues] = useState<
 		Partial<Record<DerivedCertificadosField, number>>
 	>({});
-	const mainTableColumnsConfig = mainTableConfigQuery.data ?? null;
+	const mainTableColumnsConfig =
+		mainTableConfigQuery.data ?? initialMainTableColumnsConfig ?? null;
 
-	const [isMemoriaOpen, setIsMemoriaOpen] = useState(false);
 	const [memoriaDraft, setMemoriaDraft] = useState("");
-
-	const [pendingDocs, setPendingDocs] = useState<PendingDoc[]>([
-		{ id: "doc-1", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
-		{ id: "doc-2", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
-		{ id: "doc-3", name: "", poliza: "", dueMode: "fixed", dueDate: "", offsetDays: 0, done: false },
-	]);
 
 	const [selectedRecipientUserId, setSelectedRecipientUserId] = useState<string>("");
 	const [selectedRecipientRoleId, setSelectedRecipientRoleId] = useState<string>("");
@@ -2415,6 +2563,30 @@ function ObraDetailPageContent({
 		await persistObra(dirtyPayload, { method: "PATCH" });
 	}, [buildDirtyObraPayload, form.state.values, initialFormValues, persistObra]);
 
+	const finishCurrentObra = useCallback(async () => {
+		if (!obraId || obraId === "undefined") {
+			toast.error("Obra no encontrada");
+			return;
+		}
+		try {
+			await saveCurrentObra();
+			const response = await fetch(`/api/obras/${obraId}/complete`, { method: "POST" });
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				throw new Error(payload.error ?? "No se pudo terminar la obra");
+			}
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: ["obra", obraId] }),
+				queryClient.invalidateQueries({ queryKey: ["obra", obraId, "insurance-policies"] }),
+				queryClient.invalidateQueries({ queryKey: ["insurance-policies"] }),
+			]);
+			toast.success("Obra terminada y polizas recalculadas");
+		} catch (error) {
+			console.error(error);
+			toast.error(error instanceof Error ? error.message : "No se pudo terminar la obra");
+		}
+	}, [obraId, queryClient, saveCurrentObra]);
+
 	const handleDeleteObra = useCallback(async () => {
 		if (!canDeleteObra) {
 			toast.error("No tenes permiso para borrar obras.");
@@ -2827,13 +2999,6 @@ function ObraDetailPageContent({
 		pendingDerivedFieldValues,
 	]);
 
-	// Apply pendientes data when it loads
-	useEffect(() => {
-		if (pendientesQuery.data && pendientesQuery.data.length > 0) {
-			setPendingDocs(pendientesQuery.data);
-		}
-	}, [pendientesQuery.data]);
-
 	const handleNewCertificateChange = useCallback(
 		(field: keyof NewCertificateFormState, value: string) => {
 			setNewCertificate((prev) => ({ ...prev, [field]: value }));
@@ -2851,103 +3016,6 @@ function ObraDetailPageContent({
 			return next;
 		});
 	}, []);
-
-	const updatePendingDoc = useCallback((index: number, field: keyof PendingDoc, value: string | boolean | number) => {
-		setPendingDocs((prev) => {
-			const next = [...prev];
-			next[index] = { ...next[index], [field]: value } as PendingDoc;
-			return next;
-		});
-	}, []);
-
-	const scheduleReminderForDoc = useCallback(async (doc: PendingDoc) => {
-		if (!obraId || obraId === "undefined") return;
-		if (doc.dueMode !== "fixed" || !doc.dueDate) return;
-		try {
-			const res = await fetch("/api/doc-reminders", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					obraId,
-					obraName: null,
-					documentName: doc.name || "Documento",
-					dueDate: doc.dueDate,
-					notifyUserId: currentUserId,
-					pendienteId: doc.id && /[0-9a-f-]{36}/i.test(doc.id) ? doc.id : null,
-				}),
-			});
-			if (!res.ok) throw new Error("Failed to schedule");
-			toast.success("Recordatorio programado");
-		} catch (err) {
-			console.error(err);
-			toast.error("No se pudo programar el recordatorio");
-		}
-	}, [obraId, currentUserId]);
-
-	// Pendientes are loaded via React Query (pendientesQuery) - no manual fetch needed
-
-	const savePendingDoc = useCallback(async (doc: PendingDoc, index: number) => {
-		if (!obraId || obraId === "undefined") return;
-		try {
-			const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.id);
-			const method = isUuid ? "PUT" : "POST";
-			const res = await fetch(`/api/obras/${obraId}/pendientes`, {
-				method,
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					id: isUuid ? doc.id : undefined,
-					name: doc.name,
-					poliza: doc.poliza || null,
-					dueMode: doc.dueMode,
-					dueDate: doc.dueMode === "fixed" ? (doc.dueDate || null) : null,
-					offsetDays: doc.dueMode === "after_completion" ? Number(doc.offsetDays || 0) : null,
-					done: doc.done,
-				}),
-			});
-			if (!res.ok) throw new Error("No se pudo guardar");
-			const json = await res.json().catch(() => ({}));
-			let effectiveDoc = doc;
-			if (!isUuid && json?.pendiente?.id) {
-				const newId = String(json.pendiente.id);
-				effectiveDoc = { ...doc, id: newId };
-				setPendingDocs((prev) => {
-					const next = [...prev];
-					next[index] = effectiveDoc;
-					return next;
-				});
-			}
-			toast.success("Pendiente actualizado");
-			if (effectiveDoc.dueMode === "fixed" && effectiveDoc.dueDate) {
-				await scheduleReminderForDoc(effectiveDoc);
-			}
-		} catch (err) {
-			console.error(err);
-			toast.error("No se pudo guardar el pendiente");
-		}
-	}, [obraId, scheduleReminderForDoc]);
-
-	const deletePendingDoc = useCallback(async (doc: PendingDoc, index: number) => {
-		if (!obraId || obraId === "undefined") return;
-
-		// If it's a temporary (unsaved) doc, just remove it from the list
-		const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.id);
-		if (!isUuid) {
-			setPendingDocs((prev) => prev.filter((_, i) => i !== index));
-			return;
-		}
-
-		try {
-			const res = await fetch(`/api/obras/${obraId}/pendientes?id=${doc.id}`, {
-				method: "DELETE",
-			});
-			if (!res.ok) throw new Error("No se pudo eliminar");
-			setPendingDocs((prev) => prev.filter((_, i) => i !== index));
-			toast.success("Pendiente eliminado");
-		} catch (err) {
-			console.error(err);
-			toast.error("No se pudo eliminar el pendiente");
-		}
-	}, [obraId]);
 
 	// Recipients are now loaded via React Query (recipientsQuery) - no manual effect needed
 
@@ -3625,7 +3693,7 @@ function ObraDetailPageContent({
 						<div className="mb-3 flex min-w-0 flex-col gap-3 border-b border-stone-200 pb-3 pt-2 xl:flex-row xl:items-center xl:justify-between">
 							<ExcelObraName />
 							<div className="flex flex-wrap items-center gap-2 xl:justify-end">
-								{activeTab === "documentos" ? (
+								{activeTab === "documentos" || activeTab === "documentos-new" ? (
 									<>
 										<Button
 											type="button"
@@ -3885,6 +3953,7 @@ function ObraDetailPageContent({
 										dataFlowSuggestionsError={generalTabDataFlowSuggestionsError}
 										onDataFlowSuggestionDecision={handleDataFlowSuggestionDecision}
 										isResolvingDataFlowSuggestion={isResolvingDataFlowSuggestion}
+										onFinishObra={finishCurrentObra}
 									/>
 								) : null}
 								{/* {activeTab === "general" && (
@@ -4083,6 +4152,10 @@ function ObraDetailPageContent({
 										refreshMaterialOrders={refreshMaterialOrders}
 										recoveryRequestToken={documentsRecoveryRequestToken}
 									/>
+								) : null}
+
+								{isDocumentsNewTabActive && obraId ? (
+									<ObraDocumentsNewTab obraId={obraId} />
 								) : null}
 							</div>
 

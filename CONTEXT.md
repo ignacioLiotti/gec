@@ -216,6 +216,22 @@ _Avoid_: formulario temporal sin trazabilidad
 Documento operativo creado por plantilla que termina persistido como archivo documental normal de la obra y conserva metadata de origen, version de plantilla y datos de entrada.
 _Avoid_: documento paralelo fuera del file manager
 
+**Contexto Documental Inteligente**:
+JSON intermedio auditable que hidrata un borrador o documento generado desde filas extraidas de una obra, conservando referencias a tabla, fila, lineage, extraction id y archivo fuente sin reemplazar valores manuales.
+_Avoid_: autocompletar sin evidencia o usar IA como fuente final de verdad
+
+**Document AI Run**:
+Ejecucion auditable de un pedido natural sobre documentos de obra que persiste intent, fuentes recuperadas, warnings, composicion de reporte y outputs generados.
+_Avoid_: respuesta efimera tipo chatbot sin evidencia ni archivo reproducible
+
+**Report Composition**:
+JSON intermedio formal con resumen ejecutivo, secciones, tablas, graficos, conflictos, fuentes y warnings que se renderiza a PDF, PPTX, DOCX, XLSX, HTML o dashboard.
+_Avoid_: generar archivos directamente desde el prompt sin contrato verificable
+
+**Serie Documental**:
+Secuencia ordenada de documentos del mismo tipo administrativo, como certificados de avance, usada para calcular continuidad, ultimo estado y borrador siguiente.
+_Avoid_: copiar el ultimo documento sin resolver acumulados, fechas, numero y evidencia
+
 **Revision de Documento Generado**:
 Ciclo de vida del documento operativo: al crearse queda `UNDER_REVIEW` (Esperando revision), puede editarse mientras espera revision o si fue rechazado, no puede editarse una vez aprobado, y las decisiones de aprobacion/rechazo se auditan como eventos.
 _Avoid_: editar aprobados o crear documentos nuevos al corregir rechazados

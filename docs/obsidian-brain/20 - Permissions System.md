@@ -86,6 +86,8 @@ Dashboard route access is available to all authenticated users and appears in th
 | `document_creator` | nav:document-generation, documents:create |
 | `document_reviewer` | nav:document-generation, documents:review |
 | `document_manager` | nav:document-generation, documents:create, documents:review, documents:templates, documents:drafts:all |
+| `document_ai_operator` | nav:document-ai, document-ai:run |
+| `document_ai_manager` | nav:document-ai, document-ai:run, document-ai:admin |
 
 ### Delete lifecycle permissions
 
@@ -153,7 +155,7 @@ For document generation there is an additional feature-level filter on top of ro
 - `documents:templates` shows `Plantillas` and `Configuracion`
 - `documents:drafts:all` allows seeing drafts created by other users
 
-This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document capabilities server-side and the sidebar only renders the allowed screens.
+This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document review/config capabilities server-side and the sidebar only renders privileged screens when allowed.
 
 ---
 
@@ -165,6 +167,9 @@ Document generation now has explicit feature permissions:
 |------|-------------|
 | `nav:document-generation` | Show document generation entries in the sidebar |
 | `documents:create` | Create documents, save drafts, resume own drafts |
+| `nav:document-ai` | Show Document AI workspace in the sidebar |
+| `document-ai:run` | Create and inspect auditable Document AI runs |
+| `document-ai:admin` | Rebuild Document AI index and manage generated outputs |
 | `documents:review` | Access the review queue and approve/reject documents |
 | `documents:templates` | Access template/configuration screens and mutate template overrides |
 | `documents:drafts:all` | View drafts created by other users in the tenant |

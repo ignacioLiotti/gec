@@ -38,9 +38,12 @@ type TableCellProps<Row extends FormTableRow> = {
 	tableReadOnly: boolean;
 	highlightQuery: string;
 	editMode: "always" | "active-cell";
+	editOnHover: boolean;
 	isHovered: boolean;
 	activeCell: { rowId: string; columnId: string } | null;
 	setActiveCell: (cell: { rowId: string; columnId: string } | null) => void;
+	onCommitCellValue?: (rowId: string, column: ColumnDef<Row>, value: unknown) => boolean;
+	isBulkEditing?: boolean;
 	isRowDirty: boolean;
 	isCellDirty: boolean;
 	hasInitialSnapshot: boolean;
@@ -63,9 +66,12 @@ type CellContentProps<Row extends FormTableRow> = {
 	hasInitialSnapshot: boolean;
 	editable: boolean;
 	isActive: boolean;
+	isBulkEditing?: boolean;
 	shouldAutoFocus: boolean;
 	onFocusWithinChange?: (isFocusedWithin: boolean) => void;
 	onRequestActivate?: () => void;
+	onRequestDeactivate?: () => void;
+	onCommitValue?: (value: unknown) => boolean;
 	enableContextMenu: boolean;
 	onCopyCell: (value: unknown) => void;
 	onCopyColumn: () => void;
@@ -112,9 +118,12 @@ function CellContent<Row extends FormTableRow>({
 	hasInitialSnapshot,
 	editable,
 	isActive,
+	isBulkEditing = false,
 	shouldAutoFocus,
 	onFocusWithinChange,
 	onRequestActivate,
+	onRequestDeactivate,
+	onCommitValue,
 	enableContextMenu,
 	onCopyCell,
 	onCopyColumn,
@@ -125,7 +134,10 @@ function CellContent<Row extends FormTableRow>({
 }: CellContentProps<Row>) {
 	const fieldValue = field.state.value;
 	const contentRef = useRef<HTMLDivElement | null>(null);
-	const setValue = useCallback((value: unknown) => field.handleChange(value), [field]);
+	const setValue = useCallback((value: unknown) => {
+		if (onCommitValue?.(value)) return;
+		field.handleChange(value);
+	}, [field, onCommitValue]);
 	const rawErrorMessage = field.state.meta?.errors?.[0];
 	const errorMessage =
 		typeof rawErrorMessage === "string"
@@ -151,6 +163,7 @@ function CellContent<Row extends FormTableRow>({
 			setValue,
 			handleBlur: field.handleBlur,
 			highlightQuery,
+			isBulkEditing,
 		})
 		: renderReadOnlyValue(fieldValue, row, column, highlightQuery);
 
@@ -198,7 +211,8 @@ function CellContent<Row extends FormTableRow>({
 			return;
 		}
 		onFocusWithinChange?.(false);
-	}, [onFocusWithinChange]);
+		onRequestDeactivate?.();
+	}, [onFocusWithinChange, onRequestDeactivate]);
 	const handlePointerLeave = useCallback(() => {
 		const root = contentRef.current;
 		if (!root) return;
@@ -217,9 +231,9 @@ function CellContent<Row extends FormTableRow>({
 			onFocusCapture={handleFocusCapture}
 			onBlurCapture={handleBlurCapture}
 			className={cn(
-				"absolute top-0 left-0 w-full h-full flex items-center justify-start -ml-1 [&_.children-input-hidden]:opacity-0 [&_.children-input-hidden]:transition-opacity [&_.children-input-shown]:opacity-100 [&_.children-input-shown]:transition-opacity group-hover:[&_.children-input-hidden]:opacity-100 group-hover:[&_.children-input-shown]:opacity-0",
-				isActive && "[&_.children-input-hidden]:opacity-100 [&_.children-input-shown]:opacity-0",
-				isRowDirty ? "outline outline-amber-500/60 shadow-sm border-b border-amber-500" : "",
+				"absolute top-0 left-0 w-full h-full flex items-center justify-start -ml-1 [&_.children-input-hidden]:opacity-0 [&_.children-input-hidden]:transition-opacity [&_.children-input-shown]:opacity-100 [&_.children-input-shown]:transition-opacity group-hover:[&_.children-input-hidden]:opacity-100 group-hover:[&_.children-input-shown]:opacity-0 [&:has(textarea:focus)]:relative [&:has(textarea:focus)]:h-auto [&:has(textarea:focus)]:max-h-40 [&:has(textarea:focus)]:items-start",
+				isActive && "[&_.children-input-hidden]:opacity-100 [&_.children-input-shown]:opacity-0 ",
+				isRowDirty && !isActive && "bg-amber-50/40",
 				isCellDirty
 					? "bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--color-amber-200)_5px,var(--color-amber-200)_6px,transparent_6px)] bg-repeat"
 					: ""
@@ -233,12 +247,19 @@ function CellContent<Row extends FormTableRow>({
 	);
 
 	if (!enableContextMenu) {
-		return body;
+		return (
+			<span
+				className="group block h-full w-full has-[textarea:focus]:h-auto has-[textarea:focus]:max-h-40"
+				data-state="closed"
+			>
+				{body}
+			</span>
+		);
 	}
 
 	return (
 		<ContextMenu onOpenChange={handleOpenChange}>
-			<ContextMenuTrigger className={cn("group relative block h-full w-full", isActive ? 'outline-2 outline-red-500 outline-offset-2' : '', "[&[data-state=open]_.children-input-hidden]:ring-2 [&[data-state=open]_.children-input-hidden]:ring-orange-primary/40 [&[data-state=open]_.children-input-shown]:opacity-0 [&[data-state=open]_.children-input-hidden]:opacity-100")}>
+			<ContextMenuTrigger className={cn("group relative block h-full w-full has-[textarea:focus]:h-auto has-[textarea:focus]:max-h-40", "[&[data-state=open]_.children-input-hidden]:ring-2 [&[data-state=open]_.children-input-hidden]:ring-orange-primary/40 [&[data-state=open]_.children-input-shown]:opacity-0 [&[data-state=open]_.children-input-hidden]:opacity-100")}>
 				<>{body}</>
 			</ContextMenuTrigger>
 			{/* Lazy mount: only render content after first open */}
@@ -322,7 +343,7 @@ function StaticReadOnlyCellContent<Row extends FormTableRow>({
 				: {})}
 			className={cn(
 				"absolute top-0 left-0 w-full h-full flex items-center justify-start pl-3 ",
-				isRowDirty ? "outline outline-amber-500/60 shadow-sm border-b border-amber-500" : "",
+				isRowDirty && "bg-amber-50/40",
 				isCellDirty
 					? "bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--color-amber-200)_5px,var(--color-amber-200)_6px,transparent_6px)] bg-repeat border-2 border-l-1 border-t-0 border-amber-600/50"
 					: ""
@@ -347,9 +368,12 @@ function TableCellInner<Row extends FormTableRow>({
 	tableReadOnly,
 	highlightQuery,
 	editMode,
+	editOnHover,
 	isHovered,
 	activeCell,
 	setActiveCell,
+	onCommitCellValue,
+	isBulkEditing = false,
 	isRowDirty,
 	isCellDirty,
 	hasInitialSnapshot,
@@ -363,17 +387,22 @@ function TableCellInner<Row extends FormTableRow>({
 	const [isFocusWithin, setIsFocusWithin] = useState(false);
 	const fieldPath = `rowsById.${rowId}.${column.field}` as const;
 	const isNewRow = !hasInitialSnapshot;
-	const forceEditableForNewObraNameCell =
-		isNewRow && String(column.field) === "designacionYUbicacion";
 	const editable =
-		!tableReadOnly && (column.editable !== false || forceEditableForNewObraNameCell);
+		!tableReadOnly && (column.editable !== false || (isNewRow && column.editableWhenNewRow === true));
 	const usesActiveCellEditing = editable && editMode === "active-cell";
 	const isActive =
 		usesActiveCellEditing &&
 		activeCell?.rowId === rowId &&
 		activeCell?.columnId === column.id;
-	const isHoverEditing = usesActiveCellEditing && isHovered;
-	const isInteractiveEditing = usesActiveCellEditing && (isActive || isHoverEditing || isFocusWithin);
+	const isHoverEditing = usesActiveCellEditing && editOnHover && isHovered;
+	const effectiveFocusWithin = isActive && isFocusWithin;
+	const isInteractiveEditing = usesActiveCellEditing && (isActive || isHoverEditing || effectiveFocusWithin);
+	const clearActiveCellOnBlur =
+		usesActiveCellEditing && column.cellConfig?.clearActiveCellOnBlur === true;
+	const handleCommitValue = useCallback(
+		(value: unknown) => onCommitCellValue?.(rowId, column, value) ?? false,
+		[column, onCommitCellValue, rowId]
+	);
 	const validators = column.validators;
 
 	if (!editable) {
@@ -431,7 +460,8 @@ function TableCellInner<Row extends FormTableRow>({
 					isCellDirty={isCellDirty}
 					hasInitialSnapshot={hasInitialSnapshot}
 					editable={editable}
-					isActive={usesActiveCellEditing ? (isActive || isFocusWithin) : true}
+					isActive={usesActiveCellEditing ? (isActive || effectiveFocusWithin) : true}
+					isBulkEditing={isBulkEditing}
 					shouldAutoFocus={usesActiveCellEditing ? isActive : false}
 					onFocusWithinChange={usesActiveCellEditing ? setIsFocusWithin : undefined}
 					onRequestActivate={
@@ -443,7 +473,15 @@ function TableCellInner<Row extends FormTableRow>({
 							}
 							: undefined
 					}
-					enableContextMenu={usesActiveCellEditing && isActive}
+					onRequestDeactivate={
+						clearActiveCellOnBlur
+							? () => {
+								setActiveCell(null);
+							}
+							: undefined
+					}
+					onCommitValue={handleCommitValue}
+					enableContextMenu={!tableReadOnly && (usesActiveCellEditing ? isActive : true)}
 					onCopyCell={onCopyCell}
 					onCopyColumn={onCopyColumn}
 					onCopyRow={onCopyRow}
@@ -475,7 +513,10 @@ export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => 
 		prevProps.tableReadOnly === nextProps.tableReadOnly &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&
 		prevProps.editMode === nextProps.editMode &&
+		prevProps.editOnHover === nextProps.editOnHover &&
 		prevProps.isHovered === nextProps.isHovered &&
+		prevProps.isBulkEditing === nextProps.isBulkEditing &&
+		prevProps.onCommitCellValue === nextProps.onCommitCellValue &&
 		!activeStateChanged &&
 		prevProps.isRowDirty === nextProps.isRowDirty &&
 		prevProps.isCellDirty === nextProps.isCellDirty &&

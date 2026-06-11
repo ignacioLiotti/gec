@@ -53,11 +53,15 @@ export async function POST(request: Request) {
 	for (const [tenantId, tenantPolicies] of byTenant) {
 		const { data: settings } = await admin
 			.from("insurance_policy_settings")
-			.select("responsible_user_id")
+			.select("responsible_user_id, responsible_user_ids")
 			.eq("tenant_id", tenantId)
 			.maybeSingle();
-		const responsibleUserId = settings?.responsible_user_id as string | null | undefined;
-		if (!responsibleUserId) continue;
+		const responsibleUserIds = Array.isArray(settings?.responsible_user_ids)
+			? (settings.responsible_user_ids as string[])
+			: settings?.responsible_user_id
+				? [settings.responsible_user_id as string]
+				: [];
+		if (responsibleUserIds.length === 0) continue;
 
 		const list = tenantPolicies
 			.map((policy) => {
@@ -65,15 +69,17 @@ export async function POST(request: Request) {
 				return `Obra ${obra?.n ?? ""} ${obra?.designacion_y_ubicacion ?? ""}: ${policy.policy_number}`;
 			})
 			.join("\n");
-		await notifyInApp({
-			tenantId,
-			userId: responsibleUserId,
-			title: "Pólizas de seguro para dar de baja",
-			body: list,
-			type: "insurance_policy_due",
-			actionUrl: "/macro?insurancePolicies=1",
-			data: { policyIds: tenantPolicies.map((policy) => policy.id) },
-		});
+		for (const responsibleUserId of responsibleUserIds) {
+			await notifyInApp({
+				tenantId,
+				userId: responsibleUserId,
+				title: "Polizas de seguro para dar de baja",
+				body: list,
+				type: "insurance_policy_due",
+				actionUrl: "/macro?insurancePolicies=1",
+				data: { policyIds: tenantPolicies.map((policy) => policy.id) },
+			});
+		}
 		const ids = tenantPolicies.map((policy) => policy.id);
 		await admin
 			.from("insurance_policies")

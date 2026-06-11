@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Building2, Folder, ShieldCheck, Workflow } from "lucide-react";
+import { Building2, FolderClock, ShieldCheck, Workflow } from "lucide-react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -10,13 +10,13 @@ const tabs = [
 	{ value: "polizas", label: "Pólizas", icon: ShieldCheck },
 	{ value: "flujo", label: "Flujo", icon: Workflow },
 	// { value: "certificates", label: "Certificados", icon: Receipt },
-	{ value: "documentos", label: "Documentos", icon: Folder },
+	{ value: "documentos-new", label: "Documentos New", icon: FolderClock },
 ];
 
 export function ExcelPageTabs({
 	tabBadges,
 }: {
-	tabBadges?: Partial<Record<"general" | "polizas" | "flujo" | "documentos", string>>;
+	tabBadges?: Partial<Record<"general" | "polizas" | "flujo" | "documentos" | "documentos-new", string>>;
 }) {
 	const pathname = usePathname();
 

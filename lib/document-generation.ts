@@ -124,6 +124,55 @@ export type ExtractionTableColumn = {
 	config?: Record<string, unknown> | null;
 };
 
+export type DocumentAiSourceRow = {
+	id: string;
+	tablaId: string;
+	tablaName?: string | null;
+	data: Record<string, unknown>;
+	createdAt?: string | null;
+	lineageRowKey?: string | null;
+	extractionId?: string | null;
+	documentPath?: string | null;
+	documentFileName?: string | null;
+	documentBucket?: string | null;
+};
+
+export type DocumentAiSourceReference = {
+	fieldKey: string;
+	label: string;
+	value: unknown;
+	confidence: number;
+	source: {
+		type: "obra_tabla_row";
+		tablaId: string;
+		tablaName: string | null;
+		rowId: string;
+		lineageRowKey: string | null;
+		extractionId: string | null;
+		documentPath: string | null;
+		documentFileName: string | null;
+		documentBucket: string | null;
+		createdAt: string | null;
+	};
+};
+
+export type DocumentAiContext = {
+	version: 1;
+	status: "applied" | "empty";
+	extractor: "document-generation-context-v1";
+	appliedAt: string;
+	sourceRowCount: number;
+	sourceTableCount: number;
+	sources: DocumentAiSourceReference[];
+	warnings: string[];
+};
+
+export type DocumentAiHydrationResult = {
+	inputData: Record<string, unknown>;
+	context: DocumentAiContext;
+	appliedFieldCount: number;
+};
+
 export const GENERATED_DOCUMENT_STATUS_LABELS: Record<string, string> = {
 	DRAFT: "Borrador",
 	READY_TO_GENERATE: "Listo para generar",
@@ -615,6 +664,145 @@ export function applyTemplateAliasInputData(
 	return next;
 }
 
+export function applyDocumentAiContextInputData(params: {
+	schema: TemplateSchema;
+	current: Record<string, unknown>;
+	sourceRows: DocumentAiSourceRow[];
+	appliedAt?: string;
+}) {
+	const appliedAt = params.appliedAt ?? new Date().toISOString();
+	const next: Record<string, unknown> = { ...params.current };
+	const sources: DocumentAiSourceReference[] = [];
+	const warnings: string[] = [];
+	let appliedFieldCount = 0;
+
+	const rememberSource = (
+		field: TemplateField,
+		row: DocumentAiSourceRow,
+		value: unknown,
+		keyOverride?: string,
+	) => {
+		sources.push({
+			fieldKey: keyOverride ?? field.key,
+			label: field.label,
+			value,
+			confidence: 0.78,
+			source: {
+				type: "obra_tabla_row",
+				tablaId: row.tablaId,
+				tablaName: row.tablaName ?? null,
+				rowId: row.id,
+				lineageRowKey: row.lineageRowKey ?? null,
+				extractionId: row.extractionId ?? null,
+				documentPath: row.documentPath ?? null,
+				documentFileName: row.documentFileName ?? null,
+				documentBucket: row.documentBucket ?? null,
+				createdAt: row.createdAt ?? null,
+			},
+		});
+	};
+
+	const fieldRows = params.sourceRows.filter((row) => Object.keys(row.data).length > 0);
+
+	for (const field of params.schema.fields) {
+		if (field.type === "table") {
+			if (hasTemplateInputValue(next[field.key])) continue;
+			const columns = field.columns ?? [];
+			if (columns.length === 0) continue;
+			const hydratedRows = fieldRows
+				.map((row) => {
+					const rowData: Record<string, unknown> = {};
+					for (const column of columns) {
+						const value = findTemplateFieldValueInSource(row.data, column);
+						if (hasTemplateInputValue(value)) {
+							rowData[column.key] = value;
+							rememberSource(column, row, value, `${field.key}.${column.key}`);
+						}
+					}
+					return rowData;
+				})
+				.filter((row) => Object.keys(row).length > 0);
+			if (hydratedRows.length > 0) {
+				next[field.key] = hydratedRows;
+				appliedFieldCount += hydratedRows.reduce(
+					(count, row) => count + Object.keys(row).length,
+					0,
+				);
+			}
+			continue;
+		}
+
+		if (field.repeatableGroup) continue;
+		if (hasTemplateInputValue(next[field.key])) continue;
+
+		const match = findTemplateFieldSourceValue(fieldRows, field);
+		if (!match) continue;
+		next[field.key] = match.value;
+		rememberSource(field, match.row, match.value);
+		appliedFieldCount += 1;
+	}
+
+	const repeatableGroups = new Map<string, TemplateField[]>();
+	for (const field of params.schema.fields) {
+		if (!field.repeatableGroup) continue;
+		repeatableGroups.set(field.repeatableGroup, [
+			...(repeatableGroups.get(field.repeatableGroup) ?? []),
+			field,
+		]);
+	}
+
+	for (const [groupKey, fields] of repeatableGroups.entries()) {
+		if (hasTemplateInputValue(next[groupKey])) continue;
+		const hydratedRows = fieldRows
+			.map((row) => {
+				const rowData: Record<string, unknown> = {};
+				for (const field of fields) {
+					const value = findTemplateFieldValueInSource(row.data, field);
+					if (hasTemplateInputValue(value)) {
+						rowData[field.key] = value;
+						rememberSource(field, row, value, `${groupKey}.${field.key}`);
+					}
+				}
+				return rowData;
+			})
+			.filter((row) => Object.keys(row).length > 0);
+		if (hydratedRows.length > 0) {
+			next[groupKey] = hydratedRows;
+			appliedFieldCount += hydratedRows.reduce(
+				(count, row) => count + Object.keys(row).length,
+				0,
+			);
+		}
+	}
+
+	const sourceTableCount = new Set(params.sourceRows.map((row) => row.tablaId)).size;
+	if (params.sourceRows.length === 0) {
+		warnings.push("No hay datos extraidos disponibles para esta obra, carpeta y tipo documental.");
+	} else if (appliedFieldCount === 0) {
+		warnings.push("Se encontraron datos extraidos, pero no coincidieron con los campos de la plantilla.");
+	}
+
+	const context: DocumentAiContext = {
+		version: 1,
+		status: appliedFieldCount > 0 ? "applied" : "empty",
+		extractor: "document-generation-context-v1",
+		appliedAt,
+		sourceRowCount: params.sourceRows.length,
+		sourceTableCount,
+		sources,
+		warnings,
+	};
+
+	return {
+		inputData: applyTemplateAliasInputData(params.schema, {
+			...next,
+			__documentAi: context,
+		}),
+		context,
+		appliedFieldCount,
+	} satisfies DocumentAiHydrationResult;
+}
+
 export function applyTemplateAutoInputData(
 	schema: TemplateSchema,
 	current: Record<string, unknown>,
@@ -1074,6 +1262,44 @@ function findValueByExtractionAliases(
 		}
 	}
 	return undefined;
+}
+
+function findTemplateFieldValueInSource(
+	source: Record<string, unknown>,
+	field: TemplateField,
+) {
+	const sourceByNormalizedKey = new Map(
+		Object.entries(source)
+			.filter(([key]) => !key.startsWith("__"))
+			.map(([key, value]) => [normalizeExtractionFieldKey(key), value]),
+	);
+	const candidateKeys = [
+		field.extractionFieldKey,
+		field.key,
+		field.label,
+	].filter((value): value is string => Boolean(value));
+
+	for (const candidateKey of candidateKeys) {
+		for (const alias of getExtractionFieldAliases(candidateKey)) {
+			const value = sourceByNormalizedKey.get(normalizeExtractionFieldKey(alias));
+			if (hasTemplateInputValue(value)) return value;
+		}
+	}
+
+	return undefined;
+}
+
+function findTemplateFieldSourceValue(
+	rows: DocumentAiSourceRow[],
+	field: TemplateField,
+) {
+	for (const row of rows) {
+		const value = findTemplateFieldValueInSource(row.data, field);
+		if (hasTemplateInputValue(value)) {
+			return { row, value };
+		}
+	}
+	return null;
 }
 
 function buildExtractionRow(

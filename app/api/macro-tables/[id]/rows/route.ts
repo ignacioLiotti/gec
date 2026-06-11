@@ -514,6 +514,30 @@ function sortGroupRows(rows: MacroTableRow[], groupColumn: MacroTableColumn) {
   return [...rows].sort((a, b) => compareMacroRowValues(a[sortColumnId], b[sortColumnId], direction));
 }
 
+function sortMacroRows(
+  rows: MacroTableRow[],
+  sortByColumnId: string,
+  direction: "asc" | "desc",
+  columns: MacroTableColumn[],
+) {
+  if (!sortByColumnId) return rows;
+  const validColumnIds = new Set(columns.map((column) => column.id));
+  const allowedSystemColumns = new Set([
+    "_obraName",
+    "_sourceTablaName",
+    "_businessIdentity",
+    "_docFileName",
+    "_overrideBindingStatus",
+    "_overrideConflictCount",
+  ]);
+  if (!validColumnIds.has(sortByColumnId) && !allowedSystemColumns.has(sortByColumnId)) {
+    return rows;
+  }
+  return [...rows].sort((left, right) =>
+    compareMacroRowValues(left[sortByColumnId], right[sortByColumnId], direction)
+  );
+}
+
 function groupMacroRowsByColumn(
   rows: MacroTableRow[],
   columnId: string,
@@ -564,6 +588,8 @@ export async function GET(request: Request, context: RouteContext) {
   const obraIdFilter = url.searchParams.get("obraId")?.trim() ?? "";
   const query = url.searchParams.get("q")?.trim() ?? "";
   const groupByColumnId = url.searchParams.get("groupBy")?.trim() ?? "";
+  const sortByColumnId = url.searchParams.get("sortBy")?.trim() ?? "";
+  const sortDirection = url.searchParams.get("sortDir") === "desc" ? "desc" : "asc";
   const rawFilters = url.searchParams.get("filters");
   let parsedFilters: unknown = {};
   if (rawFilters) {
@@ -991,9 +1017,13 @@ export async function GET(request: Request, context: RouteContext) {
         matchesMacroFilters(row, displayColumns, filters)
     );
 
-    const groupedRows = groupByColumnId
-      ? groupMacroRowsByColumn(filteredRows, groupByColumnId, columns)
+    const preparedRows = sortByColumnId
+      ? sortMacroRows(filteredRows, sortByColumnId, sortDirection, columns)
       : filteredRows;
+
+    const groupedRows = groupByColumnId
+      ? groupMacroRowsByColumn(preparedRows, groupByColumnId, columns)
+      : preparedRows;
 
     const total = groupedRows.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));

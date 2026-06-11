@@ -113,6 +113,11 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		path: "/document-generation",
 		allowedRoles: [], // Accessible to all authenticated users
 	},
+	{
+		path: "/document-ai",
+		allowedRoles: [],
+		requiredPermissions: ["nav:document-ai"],
+	},
 
 	// === ADMIN ROUTES (admin/owner only) ===
 	{

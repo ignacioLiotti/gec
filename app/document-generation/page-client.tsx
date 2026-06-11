@@ -21,6 +21,7 @@ import {
   MoreHorizontal,
   Plus,
   Save,
+  Sparkles,
   Trash2,
   ZoomIn,
   ZoomOut,
@@ -37,6 +38,7 @@ import {
   normalizeDocumentType,
   escapeHtml,
   renderDocumentHtml,
+  type DocumentAiContext,
   type TemplateField,
   type TemplateSelectOption,
   validateTemplateInput,
@@ -148,6 +150,12 @@ type GeneratedDocumentResponse = {
   previewHtml: string;
 };
 
+type AssistResponse = {
+  inputData: Record<string, unknown>;
+  context: DocumentAiContext;
+  appliedFieldCount: number;
+};
+
 type RepeatableGroupDescriptor = {
   key: string;
   label: string;
@@ -168,6 +176,12 @@ type OptionAddition = {
   tableKey?: string;
   option: TemplateSelectOption;
 };
+
+function readDocumentAiContext(inputData: Record<string, unknown>) {
+  const value = inputData.__documentAi;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as DocumentAiContext;
+}
 
 function getRepeatableGroups(fields: TemplateField[]): RepeatableGroupDescriptor[] {
   const groups = new Map<string, { label: string; fields: TemplateField[] }>();
@@ -1080,6 +1094,7 @@ export function DocumentGenerationPageClient({
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [assisting, setAssisting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(112);
@@ -1367,6 +1382,10 @@ export function DocumentGenerationPageClient({
     return validateTemplateInput(selectedTemplate.schema, deferredInputData).length;
   }, [deferredInputData, selectedTemplate]);
 
+  const documentAiContext = useMemo(
+    () => readDocumentAiContext(deferredInputData),
+    [deferredInputData],
+  );
   const draftStatusLabel = draftStatus ? humanizeStatus(draftStatus) : "sin guardar";
   const documentCode = getDocumentCode(deferredInputData);
   const isEditingGeneratedDocument = Boolean(editingGeneratedId);
@@ -1640,6 +1659,50 @@ export function DocumentGenerationPageClient({
     }
   };
 
+  const handleAssistFromDocuments = async () => {
+    const currentInputData = inlineInputDataRef.current;
+    flushInlineDraftData();
+    if (!workId || !folderPath || !documentType || !templateId) {
+      toast.error("Completa obra, carpeta, tipo documental y plantilla.");
+      return;
+    }
+
+    setAssisting(true);
+    try {
+      const response = await fetch("/api/document-generation/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workId,
+          folderPath,
+          documentType,
+          templateId,
+          inputData: currentInputData,
+        }),
+      });
+      const payload = (await response.json()) as AssistResponse & { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudo completar con documentos");
+      }
+
+      inlineInputDataRef.current = payload.inputData;
+      setInputData(payload.inputData);
+      setValidationErrors((current) =>
+        selectedTemplate ? validateTemplateInput(selectedTemplate.schema, payload.inputData) : current,
+      );
+      const sourceCount = payload.context.sources.length;
+      if (payload.appliedFieldCount > 0) {
+        toast.success(`Contexto aplicado: ${payload.appliedFieldCount} campos desde ${sourceCount} referencias.`);
+      } else {
+        toast.message(payload.context.warnings[0] ?? "No hubo campos nuevos para completar.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo completar con documentos");
+    } finally {
+      setAssisting(false);
+    }
+  };
+
   const handleSaveDraft = async () => {
     const currentInputData = inlineInputDataRef.current;
     flushInlineDraftData();
@@ -1863,6 +1926,16 @@ export function DocumentGenerationPageClient({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
+              variant="outline"
+              onClick={() => void handleAssistFromDocuments()}
+              disabled={assisting || loading || !selectedTemplate || !workId || !folderPath || !documentType}
+              className="h-9 rounded-md border-stone-200 bg-white px-4"
+            >
+              {assisting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
+              Completar con documentos
+            </Button>
+            <Button
+              type="button"
               variant="ghost"
               onClick={handleSaveDraft}
               disabled={savingDraft || loading || Boolean(editingGeneratedId)}
@@ -1953,6 +2026,20 @@ export function DocumentGenerationPageClient({
                     placeholder="Seleccionar plantilla"
                   />
                 </FormField>
+                {documentAiContext ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <Sparkles className="size-3.5" />
+                      Contexto documental
+                    </div>
+                    <p className="mt-1 text-emerald-800">
+                      {documentAiContext.sources.length} referencias de {documentAiContext.sourceRowCount} filas.
+                    </p>
+                    {documentAiContext.warnings[0] ? (
+                      <p className="mt-1 text-amber-700">{documentAiContext.warnings[0]}</p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </section>
 

@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { auth } from "@/lib/auth";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { revalidatePath } from "next/cache";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 // Types
 export type PermissionLevel = "read" | "edit" | "admin";
@@ -68,8 +69,6 @@ type FullNameRelation =
 	| { full_name?: string | null }[]
 	| null;
 
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
-
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 async function requireRolesAdmin(
@@ -97,8 +96,11 @@ async function requireRolesAdmin(
 			.maybeSingle(),
 	]);
 
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = isSuperAdminUser(
+		user.id,
+		profile?.is_superadmin,
+		user.email,
+	);
 	const { tenantId } = await resolveTenantMembership(
 		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
 		{ isSuperAdmin }
@@ -938,6 +940,12 @@ function getNavigationItems(): NavigationItem[] {
 		label: "Data-flow",
 		permission: "data-flow:read",
 		icon: "Layers",
+	},
+	{
+		path: "/document-ai",
+		label: "Document AI",
+		permission: "nav:document-ai",
+		icon: "FileText",
 	},
 	{
 		path: "/certificados",

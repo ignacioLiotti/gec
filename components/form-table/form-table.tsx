@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useDeferredValue, useEffect, useMemo, useRef, useTransition, startTransition } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import {
 	useReactTable,
@@ -58,6 +58,8 @@ import {
 	Download,
 	Search,
 	MoreHorizontal,
+	Check,
+	X,
 } from "lucide-react";
 import type {
 	ColumnField,
@@ -76,8 +78,10 @@ import {
 	defaultSearchMatcher,
 	defaultSortByField,
 	getClearedValue,
+	shallowEqualValues,
 	snapshotValues,
 	tableRowToCsv,
+	valuesToCsvRow,
 	copyToClipboard,
 } from "./table-utils";
 import { FormTableProvider, useFormTable as useFormTableContext } from "./context";
@@ -356,19 +360,121 @@ export function FormTableTabs({ className }: { className?: string }) {
 	);
 }
 
+function coerceBulkEditValue<Row extends FormTableRow>(column: ColumnDef<Row>, rawValue: string) {
+	const cellType = column.cellType ?? "text";
+	if (cellType === "number" || cellType === "currency") {
+		if (rawValue.trim() === "") return null;
+		const normalized = rawValue.replace(/\./g, "").replace(",", ".");
+		const parsed = Number(normalized);
+		return Number.isFinite(parsed) ? parsed : rawValue;
+	}
+	if (cellType === "boolean" || cellType === "checkbox" || cellType === "toggle") {
+		return rawValue === "true";
+	}
+	return rawValue;
+}
+
+export function FormTableBulkEditBar() {
+	const { config, bulkSelection } = useFormTable<FormTableRow, unknown>();
+	const [draft, setDraft] = useState({ selectionKey: "", value: "" });
+	const selectedColumn = bulkSelection.selectedColumn;
+	const isReadOnly = config.readOnly === true;
+
+	if (isReadOnly || !selectedColumn || bulkSelection.count < 2) {
+		return null;
+	}
+
+	const cellType = selectedColumn.cellType ?? "text";
+	const selectOptions = selectedColumn.cellConfig?.selectOptions ?? [];
+	const canUseSelect = cellType === "select" && selectOptions.length > 0;
+	const isBoolean =
+		cellType === "boolean" || cellType === "checkbox" || cellType === "toggle";
+	const selectionKey = `${selectedColumn.id}:${bulkSelection.selectedRowIds.join(",")}`;
+	const value = draft.selectionKey === selectionKey ? draft.value : "";
+	const setValue = (nextValue: string) => setDraft({ selectionKey, value: nextValue });
+
+	const apply = () => {
+		bulkSelection.applyValue(coerceBulkEditValue(selectedColumn, value));
+		setDraft({ selectionKey: "", value: "" });
+	};
+
+	return (
+		<div className="flex flex-wrap items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-950 shadow-sm">
+			<span className="font-medium">
+				{bulkSelection.count} celdas seleccionadas en {selectedColumn.label}
+			</span>
+			{canUseSelect ? (
+				<Select value={value} onValueChange={setValue}>
+					<SelectTrigger className="h-8 w-[220px] border-orange-200 bg-white">
+						<SelectValue placeholder="Elegir valor" />
+					</SelectTrigger>
+					<SelectContent>
+						{selectOptions.map((option) => (
+							<SelectItem key={option.text} value={option.text}>
+								{option.text}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			) : isBoolean ? (
+				<Select value={value} onValueChange={setValue}>
+					<SelectTrigger className="h-8 w-[160px] border-orange-200 bg-white">
+						<SelectValue placeholder="Elegir valor" />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="true">Si</SelectItem>
+						<SelectItem value="false">No</SelectItem>
+					</SelectContent>
+				</Select>
+			) : (
+				<Input
+					value={value}
+					onChange={(event) => setValue(event.target.value)}
+					placeholder="Valor para aplicar"
+					type={cellType === "date" ? "date" : "text"}
+					className="h-8 w-[220px] border-orange-200 bg-white"
+				/>
+			)}
+			<Button
+				type="button"
+				size="sm"
+				onClick={apply}
+				disabled={value === ""}
+				className="h-8 gap-1"
+			>
+				<Check className="size-3.5" />
+				Aplicar
+			</Button>
+			<Button
+				type="button"
+				size="icon"
+				variant="ghost"
+				onClick={bulkSelection.clear}
+				className="size-8 text-orange-900 hover:bg-orange-100"
+				aria-label="Limpiar seleccion"
+			>
+				<X className="size-4" />
+			</Button>
+		</div>
+	);
+}
+
 export function FormTableContent({ className, innerClassName, tableHeight }: { className?: string, innerClassName?: string, tableHeight?: string }) {
 	const {
 		tableId,
 		config,
 		columns,
 		rows,
+		bulkSelection,
 		meta,
 		pagination,
 		sorting,
-		tabs,
 	} = useFormTable<FormTableRow, unknown>();
 	const { externalRefreshVersion } = meta;
 	const rowClassName = config.rowClassName as
+		| ((row: FormTableRow, rowIndex: number) => string | undefined)
+		| undefined;
+	const rowElementClassName = config.rowElementClassName as
 		| ((row: FormTableRow, rowIndex: number) => string | undefined)
 		| undefined;
 	const rowColorInfo = config.rowColorInfo as
@@ -382,13 +488,18 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		| undefined;
 
 	const columnDefs = columns.list;
-	const { tableRef, colRefs, colWidths, isColumnHidden, getStickyProps, columnIndexMap, columnsById, groupedColumnLookup, enableResizing, hiddenIds } = columns;
+	const { tableRef, colRefs, colWidths, columnOffsets, isColumnHidden, getStickyProps, columnIndexMap, columnsById, groupedColumnLookup, enableResizing, hiddenIds, pinnedIds } = columns;
 	const hiddenColumnIdsKey = useMemo(() => hiddenIds.join(","), [hiddenIds]);
+	const bulkSelectedRowIdsSet = useMemo(
+		() => new Set(bulkSelection.selectedRowIds),
+		[bulkSelection.selectedRowIds]
+	);
 	const {
 		table,
 		FieldComponent,
 		highlightQuery,
 		editMode,
+		editOnHover,
 		activeCell,
 		setActiveCell,
 		getRowDirtyState,
@@ -401,6 +512,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		handleDelete,
 		handleClearCell,
 		handleRestoreCell,
+		handleCommitCellValue,
 		handleCopyCell,
 		handleCopyColumn,
 		handleCopyRow,
@@ -415,6 +527,16 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	const headerCellClassName = config.headerCellClassName;
 	const tableLayoutClassName = config.tableLayout === "auto" ? "table-auto" : "table-fixed";
 	const dataColumnIndexOffset = showActionsColumn && actionsColumnPosition === "start" ? 1 : 0;
+	// Rows only consume sticky left offsets, so the key that busts row memoization
+	// tracks exactly those — resizing unpinned columns no longer re-renders rows
+	// (their widths are applied through <col> elements).
+	const stickyStateKey = useMemo(() => {
+		if (pinnedIds.length === 0) return "none";
+		const offsetKey = pinnedIds
+			.map((columnId) => `${columnId}:${columnOffsets[columnId] ?? "?"}`)
+			.join(",");
+		return `${pinnedIds.join(",")}::${offsetKey}`;
+	}, [pinnedIds, columnOffsets]);
 	const canDeleteRows = !isReadOnly && config.allowDeleteRows !== false;
 	const { serverError, activityKind, isBusy, isSlowOperation } = meta;
 	const { isServerPaging, isFetching } = pagination;
@@ -432,10 +554,11 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		config.enableRowVirtualization === true &&
 		!hasAccordionRows &&
 		tableRows.length > 24;
+	const virtualizedRowEstimate = config.virtualizationEstimateSize ?? 58;
 	const rowVirtualizer = useVirtualizer({
 		count: shouldVirtualize ? tableRows.length : 0,
 		getScrollElement: () => scrollParentRef.current,
-		estimateSize: () => 58,
+		estimateSize: () => virtualizedRowEstimate,
 		overscan: config.virtualizationOverscan ?? 5,
 	});
 	const virtualRows = shouldVirtualize ? rowVirtualizer.getVirtualItems() : [];
@@ -445,6 +568,14 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 			? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1]!.end
 			: 0;
 	const rowIds = useMemo(() => tableRows.map((row) => row.original.id), [tableRows]);
+	const rowIdSet = useMemo(() => new Set(rowIds), [rowIds]);
+	const rowIndexById = useMemo(() => {
+		const map = new Map<string, number>();
+		rowIds.forEach((rowId, index) => {
+			map.set(rowId, index);
+		});
+		return map;
+	}, [rowIds]);
 	const [hoveredCell, setHoveredCell] = useState<{ rowId: string; columnId: string } | null>(null);
 	useEffect(() => {
 		if (editMode !== "active-cell" || isReadOnly) {
@@ -453,10 +584,10 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	}, [editMode, isReadOnly]);
 	useEffect(() => {
 		if (!hoveredCell) return;
-		if (!rowIds.includes(hoveredCell.rowId)) {
+		if (!rowIdSet.has(hoveredCell.rowId)) {
 			setHoveredCell(null);
 		}
-	}, [hoveredCell, rowIds]);
+	}, [hoveredCell, rowIdSet]);
 	const visibleColumnIds = useMemo(
 		() => columnDefs.filter((column) => !isColumnHidden(column.id)).map((column) => column.id),
 		[columnDefs, isColumnHidden]
@@ -466,15 +597,10 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		const tableElement = tableRef.current;
 		if (!tableElement) return;
 
-		const locateCell = () => {
-			const cells = tableElement.querySelectorAll<HTMLElement>('[data-form-table-cell="true"]');
-			for (const cell of cells) {
-				if (cell.dataset.rowId === rowId && cell.dataset.columnId === columnId) {
-					return cell;
-				}
-			}
-			return null;
-		};
+		const locateCell = () =>
+			tableElement.querySelector<HTMLElement>(
+				`td[data-form-table-cell="true"][data-row-id="${escapeSelectorAttributeValue(rowId)}"][data-column-id="${escapeSelectorAttributeValue(columnId)}"]`
+			);
 		const attemptFocus = () => {
 			const cell = locateCell();
 			if (!cell) return false;
@@ -545,7 +671,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		const currentCellElement = target.closest<HTMLElement>('td[data-form-table-cell="true"]');
 		const currentRowId = activeCell?.rowId ?? currentCellElement?.dataset.rowId ?? rowIds[0];
 		const currentColumnId = activeCell?.columnId ?? currentCellElement?.dataset.columnId ?? visibleColumnIds[0];
-		let nextRowIndex = rowIds.indexOf(currentRowId);
+		let nextRowIndex = rowIndexById.get(currentRowId) ?? -1;
 		let nextColumnIndex = visibleColumnIds.indexOf(currentColumnId);
 		if (nextRowIndex < 0) nextRowIndex = 0;
 		if (nextColumnIndex < 0) nextColumnIndex = 0;
@@ -582,6 +708,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		editMode,
 		focusCellControl,
 		rowIds,
+		rowIndexById,
 		rowVirtualizer,
 		setActiveCell,
 		shouldVirtualize,
@@ -590,6 +717,77 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	const handleClearHoveredCell = useCallback(() => {
 		setHoveredCell(null);
 	}, []);
+	const pendingBulkSelectionRef = useRef<{
+		rowId: string;
+		column: ColumnDef<FormTableRow>;
+		startX: number;
+		startY: number;
+	} | null>(null);
+	const shouldIgnoreBulkSelectionStart = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+		const target = event.target as HTMLElement | null;
+		return Boolean(
+			target?.closest(
+				'button, a, [role="combobox"], [role="switch"], [role="checkbox"], [data-column-resizer="true"]'
+			)
+		);
+	}, []);
+	const handleBulkSelectionMouseDown = useCallback((event: ReactMouseEvent<HTMLElement>, rowId: string, column: ColumnDef<FormTableRow>) => {
+		if (event.button !== 0 || isReadOnly) return;
+		if (shouldIgnoreBulkSelectionStart(event)) return;
+		pendingBulkSelectionRef.current = {
+			rowId,
+			column,
+			startX: event.clientX,
+			startY: event.clientY,
+		};
+	}, [isReadOnly, shouldIgnoreBulkSelectionStart]);
+	const handleBulkSelectionMouseEnter = useCallback((event: ReactMouseEvent<HTMLElement>, rowId: string, column: ColumnDef<FormTableRow>) => {
+		if (event.buttons !== 1) {
+			pendingBulkSelectionRef.current = null;
+			if (bulkSelection.isDragging) {
+				bulkSelection.endDrag();
+			}
+			return;
+		}
+		if (bulkSelection.isDragging) {
+			event.preventDefault();
+			bulkSelection.extendDrag(rowId, column);
+			return;
+		}
+		const pending = pendingBulkSelectionRef.current;
+		if (!pending) return;
+		if (pending.column.id !== column.id) {
+			pendingBulkSelectionRef.current = null;
+			return;
+		}
+		const deltaX = event.clientX - pending.startX;
+		const deltaY = event.clientY - pending.startY;
+		const hasIntentionalDrag =
+			Math.hypot(deltaX, deltaY) >= BULK_SELECTION_DRAG_THRESHOLD_PX &&
+			rowId !== pending.rowId;
+		if (!hasIntentionalDrag) return;
+		event.preventDefault();
+		bulkSelection.beginDrag(pending.rowId, pending.column);
+		bulkSelection.extendDrag(rowId, column);
+	}, [bulkSelection]);
+	const handleBulkSelectionMouseUp = useCallback(() => {
+		pendingBulkSelectionRef.current = null;
+		if (!bulkSelection.isDragging) return;
+		bulkSelection.endDrag();
+	}, [bulkSelection]);
+	useEffect(() => {
+		if (!bulkSelection.isDragging && !pendingBulkSelectionRef.current) return;
+		const handleWindowMouseUp = () => {
+			pendingBulkSelectionRef.current = null;
+			if (bulkSelection.isDragging) {
+				bulkSelection.endDrag();
+			}
+		};
+		window.addEventListener("mouseup", handleWindowMouseUp);
+		return () => {
+			window.removeEventListener("mouseup", handleWindowMouseUp);
+		};
+	}, [bulkSelection]);
 
 	return (
 		<>
@@ -626,7 +824,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 					ref={scrollParentRef}
 					onPointerLeave={handleClearHoveredCell}
 					onKeyDownCapture={handleArrowNavigation}
-					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", innerClassName)}>
+					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", bulkSelection.isDragging && "select-none cursor-crosshair", innerClassName)}>
 					<table ref={tableRef} data-table-id={tableId} className={cn("w-full text-sm max-w-full relative", tableLayoutClassName, tableHeight)}>
 						<colgroup className="max-w-full overflow-hidden">
 							{showActionsColumn && actionsColumnPosition === "start" && (
@@ -856,7 +1054,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 								})}
 							</tr>
 						</thead>
-						<tbody className="bg-white" key={tabs.activeTab ?? 'all'}>
+						<tbody className="bg-white">
 							{tableRows.length === 0 ? (
 								<tr>
 									<td
@@ -880,9 +1078,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									{virtualRows.map((virtualRow) => {
 										const row = tableRows[virtualRow.index];
 										const rowId = row.original.id;
-										const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
-										// Create a stable string key of dirty cell IDs for memoization
-										const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
+										const { dirty: rowIsDirty, cellIdsKey: dirtyCellIds } = getRowDirtyState(rowId);
 										return (
 											<MemoizedTableRow
 												key={rowId}
@@ -893,14 +1089,17 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												setHoveredCell={setHoveredCell}
 												columnsById={columnsById}
 												rowClassName={rowClassName}
+												rowElementClassName={rowElementClassName}
 												rowColorInfo={rowColorInfo}
 												rowOverlayBadges={rowOverlayBadges}
 												FieldComponent={FieldComponent}
 												tableReadOnly={isReadOnly}
 												highlightQuery={highlightQuery}
 												editMode={editMode}
+												editOnHover={editOnHover}
 												activeCell={activeCell}
 												setActiveCell={setActiveCell}
+												onCommitCellValue={handleCommitCellValue}
 												hasInitialSnapshot={hasInitialRow(rowId)}
 												accordionRowConfig={accordionRowConfig}
 												accordionAlwaysOpen={accordionAlwaysOpen}
@@ -908,12 +1107,18 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												isRowDirty={rowIsDirty}
 												dirtyCellIds={dirtyCellIds}
 												hiddenColumnIdsKey={hiddenColumnIdsKey}
+												stickyStateKey={stickyStateKey}
 												showActionsColumn={showActionsColumn}
 												actionsColumnPosition={actionsColumnPosition}
 												actionsColumnWidth={actionsColumnWidth}
 												canDeleteRows={canDeleteRows}
-												isColumnHidden={isColumnHidden}
 												isCellDirty={isCellDirty}
+												bulkSelectedColumnId={bulkSelection.selectedColumn?.id ?? null}
+												bulkSelectedCount={bulkSelection.count}
+												isRowBulkSelected={bulkSelectedRowIdsSet.has(rowId)}
+												onBulkSelectionStart={handleBulkSelectionMouseDown}
+												onBulkSelectionExtend={handleBulkSelectionMouseEnter}
+												onBulkSelectionEnd={handleBulkSelectionMouseUp}
 												getStickyProps={getStickyProps}
 												onToggleAccordion={toggleAccordionRow}
 												onDelete={handleDelete}
@@ -922,6 +1127,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												onCopyCell={handleCopyCell}
 												onCopyColumn={handleCopyColumn}
 												onCopyRow={handleCopyRow}
+												measureElement={rowVirtualizer.measureElement}
 											/>
 										);
 									})}
@@ -938,9 +1144,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 								// Non-virtualized rendering for small datasets
 								tableRows.map((row, rowIndex) => {
 									const rowId = row.original.id;
-									const { dirty: rowIsDirty, cells: dirtyCells } = getRowDirtyState(rowId);
-									// Create a stable string key of dirty cell IDs for memoization
-									const dirtyCellIds = dirtyCells.map(c => c.id).sort().join(',');
+									const { dirty: rowIsDirty, cellIdsKey: dirtyCellIds } = getRowDirtyState(rowId);
 									return (
 										<MemoizedTableRow
 											key={rowId}
@@ -951,14 +1155,17 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											setHoveredCell={setHoveredCell}
 											columnsById={columnsById}
 											rowClassName={rowClassName}
+											rowElementClassName={rowElementClassName}
 											rowColorInfo={rowColorInfo}
 											rowOverlayBadges={rowOverlayBadges}
 											FieldComponent={FieldComponent}
 											tableReadOnly={isReadOnly}
 											highlightQuery={highlightQuery}
 											editMode={editMode}
+											editOnHover={editOnHover}
 											activeCell={activeCell}
 											setActiveCell={setActiveCell}
+											onCommitCellValue={handleCommitCellValue}
 											hasInitialSnapshot={hasInitialRow(rowId)}
 											accordionRowConfig={accordionRowConfig}
 											accordionAlwaysOpen={accordionAlwaysOpen}
@@ -966,12 +1173,18 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											isRowDirty={rowIsDirty}
 											dirtyCellIds={dirtyCellIds}
 											hiddenColumnIdsKey={hiddenColumnIdsKey}
+											stickyStateKey={stickyStateKey}
 											showActionsColumn={showActionsColumn}
 											actionsColumnPosition={actionsColumnPosition}
 											actionsColumnWidth={actionsColumnWidth}
 											canDeleteRows={canDeleteRows}
-											isColumnHidden={isColumnHidden}
 											isCellDirty={isCellDirty}
+											bulkSelectedColumnId={bulkSelection.selectedColumn?.id ?? null}
+											bulkSelectedCount={bulkSelection.count}
+											isRowBulkSelected={bulkSelectedRowIdsSet.has(rowId)}
+											onBulkSelectionStart={handleBulkSelectionMouseDown}
+											onBulkSelectionExtend={handleBulkSelectionMouseEnter}
+											onBulkSelectionEnd={handleBulkSelectionMouseUp}
 											getStickyProps={getStickyProps}
 											onToggleAccordion={toggleAccordionRow}
 											onDelete={handleDelete}
@@ -1171,7 +1384,6 @@ export function FormTablePagination() {
 	);
 }
 
-import { computeCellDirty, computeRowDirty, hasUnsavedChanges as hasUnsavedChangesUtil } from "./dirty-tracking";
 import {
 	readPersistedArray,
 	readPersistedNumber,
@@ -1184,10 +1396,22 @@ export { requiredValidator } from "./table-utils";
 
 type TableActivityKind = "loading" | "sorting" | "search" | "filter" | "pagination";
 
+type BulkCellSelection = {
+	columnId: string | null;
+	rowIds: string[];
+	anchorRowId: string | null;
+	isDragging: boolean;
+};
+
 const DEFAULT_COL_WIDTH = 160;
-const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
-const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 250];
+const DEFAULT_PAGE_SIZE = 25;
 const SLOW_OPERATION_MS = 1200;
+const BULK_SELECTION_DRAG_THRESHOLD_PX = 8;
+
+function escapeSelectorAttributeValue(value: string) {
+	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
 
 function shallowEqualStringArrays(a: string[], b: string[]) {
 	if (a === b) return true;
@@ -1240,6 +1464,108 @@ function buildFormSnapshot<Row extends FormTableRow>(rows: Row[] | undefined) {
 	return { rowOrder, rowsById };
 }
 
+type RowDirtyCacheEntry<Row extends FormTableRow> = {
+	row: Row;
+	initialRow: Row | undefined;
+	dirty: boolean;
+	cellDirtyIds: Set<string>;
+	dirtyCells: ColumnDef<Row>[];
+	dirtyCellIdsKey: string;
+};
+
+function buildDirtyIndex<Row extends FormTableRow>(
+	rowOrder: string[],
+	initialRowOrder: string[],
+	rowsById: Record<string, Row>,
+	columns: ColumnDef<Row>[],
+	initialRowsById: Record<string, Row>,
+	cache?: Map<string, RowDirtyCacheEntry<Row>>
+) {
+	let hasChanges = rowOrder.length !== initialRowOrder.length;
+	if (!hasChanges) {
+		for (let index = 0; index < rowOrder.length; index += 1) {
+			if (rowOrder[index] !== initialRowOrder[index]) {
+				hasChanges = true;
+				break;
+			}
+		}
+	}
+
+	const rowDirtyById: Record<string, boolean> = {};
+	const cellDirtyByRowId: Record<string, Set<string>> = {};
+	const dirtyCellsByRowId: Record<string, ColumnDef<Row>[]> = {};
+	const dirtyCellIdsByRowId: Record<string, string> = {};
+
+	for (const rowId of rowOrder) {
+		const currentRow = rowsById[rowId];
+		if (!currentRow) continue;
+
+		const initialRow = initialRowsById[rowId];
+		// Rows are updated immutably, so identity equality of both the current and
+		// baseline row objects means the cached diff is still valid. This keeps the
+		// per-keystroke cost at one row diff instead of rows × columns.
+		const cached = cache?.get(rowId);
+		let entry: RowDirtyCacheEntry<Row>;
+		if (cached && cached.row === currentRow && cached.initialRow === initialRow) {
+			entry = cached;
+		} else if (!initialRow) {
+			const allColumnIds = columns.map((column) => column.id);
+			entry = {
+				row: currentRow,
+				initialRow,
+				dirty: true,
+				cellDirtyIds: new Set(allColumnIds),
+				dirtyCells: [],
+				dirtyCellIdsKey: allColumnIds.join(","),
+			};
+			cache?.set(rowId, entry);
+		} else {
+			const dirtyCells: ColumnDef<Row>[] = [];
+			const dirtyCellIds = new Set<string>();
+			for (const column of columns) {
+				if (String(column.field) === "id") continue;
+				if (!shallowEqualValues(currentRow[column.field], initialRow[column.field])) {
+					dirtyCells.push(column);
+					dirtyCellIds.add(column.id);
+				}
+			}
+			entry = {
+				row: currentRow,
+				initialRow,
+				dirty: dirtyCells.length > 0,
+				cellDirtyIds: dirtyCellIds,
+				dirtyCells,
+				dirtyCellIdsKey: dirtyCells.map((column) => column.id).join(","),
+			};
+			cache?.set(rowId, entry);
+		}
+
+		if (entry.dirty) {
+			rowDirtyById[rowId] = true;
+			cellDirtyByRowId[rowId] = entry.cellDirtyIds;
+			dirtyCellsByRowId[rowId] = entry.dirtyCells;
+			dirtyCellIdsByRowId[rowId] = entry.dirtyCellIdsKey;
+			hasChanges = true;
+		}
+	}
+
+	if (cache && cache.size > rowOrder.length) {
+		for (const cachedRowId of cache.keys()) {
+			if (!rowsById[cachedRowId]) {
+				cache.delete(cachedRowId);
+			}
+		}
+	}
+
+	return {
+		hasChanges,
+		rowDirtyById,
+		cellDirtyByRowId,
+		dirtyCellsByRowId,
+		dirtyCellIdsByRowId,
+	};
+}
+
 function hasSameRowIdentity<Row extends FormTableRow>(
 	nextRows: Row[] | undefined,
 	currentOrder: string[],
@@ -1285,7 +1611,28 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		() => buildFormSnapshot(config.defaultRows),
 		[config.defaultRows]
 	);
+	const [dirtyBaseline, setDirtyBaseline] = useState<FormValues<Row>>(() =>
+		snapshotValues(initialSnapshot.rowOrder, initialSnapshot.rowsById)
+	);
 	const [activeCell, setActiveCell] = useState<{ rowId: string; columnId: string } | null>(null);
+	const updateActiveCell = useCallback((cell: { rowId: string; columnId: string } | null) => {
+		setActiveCell((current) => {
+			if (
+				current?.rowId === cell?.rowId &&
+				current?.columnId === cell?.columnId
+			) {
+				return current;
+			}
+			return cell;
+		});
+	}, []);
+	const [bulkSelection, setBulkSelection] = useState<BulkCellSelection>({
+		columnId: null,
+		rowIds: [],
+		anchorRowId: null,
+		isDragging: false,
+	});
+	const bulkEditClearedKeyRef = useRef<string | null>(null);
 
 	// TanStack Form setup
 	const form = useForm<
@@ -1330,9 +1677,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			}, {});
 			setFormFieldValue("rowOrder", nextOrder);
 			setFormFieldValue("rowsById", nextMap);
-			initialValuesRef.current = snapshotValues(nextOrder, nextMap);
+			const snapshot = snapshotValues(nextOrder, nextMap);
+			initialValuesRef.current = snapshot;
+			setDirtyBaseline(snapshot);
 		},
-		[form]
+		[setFormFieldValue]
 	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [page, setPage] = useState(1);
@@ -1362,7 +1711,10 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			writePersistedNumber(`${TABLE_ID}:pageSize`, pageSize);
 		}
 	}, [TABLE_ID, lockedPageSize, pageSize]);
-	const paginationOptions = lockedPageSize ? [lockedPageSize] : pageSizeOptions;
+	const paginationOptions = useMemo(
+		() => (lockedPageSize ? [lockedPageSize] : pageSizeOptions),
+		[lockedPageSize, pageSizeOptions]
+	);
 	// Track if a page size change is in progress (for showing loading state)
 	const [isPageSizeTransitioning, startPageSizeTransition] = useTransition();
 	const [isSearchTransitioning, startSearchTransition] = useTransition();
@@ -1388,6 +1740,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [isServerPaging, setIsServerPaging] = useState(Boolean(fetchRowsFn));
 	const useClientPagination = !isServerPaging;
 	const [isFetchingServerRows, setIsFetchingServerRows] = useState(false);
+	const fetchRunIdRef = useRef(0);
 	const [serverError, setServerError] = useState<string | null>(null);
 	const [serverMeta, setServerMeta] = useState<ServerPaginationMeta>({
 		page: 1,
@@ -1406,6 +1759,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	useEffect(() => {
 		if (!fetchRowsFn || !Array.isArray(defaultRows)) return;
+		if (defaultRows.length === 0) return;
 		if (hasSameRowIdentity(defaultRows, rowOrder)) return;
 		setFormRows(defaultRows);
 		setServerMeta((prev) => ({
@@ -1663,7 +2017,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		});
 	}, [accordionAlwaysOpen, rows, accordionRowConfig, hasAccordionRows]);
 
-	const serverRequestIdentity = `${searchRequestKey}::${appliedFiltersKey}::${activeTab ?? "all"}::${sortState.columnId ?? "none"}::${sortState.direction}`;
+	const serverRequestIdentity = `${searchRequestKey}::${appliedFiltersKey}::${activeTab ?? "all"}::${effectiveSortState.columnId ?? "none"}::${effectiveSortState.direction}`;
 	const previousServerRequestIdentityRef = useRef<string | null>(null);
 	useEffect(() => {
 		if (!fetchRowsFn) {
@@ -1679,14 +2033,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	useEffect(() => {
 		if (!activeCell) return;
 		if (!rowOrder.includes(activeCell.rowId)) {
-			setActiveCell(null);
+			updateActiveCell(null);
 		}
-	}, [activeCell, rowOrder]);
+	}, [activeCell, rowOrder, updateActiveCell]);
 
 	useEffect(() => {
 		if (!fetchRowsFn) return;
 		if (
 			Array.isArray(defaultRows) &&
+			defaultRows.length > 0 &&
 			!hydratedServerRowsRef.current &&
 			page === 1 &&
 			searchRequestKey.length === 0 &&
@@ -1696,6 +2051,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return;
 		}
 		let isMounted = true;
+		const fetchRunId = fetchRunIdRef.current + 1;
+		fetchRunIdRef.current = fetchRunId;
 		const run = async () => {
 			setIsFetchingServerRows(true);
 			setServerError(null);
@@ -1709,7 +2066,17 @@ export function FormTable<Row extends FormTableRow, Filters>({
 					activeTab,
 					sort: effectiveSortState,
 				});
-				if (!isMounted) return;
+				if (!isMounted || fetchRunId !== fetchRunIdRef.current) return;
+				if (
+					isDev &&
+					!useServerDataMode &&
+					result.pagination &&
+					(result.pagination.totalPages ?? 1) > 1
+				) {
+					console.warn(
+						`[FormTable] ${TABLE_ID} returned paginated rows from fetchRows without serverSideData=true. Local sort/filter/export may only see the loaded page.`
+					);
+				}
 				setFormRows(result.rows);
 				const pagination = result.pagination;
 				setServerMeta({
@@ -1721,13 +2088,13 @@ export function FormTable<Row extends FormTableRow, Filters>({
 					hasPreviousPage: pagination?.hasPreviousPage ?? false,
 				});
 			} catch (error) {
-				if (!isMounted) return;
+				if (!isMounted || fetchRunId !== fetchRunIdRef.current) return;
 				console.error("Error fetching rows", error);
 				setServerError(
 					error instanceof Error ? error.message : "No se pudo obtener la página solicitada"
 				);
 			} finally {
-				if (isMounted) {
+				if (isMounted && fetchRunId === fetchRunIdRef.current) {
 					setIsFetchingServerRows(false);
 				}
 			}
@@ -1748,43 +2115,56 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		pageSize,
 		setFormRows,
 		searchRequestKey,
+		TABLE_ID,
+		isDev,
+		useServerDataMode,
 	]);
+
+	const dirtyRowCacheRef = useRef<{
+		columns: ColumnDef<Row>[] | null;
+		map: Map<string, RowDirtyCacheEntry<Row>>;
+	}>({ columns: null, map: new Map() });
+	const dirtyIndex = useMemo(() => {
+		const cache = dirtyRowCacheRef.current;
+		if (cache.columns !== columns) {
+			cache.columns = columns;
+			cache.map.clear();
+		}
+		return buildDirtyIndex(
+			rowOrder,
+			dirtyBaseline.rowOrder,
+			rowsById,
+			columns,
+			dirtyBaseline.rowsById,
+			cache.map
+		);
+	}, [rowOrder, rowsById, columns, dirtyBaseline]);
 
 	useEffect(() => {
 		if (fetchRowsFn) return;
 		if (Array.isArray(defaultRows)) {
-			const hasLocalChanges = hasUnsavedChangesUtil(
-				rowOrder,
-				initialValuesRef.current.rowOrder,
-				rowsById,
-				columns,
-				initialValuesRef.current.rowsById
-			);
-			if (hasLocalChanges) return;
+			if (dirtyIndex.hasChanges) return;
 			if (hasSameRowIdentity(defaultRows, rowOrder)) return;
 			setFormRows(defaultRows);
 		}
-	}, [fetchRowsFn, defaultRows, rowOrder, rowsById, columns, setFormRows]);
+	}, [fetchRowsFn, defaultRows, rowOrder, dirtyIndex.hasChanges, setFormRows]);
 
 	const isCellDirty = useCallback(
 		(rowId: string, column: ColumnDef<Row>) =>
-			computeCellDirty(rowId, column, rowsById, initialValuesRef.current.rowsById),
-		[rowsById]
+			Boolean(dirtyIndex.cellDirtyByRowId[rowId]?.has(column.id)),
+		[dirtyIndex]
 	);
 
 	const getRowDirtyState = useCallback(
-		(rowId: string) =>
-			computeRowDirty(rowId, rowsById, columns, initialValuesRef.current.rowsById),
-		[rowsById, columns]
+		(rowId: string) => ({
+			dirty: Boolean(dirtyIndex.rowDirtyById[rowId]),
+			cells: dirtyIndex.dirtyCellsByRowId[rowId] ?? [],
+			cellIdsKey: dirtyIndex.dirtyCellIdsByRowId[rowId] ?? "",
+		}),
+		[dirtyIndex]
 	);
 
-	const hasUnsavedChanges = hasUnsavedChangesUtil(
-		rowOrder,
-		initialValuesRef.current.rowOrder,
-		rowsById,
-		columns,
-		initialValuesRef.current.rowsById
-	);
+	const hasUnsavedChanges = dirtyIndex.hasChanges;
 
 	useEffect(() => {
 		if (!enableColumnResizing || typeof window === "undefined") return;
@@ -1952,12 +2332,12 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	// Persist hidden columns
 	useEffect(() => {
 		writePersistedArray(`${TABLE_ID}:hidden`, hiddenColumnIds);
-	}, [hiddenColumnIds]);
+	}, [TABLE_ID, hiddenColumnIds]);
 
 	// Persist pinned columns
 	useEffect(() => {
 		writePersistedArray(`${TABLE_ID}:pinned`, pinnedColumnIds);
-	}, [pinnedColumnIds]);
+	}, [TABLE_ID, pinnedColumnIds]);
 
 	// Clean up and sort pinned columns
 	useEffect(() => {
@@ -2017,7 +2397,17 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			offsets[columnId] = accumulator;
 			accumulator += width;
 		});
-		setColumnOffsets(offsets);
+		setColumnOffsets((prev) => {
+			const prevKeys = Object.keys(prev);
+			const nextKeys = Object.keys(offsets);
+			if (
+				prevKeys.length === nextKeys.length &&
+				nextKeys.every((key) => prev[key] === offsets[key])
+			) {
+				return prev;
+			}
+			return offsets;
+		});
 	}, [pinnedColumnIds, isColumnHidden, columnIndexMap, colWidths, dataColumnIndexOffset]);
 
 	useEffect(() => {
@@ -2032,16 +2422,29 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		};
 	}, [recalcPinnedOffsets]);
 
+	// Resize events fire per mousemove; coalesce state updates to one per frame so
+	// dragging a resizer doesn't re-render the table on every event.
 	useEffect(() => {
 		if (!enableColumnResizing) return;
+		let frame: number | null = null;
 		const handleColumnResize: EventListener = () => {
-			recalcPinnedOffsets();
+			if (frame !== null) return;
+			frame = window.requestAnimationFrame(() => {
+				frame = null;
+				recalcPinnedOffsets();
+			});
 		};
-		return attachColumnResizeListener(handleColumnResize);
+		const detach = attachColumnResizeListener(handleColumnResize);
+		return () => {
+			if (frame !== null) window.cancelAnimationFrame(frame);
+			detach();
+		};
 	}, [attachColumnResizeListener, recalcPinnedOffsets, enableColumnResizing]);
 
 	useEffect(() => {
 		if (!enableColumnResizing) return;
+		let frame: number | null = null;
+		const pendingWidths = new Map<number, number>();
 		const handler: EventListener = (event) => {
 			const detail = (event as CustomEvent)?.detail as {
 				tableId?: string;
@@ -2051,12 +2454,30 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			if (!detail || detail.tableId !== TABLE_ID) return;
 			const { colIndex, newWidth } = detail;
 			if (typeof colIndex !== "number" || typeof newWidth !== "number") return;
-			setColWidths((prev) => {
-				if (prev[colIndex] === newWidth) return prev;
-				return { ...prev, [colIndex]: newWidth };
+			pendingWidths.set(colIndex, newWidth);
+			if (frame !== null) return;
+			frame = window.requestAnimationFrame(() => {
+				frame = null;
+				const entries = Array.from(pendingWidths.entries());
+				pendingWidths.clear();
+				setColWidths((prev) => {
+					let changed = false;
+					const next = { ...prev };
+					for (const [index, width] of entries) {
+						if (next[index] !== width) {
+							next[index] = width;
+							changed = true;
+						}
+					}
+					return changed ? next : prev;
+				});
 			});
 		};
-		return attachColumnResizeListener(handler);
+		const detach = attachColumnResizeListener(handler);
+		return () => {
+			if (frame !== null) window.cancelAnimationFrame(frame);
+			detach();
+		};
 	}, [TABLE_ID, attachColumnResizeListener, enableColumnResizing]);
 
 	const getStickyProps = useCallback(
@@ -2073,7 +2494,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 				},
 			};
 		},
-		[columnOffsets, isColumnHidden, isColumnPinned]
+		[columnOffsets, isColumnPinned]
 	);
 
 	const hiddenIndices = useMemo(
@@ -2091,7 +2512,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			hiddenCols: hiddenIndices,
 			minVisibleWidth: 100,
 		});
-	}, [hiddenIndices]);
+	}, [TABLE_ID, hiddenIndices]);
 
 	const handleApplyAdvancedFilters = useCallback(() => {
 		if (!hasFilters || typeof filtersDraft === "undefined") return;
@@ -2111,11 +2532,17 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			setFiltersDraft(initial);
 		});
 	}, [hasFilters, markActivityStart, startFilterTransition]);
+	const setFiltersDraftValue = useCallback(
+		(updater: (prev: Filters | undefined) => Filters | undefined) => {
+			setFiltersDraft((prev) => updater(prev));
+		},
+		[]
+	);
 
 
 	const toggleSort = useCallback((columnId: string) => {
 		if (lockedSort) return;
-		setActiveCell(null);
+		updateActiveCell(null);
 		if (isDev) {
 			console.log("[FormTable][Sort] HEADER CLICK", {
 				tableId: TABLE_ID,
@@ -2143,11 +2570,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 				return { columnId: null, direction: "asc" };
 			});
 		});
-	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, setActiveCell, startSortTransition]);
+	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, startSortTransition, updateActiveCell]);
 
 	const applySortDirection = useCallback((columnId: string, direction: "asc" | "desc") => {
 		if (lockedSort) return;
-		setActiveCell(null);
+		updateActiveCell(null);
 		if (isDev) {
 			console.log("[FormTable][Sort] HEADER MENU CLICK", {
 				tableId: TABLE_ID,
@@ -2168,11 +2595,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		startSortTransition(() => {
 			setSortState({ columnId, direction });
 		});
-	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, setActiveCell, startSortTransition]);
+	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, startSortTransition, updateActiveCell]);
 
 	const clearSort = useCallback(() => {
 		if (lockedSort) return;
-		setActiveCell(null);
+		updateActiveCell(null);
 		if (isDev) {
 			console.log("[FormTable][Sort] CLEAR CLICK", {
 				tableId: TABLE_ID,
@@ -2191,7 +2618,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		startSortTransition(() => {
 			setSortState({ columnId: null, direction: "asc" });
 		});
-	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, setActiveCell, startSortTransition]);
+	}, [TABLE_ID, activityRunId, effectiveSortState, isDev, lockedSort, markActivityStart, startSortTransition, updateActiveCell]);
 
 	const clientTotalPages = useMemo(() => {
 		if (paginationDisabled) return 1;
@@ -2226,9 +2653,169 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [paginationDisabled, page, pageSize, sortedRows, fetchRowsFn, serverReturnedAllRows, useServerDataMode]);
 
 	const processedRowsRef = useRef<Row[]>(processedRows);
+	const processedRowIds = useMemo(() => processedRows.map((row) => row.id), [processedRows]);
+	const processedRowIndexById = useMemo(() => {
+		const map = new Map<string, number>();
+		processedRowIds.forEach((rowId, index) => {
+			map.set(rowId, index);
+		});
+		return map;
+	}, [processedRowIds]);
+	const processedRowIdsRef = useRef<string[]>(processedRowIds);
+	const processedRowIndexByIdRef = useRef<Map<string, number>>(processedRowIndexById);
 	useEffect(() => {
 		processedRowsRef.current = processedRows;
-	}, [processedRows]);
+		processedRowIdsRef.current = processedRowIds;
+		processedRowIndexByIdRef.current = processedRowIndexById;
+	}, [processedRows, processedRowIds, processedRowIndexById]);
+	const selectedColumn = bulkSelection.columnId
+		? columnsById[bulkSelection.columnId] ?? null
+		: null;
+	const selectedRowIdsSet = useMemo(
+		() => new Set(bulkSelection.rowIds),
+		[bulkSelection.rowIds]
+	);
+	const clearBulkSelection = useCallback(() => {
+		bulkEditClearedKeyRef.current = null;
+		setBulkSelection({
+			columnId: null,
+			rowIds: [],
+			anchorRowId: null,
+			isDragging: false,
+		});
+	}, []);
+	const isBulkCellSelected = useCallback(
+		(rowId: string, columnId: string) =>
+			bulkSelection.columnId === columnId && selectedRowIdsSet.has(rowId),
+		[bulkSelection.columnId, selectedRowIdsSet]
+	);
+	const resolveVisibleRowRange = useCallback((anchorRowId: string, currentRowId: string) => {
+		const visibleRowIds = processedRowIdsRef.current;
+		const indexById = processedRowIndexByIdRef.current;
+		const anchorIndex = indexById.get(anchorRowId) ?? -1;
+		const currentIndex = indexById.get(currentRowId) ?? -1;
+		if (anchorIndex < 0 || currentIndex < 0) {
+			return [anchorRowId, currentRowId].filter(Boolean);
+		}
+		const start = Math.min(anchorIndex, currentIndex);
+		const end = Math.max(anchorIndex, currentIndex);
+		return visibleRowIds.slice(start, end + 1);
+	}, []);
+	const beginBulkSelectionDrag = useCallback(
+		(rowId: string, column: ColumnDef<Row>) => {
+			if (isReadOnly || column.editable === false) return;
+			bulkEditClearedKeyRef.current = null;
+			updateActiveCell({ rowId, columnId: column.id });
+			setBulkSelection({
+				columnId: column.id,
+				rowIds: [rowId],
+				anchorRowId: rowId,
+				isDragging: true,
+			});
+		},
+		[isReadOnly, updateActiveCell]
+	);
+	const extendBulkSelectionDrag = useCallback(
+		(rowId: string, column: ColumnDef<Row>) => {
+			if (isReadOnly || column.editable === false) return;
+			setBulkSelection((prev) => {
+				if (!prev.isDragging || prev.columnId !== column.id || !prev.anchorRowId) {
+					return prev;
+				}
+				const rowIds = resolveVisibleRowRange(prev.anchorRowId, rowId);
+				return shallowEqualStringArrays(prev.rowIds, rowIds) ? prev : { ...prev, rowIds };
+			});
+		},
+		[isReadOnly, resolveVisibleRowRange]
+	);
+	const endBulkSelectionDrag = useCallback(() => {
+		setBulkSelection((prev) =>
+			prev.isDragging ? { ...prev, isDragging: false } : prev
+		);
+	}, []);
+	useEffect(() => {
+		if (!bulkSelection.columnId || bulkSelection.isDragging) return;
+		if (
+			!activeCell ||
+			activeCell.columnId !== bulkSelection.columnId ||
+			!bulkSelection.rowIds.includes(activeCell.rowId)
+		) {
+			clearBulkSelection();
+		}
+	}, [
+		activeCell,
+		bulkSelection.columnId,
+		bulkSelection.isDragging,
+		bulkSelection.rowIds,
+		clearBulkSelection,
+	]);
+	const commitBulkCellValue = useCallback(
+		(rowId: string, column: ColumnDef<Row>, value: unknown) => {
+			if (isReadOnly || column.editable === false) return false;
+			if (bulkSelection.columnId !== column.id || bulkSelection.rowIds.length < 2) {
+				return false;
+			}
+			if (!bulkSelection.rowIds.includes(rowId)) return false;
+
+			const selectedIds = bulkSelection.rowIds;
+			const bulkEditKey = `${column.id}:${selectedIds.join(",")}`;
+			const shouldMarkCleared = bulkEditClearedKeyRef.current !== bulkEditKey;
+			setFormFieldValue("rowsById", (prev: Record<string, Row> = {}) => {
+				let changed = false;
+				const next = { ...prev };
+				selectedIds.forEach((selectedRowId) => {
+					const row = next[selectedRowId];
+					if (!row) return;
+					next[selectedRowId] = {
+						...row,
+						[column.field]: value,
+					};
+					changed = true;
+				});
+				return changed ? next : prev;
+			});
+			if (shouldMarkCleared) {
+				bulkEditClearedKeyRef.current = bulkEditKey;
+			}
+			return true;
+		},
+		[
+			bulkSelection.columnId,
+			bulkSelection.rowIds,
+			isReadOnly,
+			setFormFieldValue,
+		]
+	);
+	const applyBulkSelectionValue = useCallback(
+		(value: unknown) => {
+			if (isReadOnly || !selectedColumn || selectedColumn.editable === false) return;
+			const selectedIds = bulkSelection.rowIds;
+			if (selectedIds.length === 0) return;
+			setFormFieldValue("rowsById", (prev: Record<string, Row> = {}) => {
+				let changed = false;
+				const next = { ...prev };
+				selectedIds.forEach((rowId) => {
+					const row = next[rowId];
+					if (!row) return;
+					next[rowId] = {
+						...row,
+						[selectedColumn.field]: value,
+					};
+					changed = true;
+				});
+				return changed ? next : prev;
+			});
+			toast.success(`${selectedIds.length} celdas actualizadas`);
+			clearBulkSelection();
+		},
+		[
+			bulkSelection.rowIds,
+			clearBulkSelection,
+			isReadOnly,
+			selectedColumn,
+			setFormFieldValue,
+		]
+	);
 
 	// Use client pagination values when server returned all rows at once
 	const useClientPaginationValues = !useServerDataMode && (useClientPagination || serverReturnedAllRows);
@@ -2261,6 +2848,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const FieldComponent = form.Field as FormFieldComponent<Row>;
 	const editMode = config.editMode ?? "always";
+	const editOnHover = config.editOnHover ?? false;
 	const isRowExpanded = useCallback(
 		(rowId: string) => (accordionAlwaysOpen ? true : expandedRowIds.has(rowId)),
 		[accordionAlwaysOpen, expandedRowIds]
@@ -2421,32 +3009,68 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	}, [isReadOnly, setFormFieldValue]);
 
 	const handleExportCsv = useCallback(async () => {
-		const exportColumns = columns.filter((column) => !isColumnHidden(column.id));
-		if (exportColumns.length === 0) {
-			toast.error("No hay columnas visibles para exportar");
-			return;
+		try {
+			const exportColumns = columns.filter((column) => !isColumnHidden(column.id));
+			if (exportColumns.length === 0) {
+				toast.error("No hay columnas visibles para exportar");
+				return;
+			}
+			const customExport = config.csvExport?.buildExport
+				? await config.csvExport.buildExport({
+					tableId: TABLE_ID,
+					rows,
+					sortedRows,
+					visibleColumns: exportColumns,
+					allColumns: columns,
+					hiddenColumnIds,
+					search: searchRequestKey,
+					filters,
+					activeTab,
+					sort: effectiveSortState,
+				})
+				: null;
+			const exportRowCount = customExport ? customExport.rows.length : sortedRows.length;
+			if (exportRowCount === 0) {
+				toast.error("No hay filas para exportar");
+				return;
+			}
+			const separator = ";";
+			const header = customExport
+				? valuesToCsvRow(customExport.columns)
+				: exportColumns
+					.map((column) => `"${column.label.replace(/"/g, '""')}"`)
+					.join(separator);
+			const body = customExport
+				? customExport.rows.map((row) => valuesToCsvRow(row)).join("\n")
+				: sortedRows.map((row) => tableRowToCsv(row, exportColumns)).join("\n");
+			const csv = `\uFEFF${header}\n${body}`;
+			const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = `${customExport?.fileName ?? TABLE_ID}.csv`;
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			URL.revokeObjectURL(url);
+			toast.success("Tabla exportada");
+		} catch (error) {
+			console.error("Error exporting table", error);
+			toast.error(error instanceof Error ? error.message : "No se pudo exportar la tabla");
 		}
-		if (sortedRows.length === 0) {
-			toast.error("No hay filas para exportar");
-			return;
-		}
-		const separator = ";";
-		const header = exportColumns
-			.map((column) => `"${column.label.replace(/"/g, '""')}"`)
-			.join(separator);
-		const body = sortedRows.map((row) => tableRowToCsv(row, exportColumns)).join("\n");
-		const csv = `\uFEFF${header}\n${body}`;
-		const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement("a");
-		link.href = url;
-		link.download = `${TABLE_ID}.csv`;
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-		URL.revokeObjectURL(url);
-		toast.success("Tabla exportada");
-	}, [TABLE_ID, columns, isColumnHidden, sortedRows]);
+	}, [
+		TABLE_ID,
+		activeTab,
+		columns,
+		config.csvExport,
+		effectiveSortState,
+		filters,
+		hiddenColumnIds,
+		isColumnHidden,
+		rows,
+		searchRequestKey,
+		sortedRows,
+	]);
 
 	const handleSave = useCallback(async () => {
 		if (isReadOnly) return;
@@ -2455,9 +3079,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setServerError(null);
 		try {
 			if (config.onSave) {
-				const dirtyRows = rows.filter((row) =>
-					computeRowDirty(row.id, rowsById, columns, initialValuesRef.current.rowsById).dirty
-				);
+				const dirtyRows = rows.filter((row) => dirtyIndex.rowDirtyById[row.id]);
 				const deletedRowIds = initialValuesRef.current.rowOrder.filter(
 					(initialId) => !rowOrder.includes(initialId)
 				);
@@ -2465,7 +3087,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			} else {
 				await new Promise((resolve) => setTimeout(resolve, 900));
 			}
-			initialValuesRef.current = snapshotValues(rowOrder, rowsById);
+			const snapshot = snapshotValues(rowOrder, rowsById);
+			initialValuesRef.current = snapshot;
+			setDirtyBaseline(snapshot);
 			toast.success("Cambios guardados correctamente");
 		} catch (error) {
 			const errorMessage =
@@ -2477,7 +3101,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		} finally {
 			setIsSaving(false);
 		}
-	}, [columns, config, hasUnsavedChanges, isReadOnly, rowOrder, rows, rowsById]);
+	}, [config, dirtyIndex, hasUnsavedChanges, isReadOnly, rowOrder, rows, rowsById]);
 
 	const handleDiscardChanges = useCallback(() => {
 		if (isReadOnly) return;
@@ -2501,7 +3125,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		toast.info("Cambios descartados");
 	}, [hasUnsavedChanges, isReadOnly, setFormFieldValue]);
 
-	const contextValue: FormTableContextValue<Row, Filters> = {
+	const contextValue = useMemo<FormTableContextValue<Row, Filters>>(() => ({
 		config,
 		tableId: TABLE_ID,
 		search: {
@@ -2515,7 +3139,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			enabled: hasFilters,
 			value: filters,
 			draft: filtersDraft,
-			setDraft: (updater) => setFiltersDraft((prev) => updater(prev)),
+			setDraft: setFiltersDraftValue,
 			activeCount: activeFilterCount,
 			isProcessing: isFilterProcessing,
 			reset: handleResetAdvancedFilters,
@@ -2537,6 +3161,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			tableRef,
 			colRefs,
 			colWidths,
+			columnOffsets,
 			enableResizing: enableColumnResizing,
 		},
 		sorting: {
@@ -2588,8 +3213,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			FieldComponent,
 			highlightQuery,
 			editMode,
+			editOnHover,
 			activeCell,
-			setActiveCell,
+			setActiveCell: updateActiveCell,
 			getRowDirtyState,
 			isCellDirty,
 			hasInitialRow,
@@ -2600,10 +3226,23 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			handleDelete,
 			handleClearCell,
 			handleRestoreCell,
+			handleCommitCellValue: commitBulkCellValue,
 			handleCopyCell,
 			handleCopyColumn,
 			handleCopyRow,
 			visibleDataColumnCount,
+		},
+		bulkSelection: {
+			selectedColumn,
+			selectedRowIds: bulkSelection.rowIds,
+			count: bulkSelection.rowIds.length,
+			isDragging: bulkSelection.isDragging,
+			isCellSelected: isBulkCellSelected,
+			beginDrag: beginBulkSelectionDrag,
+			extendDrag: extendBulkSelectionDrag,
+			endDrag: endBulkSelectionDrag,
+			clear: clearBulkSelection,
+			applyValue: applyBulkSelectionValue,
 		},
 		actions: {
 			save: handleSave,
@@ -2611,11 +3250,115 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			addRow: handleAddRow,
 			exportCsv: handleExportCsv,
 		},
-	};
+	}), [
+		TABLE_ID,
+		activeCell,
+		activeFilterCount,
+		activeTab,
+		activityKind,
+		accordionRowConfig,
+		applySortDirection,
+		bulkSelection.isDragging,
+		bulkSelection.rowIds,
+		clearBulkSelection,
+		colWidths,
+		columnOffsets,
+		colRefs,
+		columnIndexMap,
+		columns,
+		columnsById,
+		config,
+		datasetTotalCount,
+		editMode,
+		editOnHover,
+		enableColumnResizing,
+		effectiveSortState,
+		externalRefreshVersion,
+		FieldComponent,
+		filters,
+		filtersDraft,
+		getRowDirtyState,
+		getStickyProps,
+		groupedColumnLookup,
+		handleAddRow,
+		handleApplyAdvancedFilters,
+		handleBalanceColumns,
+		handleClearCell,
+		handleCopyCell,
+		handleCopyColumn,
+		handleCopyRow,
+		handleDelete,
+		handleDiscardChanges,
+		handleExportCsv,
+		handleResetAdvancedFilters,
+		handleRestoreCell,
+		handleSave,
+		handleSearchInputChange,
+		handleSetPageSize,
+		hasAccordionRows,
+		hasFilters,
+		hasInitialRow,
+		hasNextPage,
+		hasPreviousPage,
+		hasTabFilters,
+		hasUnsavedChanges,
+		hiddenColumnIds,
+		highlightQuery,
+		isBusy,
+		isCellDirty,
+		isColumnHidden,
+		isColumnPinned,
+		isEmbedded,
+		isFetchingServerRows,
+		isFilterProcessing,
+		isPageSizeTransitioning,
+		isRowExpanded,
+		isSaving,
+		isSearchProcessing,
+		isServerPaging,
+		isSlowOperation,
+		isSortProcessing,
+		lockedPageSize,
+		page,
+		pageSize,
+		paginationOptions,
+		pendingSortColumnId,
+		pinnedColumnIds,
+		rows,
+		selectedColumn,
+		setFiltersDraftValue,
+		showInlineSearch,
+		searchPlaceholder,
+		searchValue,
+		serverError,
+		table,
+		tableRef,
+		tabCounts,
+		tabFilters,
+		toggleAccordionRow,
+		togglePinColumn,
+		toggleSort,
+		totalPages,
+		totalRowCount,
+		updateActiveCell,
+		variant,
+		visibleDataColumnCount,
+		visibleRowCount,
+		isBulkCellSelected,
+		beginBulkSelectionDrag,
+		extendBulkSelectionDrag,
+		endBulkSelectionDrag,
+		applyBulkSelectionValue,
+		commitBulkCellValue,
+		clearSort,
+	]);
 
 	const content = (
 		<div
-			className="space-y-4 max-w-full overflow-hidden pt-6 flex flex-col h-full gap-4"
+			className={cn(
+				"max-w-full overflow-hidden flex flex-col h-full",
+				isEmbedded ? "gap-3 px-3 py-3" : "space-y-4 gap-4 pt-6"
+			)}
 		>
 			{(config.title || config.description) ? (
 				<div>
