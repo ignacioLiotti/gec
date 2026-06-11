@@ -106,6 +106,8 @@ export type CellConfig<Row extends FormTableRow> = {
 	selectName?: string;
 	suggestionDetection?: CellSuggestionKind | "auto" | false;
 	suggestionDetectors?: Array<CellSuggestionDetector<Row>>;
+	/** When true in active-cell mode, leaving this cell's editor clears the active cell selection. */
+	clearActiveCellOnBlur?: boolean;
 	renderReadOnly?: (args: {
 		value: unknown;
 		row: Row;
@@ -116,6 +118,8 @@ export type CellConfig<Row extends FormTableRow> = {
 		row: Row;
 		highlightQuery: string;
 		input: ReactNode;
+		setValue: (value: unknown) => void;
+		handleBlur: () => void;
 	}) => ReactNode;
 };
 
@@ -132,6 +136,25 @@ export type AccordionRowConfig<Row extends FormTableRow> = {
 	alwaysOpen?: boolean;
 };
 
+export type FormTableCsvExport = {
+	columns: string[];
+	rows: unknown[][];
+	fileName?: string;
+};
+
+export type FormTableCsvExportArgs<Row extends FormTableRow, Filters> = {
+	tableId: string;
+	rows: Row[];
+	sortedRows: Row[];
+	visibleColumns: ColumnDef<Row>[];
+	allColumns: ColumnDef<Row>[];
+	hiddenColumnIds: string[];
+	search: string;
+	filters?: Filters;
+	activeTab: string | null;
+	sort: SortState;
+};
+
 export type ColumnDef<Row extends FormTableRow> = {
 	id: string;
 	label: string;
@@ -140,6 +163,8 @@ export type ColumnDef<Row extends FormTableRow> = {
 	enableHide?: boolean;
 	enablePin?: boolean;
 	editable?: boolean;
+	/** Allows a normally read-only column to be editable only while the row has no initial snapshot. */
+	editableWhenNewRow?: boolean;
 	cellType?: CellType;
 	cellConfig?: CellConfig<Row>;
 	sortFn?: (a: Row, b: Row) => number;
@@ -150,7 +175,7 @@ export type ColumnDef<Row extends FormTableRow> = {
 		label: string;
 		onSelect?: (row: Row) => void;
 	}>;
-	defaultValue?: unknown;
+	defaultValue?: unknown | (() => unknown);
 	width?: number;
 	enableResize?: boolean;
 	enableSort?: boolean;
@@ -246,6 +271,12 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	fetchRows?: (args: FetchRowsArgs<Filters>) => Promise<FetchRowsResult<Row>>;
 	/** When true, search, sorting and pagination are resolved by fetchRows instead of client-side pipelines. */
 	serverSideData?: boolean;
+	/** Optional CSV export override for tables that need to fetch/export rows beyond the rendered dataset. */
+	csvExport?: {
+		buildExport: (
+			args: FormTableCsvExportArgs<Row, Filters>,
+		) => FormTableCsvExport | null | Promise<FormTableCsvExport | null>;
+	};
 	createRow?: () => Row;
 	onSave?: (args: SaveRowsArgs<Row>) => Promise<void>;
 	emptyStateMessage?: string;
@@ -274,12 +305,18 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	revealNewRowOnAdd?: boolean;
 	/** Mount editable field bindings only for the active cell to reduce subscription cost. */
 	editMode?: "always" | "active-cell";
+	/** When using active-cell edit mode, allow hover to reveal editors. Defaults to false. */
+	editOnHover?: boolean;
 	/** Virtualize row rendering when datasets are large enough. */
 	enableRowVirtualization?: boolean;
+	/** Estimated row height in pixels for virtualized tables. Defaults to 58. */
+	virtualizationEstimateSize?: number;
 	/** Extra rows rendered above and below the viewport when virtualization is enabled. Defaults to 5. */
 	virtualizationOverscan?: number;
 	/** Optional row class resolver to support conditional row coloring. */
 	rowClassName?: (row: Row, rowIndex: number) => string | undefined;
+	/** Optional class resolver applied to the table row element. */
+	rowElementClassName?: (row: Row, rowIndex: number) => string | undefined;
 	/** Structured row color info for rule-based coloring. Preferred over rowClassName. */
 	rowColorInfo?: (row: Row, rowIndex: number) => RowColorInfo | undefined;
 	/** Optional badges rendered on each row (for overlapping rule indicators, etc.). */

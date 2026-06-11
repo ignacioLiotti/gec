@@ -53,6 +53,43 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 
 ---
 
+## Document AI Context for Generation
+
+`POST /api/document-generation/assist`
+- Uses the selected obra, folder, document type and template to find compatible extracted `obra_tabla_rows`
+- Hydrates missing template fields from existing extracted rows
+- Preserves manual values already entered by the operator
+- Stores evidence in `input_data.__documentAi` with source row, tabla, lineage key, extraction id and source document metadata when available
+- Keeps final PDF generation deterministic through the existing document-generation renderer
+
+## Document AI Report Workspace
+
+`/document-ai`
+- Accepts a natural-language administrative request and desired output type
+- Persists `document_ai_runs`, `document_ai_sources` and `document_ai_outputs`
+- Retrieves extracted rows and indexed chunks for the selected obra
+- Parses natural-language intent with Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` or `GOOGLE_API_KEY` is configured; defaults to `gemini-2.5-flash` via `DOCUMENT_AI_GEMINI_INTENT_MODEL`
+- Normalizes progress certificates, resolves certificate continuity and detects conflicts
+- For certificate + purchase-order prompts, normalizes certificates as monthly income and purchase orders as monthly expenses, builds a double-bar chart (`ingreso_certificado` vs `gasto_total`), and includes category-level expense tables when source rows expose category and amount fields
+- Purchase-order reconciliation counts each OC number once, uses `Total Orden` as the official order amount, leaves orders without an order date outside the monthly chart, and lists them separately for data-quality review
+- Builds a `ReportComposition` JSON before rendering any file, then turns it into a `ReportLayoutPlan` so PDF/HTML reports can choose visual blocks based on the request and retrieved data
+- Financial reconciliation reports use a visual layout with cover summary, KPI cards, double-bar chart, monthly narrative, certificate evolution, category matrix, dated OC consolidation, undated OC exceptions, methodology and evidence appendix
+- Exposes a web preview at `GET /api/document-ai/runs/[id]/preview` so operators can inspect the generated report in the browser before downloading PDF/PPTX/DOCX/XLSX files
+- Renders HTML summaries/dashboards, PDF, PPTX, DOCX and XLSX outputs
+- Does not invent missing purchase-order amounts: rows without total amount or quantity + unit price are excluded from expense totals and surfaced as warnings
+
+Supporting APIs:
+
+- `POST /api/document-ai/runs`
+- `GET /api/document-ai/runs`
+- `GET /api/document-ai/runs/[id]`
+- `POST /api/document-ai/runs/[id]/render`
+- `GET /api/document-ai/runs/[id]/preview`
+- `GET /api/document-ai/runs/[id]/download`
+- `POST /api/document-ai/index/rebuild`
+
+---
+
 ## PDF Viewer
 
 `components/viewer/pdf-viewer-core.tsx`

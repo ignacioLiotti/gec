@@ -1509,6 +1509,7 @@ function FileManagerContent({
   const [activeOcrTablaIdOverride, setActiveOcrTablaIdOverride] = useState<string | null>(null);
   const [activeDocumentTablaIdOverride, setActiveDocumentTablaIdOverride] = useState<string | null>(null);
   const [lazyOcrRowsByTablaId, setLazyOcrRowsByTablaId] = useState<Map<string, TablaDataRow[]>>(new Map());
+  const [documentRowsByPathAndTablaId, setDocumentRowsByPathAndTablaId] = useState<Map<string, TablaDataRow[]>>(new Map());
   const [loadingOcrRowsTablaId, setLoadingOcrRowsTablaId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const ITEMS_PER_PAGE = 24;
@@ -2163,7 +2164,13 @@ function FileManagerContent({
 
     setDocumentsLoading(true);
     try {
-      const payload = await fetchDocumentsTreePayload();
+      const selectedFolderPath =
+        DOCUMENTS_LIST_ENABLED && selectedFolder && selectedFolder.id !== 'root'
+          ? getSelectionFolderSegments(selectedFolder).join('/')
+          : '';
+      const payload = await fetchDocumentsTreePayload(
+        selectedFolderPath ? { path: selectedFolderPath } : undefined
+      );
       if (!payload) {
         markDocumentsFetched();
         return;
@@ -2222,6 +2229,7 @@ function FileManagerContent({
 
   const refreshFileTreeDerivedData = useCallback(async () => {
     await buildFileTree({ skipCache: true });
+    setDocumentRowsByPathAndTablaId(new Map());
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'ocr-links'] }),
       queryClient.invalidateQueries({ queryKey: ['obra', obraId, 'general-reports'] }),
@@ -4826,18 +4834,29 @@ function FileManagerContent({
     [activeDocument, resolveOcrLinksForDocument]
   );
 
+  const getDocumentRowsCacheKey = useCallback(
+    (docPath: string, tablaId: string) => `${docPath}\n${tablaId}`,
+    []
+  );
+
   const activeDocumentRowsByTablaId = useMemo(() => {
     const map = new Map<string, OcrDocumentTableRow[]>();
     if (!activeDocument?.storagePath) return map;
+    const activeStoragePath = activeDocument.storagePath;
     activeDocumentOcrLinks.forEach((link) => {
-      if (!Array.isArray(link.rows) || !Array.isArray(link.columns) || link.columns.length === 0) {
+      if (!Array.isArray(link.columns) || link.columns.length === 0) {
         map.set(link.tablaId, []);
         return;
       }
-      const rows = (link.rows as TablaDataRow[])
+      const cachedRows =
+        documentRowsByPathAndTablaId.get(
+          getDocumentRowsCacheKey(activeStoragePath, link.tablaId)
+        ) ?? null;
+      const rowsSource = cachedRows ?? (Array.isArray(link.rows) ? (link.rows as TablaDataRow[]) : []);
+      const rows = rowsSource
         .filter((row) => {
           const data = (row?.data as Record<string, unknown>) ?? {};
-          return data.__docPath === activeDocument.storagePath;
+          return data.__docPath === activeStoragePath;
         })
         .map((row) => {
           const data = (row?.data as Record<string, unknown>) ?? {};
@@ -4862,7 +4881,7 @@ function FileManagerContent({
       map.set(link.tablaId, rows);
     });
     return map;
-  }, [activeDocument, activeDocumentOcrLinks]);
+  }, [activeDocument, activeDocumentOcrLinks, documentRowsByPathAndTablaId, getDocumentRowsCacheKey]);
 
   const activeDocumentOcrLink = useMemo(() => {
     if (activeDocumentOcrLinks.length === 0) return null;
@@ -4900,6 +4919,88 @@ function FileManagerContent({
     () => Array.from(activeDocumentRowsByTablaId.values()).some((rows) => rows.length > 0),
     [activeDocumentRowsByTablaId]
   );
+
+  const activeDocumentHasReportedExtractedRows = useMemo(() => {
+    if (!activeDocument?.storagePath) return false;
+    if (typeof activeDocument.ocrRowsExtracted === 'number' && activeDocument.ocrRowsExtracted > 0) {
+      return true;
+    }
+    return activeDocumentOcrLinks.some((link) =>
+      (link.documents ?? []).some(
+        (doc) =>
+          doc.source_path === activeDocument.storagePath &&
+          doc.status === 'completed' &&
+          typeof doc.rows_extracted === 'number' &&
+          doc.rows_extracted > 0
+      )
+    );
+  }, [activeDocument, activeDocumentOcrLinks]);
+
+  useEffect(() => {
+    if (!obraId || !activeDocument?.storagePath || !activeDocumentHasReportedExtractedRows) return;
+    const docPath = activeDocument.storagePath;
+    const linksToHydrate = activeDocumentOcrLinks.filter((link) => {
+      if (!Array.isArray(link.columns) || link.columns.length === 0) return false;
+      const cacheKey = getDocumentRowsCacheKey(docPath, link.tablaId);
+      if (documentRowsByPathAndTablaId.has(cacheKey)) return false;
+      const hasRowsInLink = Array.isArray(link.rows)
+        ? link.rows.some((row) => {
+          const data = (row?.data as Record<string, unknown>) ?? {};
+          return data.__docPath === docPath;
+        })
+        : false;
+      return !hasRowsInLink;
+    });
+    if (linksToHydrate.length === 0) return;
+
+    const controller = new AbortController();
+    const hydrateRows = async () => {
+      try {
+        const loadedEntries = await Promise.all(
+          linksToHydrate.map(async (link) => {
+            const params = new URLSearchParams({
+              limit: '200',
+              includeCount: '0',
+              docPath,
+            });
+            const res = await fetch(
+              `/api/obras/${encodeURIComponent(obraId)}/tablas/${encodeURIComponent(link.tablaId)}/rows?${params.toString()}`,
+              {
+                cache: 'no-store',
+                signal: controller.signal,
+              }
+            );
+            if (!res.ok) {
+              const text = await res.text().catch(() => '');
+              throw new Error(text || 'No se pudieron cargar las filas del documento');
+            }
+            const payload = await res.json().catch(() => ({}));
+            const rows = Array.isArray(payload?.rows) ? (payload.rows as TablaDataRow[]) : [];
+            return [getDocumentRowsCacheKey(docPath, link.tablaId), rows] as const;
+          })
+        );
+        if (controller.signal.aborted) return;
+        setDocumentRowsByPathAndTablaId((current) => {
+          const next = new Map(current);
+          loadedEntries.forEach(([cacheKey, rows]) => next.set(cacheKey, rows));
+          return next;
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error('Error loading document extracted rows', error);
+      }
+    };
+
+    void hydrateRows();
+    return () => controller.abort();
+  }, [
+    activeDocument?.storagePath,
+    activeDocumentHasReportedExtractedRows,
+    activeDocumentOcrLinks,
+    documentRowsByPathAndTablaId,
+    getDocumentRowsCacheKey,
+    obraId,
+  ]);
 
   const activeDocumentNeedsRetry = useMemo(() => {
     if (!activeDocument || activeDocumentOcrLinks.length === 0) return false;
@@ -6101,7 +6202,7 @@ function FileManagerContent({
         setRetryingDocumentId(null);
       }
     },
-    [buildFileTree, fetchSpreadsheetPreview, getAutoSelectedSpreadsheetTablaIds, obraId, openSpreadsheetPreview, openTableSelectionDialog, resolveOcrLinksForDocument]
+    [fetchSpreadsheetPreview, getAutoSelectedSpreadsheetTablaIds, obraId, openSpreadsheetPreview, openTableSelectionDialog, refreshFileTreeDerivedData, resolveOcrLinksForDocument]
   );
 
   // ── Bulk reprocess all documents in the current OCR folder ──

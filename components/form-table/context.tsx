@@ -50,6 +50,7 @@ export type FormTableColumnsState<Row extends FormTableRow> = {
 	tableRef: React.MutableRefObject<HTMLTableElement | null>;
 	colRefs: React.MutableRefObject<(HTMLTableColElement | null)[]>;
 	colWidths: Record<number, number>;
+	columnOffsets: Record<string, number>;
 	enableResizing: boolean;
 };
 
@@ -106,9 +107,10 @@ export type FormTableRowState<Row extends FormTableRow> = {
 	FieldComponent: FormFieldComponent<Row>;
 	highlightQuery: string;
 	editMode: "always" | "active-cell";
+	editOnHover: boolean;
 	activeCell: { rowId: string; columnId: string } | null;
 	setActiveCell: (cell: { rowId: string; columnId: string } | null) => void;
-	getRowDirtyState: (rowId: string) => { dirty: boolean; cells: ColumnDef<Row>[] };
+	getRowDirtyState: (rowId: string) => { dirty: boolean; cells: ColumnDef<Row>[]; cellIdsKey: string };
 	isCellDirty: (rowId: string, column: ColumnDef<Row>) => boolean;
 	hasInitialRow: (rowId: string) => boolean;
 	hasAccordionRows: boolean;
@@ -118,10 +120,24 @@ export type FormTableRowState<Row extends FormTableRow> = {
 	handleDelete: (rowId: string) => void;
 	handleClearCell: (rowId: string, column: ColumnDef<Row>) => void;
 	handleRestoreCell: (rowId: string, column: ColumnDef<Row>) => void;
+	handleCommitCellValue: (rowId: string, column: ColumnDef<Row>, value: unknown) => boolean;
 	handleCopyCell: (value: unknown) => Promise<void>;
 	handleCopyColumn: (column: ColumnDef<Row>) => Promise<void>;
 	handleCopyRow: (row: Row) => Promise<void>;
 	visibleDataColumnCount: number;
+};
+
+export type FormTableBulkSelectionState<Row extends FormTableRow> = {
+	selectedColumn: ColumnDef<Row> | null;
+	selectedRowIds: string[];
+	count: number;
+	isDragging: boolean;
+	isCellSelected: (rowId: string, columnId: string) => boolean;
+	beginDrag: (rowId: string, column: ColumnDef<Row>) => void;
+	extendDrag: (rowId: string, column: ColumnDef<Row>) => void;
+	endDrag: () => void;
+	clear: () => void;
+	applyValue: (value: unknown) => void;
 };
 
 export type FormTableActions = {
@@ -142,6 +158,7 @@ export type FormTableContextValue<Row extends FormTableRow, Filters> = {
 	pagination: FormTablePaginationState;
 	meta: FormTableMetaState;
 	rows: FormTableRowState<Row>;
+	bulkSelection: FormTableBulkSelectionState<Row>;
 	actions: FormTableActions;
 };
 

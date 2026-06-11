@@ -153,7 +153,7 @@ export async function syncInsurancePoliciesToMacroTable({
 
 		const { data: policies, error: policiesError } = await supabase
 			.from("insurance_policies")
-			.select("*")
+			.select("*, obras(n, designacion_y_ubicacion)")
 			.eq("tenant_id", tenantId)
 			.eq("obra_id", obraId)
 			.order("policy_number", { ascending: true });
@@ -171,4 +171,3 @@ export async function syncInsurancePoliciesToMacroTable({
 		if (insertError) throw insertError;
 	}
 }
-

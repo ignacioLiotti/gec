@@ -10,14 +10,15 @@ import {
 	Columns3,
 	Columns3Cog,
 	Database,
+	Brain,
 	FileText,
 	Globe2,
 	Home,
 	KeyRound,
 	Layers,
 	Loader2,
-	PlusCircle,
 	MessageCircle,
+	PlusCircle,
 	Settings2,
 	ShieldCheck,
 	Table2,
@@ -92,6 +93,12 @@ const navItems: NavItem[] = [
 		href: "/excel/data-flow",
 		icon: Waypoints,
 		requiredPermissions: ["data-flow:read"],
+	},
+	{
+		title: "Document AI",
+		href: "/document-ai",
+		icon: Brain,
+		requiredPermissions: ["nav:document-ai"],
 	},
 	{
 		title: "Notificaciones",
@@ -588,11 +595,8 @@ export function AppSidebar({
 	);
 
 	const filteredIgnacioItems = React.useMemo(
-		() =>
-			userRoles?.isSuperAdmin || user?.email === "ignacioliotti@gmail.com"
-				? ignacioItems
-				: [],
-		[userRoles, user?.email],
+		() => (userRoles?.isSuperAdmin ? ignacioItems : []),
+		[userRoles],
 	);
 
 	const handleEnterRealApp = React.useCallback(async () => {

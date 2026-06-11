@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyDocumentAiContextInputData,
   applyTemplateAliasInputData,
   buildDocumentGenerationExtractionRows,
   buildInitialInputData,
@@ -325,5 +326,74 @@ describe("document-generation helpers", () => {
         __docFileName: "f-1.pdf",
       },
     ]);
+  });
+
+  it("hydrates missing document fields from extracted obra rows with source references", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "proveedor", label: "Proveedor", type: "text", required: true },
+        { key: "total", label: "Total", type: "money", required: true, extractionFieldKey: "importe_total" },
+        {
+          key: "items",
+          label: "Items",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "detalle", label: "Detalle", type: "text", required: true },
+            { key: "cantidad", label: "Cantidad", type: "number", required: true },
+          ],
+        },
+      ],
+    });
+
+    const result = applyDocumentAiContextInputData({
+      schema,
+      current: { proveedor: "Proveedor manual" },
+      appliedAt: "2026-05-28T12:00:00.000Z",
+      sourceRows: [
+        {
+          id: "row-1",
+          tablaId: "tabla-1",
+          tablaName: "Certificados",
+          createdAt: "2026-05-27T12:00:00.000Z",
+          lineageRowKey: "lineage-1",
+          extractionId: "extraction-1",
+          documentPath: "obra-1/certificados/certificado.pdf",
+          documentFileName: "certificado.pdf",
+          documentBucket: "obra-documents",
+          data: {
+            proveedor: "Proveedor extraido",
+            importe_total: "1500",
+            detalle: "Hormigon",
+            cantidad: "2",
+          },
+        },
+      ],
+    });
+
+    expect(result.inputData).toMatchObject({
+      proveedor: "Proveedor manual",
+      total: "1500",
+      items: [{ detalle: "Hormigon", cantidad: "2" }],
+    });
+    expect(result.context).toMatchObject({
+      status: "applied",
+      sourceRowCount: 1,
+      sourceTableCount: 1,
+      appliedAt: "2026-05-28T12:00:00.000Z",
+    });
+    expect(result.context.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldKey: "total",
+          source: expect.objectContaining({
+            type: "obra_tabla_row",
+            rowId: "row-1",
+            lineageRowKey: "lineage-1",
+            documentPath: "obra-1/certificados/certificado.pdf",
+          }),
+        }),
+      ]),
+    );
   });
 });

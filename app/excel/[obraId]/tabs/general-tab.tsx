@@ -170,6 +170,7 @@ type GeneralTabProps = {
 	dataFlowSuggestionsError?: string | null;
 	onDataFlowSuggestionDecision?: (suggestionId: string, decision: "accept" | "reject") => void | Promise<void>;
 	isResolvingDataFlowSuggestion?: boolean;
+	onFinishObra?: () => void | Promise<void>;
 };
 
 const EMPTY_MAIN_TABLE_COLUMNS: MainTableColumnConfig[] = [];
@@ -976,6 +977,7 @@ export function ObraGeneralTab({
 	dataFlowSuggestionsError = null,
 	onDataFlowSuggestionDecision,
 	isResolvingDataFlowSuggestion = false,
+	onFinishObra,
 }: GeneralTabProps) {
 	const extraMainTableColumns = mainTableColumns.filter((column) => {
 		if (column.kind === "custom") return true;
@@ -1144,6 +1146,16 @@ export function ObraGeneralTab({
 												<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
 													<CircularProgress value={Number(field.state.value) ?? 0} />
 												</div>
+												{Number(field.state.value ?? 0) >= 100 && onFinishObra ? (
+													<Button
+														type="button"
+														className="w-full bg-[#f97316] text-white hover:bg-[#ea580c]"
+														disabled={isSaving}
+														onClick={() => void onFinishObra()}
+													>
+														Terminar obra
+													</Button>
+												) : null}
 												<div
 													className={cn(
 														"rounded-lg border border-[#f0f0f0] p-3",
@@ -1889,6 +1901,16 @@ export function ObraGeneralTab({
 											<div className="mx-auto w-full max-w-[240px] sm:max-w-none">
 												<CircularProgress value={form.state.values.porcentaje ?? 0} />
 											</div>
+											{Number(form.state.values.porcentaje ?? 0) >= 100 && onFinishObra ? (
+												<Button
+													type="button"
+													className="w-full bg-[#f97316] text-white hover:bg-[#ea580c]"
+													disabled={isSaving}
+													onClick={() => void onFinishObra()}
+												>
+													Terminar obra
+												</Button>
+											) : null}
 											<div
 												className="w-full rounded-lg border border-[#f0f0f0] p-3"
 												data-wizard-target="obra-general-findings"

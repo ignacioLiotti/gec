@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useCallback, useMemo, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,15 +12,7 @@ import {
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
-	SelectValue,
 } from "@/components/ui/select";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuTrigger,
-	ContextMenuSeparator,
-} from "@/components/ui/context-menu";
 import {
 	Ban,
 	AlertTriangle,
@@ -30,6 +22,7 @@ import {
 	Calendar as CalendarIcon,
 	CalendarDays,
 	Check,
+	ChevronDown,
 	Circle,
 	Clock3,
 	ExternalLink,
@@ -66,23 +59,12 @@ import {
 import type {
 	CellSuggestion,
 	ColumnDef,
-	FormFieldComponent,
 	FormTableRow,
 } from "./types";
 import { resolveCellSuggestion } from "./cell-suggestions";
 import { escapeRegExp, formatDateSafe } from "./table-utils";
 
 export type EditableCellValue = string | number | readonly string[] | null | undefined;
-type FieldRenderState = {
-	state: {
-		value: unknown;
-		meta?: {
-			errors?: unknown[];
-		};
-	};
-	handleChange: (value: unknown) => void;
-	handleBlur: () => void;
-};
 
 function toIsoDateOnly(date: Date): string {
 	return formatDateAsIso(date);
@@ -122,8 +104,8 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 	if (!suggestion) return null;
 
 	return (
-		<Popover>
-			<PopoverTrigger >
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
 				<Button
 					type="button"
 					variant="outline"
@@ -209,6 +191,7 @@ function DateCellEditor<Row extends FormTableRow>({
 	inputProps,
 	column,
 	row,
+	forceSyncOnChange = false,
 }: {
 	value: EditableCellValue;
 	setValue: (value: unknown) => void;
@@ -217,13 +200,15 @@ function DateCellEditor<Row extends FormTableRow>({
 	inputProps?: Record<string, string>;
 	column: ColumnDef<Row>;
 	row: Row;
+	forceSyncOnChange?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const selectedDate = parseDateValue(value ?? null);
 	const externalTypedValue = useMemo(() => {
+		if (forceSyncOnChange) return "";
 		if (!value) return "";
 		return selectedDate ? formatDateAsDmy(selectedDate) : String(value);
-	}, [value, selectedDate]);
+	}, [forceSyncOnChange, value, selectedDate]);
 	const [draftValue, setDraftValue] = useState<string | null>(null);
 	const typedValue = draftValue ?? externalTypedValue;
 
@@ -252,9 +237,13 @@ function DateCellEditor<Row extends FormTableRow>({
 				{...inputProps}
 				value={typedValue}
 				onChange={(event) => {
-					setDraftValue(event.target.value);
+					const nextValue = event.target.value;
+					setDraftValue(nextValue);
 					if (ignoredSuggestionKey) {
 						setIgnoredSuggestionKey(null);
+					}
+					if (forceSyncOnChange) {
+						setValue(nextValue);
 					}
 				}}
 				onBlur={() => {
@@ -369,6 +358,7 @@ function LocalInput<Row extends FormTableRow>({
 	row,
 	cellType,
 	syncOnChange = false,
+	forceSyncOnChange = false,
 	...props
 }: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur" | "value"> & {
 	value: EditableCellValue;
@@ -380,6 +370,7 @@ function LocalInput<Row extends FormTableRow>({
 	row: Row;
 	cellType: NonNullable<ColumnDef<Row>["cellType"]> | "text";
 	syncOnChange?: boolean;
+	forceSyncOnChange?: boolean;
 }) {
 	// Convert external value to string for the input
 	const normalizedExternal =
@@ -390,9 +381,9 @@ function LocalInput<Row extends FormTableRow>({
 				: externalValue == null
 					? ""
 					: String(externalValue);
+	const displayedExternal = forceSyncOnChange ? "" : normalizedExternal;
 	const [draftValue, setDraftValue] = useState<string | null>(null);
-	const localValue = draftValue ?? normalizedExternal;
-	const isTypingRef = useRef(false);
+	const localValue = draftValue ?? displayedExternal;
 	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
 
 	const suggestion = useMemo(
@@ -411,21 +402,19 @@ function LocalInput<Row extends FormTableRow>({
 		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
 
 	const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-		isTypingRef.current = true;
 		const nextValue = e.target.value;
 		setDraftValue(nextValue);
 		setIgnoredSuggestionKey(null);
-		if (syncOnChange) {
+		if (syncOnChange || forceSyncOnChange) {
 			syncToForm(nextValue);
 		}
-	}, [syncOnChange, syncToForm]);
+	}, [forceSyncOnChange, syncOnChange, syncToForm]);
 
 	const handleBlur = useCallback(() => {
-		isTypingRef.current = false;
 		const finalValue = transformOnBlur ? transformOnBlur(localValue) : localValue;
 		const shouldSync = transformOnBlur
 			? !Object.is(finalValue, externalValue)
-			: localValue !== normalizedExternal;
+			: localValue !== displayedExternal;
 
 		if (shouldSync) {
 			syncToForm(finalValue);
@@ -433,7 +422,7 @@ function LocalInput<Row extends FormTableRow>({
 
 		setDraftValue(null);
 		onBlur?.();
-	}, [localValue, syncToForm, onBlur, transformOnBlur, normalizedExternal, externalValue]);
+	}, [localValue, syncToForm, onBlur, transformOnBlur, displayedExternal, externalValue]);
 
 	return (
 		<>
@@ -448,7 +437,89 @@ function LocalInput<Row extends FormTableRow>({
 				suggestion={visibleSuggestion}
 				onApply={() => {
 					if (!visibleSuggestion) return;
-					isTypingRef.current = false;
+					setDraftValue(visibleSuggestion.suggestedDisplayValue);
+					syncToForm(visibleSuggestion.suggestedValue);
+					setIgnoredSuggestionKey(null);
+				}}
+				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
+				className="absolute right-1 top-1 z-20"
+			/>
+		</>
+	);
+}
+
+function LocalTextarea<Row extends FormTableRow>({
+	value: externalValue,
+	onChange: syncToForm,
+	onBlur,
+	column,
+	row,
+	cellType,
+	syncOnChange = false,
+	forceSyncOnChange = false,
+	className,
+	...props
+}: Omit<React.ComponentProps<"textarea">, "onChange" | "onBlur" | "value"> & {
+	value: EditableCellValue;
+	onChange: (value: unknown) => void;
+	onBlur?: () => void;
+	column: ColumnDef<Row>;
+	row: Row;
+	cellType: NonNullable<ColumnDef<Row>["cellType"]> | "text";
+	syncOnChange?: boolean;
+	forceSyncOnChange?: boolean;
+}) {
+	const normalizedExternal = externalValue == null ? "" : String(externalValue);
+	const displayedExternal = forceSyncOnChange ? "" : normalizedExternal;
+	const [draftValue, setDraftValue] = useState<string | null>(null);
+	const localValue = draftValue ?? displayedExternal;
+	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
+
+	const suggestion = useMemo(
+		() =>
+			resolveCellSuggestion({
+				rawValue: localValue,
+				currentValue: externalValue,
+				cellType,
+				column,
+				row,
+			}),
+		[localValue, externalValue, cellType, column, row]
+	);
+	const suggestionKey = buildSuggestionKey(suggestion);
+	const visibleSuggestion =
+		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
+
+	const handleChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+		const nextValue = event.target.value;
+		setDraftValue(nextValue);
+		setIgnoredSuggestionKey(null);
+		if (syncOnChange || forceSyncOnChange) {
+			syncToForm(nextValue);
+		}
+	}, [forceSyncOnChange, syncOnChange, syncToForm]);
+
+	const handleBlur = useCallback(() => {
+		if (localValue !== displayedExternal) {
+			syncToForm(localValue);
+		}
+		setDraftValue(null);
+		onBlur?.();
+	}, [localValue, displayedExternal, onBlur, syncToForm]);
+
+	return (
+		<>
+			<textarea
+				{...props}
+				value={localValue}
+				onChange={handleChange}
+				onBlur={handleBlur}
+				className={cn(className, visibleSuggestion ? "pr-24" : undefined)}
+			/>
+			<CellSuggestionPrompt
+				suggestion={visibleSuggestion}
+				onApply={() => {
+					if (!visibleSuggestion) return;
 					setDraftValue(visibleSuggestion.suggestedDisplayValue);
 					syncToForm(visibleSuggestion.suggestedValue);
 					setIgnoredSuggestionKey(null);
@@ -468,33 +539,51 @@ export type EditableContentArgs<Row extends FormTableRow> = {
 	setValue: (value: unknown) => void;
 	handleBlur: () => void;
 	highlightQuery: string;
+	isBulkEditing?: boolean;
 };
 
-type RenderCellArgs<Row extends FormTableRow> = {
-	column: ColumnDef<Row>;
-	row: Row;
-	rowId: string;
-	FieldComponent: FormFieldComponent<Row>;
-	highlightQuery: string;
-	isCellDirty: boolean;
-	isRowDirty: boolean;
-	onCopyCell: (value: unknown) => void;
-	onCopyColumn: () => void;
-	onCopyRow: () => void;
-	onClearValue?: () => void;
-	onRestoreValue?: () => void;
-	canRestore?: boolean;
-	customMenuItems?: ColumnDef<Row>["cellMenuItems"];
-};
+// Intl formatter construction is expensive (~50-100µs); these are shared across
+// every cell render, so cache them at module level keyed by their options.
+const numberFormatterCache = new Map<string, Intl.NumberFormat>();
+function getNumberFormatter(locale: string, options?: Intl.NumberFormatOptions) {
+	const key = `${locale}|${options ? JSON.stringify(options) : ""}`;
+	let formatter = numberFormatterCache.get(key);
+	if (!formatter) {
+		formatter = new Intl.NumberFormat(locale, options);
+		numberFormatterCache.set(key, formatter);
+	}
+	return formatter;
+}
+
+const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+function getDateFormatter(locale: string, options?: Intl.DateTimeFormatOptions) {
+	const key = `${locale}|${options ? JSON.stringify(options) : ""}`;
+	let formatter = dateFormatterCache.get(key);
+	if (!formatter) {
+		formatter = new Intl.DateTimeFormat(locale, options);
+		dateFormatterCache.set(key, formatter);
+	}
+	return formatter;
+}
+
+let lastHighlightQuery: string | null = null;
+let lastHighlightRegex: RegExp | null = null;
+function getHighlightRegex(query: string) {
+	if (query !== lastHighlightQuery) {
+		lastHighlightQuery = query;
+		lastHighlightRegex = new RegExp(`(${escapeRegExp(query)})`, "ig");
+	}
+	return lastHighlightRegex!;
+}
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
 	if (!query) return <>{text}</>;
-	const regex = new RegExp(`(${escapeRegExp(query)})`, "ig");
-	const parts = text.split(regex);
+	const parts = text.split(getHighlightRegex(query));
+	const queryLower = query.toLowerCase();
 	return (
 		<>
 			{parts.map((part, idx) =>
-				part.toLowerCase() === query.toLowerCase() ? (
+				part.toLowerCase() === queryLower ? (
 					<mark key={`${part}-${idx}`} className="bg-yellow-200 px-0.5">
 						{part}
 					</mark>
@@ -513,14 +602,14 @@ function checkedLabel(value: boolean) {
 function formatNumericInputDisplay(value: EditableCellValue): string {
 	if (value == null || value === "") return "";
 	const parsed = parseLocalizedNumber(value);
-	return parsed == null ? String(value) : parsed.toLocaleString("es-AR");
+	return parsed == null ? String(value) : getNumberFormatter("es-AR").format(parsed);
 }
 
 function formatCurrencyInputDisplay(value: EditableCellValue): string {
 	if (value == null || value === "") return "";
 	const parsed = parseLocalizedNumber(value);
 	if (parsed == null) return String(value);
-	return new Intl.NumberFormat("es-AR", {
+	return getNumberFormatter("es-AR", {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	}).format(parsed);
@@ -596,13 +685,13 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 			const amount = toNumericValue(value);
 			return (
 				<span className="font-mono tabular-nums ">
-					{amount == null ? String(value ?? "-") : amount.toLocaleString("es-AR")}
+					{amount == null ? String(value ?? "-") : getNumberFormatter("es-AR").format(amount)}
 				</span>
 			);
 		}
 		case "currency": {
 			const amount = toNumericValue(value) ?? 0;
-			const formatted = new Intl.NumberFormat(config.currencyLocale || "es-AR", {
+			const formatted = getNumberFormatter(config.currencyLocale || "es-AR", {
 				style: "currency",
 				currency: config.currencyCode || "USD",
 				currencyDisplay: "narrowSymbol",
@@ -624,7 +713,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 						: config.dateFormat === "medium"
 							? { dateStyle: "medium" }
 							: undefined;
-			return <span>{date.toLocaleDateString("es-AR", options)}</span>;
+			return <span>{getDateFormatter("es-AR", options).format(date)}</span>;
 		}
 		case "boolean":
 		case "checkbox":
@@ -759,7 +848,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		}
 		default:
 			return (
-				<span>
+				<span className="absolute top-0 pt-3">
 					<HighlightedText text={String(value || "-")} query={highlightQuery} />
 				</span>
 			);
@@ -774,6 +863,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 	setValue,
 	handleBlur,
 	highlightQuery,
+	isBulkEditing = false,
 }: EditableContentArgs<Row>): ReactNode {
 	const cellType = column.cellType || "text";
 	const config = column.cellConfig || {};
@@ -784,13 +874,15 @@ export function renderEditableContent<Row extends FormTableRow>({
 	};
 	const hiddenInputClass =
 		"w-full h-full rounded-none border-none absolute top-0 left-0 children-input-hidden focus-visible:ring-[0px] focus-visible:ring-offset-0 focus-visible:outline-none focus-visible:shadow-none ";
-	const withReadOnlyLayer = (editor: ReactNode, className?: string) => (
-		<div className={cn("relative h-full w-full", className)}>
+	const floatingTextareaClass =
+		"w-full h-full rounded-none border-none absolute top-0 left-0 children-input-hidden resize-none bg-transparent px-2 py-2 leading-snug pointer-events-auto focus:relative focus:top-auto focus:left-auto focus:z-[1] focus:h-auto focus:max-h-40 focus:field-sizing-content overflow-hidden group-data-[state=closed]:focus:overflow-auto focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ";
+	const withReadOnlyLayer = (editor: ReactNode) => (
+		<>
 			{editor}
-			<div className="children-input-shown pointer-events-none flex h-full w-full items-center">
+			<div className="children-input-shown pointer-events-none absolute inset-0 flex h-full w-full items-center">
 				{renderReadOnlyValue(value, row, column, highlightQuery)}
 			</div>
-		</div>
+		</>
 	);
 
 	switch (cellType) {
@@ -813,6 +905,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="currency"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					placeholder="0.00"
 					required={column.required}
 				/>
@@ -837,6 +930,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="number"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					required={column.required}
 				/>
 			);
@@ -850,6 +944,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					inputProps={inputDataProps}
 					column={column}
 					row={row}
+					forceSyncOnChange={isBulkEditing}
 				/>
 			);
 		case "boolean":
@@ -891,6 +986,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="tags"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					placeholder="Ej: diseño, arquitectura"
 				/>
 			);
@@ -906,6 +1002,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="link"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					placeholder="https://..."
 					required={column.required}
 				/>
@@ -921,6 +1018,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="avatar"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					placeholder="https://..."
 					className={hiddenInputClass}
 				/>
@@ -936,6 +1034,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="image"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					placeholder="https://..."
 					className={hiddenInputClass}
 				/>
@@ -974,8 +1073,29 @@ export function renderEditableContent<Row extends FormTableRow>({
 								handleBlur();
 							}}
 						>
-							<SelectTrigger className="h-8 w-full border border-orange-200 bg-white text-left">
-								<SelectValue placeholder="Seleccionar opción" />
+							<SelectTrigger
+								className={cn(
+									"h-auto min-h-0 w-auto max-w-full justify-start border-0 bg-transparent p-0 text-left shadow-none outline-none hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 [&>svg]:hidden"
+								)}
+							>
+								<span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+									{matched ? (
+										renderSelectOptionBadge(matched, highlightQuery)
+									) : (
+										<Badge variant="outline" className="min-w-0 max-w-full gap-1.5 truncate">
+											<Circle className="size-3 shrink-0" />
+											<span className="truncate">
+												{currentText || "Sin definir"}
+											</span>
+										</Badge>
+									)}
+									<span
+										aria-hidden="true"
+										className="inline-flex size-4 shrink-0 items-center justify-center bg-transparent text-stone-500"
+									>
+										<ChevronDown className="size-3.5" />
+									</span>
+								</span>
 							</SelectTrigger>
 							<SelectContent>
 								{!column.required ? (
@@ -1026,6 +1146,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="badge"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					className={cn(hiddenInputClass, "z-10 bg-transparent text-right font-mono tabular-nums")}
 				/>
 			);
@@ -1037,6 +1158,8 @@ export function renderEditableContent<Row extends FormTableRow>({
 						row,
 						highlightQuery,
 						input,
+						setValue,
+						handleBlur,
 					})
 				);
 			}
@@ -1054,121 +1177,62 @@ export function renderEditableContent<Row extends FormTableRow>({
 					row={row}
 					cellType="text-icon"
 					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
 					className={hiddenInputClass}
 				/>
 			);
 		default:
-			return withReadOnlyLayer(
-				<LocalInput
-					className={hiddenInputClass}
-					{...inputDataProps}
-					value={value ?? ""}
-					onChange={setValue}
-					onBlur={handleBlur}
-					column={column}
-					row={row}
-					cellType="text"
-					syncOnChange={config.syncOnChange}
-					required={column.required}
-				/>
-			);
+			{
+				const stringValue = value == null ? "" : String(value);
+				const shouldUseExpandedTextEditor =
+					stringValue.length > 80 || Number(column.width ?? 0) >= 220;
+				const input = (
+					shouldUseExpandedTextEditor ? (
+						<LocalTextarea
+							className={floatingTextareaClass}
+							{...inputDataProps}
+							value={value ?? ""}
+							onChange={setValue}
+							onBlur={handleBlur}
+							column={column}
+							row={row}
+							cellType="text"
+							syncOnChange={config.syncOnChange}
+							forceSyncOnChange={isBulkEditing}
+							required={column.required}
+							rows={1}
+						/>
+					) : (
+						<LocalInput
+							className={hiddenInputClass}
+							{...inputDataProps}
+							value={value ?? ""}
+							onChange={setValue}
+							onBlur={handleBlur}
+							column={column}
+							row={row}
+							cellType="text"
+							syncOnChange={config.syncOnChange}
+							forceSyncOnChange={isBulkEditing}
+							required={column.required}
+						/>
+					)
+				);
+
+				if (typeof config.renderEditable === "function") {
+					return withReadOnlyLayer(
+						config.renderEditable({
+							value,
+							row,
+							highlightQuery,
+							input,
+							setValue,
+							handleBlur,
+						})
+					);
+				}
+
+				return withReadOnlyLayer(input);
+			}
 	}
-}
-function renderCellByType<Row extends FormTableRow>({
-	column,
-	row,
-	rowId,
-	FieldComponent,
-	highlightQuery,
-	isCellDirty,
-	isRowDirty,
-	onCopyCell,
-	onCopyColumn,
-	onCopyRow,
-	onClearValue,
-	onRestoreValue,
-	canRestore,
-	customMenuItems,
-}: RenderCellArgs<Row>): ReactNode {
-	const fieldPath = `rowsById.${rowId}.${column.field}` as const;
-	const editable = column.editable !== false;
-	const validators = column.validators;
-
-	return (
-		<FieldComponent name={fieldPath} validators={validators}>
-			{(field: FieldRenderState) => {
-				const fieldValue = field.state.value;
-				const setValue = (value: unknown) => field.handleChange(value);
-				const firstError = field.state.meta?.errors?.[0];
-				const errorMessage =
-					typeof firstError === "string" ? firstError : firstError != null ? String(firstError) : null;
-				const content = editable
-					? renderEditableContent({
-						column,
-						row,
-						rowId,
-						value: fieldValue as EditableCellValue,
-						setValue,
-						handleBlur: field.handleBlur,
-						highlightQuery,
-					})
-					: renderReadOnlyValue(fieldValue, row, column, highlightQuery);
-
-				const body = (
-					<div
-						className={cn(
-							"absolute top-0 left-0 w-full h-full",
-							isRowDirty ? "outline outline-amber-500/50 bg-amber-50/60 shadow-sm" : "",
-							isCellDirty
-								? "outline outline-amber-600/50 bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--color-amber-200)_5px,var(--color-amber-200)_6px,transparent_6px)] bg-repeat"
-								: ""
-						)}
-					>
-						{content}
-						{editable && errorMessage && (
-							<p className="text-xs text-destructive">{errorMessage}</p>
-						)}
-					</div>
-				);
-
-				return (
-					<ContextMenu>
-						<ContextMenuTrigger className="[&[data-state=open]_.children-input-hidden]:ring-2 [&[data-state=open]_.children-input-hidden]:ring-orange-primary/40 [&[data-state=open]_.children-input-shown]:opacity-0 [&[data-state=open]_.children-input-hidden]:opacity-100">
-							<>{body}</>
-						</ContextMenuTrigger>
-						<ContextMenuContent className="w-56 z-[10000000]">
-							{canRestore && onRestoreValue && (
-								<>
-									<ContextMenuItem onClick={onRestoreValue} className="bg-amber-100/50 rounded-none">
-										Restaurar valor previo
-									</ContextMenuItem>
-									<ContextMenuSeparator />
-								</>
-							)}
-							<ContextMenuItem onClick={() => onCopyCell(fieldValue)}>
-								Copiar valor
-							</ContextMenuItem>
-							<ContextMenuItem onClick={onCopyColumn}>Copiar columna</ContextMenuItem>
-							<ContextMenuItem onClick={onCopyRow}>Copiar fila (CSV)</ContextMenuItem>
-							{editable && onClearValue && (
-								<ContextMenuItem onClick={onClearValue}>
-									Limpiar valor
-								</ContextMenuItem>
-							)}
-							{customMenuItems && customMenuItems.length > 0 && (
-								<>
-									<ContextMenuSeparator />
-									{customMenuItems.map((item) => (
-										<ContextMenuItem key={item.id} onClick={() => item.onSelect?.(row)}>
-											{item.label}
-										</ContextMenuItem>
-									))}
-								</>
-							)}
-						</ContextMenuContent>
-					</ContextMenu>
-				);
-			}}
-		</FieldComponent>
-	);
 }

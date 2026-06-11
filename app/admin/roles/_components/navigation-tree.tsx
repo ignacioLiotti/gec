@@ -30,6 +30,7 @@ const NAVIGATION_STRUCTURE: NavigationItem[] = [
   { path: "/", label: "Dashboard", permission: "nav:dashboard", icon: "Home" },
   { path: "/excel", label: "Excel/Obras", permission: "nav:excel", icon: "Database" },
   { path: "/excel/data-flow", label: "Data-flow", permission: "data-flow:read", icon: "Layers" },
+  { path: "/document-ai", label: "Document AI", permission: "nav:document-ai", icon: "FileText" },
   { path: "/certificados", label: "Certificados", permission: "nav:certificados", icon: "FileCheck" },
   { path: "/macro", label: "Macro Tablas", permission: "nav:macro", icon: "Layers" },
   { path: "/notifications", label: "Notificaciones", permission: "nav:notifications", icon: "Bell" },

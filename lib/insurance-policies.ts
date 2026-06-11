@@ -7,6 +7,7 @@ export type InsurancePolicyImportRow = {
 	rowNumber: number;
 	obraId: string | null;
 	obraLabel: string;
+	obraMatchStatus: "matched" | "unmatched";
 	policyNumber: string;
 	section: string;
 	coveragePeriod: string;
@@ -22,6 +23,7 @@ export type InsurancePolicyImportRow = {
 	notes: string;
 	cancellationRuleType: InsurancePolicyRuleType;
 	cancellationRuleOffset: number;
+	cancellationRuleConfigured: boolean;
 	isCancelled: boolean;
 	errors: string[];
 };
@@ -36,6 +38,23 @@ const RULE_TYPES = new Set<InsurancePolicyRuleType>([
 	"on_finish",
 	"days_after",
 	"months_after",
+]);
+
+const OBRA_MATCH_STOPWORDS = new Set([
+	"obra",
+	"obras",
+	"provincia",
+	"corrientes",
+	"licitacion",
+	"publica",
+	"privada",
+	"contratacion",
+	"directa",
+	"expte",
+	"expediente",
+	"resolucion",
+	"ubicacion",
+	"localidad",
 ]);
 
 function normalizeText(value: unknown) {
@@ -153,9 +172,11 @@ export function calculateCancellationDate(
 	obraFinishedAt: string | null | undefined,
 	ruleType: InsurancePolicyRuleType,
 	ruleOffset: number,
+	definitiveReceptionDate?: string | null,
 ) {
-	if (!obraFinishedAt) return null;
-	const base = parseExcelDate(obraFinishedAt);
+	const baseSource = definitiveReceptionDate || obraFinishedAt;
+	if (!baseSource) return null;
+	const base = parseExcelDate(baseSource);
 	if (!base) return null;
 	const date = new Date(`${base}T00:00:00.000Z`);
 	if (ruleType === "days_after") {
@@ -180,7 +201,7 @@ export async function updateInsurancePoliciesForObraCompletion({
 }) {
 	const { data: policies, error } = await supabase
 		.from("insurance_policies")
-		.select("id, cancellation_rule_type, cancellation_rule_offset")
+		.select("id, cancellation_rule_type, cancellation_rule_offset, cancellation_rule_configured, definitive_reception_date")
 		.eq("tenant_id", tenantId)
 		.eq("obra_id", obraId);
 	if (error) throw error;
@@ -188,11 +209,12 @@ export async function updateInsurancePoliciesForObraCompletion({
 	for (const policy of policies ?? []) {
 		const ruleType = policy.cancellation_rule_type as InsurancePolicyRuleType;
 		const offset = Number(policy.cancellation_rule_offset ?? 0);
+		const ruleConfigured = policy.cancellation_rule_configured === true;
 		const { error: updateError } = await supabase
 			.from("insurance_policies")
 			.update({
 				obra_finished_at: finishedAt,
-				calculated_cancellation_date: calculateCancellationDate(finishedAt, ruleType, offset),
+				calculated_cancellation_date: ruleConfigured ? calculateCancellationDate(finishedAt, ruleType, offset, policy.definitive_reception_date) : null,
 				last_notified_at: null,
 				updated_at: new Date().toISOString(),
 			})
@@ -241,7 +263,7 @@ export async function parseInsurancePoliciesWorkbook(
 		const risk = String(getCell(record, ["riesgo"]) ?? "").trim();
 		const insuredObject = String(getCell(record, ["objeto del seguro"]) ?? "").trim();
 		const notes = String(getCellByIndex(record, 19) ?? getCellByIndex(record, 18) ?? getCellByIndex(record, 17) ?? "").trim();
-		const obraValue =
+		const explicitObraValue =
 			getCell(record, ["obra", "n obra", "nro obra", "numero obra", "n", "designacion", "designacion y ubicacion"]) ??
 			`${risk}\n${insuredObject}`;
 		const policyNumber = String(getCell(record, ["numero de poliza", "nro poliza", "poliza", "póliza", "numero póliza"]) ?? "").trim();
@@ -249,14 +271,15 @@ export async function parseInsurancePoliciesWorkbook(
 		const endDate =
 			parseCoverageEndDate(coveragePeriod) ??
 			parseExcelDate(getCell(record, ["fecha de finalizacion", "fecha finalizacion", "vencimiento", "fecha vencimiento", "fecha fin"]));
-		const rule = parseRule(
-			getCell(record, ["regla vencimiento", "regla de vencimiento", "vencimiento baja", "regla"]),
-			getCell(record, ["dias", "días", "meses", "cantidad"]),
-		);
-		const obraMatch = resolveObra(obraValue, obraIndex);
+		const rawRule = getCell(record, ["regla vencimiento", "regla de vencimiento", "vencimiento baja", "regla"]);
+		const rawOffset = getCell(record, ["dias", "días", "meses", "cantidad"]);
+		const rule = parseRule(rawRule, rawOffset);
+		const hasRule = String(rawRule ?? "").trim().length > 0 || String(rawOffset ?? "").trim().length > 0;
+		const explicitObraMatch = resolveObra(explicitObraValue, obraIndex, { allowLeadingNumberMatch: true });
+		const objectObraMatch = resolveObra(`${risk}\n${insuredObject}`, obraIndex, { allowLeadingNumberMatch: false });
+		const obraMatch = objectObraMatch ?? explicitObraMatch;
 		const errors: string[] = [];
 		if (!policyNumber) errors.push("Falta número de póliza.");
-		if (!obraMatch) errors.push("No se encontró la obra.");
 
 		return {
 			rowNumber: Number(record.__rowNumber ?? 0),
@@ -265,7 +288,8 @@ export async function parseInsurancePoliciesWorkbook(
 				? [obraMatch.n != null ? String(obraMatch.n) : "", obraMatch.designacion_y_ubicacion ?? ""]
 						.filter(Boolean)
 						.join(" ")
-				: String(obraValue ?? "").trim(),
+				: "No se encontró obra adecuada",
+			obraMatchStatus: obraMatch ? "matched" : "unmatched",
 			policyNumber,
 			section: String(getCell(record, ["seccion", "sección"]) ?? "").trim(),
 			coveragePeriod,
@@ -281,6 +305,7 @@ export async function parseInsurancePoliciesWorkbook(
 			notes,
 			cancellationRuleType: rule.type,
 			cancellationRuleOffset: rule.offset,
+			cancellationRuleConfigured: hasRule,
 			isCancelled: parseBoolean(notes || getCell(record, ["poliza dada de baja", "baja", "dada de baja", "cancelada"])),
 			errors,
 		} satisfies InsurancePolicyImportRow;
@@ -302,12 +327,18 @@ function buildObraIndex(obras: ObraLookupRow[]) {
 	return { byNumber, byName, searchable };
 }
 
-function resolveObra(value: unknown, index: ReturnType<typeof buildObraIndex>) {
+function resolveObra(
+	value: unknown,
+	index: ReturnType<typeof buildObraIndex>,
+	options: { allowLeadingNumberMatch: boolean },
+) {
 	const raw = String(value ?? "").trim();
 	if (!raw) return null;
-	const numberMatch = raw.match(/\d+/);
+	const numberMatch = options.allowLeadingNumberMatch
+		? /^(?:obra\s*)?(?:n(?:ro|°|º)?\.?\s*)?(\d+)(?:\s*[-–—:]|\s*$)/i.exec(raw)
+		: null;
 	if (numberMatch) {
-		const byNumber = index.byNumber.get(numberMatch[0]);
+		const byNumber = index.byNumber.get(numberMatch[1]);
 		if (byNumber) return byNumber;
 	}
 	const normalizedRaw = normalizeText(raw);
@@ -316,7 +347,9 @@ function resolveObra(value: unknown, index: ReturnType<typeof buildObraIndex>) {
 	let best: { obra: ObraLookupRow; score: number } | null = null;
 	for (const [obra, name] of index.searchable) {
 		if (!name) continue;
-		const tokens = name.split(/\s+/).filter((token) => token.length > 3);
+		const tokens = name
+			.split(/\s+/)
+			.filter((token) => token.length > 3 && !OBRA_MATCH_STOPWORDS.has(token));
 		const score = tokens.filter((token) => normalizedRaw.includes(token)).length;
 		if (score > 0 && (!best || score > best.score)) best = { obra, score };
 	}
@@ -327,6 +360,7 @@ export const INSURANCE_POLICY_TABLE_NAME = "Pólizas de seguro";
 export const INSURANCE_POLICY_MACRO_NAME = "Pólizas de seguro";
 
 export const INSURANCE_POLICY_COLUMNS = [
+	{ fieldKey: "obraLabel", label: "Obra", dataType: "text" },
 	{ fieldKey: "policyNumber", label: "Número de póliza", dataType: "text" },
 	{ fieldKey: "section", label: "Sección", dataType: "text" },
 	{ fieldKey: "coveragePeriod", label: "Vigencia", dataType: "text" },
@@ -340,8 +374,12 @@ export const INSURANCE_POLICY_COLUMNS = [
 	{ fieldKey: "risk", label: "Riesgo", dataType: "text" },
 	{ fieldKey: "insuredObject", label: "Objeto del Seguro", dataType: "text" },
 	{ fieldKey: "cancellationRule", label: "Regla vencimiento", dataType: "text" },
+	{ fieldKey: "definitiveReceptionDate", label: "Recepcion definitiva", dataType: "date" },
 	{ fieldKey: "calculatedCancellationDate", label: "Fecha calculada baja", dataType: "date" },
 	{ fieldKey: "isCancelled", label: "Póliza dada de baja", dataType: "boolean" },
+	{ fieldKey: "cancellationRequestedAt", label: "Baja solicitada", dataType: "date" },
+	{ fieldKey: "cancellationConfirmedAt", label: "Baja confirmada", dataType: "date" },
+	{ fieldKey: "cancellationNotes", label: "Gestion de baja", dataType: "text" },
 	{ fieldKey: "notes", label: "Observaciones", dataType: "text" },
 ] as const;
 
@@ -361,13 +399,40 @@ export function buildInsurancePolicyRowData(policy: {
 	insured_object?: string | null;
 	cancellation_rule_type: InsurancePolicyRuleType;
 	cancellation_rule_offset: number | string | null;
+	cancellation_rule_configured?: boolean | null;
+	definitive_reception_date?: string | null;
 	calculated_cancellation_date?: string | null;
+	cancellation_requested_at?: string | null;
+	cancellation_confirmed_at?: string | null;
+	cancellation_notes?: string | null;
 	is_cancelled: boolean;
 	notes?: string | null;
+	import_obra_label?: string | null;
+	import_match_status?: string | null;
+	obras?:
+		| {
+				n?: number | string | null;
+				designacion_y_ubicacion?: string | null;
+		  }
+		| Array<{
+				n?: number | string | null;
+				designacion_y_ubicacion?: string | null;
+		  }>
+		| null;
 }) {
 	const offset = Number(policy.cancellation_rule_offset ?? 0);
+	const obra = Array.isArray(policy.obras) ? policy.obras[0] : policy.obras;
+	const matchedObraLabel = obra
+		? [obra.n != null ? String(obra.n) : "", obra.designacion_y_ubicacion ?? ""]
+				.filter(Boolean)
+				.join(" ")
+		: "";
 	return {
 		insurancePolicyId: policy.id,
+		obraLabel:
+			policy.import_match_status === "unmatched"
+				? "No se encontró obra adecuada"
+				: matchedObraLabel || policy.import_obra_label || "",
 		policyNumber: policy.policy_number,
 		section: policy.section ?? "",
 		coveragePeriod: policy.coverage_period ?? "",
@@ -381,12 +446,18 @@ export function buildInsurancePolicyRowData(policy: {
 		risk: policy.risk ?? "",
 		insuredObject: policy.insured_object ?? "",
 		cancellationRule:
-			policy.cancellation_rule_type === "days_after"
+			policy.cancellation_rule_configured !== true
+				? ""
+				: policy.cancellation_rule_type === "days_after"
 				? `${offset} días después`
 				: policy.cancellation_rule_type === "months_after"
 					? `${offset} meses después`
 					: "Al finalizar obra",
+		definitiveReceptionDate: policy.definitive_reception_date ?? null,
 		calculatedCancellationDate: policy.calculated_cancellation_date ?? null,
+		cancellationRequestedAt: policy.cancellation_requested_at ?? null,
+		cancellationConfirmedAt: policy.cancellation_confirmed_at ?? null,
+		cancellationNotes: policy.cancellation_notes ?? "",
 		isCancelled: policy.is_cancelled,
 		notes: policy.notes ?? "",
 	};

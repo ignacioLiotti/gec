@@ -85,6 +85,8 @@ Data-flow now uses explicit capability permissions:
 Dashboard route access is available to all authenticated users and appears in the sidebar for regular members.
 | `document_reviewer` | documents:review |
 | `document_manager` | documents:review, documents:templates |
+| `document_ai_operator` | nav:document-ai, document-ai:run |
+| `document_ai_manager` | nav:document-ai, document-ai:run, document-ai:admin |
 
 ### Delete lifecycle permissions
 
@@ -150,7 +152,7 @@ For document generation there is an additional feature-level filter on top of ro
 - `documents:review` shows `Revision`
 - `documents:templates` shows `Plantillas` and `Configuracion`
 
-This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document capabilities server-side and the sidebar only renders the allowed screens.
+This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document review/config capabilities server-side and the sidebar only renders privileged screens when allowed.
 
 ---
 
@@ -160,6 +162,9 @@ Document generation now gives tenant members baseline creation access and keeps 
 
 | Permission | Purpose |
 |------|-------------|
+| `nav:document-ai` | Show Document AI workspace in the sidebar |
+| `document-ai:run` | Create and inspect auditable Document AI runs |
+| `document-ai:admin` | Rebuild Document AI index and manage generated outputs |
 | `documents:review` | Access the review queue and approve/reject documents |
 | `documents:templates` | Access template/configuration screens and mutate template overrides |
 

@@ -171,24 +171,84 @@ export async function GET(_request: Request, context: RouteContext) {
 			return NextResponse.json({ error: "No tenant" }, { status: 400 });
 		}
 
-		const { data: obra, error: obraError } = await supabase
-			.from("obras")
-			.select("id")
-			.eq("id", obraId)
-			.eq("tenant_id", tenantId)
-			.is("deleted_at", null)
-			.maybeSingle();
-		if (obraError) throw obraError;
-		if (!obra) {
+		const isInRequestedFolder = (storagePath: string) => {
+			if (!storagePath.startsWith(`${obraId}/`)) return false;
+			const relativePath = storagePath.slice(`${obraId}/`.length);
+			const segments = relativePath.split("/").filter(Boolean);
+			segments.pop();
+			return segments.join("/") === requestedPath;
+		};
+		const scopedStorageLikePrefix = requestedPath
+			? `${obraId}/${requestedPath}/%`
+			: `${obraId}/%`;
+		const shouldLoadFileMetadata = requestedPath.length > 0;
+		const skippedQuery = Promise.resolve({ data: null, error: null });
+
+		// These reads are independent of each other — fetch them in one round
+		// trip instead of sequentially.
+		const [
+			obraResult,
+			deleteRowsResult,
+			defaultFoldersResult,
+			tablasResult,
+			trackedUploadsResult,
+			generatedDocumentsResult,
+			apsModelsResult,
+		] = await Promise.all([
+			supabase
+				.from("obras")
+				.select("id")
+				.eq("id", obraId)
+				.eq("tenant_id", tenantId)
+				.is("deleted_at", null)
+				.maybeSingle(),
+			supabase
+				.from("obra_document_deletes")
+				.select("storage_path, item_type")
+				.eq("tenant_id", tenantId)
+				.eq("obra_id", obraId)
+				.is("restored_at", null),
+			supabase
+				.from("obra_default_folders")
+				.select("name, path")
+				.eq("tenant_id", tenantId)
+				.order("position", { ascending: true }),
+			supabase
+				.from("obra_tablas")
+				.select("id, name, settings, created_at")
+				.eq("obra_id", obraId)
+				.eq("source_type", "ocr")
+				.order("created_at", { ascending: true }),
+			shouldLoadFileMetadata
+				? supabase
+					.from("obra_document_uploads")
+					.select("storage_path, uploaded_by, uploaded_at")
+					.eq("obra_id", obraId)
+					.like("storage_path", scopedStorageLikePrefix)
+				: skippedQuery,
+			shouldLoadFileMetadata
+				? supabase
+					.from("generated_documents")
+					.select("storage_path, status, updated_at")
+					.eq("obra_id", obraId)
+					.like("storage_path", scopedStorageLikePrefix)
+					.order("updated_at", { ascending: false })
+				: skippedQuery,
+			shouldLoadFileMetadata
+				? supabase
+					.from("aps_models")
+					.select("file_path, aps_urn")
+					.eq("obra_id", obraId)
+					.like("file_path", scopedStorageLikePrefix)
+				: skippedQuery,
+		]);
+
+		if (obraResult.error) throw obraResult.error;
+		if (!obraResult.data) {
 			return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
 		}
 
-		const { data: deleteRows, error: deleteRowsError } = await supabase
-			.from("obra_document_deletes")
-			.select("storage_path, item_type")
-			.eq("tenant_id", tenantId)
-			.eq("obra_id", obraId)
-			.is("restored_at", null);
+		const { data: deleteRows, error: deleteRowsError } = deleteRowsResult;
 		if (deleteRowsError) throw deleteRowsError;
 
 		const deletedFilePaths = new Set<string>();
@@ -218,23 +278,7 @@ export async function GET(_request: Request, context: RouteContext) {
 					legacyNormalizedStoragePath.startsWith(`${folderPath}/`),
 			);
 		};
-		const isInRequestedFolder = (storagePath: string) => {
-			if (!storagePath.startsWith(`${obraId}/`)) return false;
-			const relativePath = storagePath.slice(`${obraId}/`.length);
-			const segments = relativePath.split("/").filter(Boolean);
-			segments.pop();
-			return segments.join("/") === requestedPath;
-		};
-		const scopedStorageLikePrefix = requestedPath
-			? `${obraId}/${requestedPath}/%`
-			: `${obraId}/%`;
-		const shouldLoadFileMetadata = requestedPath.length > 0;
-
-		const { data: defaultFolders, error: defaultFoldersError } = await supabase
-			.from("obra_default_folders")
-			.select("name, path")
-			.eq("tenant_id", tenantId)
-			.order("position", { ascending: true });
+		const { data: defaultFolders, error: defaultFoldersError } = defaultFoldersResult;
 		if (defaultFoldersError) throw defaultFoldersError;
 
 		const displayNameByPath = new Map<string, string>();
@@ -249,22 +293,35 @@ export async function GET(_request: Request, context: RouteContext) {
 			}
 		}
 
-		const { data: tablas, error: tablasError } = await supabase
-			.from("obra_tablas")
-			.select("id, name, settings, created_at")
-			.eq("obra_id", obraId)
-			.eq("source_type", "ocr")
-			.order("created_at", { ascending: true });
+		const { data: tablas, error: tablasError } = tablasResult;
 		if (tablasError) throw tablasError;
 
+		// Second phase: these two depend on the tabla ids resolved above.
 		const tablaIds = (tablas ?? []).map((tabla) => tabla.id as string);
+		const [columnsResult, ocrDocumentsResult] = await Promise.all([
+			shouldLoadFileMetadata && tablaIds.length > 0
+				? supabase
+					.from("obra_tabla_columns")
+					.select("id, tabla_id, field_key, label, data_type, position, required, config")
+					.in("tabla_id", tablaIds)
+					.order("position", { ascending: true })
+				: skippedQuery,
+			tablaIds.length > 0
+				? supabase
+					.from("ocr_document_processing")
+					.select(
+						"id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, error_code, rows_extracted, extraction_id, file_fingerprint, content_fingerprint_normalized, fingerprint_status, fingerprint_error"
+					)
+					.eq("obra_id", obraId)
+					.in("tabla_id", tablaIds)
+					.like("source_path", scopedStorageLikePrefix)
+					.order("created_at", { ascending: false })
+				: skippedQuery,
+		]);
+
 		const columnsByTabla = new Map<string, OcrColumn[]>();
 		if (shouldLoadFileMetadata && tablaIds.length > 0) {
-			const { data: columns, error: columnsError } = await supabase
-				.from("obra_tabla_columns")
-				.select("id, tabla_id, field_key, label, data_type, position, required, config")
-				.in("tabla_id", tablaIds)
-				.order("position", { ascending: true });
+			const { data: columns, error: columnsError } = columnsResult;
 			if (columnsError) throw columnsError;
 			for (const column of columns ?? []) {
 				const mapped = mapColumn(column);
@@ -279,15 +336,7 @@ export async function GET(_request: Request, context: RouteContext) {
 		const docsByPath = new Map<string, OcrDocumentStatus>();
 		const knownDocumentPaths: string[] = [];
 		if (tablaIds.length > 0) {
-			const { data: documents, error: documentsError } = await supabase
-				.from("ocr_document_processing")
-				.select(
-					"id, tabla_id, source_bucket, source_path, source_file_name, status, error_message, error_code, rows_extracted, extraction_id, file_fingerprint, content_fingerprint_normalized, fingerprint_status, fingerprint_error"
-				)
-				.eq("obra_id", obraId)
-				.in("tabla_id", tablaIds)
-				.like("source_path", scopedStorageLikePrefix)
-				.order("created_at", { ascending: false });
+			const { data: documents, error: documentsError } = ocrDocumentsResult;
 			if (documentsError) throw documentsError;
 			for (const doc of documents ?? []) {
 				const sourcePath = typeof doc.source_path === "string" ? doc.source_path : "";
@@ -461,11 +510,7 @@ export async function GET(_request: Request, context: RouteContext) {
 			{ uploadedBy: string | null; uploadedAt: string | null }
 		>();
 		if (shouldLoadFileMetadata) {
-			const { data: trackedUploads, error: trackedUploadsError } = await supabase
-				.from("obra_document_uploads")
-				.select("storage_path, uploaded_by, uploaded_at")
-				.eq("obra_id", obraId)
-				.like("storage_path", scopedStorageLikePrefix);
+			const { data: trackedUploads, error: trackedUploadsError } = trackedUploadsResult;
 			if (trackedUploadsError) throw trackedUploadsError;
 			for (const upload of trackedUploads ?? []) {
 				const storagePath = typeof upload.storage_path === "string" ? upload.storage_path : null;
@@ -481,12 +526,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 		const generatedDocumentStatusByPath = new Map<string, string>();
 		if (shouldLoadFileMetadata) {
-			const { data: generatedDocuments, error: generatedDocumentsError } = await supabase
-				.from("generated_documents")
-				.select("storage_path, status, updated_at")
-				.eq("obra_id", obraId)
-				.like("storage_path", scopedStorageLikePrefix)
-				.order("updated_at", { ascending: false });
+			const { data: generatedDocuments, error: generatedDocumentsError } = generatedDocumentsResult;
 			if (generatedDocumentsError) throw generatedDocumentsError;
 			for (const generatedDocument of generatedDocuments ?? []) {
 				const storagePath =
@@ -510,11 +550,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 		const apsUrnByPath = new Map<string, string>();
 		if (shouldLoadFileMetadata) {
-			const { data: apsModels, error: apsModelsError } = await supabase
-				.from("aps_models")
-				.select("file_path, aps_urn")
-				.eq("obra_id", obraId)
-				.like("file_path", scopedStorageLikePrefix);
+			const { data: apsModels, error: apsModelsError } = apsModelsResult;
 			if (apsModelsError) throw apsModelsError;
 			for (const model of apsModels ?? []) {
 				const filePath = typeof model.file_path === "string" ? model.file_path : null;

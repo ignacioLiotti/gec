@@ -26,6 +26,37 @@ type ObraImportStateRow = {
 };
 
 type SupabaseRouteClient = Awaited<ReturnType<typeof getAuthContext>>["supabase"];
+type InsurancePolicyUpsert = {
+	tenant_id: string;
+	obra_id: string | null;
+	import_obra_label: string | null;
+	import_match_status: "matched" | "unmatched";
+	policy_number: string;
+	section: string;
+	coverage_period: string;
+	end_date: string | null;
+	insured_amount: number | null;
+	currency: string | null;
+	premium: number | null;
+	prize: number | null;
+	balance: number | null;
+	status: string;
+	risk: string;
+	insured_object: string;
+	notes: string;
+	cancellation_rule_type: InsurancePolicyImportRow["cancellationRuleType"];
+	cancellation_rule_offset: number;
+	cancellation_rule_configured?: boolean;
+	obra_finished_at: string | null;
+	definitive_reception_date?: string | null;
+	cancellation_requested_at?: string | null;
+	cancellation_confirmed_at?: string | null;
+	cancellation_notes?: string | null;
+	calculated_cancellation_date: string | null;
+	is_cancelled: boolean;
+	cancelled_at: string | null;
+	cancelled_by: string | null;
+};
 
 async function ensureInsuranceMacroTable(supabase: SupabaseRouteClient, tenantId: string) {
 	const { data: existing, error: existingError } = await supabase
@@ -173,7 +204,7 @@ async function syncInsuranceMacroRows(
 
 		const { data: policies, error: policiesError } = await supabase
 			.from("insurance_policies")
-			.select("*")
+			.select("*, obras(n, designacion_y_ubicacion)")
 			.eq("tenant_id", tenantId)
 			.eq("obra_id", obraId)
 			.order("policy_number", { ascending: true });
@@ -190,6 +221,74 @@ async function syncInsuranceMacroRows(
 		const { error: insertError } = await supabase.from("obra_tabla_rows").insert(rows);
 		if (insertError) throw insertError;
 	}
+}
+
+async function persistUnmatchedInsurancePolicies(
+	supabase: SupabaseRouteClient,
+	rows: InsurancePolicyUpsert[],
+) {
+	let imported = 0;
+	for (const row of rows) {
+		const { data: existing, error: existingError } = await supabase
+			.from("insurance_policies")
+			.select("id")
+			.eq("tenant_id", row.tenant_id)
+			.eq("policy_number", row.policy_number)
+			.is("obra_id", null)
+			.maybeSingle<{ id: string }>();
+		if (existingError) throw existingError;
+
+		const writePayload = (withRuleConfigured: boolean, withDefinitiveReceptionDate: boolean, withCancellationWorkflow: boolean) => {
+			if (withRuleConfigured && withDefinitiveReceptionDate && withCancellationWorkflow) return row;
+			const legacyRow: Partial<InsurancePolicyUpsert> = { ...row };
+			if (!withRuleConfigured) delete legacyRow.cancellation_rule_configured;
+			if (!withDefinitiveReceptionDate) delete legacyRow.definitive_reception_date;
+			if (!withCancellationWorkflow) {
+				delete legacyRow.cancellation_requested_at;
+				delete legacyRow.cancellation_confirmed_at;
+				delete legacyRow.cancellation_notes;
+			}
+			return legacyRow;
+		};
+
+		if (existing?.id) {
+			let { error } = await supabase
+				.from("insurance_policies")
+				.update(writePayload(true, true, true))
+				.eq("id", existing.id)
+				.eq("tenant_id", row.tenant_id);
+			if (error && /cancellation_rule_configured|definitive_reception_date|cancellation_requested_at|cancellation_confirmed_at|cancellation_notes/i.test(error.message)) {
+				const fallback = await supabase
+					.from("insurance_policies")
+					.update(writePayload(
+						!/cancellation_rule_configured/i.test(error.message),
+						!/definitive_reception_date/i.test(error.message),
+						!/cancellation_requested_at|cancellation_confirmed_at|cancellation_notes/i.test(error.message),
+					))
+					.eq("id", existing.id)
+					.eq("tenant_id", row.tenant_id);
+				error = fallback.error;
+			}
+			if (error) throw error;
+		} else {
+			let { error } = await supabase
+				.from("insurance_policies")
+				.insert(writePayload(true, true, true));
+			if (error && /cancellation_rule_configured|definitive_reception_date|cancellation_requested_at|cancellation_confirmed_at|cancellation_notes/i.test(error.message)) {
+				const fallback = await supabase
+					.from("insurance_policies")
+					.insert(writePayload(
+						!/cancellation_rule_configured/i.test(error.message),
+						!/definitive_reception_date/i.test(error.message),
+						!/cancellation_requested_at|cancellation_confirmed_at|cancellation_notes/i.test(error.message),
+					));
+				error = fallback.error;
+			}
+			if (error) throw error;
+		}
+		imported += 1;
+	}
+	return imported;
 }
 
 export async function POST(request: Request) {
@@ -221,30 +320,36 @@ export async function POST(request: Request) {
 
 	const payload = (await request.json().catch(() => ({}))) as ConfirmPayload;
 	const rows = Array.isArray(payload.rows) ? payload.rows : [];
-	const validRows = rows.filter((row) => row.obraId && row.policyNumber && row.errors.length === 0);
+	const validRows = rows.filter((row) => row.policyNumber && row.errors.length === 0);
 	if (validRows.length === 0) {
 		return NextResponse.json({ error: "No hay pólizas válidas para importar" }, { status: 400 });
 	}
 
-	const obraIds = Array.from(new Set(validRows.map((row) => row.obraId as string)));
-	const { data: obraStates, error: stateError } = await supabase
-		.from("obras")
-		.select("id, porcentaje")
-		.eq("tenant_id", tenantId)
-		.in("id", obraIds);
-	if (stateError) return NextResponse.json({ error: stateError.message }, { status: 500 });
+	const matchedRows = validRows.filter((row) => row.obraId);
+	const unmatchedRows = validRows.filter((row) => !row.obraId);
+	const obraIds = Array.from(new Set(matchedRows.map((row) => row.obraId as string)));
+	const obraStates = obraIds.length > 0
+		? await supabase
+				.from("obras")
+				.select("id, porcentaje")
+				.eq("tenant_id", tenantId)
+				.in("id", obraIds)
+		: { data: [], error: null };
+	if (obraStates.error) return NextResponse.json({ error: obraStates.error.message }, { status: 500 });
 	const finishedObras = new Set(
-		(obraStates ?? [])
+		(obraStates.data ?? [])
 			.filter((obra: ObraImportStateRow) => Number(obra.porcentaje ?? 0) >= 100)
 			.map((obra: ObraImportStateRow) => obra.id),
 	);
 	const today = new Date().toISOString().slice(0, 10);
 
-	const upserts = validRows.map((row) => {
-		const obraFinishedAt = finishedObras.has(row.obraId as string) ? today : null;
+	const buildUpsert = (row: InsurancePolicyImportRow): InsurancePolicyUpsert => {
+		const obraFinishedAt = row.obraId && finishedObras.has(row.obraId) ? today : null;
 		return {
 			tenant_id: tenantId,
 			obra_id: row.obraId,
+			import_obra_label: row.obraLabel || null,
+			import_match_status: row.obraId ? "matched" : "unmatched",
 			policy_number: row.policyNumber,
 			section: row.section,
 			coverage_period: row.coveragePeriod,
@@ -260,23 +365,63 @@ export async function POST(request: Request) {
 			notes: row.notes,
 			cancellation_rule_type: row.cancellationRuleType,
 			cancellation_rule_offset: row.cancellationRuleOffset,
+			cancellation_rule_configured: row.cancellationRuleConfigured === true,
 			obra_finished_at: obraFinishedAt,
-			calculated_cancellation_date: calculateCancellationDate(
-				obraFinishedAt,
-				row.cancellationRuleType,
-				row.cancellationRuleOffset,
-			),
+			definitive_reception_date: null,
+			cancellation_requested_at: null,
+			cancellation_confirmed_at: null,
+			cancellation_notes: null,
+			calculated_cancellation_date: row.cancellationRuleConfigured === true
+				? calculateCancellationDate(
+					obraFinishedAt,
+					row.cancellationRuleType,
+					row.cancellationRuleOffset,
+				)
+				: null,
 			is_cancelled: row.isCancelled,
 			cancelled_at: row.isCancelled ? new Date().toISOString() : null,
 			cancelled_by: row.isCancelled ? user.id : null,
 		};
-	});
+	};
 
-	const { data, error } = await supabase
-		.from("insurance_policies")
-		.upsert(upserts, { onConflict: "tenant_id,obra_id,policy_number" })
-		.select("id");
-	if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+	const upserts = matchedRows.map(buildUpsert);
+	let data: Array<{ id: string }> | null = [];
+	let error: { message: string } | null = null;
+	if (upserts.length > 0) {
+		const result = await supabase
+			.from("insurance_policies")
+			.upsert(upserts, { onConflict: "tenant_id,obra_id,policy_number" })
+			.select("id");
+		data = result.data;
+		error = result.error;
+		if (error && /cancellation_rule_configured|definitive_reception_date|cancellation_requested_at|cancellation_confirmed_at|cancellation_notes/i.test(error.message)) {
+			const legacyUpserts = upserts.map((row) => {
+				const next: Partial<typeof row> = { ...row };
+				if (/cancellation_rule_configured/i.test(error?.message ?? "")) delete next.cancellation_rule_configured;
+				if (/definitive_reception_date/i.test(error?.message ?? "")) delete next.definitive_reception_date;
+				if (/cancellation_requested_at|cancellation_confirmed_at|cancellation_notes/i.test(error?.message ?? "")) {
+					delete next.cancellation_requested_at;
+					delete next.cancellation_confirmed_at;
+					delete next.cancellation_notes;
+				}
+				return next;
+			});
+			const fallback = await supabase
+				.from("insurance_policies")
+				.upsert(legacyUpserts, { onConflict: "tenant_id,obra_id,policy_number" })
+				.select("id");
+			data = fallback.data;
+			error = fallback.error;
+		}
+		if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+	}
+	let unmatchedImported = 0;
+	try {
+		unmatchedImported = await persistUnmatchedInsurancePolicies(supabase, unmatchedRows.map(buildUpsert));
+	} catch (unmatchedError) {
+		const message = unmatchedError instanceof Error ? unmatchedError.message : "Error importando pólizas sin obra";
+		return NextResponse.json({ error: message }, { status: 500 });
+	}
 	await syncInsuranceMacroRows(supabase, tenantId, obraIds);
-	return NextResponse.json({ imported: data?.length ?? 0 });
+	return NextResponse.json({ imported: (data?.length ?? 0) + unmatchedImported });
 }

@@ -5,14 +5,14 @@ import {
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
 
-const BASE_COLUMNS =
+export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at, custom_data";
-const LEGACY_BASE_COLUMNS =
+export const LEGACY_BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at";
-const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
+export const CONFIG_COLUMNS = `${BASE_COLUMNS}, on_finish_first_message, on_finish_second_message, on_finish_second_send_at`;
 const PREVIEW_COLUMNS = "id, n, designacion_y_ubicacion";
 
-type DbObraRow = {
+export type DbObraRow = {
 	id: string;
 	n: number;
 	designacion_y_ubicacion: string;
@@ -41,7 +41,7 @@ type DbObraPreviewRow = {
 	designacion_y_ubicacion: string;
 };
 
-function mapDbRowToObra(row: DbObraRow) {
+export function mapDbRowToObra(row: DbObraRow) {
 	return {
 		id: row.id,
 		n: row.n,
@@ -92,7 +92,7 @@ function warnQueryError(
 	});
 }
 
-function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
+export function sanitizeColumns(raw: unknown): ExcelPageMainTableColumnConfig[] {
 	if (!Array.isArray(raw)) return [];
 	const next: ExcelPageMainTableColumnConfig[] = [];
 	for (const item of raw) {
