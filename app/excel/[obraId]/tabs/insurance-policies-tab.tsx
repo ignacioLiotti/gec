@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ObraDestinationCombobox } from "@/components/obra-destination-combobox";
 import { cn } from "@/lib/utils";
 
 type RuleType = "on_finish" | "days_after" | "months_after";
@@ -1433,28 +1434,13 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 						</div>
 						<label className="block space-y-1.5">
 							<span className="text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">Obra destino</span>
-							<Select
+							<ObraDestinationCombobox
+								obras={obras}
 								value={moveTargetObraId}
-								onValueChange={setMoveTargetObraId}
+								onChange={setMoveTargetObraId}
+								excludedObraId={movePolicy?.obra_id ?? obraId}
 								disabled={obrasQuery.isLoading}
-							>
-								<SelectTrigger className="h-10 w-full min-w-0 border-stone-200 bg-white text-sm text-stone-800">
-									<SelectValue placeholder={obrasQuery.isLoading ? "Cargando obras..." : "Seleccionar obra"} />
-								</SelectTrigger>
-								<SelectContent align="start" className="w-[var(--radix-select-trigger-width)] max-w-[min(42rem,calc(100vw-2rem))]">
-									{obras
-										.filter((obra) => obra.id !== (movePolicy?.obra_id ?? obraId))
-										.map((obra) => (
-											<SelectItem
-												key={obra.id}
-												value={obra.id}
-												className="w-full max-w-full whitespace-normal break-words pr-8 text-xs leading-snug"
-											>
-												{obra.n ?? "-"} - {obra.designacionYUbicacion}
-											</SelectItem>
-										))}
-								</SelectContent>
-							</Select>
+							/>
 						</label>
 					</div>
 					<DialogFooter>

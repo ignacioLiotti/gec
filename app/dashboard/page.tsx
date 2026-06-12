@@ -33,7 +33,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -42,6 +41,7 @@ import { FormTable } from "@/components/form-table/form-table";
 import type { ColumnDef, FetchRowsArgs, FormTableConfig, FormTableCsvExport, FormTableRow } from "@/components/form-table/types";
 import { QuickFormDialog, type QuickFormField } from "@/components/forms/quick-form-dialog";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
+import { ObraDestinationCombobox } from "@/components/obra-destination-combobox";
 import { toast } from "sonner";
 import { dashboardOverviewTour, demoConclusionTour } from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
@@ -1994,29 +1994,16 @@ function GlobalInsurancePoliciesPanel({
               </div>
               <label className="block space-y-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Obra destino</span>
-                <Select
+                <ObraDestinationCombobox
+                  obras={obras}
                   value={movePolicyDialog?.targetObraId ?? ""}
-                  onValueChange={(value) =>
+                  onChange={(value) =>
                     setMovePolicyDialog((current) =>
                       current ? { ...current, targetObraId: value } : current,
                     )
                   }
-                >
-                  <SelectTrigger className="h-10 w-full min-w-0 border-stone-200 bg-white text-sm text-stone-800">
-                    <SelectValue placeholder="Seleccionar obra" />
-                  </SelectTrigger>
-                  <SelectContent align="start" className="w-[var(--radix-select-trigger-width)] max-w-[min(42rem,calc(100vw-2rem))]">
-                    {obras.map((obra) => (
-                      <SelectItem
-                        key={obra.id}
-                        value={obra.id}
-                        className="w-full max-w-full whitespace-normal break-words pr-8 text-xs leading-snug"
-                      >
-                        {obra.n} - {obra.designacionYUbicacion}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  excludedObraId={movePolicyDialog?.policy.obraId}
+                />
               </label>
             </div>
             <DialogFooter>
