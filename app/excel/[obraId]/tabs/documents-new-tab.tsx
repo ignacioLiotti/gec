@@ -1057,7 +1057,11 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				throw new Error(payload.error || "No se pudo enviar a papelera");
 			}
 
-			const deletedPaths = new Set(payload.deletedPaths ?? [storagePath]);
+			const deletedPaths = new Set<string>(
+				Array.isArray(payload.deletedPaths)
+					? payload.deletedPaths.filter((path: unknown): path is string => typeof path === "string")
+					: [storagePath],
+			);
 			setSignedUrls((current) => {
 				const next = { ...current };
 				for (const path of deletedPaths) {

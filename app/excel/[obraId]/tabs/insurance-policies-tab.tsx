@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 type RuleType = "on_finish" | "days_after" | "months_after";
@@ -582,6 +583,64 @@ function EmptyPolicyDetailState({ onImportHint }: { onImportHint: () => void }) 
 	);
 }
 
+function LoadingPolicyListState() {
+	return (
+		<div className="space-y-1 p-2" aria-label="Cargando polizas">
+			{Array.from({ length: 5 }).map((_, index) => (
+				<div key={index} className="flex min-h-[72px] items-center gap-3 rounded-lg bg-white px-3 py-3">
+					<Skeleton className="size-8 shrink-0 rounded-full" />
+					<div className="min-w-0 flex-1 space-y-2">
+						<Skeleton className="h-4 w-32" />
+						<Skeleton className="h-3 w-20" />
+					</div>
+					<div className="space-y-2">
+						<Skeleton className="ml-auto h-3 w-16" />
+						<Skeleton className="ml-auto h-3 w-10" />
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function LoadingPolicyDetailState() {
+	return (
+		<div className="min-h-[560px]" aria-label="Cargando detalle de poliza">
+			<div className="flex items-start justify-between gap-6 border-b border-stone-200 bg-gradient-to-b from-stone-50 to-white px-6 py-5">
+				<div className="flex min-w-0 flex-1 items-start gap-4">
+					<Skeleton className="size-11 shrink-0 rounded-xl" />
+					<div className="min-w-0 flex-1 space-y-3">
+						<div className="flex gap-2">
+							<Skeleton className="h-3 w-16" />
+							<Skeleton className="h-3 w-20" />
+							<Skeleton className="h-3 w-12" />
+						</div>
+						<Skeleton className="h-8 w-48" />
+						<Skeleton className="h-3 w-56" />
+						<Skeleton className="h-10 max-w-4xl" />
+					</div>
+				</div>
+				<div className="flex shrink-0 gap-2">
+					<Skeleton className="h-10 w-20 rounded-lg" />
+					<Skeleton className="h-10 w-28 rounded-lg" />
+				</div>
+			</div>
+			<div className="space-y-4 px-5 py-5">
+				<Skeleton className="h-[116px] rounded-xl" />
+				<div className="grid gap-4 md:grid-cols-2">
+					{Array.from({ length: 6 }).map((_, index) => (
+						<div key={index} className="min-h-[104px] rounded-xl border border-stone-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+							<Skeleton className="h-3 w-32" />
+							<Skeleton className="mt-5 h-6 w-40" />
+							<Skeleton className="mt-2 h-3 w-56" />
+						</div>
+					))}
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 	const queryClient = useQueryClient();
 	const [form, setForm] = useState(EMPTY_POLICY_FORM);
@@ -659,6 +718,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 	const users = recipientsQuery.data?.users ?? [];
 	const obras = obrasQuery.data ?? [];
 	const responsibleUserIds = settingsQuery.data?.responsibleUserIds ?? [];
+	const isInitialPoliciesLoading = policiesQuery.isLoading && !policiesQuery.data;
 
 	const policyItems = useMemo(() => {
 		return policies.map((policy) => {
@@ -915,77 +975,83 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 				</div>
 
 				<div className="max-h-[420px] overflow-y-auto bg-stone-50 lg:max-h-[calc(85vh-360px)] shadow-card m-4">
-					{renderedPolicyItems.map((item) => {
-						const { policy, status, dueDate, dueDays: days } = item;
-						const active = selectedPolicy?.id === policy.id;
-						return (
-							<button
-								key={policy.id}
-								type="button"
-								className={cn(
-									"relative flex min-h-[72px] w-full items-center gap-3 px-5 py-3 text-left transition-all duration-300 ease-out hover:bg-stone-100 hover:outline",
-									active && selectedPolicyRowClasses(status),
-								)}
-								onClick={() => setSelectedPolicyId(policy.id)}
-							>
-								<span
-									className={cn(
-										"flex size-8 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 ease-out",
-										statusClasses(status),
-										active && statusRingClasses(status),
-									)}
-									title={listStatusDescription(status)}
-								>
-									<StatusIcon status={status} className={status === "expired" ? "size-3.5" : "size-3"} />
-								</span>
-								<span className="min-w-0 flex-1">
-									<span className="flex min-w-0 items-center gap-1.5">
-										<span className="truncate text-[15px] font-bold text-stone-900">{policy.policy_number}</span>
-										{policy.section ? (
-											<span className="shrink-0 rounded-md border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-stone-600">
-												{policy.section}
-											</span>
-										) : null}
-										{status !== "active" ? (
-											<span
-												className={cn(
-													"shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors duration-300 ease-out",
-													statusPillClasses(status),
-												)}
-											>
-												{listStatusLabel(policy, status)}
-											</span>
-										) : null}
-									</span>
-								</span>
-								<span className="text-right">
-									<span className="block text-[11px] font-semibold text-stone-500">{formatDisplayDate(dueDate)}</span>
-									{days !== null ? (
+					{isInitialPoliciesLoading ? (
+						<LoadingPolicyListState />
+					) : (
+						<>
+							{renderedPolicyItems.map((item) => {
+								const { policy, status, dueDate, dueDays: days } = item;
+								const active = selectedPolicy?.id === policy.id;
+								return (
+									<button
+										key={policy.id}
+										type="button"
+										className={cn(
+											"relative flex min-h-[72px] w-full items-center gap-3 px-5 py-3 text-left transition-all duration-300 ease-out hover:bg-stone-100 hover:outline",
+											active && selectedPolicyRowClasses(status),
+										)}
+										onClick={() => setSelectedPolicyId(policy.id)}
+									>
 										<span
 											className={cn(
-												"block text-[10px] font-bold transition-colors duration-300 ease-out",
-												statusAccentClasses(status),
+												"flex size-8 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 ease-out",
+												statusClasses(status),
+												active && statusRingClasses(status),
 											)}
+											title={listStatusDescription(status)}
 										>
-											{days < 0 ? `${Math.abs(days)}d tarde` : `${days}d`}
+											<StatusIcon status={status} className={status === "expired" ? "size-3.5" : "size-3"} />
 										</span>
-									) : null}
-								</span>
-							</button>
-						);
-					})}
-					{policiesTotal > renderedPolicyItems.length ? (
-						<div className="px-4 py-3 text-center text-xs text-stone-500">
-							Mostrando {renderedPolicyItems.length} de {policiesTotal}. Usa busqueda o filtros para acotar.
-						</div>
-					) : null}
-					{visiblePolicyItems.length === 0 ? (
-						policies.length === 0 ? (
-							<EmptyPolicyListState onImportHint={showImportHint} />
-						) : (
-							<div className="px-4 py-12 text-center text-sm font-medium text-stone-500">No hay resultados.</div>
-						)
-					) : null}
+										<span className="min-w-0 flex-1">
+											<span className="flex min-w-0 items-center gap-1.5">
+												<span className="truncate text-[15px] font-bold text-stone-900">{policy.policy_number}</span>
+												{policy.section ? (
+													<span className="shrink-0 rounded-md border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-stone-600">
+														{policy.section}
+													</span>
+												) : null}
+												{status !== "active" ? (
+													<span
+														className={cn(
+															"shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors duration-300 ease-out",
+															statusPillClasses(status),
+														)}
+													>
+														{listStatusLabel(policy, status)}
+													</span>
+												) : null}
+											</span>
+										</span>
+										<span className="text-right">
+											<span className="block text-[11px] font-semibold text-stone-500">{formatDisplayDate(dueDate)}</span>
+											{days !== null ? (
+												<span
+													className={cn(
+														"block text-[10px] font-bold transition-colors duration-300 ease-out",
+														statusAccentClasses(status),
+													)}
+												>
+													{days < 0 ? `${Math.abs(days)}d tarde` : `${days}d`}
+												</span>
+											) : null}
+										</span>
+									</button>
+								);
+							})}
+							{policiesTotal > renderedPolicyItems.length ? (
+								<div className="px-4 py-3 text-center text-xs text-stone-500">
+									Mostrando {renderedPolicyItems.length} de {policiesTotal}. Usa busqueda o filtros para acotar.
+								</div>
+							) : null}
+							{visiblePolicyItems.length === 0 ? (
+								policies.length === 0 ? (
+									<EmptyPolicyListState onImportHint={showImportHint} />
+								) : (
+									<div className="px-4 py-12 text-center text-sm font-medium text-stone-500">No hay resultados.</div>
+								)
+							) : null}
+						</>
+					)}
 				</div>
 
 				<div className="m-3 rounded-lg border border-stone-200 bg-white p-3 shadow-sm">
@@ -1019,7 +1085,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 			</aside>
 
 			<section className="min-w-0 overflow-hidden rounded-xl bg-white shadow-card m-0.5">
-				{selectedPolicy && selectedDraft ? (
+				{isInitialPoliciesLoading ? (
+					<LoadingPolicyDetailState />
+				) : selectedPolicy && selectedDraft ? (
 					<>
 						<div className={cn(
 							"flex items-start justify-between gap-6 border-b border-stone-200 bg-gradient-to-b px-6 py-5 transition-[background-color,border-color,box-shadow] duration-500 ease-out",
