@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler } from "react";
 import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -17,6 +17,7 @@ import {
 	RefreshCw,
 	Search,
 	Table2,
+	Trash2,
 	XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -506,10 +507,12 @@ function FolderThumbnail({
 	item,
 	onClick,
 	onPrefetch,
+	onContextMenu,
 }: {
 	item: FileSystemItem;
 	onClick: () => void;
 	onPrefetch: () => void;
+	onContextMenu?: MouseEventHandler<HTMLButtonElement>;
 }) {
 	const isOcrEnabled = Boolean(item.ocrEnabled);
 	const hasContent =
@@ -524,6 +527,7 @@ function FolderThumbnail({
 				onClick={onClick}
 				onMouseEnter={onPrefetch}
 				onFocus={onPrefetch}
+				onContextMenu={onContextMenu}
 				className={cn(
 					"relative ml-1 mb-1 flex h-[85px] w-[120px] flex-col items-start gap-2 rounded-lg border p-3 pb-1 transition-colors",
 					isOcrEnabled ? "bg-linear-to-b from-amber-500 to-amber-700" : "bg-linear-to-b from-stone-500 to-stone-700",
@@ -566,6 +570,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const [selectedDocument, setSelectedDocument] = useState<FileSystemItem | null>(null);
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 	const [isDocumentSheetOpen, setIsDocumentSheetOpen] = useState(false);
+	const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FileSystemItem } | null>(null);
+	const [itemToDelete, setItemToDelete] = useState<FileSystemItem | null>(null);
+	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+	const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 	const reprocessAllAbortRef = useRef(false);
 	const previewRequestIdRef = useRef(0);
 
@@ -751,6 +759,20 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		}
 		setActiveOcrTablaIdOverride(activeFolderLinks[0]?.tablaId ?? null);
 	}, [activeFolderLinks, activeOcrTablaIdOverride]);
+
+	useEffect(() => {
+		if (!contextMenu) return;
+		const close = () => setContextMenu(null);
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setContextMenu(null);
+		};
+		window.addEventListener("click", close);
+		window.addEventListener("keydown", closeOnEscape);
+		return () => {
+			window.removeEventListener("click", close);
+			window.removeEventListener("keydown", closeOnEscape);
+		};
+	}, [contextMenu]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -999,6 +1021,78 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		}
 	}, []);
 
+	const resolveDeleteStoragePath = useCallback((item: FileSystemItem) => {
+		if (item.storagePath) return normalizeFolderPath(item.storagePath);
+		const relativePath = getRelativeFolderPath(item);
+		if (!relativePath) return item.type === "folder" ? obraId : "";
+		return normalizeFolderPath(`${obraId}/${relativePath}`);
+	}, [obraId]);
+
+	const confirmDeleteItem = useCallback((item: FileSystemItem) => {
+		setContextMenu(null);
+		setItemToDelete(item);
+		setIsDeleteDialogOpen(true);
+	}, []);
+
+	const handleDeleteItem = useCallback(async () => {
+		if (!itemToDelete || deletingItemId) return;
+		const storagePath = resolveDeleteStoragePath(itemToDelete);
+		if (!storagePath) {
+			toast.error("No se pudo resolver la ruta del elemento.");
+			return;
+		}
+
+		setDeletingItemId(itemToDelete.id);
+		try {
+			const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/deletes`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					itemType: itemToDelete.type,
+					storagePath,
+				}),
+			});
+			const payload = await response.json().catch(() => ({} as { error?: string; deletedPaths?: string[] }));
+			if (!response.ok) {
+				throw new Error(payload.error || "No se pudo enviar a papelera");
+			}
+
+			const deletedPaths = new Set(payload.deletedPaths ?? [storagePath]);
+			setSignedUrls((current) => {
+				const next = { ...current };
+				for (const path of deletedPaths) {
+					delete next[path];
+				}
+				return next;
+			});
+
+			if (selectedDocument?.id === itemToDelete.id) {
+				handleDocumentSheetOpenChange(false);
+			}
+			await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] });
+			if (activeOcrTablaId) {
+				await tablaRowsQuery.refetch();
+			}
+			toast.success(itemToDelete.type === "folder" ? "Carpeta enviada a papelera." : "Archivo enviado a papelera.");
+			setIsDeleteDialogOpen(false);
+			setItemToDelete(null);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "No se pudo enviar a papelera");
+		} finally {
+			setDeletingItemId(null);
+		}
+	}, [
+		activeOcrTablaId,
+		deletingItemId,
+		handleDocumentSheetOpenChange,
+		itemToDelete,
+		obraId,
+		queryClient,
+		resolveDeleteStoragePath,
+		selectedDocument?.id,
+		tablaRowsQuery,
+	]);
+
 	const selectedDocumentIndex = selectedDocument
 		? files.findIndex((file) => file.id === selectedDocument.id)
 		: -1;
@@ -1043,6 +1137,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 								item={folder}
 								onClick={() => openFolder(folder)}
 								onPrefetch={() => prefetchFolder(folder)}
+								onContextMenu={(event) => {
+									event.preventDefault();
+									setContextMenu({ x: event.clientX, y: event.clientY, item: folder });
+								}}
 							/>
 						))}
 					</div>
@@ -1064,6 +1162,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 								className="group relative flex h-[145px] w-[120px] flex-col items-start gap-2 rounded-none border bg-stone-100 p-3 text-left transition-colors"
 								title={item.name}
 								onClick={() => void handleOpenDocumentPreview(item)}
+								onContextMenu={(event) => {
+									event.preventDefault();
+									setContextMenu({ x: event.clientX, y: event.clientY, item });
+								}}
 							>
 								<span className="absolute top-0 right-0 z-10 border-8 border-stone-300 bg-stone-100" />
 								<span className="absolute top-[-1px] right-[-1px] z-10 border-8 border-b-transparent border-l-transparent border-white bg-stone-200" />
@@ -1314,6 +1416,63 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				onNextDocument={nextDocument ? () => void handleOpenDocumentPreview(nextDocument) : null}
 				documentPositionLabel={documentPositionLabel}
 			/>
+
+			{contextMenu ? (
+				<div
+					className="fixed z-50 min-w-[190px] rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+					style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
+					onClick={(event) => event.stopPropagation()}
+				>
+					<button
+						type="button"
+						className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50"
+						onClick={() => confirmDeleteItem(contextMenu.item)}
+					>
+						<Trash2 className="size-4" />
+						Enviar a papelera
+					</button>
+				</div>
+			) : null}
+
+			<Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
+				if (deletingItemId) return;
+				setIsDeleteDialogOpen(open);
+				if (!open) setItemToDelete(null);
+			}}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Enviar a papelera</DialogTitle>
+						<DialogDescription>
+							{itemToDelete?.type === "folder"
+								? `Se va a enviar la carpeta "${itemToDelete.name}" y sus archivos a la papelera.`
+								: `Se va a enviar "${itemToDelete?.name ?? "este archivo"}" a la papelera.`}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="secondary"
+							disabled={Boolean(deletingItemId)}
+							onClick={() => {
+								setIsDeleteDialogOpen(false);
+								setItemToDelete(null);
+							}}
+						>
+							Cancelar
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							disabled={!itemToDelete || Boolean(deletingItemId)}
+							onClick={() => void handleDeleteItem()}
+							className="gap-2"
+						>
+							{deletingItemId ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+							Enviar a papelera
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 
 			<Dialog open={isReprocessAllConfirmOpen} onOpenChange={(open) => { if (!isReprocessingAll) setIsReprocessAllConfirmOpen(open); }}>
 				<DialogContent>

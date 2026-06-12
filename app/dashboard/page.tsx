@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -222,6 +223,7 @@ type InsurancePolicyTableRow = FormTableRow & {
   cancellationConfirmedAt: string | null;
   cancellationNotes: string;
   isCancelled: boolean;
+  moveAction: string;
 };
 
 type InsurancePolicyGroupRow = FormTableRow & {
@@ -750,6 +752,7 @@ function toInsurancePolicyTableRow(policy: GlobalInsurancePolicy): InsurancePoli
     cancellationConfirmedAt: policy.cancellation_confirmed_at?.slice(0, 10) ?? null,
     cancellationNotes: policy.cancellation_notes ?? "",
     isCancelled: policy.is_cancelled,
+    moveAction: "",
   };
   row.operationalStatus = getPolicyOperationalStatus(row).label;
   return row;
@@ -1131,6 +1134,8 @@ function GlobalInsurancePoliciesPanel({
   const [groupBy, setGroupBy] = useState<InsurancePolicyGroupBy>("obra");
   const [statusFilter, setStatusFilter] = useState<InsurancePolicyStatusFilter>("all");
   const [quickFilter, setQuickFilter] = useState<InsurancePolicyQuickFilter>("none");
+  const [movePolicyDialog, setMovePolicyDialog] = useState<{ policy: InsurancePolicyTableRow; targetObraId: string } | null>(null);
+  const [movingPolicyId, setMovingPolicyId] = useState<string | null>(null);
   const policiesQuery = useQuery({
     queryKey: ["insurance-policies", "related", statusFilter, groupBy, quickFilter],
     enabled: groupBy !== "none",
@@ -1268,6 +1273,33 @@ function GlobalInsurancePoliciesPanel({
     toast.success("Polizas borradas");
   }, [policiesQuery, queryClient, summaryQuery]);
 
+  const openMovePolicyDialog = useCallback((policy: InsurancePolicyTableRow) => {
+    setMovePolicyDialog({ policy, targetObraId: policy.obraId ?? "" });
+  }, []);
+
+  const handleMovePolicy = useCallback(async () => {
+    if (!movePolicyDialog || !movePolicyDialog.targetObraId) return;
+    setMovingPolicyId(movePolicyDialog.policy.id);
+    try {
+      const response = await fetch(`/api/insurance-policies/${movePolicyDialog.policy.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ obraId: movePolicyDialog.targetObraId }),
+      });
+      if (!response.ok) {
+        throw new Error(await getResponseErrorMessage(response, "No se pudo mover la poliza"));
+      }
+      await handleRefresh();
+      await refetchPolicySummary();
+      setMovePolicyDialog(null);
+      toast.success("Poliza movida a otra obra");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo mover la poliza");
+    } finally {
+      setMovingPolicyId(null);
+    }
+  }, [handleRefresh, movePolicyDialog, refetchPolicySummary]);
+
   const policyTableColumns = useMemo<ColumnDef<InsurancePolicyTableRow>[]>(() => [
     { id: "policyNumber", label: "Poliza", field: "policyNumber", editable: true, width: 150 },
     {
@@ -1361,7 +1393,32 @@ function GlobalInsurancePoliciesPanel({
       cellConfig: { clearActiveCellOnBlur: true },
     },
     { id: "isCancelled", label: "Dada de baja", field: "isCancelled", cellType: "checkbox", editable: true, width: 120 },
-  ], [obras]);
+    {
+      id: "movePolicy",
+      label: "Mover",
+      field: "moveAction",
+      editable: false,
+      enableSort: false,
+      width: 96,
+      cellConfig: {
+        renderReadOnly: ({ row }) => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 px-2 text-xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              openMovePolicyDialog(row);
+            }}
+          >
+            <ArrowRight className="size-3.5" />
+            Mover
+          </Button>
+        ),
+      },
+    },
+  ], [obras, openMovePolicyDialog]);
 
   const policyTableConfig = useMemo<FormTableConfig<InsurancePolicyTableRow, InsurancePolicyFilters>>(() => ({
     tableId: `dashboard-insurance-related-${statusFilter}-${quickFilter}`,
@@ -1597,6 +1654,7 @@ function GlobalInsurancePoliciesPanel({
                 <TableHead>Baja solicitada</TableHead>
                 <TableHead>Baja confirmada</TableHead>
                 <TableHead>Dada de baja</TableHead>
+                <TableHead>Mover</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1640,6 +1698,18 @@ function GlobalInsurancePoliciesPanel({
                   <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.cancellationRequestedAt)}</TableCell>
                   <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.cancellationConfirmedAt)}</TableCell>
                   <TableCell className="px-3 py-2">{policy.isCancelled ? "Si" : "No"}</TableCell>
+                  <TableCell className="px-3 py-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onClick={() => openMovePolicyDialog(policy)}
+                    >
+                      <ArrowRight className="size-3.5" />
+                      Mover
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1659,7 +1729,7 @@ function GlobalInsurancePoliciesPanel({
         );
       },
     },
-  }), [groupBy, groupTableColumns, groupedRows, quickFilter, statusFilter]);
+  }), [groupBy, groupTableColumns, groupedRows, openMovePolicyDialog, quickFilter, statusFilter]);
 
   return (
     <Card className="overflow-hidden rounded-xl border-0 bg-transparent pt-0 shadow-none gap-0">
@@ -1907,6 +1977,73 @@ function GlobalInsurancePoliciesPanel({
             />
           )}
         </div>
+        <Dialog open={Boolean(movePolicyDialog)} onOpenChange={(open) => {
+          if (movingPolicyId) return;
+          if (!open) setMovePolicyDialog(null);
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Mover poliza a otra obra</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+                <p className="font-semibold text-stone-900">{movePolicyDialog?.policy.policyNumber ?? "Poliza"}</p>
+                <p className="mt-0.5 truncate text-xs text-stone-500">
+                  Actual: {movePolicyDialog?.policy.obra || "Sin obra asignada"}
+                </p>
+              </div>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Obra destino</span>
+                <Select
+                  value={movePolicyDialog?.targetObraId ?? ""}
+                  onValueChange={(value) =>
+                    setMovePolicyDialog((current) =>
+                      current ? { ...current, targetObraId: value } : current,
+                    )
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full min-w-0 border-stone-200 bg-white text-sm text-stone-800">
+                    <SelectValue placeholder="Seleccionar obra" />
+                  </SelectTrigger>
+                  <SelectContent align="start" className="w-[var(--radix-select-trigger-width)] max-w-[min(42rem,calc(100vw-2rem))]">
+                    {obras.map((obra) => (
+                      <SelectItem
+                        key={obra.id}
+                        value={obra.id}
+                        className="w-full max-w-full whitespace-normal break-words pr-8 text-xs leading-snug"
+                      >
+                        {obra.n} - {obra.designacionYUbicacion}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={Boolean(movingPolicyId)}
+                onClick={() => setMovePolicyDialog(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="gap-2"
+                disabled={
+                  !movePolicyDialog?.targetObraId ||
+                  movePolicyDialog.targetObraId === movePolicyDialog.policy.obraId ||
+                  movingPolicyId === movePolicyDialog?.policy.id
+                }
+                onClick={() => void handleMovePolicy()}
+              >
+                {movingPolicyId === movePolicyDialog?.policy.id ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+                Mover
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

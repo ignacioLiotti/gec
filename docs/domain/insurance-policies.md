@@ -112,6 +112,10 @@ El importador de Excel hace una vista previa antes de persistir. Cada fila debe 
 
 Las filas sin numero de poliza siguen siendo errores bloqueantes. Las filas `unmatched` no bloquean la confirmacion y no aparecen en el detalle de una obra hasta ser asignadas.
 
+## Reasignacion entre obras
+
+Una poliza ya asociada puede moverse a otra obra del mismo tenant cuando la importacion o carga manual quedo vinculada a una obra incorrecta. La reasignacion actualiza el `obra_id`, mantiene la poliza como origen de verdad y vuelve a sincronizar la macrotabla de polizas para la obra anterior y la nueva.
+
 ## Macrotabla
 
 La macrotabla de polizas es una proyeccion sincronizada desde `insurance_policies` + `obras`, no una copia editable separada. Por eso refleja el estado actual de obra, fecha de finalizacion de obra, fecha calculada de baja y baja de poliza.

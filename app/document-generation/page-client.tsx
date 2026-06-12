@@ -1449,13 +1449,25 @@ export function DocumentGenerationPageClient({
     await loadBootstrap({ workId, folderPath: value, documentType: nextDocumentType || undefined });
   };
 
+  const commitInputData = useCallback((nextData: Record<string, unknown>) => {
+    inlineInputDataRef.current = nextData;
+    setInputData(nextData);
+  }, []);
+
+  const updateInputDataFromLatest = useCallback((updater: (current: Record<string, unknown>) => Record<string, unknown>) => {
+    const nextData = updater(inlineInputDataRef.current);
+    inlineInputDataRef.current = nextData;
+    setInputData(nextData);
+    return nextData;
+  }, []);
+
   const handleTemplateChange = (value: string) => {
     setTemplateId(value);
     setValidationErrors([]);
     const nextTemplate = templates.find((template) => template.id === value) ?? null;
     if (!nextTemplate) return;
-    setInputData(
-      applyTemplateAutoInputData(nextTemplate.schema, buildInitialInputData(nextTemplate.schema, inputData), {
+    commitInputData(
+      applyTemplateAutoInputData(nextTemplate.schema, buildInitialInputData(nextTemplate.schema, inlineInputDataRef.current), {
         selectedContextId: workId,
         selectedContextLabel: workLabel,
         documentType,
@@ -1465,7 +1477,7 @@ export function DocumentGenerationPageClient({
   };
 
   const handleFieldChange = (field: TemplateField, value: string) => {
-    setInputData((current) => (current[field.key] === value ? current : {
+    updateInputDataFromLatest((current) => (current[field.key] === value ? current : {
       ...current,
       [field.key]: value,
     }));
@@ -1482,7 +1494,7 @@ export function DocumentGenerationPageClient({
     value: string,
     token?: string,
   ) => {
-    setInputData((current) => {
+    updateInputDataFromLatest((current) => {
       const rows = readRepeatableRows(current, groupKey).slice();
       while (rows.length <= rowIndex) {
         rows.push({});
@@ -1599,18 +1611,22 @@ export function DocumentGenerationPageClient({
   };
 
   const addRepeatableRow = (groupKey: string, fields: TemplateField[]) => {
-    setInputData((current) => ({
+    updateInputDataFromLatest((current) => ({
       ...current,
       [groupKey]: [...readRepeatableRows(current, groupKey), createRepeatableRow(fields)],
     }));
   };
 
   const duplicateRepeatableRow = (groupKey: string, rowIndex: number) => {
-    setInputData((current) => {
+    updateInputDataFromLatest((current) => {
       const rows = readRepeatableRows(current, groupKey);
       const next = rows.slice();
       const source = rows[rowIndex];
-      next.splice(rowIndex + 1, 0, source);
+      const duplicate =
+        source && typeof source === "object" && !Array.isArray(source)
+          ? { ...(source as Record<string, unknown>) }
+          : source;
+      next.splice(rowIndex + 1, 0, duplicate);
       return {
         ...current,
         [groupKey]: next,
@@ -1619,7 +1635,7 @@ export function DocumentGenerationPageClient({
   };
 
   const removeRepeatableRow = (groupKey: string, rowIndex: number) => {
-    setInputData((current) => ({
+    updateInputDataFromLatest((current) => ({
       ...current,
       [groupKey]: readRepeatableRows(current, groupKey).filter((_, index) => index !== rowIndex),
     }));
@@ -1737,8 +1753,9 @@ export function DocumentGenerationPageClient({
       setDraftId(payload.draft.id);
       setDraftStatus(payload.draft.status);
       setValidationErrors(payload.draft.validation_errors ?? []);
-      setInputData(payload.draft.input_data ?? currentInputData);
-      await persistCreatableOptions(payload.draft.input_data ?? currentInputData);
+      const nextInputData = payload.draft.input_data ?? currentInputData;
+      commitInputData(nextInputData);
+      await persistCreatableOptions(nextInputData);
       toast.success("Borrador guardado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo guardar el borrador");
