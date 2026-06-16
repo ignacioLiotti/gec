@@ -131,6 +131,15 @@ type MacroAccordionSort = {
   columnId: string;
   direction: "asc" | "desc";
 } | null;
+type MacroAccordionCellDraft = {
+  sourceRowId: string;
+  columnId: string;
+  value: unknown;
+};
+
+function getMacroAccordionCellDraftKey(rowId: string, columnId: string) {
+  return `${rowId}::${columnId}`;
+}
 
 type InsurancePolicyPreviewRow = {
   rowNumber: number;
@@ -378,18 +387,22 @@ function handleMacroAccordionKeyDown(event: React.KeyboardEvent<HTMLTableElement
   focusMacroAccordionCell(table, nextRowIndex, nextColumnIndex);
 }
 
-function MacroAccordionCell({
-  row,
-  column,
-  editable,
-  onSave,
-}: {
+function MacroAccordionCell(props: {
   row: MacroRow;
   column: MacroDisplayColumn;
   editable: boolean;
+  value?: unknown;
+  onChangeValue?: (value: unknown) => void;
   onSave: (args: { rowId: string; columnId: string; value: unknown }) => Promise<void>;
 }) {
-  const rawValue = row[column.id];
+  const {
+    row,
+    column,
+    editable,
+    onChangeValue,
+    onSave,
+  } = props;
+  const rawValue = "value" in props ? props.value : row[column.id];
   const [value, setValue] = useState(() =>
     normalizeEditableCellValue(rawValue, column.dataType)
   );
@@ -401,6 +414,7 @@ function MacroAccordionCell({
 
   const commit = useCallback(
     async (nextValue: unknown = value) => {
+      if (onChangeValue) return;
       const normalizedOriginal = normalizeEditableCellValue(rawValue, column.dataType);
       if (String(nextValue) === String(normalizedOriginal)) return;
       setIsSaving(true);
@@ -414,7 +428,7 @@ function MacroAccordionCell({
         setIsSaving(false);
       }
     },
-    [column.dataType, column.id, onSave, rawValue, row.id, value]
+    [column.dataType, column.id, onChangeValue, onSave, rawValue, row.id, value]
   );
 
   if (!editable) {
@@ -431,7 +445,11 @@ function MacroAccordionCell({
         onChange={(event) => {
           const nextValue = event.currentTarget.checked;
           setValue(nextValue);
-          void commit(nextValue);
+          if (onChangeValue) {
+            onChangeValue(nextValue);
+          } else {
+            void commit(nextValue);
+          }
         }}
         className="size-4 rounded border-stone-300"
       />
@@ -443,8 +461,14 @@ function MacroAccordionCell({
       type={column.dataType === "date" ? "date" : "text"}
       value={String(value)}
       disabled={isSaving}
-      onChange={(event) => setValue(event.currentTarget.value)}
-      onBlur={() => void commit()}
+      onChange={(event) => {
+        const nextValue = event.currentTarget.value;
+        setValue(nextValue);
+        onChangeValue?.(nextValue);
+      }}
+      onBlur={() => {
+        if (!onChangeValue) void commit();
+      }}
       className="h-8 min-w-36 bg-white"
     />
   );
@@ -506,11 +530,19 @@ function MacroAccordionDetailTable({
   rows,
   columns,
   isEditableColumn,
+  drafts,
+  onChangeCell,
   onSaveCell,
 }: {
   rows: MacroRow[];
   columns: MacroDisplayColumn[];
   isEditableColumn: (column: MacroDisplayColumn) => boolean;
+  drafts?: Record<string, MacroAccordionCellDraft>;
+  onChangeCell?: (args: {
+    row: MacroRow;
+    column: MacroDisplayColumn;
+    value: unknown;
+  }) => void;
   onSaveCell: (args: { rowId: string; columnId: string; value: unknown }) => Promise<void>;
 }) {
   const [sort, setSort] = useState<MacroAccordionSort>(null);
@@ -607,12 +639,25 @@ function MacroAccordionDetailTable({
                     tabIndex={-1}
                     className="border-b border-stone-100 px-3 py-2 focus:outline focus:outline-2 focus:outline-orange-primary"
                   >
-                    <MacroAccordionCell
-                      row={childRow}
-                      column={column}
-                      editable={isEditableColumn(column)}
-                      onSave={onSaveCell}
-                    />
+                    {(() => {
+                      const draftKey = getMacroAccordionCellDraftKey(childRow.id, column.id);
+                      const draft = drafts?.[draftKey];
+                      const controlledProps = onChangeCell
+                        ? {
+                          value: draft ? draft.value : childRow[column.id],
+                          onChangeValue: (value: unknown) => onChangeCell({ row: childRow, column, value }),
+                        }
+                        : {};
+                      return (
+                        <MacroAccordionCell
+                          row={childRow}
+                          column={column}
+                          editable={isEditableColumn(column)}
+                          {...controlledProps}
+                          onSave={onSaveCell}
+                        />
+                      );
+                    })()}
                   </td>
                 ))}
               </tr>
@@ -785,6 +830,8 @@ function MacroTablePanel({
   const queryParams = new URLSearchParams(searchParams);
   const getSearchParam = (key: string): string | null => queryParams.get(key);
   const queryClient = useQueryClient();
+  const [accordionCellDrafts, setAccordionCellDrafts] = useState<Record<string, MacroAccordionCellDraft>>({});
+  const accordionCellDraftCount = Object.keys(accordionCellDrafts).length;
   const columns = useMemo(() => macroTable.columns ?? [], [macroTable.columns]);
   const displayColumns = useMemo<MacroDisplayColumn[]>(() => {
     return columns.map((column) => {
@@ -830,6 +877,47 @@ function MacroTablePanel({
     () => displayColumns.find(isMacroAccordionGroupColumn) ?? null,
     [displayColumns]
   );
+  const stageAccordionCellChange = useCallback(
+    ({
+      row,
+      column,
+      value,
+    }: {
+      row: MacroRow;
+      column: MacroDisplayColumn;
+      value: unknown;
+    }) => {
+      const key = getMacroAccordionCellDraftKey(row.id, column.id);
+      const originalValue = normalizeEditableCellValue(row[column.id], column.dataType);
+      setAccordionCellDrafts((current) => {
+        const hasDraft = Object.prototype.hasOwnProperty.call(current, key);
+        if (String(value) === String(originalValue)) {
+          if (!hasDraft) return current;
+          const next = { ...current };
+          delete next[key];
+          return next;
+        }
+        const existing = current[key];
+        if (existing && String(existing.value) === String(value)) {
+          return current;
+        }
+        return {
+          ...current,
+          [key]: {
+            sourceRowId: row.id,
+            columnId: column.id,
+            value,
+          },
+        };
+      });
+    },
+    []
+  );
+  const clearAccordionCellDrafts = useCallback(() => {
+    setAccordionCellDrafts((current) =>
+      Object.keys(current).length === 0 ? current : {}
+    );
+  }, []);
 
   const fetchRows = useCallback(
     async ({
@@ -969,16 +1057,34 @@ function MacroTablePanel({
         columnId: string;
         value: unknown;
       }> = [];
+      const addCustomValue = (value: {
+        sourceRowId: string;
+        columnId: string;
+        value: unknown;
+      }) => {
+        const existingIndex = customValues.findIndex(
+          (item) =>
+            item.sourceRowId === value.sourceRowId &&
+            item.columnId === value.columnId
+        );
+        if (existingIndex >= 0) {
+          customValues[existingIndex] = value;
+        } else {
+          customValues.push(value);
+        }
+      };
 
       for (const row of dirtyRows) {
         for (const colId of editableColumnIds) {
-          customValues.push({
+          addCustomValue({
             sourceRowId: row.id,
             columnId: colId,
             value: row[colId],
           });
         }
       }
+
+      Object.values(accordionCellDrafts).forEach(addCustomValue);
 
       if (customValues.length === 0) return;
 
@@ -994,8 +1100,9 @@ function MacroTablePanel({
       }
 
       queryClient.invalidateQueries({ queryKey: ["macro-table-rows", tableId] });
+      clearAccordionCellDrafts();
     },
-    [columns, macroTable.id, queryClient]
+    [accordionCellDrafts, clearAccordionCellDrafts, columns, macroTable.id, queryClient]
   );
 
   const saveAccordionCell = useCallback(
@@ -1100,9 +1207,14 @@ function MacroTablePanel({
       enableColumnResizing: true,
       tableLayout: "auto",
       columns: columnDefs,
+      dirtyFields: accordionDetailColumns
+        .filter(isAccordionEditableColumn)
+        .map((column) => column.id),
       fetchRows,
       serverSideData: true,
+      externalUnsavedChanges: accordionCellDraftCount > 0,
       onSave,
+      onDiscardChanges: clearAccordionCellDrafts,
       searchPlaceholder: "Buscar certificados, obras o estados...",
       defaultPageSize: 50,
       pageSizeOptions: [25, 50, 100],
@@ -1175,7 +1287,7 @@ function MacroTablePanel({
                 </Button>
               );
             },
-            renderContent: (row: MacroTableRowData) => {
+            renderContent: (row: MacroTableRowData, accordion) => {
               const childRows = Array.isArray(row._macroAccordionRows)
                 ? row._macroAccordionRows
                 : [];
@@ -1188,6 +1300,8 @@ function MacroTablePanel({
                     rows={childRows}
                     columns={detailColumns}
                     isEditableColumn={isAccordionEditableColumn}
+                    drafts={accordionCellDrafts}
+                    onChangeCell={stageAccordionCellChange}
                     onSaveCell={saveAccordionCell}
                   />
                 );
@@ -1211,6 +1325,8 @@ function MacroTablePanel({
                           row={row}
                           column={column}
                           editable={isAccordionEditableColumn(column)}
+                          value={accordion.getValue(column.id)}
+                          onChangeValue={(value) => accordion.setValue(column.id, value)}
                           onSave={saveAccordionCell}
                         />
                       </p>
@@ -1231,8 +1347,11 @@ function MacroTablePanel({
       editMode: "active-cell",
     };
   }, [
+    accordionCellDraftCount,
+    accordionCellDrafts,
     accordionDetailColumns,
     accordionGroupColumn,
+    clearAccordionCellDrafts,
     displayColumns,
     fetchRows,
     fetchAllRowsForExport,
@@ -1244,6 +1363,7 @@ function MacroTablePanel({
     macroTable.name,
     onSave,
     saveAccordionCell,
+    stageAccordionCellChange,
     tableColumns,
   ]);
 

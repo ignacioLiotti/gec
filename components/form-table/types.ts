@@ -38,6 +38,18 @@ export type FormFieldComponent<Row extends FormTableRow> = (props: {
 	validators?: FieldValidators;
 }) => ReactNode;
 
+export type AccordionRowRenderContext<Row extends FormTableRow> = {
+	rowId: string;
+	FieldComponent: FormFieldComponent<Row>;
+	columnsById: Record<string, ColumnDef<Row>>;
+	getFieldName: (field: ColumnField<Row>) => `rowsById.${string}.${Extract<keyof Row, string>}`;
+	getValue: (field: ColumnField<Row>) => unknown;
+	setValue: (field: ColumnField<Row>, value: unknown) => void;
+	updateRow: (updater: (row: Row) => Row) => void;
+	isDirty: boolean;
+	isCellDirty: (column: ColumnDef<Row>) => boolean;
+};
+
 export type CellType =
 	| "text"
 	| "number"
@@ -124,7 +136,7 @@ export type CellConfig<Row extends FormTableRow> = {
 };
 
 export type AccordionRowConfig<Row extends FormTableRow> = {
-	renderContent: (row: Row) => ReactNode;
+	renderContent: (row: Row, context: AccordionRowRenderContext<Row>) => ReactNode;
 	renderTrigger?: (args: {
 		row: Row;
 		isOpen: boolean;
@@ -277,8 +289,13 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 			args: FormTableCsvExportArgs<Row, Filters>,
 		) => FormTableCsvExport | null | Promise<FormTableCsvExport | null>;
 	};
+	/** Extra row fields to include in dirty tracking even when they are not visible table columns. */
+	dirtyFields?: ColumnField<Row>[];
+	/** Additional dirty state owned by custom content rendered inside the table. */
+	externalUnsavedChanges?: boolean;
 	createRow?: () => Row;
 	onSave?: (args: SaveRowsArgs<Row>) => Promise<void>;
+	onDiscardChanges?: () => void;
 	emptyStateMessage?: string;
 	accordionRow?: AccordionRowConfig<Row>;
 	showInlineSearch?: boolean;
