@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sintesis — Control financiero de obras | Dossier comercial</title>
+  <meta name="description" content="Certificados, avances, saldos y respaldo documental por obra. Landing y dossier comercial de Síntesis, enfoque financiero." />
+  <link rel="stylesheet" href="shared/sintesis-tokens.css" />
+  <link rel="stylesheet" href="shared/landing.css" />
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root" data-screen-label="Landing - Financiero"></div>
+
+  <script type="text/babel" src="shared/chrome.jsx"></script>
+  <script type="text/babel" src="shared/sections.jsx"></script>
+  <script type="text/babel" src="shared/mocks.jsx"></script>
+
+  <script type="text/babel">
+    function App() {
+      const stats = [
+        { eyebrow: "Una sola fuente", value: "1 lugar", label: "Certificados, avances, saldos, gastos y documentos de cada obra, juntos y conectados.", orange: true },
+        { eyebrow: "Ciclo completo", value: "4 estados", label: "Cada certificado se sigue por obra: emitido, facturado, cobrado y saldo pendiente." },
+        { eyebrow: "Respaldo a un clic", value: "0 búsquedas", label: "Cada número vuelve al documento que lo respalda, sin rastrear mails ni carpetas." },
+      ];
+
+      const problema = {
+        eyebrow: "El problema",
+        title: "Cuando cada número vive en un archivo distinto, <em>el control llega tarde</em>.",
+        lead: "Antes de que dirección vea el estado real de una obra, alguien tiene que juntar planillas, PDFs y mensajes, y armar un resumen a mano. Ese resumen llega tarde, llega incompleto, y nadie puede defender de dónde salió cada número.",
+        ctaLabel: "Ver cómo lo resuelve Síntesis",
+        items: [
+          { title: "Los certificados, en una planilla aparte", body: "El seguimiento de emitido, facturado y cobrado vive en un Excel que mantiene una sola persona. Si esa persona no está, el número no existe." },
+          { title: "Los comprobantes, en PDF o WhatsApp", body: "El respaldo de cada monto queda disperso entre chats, mails y carpetas. Auditar un número significa buscar durante horas." },
+          { title: "Los avances, cargados a mano", body: "El porcentaje de avance depende de que alguien se acuerde de actualizarlo. Nadie sabe si el 64% es de esta semana o del mes pasado." },
+          { title: "Dirección se entera tarde", body: "Los saldos se revisan recién cuando aparece el resumen mensual. Para entonces, el certificado sin cobrar ya tiene 40 días." },
+        ],
+      };
+
+      const quick = {
+        eyebrow: "La solución",
+        title: "Síntesis conecta <em>cada número con su obra y su documento</em>.",
+        lead: "Los certificados, los avances y los saldos dejan de estar sueltos: cada uno queda atado a la obra a la que pertenece y al documento que lo respalda. El resumen ya no se arma — se consulta.",
+        items: [
+          { icon: ITrend,  eyebrow: "Avance vs plazo",       title: "Detectá desvíos a tiempo.", body: "Compará porcentaje de avance físico contra plazo transcurrido y encontrá las obras donde el tiempo corre más rápido que la obra — antes de que sea un problema de plata." },
+          { icon: IWallet, eyebrow: "Certificados y cobros", title: "El ciclo económico, registrado.", body: "Cada certificado se sigue por obra: monto, período, facturación, cobro y saldo pendiente, en una tabla editable que tu equipo ya sabe usar." },
+          { icon: IChart,  eyebrow: "Reportes con respaldo", title: "Exportables y trazables.", body: "Obras, certificados y datos extraídos de los documentos alimentan reportes con filtros y exportación a Excel o PDF. Cada cifra puede volver a su fuente." },
+        ],
+      };
+
+      const anchored = {
+        eyebrow: "Producto",
+        title: "Empezá por <em>el número que más te preocupa</em>.",
+        lead: "Lo que sigue no son maquetas: son las pantallas reales del sistema, con la misma interfaz que va a usar tu equipo.",
+        blocks: [
+          {
+            anchor: "Certificados",
+            title: "Control de <em>certificados</em>.",
+            lead: "Emitido, facturado, cobrado y saldo pendiente por obra, en una sola tabla. Los totales se calculan solos y cada fila enlaza al certificado que la respalda.",
+            frame: "dark",
+            mock: <CertificadosTable />,
+          },
+          {
+            anchor: "Avance",
+            title: "Avance físico vs <em>plazo transcurrido</em>.",
+            lead: "La comparación que ningún Excel mantiene actualizada: qué obras avanzan más lento que su cronograma, ordenadas por desvío, a tiempo de hacer algo.",
+            frame: "cool",
+            mock: <AvanceVsPlazo />,
+          },
+          {
+            anchor: "Saldos",
+            title: "Saldos y <em>cartera completa</em>.",
+            lead: "Contrato, avance, saldo a certificar y nivel de riesgo de todas tus obras en una vista común, con filtros y exportación. La foto que dirección pide cada lunes.",
+            frame: "warm",
+            mock: <ObrasOverview variant="financiero" />,
+          },
+          {
+            anchor: "Alertas",
+            title: "Señales <em>antes del resumen mensual</em>.",
+            lead: "Certificados facturados sin cobro, avances por debajo del plazo, documentos sin revisar: el sistema avisa cuando pasa, no cuando alguien lo descubre.",
+            frame: "warm",
+            mock: <AlertasFinancieras />,
+          },
+        ],
+      };
+
+      const perfiles = {
+        eyebrow: "Para quién",
+        title: "Cada rol ve <em>lo que necesita para decidir</em>.",
+        lead: "Síntesis no es una herramienta más para el equipo: es la misma información, presentada según quién la mira.",
+        items: [
+          {
+            role: "Dirección",
+            title: "El estado real, sin pedirlo.",
+            body: "La cartera completa con avances, saldos y desvíos, lista para la reunión de seguimiento.",
+            bullets: ["Dashboard de cartera y riesgo", "Avance vs plazo por obra", "Reportes exportables a PDF", "Alertas de desvíos"],
+          },
+          {
+            role: "Administración",
+            title: "Certificados sin planilla paralela.",
+            body: "El ciclo de facturación y cobro en una tabla editable, conectada a los documentos.",
+            bullets: ["Certificados por obra y estado", "Saldos por cobrar al día", "Comprobantes a un clic", "Exportación a Excel"],
+          },
+          {
+            role: "Oficina técnica",
+            title: "Avances y datos conectados.",
+            body: "Los avances, mediciones y documentos técnicos alimentan los mismos números que ve dirección.",
+            bullets: ["Carga de avance por obra", "Documentos técnicos por carpeta", "Datos extraídos de PDFs", "Historial de cambios"],
+          },
+          {
+            role: "Jefes de obra",
+            title: "Cargar desde la obra, sin fricción.",
+            body: "Fotos y documentos suben desde el celular y se vuelven datos sin doble carga.",
+            bullets: ["Carga desde el celular", "Pendientes y recordatorios", "Solo ven sus obras", "Sin planillas que mantener"],
+          },
+        ],
+      };
+
+      const flujo = {
+        eyebrow: "Flujo",
+        title: "El recorrido financiero, <em>en cuatro pasos</em>.",
+        lead: "Lo que la plataforma hace, en orden, con la información económica de cada obra.",
+        steps: [
+          { title: "Cargás la cartera", body: "Las obras entran por importación o carga manual, con contrato, plazo, entidad, avance y los campos que ya usa tu empresa." },
+          { title: "Registrás certificados", body: "Tu equipo carga certificados, facturación, cobros y notas. El ciclo económico de cada obra queda legible y al día." },
+          { title: "Sumás los documentos", body: "Certificados, facturas y comprobantes se suben a la carpeta de su obra. El sistema extrae los datos y le da respaldo a cada número." },
+          { title: "Consultás y exportás", body: "Las vistas filtradas se comparten como reporte, Excel o PDF. El resumen mensual deja de armarse a mano." },
+        ],
+      };
+
+      const demo = {
+        eyebrow: "Demo",
+        title: "Recorré una <em>cartera económica trazable</em>.",
+        lead: "Tres vistas reales, en orden: la cartera completa, el detalle de certificados y el reporte que sale de los mismos datos.",
+        tabs: [
+          { tag: "Cartera", title: "Todas tus obras", body: "Búsqueda, filtros y columnas económicas para ubicar al instante las obras con saldo, avance o plazo a revisar." },
+          { tag: "Certs", title: "Certificados", body: "Estados de facturación y cobro editables, sin salir del contexto de la obra. Los totales se actualizan solos." },
+          { tag: "Reporte", title: "El reporte, listo", body: "La misma información sale como reporte de dirección, Excel o PDF — sin rearmar nada." },
+        ],
+        demoMock: (i) => [<ObrasOverview variant="financiero" />, <CertificadosTable />, <ReporteDireccion />][i],
+      };
+
+      const modulos = {
+        eyebrow: "Módulos",
+        title: "Qué incluye, <em>módulo por módulo</em>.",
+        lead: "El inventario completo de capacidades del enfoque financiero. Todos los módulos operan sobre las mismas obras y los mismos datos.",
+        note: "Todos los módulos son configurables por organización: carpetas, columnas, estados y reportes base se definen una vez y aplican a todas las obras, para que la cartera sea comparable.",
+        modules: [
+          {
+            icon: ITable, name: "Cartera de obras",
+            desc: "La tabla madre: todas las obras con sus campos económicos, editable y filtrable como un Excel.",
+            bullets: ["Contrato, entidad, plazo y avance por obra", "Búsqueda, filtros y columnas configurables", "Importación desde planillas existentes", "Estados y riesgo calculados"],
+          },
+          {
+            icon: IWallet, name: "Certificados",
+            desc: "El ciclo emitido → facturado → cobrado, seguido por obra y con saldos siempre al día.",
+            bullets: ["Monto, período y estado por certificado", "Saldo a certificar y por cobrar automáticos", "Notas y fechas de cobro editables", "Enlace al certificado PDF de respaldo"],
+          },
+          {
+            icon: ITrend, name: "Avance vs plazo",
+            desc: "La curva física contra el cronograma, por obra y agregada, para detectar desvíos a tiempo.",
+            bullets: ["Desvío en puntos por obra", "Ranking de obras a revisar", "Historial de cambios de avance", "Vista de cartera ponderada"],
+          },
+          {
+            icon: IFolder, name: "Documentos y respaldo",
+            desc: "Certificados, facturas y comprobantes viven en la carpeta de su obra, con fecha y responsable.",
+            bullets: ["Carpetas por obra configurables", "Carga desde celular o escritorio", "Extracción de datos desde PDF y fotos", "Trazabilidad número → documento"],
+          },
+          {
+            icon: IBell, name: "Alertas financieras",
+            desc: "Señales automáticas sobre el ciclo económico, antes de que aparezcan en el resumen mensual.",
+            bullets: ["Certificados facturados sin cobro", "Avance por debajo del plazo", "Documentos pendientes de revisión", "Notificaciones por rol"],
+          },
+          {
+            icon: IChart, name: "Reportes y exportación",
+            desc: "Reportes de dirección armados con los datos operativos, exportables y siempre actualizados.",
+            bullets: ["Reporte de cartera con KPIs", "Exportación a Excel y PDF", "Vistas filtradas compartibles", "Generación desde plantillas"],
+          },
+        ],
+      };
+
+      const ficha = {
+        eyebrow: "Ficha técnica",
+        title: "Lo que vas a querer saber <em>antes de la primera reunión</em>.",
+        lead: "Las respuestas concretas sobre implementación, datos, seguridad y salida. Para compartir con administración, sistemas o quien decida.",
+        rows: [
+          { label: "Qué es", value: "Una plataforma web de control de obras para constructoras: obras, certificados, gastos, documentos, alertas y reportes en un solo lugar, con accesos por rol. <b>No reemplaza tu contabilidad ni tu ERP</b> — ordena la capa operativa que hoy vive en Excel, Drive y WhatsApp." },
+          { label: "Implementación", value: "Arranque por <b>piloto de 30 días sobre una obra real</b>: configuramos el espacio de tu empresa, cargamos una obra con sus certificados y documentos reales, activamos alertas y entrenamos al equipo. Sin proyecto de meses ni migración total." },
+          { label: "Carga inicial", value: "Las obras y certificados existentes se importan desde tus planillas actuales. Los documentos se suben a carpetas por obra y el sistema extrae los datos clave (montos, fechas, proveedores) para evitar la doble carga." },
+          { label: "Origen de los datos", value: "Cada dato registra su origen: <b>extraído de un documento, cargado a mano o mixto</b>. La trazabilidad es visible en las tablas y los reportes — cualquier número puede defenderse mostrando su fuente." },
+          { label: "Contabilidad y ERP", value: "Síntesis convive con tu sistema contable: maneja el seguimiento operativo (qué se certificó, facturó y cobró por obra) y exporta a Excel/PDF para alimentar lo que ya usás. La contabilidad formal sigue donde está." },
+          { label: "Accesos y roles", value: "Permisos por módulo y por rol (dirección, administración, obra, oficina técnica), con overrides por obra. Cada persona ve y edita solo lo que le corresponde; los cambios quedan auditados." },
+          { label: "Seguridad de datos", value: "Arquitectura multi-empresa con datos completamente separados por organización. Accesos con usuario y contraseña, sesiones controladas y registro de auditoría de acciones administrativas." },
+          { label: "Exportación y salida", value: "Tablas y reportes se exportan a <b>Excel y PDF en cualquier momento</b>. Tus datos son tuyos: si un día querés irte, te llevás todo en formatos abiertos." },
+          { label: "Requisitos", value: "Solo un navegador — sin instalación ni servidores propios. La carga desde obra funciona desde cualquier celular. No requiere capacitación técnica: las tablas se editan como un Excel." },
+          { label: "Acompañamiento", value: "Implementación asistida: configuración inicial, carga de la primera obra y capacitación por rol los hacemos con tu equipo. Soporte directo durante el piloto y después." },
+        ],
+      };
+
+      const darkSteps = {
+        eyebrow: "Empezar",
+        title: "Ordená certificados y saldos <em>sin cambiar tu contabilidad</em>.",
+        steps: [
+          { title: "Cartera inicial", body: "Cargamos o importamos las obras vivas con los campos económicos que ya usa tu equipo. Una tarde de trabajo, no un proyecto." },
+          { title: "Certificados", body: "Registramos los certificados existentes con su estado de facturación y cobro. Los saldos quedan al día desde el primer día." },
+          { title: "Documentos", body: "Subimos los comprobantes para que cada número tenga su evidencia a un clic, y activamos la extracción de datos." },
+          { title: "Reportes", body: "Configuramos las vistas y exportaciones para tus reuniones de seguimiento. El primer reporte sale en la semana uno." },
+        ],
+        ctaLight: "Probar en una obra 30 días",
+        ctaGhost: "Ver demo con una obra real",
+      };
+
+      const split = {
+        eyebrow: "Preguntas frecuentes",
+        title: "Síntesis no <em>reemplaza</em> tu contabilidad.",
+        lead: "La complementa. Le da a tu operación una capa de seguimiento y evidencia para que los números de obra no dependan de archivos sueltos ni de la memoria de una persona.",
+        ctaLabel: "Hablar con un especialista",
+        items: [
+          { title: "¿Reemplaza mi contabilidad o mi ERP?", body: "No. Síntesis ordena obras, certificados, documentos y reportes — la capa operativa. Tu contabilidad formal sigue en el sistema que ya usás, alimentada por las exportaciones." },
+          { title: "¿De dónde salen los números?", body: "De documentos procesados, datos extraídos, tablas editables o carga manual — siempre con el origen registrado y el contexto de la obra a la que pertenecen." },
+          { title: "¿Mi equipo tiene que dejar el Excel?", body: "No. Las tablas de Síntesis se editan como una planilla y todo se exporta a Excel. El cambio es que ahora la planilla está conectada a las obras y los documentos." },
+          { title: "¿Cuánto lleva implementarlo?", body: "El piloto arranca con una obra en días, no meses. La carga inicial se importa desde tus planillas y el equipo se entrena por rol en sesiones cortas." },
+          { title: "¿Quién ve qué?", body: "Lo que definas: permisos por módulo y por rol, con excepciones por obra. Dirección ve la cartera; cada jefe de obra, solo lo suyo." },
+          { title: "¿Puedo sacar la información?", body: "Siempre. Reportes y tablas se exportan a Excel o PDF en cualquier momento. Los datos son de tu empresa, no nuestros." },
+        ],
+      };
+
+      const cierre = {
+        eyebrow: "La promesa",
+        title: "Síntesis no solo guarda tu información: <em>la vuelve operable</em>.",
+        lead: "Certificados, avances, saldos y documentos se leen juntos, con su origen a la vista, para decidir con evidencia y dejar de reconstruir los números de obra desde Excel, WhatsApp y PDFs sueltos.",
+        primary: "Probalo en una obra 30 días",
+        secondary: "Ver demo con una obra real",
+      };
+
+      return (
+        <>
+          <Nav variant="financiero" />
+          <Hero
+            variant="financiero"
+            eyebrow="Certificados, avances y saldos por obra"
+            title='El estado económico de cada obra, <em>sin reconstruirlo a fin de mes</em>.'
+            lead="Síntesis conecta certificados, avances, facturación, cobros y documentos para que dirección vea qué se ejecutó, qué se facturó, qué se cobró y qué queda pendiente en cada obra — con el respaldo documental a un clic."
+            primaryCta="Ver demo con una obra real"
+            secondaryCta="Quiero ordenar mis certificados"
+            trust={["Certificados por obra", "Avance vs plazo", "Facturado / cobrado / pendiente", "Evidencia documental", "Exportable a Excel/PDF"]}
+          />
+          <DossierBar note="Guardala como PDF y compartila con quien decide: incluye el producto pantalla por pantalla, los módulos, la ficha técnica y el plan de arranque." />
+          <StatsStrip items={stats} />
+          <Split {...problema} />
+          <QuickReference {...quick} />
+          <AnchoredFeatures {...anchored} />
+          <Perfiles {...perfiles} />
+          <Flujo {...flujo} />
+          <DemoSection {...demo} />
+          <ModuloCatalogo {...modulos} />
+          <FichaTecnica {...ficha} />
+          <DarkSteps {...darkSteps} />
+          <Split {...split} />
+          <Cierre {...cierre} />
+          <Footer variant="financiero" />
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+
+  <style id="__om-edit-overrides"></style>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sintesis — Landings</title>
+  <link rel="stylesheet" href="landings/shared/sintesis-tokens.css" />
+  <link rel="stylesheet" href="landings/shared/landing.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    .picker { flex: 1; display: grid; place-items: center; padding: 80px 32px; position: relative; overflow: hidden; }
+    .halo {
+      position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%);
+      width: 600px; height: 600px; border-radius: 9999px;
+      background: radial-gradient(circle, rgba(255,88,0,.16), rgba(255,88,0,0) 70%);
+      filter: blur(40px); z-index: 0;
+    }
+    .picker-inner { position: relative; z-index: 1; max-width: 1080px; width: 100%; text-align: center; }
+    .picker .eyebrow { margin-bottom: 22px; }
+    .picker h1 { margin: 0 auto; max-width: 18ch; }
+    .picker .lead { margin: 28px auto 0; }
+    .cards {
+      margin-top: 60px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      text-align: left;
+    }
+    .card {
+      display: block;
+      background: #fff;
+      border: 1px solid rgba(28,25,23,.08);
+      border-radius: 22px;
+      padding: 28px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform .2s ease, box-shadow .2s ease;
+      box-shadow: 0 1px 0 rgba(0,0,0,.03);
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 18px 40px -18px rgba(28,25,23,.18); }
+    .card-thumb {
+      height: 220px; border-radius: 14px; overflow: hidden; margin-bottom: 22px;
+      display: flex; align-items: stretch; justify-content: stretch;
+      position: relative;
+    }
+    .card h3 { font-family: var(--font-serif); font-weight: 400; font-size: 30px; line-height: 1.05; margin: 0 0 12px; letter-spacing: -0.018em; color: var(--stone-900); }
+    .card h3 em { font-style: italic; color: var(--stone-500); }
+    .card p { margin: 0; font-size: 15px; color: var(--stone-600); line-height: 1.55; }
+    .card-tag {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      letter-spacing: .18em; text-transform: uppercase; color: var(--stone-500);
+      margin-bottom: 12px;
+    }
+    .card-cta {
+      margin-top: 22px;
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: var(--stone-900);
+    }
+    .card-cta::after {
+      content: "→"; font-size: 14px;
+      transition: transform .2s;
+    }
+    .card:hover .card-cta::after { transform: translateX(4px); }
+    @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-screen-label="Landings index">
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="nav-brand" href="index.html">
+        <span class="nav-brand-dot"></span>
+        Sintesis
+      </a>
+      <div class="nav-links">
+        <a href="#">Producto</a>
+        <a href="#">Recursos</a>
+        <a href="#">Precios</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn btn-ghost">Ingresar</button>
+        <button class="btn btn-primary">Agendar demo</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="picker">
+    <div class="halo"></div>
+    <div class="picker-inner">
+      <div class="eyebrow">Landings · 2 enfoques</div>
+      <h1 class="serif-display">Dos formas de contar <em>la misma plataforma</em>.</h1>
+      <p class="lead" style="font-size:18px; max-width:60ch; text-align:center; color:var(--stone-600); margin: 28px auto 0;">
+        Las dos landings hablan de Sintesis. Cada una elige una entrada distinta segun a quien le estamos vendiendo: la operacion completa de la empresa, o el control economico de cada obra.
+      </p>
+
+      <div class="cards">
+        <a class="card" href="landings/Sintesis - Operativo.html">
+          <div class="card-thumb">
+            <!-- Operativo thumbnail: dashboard-like illustration -->
+            <svg viewBox="0 0 500 220" preserveAspectRatio="xMidYMid slice" width="100%" height="100%">
+              <defs>
+                <linearGradient id="op-bg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#fef0e3"/>
+                  <stop offset="60%" stop-color="#f8eedb"/>
+                  <stop offset="100%" stop-color="#f3e0c8"/>
+                </linearGradient>
+              </defs>
+              <rect width="500" height="220" fill="url(#op-bg)"/>
+              <!-- topo lines -->
+              <g fill="none" stroke="#c8a87d" stroke-opacity=".22" stroke-width="1">
+                <path d="M -20 60 Q 120 30 250 70 T 540 50"/>
+                <path d="M -20 110 Q 140 80 260 120 T 540 100"/>
+                <path d="M -20 160 Q 130 130 270 170 T 540 150"/>
+              </g>
+              <!-- mini dashboard card -->
+              <g transform="translate(80, 60)">
+                <rect width="340" height="130" rx="10" fill="#fff" stroke="rgba(28,25,23,.1)"/>
+                <rect x="14" y="14" width="80" height="8" rx="3" fill="#1c1917"/>
+                <rect x="14" y="30" width="140" height="6" rx="3" fill="#a8a29e"/>
+                <g transform="translate(14, 56)">
+                  <rect width="312" height="22" rx="4" fill="#fafaf9"/>
+                  <rect width="200" height="6" x="6" y="8" rx="3" fill="#ff5800"/>
+                  <text x="280" y="15" font-family="ui-monospace" font-size="10" fill="#1c1917">64%</text>
+                </g>
+                <g transform="translate(14, 84)">
+                  <rect width="312" height="22" rx="4" fill="#fafaf9"/>
+                  <rect width="120" height="6" x="6" y="8" rx="3" fill="#d6d3d1"/>
+                  <text x="280" y="15" font-family="ui-monospace" font-size="10" fill="#78716c">38%</text>
+                </g>
+              </g>
+              <circle cx="70" cy="180" r="8" fill="#ff5800"/>
+            </svg>
+          </div>
+          <div class="card-tag">Narrativa 03 · Operativo</div>
+          <h3>Sistema operativo <em>de obras</em>.</h3>
+          <p>Le habla a la empresa. Plantillas por organizacion, permisos, documentos, tablas, pendientes y reportes. La base configurable para ordenar obras sin perder trazabilidad.</p>
+          <span class="card-cta">Ver landing operativa</span>
+        </a>
+
+        <a class="card" href="landings/Sintesis - Financiero.html">
+          <div class="card-thumb">
+            <svg viewBox="0 0 500 220" preserveAspectRatio="xMidYMid slice" width="100%" height="100%">
+              <defs>
+                <linearGradient id="fi-bg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#ffd9b8"/>
+                  <stop offset="60%" stop-color="#ffb88a"/>
+                  <stop offset="100%" stop-color="#ff8851"/>
+                </linearGradient>
+              </defs>
+              <rect width="500" height="220" fill="url(#fi-bg)"/>
+              <!-- chart illustration -->
+              <g transform="translate(80, 60)">
+                <rect width="340" height="130" rx="10" fill="#fff" stroke="rgba(28,25,23,.1)"/>
+                <rect x="14" y="14" width="100" height="8" rx="3" fill="#1c1917"/>
+                <rect x="14" y="30" width="160" height="6" rx="3" fill="#a8a29e"/>
+                <!-- bars -->
+                <g transform="translate(14, 50)">
+                  <rect x="0"   y="48" width="22" height="22" rx="3" fill="#d6d3d1"/>
+                  <rect x="32"  y="32" width="22" height="38" rx="3" fill="#d6d3d1"/>
+                  <rect x="64"  y="40" width="22" height="30" rx="3" fill="#d6d3d1"/>
+                  <rect x="96"  y="20" width="22" height="50" rx="3" fill="#d6d3d1"/>
+                  <rect x="128" y="12" width="22" height="58" rx="3" fill="#d6d3d1"/>
+                  <rect x="160" y="4"  width="22" height="66" rx="3" fill="#d6d3d1"/>
+                  <rect x="192" y="14" width="22" height="56" rx="3" fill="#d6d3d1"/>
+                  <rect x="224" y="22" width="22" height="48" rx="3" fill="#d6d3d1"/>
+                  <rect x="256" y="0"  width="22" height="70" rx="3" fill="#ff5800"/>
+                  <rect x="288" y="-8" width="22" height="78" rx="3" fill="#ff5800"/>
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="card-tag">Narrativa 01 · Financiero</div>
+          <h3>Control financiero <em>para constructoras</em>.</h3>
+          <p>Le habla a direccion. Obras, avance, certificados, saldo a certificar y reportes exportables. Una lectura economica de la cartera basada en datos cargados en la operacion.</p>
+          <span class="card-cta">Ver landing financiera</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <style id="__om-edit-overrides"></style>
+</body>
+</html>
