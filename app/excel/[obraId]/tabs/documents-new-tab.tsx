@@ -51,6 +51,11 @@ const DocumentSheet = dynamic(
 	{ ssr: false },
 );
 
+const DocumentDataSheet = dynamic(
+	() => import("./file-manager/components/document-data-sheet").then((mod) => mod.DocumentDataSheet),
+	{ ssr: false },
+);
+
 type DocumentsListPayload = {
 	tree: FileSystemItem | null;
 	folder?: FileSystemItem | null;
@@ -563,9 +568,11 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const [isReprocessingAll, setIsReprocessingAll] = useState(false);
 	const [isReprocessAllConfirmOpen, setIsReprocessAllConfirmOpen] = useState(false);
 	const [reprocessAllProgress, setReprocessAllProgress] = useState<{ done: number; total: number; errors: number } | null>(null);
+	const [retryingDocumentId, setRetryingDocumentId] = useState<string | null>(null);
 	const [selectedDocument, setSelectedDocument] = useState<FileSystemItem | null>(null);
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 	const [isDocumentSheetOpen, setIsDocumentSheetOpen] = useState(false);
+	const [isDocumentDataSheetOpen, setIsDocumentDataSheetOpen] = useState(false);
 	const reprocessAllAbortRef = useRef(false);
 	const previewRequestIdRef = useRef(0);
 
@@ -677,7 +684,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const tablaRowsQuery = useQuery({
 		queryKey: ["obra", obraId, "documents-new", "tabla-rows", activeOcrTablaId],
 		queryFn: () => fetchTablaRows(obraId, activeOcrTablaId as string),
-		enabled: Boolean(obraId && activeOcrTablaId && documentViewMode === "table"),
+		enabled: Boolean(obraId && activeOcrTablaId && (documentViewMode === "table" || selectedDocument?.storagePath)),
 		staleTime: TABLE_ROWS_STALE_TIME,
 		refetchOnWindowFocus: false,
 	});
@@ -739,6 +746,22 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			enableColumnResizing: true,
 		};
 	}, [activeFolderLink?.columns, activeOcrTablaId, obraId, tableRows, tablaRowsQuery.isFetching]);
+	const selectedDocumentRows = useMemo(() => {
+		const docPath = selectedDocument?.storagePath ?? null;
+		if (!docPath) return [] as DocumentsNewTableRow[];
+		return tableRows.filter((row) => row.__docPath === docPath);
+	}, [selectedDocument?.storagePath, tableRows]);
+	const documentDataTableConfig = useMemo<FormTableConfig<DocumentsNewTableRow, Record<string, never>> | null>(() => {
+		if (!ocrTableConfig || !selectedDocument) return null;
+		return {
+			...ocrTableConfig,
+			tableId: `${ocrTableConfig.tableId}-document-${selectedDocument.id}`,
+			defaultRows: selectedDocumentRows,
+			emptyStateMessage: tablaRowsQuery.isFetching
+				? "Cargando datos extraidos..."
+				: "Este documento no tiene datos extraidos.",
+		};
+	}, [ocrTableConfig, selectedDocument, selectedDocumentRows, tablaRowsQuery.isFetching]);
 
 	useEffect(() => {
 		if (activeFolderLinks.length === 0) {
@@ -788,6 +811,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		setSelectedDocument(null);
 		setPreviewUrl(null);
 		setIsDocumentSheetOpen(false);
+		setIsDocumentDataSheetOpen(false);
 	}
 
 	function openFolder(item: FileSystemItem) {
@@ -935,6 +959,71 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		reprocessAllAbortRef.current = true;
 	}, []);
 
+	const handleReprocessDocument = useCallback(
+		async (document: FileSystemItem | null) => {
+			if (!document?.storagePath) {
+				toast.error("No encontramos la ruta del documento para reprocesar.");
+				return;
+			}
+			const tablaIds = [...new Set(activeFolderLinks.map((link) => link.tablaId).filter(Boolean))];
+			if (tablaIds.length === 0) {
+				toast.error("Este documento no esta vinculado a una tabla OCR.");
+				return;
+			}
+
+			setRetryingDocumentId(document.id);
+			try {
+				const formData = new FormData();
+				formData.append("existingBucket", "obra-documents");
+				formData.append("existingPath", document.storagePath);
+				formData.append("existingFileName", document.name);
+				formData.append("tablaIds", JSON.stringify(tablaIds));
+
+				const response = await fetch(
+					`/api/obras/${encodeURIComponent(obraId)}/tablas/import/ocr-multi?skipStorage=1`,
+					{ method: "POST", body: formData },
+				);
+				const payload = await response.json().catch(() => ({} as { error?: string; perTable?: Array<{ tablaName?: string; inserted?: number }> }));
+
+				if (!response.ok) {
+					if (response.status === 413) {
+						toast.warning(payload.error ?? `El documento ${document.name} es demasiado grande para OCR.`);
+					} else if (response.status === 402) {
+						toast.warning(payload.error ?? "Superaste el limite de tokens de IA de tu plan.");
+					} else {
+						toast.error(payload.error ?? "No se pudo reprocesar el documento.");
+					}
+					return;
+				}
+
+				const perTableResults = Array.isArray(payload.perTable) ? payload.perTable : [];
+				if (perTableResults.length > 0) {
+					perTableResults.forEach((result) => {
+						const inserted = result.inserted ?? 0;
+						if (inserted > 0) {
+							toast.success(`${result.tablaName ?? "Tabla"}: ${inserted} filas actualizadas.`);
+						} else {
+							toast.warning(`${result.tablaName ?? "Tabla"}: sin filas detectadas.`);
+						}
+					});
+				} else {
+					toast.success("Documento reprocesado.");
+				}
+
+				await folderQuery.refetch();
+				if (activeOcrTablaId) {
+					await tablaRowsQuery.refetch();
+				}
+			} catch (error) {
+				console.error("[documents-new] Error reprocessing document", document.name, error);
+				toast.error("No se pudo reprocesar el documento.");
+			} finally {
+				setRetryingDocumentId(null);
+			}
+		},
+		[activeFolderLinks, activeOcrTablaId, folderQuery, obraId, tablaRowsQuery],
+	);
+
 	const handleDownloadDocument = useCallback(
 		async (document: FileSystemItem) => {
 			if (!document.storagePath) {
@@ -956,6 +1045,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		async (document: FileSystemItem) => {
 			setSelectedDocument(document);
 			setIsDocumentSheetOpen(true);
+			setIsDocumentDataSheetOpen(false);
 			const requestId = previewRequestIdRef.current + 1;
 			previewRequestIdRef.current = requestId;
 
@@ -994,10 +1084,16 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		setIsDocumentSheetOpen(open);
 		if (!open) {
 			previewRequestIdRef.current += 1;
+			setIsDocumentDataSheetOpen(false);
 			setSelectedDocument(null);
 			setPreviewUrl(null);
 		}
 	}, []);
+
+	const toggleDocumentDataSheet = useCallback(() => {
+		if (!documentDataTableConfig) return;
+		setIsDocumentDataSheetOpen((current) => !current);
+	}, [documentDataTableConfig]);
 
 	const selectedDocumentIndex = selectedDocument
 		? files.findIndex((file) => file.id === selectedDocument.id)
@@ -1008,8 +1104,8 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		selectedDocumentIndex >= 0 && selectedDocumentIndex < files.length - 1
 			? files[selectedDocumentIndex + 1]
 			: null;
-	const documentPositionLabel =
-		selectedDocumentIndex >= 0 ? `${selectedDocumentIndex + 1}/${files.length}` : null;
+	const canReprocessSelectedDocument = Boolean(selectedDocument?.storagePath);
+	const canShowSelectedDocumentData = Boolean(selectedDocument?.storagePath && documentDataTableConfig);
 
 	const skeletonContent = (
 		<div className="space-y-4">
@@ -1302,17 +1398,34 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				</div>
 			</section>
 
+			<DocumentDataSheet
+				isOpen={isDocumentDataSheetOpen && Boolean(selectedDocument) && Boolean(documentDataTableConfig)}
+				onOpenChange={setIsDocumentDataSheetOpen}
+				document={selectedDocument}
+				tableConfig={documentDataTableConfig}
+			/>
+
 			<DocumentSheet
 				isOpen={isDocumentSheetOpen && Boolean(selectedDocument)}
 				onOpenChange={handleDocumentSheetOpenChange}
 				document={selectedDocument}
-				breadcrumb={selectedFolderLabel}
 				previewUrl={previewUrl}
 				onDownload={(document) => void handleDownloadDocument(document)}
-				ocrStatusBadge={selectedDocument ? renderOcrStatusBadge(selectedDocument) : null}
+				onRetryOcr={canReprocessSelectedDocument ? handleReprocessDocument : undefined}
+				retryingOcr={Boolean(selectedDocument && retryingDocumentId === selectedDocument.id)}
+				highlightRetryAction={Boolean(
+					selectedDocument &&
+					(selectedDocument.ocrDocumentStatus === "failed" ||
+						selectedDocument.ocrDocumentStatus === "unprocessed" ||
+						(selectedDocument.ocrDocumentStatus === "completed" &&
+							typeof selectedDocument.ocrRowsExtracted === "number" &&
+							selectedDocument.ocrRowsExtracted <= 0)),
+				)}
+				onToggleDataSheet={toggleDocumentDataSheet}
+				showDataToggle={canShowSelectedDocumentData}
+				isDataSheetOpen={isDocumentDataSheetOpen}
 				onPreviousDocument={previousDocument ? () => void handleOpenDocumentPreview(previousDocument) : null}
 				onNextDocument={nextDocument ? () => void handleOpenDocumentPreview(nextDocument) : null}
-				documentPositionLabel={documentPositionLabel}
 			/>
 
 			<Dialog open={isReprocessAllConfirmOpen} onOpenChange={(open) => { if (!isReprocessingAll) setIsReprocessAllConfirmOpen(open); }}>

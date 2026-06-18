@@ -24,7 +24,7 @@
  * TODO: Add comparison view (side-by-side)
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { Button } from '@/components/ui/button';
@@ -85,6 +85,7 @@ type DocumentViewerProps = {
   fileType: 'pdf' | 'image';
   title?: boolean;
   onDownload?: () => void;
+  toolbarActions?: ReactNode;
 };
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -104,6 +105,7 @@ export function EnhancedDocumentViewer({
   fileType,
   title = true,
   onDownload,
+  toolbarActions,
 }: DocumentViewerProps) {
   // Client-side only check
   const [isClient, setIsClient] = useState(false);
@@ -396,16 +398,20 @@ export function EnhancedDocumentViewer({
           >
             <RotateCw className="size-4" />
           </Button>
-          {onDownload && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onDownload}
-              title="Download"
-              className="ml-auto"
-            >
-              <Download className="size-4" />
-            </Button>
+          {(toolbarActions || onDownload) && (
+            <div className="ml-auto flex items-center gap-2">
+              {toolbarActions}
+              {onDownload && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onDownload}
+                  title="Download"
+                >
+                  <Download className="size-4" />
+                </Button>
+              )}
+            </div>
           )}
         </div>
 
