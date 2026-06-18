@@ -156,6 +156,12 @@ type AssistResponse = {
   appliedFieldCount: number;
 };
 
+type GeneratedDocumentDownloadTarget = {
+  workId: string;
+  storagePath: string;
+  fileName: string;
+};
+
 type RepeatableGroupDescriptor = {
   key: string;
   label: string;
@@ -347,6 +353,41 @@ function countFilledRows(rows: unknown[]) {
 
 function humanizeStatus(status: string) {
   return GENERATED_DOCUMENT_STATUS_LABELS[status] ?? status.toLowerCase().replace(/_/g, " ");
+}
+
+function joinStoragePath(...parts: Array<string | null | undefined>) {
+  return parts
+    .map((part) => (typeof part === "string" ? part.trim().replace(/^\/+|\/+$/g, "") : ""))
+    .filter(Boolean)
+    .join("/");
+}
+
+function buildDownloadTargetFromGeneratedResponse(
+  response: GeneratedDocumentResponse,
+  workId: string,
+): GeneratedDocumentDownloadTarget | null {
+  if (!workId) return null;
+  const storagePath =
+    response.generatedDocument.storage_path || joinStoragePath(workId, response.relativeFilePath);
+  if (!storagePath) return null;
+  return {
+    workId,
+    storagePath,
+    fileName: response.generatedDocument.file_name || "documento.pdf",
+  };
+}
+
+function buildDownloadTargetFromGeneratedDetail(
+  document: GeneratedDetailResponse["document"],
+): GeneratedDocumentDownloadTarget | null {
+  const storagePath =
+    document.storagePath || joinStoragePath(document.workId, document.folderPath, document.fileName);
+  if (!document.workId || !storagePath) return null;
+  return {
+    workId: document.workId,
+    storagePath,
+    fileName: document.fileName || "documento.pdf",
+  };
 }
 
 function getDocumentCode(inputData: Record<string, unknown>) {
@@ -1091,6 +1132,7 @@ export function DocumentGenerationPageClient({
   const [editingGeneratedStatus, setEditingGeneratedStatus] = useState<string>("");
   const [draftStatus, setDraftStatus] = useState<string>("");
   const [generatedDocument, setGeneratedDocument] = useState<GeneratedDocumentResponse | null>(null);
+  const [generatedDownloadTarget, setGeneratedDownloadTarget] = useState<GeneratedDocumentDownloadTarget | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -1174,6 +1216,7 @@ export function DocumentGenerationPageClient({
           setDraftStatus(payload.draft.status);
           setValidationErrors(payload.draft.validationErrors ?? []);
           setGeneratedDocument(null);
+          setGeneratedDownloadTarget(null);
           await loadBootstrap(
             {
               workId: payload.draft.workId,
@@ -1224,6 +1267,7 @@ export function DocumentGenerationPageClient({
           setEditingGeneratedStatus(payload.document.status);
           setValidationErrors([]);
           setGeneratedDocument(null);
+          setGeneratedDownloadTarget(buildDownloadTargetFromGeneratedDetail(payload.document));
           await loadBootstrap(
             {
               workId: payload.document.workId,
@@ -1253,6 +1297,7 @@ export function DocumentGenerationPageClient({
       setEditingGeneratedStatus("");
       setDraftStatus("");
       setGeneratedDocument(null);
+      setGeneratedDownloadTarget(null);
       setValidationErrors([]);
       await loadBootstrap({
         workId: initialWorkId,
@@ -1408,6 +1453,7 @@ export function DocumentGenerationPageClient({
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
+    setGeneratedDownloadTarget(null);
     setValidationErrors([]);
     await loadBootstrap({ workId: value, folderPath, documentType: documentType || undefined });
   };
@@ -1429,6 +1475,7 @@ export function DocumentGenerationPageClient({
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
+    setGeneratedDownloadTarget(null);
     setValidationErrors([]);
     await loadBootstrap({ workId, folderPath: resolvedFolderPath, documentType: nextType || undefined });
   };
@@ -1445,6 +1492,7 @@ export function DocumentGenerationPageClient({
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
+    setGeneratedDownloadTarget(null);
     setValidationErrors([]);
     await loadBootstrap({ workId, folderPath: value, documentType: nextDocumentType || undefined });
   };
@@ -1787,6 +1835,7 @@ export function DocumentGenerationPageClient({
       }
 
       setGeneratedDocument(payload);
+      setGeneratedDownloadTarget(buildDownloadTargetFromGeneratedResponse(payload, workId));
       if (editingGeneratedId) {
         setEditingGeneratedStatus(payload.generatedDocument.status);
       }
@@ -1812,16 +1861,19 @@ export function DocumentGenerationPageClient({
   };
 
   const downloadGeneratedDocument = () => {
-    if (!generatedDocument || !workId) return;
-    const storagePath =
-      generatedDocument.generatedDocument.storage_path || `${workId}/${generatedDocument.relativeFilePath}`;
+    const target =
+      generatedDownloadTarget ||
+      (generatedDocument && workId
+        ? buildDownloadTargetFromGeneratedResponse(generatedDocument, workId)
+        : null);
+    if (!target) return;
     const query = new URLSearchParams({
-      path: storagePath,
+      path: target.storagePath,
       download: "1",
     });
     const anchor = document.createElement("a");
-    anchor.href = `/api/obras/${encodeURIComponent(workId)}/documents/access?${query.toString()}`;
-    anchor.download = generatedDocument.generatedDocument.file_name || "documento.pdf";
+    anchor.href = `/api/obras/${encodeURIComponent(target.workId)}/documents/access?${query.toString()}`;
+    anchor.download = target.fileName;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -1954,6 +2006,18 @@ export function DocumentGenerationPageClient({
               <Eye className="mr-2 size-4" />
               Vista previa completa
             </Button>
+            {editingGeneratedId ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={downloadGeneratedDocument}
+                disabled={loading || !generatedDownloadTarget}
+                className="h-9 rounded-md px-4"
+              >
+                <Download className="mr-2 size-4" />
+                Descargar
+              </Button>
+            ) : null}
             <Button
               type="button"
               onClick={handleGenerate}

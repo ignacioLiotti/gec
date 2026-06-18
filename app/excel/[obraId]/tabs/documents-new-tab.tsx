@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -51,10 +51,18 @@ const DocumentSheet = dynamic(
 	{ ssr: false },
 );
 
+type DocumentDataSheetComponent = <Row extends FormTableRow, Filters>(props: {
+	isOpen: boolean;
+	onOpenChange: (open: boolean) => void;
+	document: FileSystemItem | null;
+	tableConfig: FormTableConfig<Row, Filters> | null;
+	dataTableSelector?: ReactNode;
+}) => ReactElement | null;
+
 const DocumentDataSheet = dynamic(
 	() => import("./file-manager/components/document-data-sheet").then((mod) => mod.DocumentDataSheet),
 	{ ssr: false },
-);
+) as DocumentDataSheetComponent;
 
 type DocumentsListPayload = {
 	tree: FileSystemItem | null;
@@ -66,6 +74,22 @@ type DocumentsListPayload = {
 
 type BatchAccessPayload = {
 	urls?: Record<string, string>;
+	errors?: Record<string, string>;
+};
+
+type DocumentAccessPayload = {
+	error?: string;
+	code?: string;
+};
+
+type DocumentDownloadError = Error & {
+	code?: string;
+	status?: number;
+};
+
+type ReprocessTableResult = {
+	tablaName?: string;
+	inserted?: number;
 };
 
 type TablaRowsPayload = {
@@ -418,12 +442,30 @@ async function fetchTablaRows(obraId: string, tablaId: string) {
 }
 
 async function fetchStoredDocumentBlob(obraId: string, storagePath: string) {
-	const urls = await fetchBatchAccess(obraId, [storagePath]);
-	const signedUrl = urls[storagePath];
-	if (!signedUrl) throw new Error("No se pudo firmar el archivo");
-	const response = await fetch(signedUrl);
-	if (!response.ok) throw new Error("No se pudo descargar el archivo");
+	const params = new URLSearchParams({
+		path: storagePath,
+		download: "1",
+	});
+	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/access?${params.toString()}`, {
+		cache: "no-store",
+	});
+	if (!response.ok) {
+		const payload = (await response.json().catch(() => ({}))) as DocumentAccessPayload;
+		const error = new Error(payload.error ?? "No se pudo descargar el documento.") as DocumentDownloadError;
+		error.status = response.status;
+		if (typeof payload.code === "string") error.code = payload.code;
+		throw error;
+	}
 	return response.blob();
+}
+
+function getDocumentDownloadErrorMessage(error: unknown) {
+	const downloadError = error as DocumentDownloadError;
+	if (downloadError?.code === "DOCUMENT_STORAGE_MISSING") {
+		return "El documento figura en metadata, pero el archivo ya no existe en Storage.";
+	}
+	if (error instanceof Error && error.message) return error.message;
+	return "No se pudo descargar el documento.";
 }
 
 function triggerBlobDownload(blob: Blob, fileName: string) {
@@ -983,7 +1025,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 					`/api/obras/${encodeURIComponent(obraId)}/tablas/import/ocr-multi?skipStorage=1`,
 					{ method: "POST", body: formData },
 				);
-				const payload = await response.json().catch(() => ({} as { error?: string; perTable?: Array<{ tablaName?: string; inserted?: number }> }));
+				const payload = (await response.json().catch(() => ({}))) as {
+					error?: string;
+					perTable?: ReprocessTableResult[];
+				};
 
 				if (!response.ok) {
 					if (response.status === 413) {
@@ -1035,7 +1080,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				triggerBlobDownload(blob, document.name);
 			} catch (error) {
 				console.error("[documents-new] Document download failed", error);
-				toast.error("No se pudo descargar el documento.");
+				toast.error(getDocumentDownloadErrorMessage(error));
 			}
 		},
 		[obraId],
