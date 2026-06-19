@@ -5,6 +5,9 @@ export type InsurancePolicyRuleType = "on_finish" | "days_after" | "months_after
 
 export type InsurancePolicyImportRow = {
 	rowNumber: number;
+	sourceFormat?: "policy_master" | "exigible_debt";
+	sourceFileName?: string;
+	sourceCutoffDate?: string | null;
 	obraId: string | null;
 	obraLabel: string;
 	obraMatchStatus: "matched" | "unmatched";
@@ -25,6 +28,7 @@ export type InsurancePolicyImportRow = {
 	cancellationRuleOffset: number;
 	cancellationRuleConfigured: boolean;
 	isCancelled: boolean;
+	financialMovements?: InsurancePolicyFinancialMovementImport[];
 	errors: string[];
 };
 
@@ -32,6 +36,33 @@ export type ObraLookupRow = {
 	id: string;
 	n: number | string | null;
 	designacion_y_ubicacion: string | null;
+};
+
+export type InsurancePolicyFinancialMovementImport = {
+	rowNumber: number;
+	policyNumber: string;
+	endorsementNumber: string | null;
+	installmentNumber: string | null;
+	itemNumber: string | null;
+	invoicePosition: string | null;
+	invoiceNumber: string | null;
+	invoiceLetter: string | null;
+	issueDate: string | null;
+	producerDueDate: string | null;
+	insuredDueDate: string | null;
+	coverageStart: string | null;
+	coverageEnd: string | null;
+	section: string;
+	currency: string | null;
+	premiumAmount: number | null;
+	paidAmount: number | null;
+	futurePaidAmount: number | null;
+	dueAmount: number | null;
+	upcomingAmount: number | null;
+	balanceAmount: number | null;
+	status: string;
+	movementType: "debit" | "credit_note";
+	raw: Record<string, unknown>;
 };
 
 const RULE_TYPES = new Set<InsurancePolicyRuleType>([
@@ -94,11 +125,14 @@ function parseNumber(value: unknown): number | null {
 	if (typeof value === "number" && Number.isFinite(value)) return value;
 	const text = String(value ?? "").trim();
 	if (!text) return null;
-	const normalized = text
+	let normalized = text
 		.replace(/\$/g, "")
-		.replace(/\s+/g, "")
-		.replace(/\./g, "")
-		.replace(",", ".");
+		.replace(/\s+/g, "");
+	if (normalized.includes(",") && normalized.includes(".")) {
+		normalized = normalized.replace(/\./g, "").replace(",", ".");
+	} else if (normalized.includes(",")) {
+		normalized = normalized.replace(",", ".");
+	}
 	const parsed = Number(normalized);
 	return Number.isFinite(parsed) ? parsed : null;
 }
@@ -108,6 +142,16 @@ function parseCoverageEndDate(value: unknown): string | null {
 	if (!text) return null;
 	const parts = text.split(/\s+-\s+/);
 	return parseExcelDate(parts[1] ?? text);
+}
+
+function extractPolicyListCutoffDate(matrix: unknown[][]) {
+	for (const row of matrix.slice(0, 10)) {
+		const text = row.map((cell) => String(cell ?? "").trim()).filter(Boolean).join(" ");
+		const match = /\bal\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/i.exec(text);
+		const parsed = match ? parseExcelDate(match[1]) : null;
+		if (parsed) return parsed;
+	}
+	return null;
 }
 
 export function parseExcelDate(value: unknown): string | null {
@@ -227,6 +271,7 @@ export async function updateInsurancePoliciesForObraCompletion({
 export async function parseInsurancePoliciesWorkbook(
 	buffer: ArrayBuffer,
 	obras: ObraLookupRow[],
+	options: { sourceFileName?: string } = {},
 ) {
 	const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
 	const sheetName = workbook.SheetNames[0];
@@ -236,6 +281,14 @@ export async function parseInsurancePoliciesWorkbook(
 
 	const sheet = workbook.Sheets[sheetName];
 	const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+	const exigibleSheetName = workbook.SheetNames.find((name) => {
+		const candidate = workbook.Sheets[name];
+		const rows = XLSX.utils.sheet_to_json<unknown[]>(candidate, { header: 1, defval: "" });
+		return rows.some((row) => isExigibleHeaderRow(row));
+	});
+	if (exigibleSheetName) {
+		return parseInsurancePolicyExigibleWorkbook(workbook, exigibleSheetName, options);
+	}
 	const headerIndex = matrix.findIndex((row) =>
 		Array.isArray(row) &&
 		row.some((cell) => normalizeHeader(cell) === "poliza") &&
@@ -245,24 +298,32 @@ export async function parseInsurancePoliciesWorkbook(
 		return { rows: [], errors: ["No se encontró la fila de encabezados de pólizas."] };
 	}
 	const headers = matrix[headerIndex] ?? [];
-	const records = matrix
-		.slice(headerIndex + 1)
-		.map((row, index) => {
-			const record: Record<string, unknown> = {};
-			(row ?? []).forEach((value, columnIndex) => {
-				const header = String(headers[columnIndex] ?? "").trim();
-				if (header) record[header] = value;
-				record[`__col_${columnIndex}`] = value;
-			});
-			record.__rowNumber = headerIndex + index + 2;
-			return record;
-		})
-		.filter((record) => String(getCell(record, ["poliza", "póliza"]) ?? "").trim().length > 0);
+	const sourceCutoffDate = extractPolicyListCutoffDate(matrix);
+	const records: Record<string, unknown>[] = [];
+	let currentPolicyholder = "";
+	matrix.slice(headerIndex + 1).forEach((row, index) => {
+		const record: Record<string, unknown> = {};
+		(row ?? []).forEach((value, columnIndex) => {
+			const header = String(headers[columnIndex] ?? "").trim();
+			if (header) record[header] = value;
+			record[`__col_${columnIndex}`] = value;
+		});
+		record.__rowNumber = headerIndex + index + 2;
+		const policyholder = String(getCell(record, ["tomador"]) ?? "").trim();
+		const section = normalizeText(getCell(record, ["seccion", "sección"]));
+		if (policyholder && !normalizeText(policyholder).startsWith("total")) currentPolicyholder = policyholder;
+		if (section.startsWith("total")) return;
+		if (String(getCell(record, ["poliza", "póliza"]) ?? "").trim().length === 0) return;
+		record.__policyholder = currentPolicyholder;
+		records.push(record);
+	});
 	const obraIndex = buildObraIndex(obras);
 	const rows = records.map((record) => {
 		const risk = String(getCell(record, ["riesgo"]) ?? "").trim();
 		const insuredObject = String(getCell(record, ["objeto del seguro"]) ?? "").trim();
-		const notes = String(getCellByIndex(record, 19) ?? getCellByIndex(record, 18) ?? getCellByIndex(record, 17) ?? "").trim();
+		const rawNotes = String(getCellByIndex(record, 19) ?? getCellByIndex(record, 18) ?? getCellByIndex(record, 17) ?? "").trim();
+		const policyholder = String(record.__policyholder ?? "").trim();
+		const notes = [policyholder ? `Tomador: ${policyholder}` : "", rawNotes].filter(Boolean).join("\n");
 		const explicitObraValue =
 			getCell(record, ["obra", "n obra", "nro obra", "numero obra", "n", "designacion", "designacion y ubicacion"]) ??
 			`${risk}\n${insuredObject}`;
@@ -283,6 +344,9 @@ export async function parseInsurancePoliciesWorkbook(
 
 		return {
 			rowNumber: Number(record.__rowNumber ?? 0),
+			sourceFormat: "policy_master",
+			sourceFileName: options.sourceFileName,
+			sourceCutoffDate,
 			obraId: obraMatch?.id ?? null,
 			obraLabel: obraMatch
 				? [obraMatch.n != null ? String(obraMatch.n) : "", obraMatch.designacion_y_ubicacion ?? ""]
@@ -308,6 +372,200 @@ export async function parseInsurancePoliciesWorkbook(
 			cancellationRuleConfigured: hasRule,
 			isCancelled: parseBoolean(notes || getCell(record, ["poliza dada de baja", "baja", "dada de baja", "cancelada"])),
 			errors,
+		} satisfies InsurancePolicyImportRow;
+	});
+
+	return { rows, errors: [] };
+}
+
+function isExigibleHeaderRow(row: unknown) {
+	if (!Array.isArray(row)) return false;
+	const normalized = new Set(row.map(normalizeHeader));
+	return (
+		normalized.has("polizanro") &&
+		normalized.has("endosonro") &&
+		normalized.has("saldopremio") &&
+		normalized.has("vigenciahastaendoso")
+	);
+}
+
+function getWorkbookParam(workbook: XLSX.WorkBook, key: string) {
+	const paramsSheet = workbook.Sheets.Parametros;
+	if (!paramsSheet) return null;
+	const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(paramsSheet, { defval: null });
+	const first = rows[0];
+	if (!first) return null;
+	return first[key] ?? null;
+}
+
+function compareIsoDate(a: string | null, b: string | null) {
+	if (!a) return b;
+	if (!b) return a;
+	return a >= b ? a : b;
+}
+
+function buildPolicyNumberWithEndorsement(policyNumber: unknown, endorsementNumber: unknown) {
+	const policy = String(policyNumber ?? "").trim();
+	const endorsement = String(endorsementNumber ?? "").trim();
+	if (!policy) return "";
+	return endorsement ? `${policy} / ${endorsement}` : policy;
+}
+
+function parseInsurancePolicyExigibleWorkbook(
+	workbook: XLSX.WorkBook,
+	sheetName: string,
+	options: { sourceFileName?: string },
+) {
+	const sheet = workbook.Sheets[sheetName];
+	const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+	const headerIndex = matrix.findIndex(isExigibleHeaderRow);
+	if (headerIndex < 0) {
+		return { rows: [], errors: ["No se encontrÃ³ la fila de encabezados del exigible de deudores."] };
+	}
+	const headers = matrix[headerIndex] ?? [];
+	const sourceCutoffDate = parseExcelDate(getWorkbookParam(workbook, "FechaExigible"));
+	const records = matrix
+		.slice(headerIndex + 1)
+		.map((row, index) => {
+			const record: Record<string, unknown> = {};
+			(row ?? []).forEach((value, columnIndex) => {
+				const header = String(headers[columnIndex] ?? "").trim();
+				if (header) record[header] = value;
+				record[`__col_${columnIndex}`] = value;
+			});
+			record.__rowNumber = headerIndex + index + 2;
+			return record;
+		})
+		.filter((record) => String(getCell(record, ["PolizaNro", "poliza nro", "pÃ³liza nro"]) ?? "").trim().length > 0);
+
+	const summaries = new Map<string, {
+		policyNumber: string;
+		rowNumber: number;
+		section: string;
+		currency: string | null;
+		coverageStart: string | null;
+		coverageEnd: string | null;
+		prize: number;
+		balance: number;
+		positiveBalance: number;
+		creditNotes: number;
+		dueAmount: number;
+		upcomingAmount: number;
+		statuses: Set<string>;
+		movements: InsurancePolicyFinancialMovementImport[];
+	}>();
+
+	for (const record of records) {
+		const rawPolicyNumber = getCell(record, ["PolizaNro", "poliza nro", "pÃ³liza nro"]);
+		const endorsementNumber = String(getCell(record, ["EndosoNro"]) ?? "").trim() || null;
+		const policyNumber = buildPolicyNumberWithEndorsement(rawPolicyNumber, endorsementNumber);
+		if (!policyNumber) continue;
+		const rowNumber = Number(record.__rowNumber ?? 0);
+		const section = String(getCell(record, ["SeccionDescripcion", "seccion descripcion", "secciÃ³n descripcion"]) ?? "").trim();
+		const coverageStart = parseExcelDate(getCell(record, ["VigenciaDesdeEndoso"]));
+		const coverageEnd = parseExcelDate(getCell(record, ["VigenciaHastaEndoso"]));
+		const balanceAmount = parseNumber(getCell(record, ["SaldoPremio"]));
+		const premiumAmount = parseNumber(getCell(record, ["Premio"]));
+		const dueAmount = parseNumber(getCell(record, ["Vencido"]));
+		const upcomingAmount = parseNumber(getCell(record, ["AVencer"]));
+		const paidAmount = parseNumber(getCell(record, ["PagadoPremio"]));
+		const futurePaidAmount = parseNumber(getCell(record, ["PagadoFuturoPremio"]));
+		const status = String(getCell(record, ["Estado"]) ?? "").trim();
+		const currency = String(getCell(record, ["MonedaSimbolo", "Moneda"]) ?? "").trim() || null;
+		const movement: InsurancePolicyFinancialMovementImport = {
+			rowNumber,
+			policyNumber,
+			endorsementNumber,
+			installmentNumber: String(getCell(record, ["CuotaNro"]) ?? "").trim() || null,
+			itemNumber: String(getCell(record, ["ItemNro"]) ?? "").trim() || null,
+			invoicePosition: String(getCell(record, ["FacturaPos"]) ?? "").trim() || null,
+			invoiceNumber: String(getCell(record, ["FacturaNumero"]) ?? "").trim() || null,
+			invoiceLetter: String(getCell(record, ["FacturaLetra"]) ?? "").trim() || null,
+			issueDate: parseExcelDate(getCell(record, ["FechaEmision"])),
+			producerDueDate: parseExcelDate(getCell(record, ["FechaVtoProductor"])),
+			insuredDueDate: parseExcelDate(getCell(record, ["FechaVtoAsegurado"])),
+			coverageStart,
+			coverageEnd,
+			section,
+			currency,
+			premiumAmount,
+			paidAmount,
+			futurePaidAmount,
+			dueAmount,
+			upcomingAmount,
+			balanceAmount,
+			status,
+			movementType: (balanceAmount ?? 0) < 0 ? "credit_note" : "debit",
+			raw: record,
+		};
+		const summary = summaries.get(policyNumber) ?? {
+			policyNumber,
+			rowNumber,
+			section,
+			currency,
+			coverageStart,
+			coverageEnd,
+			prize: 0,
+			balance: 0,
+			positiveBalance: 0,
+			creditNotes: 0,
+			dueAmount: 0,
+			upcomingAmount: 0,
+			statuses: new Set<string>(),
+			movements: [],
+		};
+		summary.rowNumber = Math.min(summary.rowNumber, rowNumber);
+		if (!summary.section && section) summary.section = section;
+		if (!summary.currency && currency) summary.currency = currency;
+		summary.coverageStart = summary.coverageStart && coverageStart
+			? (summary.coverageStart <= coverageStart ? summary.coverageStart : coverageStart)
+			: summary.coverageStart ?? coverageStart;
+		summary.coverageEnd = compareIsoDate(summary.coverageEnd, coverageEnd);
+		summary.prize += premiumAmount ?? 0;
+		summary.balance += balanceAmount ?? 0;
+		summary.positiveBalance += Math.max(0, balanceAmount ?? 0);
+		summary.creditNotes += Math.min(0, balanceAmount ?? 0);
+		summary.dueAmount += dueAmount ?? 0;
+		summary.upcomingAmount += upcomingAmount ?? 0;
+		if (status) summary.statuses.add(status);
+		summary.movements.push(movement);
+		summaries.set(policyNumber, summary);
+	}
+
+	const rows = Array.from(summaries.values()).map((summary) => {
+		const coveragePeriod = [summary.coverageStart, summary.coverageEnd].filter(Boolean).join(" - ");
+		const notes = [
+			"Importada desde exigible de deudores del productor.",
+			"El productor informo este archivo como vigentes en teoria.",
+			summary.creditNotes < 0 ? `Incluye notas de credito por ${summary.creditNotes}.` : "",
+		].filter(Boolean).join(" ");
+		return {
+			rowNumber: summary.rowNumber,
+			sourceFormat: "exigible_debt" as const,
+			sourceFileName: options.sourceFileName,
+			sourceCutoffDate,
+			obraId: null,
+			obraLabel: "No se encontrÃ³ obra adecuada",
+			obraMatchStatus: "unmatched" as const,
+			policyNumber: summary.policyNumber,
+			section: summary.section,
+			coveragePeriod,
+			endDate: summary.coverageEnd,
+			insuredAmount: null,
+			currency: summary.currency,
+			premium: null,
+			prize: summary.prize || null,
+			balance: summary.balance,
+			status: Array.from(summary.statuses).join(", "),
+			risk: "",
+			insuredObject: "",
+			notes,
+			cancellationRuleType: "on_finish" as const,
+			cancellationRuleOffset: 0,
+			cancellationRuleConfigured: false,
+			isCancelled: false,
+			financialMovements: summary.movements,
+			errors: [],
 		} satisfies InsurancePolicyImportRow;
 	});
 

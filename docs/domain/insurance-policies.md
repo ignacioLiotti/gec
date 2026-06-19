@@ -112,6 +112,17 @@ El importador de Excel hace una vista previa antes de persistir. Cada fila debe 
 
 Las filas sin numero de poliza siguen siendo errores bloqueantes. Las filas `unmatched` no bloquean la confirmacion y no aparecen en el detalle de una obra hasta ser asignadas.
 
+El importador soporta dos familias de Excel:
+
+- **Maestro/listado de polizas**: trae poliza, vigencia, obra u objeto asegurable, suma asegurada, prima/premio y estado operativo. Este formato actualiza la poliza canonica. Tambien se acepta el listado del productor agrupado por `Tomador`, con encabezado `Tomador / Seccion / Poliza / Vigencia / Sum.Aseg. / Mon / Prima / Premio / Saldo / Saldo $ / Estado / Riesgo / Objeto del Seguro`; las filas `Total Tomador` se ignoran, el tomador se conserva en observaciones y la fecha del titulo "al dd-mm-aaaa" se usa como fecha de corte de origen.
+- **Exigible de deudores / cuenta corriente**: trae `PolizaNro`, `EndosoNro`, `CuotaNro`, vencimientos, `Premio`, `Vencido`, `AVencer` y `SaldoPremio`. Este formato se interpreta como cuenta corriente del productor. La identidad de poliza se compone como `PolizaNro / EndosoNro` para coincidir con el Excel maestro; por ejemplo `1006726` + endoso `0` es la misma poliza que `1006726 / 0`. Si el productor lo informa como vigente, las polizas se presumen activas hasta validacion, pero la importacion no debe borrar datos operativos previos como obra, responsables o reglas de baja.
+
+En el formato exigible, los saldos negativos son **notas de credito**. Deben persistirse como movimientos financieros `credit_note`, no como deuda negativa ni como ahorro confirmado. La poliza conserva un saldo neto observado para priorizacion, pero el detalle auditable queda en movimientos financieros por poliza/endoso/cuota.
+
+## Reasignacion entre obras
+
+Una poliza ya asociada puede moverse a otra obra del mismo tenant cuando la importacion o carga manual quedo vinculada a una obra incorrecta. La reasignacion actualiza el `obra_id`, mantiene la poliza como origen de verdad y vuelve a sincronizar la macrotabla de polizas para la obra anterior y la nueva.
+
 ## Macrotabla
 
 La macrotabla de polizas es una proyeccion sincronizada desde `insurance_policies` + `obras`, no una copia editable separada. Por eso refleja el estado actual de obra, fecha de finalizacion de obra, fecha calculada de baja y baja de poliza.
