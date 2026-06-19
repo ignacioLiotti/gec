@@ -528,7 +528,7 @@ export function AppSidebar({
 			switch (href) {
 				case "/document-generation":
 				case "/document-generation/drafts":
-					return Boolean(user);
+					return Boolean(user && activeTenantId);
 				case "/document-generation/review":
 					return Boolean(documentPermissions?.canReview);
 				case "/document-generation/config":
@@ -537,7 +537,7 @@ export function AppSidebar({
 					return false;
 			}
 		},
-		[demoMode, documentPermissions, user, userRoles],
+		[activeTenantId, demoMode, documentPermissions, user, userRoles],
 	);
 
 	const filteredNavItems = React.useMemo(

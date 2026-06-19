@@ -146,14 +146,15 @@ function extractJsonFromText(raw: string) {
 }
 
 function zodTypeForColumn(column: ColumnMeta) {
+	const nullAsEmpty = <T extends z.ZodTypeAny>(schema: T) => schema.nullable();
 	switch (column.dataType) {
 		case "number":
 		case "currency":
-			return z.union([z.number(), z.string()]);
+			return nullAsEmpty(z.union([z.number(), z.string()]));
 		case "boolean":
-			return z.union([z.boolean(), z.string(), z.number()]);
+			return nullAsEmpty(z.union([z.boolean(), z.string(), z.number()]));
 		default:
-			return z.string();
+			return nullAsEmpty(z.string());
 	}
 }
 

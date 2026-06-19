@@ -1,10 +1,9 @@
 "use client";
 
-import { memo } from "react";
-import type { ReactNode } from "react";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { memo, type ReactNode } from "react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, RefreshCw, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import type { FileSystemItem } from "../types";
 import { DocumentPreview } from "./document-preview";
 import { cn } from "@/lib/utils";
@@ -13,7 +12,7 @@ type DocumentSheetProps = {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
 	document: FileSystemItem | null;
-	breadcrumb: string;
+	breadcrumb?: string;
 	previewUrl: string | null;
 	onDownload: (doc: FileSystemItem) => void;
 	onRetryOcr?: (doc: FileSystemItem | null) => void;
@@ -37,7 +36,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 	onDownload,
 	onRetryOcr,
 	retryingOcr = false,
-	ocrStatusBadge,
+	ocrStatusBadge = null,
 	onToggleDataSheet,
 	showDataToggle = false,
 	isDataSheetOpen = false,
@@ -59,7 +58,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 			timeStyle: "short",
 		}).format(parsed);
 	})();
-	const uploadedByLabel = document.uploadedByLabel ?? document.uploadedByUserId ?? null;
+	const uploadedByLabel = document.uploadedByLabel ?? (document.uploadedByUserId ? "Usuario" : null);
 	const showDocumentPagination = Boolean(onPreviousDocument || onNextDocument);
 	const arePaginationButtonsDisabled = isDataSheetOpen;
 	const showOcrProcessingOverlay = document.ocrDocumentStatus === "pending" || document.ocrDocumentStatus === "processing";
@@ -152,15 +151,14 @@ export const DocumentSheet = memo(function DocumentSheet({
 						<div className="min-w-0 flex-1">
 							<div className="flex flex-wrap items-center gap-2">
 								<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
+								{ocrStatusBadge}
 							</div>
-							{/* {ocrStatusBadge} */}
 							<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 pt-2">
-
-								{/* {breadcrumb && (
-									<SheetDescription className="truncate text-xs uppercase tracking-wide text-stone-400">
+								{breadcrumb ? (
+									<p className="truncate text-xs uppercase tracking-wide text-stone-400">
 										{breadcrumb}
-									</SheetDescription>
-								)} */}
+									</p>
+								) : null}
 								{(uploadedAtLabel || uploadedByLabel) && (
 									<div className="mt-1 text-xs text-stone-500 break-words">
 										{uploadedByLabel && <span>Subido por: {uploadedByLabel}</span>}
@@ -170,47 +168,11 @@ export const DocumentSheet = memo(function DocumentSheet({
 								)}
 							</div>
 						</div>
-						<div className="flex flex-wrap items-center gap-2 mr-10 absolute right-2 top-3">
-							{/* {documentPositionLabel ? (
-								<div className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-stone-500 uppercase">
-									Documento {documentPositionLabel}
-								</div>
-							) : null} */}
-							{showDataToggle && (
-								<Button
-									variant="secondary"
-									size="sm"
-									onClick={onToggleDataSheet}
-									className="shrink-0"
-								>
-									{isDataSheetOpen ? "Ocultar datos" : "Ver datos"}
-								</Button>
-							)}
-							{onRetryOcr && (
-								<Button
-									variant={highlightRetryAction ? "outline" : "secondary"}
-									size="sm"
-									disabled={retryingOcr}
-									onClick={() => onRetryOcr(document)}
-									className={cn(
-										"shrink-0",
-										highlightRetryAction &&
-										"border-amber-300 bg-amber-50 text-amber-950 shadow-[0_0_0_1px_rgba(251,191,36,0.45),0_10px_30px_rgba(245,158,11,0.18)] hover:bg-amber-100 focus-visible:ring-amber-300"
-									)}
-								>
-									{retryingOcr ? (
-										<Loader2 className="mr-2 size-4 animate-spin" />
-									) : (
-										<RefreshCw className="mr-2 size-4" />
-									)}
-									Reprocesar Extracción
-								</Button>
-							)}
-							{/* <Button variant="outline" size="sm" onClick={() => onDownload(document)} className="shrink-0">
-								<Download className="size-4 mr-2" />
-								Descargar
-							</Button> */}
-						</div>
+						{documentPositionLabel ? (
+							<div className="mr-10 shrink-0 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+								Documento {documentPositionLabel}
+							</div>
+						) : null}
 					</div>
 					{ocrConflictMessage ? (
 						<div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
@@ -225,7 +187,17 @@ export const DocumentSheet = memo(function DocumentSheet({
 					) : null}
 				</SheetHeader>
 				<div className="relative flex-1 min-h-[50dvh] sm:min-h-[60vh] overflow-hidden bg-white">
-					<DocumentPreview document={document} previewUrl={previewUrl} onDownload={onDownload} />
+					<DocumentPreview
+						document={document}
+						previewUrl={previewUrl}
+						onDownload={onDownload}
+						onRetryOcr={onRetryOcr}
+						retryingOcr={retryingOcr}
+						highlightRetryAction={highlightRetryAction}
+						onToggleDataSheet={onToggleDataSheet}
+						showDataToggle={showDataToggle}
+						isDataSheetOpen={isDataSheetOpen}
+					/>
 					{showOcrProcessingOverlay ? (
 						<div className="pointer-events-none absolute inset-0 z-30 overflow-hidden ocr-scan-overlay">
 							<div className="absolute inset-0 ocr-scan-tint" />

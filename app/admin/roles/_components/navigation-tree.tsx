@@ -34,18 +34,8 @@ const NAVIGATION_STRUCTURE: NavigationItem[] = [
   { path: "/certificados", label: "Certificados", permission: "nav:certificados", icon: "FileCheck" },
   { path: "/macro", label: "Macro Tablas", permission: "nav:macro", icon: "Layers" },
   { path: "/notifications", label: "Notificaciones", permission: "nav:notifications", icon: "Bell" },
-  {
-    path: "/document-generation",
-    label: "Documentos",
-    permission: "nav:document-generation",
-    icon: "FileText",
-    children: [
-      { path: "/document-generation", label: "Generar documentos", permission: "documents:create" },
-      { path: "/document-generation/drafts", label: "Historial", permission: "documents:create" },
-      { path: "/document-generation/review", label: "Revision", permission: "documents:review" },
-      { path: "/document-generation/config", label: "Configuracion", permission: "documents:templates" },
-    ],
-  },
+  { path: "/document-generation/review", label: "Revision de documentos", permission: "documents:review", icon: "FileText" },
+  { path: "/document-generation/config", label: "Configuracion documental", permission: "documents:templates", icon: "FileText" },
   {
     path: "/admin",
     label: "Administracion",

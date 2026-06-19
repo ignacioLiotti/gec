@@ -6,6 +6,7 @@ import {
 	buildInsurancePolicyRowData,
 	calculateCancellationDate,
 	parseInsurancePoliciesWorkbook,
+	type InsurancePolicyFinancialMovementImport,
 	type InsurancePolicyImportRow,
 } from "@/lib/insurance-policies";
 import { getAuthContext } from "../../obras/route";
@@ -57,6 +58,109 @@ type InsurancePolicyUpsert = {
 	cancelled_at: string | null;
 	cancelled_by: string | null;
 };
+
+type ExistingPolicyLookupRow = {
+	id: string;
+	obra_id: string | null;
+	policy_number: string;
+};
+
+type InsurancePolicyFinancialMovementInsert = {
+	tenant_id: string;
+	insurance_policy_id: string | null;
+	policy_number: string;
+	endorsement_number: string | null;
+	installment_number: string | null;
+	item_number: string | null;
+	invoice_position: string | null;
+	invoice_number: string | null;
+	invoice_letter: string | null;
+	issue_date: string | null;
+	producer_due_date: string | null;
+	insured_due_date: string | null;
+	coverage_start: string | null;
+	coverage_end: string | null;
+	section: string;
+	currency: string | null;
+	premium_amount: number | null;
+	paid_amount: number | null;
+	future_paid_amount: number | null;
+	due_amount: number | null;
+	upcoming_amount: number | null;
+	balance_amount: number | null;
+	status: string;
+	movement_type: "debit" | "credit_note";
+	source_file_name: string | null;
+	source_cutoff_date: string | null;
+	raw_row: Record<string, unknown>;
+};
+
+const SUPABASE_IN_CHUNK_SIZE = 80;
+
+function uniqueValues(values: Array<string | null | undefined>) {
+	return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function chunkValues<T>(values: T[], size = SUPABASE_IN_CHUNK_SIZE) {
+	const chunks: T[][] = [];
+	for (let index = 0; index < values.length; index += size) {
+		chunks.push(values.slice(index, index + size));
+	}
+	return chunks;
+}
+
+async function fetchExistingPoliciesByNumber(
+	supabase: SupabaseRouteClient,
+	tenantId: string,
+	policyNumbers: string[],
+) {
+	const rows: ExistingPolicyLookupRow[] = [];
+	for (const chunk of chunkValues(uniqueValues(policyNumbers))) {
+		const { data, error } = await supabase
+			.from("insurance_policies")
+			.select("id, obra_id, policy_number")
+			.eq("tenant_id", tenantId)
+			.in("policy_number", chunk);
+		if (error) throw error;
+		rows.push(...((data ?? []) as ExistingPolicyLookupRow[]));
+	}
+	return rows;
+}
+
+async function fetchObraStatesById(
+	supabase: SupabaseRouteClient,
+	tenantId: string,
+	obraIds: string[],
+) {
+	const rows: ObraImportStateRow[] = [];
+	for (const chunk of chunkValues(uniqueValues(obraIds))) {
+		const { data, error } = await supabase
+			.from("obras")
+			.select("id, porcentaje")
+			.eq("tenant_id", tenantId)
+			.in("id", chunk);
+		if (error) throw error;
+		rows.push(...((data ?? []) as ObraImportStateRow[]));
+	}
+	return rows;
+}
+
+async function annotateInsuranceImportPreview(
+	supabase: SupabaseRouteClient,
+	tenantId: string,
+	rows: InsurancePolicyImportRow[],
+) {
+	const policyNumbers = uniqueValues(rows.map((row) => row.policyNumber));
+	if (policyNumbers.length === 0) return rows;
+	const existing = await fetchExistingPoliciesByNumber(supabase, tenantId, policyNumbers);
+	const existingPolicyNumbers = new Set(
+		(existing ?? []).map((policy) => String(policy.policy_number ?? "")),
+	);
+	return rows.map((row) => ({
+		...row,
+		importAction: existingPolicyNumbers.has(row.policyNumber) ? "update" : "create",
+	}));
+}
 
 async function ensureInsuranceMacroTable(supabase: SupabaseRouteClient, tenantId: string) {
 	const { data: existing, error: existingError } = await supabase
@@ -291,6 +395,74 @@ async function persistUnmatchedInsurancePolicies(
 	return imported;
 }
 
+async function replaceFinancialMovementsForImport(
+	supabase: SupabaseRouteClient,
+	tenantId: string,
+	sourceFileName: string | null,
+	sourceCutoffDate: string | null,
+	policyNumbers: string[],
+	movements: InsurancePolicyFinancialMovementInsert[],
+) {
+	if (policyNumbers.length === 0) return 0;
+	for (const chunk of chunkValues(uniqueValues(policyNumbers))) {
+		let deleteQuery = supabase
+			.from("insurance_policy_financial_movements")
+			.delete()
+			.eq("tenant_id", tenantId)
+			.in("policy_number", chunk);
+		if (sourceFileName) deleteQuery = deleteQuery.eq("source_file_name", sourceFileName);
+		if (sourceCutoffDate) deleteQuery = deleteQuery.eq("source_cutoff_date", sourceCutoffDate);
+		const { error: deleteError } = await deleteQuery;
+		if (deleteError) throw deleteError;
+	}
+	if (movements.length === 0) return 0;
+	for (const chunk of chunkValues(movements, 250)) {
+		const { error: insertError } = await supabase
+			.from("insurance_policy_financial_movements")
+			.insert(chunk);
+		if (insertError) throw insertError;
+	}
+	return movements.length;
+}
+
+function buildFinancialMovementInsert(
+	tenantId: string,
+	policyId: string | null,
+	sourceFileName: string | null,
+	sourceCutoffDate: string | null,
+	movement: InsurancePolicyFinancialMovementImport,
+): InsurancePolicyFinancialMovementInsert {
+	return {
+		tenant_id: tenantId,
+		insurance_policy_id: policyId,
+		policy_number: movement.policyNumber,
+		endorsement_number: movement.endorsementNumber,
+		installment_number: movement.installmentNumber,
+		item_number: movement.itemNumber,
+		invoice_position: movement.invoicePosition,
+		invoice_number: movement.invoiceNumber,
+		invoice_letter: movement.invoiceLetter,
+		issue_date: movement.issueDate,
+		producer_due_date: movement.producerDueDate,
+		insured_due_date: movement.insuredDueDate,
+		coverage_start: movement.coverageStart,
+		coverage_end: movement.coverageEnd,
+		section: movement.section,
+		currency: movement.currency,
+		premium_amount: movement.premiumAmount,
+		paid_amount: movement.paidAmount,
+		future_paid_amount: movement.futurePaidAmount,
+		due_amount: movement.dueAmount,
+		upcoming_amount: movement.upcomingAmount,
+		balance_amount: movement.balanceAmount,
+		status: movement.status,
+		movement_type: movement.movementType,
+		source_file_name: sourceFileName,
+		source_cutoff_date: sourceCutoffDate,
+		raw_row: movement.raw,
+	};
+}
+
 export async function POST(request: Request) {
 	const { supabase, user, tenantId } = await getAuthContext();
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -310,11 +482,16 @@ export async function POST(request: Request) {
 		if (!(file instanceof File)) {
 			return NextResponse.json({ error: "Archivo Excel requerido" }, { status: 400 });
 		}
-		const parsed = await parseInsurancePoliciesWorkbook(await file.arrayBuffer(), (obras ?? []) as ObraImportLookupRow[]);
+		const parsed = await parseInsurancePoliciesWorkbook(
+			await file.arrayBuffer(),
+			(obras ?? []) as ObraImportLookupRow[],
+			{ sourceFileName: file.name },
+		);
+		const previewRows = await annotateInsuranceImportPreview(supabase, tenantId, parsed.rows);
 		return NextResponse.json({
-			preview: parsed.rows,
+			preview: previewRows,
 			errors: parsed.errors,
-			hasBlockingErrors: parsed.errors.length > 0 || parsed.rows.some((row) => row.errors.length > 0),
+			hasBlockingErrors: parsed.errors.length > 0 || previewRows.some((row) => row.errors.length > 0),
 		});
 	}
 
@@ -325,19 +502,20 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: "No hay pólizas válidas para importar" }, { status: 400 });
 	}
 
-	const matchedRows = validRows.filter((row) => row.obraId);
-	const unmatchedRows = validRows.filter((row) => !row.obraId);
+	const exigibleRows = validRows.filter((row) => row.sourceFormat === "exigible_debt");
+	const policyMasterRows = validRows.filter((row) => row.sourceFormat !== "exigible_debt");
+	const matchedRows = policyMasterRows.filter((row) => row.obraId);
+	const unmatchedRows = policyMasterRows.filter((row) => !row.obraId);
 	const obraIds = Array.from(new Set(matchedRows.map((row) => row.obraId as string)));
-	const obraStates = obraIds.length > 0
-		? await supabase
-				.from("obras")
-				.select("id, porcentaje")
-				.eq("tenant_id", tenantId)
-				.in("id", obraIds)
-		: { data: [], error: null };
-	if (obraStates.error) return NextResponse.json({ error: obraStates.error.message }, { status: 500 });
+	let obraStates: ObraImportStateRow[] = [];
+	try {
+		obraStates = await fetchObraStatesById(supabase, tenantId, obraIds);
+	} catch (obraStatesError) {
+		const message = obraStatesError instanceof Error ? obraStatesError.message : "Error consultando obras";
+		return NextResponse.json({ error: message }, { status: 500 });
+	}
 	const finishedObras = new Set(
-		(obraStates.data ?? [])
+		obraStates
 			.filter((obra: ObraImportStateRow) => Number(obra.porcentaje ?? 0) >= 100)
 			.map((obra: ObraImportStateRow) => obra.id),
 	);
@@ -384,7 +562,56 @@ export async function POST(request: Request) {
 		};
 	};
 
-	const upserts = matchedRows.map(buildUpsert);
+	const masterPolicyNumbers = uniqueValues(policyMasterRows.map((row) => row.policyNumber));
+	let existingMasterPolicies: ExistingPolicyLookupRow[] = [];
+	try {
+		existingMasterPolicies = await fetchExistingPoliciesByNumber(supabase, tenantId, masterPolicyNumbers);
+	} catch (existingMasterPoliciesError) {
+		const message = existingMasterPoliciesError instanceof Error ? existingMasterPoliciesError.message : "Error consultando polizas existentes";
+		return NextResponse.json({ error: message }, { status: 500 });
+	}
+	const existingMasterByPolicy = new Map<string, ExistingPolicyLookupRow>();
+	for (const policy of existingMasterPolicies) {
+		const current = existingMasterByPolicy.get(policy.policy_number);
+		if (!current || (!current.obra_id && policy.obra_id)) existingMasterByPolicy.set(policy.policy_number, policy);
+	}
+	let existingMasterImported = 0;
+	const existingMasterAffectedObraIds = new Set<string>();
+	for (const row of policyMasterRows) {
+		const existing = existingMasterByPolicy.get(row.policyNumber);
+		if (!existing?.id) continue;
+		const updatePayload: Partial<InsurancePolicyUpsert> = buildUpsert(row);
+		delete updatePayload.tenant_id;
+		delete updatePayload.cancellation_requested_at;
+		delete updatePayload.cancellation_confirmed_at;
+		delete updatePayload.cancellation_notes;
+		delete updatePayload.definitive_reception_date;
+		if (row.cancellationRuleConfigured !== true) {
+			delete updatePayload.cancellation_rule_configured;
+			delete updatePayload.cancellation_rule_type;
+			delete updatePayload.cancellation_rule_offset;
+			delete updatePayload.calculated_cancellation_date;
+		}
+		if (!row.obraId) {
+			delete updatePayload.obra_id;
+			delete updatePayload.import_obra_label;
+			delete updatePayload.import_match_status;
+			delete updatePayload.obra_finished_at;
+			delete updatePayload.calculated_cancellation_date;
+		}
+		const { error: updateError } = await supabase
+			.from("insurance_policies")
+			.update(updatePayload)
+			.eq("id", existing.id)
+			.eq("tenant_id", tenantId);
+		if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+		if (existing.obra_id) existingMasterAffectedObraIds.add(existing.obra_id);
+		if (row.obraId) existingMasterAffectedObraIds.add(row.obraId);
+		existingMasterImported += 1;
+	}
+	const newMatchedRows = matchedRows.filter((row) => !existingMasterByPolicy.has(row.policyNumber));
+	const newUnmatchedRows = unmatchedRows.filter((row) => !existingMasterByPolicy.has(row.policyNumber));
+	const upserts = newMatchedRows.map(buildUpsert);
 	let data: Array<{ id: string }> | null = [];
 	let error: { message: string } | null = null;
 	if (upserts.length > 0) {
@@ -417,11 +644,96 @@ export async function POST(request: Request) {
 	}
 	let unmatchedImported = 0;
 	try {
-		unmatchedImported = await persistUnmatchedInsurancePolicies(supabase, unmatchedRows.map(buildUpsert));
+		unmatchedImported = await persistUnmatchedInsurancePolicies(supabase, newUnmatchedRows.map(buildUpsert));
 	} catch (unmatchedError) {
 		const message = unmatchedError instanceof Error ? unmatchedError.message : "Error importando pólizas sin obra";
 		return NextResponse.json({ error: message }, { status: 500 });
 	}
-	await syncInsuranceMacroRows(supabase, tenantId, obraIds);
-	return NextResponse.json({ imported: (data?.length ?? 0) + unmatchedImported });
+	let exigibleImported = 0;
+	let financialMovementsImported = 0;
+	const financialAffectedObraIds = new Set<string>();
+	if (exigibleRows.length > 0) {
+		const policyNumbers = uniqueValues(exigibleRows.map((row) => row.policyNumber));
+		let existingPolicies: ExistingPolicyLookupRow[] = [];
+		try {
+			existingPolicies = await fetchExistingPoliciesByNumber(supabase, tenantId, policyNumbers);
+		} catch (existingPoliciesError) {
+			const message = existingPoliciesError instanceof Error ? existingPoliciesError.message : "Error consultando polizas existentes";
+			return NextResponse.json({ error: message }, { status: 500 });
+		}
+		const existingByPolicy = new Map<string, ExistingPolicyLookupRow>();
+		for (const policy of existingPolicies) {
+			const current = existingByPolicy.get(policy.policy_number);
+			if (!current || (!current.obra_id && policy.obra_id)) existingByPolicy.set(policy.policy_number, policy);
+		}
+		const policyIdByNumber = new Map<string, string>();
+		for (const row of exigibleRows) {
+			const existing = existingByPolicy.get(row.policyNumber);
+			const upsert = buildUpsert(row);
+			if (existing?.id) {
+				const { error: updateError } = await supabase
+					.from("insurance_policies")
+					.update({
+						section: upsert.section,
+						coverage_period: upsert.coverage_period,
+						end_date: upsert.end_date,
+						currency: upsert.currency,
+						prize: upsert.prize,
+						balance: upsert.balance,
+						status: upsert.status,
+						notes: upsert.notes,
+						is_cancelled: false,
+						updated_at: new Date().toISOString(),
+					})
+					.eq("id", existing.id)
+					.eq("tenant_id", tenantId);
+				if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+				policyIdByNumber.set(row.policyNumber, existing.id);
+				if (existing.obra_id) financialAffectedObraIds.add(existing.obra_id);
+				exigibleImported += 1;
+			} else {
+				const { data: created, error: createError } = await supabase
+					.from("insurance_policies")
+					.insert(upsert)
+					.select("id, obra_id")
+					.single<{ id: string; obra_id: string | null }>();
+				if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });
+				policyIdByNumber.set(row.policyNumber, created.id);
+				if (created.obra_id) financialAffectedObraIds.add(created.obra_id);
+				exigibleImported += 1;
+			}
+		}
+		const sourceFileName = exigibleRows.find((row) => row.sourceFileName)?.sourceFileName ?? null;
+		const sourceCutoffDate = exigibleRows.find((row) => row.sourceCutoffDate)?.sourceCutoffDate ?? null;
+		const movementInserts = exigibleRows.flatMap((row) =>
+			(row.financialMovements ?? []).map((movement) =>
+				buildFinancialMovementInsert(
+					tenantId,
+					policyIdByNumber.get(row.policyNumber) ?? null,
+					sourceFileName,
+					sourceCutoffDate,
+					movement,
+				)
+			)
+		);
+		try {
+			financialMovementsImported = await replaceFinancialMovementsForImport(
+				supabase,
+				tenantId,
+				sourceFileName,
+				sourceCutoffDate,
+				policyNumbers,
+				movementInserts,
+			);
+		} catch (movementError) {
+			const message = movementError instanceof Error ? movementError.message : "Error importando movimientos financieros de polizas";
+			return NextResponse.json({ error: message }, { status: 500 });
+		}
+	}
+	const syncObraIds = Array.from(new Set([...obraIds, ...existingMasterAffectedObraIds, ...financialAffectedObraIds]));
+	await syncInsuranceMacroRows(supabase, tenantId, syncObraIds);
+	return NextResponse.json({
+		imported: (data?.length ?? 0) + unmatchedImported + existingMasterImported + exigibleImported,
+		financialMovementsImported,
+	});
 }

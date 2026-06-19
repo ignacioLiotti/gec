@@ -63,11 +63,8 @@ type ExtractionTarget = {
 };
 
 export type DocumentGenerationPermissionKey =
-  | "nav:document-generation"
-  | "documents:create"
   | "documents:review"
-  | "documents:templates"
-  | "documents:drafts:all";
+  | "documents:templates";
 
 export type DocumentGenerationPermissionMap = {
   canSeeNavigation: boolean;
@@ -87,14 +84,11 @@ export type DocumentActorSummary = {
 export function canEditGeneratedDocument(params: {
   canCreate: boolean;
   userId: string | null;
-  generatedBy: string | null;
   status: string | null;
 }) {
   return (
     params.canCreate &&
     Boolean(params.userId) &&
-    Boolean(params.generatedBy) &&
-    params.userId === params.generatedBy &&
     ["GENERATED", "UNDER_REVIEW", "REJECTED"].includes(params.status ?? "")
   );
 }
@@ -201,21 +195,18 @@ export async function loadDocumentGenerationPermissions(
     };
   }
 
-  const [canSeeNavigation, canCreate, canReview, canManageTemplates, canViewAllDrafts] =
+  const [canReview, canManageTemplates] =
     await Promise.all([
-      hasDocumentGenerationPermission(access, "nav:document-generation"),
-      hasDocumentGenerationPermission(access, "documents:create"),
       hasDocumentGenerationPermission(access, "documents:review"),
       hasDocumentGenerationPermission(access, "documents:templates"),
-      hasDocumentGenerationPermission(access, "documents:drafts:all"),
     ]);
 
   return {
-    canSeeNavigation,
-    canCreate,
+    canSeeNavigation: true,
+    canCreate: true,
     canReview,
     canManageTemplates,
-    canViewAllDrafts,
+    canViewAllDrafts: false,
   };
 }
 

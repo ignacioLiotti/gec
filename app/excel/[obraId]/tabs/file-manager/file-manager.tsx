@@ -1475,9 +1475,28 @@ function FileManagerContent({
   const resolveOcrLinksForDocument = useCallback(
     (doc: FileSystemItem | null) => {
       if (!doc?.storagePath) return [] as OcrFolderLink[];
+      const findLinksForFolderKey = (folderKey: string) => {
+        const normalizedPath = normalizeFolderPath(folderKey);
+        const candidates = new Set<string>();
+        if (normalizedPath) {
+          candidates.add(normalizedPath);
+          candidates.add(normalizeFolderName(normalizedPath));
+          const leafSegment = normalizedPath.split('/').filter(Boolean).pop() ?? '';
+          if (leafSegment) {
+            candidates.add(leafSegment);
+            candidates.add(normalizeFolderName(leafSegment));
+          }
+        }
+        const normalizedFlat = normalizeFolderName(folderKey);
+        if (normalizedFlat) candidates.add(normalizedFlat);
+        for (const candidate of candidates) {
+          const links = ocrFolderLinksMap.get(candidate);
+          if (links && links.length > 0) return links;
+        }
+        return null;
+      };
       if (doc.ocrFolderName) {
-        const normalized = normalizeFolderPath(doc.ocrFolderName);
-        const direct = ocrFolderLinksMap.get(normalized) ?? ocrFolderLinksMap.get(normalizeFolderName(normalized));
+        const direct = findLinksForFolderKey(doc.ocrFolderName);
         if (direct && direct.length > 0) return direct;
       }
       const segments = doc.storagePath.split('/').filter(Boolean);
@@ -1485,7 +1504,7 @@ function FileManagerContent({
       const relativePath = normalizeFolderPath(segments.slice(1, -1).join('/'));
       let cursor = relativePath;
       while (cursor) {
-        const links = ocrFolderLinksMap.get(cursor) ?? ocrFolderLinksMap.get(normalizeFolderName(cursor));
+        const links = findLinksForFolderKey(cursor);
         if (links && links.length > 0) return links;
         cursor = getParentFolderPath(cursor);
       }
@@ -4908,11 +4927,6 @@ function FileManagerContent({
     return activeDocumentRowsByTablaId.get(activeDocumentOcrLink.tablaId) ?? [];
   }, [activeDocumentOcrLink, activeDocumentRowsByTablaId]);
 
-  const canRetryActiveDocument = useMemo(
-    () => activeDocumentOcrLinks.length > 0,
-    [activeDocumentOcrLinks]
-  );
-
   const [isDocumentDataSheetOpen, setIsDocumentDataSheetOpen] = useState(false);
 
   const hasAnyActiveDocumentData = useMemo(
@@ -5037,13 +5051,6 @@ function FileManagerContent({
     setIsDocumentDataSheetOpen(false);
     setActiveDocumentTablaIdOverride(null);
   }, [activeDocument?.storagePath]);
-
-  const documentBreadcrumb = useMemo(() => {
-    const doc = activeDocument ?? selectedDocument;
-    if (!doc) return '';
-    const folderSegments = selectedFolder ? getPathSegments(selectedFolder) : [];
-    return [...folderSegments, doc.name].join(' / ');
-  }, [activeDocument, getPathSegments, selectedDocument, selectedFolder]);
 
   const getFileIcon = useCallback((mimetype?: string) => {
     if (!mimetype) return <File className="size-8" />;
@@ -7003,11 +7010,9 @@ function FileManagerContent({
         isOpen={isDocumentSheetOpen && Boolean(activeDocument)}
         onOpenChange={handleDocumentSheetOpenChange}
         document={activeDocument}
-        breadcrumb={documentBreadcrumb}
         previewUrl={previewUrl}
         onDownload={handleDownload}
-        ocrStatusBadge={activeDocument ? renderOcrStatusBadge(activeDocument, 'sheet') : null}
-        onRetryOcr={canRetryActiveDocument ? handleRetryDocumentOcr : undefined}
+        onRetryOcr={activeDocument?.storagePath ? handleRetryDocumentOcr : undefined}
         retryingOcr={Boolean(activeDocument && retryingDocumentId === activeDocument.id)}
         highlightRetryAction={activeDocumentNeedsRetry}
         onToggleDataSheet={toggleDocumentDataSheet}
@@ -7015,11 +7020,6 @@ function FileManagerContent({
         isDataSheetOpen={isDocumentDataSheetOpen}
         onPreviousDocument={previousSheetDocument ? () => handleSheetDocumentPagination('previous') : null}
         onNextDocument={nextSheetDocument ? () => handleSheetDocumentPagination('next') : null}
-        documentPositionLabel={
-          activeDocumentIndex >= 0 && selectedFolderFiles.length > 0
-            ? `${activeDocumentIndex + 1} de ${selectedFolderFiles.length}`
-            : null
-        }
       />
 
       <Dialog

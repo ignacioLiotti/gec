@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { AlertCircle, Download, Eye, FileText, Loader2 } from "lucide-react";
+import { AlertCircle, Download, Eye, FileText, Loader2, RefreshCw, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,12 @@ type DocumentPreviewProps = {
 	document: FileSystemItem | null;
 	previewUrl: string | null;
 	onDownload: (doc: FileSystemItem) => void;
+	onRetryOcr?: (doc: FileSystemItem | null) => void;
+	retryingOcr?: boolean;
+	highlightRetryAction?: boolean;
+	onToggleDataSheet?: () => void;
+	showDataToggle?: boolean;
+	isDataSheetOpen?: boolean;
 };
 
 type PreviewKind =
@@ -150,12 +156,15 @@ function filterWordMessages(messages: MammothMessage[]) {
 function PreviewActionBar({
 	document,
 	onDownload,
+	actions,
 }: {
 	document: FileSystemItem;
 	onDownload: (doc: FileSystemItem) => void;
+	actions?: ReactNode;
 }) {
 	return (
-		<div className="absolute right-4 top-4 z-20">
+		<div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+			{actions}
 			<Button variant="default" size="sm" onClick={() => onDownload(document)}>
 				<Download className="mr-2 size-4" />
 				Descargar
@@ -164,18 +173,89 @@ function PreviewActionBar({
 	);
 }
 
+function ReprocessOcrButton({
+	document,
+	onRetryOcr,
+	retryingOcr = false,
+	highlight = false,
+	compact = false,
+}: {
+	document: FileSystemItem;
+	onRetryOcr?: (doc: FileSystemItem | null) => void;
+	retryingOcr?: boolean;
+	highlight?: boolean;
+	compact?: boolean;
+}) {
+	if (!onRetryOcr) return null;
+
+	return (
+		<Button
+			variant="default"
+			size="sm"
+			disabled={retryingOcr}
+			onClick={() => onRetryOcr(document)}
+			title={retryingOcr ? "Reprocesando OCR" : "Reprocesar OCR"}
+			className={cn(
+				"shrink-0 gap-2 border border-[#ff5800] bg-[#ff5800] font-semibold text-white shadow-[0_10px_24px_rgba(255,88,0,0.32)] hover:border-[#e64f00] hover:bg-[#e64f00] hover:text-white focus-visible:ring-[#ff5800]/45 disabled:border-orange-300 disabled:bg-orange-300 disabled:text-white",
+				compact && "px-2 sm:px-3",
+				highlight &&
+					"border-[#ff3d00] bg-[#ff3d00] shadow-[0_0_0_2px_rgba(255,88,0,0.28),0_14px_34px_rgba(255,61,0,0.38)] hover:border-[#d93400] hover:bg-[#d93400]"
+			)}
+		>
+			{retryingOcr ? (
+				<Loader2 className="size-4 animate-spin" />
+			) : (
+				<RefreshCw className="size-4" />
+			)}
+			<span className={compact ? "hidden sm:inline" : undefined}>Reprocesar OCR</span>
+		</Button>
+	);
+}
+
+function DataSheetToggleButton({
+	onToggleDataSheet,
+	isDataSheetOpen = false,
+	compact = false,
+}: {
+	onToggleDataSheet?: () => void;
+	isDataSheetOpen?: boolean;
+	compact?: boolean;
+}) {
+	if (!onToggleDataSheet) return null;
+
+	return (
+		<Button
+			variant="default"
+			size="sm"
+			onClick={onToggleDataSheet}
+			title={isDataSheetOpen ? "Ocultar datos extraidos" : "Ver datos extraidos"}
+			className={cn(
+				"shrink-0 gap-2 border border-[#0f766e] bg-[#0f766e] font-semibold text-white shadow-[0_10px_24px_rgba(15,118,110,0.28)] hover:border-[#0d665f] hover:bg-[#0d665f] hover:text-white focus-visible:ring-[#0f766e]/45",
+				compact && "px-2 sm:px-3"
+			)}
+		>
+			<Table2 className="size-4" />
+			<span className={compact ? "hidden sm:inline" : undefined}>
+				{isDataSheetOpen ? "Ocultar datos" : "Ver datos"}
+			</span>
+		</Button>
+	);
+}
+
 function PreviewFallback({
 	document,
 	onDownload,
 	message = "Vista previa no disponible para este tipo de archivo",
+	actions,
 }: {
 	document: FileSystemItem;
 	onDownload: (doc: FileSystemItem) => void;
 	message?: string;
+	actions?: ReactNode;
 }) {
 	return (
 		<div className="relative flex h-full flex-col">
-			<PreviewActionBar document={document} onDownload={onDownload} />
+			<PreviewActionBar document={document} onDownload={onDownload} actions={actions} />
 			<div className="flex flex-1 flex-col items-center justify-center p-4 text-stone-400">
 				<FileText className="mb-4 size-16 opacity-20" />
 				<p>{message}</p>
@@ -193,11 +273,13 @@ function SpreadsheetLikePreview({
 	previewUrl,
 	onDownload,
 	mode,
+	actions,
 }: {
 	document: FileSystemItem;
 	previewUrl: string;
 	onDownload: (doc: FileSystemItem) => void;
 	mode: "spreadsheet" | "csv" | "text";
+	actions?: ReactNode;
 }) {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -272,7 +354,7 @@ function SpreadsheetLikePreview({
 	if (isLoading) {
 		return (
 			<div className="relative flex h-full flex-col">
-				<PreviewActionBar document={document} onDownload={onDownload} />
+				<PreviewActionBar document={document} onDownload={onDownload} actions={actions} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
 					<Loader2 className="size-4 animate-spin" />
 					Cargando vista previa&hellip;
@@ -284,7 +366,7 @@ function SpreadsheetLikePreview({
 	if (error) {
 		return (
 			<div className="relative flex h-full flex-col">
-				<PreviewActionBar document={document} onDownload={onDownload} />
+				<PreviewActionBar document={document} onDownload={onDownload} actions={actions} />
 				<div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center text-stone-500">
 					<AlertCircle className="size-10 text-amber-500" />
 					<p>{error}</p>
@@ -296,7 +378,7 @@ function SpreadsheetLikePreview({
 	if (mode === "text") {
 		return (
 			<div className="relative flex h-full flex-col">
-				<PreviewActionBar document={document} onDownload={onDownload} />
+				<PreviewActionBar document={document} onDownload={onDownload} actions={actions} />
 				<div className="min-h-0 flex-1 overflow-auto bg-stone-50 p-4 pt-16">
 					<pre className="whitespace-pre-wrap break-words font-mono text-xs text-stone-700">
 						{textPreview}
@@ -311,6 +393,7 @@ function SpreadsheetLikePreview({
 			<PreviewFallback
 				document={document}
 				onDownload={onDownload}
+				actions={actions}
 				message="El archivo no contiene datos previsualizables."
 			/>
 		);
@@ -318,7 +401,7 @@ function SpreadsheetLikePreview({
 
 	return (
 		<div className="relative flex h-full min-h-0 flex-col">
-			<PreviewActionBar document={document} onDownload={onDownload} />
+			<PreviewActionBar document={document} onDownload={onDownload} actions={actions} />
 			{sheets.length > 1 ? (
 				<div className="flex gap-2 overflow-x-auto border-b border-stone-200 px-3 py-2 pr-40">
 					{sheets.map((sheet) => (
@@ -349,10 +432,12 @@ function WordDocumentPreview({
 	document,
 	previewUrl,
 	onDownload,
+	actions,
 }: {
 	document: FileSystemItem;
 	previewUrl: string;
 	onDownload: (doc: FileSystemItem) => void;
+	actions?: ReactNode;
 }) {
 	const ext = getFileExtension(document.name);
 	const [isLoading, setIsLoading] = useState(true);
@@ -438,7 +523,7 @@ function WordDocumentPreview({
 	if (isLoading) {
 		return (
 			<div className="relative flex h-full flex-col">
-				<PreviewActionBar document={document} onDownload={onDownload} />
+				<PreviewActionBar document={document} onDownload={onDownload} actions={actions} />
 				<div className="flex flex-1 items-center justify-center gap-2 text-sm text-stone-500">
 					<Loader2 className="size-4 animate-spin" />
 					Renderizando documento&hellip;
@@ -448,12 +533,12 @@ function WordDocumentPreview({
 	}
 
 	if (error) {
-		return <PreviewFallback document={document} onDownload={onDownload} message={error} />;
+		return <PreviewFallback document={document} onDownload={onDownload} actions={actions} message={error} />;
 	}
 
 	return (
 		<div className="relative flex h-full flex-col">
-			<PreviewActionBar document={document} onDownload={onDownload} />
+			<PreviewActionBar document={document} onDownload={onDownload} actions={actions} />
 			<div className="min-h-0 flex-1 overflow-auto bg-stone-50 p-6 pt-16">
 				<div className="docx-preview-shell mx-auto max-w-4xl rounded-xl border border-stone-200 bg-white p-8 shadow-sm">
 					<div
@@ -805,6 +890,12 @@ export const DocumentPreview = memo(function DocumentPreview({
 	document,
 	previewUrl,
 	onDownload,
+	onRetryOcr,
+	retryingOcr = false,
+	highlightRetryAction = false,
+	onToggleDataSheet,
+	showDataToggle = false,
+	isDataSheetOpen = false,
 }: DocumentPreviewProps) {
 	if (!document) {
 		return (
@@ -816,13 +907,31 @@ export const DocumentPreview = memo(function DocumentPreview({
 	}
 
 	const previewKind = getPreviewKind(document);
+	const previewActions = (
+		<>
+			{showDataToggle ? (
+				<DataSheetToggleButton
+					onToggleDataSheet={onToggleDataSheet}
+					isDataSheetOpen={isDataSheetOpen}
+					compact
+				/>
+			) : null}
+			<ReprocessOcrButton
+				document={document}
+				onRetryOcr={onRetryOcr}
+				retryingOcr={retryingOcr}
+				highlight={highlightRetryAction}
+				compact
+			/>
+		</>
+	);
 
 	if (previewKind === "model") {
 		return <ModelDocumentPreview document={document} onDownload={onDownload} />;
 	}
 
 	if (!previewUrl) {
-		return <PreviewFallback document={document} onDownload={onDownload} />;
+		return <PreviewFallback document={document} onDownload={onDownload} actions={previewActions} />;
 	}
 
 	if (previewKind === "image" || previewKind === "pdf") {
@@ -839,6 +948,7 @@ export const DocumentPreview = memo(function DocumentPreview({
 					fileName={document.name}
 					fileType={previewKind === "pdf" ? "pdf" : "image"}
 					onDownload={() => onDownload(document)}
+					toolbarActions={previewActions}
 				/>
 			</div>
 		);
@@ -857,6 +967,7 @@ export const DocumentPreview = memo(function DocumentPreview({
 					previewUrl={previewUrl}
 					onDownload={onDownload}
 					mode={previewKind}
+					actions={previewActions}
 				/>
 			</div>
 		);
@@ -874,10 +985,11 @@ export const DocumentPreview = memo(function DocumentPreview({
 					document={document}
 					previewUrl={previewUrl}
 					onDownload={onDownload}
+					actions={previewActions}
 				/>
 			</div>
 		);
 	}
 
-	return <PreviewFallback document={document} onDownload={onDownload} />;
+	return <PreviewFallback document={document} onDownload={onDownload} actions={previewActions} />;
 });

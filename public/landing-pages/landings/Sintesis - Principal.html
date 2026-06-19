@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sintesis — Documentos, datos y control para constructoras</title>
+  <link rel="stylesheet" href="shared/sintesis-tokens.css" />
+  <link rel="stylesheet" href="shared/landing.css" />
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root" data-screen-label="Landing - Principal"></div>
+
+  <script type="text/babel" src="shared/chrome.jsx"></script>
+  <script type="text/babel" src="shared/sections.jsx"></script>
+  <script type="text/babel" src="shared/mocks.jsx"></script>
+
+  <script type="text/babel">
+    function App() {
+      const stats = [
+        { eyebrow: "Toda la obra", value: "1 lugar", label: "Documentos, datos, alertas y reportes de cada obra, juntos y conectados.", orange: true },
+        { eyebrow: "De documento a dato", value: "0 doble carga", label: "El dato se lee del documento una vez; no se vuelve a tipear en una planilla." },
+        { eyebrow: "Misma información", value: "1 equipo", label: "Dirección, administración, obra y oficina técnica miran lo mismo." },
+      ];
+
+      const dolor = {
+        eyebrow: "El problema",
+        title: "El problema no es que falte información. <em>Es que está repartida</em>.",
+        lead: "En muchas constructoras los documentos están en carpetas físicas, los datos en Excel, las fotos en WhatsApp y los certificados en PDF. Cuando dirección necesita ver qué pasó en una obra, alguien tiene que reconstruir la historia a mano.",
+        ctaLabel: "Ver cómo lo ordena Síntesis",
+        items: [
+          { title: "Documentos difíciles de encontrar", body: "Contratos, pólizas, certificados, remitos y facturas quedan repartidos entre chats, mails y carpetas." },
+          { title: "Datos cargados dos veces", body: "La información se lee de un documento y después alguien la vuelve a cargar a mano en una planilla." },
+          { title: "Vencimientos y desvíos que llegan tarde", body: "Las alertas dependen de la memoria, del seguimiento manual o de un Excel que alguien se acuerde de mirar." },
+          { title: "Reportes sin respaldo inmediato", body: "El número aparece en una planilla, pero cuesta volver al documento que lo originó." },
+        ],
+      };
+
+      const solucion = {
+        eyebrow: "La solución",
+        title: "Síntesis conecta <em>documento, dato y decisión</em>.",
+        lead: "Un mismo recorrido: el documento entra, se vuelve dato y termina en control de obra.",
+        steps: [
+          { title: "Cargá documentos", body: "Subí fotos, PDF o archivos por obra. Cada documento queda en su carpeta, con responsable, fecha y trazabilidad." },
+          { title: "Convertí documentos en datos", body: "El sistema extrae fechas, montos, proveedores, certificados y vencimientos para que no dependas de la carga manual." },
+          { title: "Controlá la obra", body: "Los datos alimentan tablas, alertas, reportes y resúmenes para que dirección vea el estado real de cada obra." },
+        ],
+      };
+
+      const producto = {
+        eyebrow: "Producto",
+        title: "El producto, <em>sobre obras reales</em>.",
+        lead: "No es una maqueta: documentos, extracción, alertas y reportes funcionando sobre datos de obra.",
+        blocks: [
+          {
+            anchor: "Documentos",
+            title: "Cada documento <em>en su obra</em>.",
+            lead: "Contratos, pólizas, certificados, remitos y facturas viven en la carpeta de su obra, con fecha, responsable y trazabilidad.",
+            frame: "warm",
+            mock: <ObrasOverview variant="operativo" />,
+          },
+          {
+            anchor: "Extracción",
+            title: "De la foto o el PDF <em>al dato</em>.",
+            lead: "El sistema lee el documento y completa fechas, montos, proveedores y vencimientos, sin recargar nada a mano.",
+            frame: "cool",
+            mock: <AccionRapida />,
+          },
+          {
+            anchor: "Alertas",
+            title: "Vencimientos y pendientes <em>que avisan a tiempo</em>.",
+            lead: "Pólizas por vencer, documentos pendientes y recordatorios llegan antes, no después.",
+            frame: "warm",
+            mock: <FlujoBoard />,
+          },
+          {
+            anchor: "Reportes",
+            title: "Reportes <em>con respaldo</em>.",
+            lead: "Resúmenes por obra exportables a Excel o PDF, donde cada número puede volver a su documento fuente.",
+            frame: "dark",
+            mock: <ReporteDireccion />,
+          },
+        ],
+      };
+
+      const dueno = {
+        eyebrow: "Para el dueño",
+        title: "Control para el dueño, <em>menos carga para el equipo</em>.",
+        lead: "Síntesis está pensado para que dirección vea documentos, datos y desvíos sin perseguir planillas, y para que administración y obra sigan trabajando como ya lo hacen: búsquedas, tablas editables, autocompletes, exportaciones y carga de documentos. No obliga al equipo a cambiar de golpe: ordena lo que ya hace y lo vuelve trazable.",
+        ctaLabel: "Quiero verlo en una demo",
+        items: [
+          { title: "Para dirección", body: "El estado real de cada obra, con datos trazables y reportes exportables." },
+          { title: "Para administración", body: "Documentos, vencimientos y certificados ordenados, sin rearmar planillas." },
+          { title: "Para obra", body: "Carga de fotos y documentos desde el celular, sin cambiar la forma de trabajar." },
+          { title: "Para oficina técnica", body: "Datos y documentos conectados para certificados, avances y reportes." },
+        ],
+      };
+
+      const casos = {
+        eyebrow: "Casos de uso",
+        title: "Empezá por <em>el circuito que más te duele</em>.",
+        lead: "No hace falta ordenar todo de golpe. Arrancá por donde hoy más perdés tiempo o plata.",
+        items: [
+          { icon: IAlert,  eyebrow: "Pólizas y vencimientos", title: "Antes de que sean un problema.", body: "Detectá vencimientos de pólizas, seguros y documentación crítica antes de que caduquen." },
+          { icon: IWallet, eyebrow: "Certificados de obra",   title: "Emitido, facturado, cobrado, saldo.", body: "Seguí el estado de cada certificado por obra y el saldo pendiente, con respaldo documental." },
+          { icon: IDoc,    eyebrow: "Generación documental",  title: "Documentos desde plantillas.", body: "Armá documentos con los datos ya cargados, en vez de rehacerlos desde cero cada vez." },
+        ],
+      };
+
+      const piloto = {
+        eyebrow: "Piloto",
+        title: "Probalo en <em>una obra real</em> durante 30 días.",
+        steps: [
+          { title: "Configuración inicial", body: "Armamos el espacio de tu empresa, los roles y las carpetas base de tu operación." },
+          { title: "Carga de una obra real", body: "Elegimos una obra y cargamos sus documentos reales: contratos, pólizas, certificados." },
+          { title: "Extracción y alertas", body: "Convertimos esos documentos en datos y activamos alertas de vencimientos y pendientes." },
+          { title: "Capacitación y reporte final", body: "Entrenamos al equipo y medimos si Síntesis ordenó información, ahorró tiempo y mejoró el control." },
+        ],
+        ctaLight: "Quiero hacer un piloto",
+        ctaGhost: "Ver demo con una obra real",
+      };
+
+      const cierre = {
+        eyebrow: "La promesa",
+        title: "De documentos sueltos a <em>una sola fuente de verdad</em>.",
+        lead: "Convertimos los documentos de tus obras en datos, alertas y reportes para que dirección, administración y obra trabajen sobre la misma información.",
+        primary: "Ver demo con una obra real",
+        secondary: "Probar en una obra 30 días",
+      };
+
+      const paths = [
+        { tag: "Documentación y alertas", title: "Ordenar papeles y vencimientos", body: "Carpetas, pólizas, certificados, vencimientos y documentación crítica de cada obra.", href: "Sintesis - Operativo.html" },
+        { tag: "Certificados y avance",   title: "Controlar plata por obra",       body: "Avance, certificados, facturación, cobros y saldos por obra, con respaldo.", href: "Sintesis - Financiero.html" },
+        { tag: "Reportes para dirección", title: "Ver el estado real",             body: "Resúmenes de obra con datos trazables y exportables a Excel o PDF.", href: "Sintesis - Financiero.html" },
+        { tag: "Generación documental",   title: "Armar documentos con datos",     body: "Crear documentos desde plantillas con la información ya cargada.", href: "Sintesis - Operativo.html" },
+      ];
+
+      return (
+        <>
+          <Nav variant="operativo" />
+          <Hero
+            variant="operativo"
+            eyebrow="Para constructoras que trabajan con papel, Excel, Drive y WhatsApp"
+            title='Convertí la documentación de tus obras en <em>datos, alertas y reportes</em>.'
+            lead="Síntesis centraliza los documentos de cada obra, extrae información desde fotos y PDF, controla vencimientos y desvíos, y le da a dirección, administración y obra una misma fuente de verdad."
+            primaryCta="Ver demo con una obra real"
+            secondaryCta="Probar en una obra 30 días"
+            trust={["Documentos por obra", "Extracción automática", "Alertas de vencimientos", "Certificados y reportes", "Exportable a Excel/PDF"]}
+          />
+          <StatsStrip items={stats} />
+
+          {/* PRUEBA / proof strip */}
+          <section className="section section-tight">
+            <div className="wrap">
+              <div className="section-head" style={{ textAlign: "center", margin: "0 auto" }}>
+                <div className="eyebrow">En uso real</div>
+                <h2 className="serif-section" style={{ marginTop: 18 }}>
+                  Usado casi a diario por una constructora real, en <em>administración, obra, oficina técnica y dirección</em>.
+                </h2>
+                <p>Síntesis se desarrolló sobre flujos reales —documentos, certificados, reportes, alertas y seguimiento de datos de obra— y está diseñado para equipos que ya trabajan con Excel, Drive, WhatsApp y carpetas físicas.</p>
+              </div>
+            </div>
+          </section>
+
+          <Split {...dolor} />
+          <Flujo {...solucion} />
+          <AnchoredFeatures {...producto} />
+          <Split {...dueno} />
+          <QuickReference {...casos} />
+
+          {/* ELEGÍ POR DÓNDE EMPEZAR */}
+          <section className="section">
+            <div className="wrap">
+              <div className="section-head">
+                <div className="eyebrow">Por dónde empezar</div>
+                <h2 className="serif-section" style={{ marginTop: 18 }}>Elegí por dónde <em>querés empezar</em>.</h2>
+                <p>Entrá por tu dolor, no por nuestra arquitectura. Cada camino te lleva a la obra desde un ángulo distinto.</p>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 18 }}>
+                {paths.map((p, i) => (
+                  <a key={i} href={p.href} style={{
+                    display: "block", background: "#fff",
+                    border: "1px solid rgba(28,25,23,.08)", borderRadius: 18,
+                    padding: 26, textDecoration: "none", color: "inherit",
+                    boxShadow: "0 1px 0 rgba(0,0,0,.03)",
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--orange-primary)", marginBottom: 12 }}>{p.tag}</div>
+                    <div style={{ fontFamily: "var(--font-serif)", fontSize: 24, lineHeight: 1.1, color: "var(--stone-900)", marginBottom: 10 }}>{p.title}</div>
+                    <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, color: "var(--stone-600)" }}>{p.body}</p>
+                    <span style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600, color: "var(--stone-900)" }}>
+                      Ver más <IArrow size={14} />
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <DarkSteps {...piloto} />
+          <Cierre {...cierre} />
+          <Footer variant="operativo" />
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+
+  <style id="__om-edit-overrides"></style>
+</body>
+</html>

@@ -9,6 +9,21 @@ function parsePositiveInt(value: string | null, fallback: number) {
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function escapeLikeSearchTerm(value: string) {
+	return value.replace(/[%_]/g, "\\$&");
+}
+
+function buildPolicyNumberSearchTerms(value: string) {
+	const trimmed = value.trim();
+	const terms = new Set<string>();
+	if (trimmed) terms.add(trimmed);
+	if (trimmed.includes("/")) {
+		terms.add(trimmed.replace(/\s*\/\s*/g, "/"));
+		terms.add(trimmed.replace(/\s*\/\s*/g, " / "));
+	}
+	return Array.from(terms).map(escapeLikeSearchTerm).filter(Boolean);
+}
+
 export async function GET(request: Request) {
 	const access = await resolveRequestAccessContext();
 	const { supabase, tenantId } = access;
@@ -171,6 +186,9 @@ export async function GET(request: Request) {
 				potentialOverbillingPolicies,
 				potentialOverbillingAmount,
 			},
+			permissions: {
+				canDeleteAllPolicies: access.isSuperAdmin === true,
+			},
 		});
 	}
 
@@ -297,7 +315,7 @@ export async function GET(request: Request) {
 		if (policyFilter) {
 			const policyTerms = policyFilter
 				.split(",")
-				.map((item) => item.trim().replace(/[%_]/g, "\\$&"))
+				.flatMap((item) => buildPolicyNumberSearchTerms(item))
 				.filter(Boolean);
 			if (policyTerms.length > 0) {
 				nextQuery = nextQuery.or(
@@ -325,10 +343,11 @@ export async function GET(request: Request) {
 			);
 		}
 		if (search) {
-			const escaped = search.replace(/[%_]/g, "\\$&");
+			const escaped = escapeLikeSearchTerm(search);
+			const policyTerms = buildPolicyNumberSearchTerms(search);
 			nextQuery = nextQuery.or(
 				[
-					`policy_number.ilike.%${escaped}%`,
+					...policyTerms.map((term) => `policy_number.ilike.%${term}%`),
 					`section.ilike.%${escaped}%`,
 					`coverage_period.ilike.%${escaped}%`,
 					`import_obra_label.ilike.%${escaped}%`,
@@ -396,16 +415,15 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE() {
-	if (process.env.NODE_ENV === "production") {
-		return NextResponse.json({ error: "Disponible solo en desarrollo" }, { status: 403 });
-	}
-
 	const access = await resolveRequestAccessContext();
 	const { supabase, tenantId } = access;
 	if (access.actorType === "anonymous") {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 	if (!tenantId) return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	if (access.isSuperAdmin !== true) {
+		return NextResponse.json({ error: "Solo superadmins pueden borrar todas las polizas" }, { status: 403 });
+	}
 
 	const { data: obraRows, error: obrasError } = await supabase
 		.from("obras")

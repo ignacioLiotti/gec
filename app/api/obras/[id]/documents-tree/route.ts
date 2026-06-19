@@ -6,6 +6,7 @@ import {
   hasDemoCapability,
   resolveRequestAccessContext,
 } from "@/lib/demo-session";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -21,6 +22,99 @@ type OcrColumn = {
   position?: number;
   config?: Record<string, unknown>;
 };
+
+type UploaderUserLike = {
+  id?: string | null;
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+};
+
+function readNonEmptyString(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function getUserDisplayLabel(user: UploaderUserLike | null | undefined) {
+  const metadata =
+    user?.user_metadata && typeof user.user_metadata === "object"
+      ? user.user_metadata
+      : {};
+  return (
+    readNonEmptyString(metadata.display_name) ??
+    readNonEmptyString(metadata.full_name) ??
+    readNonEmptyString(metadata.name) ??
+    readNonEmptyString(user?.email) ??
+    null
+  );
+}
+
+async function loadUploaderLabels(
+  userIds: string[],
+  currentUser: UploaderUserLike | null | undefined,
+) {
+  const uniqueUserIds = Array.from(
+    new Set(userIds.map(readNonEmptyString).filter((userId): userId is string => Boolean(userId))),
+  );
+  const labelsByUserId = new Map<string, string>();
+
+  if (currentUser?.id) {
+    const currentLabel = getUserDisplayLabel(currentUser) ?? "Vos";
+    labelsByUserId.set(currentUser.id, currentLabel);
+  }
+  if (uniqueUserIds.length === 0) return labelsByUserId;
+
+  const admin = createSupabaseAdminClient();
+  const { data: profiles, error: profilesError } = await admin
+    .from("profiles")
+    .select("user_id, full_name")
+    .in("user_id", uniqueUserIds);
+
+  if (profilesError) {
+    console.error("[documents-tree:get] uploader profiles error:", profilesError);
+  } else {
+    for (const profile of profiles ?? []) {
+      const userId = readNonEmptyString(profile.user_id);
+      const fullName = readNonEmptyString(profile.full_name);
+      if (userId && fullName) {
+        labelsByUserId.set(userId, fullName);
+      }
+    }
+  }
+
+  const missingUserIds = uniqueUserIds.filter((userId) => !labelsByUserId.has(userId));
+  const authLookups = await Promise.all(
+    missingUserIds.map(async (userId) => {
+      try {
+        const { data, error } = await admin.auth.admin.getUserById(userId);
+        if (error) {
+          console.error("[documents-tree:get] uploader auth user error:", { userId, error });
+          return null;
+        }
+        return { userId, label: getUserDisplayLabel(data.user) };
+      } catch (error) {
+        console.error("[documents-tree:get] uploader auth user lookup failed:", { userId, error });
+        return null;
+      }
+    }),
+  );
+
+  for (const lookup of authLookups) {
+    if (lookup?.label) {
+      labelsByUserId.set(lookup.userId, lookup.label);
+    }
+  }
+
+  return labelsByUserId;
+}
+
+function getUploaderLabel(
+  userId: string | null | undefined,
+  labelsByUserId: Map<string, string>,
+) {
+  if (!userId) return null;
+  return labelsByUserId.get(userId) ?? "Usuario";
+}
 
 function normalizeDataInputMethod(value: unknown): DataInputMethod {
   if (value === "ocr" || value === "manual" || value === "both") return value;
@@ -490,12 +584,10 @@ export async function GET(request: Request, context: RouteContext) {
             : null,
         uploadedAt: trackedUpload?.uploadedAt ?? null,
         uploadedByUserId: trackedUpload?.uploadedBy ?? null,
-        uploadedByLabel:
-          trackedUpload?.uploadedBy &&
-          currentUser?.id &&
-          trackedUpload.uploadedBy === currentUser.id
-            ? "Vos"
-            : trackedUpload?.uploadedBy ?? null,
+        uploadedByLabel: getUploaderLabel(
+          trackedUpload?.uploadedBy,
+          uploaderLabelByUserId,
+        ),
         generatedDocumentStatus: generatedDocumentStatusByPath.get(storagePath) ?? null,
       };
       parentNode.children?.push(fileItem);
@@ -533,6 +625,20 @@ export async function GET(request: Request, context: RouteContext) {
           uploadedAt:
             typeof upload.uploaded_at === "string" ? upload.uploaded_at : null,
         });
+      }
+    }
+
+    let uploaderLabelByUserId = new Map<string, string>();
+    if (uploadTrackingByPath.size > 0) {
+      try {
+        uploaderLabelByUserId = await loadUploaderLabels(
+          Array.from(uploadTrackingByPath.values())
+            .map((upload) => upload.uploadedBy)
+            .filter((uploadedBy): uploadedBy is string => Boolean(uploadedBy)),
+          currentUser,
+        );
+      } catch (error) {
+        console.error("[documents-tree:get] uploader label lookup failed:", error);
       }
     }
 
@@ -627,8 +733,7 @@ export async function GET(request: Request, context: RouteContext) {
                 : null;
         if (!fileNode.uploadedByUserId && storageOwner) {
           fileNode.uploadedByUserId = storageOwner;
-          fileNode.uploadedByLabel =
-            currentUser?.id && storageOwner === currentUser.id ? "Vos" : storageOwner;
+          fileNode.uploadedByLabel = getUploaderLabel(storageOwner, uploaderLabelByUserId);
         }
       }
     }

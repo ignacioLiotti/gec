@@ -19,6 +19,12 @@ type BatchAccessRequest = {
 	expiresIn?: unknown;
 };
 
+type BatchSignedUrlEntry = {
+	path?: string | null;
+	signedUrl?: string | null;
+	error?: string | null;
+};
+
 function normalizePathList(value: unknown, obraId: string) {
 	if (!Array.isArray(value)) return [];
 	const seen = new Set<string>();
@@ -110,9 +116,34 @@ export async function POST(request: Request, context: RouteContext) {
 		}
 
 		const storageClient = createSupabaseAdminClient();
+		const { data: rejectedGeneratedDocuments, error: rejectedGeneratedDocumentsError } =
+			await storageClient
+				.from("generated_documents")
+				.select("storage_path")
+				.eq("tenant_id", tenantId)
+				.eq("obra_id", obraId)
+				.eq("storage_bucket", DOCUMENTS_BUCKET)
+				.eq("status", "REJECTED")
+				.in("storage_path", allowedPaths);
+		if (rejectedGeneratedDocumentsError) throw rejectedGeneratedDocumentsError;
+
+		const rejectedGeneratedPaths = new Set(
+			(rejectedGeneratedDocuments ?? [])
+				.map((row) =>
+					typeof row.storage_path === "string" ? row.storage_path : "",
+				)
+				.filter(Boolean),
+		);
+		const signablePaths = allowedPaths.filter(
+			(path) => !rejectedGeneratedPaths.has(path),
+		);
+		if (signablePaths.length === 0) {
+			return NextResponse.json({ urls: {} });
+		}
+
 		const { data, error } = await storageClient.storage
 			.from(DOCUMENTS_BUCKET)
-			.createSignedUrls(allowedPaths, expiresIn);
+			.createSignedUrls(signablePaths, expiresIn);
 		if (error) {
 			return NextResponse.json(
 				{ error: error.message ?? "No se pudieron firmar los documentos" },
@@ -121,13 +152,24 @@ export async function POST(request: Request, context: RouteContext) {
 		}
 
 		const urls: Record<string, string> = {};
-		for (const entry of data ?? []) {
-			if (entry.path && entry.signedUrl) {
-				urls[entry.path] = entry.signedUrl;
+		const errors: Record<string, string> = {};
+		const entries = (data ?? []) as BatchSignedUrlEntry[];
+		for (const [index, entry] of entries.entries()) {
+			const path =
+				typeof entry.path === "string" && entry.path.length > 0
+					? entry.path
+					: signablePaths[index];
+			if (!path) continue;
+			if (typeof entry.signedUrl === "string" && entry.signedUrl.length > 0) {
+				urls[path] = entry.signedUrl;
+			} else if (typeof entry.error === "string" && entry.error.length > 0) {
+				errors[path] = entry.error;
 			}
 		}
 
-		return NextResponse.json({ urls });
+		return NextResponse.json(
+			Object.keys(errors).length > 0 ? { urls, errors } : { urls },
+		);
 	} catch (error) {
 		console.error("[documents:access:batch]", error);
 		const message =

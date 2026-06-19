@@ -1,0 +1,1321 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sintesis - PDF comercial</title>
+  <style>
+    :root {
+      --ink: #171412;
+      --muted: #6f655d;
+      --soft: #f7f2ea;
+      --paper: #fffaf2;
+      --line: rgba(23, 20, 18, .12);
+      --orange: #ff5a1f;
+      --orange-soft: #ffe3d2;
+      --green: #168a4a;
+      --red: #bd2d21;
+      --amber: #b86d12;
+      --blue: #315f8c;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      background: #d9d2c7;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.4;
+    }
+
+    body {
+      padding: 28px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 16px;
+      z-index: 10;
+      width: 210mm;
+      margin: 0 auto 18px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .toolbar button {
+      border: 1px solid rgba(23, 20, 18, .15);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(23, 20, 18, .12);
+    }
+
+    .deck {
+      display: grid;
+      gap: 22px;
+      justify-content: center;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      background:
+        radial-gradient(circle at 82% 12%, rgba(255, 90, 31, .16), transparent 34%),
+        linear-gradient(180deg, #fffdf8 0%, #fff8ef 100%);
+      position: relative;
+      overflow: hidden;
+      padding: 18mm 17mm 15mm;
+      box-shadow: 0 18px 70px rgba(23, 20, 18, .22);
+      page-break-after: always;
+    }
+
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(120, 94, 63, .045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 94, 63, .045) 1px, transparent 1px);
+      background-size: 28px 28px;
+      pointer-events: none;
+    }
+
+    .page > * { position: relative; z-index: 1; }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .brand-mark {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 0 7px rgba(255, 90, 31, .12);
+    }
+
+    .page-label,
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      max-width: 12ch;
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      font-size: 68px;
+      line-height: .96;
+      letter-spacing: -.03em;
+    }
+
+    h2 {
+      max-width: 16ch;
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      font-size: 48px;
+      line-height: 1;
+      letter-spacing: -.025em;
+    }
+
+    h3 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      font-size: 27px;
+      line-height: 1.08;
+      letter-spacing: -.01em;
+    }
+
+    .lead {
+      max-width: 67ch;
+      color: #3c342d;
+      font-size: 18px;
+      line-height: 1.55;
+      margin-top: 22px;
+    }
+
+    .accent { color: var(--orange); }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.02fr .98fr;
+      gap: 24px;
+      align-items: start;
+      margin-top: 28px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, .78);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, .03);
+    }
+
+    .card h3 {
+      font-size: 22px;
+      margin-bottom: 9px;
+    }
+
+    .card p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .check-list {
+      display: grid;
+      grid-template-columns: repeat(5, auto);
+      gap: 8px 13px;
+      align-items: center;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      color: #3f3731;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .check {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .check::before {
+      content: "✓";
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--orange);
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .steps {
+      display: grid;
+      gap: 13px;
+      margin-top: 26px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 46px 1fr;
+      gap: 14px;
+      padding: 15px;
+      background: rgba(255, 255, 255, .75);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .step-num {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 18px;
+    }
+
+    .step h3 {
+      font-size: 21px;
+      margin-bottom: 5px;
+    }
+
+    .step p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .persona-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 25px;
+    }
+
+    .persona {
+      min-height: 150px;
+      padding: 17px;
+      background: rgba(255, 255, 255, .75);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .persona h3 {
+      font-size: 23px;
+      margin-bottom: 10px;
+    }
+
+    .persona ul,
+    .usecase ul,
+    .pilot ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 13.5px;
+    }
+
+    .persona li::before,
+    .usecase li::before,
+    .pilot li::before {
+      content: "✓ ";
+      color: var(--orange);
+      font-weight: 900;
+    }
+
+    .usecase-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 25px;
+    }
+
+    .usecase {
+      padding: 17px;
+      background: rgba(255, 255, 255, .75);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .usecase h3 {
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
+
+    .quote {
+      margin-top: 26px;
+      padding: 24px;
+      border-radius: 14px;
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .quote p {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 29px;
+      line-height: 1.18;
+    }
+
+    .quote small {
+      display: block;
+      margin-top: 13px;
+      color: rgba(255, 255, 255, .72);
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .pilot {
+      margin-top: 26px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .pilot-box {
+      padding: 22px;
+      border-radius: 16px;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+
+    .cta {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .cta-item {
+      padding: 13px 14px;
+      border-radius: 10px;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 800;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .screen {
+      background: #f6f1e8;
+      border: 1px solid rgba(23, 20, 18, .18);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(23, 20, 18, .16);
+    }
+
+    .screen.compact { box-shadow: 0 14px 35px rgba(23, 20, 18, .14); }
+
+    .screen.capture-screen {
+      height: 392px;
+      background-color: #f4f0e7;
+      background-repeat: no-repeat;
+      background-size: cover;
+      background-position: center top;
+    }
+
+    .screen.compact.capture-screen {
+      height: 356px;
+    }
+
+    .screen.capture-screen > :not(.screen-top) {
+      display: none;
+    }
+
+    .screen.capture-screen .screen-top {
+      background: rgba(255, 255, 255, .94);
+      backdrop-filter: blur(8px);
+    }
+
+    .screen.capture-dashboard {
+      background-image: url("screens/dashboard-home.png");
+      background-position: center top;
+    }
+
+    .screen.capture-documents {
+      background-image: url("screens/documents-folders.png");
+      background-position: 54% top;
+    }
+
+    .screen.capture-excel {
+      background-image: url("screens/excel-obras.png");
+      background-position: center top;
+    }
+
+    .screen.capture-reports {
+      background-image: url("screens/macro-reports.png");
+      background-position: center top;
+    }
+
+    .screen-top {
+      height: 36px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 13px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .screen-dots {
+      display: flex;
+      gap: 5px;
+    }
+
+    .screen-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #d8d0c5;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 116px 1fr;
+      min-height: 335px;
+    }
+
+    .side {
+      background: #eee8dc;
+      border-right: 1px solid var(--line);
+      padding: 13px 10px;
+      display: grid;
+      align-content: start;
+      gap: 8px;
+    }
+
+    .side-brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+
+    .side-brand span {
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      background: var(--orange);
+    }
+
+    .nav-pill {
+      padding: 7px 8px;
+      border-radius: 7px;
+      font-size: 10px;
+      color: #685d55;
+      font-weight: 700;
+    }
+
+    .nav-pill.active {
+      background: #fff;
+      color: var(--ink);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, .04);
+    }
+
+    .main {
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .main-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .screen-title {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 23px;
+      line-height: 1;
+    }
+
+    .screen-sub {
+      margin-top: 4px;
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .mini-btn {
+      padding: 6px 8px;
+      border-radius: 7px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 9px;
+      font-weight: 800;
+      color: #4b423b;
+    }
+
+    .mini-btn.dark {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 13px;
+    }
+
+    .kpi {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .kpi small {
+      display: block;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      font-size: 8px;
+      font-weight: 900;
+    }
+
+    .kpi strong {
+      display: block;
+      margin-top: 6px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 22px;
+      line-height: .95;
+    }
+
+    .table {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .tr {
+      display: grid;
+      grid-template-columns: 1.6fr .8fr .9fr .9fr .75fr;
+      gap: 8px;
+      align-items: center;
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(23, 20, 18, .08);
+      font-size: 10px;
+    }
+
+    .tr:last-child { border-bottom: 0; }
+    .tr.head {
+      background: #f4efe7;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 8px;
+      font-weight: 900;
+    }
+
+    .bar {
+      height: 6px;
+      border-radius: 999px;
+      background: #ece5da;
+      overflow: hidden;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      background: var(--orange);
+      border-radius: inherit;
+    }
+
+    .folder-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 9px;
+    }
+
+    .folder {
+      min-height: 73px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid var(--line);
+      padding: 11px;
+      display: grid;
+      align-content: space-between;
+    }
+
+    .folder-icon {
+      width: 34px;
+      height: 25px;
+      border-radius: 6px 6px 4px 4px;
+      background: linear-gradient(180deg, #ffb177, var(--orange));
+      position: relative;
+    }
+
+    .folder-icon::before {
+      content: "";
+      position: absolute;
+      top: -5px;
+      left: 3px;
+      width: 16px;
+      height: 8px;
+      border-radius: 4px 4px 0 0;
+      background: #ffb177;
+    }
+
+    .folder strong {
+      font-size: 10px;
+    }
+
+    .folder small {
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .doc-layout {
+      display: grid;
+      grid-template-columns: .85fr 1fr;
+      gap: 12px;
+    }
+
+    .pdf {
+      min-height: 258px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+    }
+
+    .pdf-line {
+      height: 8px;
+      background: #e7dfd3;
+      border-radius: 99px;
+      margin-bottom: 8px;
+    }
+
+    .pdf-line.short { width: 65%; }
+    .pdf-line.mid { width: 82%; }
+
+    .stamp {
+      margin-top: 19px;
+      border: 2px solid rgba(255, 90, 31, .45);
+      color: var(--orange);
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 900;
+      transform: rotate(-4deg);
+    }
+
+    .data-panel {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .data-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+      padding: 10px 11px;
+      border-bottom: 1px solid rgba(23, 20, 18, .08);
+      font-size: 10px;
+      align-items: center;
+    }
+
+    .data-row:last-child { border-bottom: 0; }
+    .data-row small {
+      color: var(--muted);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-size: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 4px 7px;
+      font-size: 8px;
+      font-weight: 900;
+      background: var(--orange-soft);
+      color: #9a3412;
+      white-space: nowrap;
+    }
+
+    .search-panel {
+      display: grid;
+      gap: 10px;
+    }
+
+    .search-box {
+      height: 39px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .result {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 11px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .result strong {
+      font-size: 12px;
+    }
+
+    .result small {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .footer {
+      position: absolute;
+      left: 17mm;
+      right: 17mm;
+      bottom: 10mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: rgba(23, 20, 18, .48);
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      font-weight: 800;
+      z-index: 2;
+    }
+
+    .cover .hero-screen {
+      margin-top: 30px;
+    }
+
+    .cover h1 {
+      margin-top: 38px;
+    }
+
+    @media print {
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .toolbar {
+        display: none;
+      }
+
+      .deck {
+        display: block;
+      }
+
+      .page {
+        box-shadow: none;
+        width: 210mm;
+        height: 297mm;
+        min-height: 297mm;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" onclick="window.print()">Imprimir / guardar PDF</button>
+  </div>
+
+  <main class="deck">
+    <section class="page cover">
+      <div class="brand-row">
+        <div class="brand"><span class="brand-mark"></span>Sintesis</div>
+        <div class="page-label">PDF comercial V1</div>
+      </div>
+
+      <div class="eyebrow">Control documental para constructoras</div>
+      <h1>La documentación de tus obras ya existe.</h1>
+      <p class="lead">
+        El problema es que está repartida. Síntesis ayuda a centralizar documentación,
+        extraer datos desde fotos y PDF, generar seguimiento operativo y mantener a dirección,
+        administración y obra trabajando sobre la misma información.
+      </p>
+
+      <div class="hero-screen">
+        <div class="screen capture-screen capture-documents">
+          <div class="screen-top">
+            <div class="screen-dots"><span></span><span></span><span></span></div>
+            <span>Dashboard → Obra → Carpetas</span>
+          </div>
+          <div class="app">
+            <aside class="side">
+              <div class="side-brand"><span></span>Sintesis</div>
+              <div class="nav-pill">Dashboard</div>
+              <div class="nav-pill active">Obras</div>
+              <div class="nav-pill">Documentos</div>
+              <div class="nav-pill">Certificados</div>
+              <div class="nav-pill">Reportes</div>
+            </aside>
+            <div class="main">
+              <div class="main-head">
+                <div>
+                  <div class="screen-title">Obras activas</div>
+                  <div class="screen-sub">Centralización operativa por obra</div>
+                </div>
+                <div class="button-row">
+                  <span class="mini-btn">Filtros</span>
+                  <span class="mini-btn">Columnas</span>
+                  <span class="mini-btn dark">Nueva obra</span>
+                </div>
+              </div>
+              <div class="kpis">
+                <div class="kpi"><small>Obras</small><strong>24</strong></div>
+                <div class="kpi"><small>Docs</small><strong>1.842</strong></div>
+                <div class="kpi"><small>Pendientes</small><strong>17</strong></div>
+                <div class="kpi"><small>Reportes</small><strong>8</strong></div>
+              </div>
+              <div class="folder-grid">
+                <div class="folder"><div class="folder-icon"></div><strong>Contratos</strong><small>38 archivos</small></div>
+                <div class="folder"><div class="folder-icon"></div><strong>Pólizas</strong><small>12 vencimientos</small></div>
+                <div class="folder"><div class="folder-icon"></div><strong>Certificados</strong><small>96 registros</small></div>
+                <div class="folder"><div class="folder-icon"></div><strong>Remitos</strong><small>OCR activo</small></div>
+                <div class="folder"><div class="folder-icon"></div><strong>Facturas</strong><small>Tabla vinculada</small></div>
+                <div class="folder"><div class="folder-icon"></div><strong>Reportes</strong><small>PDF / Excel</small></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="check-list">
+        <span class="check">Excel</span>
+        <span class="check">WhatsApp</span>
+        <span class="check">PDF</span>
+        <span class="check">Carpetas físicas</span>
+        <span class="check">Google Drive</span>
+      </div>
+
+      <div class="footer"><span>Sintesis Cloud Solutions</span><span>01</span></div>
+    </section>
+
+    <section class="page">
+      <div class="brand-row">
+        <div class="brand"><span class="brand-mark"></span>Sintesis</div>
+        <div class="page-label">El problema</div>
+      </div>
+
+      <h2>La información no falta. Lo que falta es <span class="accent">control</span>.</h2>
+
+      <div class="grid-2">
+        <div>
+          <div class="problem-grid">
+            <div class="card">
+              <h3>Documentos dispersos</h3>
+              <p>Contratos, pólizas, certificados, remitos y facturas terminan repartidos entre WhatsApp, carpetas compartidas y archivos físicos.</p>
+            </div>
+            <div class="card">
+              <h3>Datos duplicados</h3>
+              <p>La misma información se carga varias veces en distintos sistemas y planillas.</p>
+            </div>
+            <div class="card">
+              <h3>Vencimientos olvidados</h3>
+              <p>El seguimiento depende de memoria, planillas manuales o avisos informales.</p>
+            </div>
+            <div class="card">
+              <h3>Reportes tardíos</h3>
+              <p>Cuando dirección necesita entender una obra, alguien tiene que reconstruir la historia.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen compact capture-screen capture-documents">
+          <div class="screen-top">
+            <div class="screen-dots"><span></span><span></span><span></span></div>
+            <span>Documento + datos extraídos</span>
+          </div>
+          <div class="main">
+            <div class="doc-layout">
+              <div class="pdf">
+                <div class="pdf-line mid"></div>
+                <div class="pdf-line"></div>
+                <div class="pdf-line short"></div>
+                <br />
+                <div class="pdf-line"></div>
+                <div class="pdf-line mid"></div>
+                <div class="pdf-line"></div>
+                <br />
+                <div class="pdf-line short"></div>
+                <div class="pdf-line"></div>
+                <div class="stamp">PÓLIZA PDF</div>
+              </div>
+              <div class="data-panel">
+                <div class="data-row"><small>Proveedor</small><strong>Seguros Norte</strong><span class="badge">detectado</span></div>
+                <div class="data-row"><small>Obra</small><strong>Escuela Técnica</strong><span class="badge">vinculado</span></div>
+                <div class="data-row"><small>Monto</small><strong>$ 8.400.000</strong><span class="badge">OCR</span></div>
+                <div class="data-row"><small>Vence</small><strong>12/09/2026</strong><span class="badge">seguimiento</span></div>
+                <div class="data-row"><small>Carpeta</small><strong>Pólizas</strong><span class="badge">archivo</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer"><span>Problema comercial</span><span>02</span></div>
+    </section>
+
+    <section class="page">
+      <div class="brand-row">
+        <div class="brand"><span class="brand-mark"></span>Sintesis</div>
+        <div class="page-label">Cómo funciona</div>
+      </div>
+
+      <h2>De PDF suelto a información operativa.</h2>
+
+      <div class="grid-2">
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div>
+              <h3>Cargá documentos</h3>
+              <p>Subí fotos o PDF como ya lo hace tu equipo.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div>
+              <h3>Extraé información</h3>
+              <p>Síntesis detecta fechas, montos, proveedores, vencimientos y otros datos relevantes.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div>
+              <h3>Organizá por obra</h3>
+              <p>Cada documento queda asociado a la obra correcta, carpeta correcta e historial completo.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div>
+              <h3>Generá seguimiento</h3>
+              <p>La información se transforma en pendientes, reportes y control operativo para dirección y administración.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen compact capture-screen capture-documents">
+          <div class="screen-top">
+            <div class="screen-dots"><span></span><span></span><span></span></div>
+            <span>Documento abierto · datos extraídos</span>
+          </div>
+          <div class="main">
+            <div class="main-head">
+              <div>
+                <div class="screen-title">Factura hormigón H21</div>
+                <div class="screen-sub">Obra / Centro de Salud / Facturas</div>
+              </div>
+              <span class="mini-btn dark">Guardar datos</span>
+            </div>
+            <div class="doc-layout">
+              <div class="pdf">
+                <div class="pdf-line"></div>
+                <div class="pdf-line mid"></div>
+                <div class="pdf-line short"></div>
+                <br />
+                <div class="pdf-line"></div>
+                <div class="pdf-line"></div>
+                <div class="stamp">FACTURA</div>
+              </div>
+              <div class="data-panel">
+                <div class="data-row"><small>Fecha</small><strong>18/05/2026</strong><span class="badge">ok</span></div>
+                <div class="data-row"><small>Proveedor</small><strong>Hormix S.A.</strong><span class="badge">ok</span></div>
+                <div class="data-row"><small>Importe</small><strong>$ 640.000</strong><span class="badge">ok</span></div>
+                <div class="data-row"><small>CUIT</small><strong>30-718...</strong><span class="badge">revisar</span></div>
+                <div class="data-row"><small>Tabla</small><strong>Gastos obra</strong><span class="badge">sync</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer"><span>Flujo operativo</span><span>03</span></div>
+    </section>
+
+    <section class="page">
+      <div class="brand-row">
+        <div class="brand"><span class="brand-mark"></span>Sintesis</div>
+        <div class="page-label">Usuarios</div>
+      </div>
+
+      <h2>Lo que ve cada área.</h2>
+
+      <div class="grid-2">
+        <div class="persona-grid">
+          <div class="persona">
+            <h3>Dirección</h3>
+            <ul>
+              <li>Estado de cada obra</li>
+              <li>Documentos críticos</li>
+              <li>Vencimientos</li>
+              <li>Reportes</li>
+              <li>Desvíos para revisar</li>
+            </ul>
+          </div>
+          <div class="persona">
+            <h3>Administración</h3>
+            <ul>
+              <li>Carga documental</li>
+              <li>Búsquedas rápidas</li>
+              <li>Generación documental</li>
+              <li>Seguimiento de certificados</li>
+            </ul>
+          </div>
+          <div class="persona">
+            <h3>Obra</h3>
+            <ul>
+              <li>Consulta de información</li>
+              <li>Carga de documentación</li>
+              <li>Trazabilidad</li>
+            </ul>
+          </div>
+          <div class="persona">
+            <h3>Oficina técnica</h3>
+            <ul>
+              <li>Certificados</li>
+              <li>Antecedentes</li>
+              <li>Documentación histórica</li>
+              <li>Soporte para licitaciones</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="screen compact capture-screen capture-dashboard">
+          <div class="screen-top">
+            <div class="screen-dots"><span></span><span></span><span></span></div>
+            <span>Resumen ejecutivo de obra</span>
+          </div>
+          <div class="main">
+            <div class="main-head">
+              <div>
+                <div class="screen-title">Centro de Salud - Refacción</div>
+                <div class="screen-sub">Municipio de Goya · OB-2401</div>
+              </div>
+              <span class="mini-btn dark">Generar reporte</span>
+            </div>
+            <div class="kpis">
+              <div class="kpi"><small>Avance</small><strong>64%</strong></div>
+              <div class="kpi"><small>Docs</small><strong>147</strong></div>
+              <div class="kpi"><small>Pend.</small><strong>3</strong></div>
+              <div class="kpi"><small>Saldo</small><strong>$18M</strong></div>
+            </div>
+            <div class="table">
+              <div class="tr head"><span>Área</span><span>Estado</span><span>Dato</span><span>Fuente</span><span>Acción</span></div>
+              <div class="tr"><span>Documentos</span><span>Activo</span><span>147</span><span>Carpetas</span><span>Ver</span></div>
+              <div class="tr"><span>Certificados</span><span>En curso</span><span>7</span><span>Tabla</span><span>Revisar</span></div>
+              <div class="tr"><span>Pólizas</span><span>Seguimiento</span><span>2</span><span>OCR</span><span>Abrir</span></div>
+              <div class="tr"><span>Reporte</span><span>Listo</span><span>PDF</span><span>Datos</span><span>Exportar</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer"><span>Valor por usuario</span><span>04</span></div>
+    </section>
+
+    <section class="page">
+      <div class="brand-row">
+        <div class="brand"><span class="brand-mark"></span>Sintesis</div>
+        <div class="page-label">Casos de uso</div>
+      </div>
+
+      <h2>Casos concretos donde aporta valor.</h2>
+
+      <div class="grid-2">
+        <div class="usecase-grid">
+          <div class="usecase">
+            <h3>Control documental</h3>
+            <ul><li>Centralizá toda la documentación de una obra.</li></ul>
+          </div>
+          <div class="usecase">
+            <h3>Pólizas y vencimientos</h3>
+            <ul><li>Detectá vencimientos antes de que se conviertan en un problema.</li></ul>
+          </div>
+          <div class="usecase">
+            <h3>Certificados de obra</h3>
+            <ul><li>Seguí emitido, facturado, cobrado y saldo pendiente.</li></ul>
+          </div>
+          <div class="usecase">
+            <h3>Generación documental</h3>
+            <ul><li>Creá documentos utilizando información ya cargada.</li></ul>
+          </div>
+          <div class="usecase">
+            <h3>Auditorías</h3>
+            <ul><li>Encontrá cualquier documento en segundos.</li></ul>
+          </div>
+          <div class="usecase">
+            <h3>Reportes</h3>
+            <ul><li>Exportá vistas y evidencia para reuniones de seguimiento.</li></ul>
+          </div>
+        </div>
+
+        <div class="screen compact capture-screen capture-excel">
+          <div class="screen-top">
+            <div class="screen-dots"><span></span><span></span><span></span></div>
+            <span>Búsqueda y documentos</span>
+          </div>
+          <div class="main">
+            <div class="search-panel">
+              <div class="search-box">Buscar: póliza caución Escuela Técnica</div>
+              <div class="result"><strong>Póliza de caución - Etapa II.pdf</strong><small>Obra: Escuela Técnica · Carpeta: Pólizas · Vence 12/09/2026</small></div>
+              <div class="result"><strong>Endoso póliza 04.pdf</strong><small>Documento relacionado · Datos extraídos disponibles</small></div>
+              <div class="result"><strong>Reporte documental - Escuela Técnica</strong><small>Vista preparada para dirección · PDF / Excel</small></div>
+            </div>
+            <div style="height: 14px"></div>
+            <div class="folder-grid">
+              <div class="folder"><div class="folder-icon"></div><strong>Contrato</strong><small>5 docs</small></div>
+              <div class="folder"><div class="folder-icon"></div><strong>Pólizas</strong><small>12 docs</small></div>
+              <div class="folder"><div class="folder-icon"></div><strong>Certificados</strong><small>22 docs</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer"><span>Casos de uso</span><span>05</span></div>
+    </section>
+
+    <section class="page">
+      <div class="brand-row">
+        <div class="brand"><span class="brand-mark"></span>Sintesis</div>
+        <div class="page-label">Prueba real</div>
+      </div>
+
+      <h2>Ya funciona en una constructora real.</h2>
+      <p class="lead">
+        Síntesis es utilizado diariamente por dirección, administración, obra y oficina técnica.
+        Fue desarrollado sobre flujos reales de construcción y evolucionó resolviendo problemas
+        concretos de operación documental, seguimiento y control de obras.
+      </p>
+
+      <div class="grid-2">
+        <div>
+          <div class="problem-grid">
+            <div class="card"><h3>Dirección</h3><p>Lee estado de obra y reportes sin reconstruir información desde cero.</p></div>
+            <div class="card"><h3>Administración</h3><p>Ordena documentos, certificados y datos extraídos.</p></div>
+            <div class="card"><h3>Obra</h3><p>Consulta y carga documentación con trazabilidad.</p></div>
+            <div class="card"><h3>Oficina técnica</h3><p>Encuentra antecedentes y documentación histórica para operar y licitar.</p></div>
+          </div>
+          <div class="quote">
+            <p>“Antes la información estaba repartida entre Excel, WhatsApp y carpetas. Hoy tenemos documentos y datos centralizados en un único lugar.”</p>
+            <small>Testimonio GEC · placeholder para validar</small>
+          </div>
+        </div>
+
+        <div class="screen compact capture-screen capture-reports">
+          <div class="screen-top">
+            <div class="screen-dots"><span></span><span></span><span></span></div>
+            <span>Reporte / resumen ejecutivo</span>
+          </div>
+          <div class="main">
+            <div class="main-head">
+              <div>
+                <div class="screen-title">Reporte de cartera</div>
+                <div class="screen-sub">Mayo 2026 · Constructora</div>
+              </div>
+              <span class="mini-btn dark">Exportar PDF</span>
+            </div>
+            <div class="kpis">
+              <div class="kpi"><small>Obras</small><strong>24</strong></div>
+              <div class="kpi"><small>Docs</small><strong>1.842</strong></div>
+              <div class="kpi"><small>Cert.</small><strong>96</strong></div>
+              <div class="kpi"><small>Pend.</small><strong>17</strong></div>
+            </div>
+            <div class="table">
+              <div class="tr head"><span>Obra</span><span>Avance</span><span>Docs</span><span>Cert.</span><span>Estado</span></div>
+              <div class="tr"><span>Escuela Técnica</span><span><div class="bar"><span style="width:42%"></span></div></span><span>224</span><span>14</span><span>Revisar</span></div>
+              <div class="tr"><span>Centro de Salud</span><span><div class="bar"><span style="width:64%"></span></div></span><span>147</span><span>7</span><span>Activo</span></div>
+              <div class="tr"><span>Red Cloacal</span><span><div class="bar"><span style="width:31%"></span></div></span><span>318</span><span>22</span><span>Activo</span></div>
+              <div class="tr"><span>Pavimento SM</span><span><div class="bar"><span style="width:88%"></span></div></span><span>96</span><span>9</span><span>OK</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer"><span>Validación comercial</span><span>06</span></div>
+    </section>
+
+    <section class="page">
+      <div class="brand-row">
+        <div class="brand"><span class="brand-mark"></span>Sintesis</div>
+        <div class="page-label">Piloto</div>
+      </div>
+
+      <h2>Probalo en una obra real durante <span class="accent">30 días</span>.</h2>
+      <p class="lead">
+        El piloto está pensado para abrir valor rápido: una obra real, usuarios clave,
+        carpetas documentales, extracción de datos y un reporte final para decidir continuidad.
+      </p>
+
+      <div class="pilot">
+        <div class="pilot-box">
+          <h3>Incluye</h3>
+          <br />
+          <ul>
+            <li>Configuración inicial</li>
+            <li>Una obra real</li>
+            <li>Usuarios clave</li>
+            <li>Carpetas documentales</li>
+            <li>Extracción automática de datos</li>
+            <li>Seguimiento básico</li>
+            <li>Capacitación</li>
+            <li>Acompañamiento</li>
+            <li>Reporte final</li>
+          </ul>
+        </div>
+        <div class="pilot-box">
+          <h3>Resultado esperado</h3>
+          <br />
+          <p style="color: var(--muted); font-size: 15px;">
+            Al cierre del piloto, la empresa puede evaluar si Síntesis reduce dispersión documental,
+            mejora la búsqueda de información y acelera la preparación de reportes operativos.
+          </p>
+          <div class="cta">
+            <div class="cta-item">WhatsApp</div>
+            <div class="cta-item">Mail</div>
+            <div class="cta-item">Web</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 34px; padding: 28px; border-radius: 18px; background: var(--ink); color: #fff;">
+        <div class="eyebrow" style="color: rgba(255,255,255,.65);">CTA</div>
+        <h2 style="margin-top: 12px; color: #fff;">Solicitar demostración.</h2>
+        <p style="margin-top: 14px; color: rgba(255,255,255,.72); max-width: 58ch; font-size: 16px;">
+          Agendamos una reunión breve, revisamos una obra real y mostramos cómo quedaría el flujo documental dentro de Síntesis.
+        </p>
+      </div>
+
+      <div class="footer"><span>Implementación piloto</span><span>07</span></div>
+    </section>
+  </main>
+</body>
+</html>

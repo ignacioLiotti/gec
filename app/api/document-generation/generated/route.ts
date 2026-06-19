@@ -67,20 +67,30 @@ export async function GET(request: NextRequest) {
       .select(
         "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, file_name, status, input_data, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name)",
       )
+      .eq("tenant_id", tenantId)
       .order("generated_at", { ascending: false });
 
     if (workId) query = query.eq("obra_id", workId);
     if (createdBy) query = query.eq("generated_by", createdBy);
     if (documentType) query = query.eq("document_type", documentType);
     if (statusFilter.length > 0) query = query.in("status", statusFilter);
-    if (!permissions.canReview && !permissions.canViewAllDrafts) query = query.eq("generated_by", user.id);
     if (from) query = query.gte("generated_at", `${from}T00:00:00.000Z`);
     if (to) query = query.lte("generated_at", `${to}T23:59:59.999Z`);
 
     const { data, error } = await query;
     if (error) throw error;
 
-    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    let rows = (data ?? []) as Array<Record<string, unknown>>;
+    if (!permissions.canReview && !permissions.canViewAllDrafts) {
+      rows = rows.filter((row) => (
+        String(row.generated_by ?? "") === user.id ||
+        canEditGeneratedDocument({
+          canCreate: permissions.canCreate,
+          userId: user.id,
+          status: typeof row.status === "string" ? row.status : null,
+        })
+      ));
+    }
     const actorsById = await loadActorsByIds(rows.map((row) => String(row.generated_by ?? "")));
     const works = await loadWorks(accessContext);
 
@@ -107,9 +117,8 @@ export async function GET(request: NextRequest) {
         updatedAt: String(row.updated_at ?? ""),
         createdBy: actor,
         canEdit: canEditGeneratedDocument({
-          canCreate: true,
+          canCreate: permissions.canCreate,
           userId: user.id,
-          generatedBy: typeof row.generated_by === "string" ? row.generated_by : null,
           status: typeof row.status === "string" ? row.status : null,
         }),
       };
