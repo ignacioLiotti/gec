@@ -137,7 +137,8 @@ export async function GET(request: Request) {
 			const hasCancellationWorkflow = Boolean(policy.cancellation_requested_at || policy.cancellation_confirmed_at);
 			const hasPositiveObservedAmount = safeObservedAmount > 0 || safeBalance > 0;
 			observedBalance += safeBalance;
-			if (premium < 0 || prize < 0 || balance < 0) {
+			const hasCreditSignal = premium < 0 || prize < 0 || balance < 0;
+			if (hasCreditSignal) {
 				creditSignal += 1;
 				creditSignalAmount += Math.min(premium, 0) + Math.min(prize, 0) + Math.min(balance, 0);
 			}
@@ -153,13 +154,15 @@ export async function GET(request: Request) {
 			if (policy.end_date && policy.end_date.slice(0, 10) < today) {
 				finishedWithoutCancellation += 1;
 				finishedWithoutCancellationAmount += safeObservedAmount;
-				if (!isOfferMaintenance && !hasCancellationWorkflow) {
+				if (!hasCreditSignal && !isOfferMaintenance && !hasCancellationWorkflow) {
 					potentialOverbillingPolicies += 1;
-					potentialOverbillingAmount += hasPositiveObservedAmount ? safeObservedAmount || safeBalance : 0;
+					potentialOverbillingAmount += hasPositiveObservedAmount
+						? Math.max(safeObservedAmount, safeBalance, 0)
+						: 0;
 				}
-			} else if (policy.end_date && policy.end_date.slice(0, 10) <= warningIso && !isOfferMaintenance && !hasCancellationWorkflow) {
+			} else if (policy.end_date && policy.end_date.slice(0, 10) <= warningIso && !hasCreditSignal && !isOfferMaintenance && !hasCancellationWorkflow) {
 				preventiveCancellationAlerts += 1;
-				preventiveCancellationAlertAmount += safeObservedAmount || safeBalance;
+				preventiveCancellationAlertAmount += Math.max(safeObservedAmount, safeBalance, 0);
 			}
 			if (!policy.end_date) {
 				activeWithoutEndDate += 1;
