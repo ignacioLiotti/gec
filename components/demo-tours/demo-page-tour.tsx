@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Sparkles } from "lucide-react";
 
@@ -19,6 +19,8 @@ type DemoPageTourProps = {
 	storageKey?: string;
 	preserveQueryOnComplete?: boolean;
 	finishLabel?: string;
+	/** Al finalizar el tour navega a esta URL (permite encadenar tours entre páginas). */
+	nextHref?: string;
 };
 
 export function DemoPageTour({
@@ -29,16 +31,18 @@ export function DemoPageTour({
 	finishLabel,
 	storageKey,
 	preserveQueryOnComplete = false,
+	nextHref,
 }: DemoPageTourProps) {
 	const pathname = usePathname();
 	const router = useRouter();
-  const { replace } = router;
+	const { replace } = router;
 	const searchParams = useSearchParams();
-	const queryParams = new URLSearchParams(searchParams);
-	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const [open, setOpen] = useState(false);
 	const preserveClearRef = useRef(false);
-	const activeTourId = getSearchParam("tour");
+	const activeTourId = searchParams.get("tour");
+	const isActiveTour = activeTourId === flow.id;
+	const isAnotherTourActive = Boolean(activeTourId) && !isActiveTour;
+	const wizardOpen = isAnotherTourActive ? false : open || isActiveTour;
 
 	const clearTourQuery = useCallback(() => {
 		if (activeTourId !== flow.id) return;
@@ -46,13 +50,7 @@ export function DemoPageTour({
 		params.delete("tour");
 		const nextUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
 		replace(nextUrl, { scroll: false });
-	}, [activeTourId, flow.id, pathname, router, searchParams]);
-
-	useEffect(() => {
-		if (activeTourId === flow.id) {
-			setOpen(true);
-		}
-	}, [activeTourId, flow.id]);
+	}, [activeTourId, flow.id, pathname, replace, searchParams]);
 
 	const resolvedStorageKey = useMemo(
 		() => storageKey ?? `demo-tour-${flow.id}`,
@@ -76,7 +74,7 @@ export function DemoPageTour({
 				</Button>
 			) : null}
 			<ContextualWizard
-				open={open}
+				open={wizardOpen}
 				onOpenChange={(nextOpen) => {
 					setOpen(nextOpen);
 					if (!nextOpen) {
@@ -91,6 +89,11 @@ export function DemoPageTour({
 				storageKey={resolvedStorageKey}
 				finishLabel={finishLabel}
 				onComplete={() => {
+					if (nextHref) {
+						preserveClearRef.current = true;
+						router.push(nextHref);
+						return;
+					}
 					if (preserveQueryOnComplete) {
 						preserveClearRef.current = true;
 						return;
