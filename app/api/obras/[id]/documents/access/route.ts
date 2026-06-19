@@ -99,6 +99,23 @@ export async function GET(request: Request, context: RouteContext) {
 		}
 
 		const storageClient = createSupabaseAdminClient();
+		const { data: rejectedGeneratedDocument, error: rejectedGeneratedDocumentError } =
+			await storageClient
+				.from("generated_documents")
+				.select("id")
+				.eq("tenant_id", tenantId)
+				.eq("obra_id", obraId)
+				.eq("storage_bucket", DOCUMENTS_BUCKET)
+				.eq("storage_path", storagePath)
+				.eq("status", "REJECTED")
+				.maybeSingle();
+		if (rejectedGeneratedDocumentError) throw rejectedGeneratedDocumentError;
+		if (rejectedGeneratedDocument) {
+			return NextResponse.json(
+				{ error: "No se puede descargar un documento rechazado." },
+				{ status: 403 },
+			);
+		}
 
 		if (download) {
 			const { data, error } = await storageClient.storage

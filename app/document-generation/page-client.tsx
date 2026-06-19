@@ -150,12 +150,6 @@ type GeneratedDocumentResponse = {
   previewHtml: string;
 };
 
-type AssistResponse = {
-  inputData: Record<string, unknown>;
-  context: DocumentAiContext;
-  appliedFieldCount: number;
-};
-
 type GeneratedDocumentDownloadTarget = {
   workId: string;
   storagePath: string;
@@ -1136,7 +1130,6 @@ export function DocumentGenerationPageClient({
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
-  const [assisting, setAssisting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(112);
@@ -1253,7 +1246,7 @@ export function DocumentGenerationPageClient({
           }
           if (cancelled) return;
           if (!payload.document.canEdit) {
-            toast.error("Solo puedes editar documentos tuyos que aun no fueron aprobados.");
+            toast.error("Solo se pueden editar documentos pendientes de revision o rechazados.");
             replace("/document-generation", { scroll: false });
             return;
           }
@@ -1707,50 +1700,6 @@ export function DocumentGenerationPageClient({
     }
   };
 
-  const handleAssistFromDocuments = async () => {
-    const currentInputData = inlineInputDataRef.current;
-    flushInlineDraftData();
-    if (!workId || !folderPath || !documentType || !templateId) {
-      toast.error("Completa obra, carpeta, tipo documental y plantilla.");
-      return;
-    }
-
-    setAssisting(true);
-    try {
-      const response = await fetch("/api/document-generation/assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workId,
-          folderPath,
-          documentType,
-          templateId,
-          inputData: currentInputData,
-        }),
-      });
-      const payload = (await response.json()) as AssistResponse & { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "No se pudo completar con documentos");
-      }
-
-      inlineInputDataRef.current = payload.inputData;
-      setInputData(payload.inputData);
-      setValidationErrors((current) =>
-        selectedTemplate ? validateTemplateInput(selectedTemplate.schema, payload.inputData) : current,
-      );
-      const sourceCount = payload.context.sources.length;
-      if (payload.appliedFieldCount > 0) {
-        toast.success(`Contexto aplicado: ${payload.appliedFieldCount} campos desde ${sourceCount} referencias.`);
-      } else {
-        toast.message(payload.context.warnings[0] ?? "No hubo campos nuevos para completar.");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo completar con documentos");
-    } finally {
-      setAssisting(false);
-    }
-  };
-
   const handleSaveDraft = async () => {
     const currentInputData = inlineInputDataRef.current;
     flushInlineDraftData();
@@ -1860,7 +1809,14 @@ export function DocumentGenerationPageClient({
     push(`/excel/${workId}?${query.toString()}`);
   };
 
+  const currentGeneratedStatus = generatedDocument?.generatedDocument.status || editingGeneratedStatus;
+  const canDownloadGeneratedDocument = currentGeneratedStatus !== "REJECTED";
+
   const downloadGeneratedDocument = () => {
+    if (!canDownloadGeneratedDocument) {
+      toast.error("No se puede descargar un documento rechazado.");
+      return;
+    }
     const target =
       generatedDownloadTarget ||
       (generatedDocument && workId
@@ -1978,16 +1934,6 @@ export function DocumentGenerationPageClient({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
-              variant="outline"
-              onClick={() => void handleAssistFromDocuments()}
-              disabled={assisting || loading || !selectedTemplate || !workId || !folderPath || !documentType}
-              className="h-9 rounded-md border-stone-200 bg-white px-4"
-            >
-              {assisting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
-              Completar con documentos
-            </Button>
-            <Button
-              type="button"
               variant="ghost"
               onClick={handleSaveDraft}
               disabled={savingDraft || loading || Boolean(editingGeneratedId)}
@@ -1997,21 +1943,12 @@ export function DocumentGenerationPageClient({
               {savingDraft ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
               Guardar borrador
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPreviewDialogOpen(true)}
-              className="h-9 rounded-md border-stone-200 bg-white px-4"
-            >
-              <Eye className="mr-2 size-4" />
-              Vista previa completa
-            </Button>
             {editingGeneratedId ? (
               <Button
                 type="button"
                 variant="outline"
                 onClick={downloadGeneratedDocument}
-                disabled={loading || !generatedDownloadTarget}
+                disabled={loading || !generatedDownloadTarget || !canDownloadGeneratedDocument}
                 className="h-9 rounded-md px-4"
               >
                 <Download className="mr-2 size-4" />
@@ -2286,7 +2223,13 @@ export function DocumentGenerationPageClient({
                         Abrir documento
                       </Link>
                     </Button>
-                    <Button type="button" variant="outline" onClick={downloadGeneratedDocument} className="rounded-md">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={downloadGeneratedDocument}
+                      disabled={!canDownloadGeneratedDocument}
+                      className="rounded-md"
+                    >
                       <Download className="mr-2 h-4 w-4" />
                       Descargar
                     </Button>
@@ -2556,6 +2499,7 @@ export function DocumentGenerationPageClient({
                         type="button"
                         variant="outline"
                         onClick={downloadGeneratedDocument}
+                        disabled={!canDownloadGeneratedDocument}
                         className="rounded-md"
                       >
                         <Download className="mr-2 size-4" />

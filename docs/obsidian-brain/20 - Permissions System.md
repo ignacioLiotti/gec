@@ -172,6 +172,8 @@ Document generation now gives tenant members baseline creation access and keeps 
 
 - `/document-generation` -> authenticated tenant member
 - `/document-generation/drafts` -> authenticated tenant member, own drafts only
+- generated documents in `GENERATED`, `UNDER_REVIEW`, or `REJECTED` can be edited by authenticated tenant members, regardless of who generated them
+- approved generated documents remain non-editable
 - `/document-generation/review` â†’ `documents:review`
 - `/document-generation/templates` â†’ `documents:templates`
 - `/document-generation/config` â†’ `documents:templates`
@@ -180,7 +182,10 @@ Document generation now gives tenant members baseline creation access and keeps 
 
 - `bootstrap`, `drafts POST`, `generate` -> authenticated tenant member
 - `drafts GET` -> authenticated tenant member, own drafts only
-- `generated GET/PATCH` â†’ `documents:review`
+- generated list/detail -> authenticated tenant member for own documents and tenant-editable generated documents; `documents:review` can inspect the review queue broadly
+- generated regeneration -> authenticated tenant member when the generated document is `GENERATED`, `UNDER_REVIEW`, or `REJECTED`
+- generated approve/reject PATCH -> `documents:review`
+- `documents/access` refuses signed URLs and direct PDF downloads for generated documents whose status is `REJECTED`
 - `templates GET/PUT` â†’ `documents:templates`
 
 ---

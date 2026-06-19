@@ -248,6 +248,7 @@ export async function POST(request: NextRequest) {
           "id, obra_id, folder_path, document_type, template_id, source_draft_id, storage_bucket, storage_path, file_name, status, generated_by, input_data",
         )
         .eq("id", body.generatedDocumentId.trim())
+        .eq("tenant_id", tenantId)
         .maybeSingle();
       if (existingGeneratedDocumentError) throw existingGeneratedDocumentError;
       if (!existingGeneratedDocument) {
@@ -257,10 +258,6 @@ export async function POST(request: NextRequest) {
         !canEditGeneratedDocument({
           canCreate: permissions.canCreate,
           userId: user.id,
-          generatedBy:
-            typeof existingGeneratedDocument.generated_by === "string"
-              ? existingGeneratedDocument.generated_by
-              : null,
           status:
             typeof existingGeneratedDocument.status === "string"
               ? existingGeneratedDocument.status
@@ -268,7 +265,7 @@ export async function POST(request: NextRequest) {
         })
       ) {
         return NextResponse.json(
-          { error: "Solo puedes editar documentos tuyos que aun no fueron aprobados." },
+          { error: "Solo se pueden editar documentos pendientes de revision o rechazados." },
           { status: 403 },
         );
       }
@@ -486,6 +483,7 @@ export async function POST(request: NextRequest) {
           generated_at: new Date().toISOString(),
         })
         .eq("id", editingGeneratedDocument.id)
+        .eq("tenant_id", tenantId)
         .select("*")
         .maybeSingle();
       if (error) throw error;

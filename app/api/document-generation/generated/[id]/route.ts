@@ -178,6 +178,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_bucket, storage_path, file_name, status, input_data, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name, content_html), generated_document_events(id, event_type, from_status, to_status, payload, created_by, created_at)",
       )
       .eq("id", id)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
     if (error) throw error;
     if (!document) {
@@ -186,10 +187,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const canEdit = canEditGeneratedDocument({
       canCreate: permissions.canCreate,
       userId: user.id,
-      generatedBy: typeof document.generated_by === "string" ? document.generated_by : null,
       status: typeof document.status === "string" ? document.status : null,
     });
-    if (!permissions.canReview && !canEdit) {
+    const isGeneratedByUser = String(document.generated_by ?? "") === user.id;
+    if (!permissions.canReview && !canEdit && !isGeneratedByUser) {
       return NextResponse.json({ error: "Sin permisos para ver este documento generado." }, { status: 403 });
     }
 
@@ -319,6 +320,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         "id, tenant_id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_bucket, storage_path, file_name, input_data, generated_by, status, generated_at, obras(n, designacion_y_ubicacion), document_generation_templates(content_html)",
       )
       .eq("id", id)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
     if (currentError) throw currentError;
     if (!current) {
@@ -404,6 +406,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .from("generated_documents")
       .update({ status: nextStatus })
       .eq("id", id)
+      .eq("tenant_id", tenantId)
       .select("*")
       .maybeSingle();
     if (error) throw error;

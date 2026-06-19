@@ -84,14 +84,11 @@ export type DocumentActorSummary = {
 export function canEditGeneratedDocument(params: {
   canCreate: boolean;
   userId: string | null;
-  generatedBy: string | null;
   status: string | null;
 }) {
   return (
     params.canCreate &&
     Boolean(params.userId) &&
-    Boolean(params.generatedBy) &&
-    params.userId === params.generatedBy &&
     ["GENERATED", "UNDER_REVIEW", "REJECTED"].includes(params.status ?? "")
   );
 }
