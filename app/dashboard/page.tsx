@@ -41,8 +41,14 @@ import { FormTable } from "@/components/form-table/form-table";
 import type { ColumnDef, FetchRowsArgs, FormTableConfig, FormTableCsvExport, FormTableRow } from "@/components/form-table/types";
 import { QuickFormDialog, type QuickFormField } from "@/components/forms/quick-form-dialog";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
+import { ObraDestinationCombobox } from "@/components/obra-destination-combobox";
 import { toast } from "sonner";
-import { dashboardOverviewTour, demoConclusionTour } from "@/lib/demo-tours/screen-tour-flows";
+import {
+  dashboardOverviewTour,
+  demoConclusionTour,
+  presentacionCierreTour,
+  presentacionDashboardTour,
+} from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
 
@@ -123,6 +129,7 @@ type CompanyFile = {
 
 type InsurancePolicyPreviewRow = {
   rowNumber: number;
+  importAction?: "create" | "update";
   obraId: string | null;
   obraLabel: string | null;
   policyNumber: string | null;
@@ -222,6 +229,8 @@ type InsurancePolicyTableRow = FormTableRow & {
   cancellationConfirmedAt: string | null;
   cancellationNotes: string;
   isCancelled: boolean;
+  moveAction: string;
+  deleteAction: string;
 };
 
 type InsurancePolicyGroupRow = FormTableRow & {
@@ -750,6 +759,8 @@ function toInsurancePolicyTableRow(policy: GlobalInsurancePolicy): InsurancePoli
     cancellationConfirmedAt: policy.cancellation_confirmed_at?.slice(0, 10) ?? null,
     cancellationNotes: policy.cancellation_notes ?? "",
     isCancelled: policy.is_cancelled,
+    moveAction: "",
+    deleteAction: "",
   };
   row.operationalStatus = getPolicyOperationalStatus(row).label;
   return row;
@@ -1127,10 +1138,12 @@ function GlobalInsurancePoliciesPanel({
   obras: Obra[];
 }) {
   const queryClient = useQueryClient();
-  const isDev = process.env.NODE_ENV !== "production";
   const [groupBy, setGroupBy] = useState<InsurancePolicyGroupBy>("obra");
   const [statusFilter, setStatusFilter] = useState<InsurancePolicyStatusFilter>("all");
   const [quickFilter, setQuickFilter] = useState<InsurancePolicyQuickFilter>("none");
+  const [movePolicyDialog, setMovePolicyDialog] = useState<{ policy: InsurancePolicyTableRow; targetObraId: string } | null>(null);
+  const [movingPolicyId, setMovingPolicyId] = useState<string | null>(null);
+  const [deletingPolicyId, setDeletingPolicyId] = useState<string | null>(null);
   const policiesQuery = useQuery({
     queryKey: ["insurance-policies", "related", statusFilter, groupBy, quickFilter],
     enabled: groupBy !== "none",
@@ -1153,10 +1166,14 @@ function GlobalInsurancePoliciesPanel({
     queryFn: async () => {
       const response = await fetch("/api/insurance-policies?summary=1");
       if (!response.ok) throw new Error("No se pudo cargar el resumen de polizas");
-      return (await response.json()) as { summary: InsurancePolicySummary };
+      return (await response.json()) as {
+        summary: InsurancePolicySummary;
+        permissions?: { canDeleteAllPolicies?: boolean };
+      };
     },
   });
   const refetchPolicySummary = summaryQuery.refetch;
+  const canDeleteAllPolicies = summaryQuery.data?.permissions?.canDeleteAllPolicies === true;
   const policyFinancials = summaryQuery.data?.summary ?? {
     totalPolicies: 0,
     activePolicies: 0,
@@ -1254,7 +1271,7 @@ function GlobalInsurancePoliciesPanel({
     window.dispatchEvent(new CustomEvent("form-table:refresh", { detail: { tableId: `dashboard-insurance-related-${statusFilter}-${quickFilter}` } }));
   }, [onRefresh, queryClient, quickFilter, statusFilter]);
   const handleDeleteAllPolicies = useCallback(async () => {
-    if (!window.confirm("Borrar todas las polizas del tenant actual? Esta accion es solo para desarrollo.")) return;
+    if (!window.confirm("Borrar todas las polizas del tenant actual? Esta accion no se puede deshacer.")) return;
     const response = await fetch("/api/insurance-policies", { method: "DELETE" });
     if (!response.ok) {
       toast.error(await getResponseErrorMessage(response, "No se pudieron borrar las polizas"));
@@ -1267,6 +1284,51 @@ function GlobalInsurancePoliciesPanel({
     ]);
     toast.success("Polizas borradas");
   }, [policiesQuery, queryClient, summaryQuery]);
+
+  const handleDeletePolicy = useCallback(async (policy: InsurancePolicyTableRow) => {
+    if (!window.confirm(`Borrar la poliza ${policy.policyNumber}? Esta accion no se puede deshacer.`)) return;
+    setDeletingPolicyId(policy.id);
+    try {
+      const response = await fetch(`/api/insurance-policies/${policy.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error(await getResponseErrorMessage(response, "No se pudo borrar la poliza"));
+      }
+      await handleRefresh();
+      await refetchPolicySummary();
+      toast.success("Poliza borrada");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo borrar la poliza");
+    } finally {
+      setDeletingPolicyId(null);
+    }
+  }, [handleRefresh, refetchPolicySummary]);
+
+  const openMovePolicyDialog = useCallback((policy: InsurancePolicyTableRow) => {
+    setMovePolicyDialog({ policy, targetObraId: policy.obraId ?? "" });
+  }, []);
+
+  const handleMovePolicy = useCallback(async () => {
+    if (!movePolicyDialog || !movePolicyDialog.targetObraId) return;
+    setMovingPolicyId(movePolicyDialog.policy.id);
+    try {
+      const response = await fetch(`/api/insurance-policies/${movePolicyDialog.policy.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ obraId: movePolicyDialog.targetObraId }),
+      });
+      if (!response.ok) {
+        throw new Error(await getResponseErrorMessage(response, "No se pudo mover la poliza"));
+      }
+      await handleRefresh();
+      await refetchPolicySummary();
+      setMovePolicyDialog(null);
+      toast.success("Poliza movida a otra obra");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo mover la poliza");
+    } finally {
+      setMovingPolicyId(null);
+    }
+  }, [handleRefresh, movePolicyDialog, refetchPolicySummary]);
 
   const policyTableColumns = useMemo<ColumnDef<InsurancePolicyTableRow>[]>(() => [
     { id: "policyNumber", label: "Poliza", field: "policyNumber", editable: true, width: 150 },
@@ -1361,7 +1423,58 @@ function GlobalInsurancePoliciesPanel({
       cellConfig: { clearActiveCellOnBlur: true },
     },
     { id: "isCancelled", label: "Dada de baja", field: "isCancelled", cellType: "checkbox", editable: true, width: 120 },
-  ], [obras]);
+    {
+      id: "movePolicy",
+      label: "Mover",
+      field: "moveAction",
+      editable: false,
+      enableSort: false,
+      width: 96,
+      cellConfig: {
+        renderReadOnly: ({ row }) => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 px-2 text-xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              openMovePolicyDialog(row);
+            }}
+          >
+            <ArrowRight className="size-3.5" />
+            Mover
+          </Button>
+        ),
+      },
+    },
+    {
+      id: "deletePolicy",
+      label: "Eliminar",
+      field: "deleteAction",
+      editable: false,
+      enableSort: false,
+      width: 110,
+      cellConfig: {
+        renderReadOnly: ({ row }) => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={deletingPolicyId === row.id}
+            className="h-8 gap-1.5 px-2 text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleDeletePolicy(row);
+            }}
+          >
+            {deletingPolicyId === row.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+            Eliminar
+          </Button>
+        ),
+      },
+    },
+  ], [deletingPolicyId, handleDeletePolicy, obras, openMovePolicyDialog]);
 
   const policyTableConfig = useMemo<FormTableConfig<InsurancePolicyTableRow, InsurancePolicyFilters>>(() => ({
     tableId: `dashboard-insurance-related-${statusFilter}-${quickFilter}`,
@@ -1597,6 +1710,8 @@ function GlobalInsurancePoliciesPanel({
                 <TableHead>Baja solicitada</TableHead>
                 <TableHead>Baja confirmada</TableHead>
                 <TableHead>Dada de baja</TableHead>
+                <TableHead>Mover</TableHead>
+                <TableHead>Eliminar</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1640,6 +1755,31 @@ function GlobalInsurancePoliciesPanel({
                   <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.cancellationRequestedAt)}</TableCell>
                   <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.cancellationConfirmedAt)}</TableCell>
                   <TableCell className="px-3 py-2">{policy.isCancelled ? "Si" : "No"}</TableCell>
+                  <TableCell className="px-3 py-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onClick={() => openMovePolicyDialog(policy)}
+                    >
+                      <ArrowRight className="size-3.5" />
+                      Mover
+                    </Button>
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={deletingPolicyId === policy.id}
+                      className="h-7 gap-1.5 px-2 text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+                      onClick={() => void handleDeletePolicy(policy)}
+                    >
+                      {deletingPolicyId === policy.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                      Eliminar
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1659,7 +1799,7 @@ function GlobalInsurancePoliciesPanel({
         );
       },
     },
-  }), [groupBy, groupTableColumns, groupedRows, quickFilter, statusFilter]);
+  }), [deletingPolicyId, groupBy, groupTableColumns, groupedRows, handleDeletePolicy, openMovePolicyDialog, quickFilter, statusFilter]);
 
   return (
     <Card className="overflow-hidden rounded-xl border-0 bg-transparent pt-0 shadow-none gap-0">
@@ -1706,7 +1846,7 @@ function GlobalInsurancePoliciesPanel({
             <option value="calculatedDate">Agrupar por baja calculada</option>
           </select>
           <div className="flex flex-wrap items-center gap-2 ml-auto">
-            {isDev ? (
+            {canDeleteAllPolicies ? (
               <Button
                 type="button"
                 variant="outline"
@@ -1907,6 +2047,60 @@ function GlobalInsurancePoliciesPanel({
             />
           )}
         </div>
+        <Dialog open={Boolean(movePolicyDialog)} onOpenChange={(open) => {
+          if (movingPolicyId) return;
+          if (!open) setMovePolicyDialog(null);
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Mover poliza a otra obra</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+                <p className="font-semibold text-stone-900">{movePolicyDialog?.policy.policyNumber ?? "Poliza"}</p>
+                <p className="mt-0.5 truncate text-xs text-stone-500">
+                  Actual: {movePolicyDialog?.policy.obra || "Sin obra asignada"}
+                </p>
+              </div>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Obra destino</span>
+                <ObraDestinationCombobox
+                  obras={obras}
+                  value={movePolicyDialog?.targetObraId ?? ""}
+                  onChange={(value) =>
+                    setMovePolicyDialog((current) =>
+                      current ? { ...current, targetObraId: value } : current,
+                    )
+                  }
+                  excludedObraId={movePolicyDialog?.policy.obraId}
+                />
+              </label>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={Boolean(movingPolicyId)}
+                onClick={() => setMovePolicyDialog(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="gap-2"
+                disabled={
+                  !movePolicyDialog?.targetObraId ||
+                  movePolicyDialog.targetObraId === movePolicyDialog.policy.obraId ||
+                  movingPolicyId === movePolicyDialog?.policy.id
+                }
+                onClick={() => void handleMovePolicy()}
+              >
+                {movingPolicyId === movePolicyDialog?.policy.id ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+                Mover
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
@@ -2711,6 +2905,15 @@ export default function Home() {
                   flow={demoConclusionTour}
                   finishLabel="¡Listo!"
                 />
+                <DemoPageTour
+                  flow={presentacionDashboardTour}
+                  finishLabel="Ver la cartera de obras →"
+                  nextHref="/excel?tour=demo-cartera"
+                />
+                <DemoPageTour
+                  flow={presentacionCierreTour}
+                  finishLabel="¡Listo!"
+                />
                 <div className="inline-flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2">
                   <div className="flex size-6 items-center justify-center rounded-full bg-cyan-50">
                     <Activity className="size-3.5 text-cyan-700" />
@@ -3228,6 +3431,7 @@ export default function Home() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fila</TableHead>
+                    <TableHead>Accion</TableHead>
                     <TableHead>Obra detectada</TableHead>
                     <TableHead>Poliza</TableHead>
                     <TableHead>Seccion</TableHead>
@@ -3239,6 +3443,14 @@ export default function Home() {
                   {insurancePreviewRows.map((row) => (
                     <TableRow key={`${row.rowNumber}-${row.policyNumber ?? "sin-poliza"}`}>
                       <TableCell>{row.rowNumber}</TableCell>
+                      <TableCell>
+                        <span className={row.importAction === "update"
+                          ? "inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700"
+                          : "inline-flex rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-bold text-orange-700"}
+                        >
+                          {row.importAction === "update" ? "Edita existente" : "Crea nueva"}
+                        </span>
+                      </TableCell>
                       <TableCell>{row.obraLabel || "-"}</TableCell>
                       <TableCell>{row.policyNumber || "-"}</TableCell>
                       <TableCell>{row.section || "-"}</TableCell>
