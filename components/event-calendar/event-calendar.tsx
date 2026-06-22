@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { RiCalendarCheckLine } from "@remixicon/react"
 import {
   addDays,
@@ -71,6 +71,7 @@ export function EventCalendar({
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false)
   const [isEventViewOpen, setIsEventViewOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const newEventIdRef = useRef(0)
   const interactive = !readOnly
 
   // Add keyboard shortcuts for view switching
@@ -186,9 +187,10 @@ export function EventCalendar({
         position: "bottom-left",
       })
     } else {
+      newEventIdRef.current += 1
       onEventAdd?.({
         ...event,
-        id: Math.random().toString(36).substring(2, 11),
+        id: `event-${newEventIdRef.current}`,
       })
       // Show toast notification when an event is added
       toast(`Evento "${event.title}" añadido`, {
@@ -235,7 +237,7 @@ export function EventCalendar({
     })
   }
 
-  const viewTitle = useMemo(() => {
+  const viewTitle = (() => {
     if (view === "month") {
       return capitalizeFirst(format(currentDate, "MMMM yyyy", { locale: es }))
     } else if (view === "week") {
@@ -273,12 +275,12 @@ export function EventCalendar({
     } else {
       return capitalizeFirst(format(currentDate, "MMMM yyyy", { locale: es }))
     }
-  }, [currentDate, view])
+  })()
 
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden rounded-3xl border border-zinc-200/80 bg-white has-data-[slot=month-view]:flex-1 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_rgba(15,23,42,0.06)]",
+        "flex min-w-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_rgba(15,23,42,0.06)] has-data-[slot=month-view]:flex-1 sm:rounded-3xl",
         className
       )}
       style={
@@ -290,8 +292,8 @@ export function EventCalendar({
       }
     >
       <CalendarDndProvider onEventUpdate={handleEventUpdate}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 bg-white/95 px-3 py-3 sm:px-4">
-          <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex flex-col gap-3 border-b border-zinc-100 bg-white/95 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
             <Button
               variant="outline"
               className="h-8 rounded-xl border-zinc-200 px-3 text-xs text-zinc-700 hover:bg-zinc-50 sm:h-9 sm:text-sm"
@@ -320,12 +322,12 @@ export function EventCalendar({
                 <ChevronRightIcon size={16} aria-hidden="true" />
               </Button>
             </div>
-            <h2 className="text-sm font-semibold text-zinc-900 sm:text-lg md:text-xl">
+            <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 sm:flex-none sm:text-lg md:text-xl">
               {viewTitle}
             </h2>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto sm:overflow-visible">
+            <div className="inline-flex min-w-max items-center rounded-xl border border-zinc-200 bg-zinc-50 p-1">
               {(
                 [
                   { id: "day", label: "Día" },
@@ -369,7 +371,7 @@ export function EventCalendar({
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col overflow-x-auto">
           {view === "month" && (
             <MonthView
               currentDate={currentDate}
