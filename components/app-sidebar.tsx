@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
 	Bell,
+	BarChart3,
 	Building2,
 	Check,
 	ChevronDown,
@@ -63,6 +64,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { hasDemoCapability, type DemoCapability } from "@/lib/demo-capabilities";
 import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
+import type {
+	PermissionOption,
+	PermissionSimulation,
+} from "@/lib/permission-simulation";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 
 type NavItem = {
@@ -70,6 +75,7 @@ type NavItem = {
 	href: string;
 	icon: React.ComponentType<{ className?: string }>;
 	requiredPermissions?: string[];
+	deniedByPermission?: string;
 	items?: {
 		title: string;
 		href: string;
@@ -82,11 +88,13 @@ const navItems: NavItem[] = [
 		title: "Dashboard",
 		href: "/dashboard",
 		icon: Home,
+		deniedByPermission: "nav:dashboard",
 	},
 	{
 		title: "Excel",
 		href: "/excel",
 		icon: Database,
+		deniedByPermission: "nav:excel",
 	},
 	{
 		title: "Data-flow general",
@@ -104,6 +112,7 @@ const navItems: NavItem[] = [
 		title: "Notificaciones",
 		href: "/notifications",
 		icon: Bell,
+		deniedByPermission: "nav:notifications",
 	},
 ];
 
@@ -131,6 +140,11 @@ const documentNavItems: NavItem[] = [
 ];
 
 const adminItems: NavItem[] = [
+	{
+		title: "Dashboard admin",
+		href: "/admin/dashboard",
+		icon: BarChart3,
+	},
 	{
 		title: "Usuarios",
 		href: "/admin/users",
@@ -257,12 +271,23 @@ const SidebarPrefetchLink = React.forwardRef<
 	HTMLAnchorElement,
 	SidebarPrefetchLinkProps
 >(function SidebarPrefetchLink(
-	{ href, onMouseEnter, onFocus, onTouchStart, onPointerDown, navIcon, children, ...props },
+	{
+		href,
+		onClick,
+		onMouseEnter,
+		onFocus,
+		onTouchStart,
+		onPointerDown,
+		navIcon,
+		children,
+		...props
+	},
 	ref,
 ) {
 	const router = useRouter();
 	const { prefetch } = router;
 	const { prefetchObra } = usePrefetchObra();
+	const { isMobile, setOpenMobile } = useSidebar();
 	const prefetchedRef = React.useRef(false);
 	const hrefValue = typeof href === "string" ? href : href.toString();
 	const shouldIdlePrefetchExcel = hrefValue === "/excel";
@@ -325,6 +350,12 @@ const SidebarPrefetchLink = React.forwardRef<
 		<Link
 			ref={ref}
 			href={href}
+			onClick={(event) => {
+				onClick?.(event);
+				if (!event.defaultPrevented && isMobile) {
+					setOpenMobile(false);
+				}
+			}}
 			onMouseEnter={(event) => {
 				onMouseEnter?.(event);
 				runPrefetch();
@@ -355,6 +386,7 @@ export function AppSidebar({
 	user,
 	userRoles,
 	documentPermissions,
+	permissionOptions,
 	tenants,
 	sidebarMacroTables,
 	demoMode = false,
@@ -369,8 +401,12 @@ export function AppSidebar({
 		isSuperAdmin: boolean;
 		tenantId: string | null;
 		permissionKeys?: string[];
+		deniedPermissionKeys?: string[];
+		actualIsSuperAdmin?: boolean;
+		permissionSimulation?: PermissionSimulation | null;
 	} | null;
 	documentPermissions?: DocumentGenerationPermissionMap | null;
+	permissionOptions?: PermissionOption[];
 	tenants?: { id: string; name: string | null }[];
 	sidebarMacroTables?: SidebarMacroTable[];
 	demoMode?: boolean;
@@ -383,7 +419,8 @@ export function AppSidebar({
 	const getSearchParam = (key: string): string | null => queryParams.get(key);
 	const router = useRouter();
 	const { refresh } = router;
-	const { state } = useSidebar();
+	const { isMobile, state, setOpenMobile } = useSidebar();
+	const isCollapsed = !isMobile && state === "collapsed";
 	const [switchingTenantId, setSwitchingTenantId] = React.useState<
 		string | null
 	>(null);
@@ -397,6 +434,10 @@ export function AppSidebar({
 	const permissionKeySet = React.useMemo(
 		() => new Set(userRoles?.permissionKeys ?? []),
 		[userRoles?.permissionKeys],
+	);
+	const deniedPermissionKeySet = React.useMemo(
+		() => new Set(userRoles?.deniedPermissionKeys ?? []),
+		[userRoles?.deniedPermissionKeys],
 	);
 
 	React.useEffect(() => {
@@ -437,6 +478,9 @@ export function AppSidebar({
 
 	const handleTenantSwitch = React.useCallback(
 		async (tenantId: string) => {
+			if (isMobile) {
+				setOpenMobile(false);
+			}
 			setSwitchingTenantId(tenantId);
 			try {
 				const response = await fetch(`/api/tenants/${tenantId}/switch`, {
@@ -455,7 +499,7 @@ export function AppSidebar({
 				);
 			}
 		},
-		[refresh],
+		[isMobile, refresh, setOpenMobile],
 	);
 	const activeTenant =
 		tenantOptions.find((tenant) => tenant.id === activeTenantId) ??
@@ -490,6 +534,12 @@ export function AppSidebar({
 			}
 
 			const config = getRouteAccessConfig(href);
+			if (
+				config?.deniedByPermission &&
+				deniedPermissionKeySet.has(config.deniedByPermission)
+			) {
+				return false;
+			}
 			if (!config) {
 				return true;
 			}
@@ -516,7 +566,7 @@ export function AppSidebar({
 
 			return true;
 		},
-		[demoCapabilities, demoMode, permissionKeySet, userRoles],
+		[demoCapabilities, demoMode, deniedPermissionKeySet, permissionKeySet, userRoles],
 	);
 
 	const canAccessDocumentNav = React.useCallback(
@@ -546,6 +596,10 @@ export function AppSidebar({
 				(item) =>
 					canAccessRoute(item.href) &&
 					canAccessDocumentNav(item.href) &&
+					(!item.deniedByPermission ||
+						userRoles?.isAdmin ||
+						userRoles?.isSuperAdmin ||
+						!deniedPermissionKeySet.has(item.deniedByPermission)) &&
 					(!item.requiredPermissions?.length ||
 						userRoles?.isAdmin ||
 						userRoles?.isSuperAdmin ||
@@ -553,7 +607,7 @@ export function AppSidebar({
 							permissionKeySet.has(permissionKey),
 						)),
 			),
-		[canAccessDocumentNav, canAccessRoute, permissionKeySet, userRoles],
+		[canAccessDocumentNav, canAccessRoute, deniedPermissionKeySet, permissionKeySet, userRoles],
 	);
 	const filteredDocumentItems = React.useMemo(
 		() =>
@@ -571,7 +625,11 @@ export function AppSidebar({
 		[canAccessDocumentNav, canAccessRoute, permissionKeySet, userRoles],
 	);
 	const macroTablesInsertionHref = React.useMemo(() => {
-		if (macroTables.length === 0 || filteredNavItems.length === 0) return null;
+		if (
+			macroTables.length === 0 ||
+			filteredNavItems.length === 0 ||
+			!canAccessRoute("/macro")
+		) return null;
 		const notificationsItem = filteredNavItems.find(
 			(item) => item.href === "/notifications",
 		);
@@ -579,7 +637,7 @@ export function AppSidebar({
 		const excelItem = filteredNavItems.find((item) => item.href === "/excel");
 		if (excelItem) return excelItem.href;
 		return filteredNavItems[filteredNavItems.length - 1]?.href ?? null;
-	}, [filteredNavItems, macroTables]);
+	}, [canAccessRoute, filteredNavItems, macroTables]);
 
 	const filteredAdminItems = React.useMemo(
 		() =>
@@ -618,20 +676,20 @@ export function AppSidebar({
 						<div className="transition-[gap] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]">
 							<div
 								className={
-									state === "collapsed" ? "space-y-2" : "flex items-start gap-2"
+									isCollapsed ? "space-y-2" : "flex items-start gap-2"
 								}
 							>
 								<SidebarMenuButton
 									size="lg"
 									asChild
-									className={state === "collapsed" ? "" : "min-w-0 flex-1"}
+									className={isCollapsed ? "" : "min-w-0 flex-1"}
 								>
 									<SidebarPrefetchLink
 										href="/"
 										className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5"
 									>
 										<div
-											className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full transition-[width,height,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${state === "collapsed" ? "size-8 scale-95" : "size-10 scale-100"
+											className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full transition-[width,height,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isCollapsed ? "size-8 scale-95" : "size-10 scale-100"
 												}`}
 										/>
 										<div className="grid flex-1 text-left text-sm leading-tight transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-data-[collapsible=icon]:-translate-x-1 group-data-[collapsible=icon]:opacity-0">
@@ -648,7 +706,7 @@ export function AppSidebar({
 							{tenantOptions.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										{state === "collapsed" ? (
+										{isCollapsed ? (
 											<button
 												className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2.5"
 												type="button"
@@ -727,7 +785,7 @@ export function AppSidebar({
 									</DropdownMenuContent>
 								</DropdownMenu>
 							) : canCreateTenant ? (
-								state === "collapsed" ? (
+								isCollapsed ? (
 									<SidebarPrefetchLink
 										href="/tenants/new"
 										className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
@@ -750,7 +808,7 @@ export function AppSidebar({
 			</SidebarHeader>
 
 			<SidebarContent>
-				{filteredNavItems.length > 0 && (
+				{(filteredNavItems.length > 0 || filteredDocumentItems.length > 0) && (
 					<SidebarGroup>
 						<SidebarGroupLabel>Principal</SidebarGroupLabel>
 						<SidebarGroupContent>
@@ -763,7 +821,7 @@ export function AppSidebar({
 									return (
 										<React.Fragment key={item.title}>
 											{showTablasBeforeThis &&
-												(state === "collapsed" ? (
+												(isCollapsed ? (
 													<SidebarMenuItem>
 														<DropdownMenu>
 															<DropdownMenuTrigger asChild>
@@ -869,7 +927,7 @@ export function AppSidebar({
 									);
 								})}
 								{filteredDocumentItems.length > 0 &&
-									(state === "collapsed" ? (
+									(isCollapsed ? (
 										<SidebarMenuItem>
 											<DropdownMenu>
 												<DropdownMenuTrigger asChild>
@@ -1021,6 +1079,7 @@ export function AppSidebar({
 							<UserMenu
 								email={user.email}
 								userRoles={userRoles}
+								permissionOptions={permissionOptions}
 								variant="sidebar"
 							/>
 						</SidebarMenuItem>
@@ -1043,7 +1102,7 @@ export function AppSidebar({
 								<button
 									type="button"
 									onClick={handleEnterRealApp}
-									className={`flex w-full items-center justify-center gap-2 overflow-hidden rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-sm font-medium text-sidebar-foreground transition-[background-color,padding,gap] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sidebar-accent ${state === "collapsed" ? "gap-0 px-2" : ""
+									className={`flex w-full items-center justify-center gap-2 overflow-hidden rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-sm font-medium text-sidebar-foreground transition-[background-color,padding,gap] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sidebar-accent ${isCollapsed ? "gap-0 px-2" : ""
 										}`}
 									title="Ingresar a la app real"
 								>

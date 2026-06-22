@@ -46,6 +46,9 @@ export function RoleEditor({
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(
     role?.permissions ?? [],
   );
+  const [deniedPermissions, setDeniedPermissions] = useState<string[]>(
+    role?.denied_permissions ?? [],
+  );
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +69,7 @@ export function RoleEditor({
           description: description.trim() || undefined,
           color,
           permissionKeys: selectedPermissions,
+          deniedPermissionKeys: deniedPermissions,
         });
       } else {
         // Create new
@@ -75,6 +79,7 @@ export function RoleEditor({
           description: description.trim() || undefined,
           color,
           permissionKeys: selectedPermissions,
+          deniedPermissionKeys: deniedPermissions,
         });
       }
 
@@ -173,6 +178,8 @@ export function RoleEditor({
                 permissionsByCategory={permissionsByCategory}
                 selectedPermissions={selectedPermissions}
                 onChange={setSelectedPermissions}
+                deniedPermissions={deniedPermissions}
+                onDeniedChange={setDeniedPermissions}
               />
             </div>
           </div>
@@ -181,7 +188,7 @@ export function RoleEditor({
         <DialogFooter>
           <div className="flex items-center justify-between w-full">
             <div className="text-sm text-muted-foreground">
-              {selectedPermissions.length} permisos seleccionados
+              {selectedPermissions.length} permitidos / {deniedPermissions.length} bloqueados
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>

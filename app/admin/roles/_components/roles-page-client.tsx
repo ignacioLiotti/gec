@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,6 +36,10 @@ export function RolesPageClient({
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const allPermissions = useMemo(
+    () => permissionsByCategory.flatMap((category) => category.permissions),
+    [permissionsByCategory],
+  );
 
   const handleEditRole = (role: Role) => {
     setEditingRole(role);
@@ -127,7 +131,11 @@ export function RolesPageClient({
                 Asigna roles a los usuarios de tu organizacion
               </p>
             </div>
-            <UserAssignments users={users} tenantId={tenantId} />
+            <UserAssignments
+              users={users}
+              tenantId={tenantId}
+              allPermissions={allPermissions}
+            />
           </div>
         </TabsContent>
       </Tabs>

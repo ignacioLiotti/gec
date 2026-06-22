@@ -19,13 +19,20 @@ import DomainMigrationGuard from "@/components/domain-migration-guard";
 import { LazyMotionProvider } from "@/components/motion/lazy-motion-provider";
 import { PathnameLayoutShell } from "@/components/pathname-layout-shell";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import {
+	documentPermissionsFromPermissionSimulation,
+	type PermissionOption,
+	type PermissionSimulation,
+} from "@/lib/permission-simulation";
+import { isSuperAdminUser } from "@/lib/superadmin";
 import type { Role } from "@/lib/route-access";
-import { getUserPermissionKeys } from "@/lib/route-guard";
+import {
+	getUserDeniedPermissionKeys,
+	getUserPermissionKeys,
+} from "@/lib/route-guard";
 import { loadDocumentGenerationPermissions } from "@/lib/document-generation-server";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
-const SUPERADMIN_EMAIL = "ignacioliotti@gmail.com";
 const ENABLE_REACT_SCAN =
 	process.env.NODE_ENV === "development" &&
 	process.env.NEXT_PUBLIC_ENABLE_REACT_SCAN !== "false";
@@ -66,6 +73,9 @@ type LayoutUserRoles = {
 	tenantId: string | null;
 	actorType?: "user" | "demo";
 	permissionKeys: string[];
+	actualIsSuperAdmin?: boolean;
+	permissionSimulation?: PermissionSimulation | null;
+	deniedPermissionKeys: string[];
 };
 
 const EMPTY_DOCUMENT_PERMISSIONS = {
@@ -127,9 +137,11 @@ export default async function RootLayout({
 		isSuperAdmin: false,
 		tenantId: null,
 		permissionKeys: [],
+		deniedPermissionKeys: [],
 	};
 	let tenants: { id: string; name: string }[] = [];
 	let documentPermissions = EMPTY_DOCUMENT_PERMISSIONS;
+	let permissionOptions: PermissionOption[] = [];
 
 	if (user) {
 		type MembershipRow = MembershipLike & {
@@ -141,11 +153,13 @@ export default async function RootLayout({
 				: (membership.tenants?.name ?? null);
 
 		const memberships = access.memberships as MembershipRow[];
-		const userEmail = user.email?.toLowerCase() ?? "";
-		const isSuperAdmin =
-			access.isSuperAdmin ||
-			user.id === SUPERADMIN_USER_ID ||
-			userEmail === SUPERADMIN_EMAIL;
+		const actualIsSuperAdmin =
+			access.actualIsSuperAdmin || isSuperAdminUser(user.id, null, user.email);
+		const permissionSimulation = access.permissionSimulation;
+		const isSimulatingPermissions = Boolean(permissionSimulation);
+		const isSuperAdmin = isSimulatingPermissions
+			? false
+			: (access.isSuperAdmin || actualIsSuperAdmin);
 		const tenantId = access.tenantId;
 		const membershipRole = access.membershipRole;
 		const isAdmin =
@@ -157,7 +171,7 @@ export default async function RootLayout({
 			roles.push("admin");
 		}
 
-		if (tenantId && !isAdmin && !isSuperAdmin) {
+		if (tenantId && !isAdmin && !isSuperAdmin && !isSimulatingPermissions) {
 			try {
 				const { data: userRoleIds, error: userRoleIdsError } = await supabase
 					.from("user_roles")
@@ -211,6 +225,28 @@ export default async function RootLayout({
 			}
 		}
 
+		if (actualIsSuperAdmin) {
+			const { data: permissions } = await supabase
+				.from("permissions")
+				.select("key, display_name, category")
+				.order("category", { ascending: true })
+				.order("sort_order", { ascending: true });
+			permissionOptions = (permissions ?? []).map((permission) => ({
+				key: permission.key,
+				displayName: permission.display_name ?? permission.key,
+				category: permission.category ?? null,
+			}));
+		}
+
+		const [permissionKeys, deniedPermissionKeys] = permissionSimulation
+			? [permissionSimulation.permissionKeys, []]
+			: tenantId
+				? await Promise.all([
+						getUserPermissionKeys(),
+						getUserDeniedPermissionKeys(),
+					])
+				: [[], []];
+
 		userRoles = {
 			roles,
 			roleIds,
@@ -218,12 +254,16 @@ export default async function RootLayout({
 			isSuperAdmin,
 			tenantId,
 			actorType: "user",
-			permissionKeys: tenantId ? await getUserPermissionKeys() : [],
+			permissionKeys,
+			deniedPermissionKeys,
+			actualIsSuperAdmin,
+			permissionSimulation,
 		};
 
 		if (tenantId && user.id) {
-			documentPermissions =
-				isAdmin || isSuperAdmin
+			documentPermissions = permissionSimulation
+				? documentPermissionsFromPermissionSimulation(permissionSimulation)
+				: isAdmin || isSuperAdmin
 					? FULL_DOCUMENT_PERMISSIONS
 					: await loadDocumentGenerationPermissions({
 							supabase,
@@ -266,6 +306,7 @@ export default async function RootLayout({
 			tenantId: access.tenantId,
 			actorType: "demo",
 			permissionKeys: [],
+			deniedPermissionKeys: [],
 		};
 		documentPermissions = EMPTY_DOCUMENT_PERMISSIONS;
 	}
@@ -301,6 +342,7 @@ export default async function RootLayout({
 							user={user}
 							userRoles={userRoles}
 							documentPermissions={documentPermissions}
+							permissionOptions={permissionOptions}
 							tenants={tenants}
 							demoSession={access.demoSession}
 							demoCapabilities={access.demoSession?.allowedCapabilities}

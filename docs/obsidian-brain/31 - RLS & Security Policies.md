@@ -99,6 +99,7 @@ These functions run with elevated privileges (bypass RLS):
 | `workflow_insert_notification()` | Inserts notifications from Temporal | 0052 |
 | `get_active_tenant_secret()` | Reads signing secrets (for request verification) | 0045 |
 | `get_tenant_usage()` | Reads usage across tables | 0066 |
+| `has_permission()` | Resolves tenant-scoped user and role grants/denies without role RLS recursion | 0039, 0122, 0123 |
 | `acquire_flow_lock()` | Distributed lock for flow engine | 0074 |
 | `cleanup_orphan_records()` | Maintenance cleanup | — |
 | `rotate_tenant_api_secret()` | Secret rotation | 0045 |

@@ -31,7 +31,9 @@ export type Role = {
 	color: string | null;
 	is_default: boolean;
 	permission_count?: number;
+	denied_permission_count?: number;
 	permissions?: string[];
+	denied_permissions?: string[];
 };
 
 export type RoleTemplate = {
@@ -188,6 +190,63 @@ function readFullName(value: FullNameRelation): string | null {
 	return typeof record?.full_name === "string" ? record.full_name : null;
 }
 
+function buildRolePermissionStates(
+	permissionKeys: string[],
+	deniedPermissionKeys: string[] = []
+) {
+	const grantedKeys = new Set(permissionKeys);
+	const deniedKeys = new Set(deniedPermissionKeys);
+	for (const key of deniedKeys) {
+		grantedKeys.delete(key);
+	}
+
+	return {
+		grantedKeys: Array.from(grantedKeys),
+		deniedKeys: Array.from(deniedKeys),
+		allKeys: Array.from(new Set([...grantedKeys, ...deniedKeys])),
+	};
+}
+
+async function insertRolePermissionStates(
+	supabase: Supabase,
+	roleId: string,
+	permissionKeys: string[],
+	deniedPermissionKeys: string[] = []
+) {
+	const { deniedKeys, allKeys } = buildRolePermissionStates(
+		permissionKeys,
+		deniedPermissionKeys
+	);
+
+	if (allKeys.length === 0) {
+		return null;
+	}
+
+	const deniedKeySet = new Set(deniedKeys);
+	const { data: permissions, error: permissionsError } = await supabase
+		.from("permissions")
+		.select("id, key")
+		.in("key", allKeys);
+
+	if (permissionsError) {
+		return permissionsError.message;
+	}
+
+	if (!permissions?.length) {
+		return null;
+	}
+
+	const { error } = await supabase.from("role_permissions").insert(
+		permissions.map((permission) => ({
+			role_id: roleId,
+			permission_id: permission.id,
+			is_granted: !deniedKeySet.has(permission.key),
+		}))
+	);
+
+	return error?.message ?? null;
+}
+
 // =====================================================
 // PERMISSIONS
 // =====================================================
@@ -309,27 +368,31 @@ export async function getRolesWithPermissions({
 	const roleIds = roles.map((r) => r.id);
 	const { data: rolePerms } = await supabase
 		.from("role_permissions")
-		.select("role_id, permissions(key)")
+		.select("role_id, is_granted, permissions(key)")
 		.in("role_id", roleIds);
 
 	// Build permission map
 	const permMap: Record<string, string[]> = {};
+	const denyMap: Record<string, string[]> = {};
 	for (const rp of rolePerms ?? []) {
-		if (!permMap[rp.role_id]) {
-			permMap[rp.role_id] = [];
-		}
 		const permKey = readPermissionKey(
 			rp.permissions as PermissionKeyRelation
 		);
 		if (permKey) {
-			permMap[rp.role_id].push(permKey);
+			const targetMap = rp.is_granted === false ? denyMap : permMap;
+			if (!targetMap[rp.role_id]) {
+				targetMap[rp.role_id] = [];
+			}
+			targetMap[rp.role_id].push(permKey);
 		}
 	}
 
 	return roles.map((r) => ({
 		...r,
 		permissions: permMap[r.id] || [],
+		denied_permissions: denyMap[r.id] || [],
 		permission_count: (permMap[r.id] || []).length,
+		denied_permission_count: (denyMap[r.id] || []).length,
 	}));
 }
 
@@ -396,6 +459,7 @@ export async function createRoleFromTemplate({
 				permissions.map((p) => ({
 					role_id: role.id,
 					permission_id: p.id,
+					is_granted: true,
 				}))
 			);
 		}
@@ -411,12 +475,14 @@ export async function createRoleWithPermissions({
 	description,
 	color,
 	permissionKeys,
+	deniedPermissionKeys = [],
 }: {
 	tenantId: string;
 	name: string;
 	description?: string;
 	color?: string;
 	permissionKeys: string[];
+	deniedPermissionKeys?: string[];
 }): Promise<{ role?: Role; error?: string }> {
 	const session = await auth();
 	if (!session.data.user) throw new Error("Unauthorized");
@@ -440,21 +506,15 @@ export async function createRoleWithPermissions({
 		return { error: roleError.message };
 	}
 
-	// Get permission IDs
-	if (permissionKeys.length > 0) {
-		const { data: permissions } = await supabase
-			.from("permissions")
-			.select("id")
-			.in("key", permissionKeys);
-
-		if (permissions?.length) {
-			await supabase.from("role_permissions").insert(
-				permissions.map((p) => ({
-					role_id: role.id,
-					permission_id: p.id,
-				}))
-			);
-		}
+	const permissionError = await insertRolePermissionStates(
+		supabase,
+		role.id,
+		permissionKeys,
+		deniedPermissionKeys
+	);
+	if (permissionError) {
+		console.error("Error assigning role permissions:", permissionError);
+		return { error: permissionError };
 	}
 
 	revalidatePath("/admin/roles");
@@ -467,12 +527,14 @@ export async function updateRoleWithPermissions({
 	description,
 	color,
 	permissionKeys,
+	deniedPermissionKeys = [],
 }: {
 	roleId: string;
 	name: string;
 	description?: string;
 	color?: string;
 	permissionKeys: string[];
+	deniedPermissionKeys?: string[];
 }): Promise<{ error?: string }> {
 	const session = await auth();
 	if (!session.data.user) throw new Error("Unauthorized");
@@ -498,21 +560,15 @@ export async function updateRoleWithPermissions({
 	// Delete existing permissions
 	await supabase.from("role_permissions").delete().eq("role_id", roleId);
 
-	// Add new permissions
-	if (permissionKeys.length > 0) {
-		const { data: permissions } = await supabase
-			.from("permissions")
-			.select("id")
-			.in("key", permissionKeys);
-
-		if (permissions?.length) {
-			await supabase.from("role_permissions").insert(
-				permissions.map((p) => ({
-					role_id: roleId,
-					permission_id: p.id,
-				}))
-			);
-		}
+	const permissionError = await insertRolePermissionStates(
+		supabase,
+		roleId,
+		permissionKeys,
+		deniedPermissionKeys
+	);
+	if (permissionError) {
+		console.error("Error updating role permissions:", permissionError);
+		return { error: permissionError };
 	}
 
 	revalidatePath("/admin/roles");
@@ -755,13 +811,21 @@ export async function getUserEffectivePermissions({
 	}
 
 	// Get permissions from roles
-	let rolePermissions: { role_id: string; permission_id: string }[] = [];
+	let rolePermissions: {
+		role_id: string;
+		permission_id: string;
+		is_granted: boolean;
+	}[] = [];
 	if (roleIds.length > 0) {
 		const { data: rp } = await supabase
 			.from("role_permissions")
-			.select("role_id, permission_id")
+			.select("role_id, permission_id, is_granted")
 			.in("role_id", roleIds);
-		rolePermissions = rp ?? [];
+		rolePermissions = (rp ?? []).map((row) => ({
+			role_id: row.role_id,
+			permission_id: row.permission_id,
+			is_granted: row.is_granted !== false,
+		}));
 	}
 
 	// Get direct overrides
@@ -769,24 +833,47 @@ export async function getUserEffectivePermissions({
 		.from("user_permission_overrides")
 		.select("permission_id, is_granted")
 		.eq("user_id", userId)
-		.eq("is_granted", true);
+		.eq("tenant_id", tenantId);
 
-	const overrideIds = new Set((overrides ?? []).map((o) => o.permission_id));
+	const overrideIds = new Set(
+		(overrides ?? [])
+			.filter((override) => override.is_granted)
+			.map((override) => override.permission_id)
+	);
+	const deniedOverrideIds = new Set(
+		(overrides ?? [])
+			.filter((override) => !override.is_granted)
+			.map((override) => override.permission_id)
+	);
+	const roleDeniedIds = new Set(
+		rolePermissions
+			.filter((rolePermission) => !rolePermission.is_granted)
+			.map((rolePermission) => rolePermission.permission_id)
+	);
 
 	// Build effective permissions
 	const result: EffectivePermission[] = [];
 
 	for (const perm of allPermissions) {
+		if (deniedOverrideIds.has(perm.id)) {
+			continue;
+		}
+
 		const sources: EffectivePermission["sources"] = [];
+		const hasOverrideGrant = overrideIds.has(perm.id);
+
+		if (roleDeniedIds.has(perm.id) && !hasOverrideGrant) {
+			continue;
+		}
 
 		// Check override
-		if (overrideIds.has(perm.id)) {
+		if (hasOverrideGrant) {
 			sources.push({ type: "override", name: "Direct Grant" });
 		}
 
 		// Check roles
 		for (const rp of rolePermissions) {
-			if (rp.permission_id === perm.id) {
+			if (rp.permission_id === perm.id && rp.is_granted) {
 				sources.push({
 					type: "role",
 					name: roleNames[rp.role_id] || "Unknown",

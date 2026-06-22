@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   MoreVertical,
+  Ban,
   Pencil,
   Trash2,
   Users,
@@ -42,6 +43,7 @@ type RoleCardProps = {
 export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const deniedCount = role.denied_permission_count || 0;
 
   const handleDelete = () => {
     startTransition(async () => {
@@ -127,9 +129,17 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
           )}
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Shield className="size-4" />
-              <span>{role.permission_count || 0} permisos</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Shield className="size-4" />
+                {role.permission_count || 0} permitidos
+              </span>
+              {deniedCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-red-600">
+                  <Ban className="size-4" />
+                  {deniedCount} bloqueados
+                </span>
+              )}
             </div>
             <NavigationAccessBadges
               selectedPermissions={role.permissions || []}
@@ -153,7 +163,7 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminar Rol</AlertDialogTitle>
             <AlertDialogDescription>
-              Estas seguro de que quieres eliminar el rol "{role.name}"? Esta
+              Estas seguro de que quieres eliminar el rol {role.name}? Esta
               accion no se puede deshacer y los usuarios asignados perderan
               estos permisos.
             </AlertDialogDescription>
@@ -208,7 +218,10 @@ export function RoleListItem({
       <div className="flex-1 min-w-0">
         <div className="font-medium text-sm truncate">{role.name}</div>
         <div className="text-xs text-muted-foreground">
-          {role.permission_count || 0} permisos
+          {role.permission_count || 0} permitidos
+          {(role.denied_permission_count || 0) > 0
+            ? ` / ${role.denied_permission_count} bloqueados`
+            : ""}
         </div>
       </div>
       <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />

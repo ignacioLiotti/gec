@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import { permissionSimulationHas } from "@/lib/permission-simulation";
 
 const MAX_PERMISSION_KEYS = 50;
 
@@ -35,6 +36,17 @@ export async function GET(request: Request) {
 		const keys = parsePermissionKeys(request);
 		if (keys.length === 0) {
 			return NextResponse.json({ permissions: {} });
+		}
+
+		if (access.permissionSimulation) {
+			return NextResponse.json({
+				permissions: Object.fromEntries(
+					keys.map((key) => [
+						key,
+						permissionSimulationHas(access.permissionSimulation, key),
+					]),
+				),
+			});
 		}
 
 		const entries = await Promise.all(

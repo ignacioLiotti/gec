@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
+import { isSuperAdminUser } from "@/lib/superadmin";
 import { Suspense } from "react";
 import { RolesPageClient } from "./_components/roles-page-client";
 import {
@@ -9,13 +10,7 @@ import {
   getRoleTemplates,
   getMacroTablePermissions,
   getMacroTablesForPermissions,
-  type Role,
-  type PermissionsByCategory,
-  type RoleTemplate,
-  type MacroTablePermission,
 } from "./permissions-actions";
-
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 
 export default async function RolesAdminPage() {
   const supabase = await createClient();
@@ -46,8 +41,7 @@ export default async function RolesAdminPage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const isSuperAdmin =
-    (profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+  const isSuperAdmin = isSuperAdminUser(user.id, profile?.is_superadmin, user.email);
 
   const { tenantId } = await resolveTenantMembership(
     (memberships ?? []) as { tenant_id: string | null; role: string | null }[],
