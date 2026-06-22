@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEventHandler } from "react";
 import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -62,6 +62,12 @@ type DocumentsListPayload = {
 
 type BatchAccessPayload = {
 	urls?: Record<string, string>;
+};
+
+type DocumentUploadPayload = {
+	error?: string;
+	path?: string;
+	fileName?: string;
 };
 
 type TablaRowsPayload = {
@@ -433,6 +439,16 @@ function triggerBlobDownload(blob: Blob, fileName: string) {
 	window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
+function containsFiles(dataTransfer?: DataTransfer | null) {
+	if (!dataTransfer) return false;
+	if (dataTransfer.files && dataTransfer.files.length > 0) return true;
+	if (dataTransfer.types && Array.from(dataTransfer.types).includes("Files")) return true;
+	if (dataTransfer.items) {
+		return Array.from(dataTransfer.items).some((item) => item.kind === "file");
+	}
+	return false;
+}
+
 function FilePreview({
 	item,
 	signedUrl,
@@ -574,6 +590,8 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const [itemToDelete, setItemToDelete] = useState<FileSystemItem | null>(null);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+	const [isFileDragActive, setIsFileDragActive] = useState(false);
+	const [isUploadingFiles, setIsUploadingFiles] = useState(false);
 	const reprocessAllAbortRef = useRef(false);
 	const previewRequestIdRef = useRef(0);
 
@@ -775,6 +793,16 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	}, [contextMenu]);
 
 	useEffect(() => {
+		const clearDragState = () => setIsFileDragActive(false);
+		window.addEventListener("dragend", clearDragState);
+		window.addEventListener("drop", clearDragState);
+		return () => {
+			window.removeEventListener("dragend", clearDragState);
+			window.removeEventListener("drop", clearDragState);
+		};
+	}, []);
+
+	useEffect(() => {
 		let cancelled = false;
 		if (!previewPathKey) return;
 		const paths = previewPathKey.split("\n").filter(Boolean);
@@ -828,6 +856,85 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	function goToParent() {
 		updateFolderPath(getParentFolder(selectedFolderPath).path);
 	}
+
+	const uploadFilesToCurrentFolder = useCallback(async (inputFiles: FileList | File[]) => {
+		if (isUploadingFiles) return;
+		const filesArray = Array.from(inputFiles).filter((file) => file.name.trim().length > 0);
+		if (filesArray.length === 0) return;
+
+		const folderPath = normalizeFolderPath(
+			selectedFolderPath ? `${obraId}/${selectedFolderPath}` : obraId,
+		);
+		setIsUploadingFiles(true);
+		let uploadedCount = 0;
+
+		try {
+			for (const file of filesArray) {
+				const formData = new FormData();
+				formData.append("file", file);
+				formData.append("folderPath", folderPath);
+
+				const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/upload`, {
+					method: "POST",
+					body: formData,
+				});
+				const payload = (await response.json().catch(() => ({}))) as DocumentUploadPayload;
+
+				if (!response.ok) {
+					throw new Error(payload.error || "No se pudieron subir los documentos.");
+				}
+
+				uploadedCount += 1;
+			}
+
+			await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] });
+			toast.success(`${uploadedCount} archivo${uploadedCount === 1 ? "" : "s"} subido${uploadedCount === 1 ? "" : "s"}.`);
+		} catch (error) {
+			if (uploadedCount > 0) {
+				await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] });
+			}
+			toast.error(error instanceof Error ? error.message : "No se pudieron subir los documentos.");
+		} finally {
+			setIsUploadingFiles(false);
+		}
+	}, [isUploadingFiles, obraId, queryClient, selectedFolderPath]);
+
+	const handleDocumentAreaDragEnter = useCallback((event: DragEvent<HTMLElement>) => {
+		if (!containsFiles(event.dataTransfer)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		setIsFileDragActive(true);
+	}, []);
+
+	const handleDocumentAreaDragOver = useCallback((event: DragEvent<HTMLElement>) => {
+		if (!containsFiles(event.dataTransfer)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		event.dataTransfer.dropEffect = isUploadingFiles ? "none" : "copy";
+		if (!isFileDragActive) {
+			setIsFileDragActive(true);
+		}
+	}, [isFileDragActive, isUploadingFiles]);
+
+	const handleDocumentAreaDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
+		if (!containsFiles(event.dataTransfer)) return;
+		const currentTarget = event.currentTarget as HTMLElement;
+		const relatedTarget = event.relatedTarget as Node | null;
+		if (relatedTarget && currentTarget.contains(relatedTarget)) return;
+		setIsFileDragActive(false);
+	}, []);
+
+	const handleDocumentAreaDrop = useCallback((event: DragEvent<HTMLElement>) => {
+		if (!containsFiles(event.dataTransfer)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		setIsFileDragActive(false);
+		if (isUploadingFiles) return;
+		const droppedFiles = Array.from(event.dataTransfer.files || []);
+		if (droppedFiles.length > 0) {
+			void uploadFilesToCurrentFolder(droppedFiles);
+		}
+	}, [isUploadingFiles, uploadFilesToCurrentFolder]);
 
 	const totalBytes = files.reduce((sum, item) => sum + (typeof item.size === "number" ? item.size : 0), 0);
 	const folderCountLabel = documentViewMode === "table" && isOcrFolder ? `${tableRows.length} filas` : `${files.length} archivos`;
@@ -1398,12 +1505,22 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				</div>
 				<div
 					className={cn(
-						"min-h-[560px] bg-white",
+						"relative min-h-[560px] bg-white transition-colors",
 						isOcrFolder
 							? "rounded-b-lg border border-[#d9d9d9] p-4 pt-4"
 							: "p-4",
+						(isFileDragActive || isUploadingFiles) && "bg-amber-50/40 ring-2 ring-inset ring-amber-500",
 					)}
+					onDragEnter={handleDocumentAreaDragEnter}
+					onDragOver={handleDocumentAreaDragOver}
+					onDragLeave={handleDocumentAreaDragLeave}
+					onDrop={handleDocumentAreaDrop}
 				>
+					{isFileDragActive || isUploadingFiles ? (
+						<div className="pointer-events-none absolute inset-3 z-30 flex items-center justify-center rounded-md border-2 border-dashed border-amber-500 bg-amber-50/80 text-sm font-semibold text-amber-800">
+							{isUploadingFiles ? "Subiendo documentos..." : "Solta los documentos para subirlos"}
+						</div>
+					) : null}
 					{activeBody}
 				</div>
 			</section>
