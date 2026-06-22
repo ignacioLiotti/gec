@@ -9,6 +9,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { sendInvitationEmail } from "@/lib/email/invitations";
 
 const INVITATIONS_TABLE_MISSING_CODE = "PGRST205";
+const DEFAULT_INVITATION_BASE_URL = "https://sintesis.dev";
 const isInvitationsTableMissing = (error?: PostgrestError | null) =>
 	error?.code === INVITATIONS_TABLE_MISSING_CODE;
 const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
@@ -102,6 +103,27 @@ async function requireInvitationInTenant(
 	if (!invitation) {
 		throw new Error("Invitation not found");
 	}
+}
+
+function normalizeBaseUrl(value: string) {
+	const trimmed = value.trim().replace(/\/+$/, "");
+	if (!trimmed) return null;
+	if (/^https?:\/\//i.test(trimmed)) return trimmed;
+	return `https://${trimmed}`;
+}
+
+function getInvitationBaseUrl() {
+	const configured = [
+		process.env.APP_URL,
+		process.env.MARKETING_HOST,
+		process.env.NEXT_PUBLIC_MARKETING_HOST,
+		process.env.NEXT_PUBLIC_APP_URL,
+	]
+		.map((value) => (value ? normalizeBaseUrl(value) : null))
+		.find((value): value is string => Boolean(value));
+	if (configured) return configured;
+	if (process.env.NODE_ENV === "production") return DEFAULT_INVITATION_BASE_URL;
+	return "http://localhost:3000";
 }
 
 export type InvitationStatus =
@@ -205,13 +227,7 @@ export async function sendInvitation({
 		return { error: "Failed to create invitation" };
 	}
 
-	const baseUrl =
-		process.env.NEXT_PUBLIC_APP_URL ??
-		(process.env.NEXT_PUBLIC_VERCEL_URL
-			? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-			: process.env.VERCEL_URL
-				? `https://${process.env.VERCEL_URL}`
-				: "http://localhost:3000");
+	const baseUrl = getInvitationBaseUrl();
 	const inviteLink = `${baseUrl}/invitations/${invitation.token}`;
 	const { data: tenant } = await supabase
 		.from("tenants")
@@ -236,6 +252,7 @@ export async function sendInvitation({
 		success: true,
 		invitationId: invitation.id,
 		token: invitation.token,
+		inviteLink,
 	};
 }
 
