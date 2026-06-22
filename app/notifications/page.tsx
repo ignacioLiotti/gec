@@ -75,6 +75,7 @@ type CalendarEventRow = {
   end_at: string;
   all_day?: boolean | null;
   color?: CalendarEventPayload["color"] | null;
+  location?: string | null;
   completed?: boolean | null;
   obra_id?: string | null;
   audience_type?: CalendarEventPayload["audienceType"] | null;
