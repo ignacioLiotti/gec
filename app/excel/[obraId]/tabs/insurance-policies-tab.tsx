@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 type RuleType = "on_finish" | "days_after" | "months_after";
 type PolicyStatusFilter = "all" | "active" | "dueSoon" | "expired" | "cancelled";
 type PolicySortKey = "policy" | "endDate" | "rule" | "calculatedDate" | "status";
-type EditingSection = "responsibles" | "calculatedDate" | "balanceStatus" | null;
+type EditingSection = "responsibles" | "calculatedDate" | "balanceStatus" | "insuredAmount" | "endDate" | "premiumPrize" | null;
 type PolicyStatus = "active" | "dueSoon" | "expired" | "cancelled";
 
 type Policy = {
@@ -61,6 +61,9 @@ type TenantUser = {
 
 type PolicyDraft = {
 	endDate: string;
+	insuredAmount: string;
+	premium: string;
+	prize: string;
 	balance: string;
 	status: string;
 	definitiveReceptionDate: string;
@@ -203,6 +206,9 @@ function ruleDescription(policy: Policy, draft: PolicyDraft) {
 function getPolicyDraft(policy: Policy, drafts: Record<string, PolicyDraft>): PolicyDraft {
 	return drafts[policy.id] ?? {
 		endDate: policy.end_date?.slice(0, 10) ?? "",
+		insuredAmount: policy.insured_amount == null ? "" : String(policy.insured_amount),
+		premium: policy.premium == null ? "" : String(policy.premium),
+		prize: policy.prize == null ? "" : String(policy.prize),
 		balance: policy.balance == null ? "" : String(policy.balance),
 		status: policy.status ?? "",
 		definitiveReceptionDate: policy.definitive_reception_date?.slice(0, 10) ?? "",
@@ -215,6 +221,9 @@ function getPolicyDraft(policy: Policy, drafts: Record<string, PolicyDraft>): Po
 function isPolicyDraftDirty(policy: Policy, draft: PolicyDraft) {
 	return (
 		draft.endDate !== (policy.end_date?.slice(0, 10) ?? "") ||
+		draft.insuredAmount !== (policy.insured_amount == null ? "" : String(policy.insured_amount)) ||
+		draft.premium !== (policy.premium == null ? "" : String(policy.premium)) ||
+		draft.prize !== (policy.prize == null ? "" : String(policy.prize)) ||
 		draft.balance !== (policy.balance == null ? "" : String(policy.balance)) ||
 		draft.status !== (policy.status ?? "") ||
 		draft.definitiveReceptionDate !== (policy.definitive_reception_date?.slice(0, 10) ?? "") ||
@@ -684,6 +693,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 		const draft = getPolicyDraft(policy, policyDrafts);
 		const payload: {
 			endDate: string | null;
+			insuredAmount: string | null;
+			premium: string | null;
+			prize: string | null;
 			balance: string | null;
 			status: string | null;
 			definitiveReceptionDate: string | null;
@@ -691,6 +703,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 			cancellationRuleOffset?: number;
 		} = {
 			endDate: draft.endDate || null,
+			insuredAmount: draft.insuredAmount.trim() || null,
+			premium: draft.premium.trim() || null,
+			prize: draft.prize.trim() || null,
 			balance: draft.balance.trim() || null,
 			status: draft.status.trim() || null,
 			definitiveReceptionDate: draft.definitiveReceptionDate || null,
@@ -964,16 +979,44 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 								<PeriodProgressField policy={selectedPolicy} />
 							</div>
 							<div className="grid gap-4 md:grid-cols-2">
-								<DetailField label="Monto asegurado" value={formatMoney(selectedPolicy.insured_amount, selectedPolicy.currency)} />
-								<DetailField label="Fecha de finalizacion">
-									<div className="mt-2 space-y-0.5">
-										<p className="text-xl font-black tracking-tight text-stone-900">
-											{formatDisplayDate(selectedDraft.endDate)}
+								<DetailField label="Monto asegurado" tone="editable" onEdit={() => setEditingSection("insuredAmount")}>
+									{editingSection === "insuredAmount" ? (
+										<Input
+											value={selectedDraft.insuredAmount}
+											placeholder="Monto asegurado"
+											inputMode="decimal"
+											className="mt-2 h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+											onChange={(event) => updatePolicyDraft(selectedPolicy, { insuredAmount: event.target.value })}
+										/>
+									) : (
+										<p className="mt-2.5 text-xl font-black tracking-tight text-stone-900">
+											{formatMoney(selectedDraft.insuredAmount, selectedPolicy.currency)}
 										</p>
-										<p className="text-xs font-semibold text-stone-500">
-											Fecha importada de la poliza; no define la baja automatica.
-										</p>
-									</div>
+									)}
+								</DetailField>
+								<DetailField label="Fecha de finalizacion" tone="editable" onEdit={() => setEditingSection("endDate")}>
+									{editingSection === "endDate" ? (
+										<div className="mt-2 space-y-1.5">
+											<Input
+												type="date"
+												value={selectedDraft.endDate}
+												className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+												onChange={(event) => updatePolicyDraft(selectedPolicy, { endDate: event.target.value })}
+											/>
+											<p className="text-xs font-semibold text-stone-500">
+												Fecha importada de la poliza; no define la baja automatica.
+											</p>
+										</div>
+									) : (
+										<div className="mt-2 space-y-0.5">
+											<p className="text-xl font-black tracking-tight text-stone-900">
+												{formatDisplayDate(selectedDraft.endDate)}
+											</p>
+											<p className="text-xs font-semibold text-stone-500">
+												Fecha importada de la poliza; no define la baja automatica.
+											</p>
+										</div>
+									)}
 								</DetailField>
 								<DetailField
 									label="Responsables"
@@ -1119,15 +1162,44 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 										) : null}
 									</div>
 								</DetailField>
-								<DetailField label="Premio / prima">
-									<div className="mt-2 space-y-0.5">
-										<p className="text-xl font-black tracking-tight text-stone-900">
-											{formatMoney(selectedPolicy.prize, selectedPolicy.currency)}
-											<span className="mx-2 text-stone-300">/</span>
-											<span className="text-stone-500">{formatMoney(selectedPolicy.premium, selectedPolicy.currency)}</span>
-										</p>
-										<p className="text-xs font-semibold text-stone-500">Premio total / prima neta</p>
-									</div>
+								<DetailField label="Premio / prima" tone="editable" onEdit={() => setEditingSection("premiumPrize")}>
+									{editingSection === "premiumPrize" ? (
+										<div className="mt-2 grid gap-2 sm:grid-cols-2">
+											<label className="space-y-1">
+												<span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">
+													Premio
+												</span>
+												<Input
+													value={selectedDraft.prize}
+													placeholder="Premio"
+													inputMode="decimal"
+													className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+													onChange={(event) => updatePolicyDraft(selectedPolicy, { prize: event.target.value })}
+												/>
+											</label>
+											<label className="space-y-1">
+												<span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">
+													Prima
+												</span>
+												<Input
+													value={selectedDraft.premium}
+													placeholder="Prima"
+													inputMode="decimal"
+													className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+													onChange={(event) => updatePolicyDraft(selectedPolicy, { premium: event.target.value })}
+												/>
+											</label>
+										</div>
+									) : (
+										<div className="mt-2 space-y-0.5">
+											<p className="text-xl font-black tracking-tight text-stone-900">
+												{formatMoney(selectedDraft.prize, selectedPolicy.currency)}
+												<span className="mx-2 text-stone-300">/</span>
+												<span className="text-stone-500">{formatMoney(selectedDraft.premium, selectedPolicy.currency)}</span>
+											</p>
+											<p className="text-xs font-semibold text-stone-500">Premio total / prima neta</p>
+										</div>
+									)}
 								</DetailField>
 								<DetailField label="Saldo / estado importado" tone="editable" onEdit={() => setEditingSection("balanceStatus")}>
 									{editingSection === "balanceStatus" ? (
