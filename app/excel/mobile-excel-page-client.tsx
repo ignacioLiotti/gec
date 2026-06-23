@@ -108,15 +108,15 @@ export default function MobileExcelPageClient({
 	}, [hasPartialInitialObras, initialObras]);
 
 	return (
-		<div className={cn("flex-1 space-y-4 px-4 py-4", DS.page)}>
+		<div className={cn("flex-1 space-y-4 px-3 py-4 sm:px-4", DS.page)}>
 			<Framed>
 				<div className="space-y-4 p-4">
-					<div className="flex items-center justify-between gap-2">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div>
 							<h1 className="text-2xl font-semibold tracking-tight text-[#1a1a1a]">Panel de obras</h1>
 							<p className="text-xs text-[#999]">Vista rápida y acceso a cada obra</p>
 						</div>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<Button variant="outline" size="sm" asChild className={toolButtonClass}>
 								<Link href="/excel/reporte" prefetch={false} className="gap-2">
 									<FileText className="size-4" />

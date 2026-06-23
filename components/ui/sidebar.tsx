@@ -135,7 +135,7 @@ function SidebarProvider({
             {
               "--sidebar-width": SIDEBAR_WIDTH,
               "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-              "--sidebar-current-width": SIDEBAR_WIDTH_ICON,
+              "--sidebar-current-width": isMobile ? "0rem" : SIDEBAR_WIDTH_ICON,
               ...style,
             } as React.CSSProperties
           }
@@ -188,7 +188,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
+          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) max-w-[calc(100vw-1rem)] p-0"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -197,8 +197,8 @@ function Sidebar({
           side={side}
         >
           <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+            <SheetTitle>Navegacion</SheetTitle>
+            <SheetDescription>Menu principal de la aplicacion.</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
@@ -317,14 +317,14 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
 function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <div className={cn(
-      " relative flex w-full flex-1 flex-col p-1.5 pl-0",
+      "relative flex min-h-svh w-full flex-1 flex-col bg-[#fafafa] p-0 md:p-1.5 md:pl-0",
       "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
       className
     )}>
       <main
         data-slot="sidebar-inset"
         className={cn(
-          "bg-background z-10 relative flex w-full flex-1 flex-col rounded-xl shadow-card max-h-[calc(100vh-2rem)] overflow-y-auto ",
+          "bg-background z-10 relative flex min-h-svh w-full flex-1 flex-col overflow-y-auto rounded-none shadow-none md:min-h-0 md:max-h-[calc(100vh-2rem)] md:rounded-xl md:shadow-card",
           "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
           className
         )}
