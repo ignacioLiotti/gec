@@ -527,7 +527,7 @@ export default function DesktopExcelPageClient({
 	}, []);
 
 	return (
-		<div className="relative min-h-full w-full overflow-hidden bg-[#f9f9f9] px-3 py-4 sm:px-4 md:max-w-[calc(100vw-var(--sidebar-current-width))] md:pl-8 md:py-8">
+		<div className="relative min-h-full max-w-[calc(100vw-var(--sidebar-current-width))] bg-[#f9f9f9] px-4 py-4 md:pl-8 md:py-8">
 			{isPreviewOpen ? (
 				<Sheet open onOpenChange={(open) => !open && handleCancelPreview()}>
 					<SheetContent side="right" className="border-l-[#ece7df] bg-[#f6f2eb] p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:max-w-lg">
@@ -609,8 +609,8 @@ export default function DesktopExcelPageClient({
 									Filtra, busca y actualiza tus obras desde una vista unificada.
 								</p>
 							</div>
-							<div data-wizard-target="excel-page-tabs" className="min-w-0 overflow-x-auto">
-								<FormTableTabs className={cn("flex h-11 min-w-max justify-start rounded-lg p-1")} />
+							<div data-wizard-target="excel-page-tabs">
+								<FormTableTabs className={cn("flex h-11 justify-start rounded-lg p-1")} />
 							</div>
 						</div>
 					</div>
@@ -618,7 +618,7 @@ export default function DesktopExcelPageClient({
 					<div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:-mb-0">
 						<div
 							data-wizard-target="excel-page-toolbar"
-							className="relative flex min-w-0 items-center gap-2 overflow-x-auto rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:overflow-visible xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
+							className="relative -ml-[1px] flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
 							style={
 								{
 									"--notch-bg": "white",
@@ -630,7 +630,7 @@ export default function DesktopExcelPageClient({
 							<NotchTail side="right" className="z-100 mb-[1px] h-[45px] !hidden xl:!block" />
 						</div>
 						<div
-							className="relative flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 xl:-mr-[1px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 xl:pb-0"
+							className="relative -mr-[1px] flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0"
 							style={
 								{
 									"--notch-bg": "white",
@@ -681,9 +681,9 @@ export default function DesktopExcelPageClient({
 					</div>
 					<div
 						data-wizard-target="excel-page-table"
-						className="flex min-w-0 flex-col gap-4 rounded-xl bg-card p-2 pt-3 shadow-card sm:p-2.5 sm:pt-3.5 xl:rounded-t-none"
+						className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pt-3.5 shadow-card xl:rounded-t-none "
 					>
-						<FormTableContent className="my-0 max-w-full overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[70svh] md:max-h-[calc(100vh-400px)]" />
+						<FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[calc(100vh-400px)]" />
 						<Separator className="bg-border" />
 						<FormTablePagination />
 					</div>

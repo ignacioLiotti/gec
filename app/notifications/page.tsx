@@ -18,79 +18,10 @@ type NotificationRow = {
   action_url: string | null;
   created_at: string;
   read_at: string | null;
-  data: NotificationData | null;
-  pendiente_id?: string | null;
-  pending?: PendingRow;
+  data: any;
 };
 
-type NotificationData = {
-  dueDate?: string | null;
-  documentName?: string | null;
-  obraId?: string | null;
-  obraName?: string | null;
-  [key: string]: unknown;
-};
-
-type PendingRow = {
-  id: string;
-  name: string;
-  obra_id: string | null;
-  due_date: string | null;
-};
-
-type ScheduleRow = {
-  pendiente_id: string;
-  run_at: string;
-};
-
-type ObraNameRow = {
-  id: string;
-  designacion_y_ubicacion: string | null;
-};
-
-type RoleRow = {
-  id: string;
-  name: string | null;
-};
-
-type UserRoleRow = {
-  role_id: string;
-};
-
-type ProfileRow = {
-  user_id: string;
-  full_name: string | null;
-};
-
-type MembershipUserRow = {
-  user_id: string;
-  users?: { email?: string | null } | { email?: string | null }[] | null;
-};
-
-type CalendarEventRow = {
-  id: string;
-  title: string | null;
-  description?: string | null;
-  start_at: string;
-  end_at: string;
-  all_day?: boolean | null;
-  color?: CalendarEventPayload["color"] | null;
-  location?: string | null;
-  completed?: boolean | null;
-  obra_id?: string | null;
-  audience_type?: CalendarEventPayload["audienceType"] | null;
-  target_user_id?: string | null;
-  target_role_id?: string | null;
-  created_by?: string | null;
-  created_at?: string | null;
-};
-
-function getMembershipUserEmail(row: MembershipUserRow) {
-  const users = Array.isArray(row.users) ? row.users[0] : row.users;
-  return users?.email ?? null;
-}
-
-export default async function NotificationsIndexPage() {
+export default async function NotificationsIndexPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;
@@ -125,17 +56,17 @@ export default async function NotificationsIndexPage() {
   const reminders = (remData ?? []) as NotificationRow[];
 
   // Fetch pendientes details for richer display
-  const pendienteIds = Array.from(new Set(reminders.map((n) => n.pendiente_id).filter(Boolean))) as string[];
-  const pendientesById: Record<string, { name: string; obra_id: string | null; due_date: string | null }> = {};
-  const dueBySchedule: Record<string, string> = {};
+  const pendienteIds = Array.from(new Set((reminders as any[]).map((n) => n.pendiente_id).filter(Boolean)));
+  let pendientesById: Record<string, { name: string; obra_id: string | null; due_date: string | null }> = {};
+  let dueBySchedule: Record<string, string> = {};
   if (pendienteIds.length) {
     const { data: pendRows } = await supabase
       .from("obra_pendientes")
       .select("id,name,obra_id,due_date")
       .in("id", pendienteIds)
       .eq("tenant_id", tenantId);
-    for (const r of (pendRows ?? []) as PendingRow[]) {
-      pendientesById[r.id] = { name: r.name, obra_id: r.obra_id ?? null, due_date: r.due_date ?? null };
+    for (const r of pendRows ?? []) {
+      pendientesById[(r as any).id] = { name: (r as any).name, obra_id: (r as any).obra_id ?? null, due_date: (r as any).due_date ?? null };
     }
 
     const { data: schedRows } = await supabase
@@ -144,9 +75,9 @@ export default async function NotificationsIndexPage() {
       .in("pendiente_id", pendienteIds)
       .eq("tenant_id", tenantId)
       .eq("stage", "due_today");
-    for (const s of (schedRows ?? []) as ScheduleRow[]) {
-      const runAtDate = new Date(s.run_at);
-      dueBySchedule[s.pendiente_id] = formatLocalDate(runAtDate);
+    for (const s of schedRows ?? []) {
+      const runAtDate = new Date((s as any).run_at);
+      dueBySchedule[(s as any).pendiente_id] = formatLocalDate(runAtDate);
     }
   }
 
@@ -180,23 +111,23 @@ export default async function NotificationsIndexPage() {
         .eq("tenant_id", tenantId),
     ]);
 
-    const obras = (obrasRes.data ?? []) as ObraNameRow[];
+    const obras = obrasRes.data ?? [];
     obraNameById = new Map(
-      obras.map((obra) => [
-        obra.id,
-        obra.designacion_y_ubicacion ?? "",
+      obras.map((obra: any) => [
+        obra.id as string,
+        (obra.designacion_y_ubicacion as string) ?? "",
       ])
     );
-    const rolesData = (rolesRes.data ?? []) as RoleRow[];
-    const userRoleIds = (userRoleIdsRes.data ?? []) as UserRoleRow[];
-    const calendarEventRows = (calendarRes.data ?? []) as CalendarEventRow[];
+    const rolesData = rolesRes.data ?? [];
+    const userRoleIds = (userRoleIdsRes.data ?? []) as { role_id: string }[];
+    const calendarEventRows = calendarRes.data ?? [];
 
-    availableRoles = rolesData.map((r) => ({
-      id: r.id,
+    availableRoles = rolesData.map((r: any) => ({
+      id: String(r.id),
       name: r.name ?? null,
     }));
     const roleNameById = new Map(
-      rolesData.map((role) => [role.id, role.name ?? ""])
+      rolesData.map((role: any) => [role.id as string, role.name as string])
     );
 
     const userRoleIdSet = new Set(userRoleIds.map((ur) => ur.role_id));
@@ -212,13 +143,13 @@ export default async function NotificationsIndexPage() {
         .from("profiles")
         .select("user_id,full_name")
         .in("user_id", Array.from(userIds))
-      : { data: [] as ProfileRow[] };
+      : { data: [] as any[] };
     const userNameById = new Map(
-      ((profileRows ?? []) as ProfileRow[]).map((p) => [p.user_id, p.full_name ?? ""])
+      (profileRows ?? []).map((p: any) => [p.user_id as string, p.full_name as string])
     );
-    const membershipRows = (membershipUsersRes?.data ?? []) as MembershipUserRow[];
+    const membershipRows = (membershipUsersRes?.data ?? []) as any[];
     const userEmailById = new Map(
-      membershipRows.map((row) => [row.user_id, getMembershipUserEmail(row) ?? ""])
+      membershipRows.map((row) => [row.user_id as string, row.users?.email as string])
     );
 
     const calendarEventsFromTable: CalendarEventPayload[] = (calendarEventRows ?? [])
@@ -498,13 +429,11 @@ export default async function NotificationsIndexPage() {
 
     if (!notification) return;
 
-    const notificationRow = notification as { pendiente_id?: string | null };
-
-    if (notificationRow.pendiente_id) {
+    if ((notification as any).pendiente_id) {
       await s
         .from("obra_pendientes")
         .delete()
-        .eq("id", notificationRow.pendiente_id)
+        .eq("id", (notification as any).pendiente_id)
         .eq("tenant_id", tenantId);
     } else {
       await s
@@ -561,17 +490,15 @@ export default async function NotificationsIndexPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-4 p-3 sm:gap-6 sm:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-h-svh flex-col gap-6 p-6">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">Notificaciones</h1>
         <form action={markAllRead}>
-          <Button variant="outline" size="sm" className="w-full sm:w-auto">
-            Marcar todas como leídas
-          </Button>
+          <Button variant="outline" size="sm">Marcar todas como leídas</Button>
         </form>
       </div>
 
-      <div className="rounded-2xl border border-stone-200/70 bg-white p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:rounded-3xl">
+      <div className="rounded-3xl border border-stone-200/70 bg-white p-2 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
         <div className="no-scrollbar flex w-full gap-3 overflow-x-auto border-none bg-transparent flex-row shadow-[0_20px_60px_rgba(15,23,42,0.06)]" >
           {metrics.map((metric) => {
             const isPositive = metric.delta >= 0;
@@ -580,7 +507,7 @@ export default async function NotificationsIndexPage() {
             return (
               <Card
                 key={metric.title}
-                className="min-w-[220px] flex-1 rounded-2xl border border-zinc-200 bg-white shadow-none gap-0 sm:min-w-[250px]"
+                className="min-w-[250px] flex-1 rounded-2xl border border-zinc-200 bg-white shadow-none gap-0 "
               >
                 <CardHeader className="space-y-0 pb-2">
                   <div className="flex items-center justify-between">
@@ -668,8 +595,8 @@ function parsePendienteRows(
   dueBySchedule: Record<string, string>
 ): PendienteItem[] {
   return rows.map((r) => {
-    const pendienteId = r.pendiente_id ?? null;
-    const joined = r.pending;
+    const pendienteId = (r as any).pendiente_id;
+    const joined = (r as any).pending as { id: string; name: string; obra_id: string | null; due_date: string | null } | undefined;
     const dueDate = pendienteId
       ? (joined?.due_date ?? dueBySchedule[pendienteId] ?? pendientesById[pendienteId]?.due_date ?? r.data?.dueDate ?? null)
       : (r.data?.dueDate ?? null);

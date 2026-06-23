@@ -206,9 +206,9 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 	const isEmpty = messages.length === 0;
 
 	return (
-		<main className="dai-root flex h-[calc(100svh-3.5rem)] flex-col bg-[#faf9f5] text-stone-900 md:h-svh">
+		<main className="dai-root flex h-svh flex-col bg-[#faf9f5] text-stone-900">
 			{/* Top bar */}
-			<header className="z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-stone-200/70 bg-[#faf9f5]/80 px-3 backdrop-blur-sm md:px-6">
+			<header className="z-10 flex h-14 shrink-0 items-center justify-between border-b border-stone-200/70 bg-[#faf9f5]/80 px-4 backdrop-blur-sm md:px-6">
 				<div className="flex items-baseline gap-2.5">
 					<span className="size-2 rounded-full bg-[#ff5800]" aria-hidden />
 					<h1 className="text-sm font-semibold tracking-tight text-stone-800">Document AI</h1>
@@ -225,7 +225,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 								Historial
 							</button>
 						</PopoverTrigger>
-						<PopoverContent align="end" sideOffset={8} className="w-[calc(100vw-2rem)] p-1.5 sm:w-80">
+						<PopoverContent align="end" sideOffset={8} className="w-80 p-1.5">
 							{chats.length === 0 ? (
 								<p className="px-2 py-5 text-center text-xs text-stone-400">
 									Todavía no hay conversaciones guardadas.
@@ -273,7 +273,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 					<button
 						type="button"
 						onClick={startNewChat}
-						className="dai-press inline-flex h-8 items-center gap-1.5 rounded-lg bg-stone-900 px-2.5 text-xs font-semibold text-white transition-colors hover:bg-stone-700 sm:px-3"
+						className="dai-press inline-flex h-8 items-center gap-1.5 rounded-lg bg-stone-900 px-3 text-xs font-semibold text-white transition-colors hover:bg-stone-700"
 					>
 						<Plus className="size-3.5" />
 						Nueva
@@ -289,8 +289,8 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 			>
 				<div className="mx-auto w-full max-w-3xl px-4 md:px-6">
 					{isEmpty ? (
-						<div className="flex min-h-[52svh] flex-col items-center justify-center pt-8 text-center sm:min-h-[60svh] sm:pt-10">
-							<p className="dai-message-enter font-ui-serif text-2xl text-stone-800 sm:text-3xl md:text-4xl">
+						<div className="flex min-h-[60svh] flex-col items-center justify-center pt-10 text-center">
+							<p className="dai-message-enter font-ui-serif text-3xl text-stone-800 md:text-4xl">
 								<span className="text-[#ff5800]">*</span> ¿Qué necesitás saber de tus obras?
 							</p>
 							<p className="dai-message-enter mt-3 max-w-md text-sm leading-6 text-stone-500">
@@ -381,7 +381,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 			</div>
 
 			{/* Composer */}
-			<div className="shrink-0 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:pb-5">
+			<div className="shrink-0 px-4 pb-4 md:px-6 md:pb-5">
 				<form onSubmit={submit} className="mx-auto w-full max-w-3xl">
 					<div className="dai-composer rounded-2xl border border-stone-300/80 bg-white shadow-[0_2px_16px_rgba(28,25,23,0.06)] focus-within:border-stone-400 focus-within:shadow-[0_4px_24px_rgba(28,25,23,0.09)]">
 						<ScopeChips works={works} scope={scope} onScopeChange={setScope} />

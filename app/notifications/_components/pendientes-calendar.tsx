@@ -158,7 +158,7 @@ export function PendientesCalendar({
   // }
 
   return (
-    <div className="min-w-0 rounded-2xl border border-zinc-200/80 bg-white p-1.5 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_16px_36px_rgba(15,23,42,0.06)] sm:rounded-3xl sm:p-2">
+    <div className="rounded-3xl border border-zinc-200/80 bg-white p-2 shadow-[0_1px_3px_rgba(15,23,42,0.05),0_16px_36px_rgba(15,23,42,0.06)]">
       <EventCalendar
         events={calendarEvents}
         onEventAdd={handleEventAdd}
