@@ -170,6 +170,54 @@ function getFolderLookupKeys(folderName: string, obraId: string) {
 	return Array.from(keys).filter(Boolean);
 }
 
+function getCertificadoTablePriority(link: OcrFolderLink): number | null {
+	const normalizedName = normalizeFolderName(link.tablaName ?? "");
+	if (normalizedName.includes("pmc-resumen")) return 0;
+	if (normalizedName.includes("pmc-items")) return 1;
+	if (normalizedName.includes("curva-plan")) return 2;
+
+	const fieldKeys = new Set(link.columns.map((column) => column.fieldKey));
+	const looksLikeResumen =
+		fieldKeys.has("monto_certificado") &&
+		(fieldKeys.has("monto_acumulado") || fieldKeys.has("avance_fisico_acumulado_pct"));
+	const looksLikeItems =
+		(fieldKeys.has("item_code") || fieldKeys.has("descripcion")) &&
+		(fieldKeys.has("avance_periodo_pct") || fieldKeys.has("monto_presente"));
+	const looksLikePlan =
+		fieldKeys.has("periodo") &&
+		fieldKeys.has("avance_mensual_pct") &&
+		fieldKeys.has("avance_acumulado_pct");
+
+	if (looksLikeResumen) return 0;
+	if (looksLikeItems) return 1;
+	if (looksLikePlan) return 2;
+	return null;
+}
+
+function sortOcrFolderLinks(links: OcrFolderLink[]) {
+	if (links.length <= 1) return links;
+
+	const certificadoEntries = links.map((link, index) => ({
+		index,
+		link,
+		priority: getCertificadoTablePriority(link),
+	}));
+	if (certificadoEntries.some((entry) => entry.priority !== null)) {
+		return certificadoEntries
+			.toSorted((left, right) => {
+				const leftPriority = left.priority ?? 99;
+				const rightPriority = right.priority ?? 99;
+				if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+				return left.index - right.index;
+			})
+			.map((entry) => entry.link);
+	}
+
+	return links.toSorted((left, right) =>
+		(left.tablaName ?? "").localeCompare(right.tablaName ?? "", "es", { sensitivity: "base" }),
+	);
+}
+
 function getRelativeFolderPath(item: FileSystemItem) {
 	if (item.relativePath) return normalizePath(item.relativePath);
 	if (item.storagePath) {
@@ -648,9 +696,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			return getFolderLookupKeys(link.folderName, obraId).some((key) => folderLookupKeys.has(key));
 		});
 		if (matchingLinks.length > 0) {
-			return matchingLinks.toSorted((left, right) =>
-				(left.tablaName ?? "").localeCompare(right.tablaName ?? "", "es", { sensitivity: "base" }),
-			);
+			return sortOcrFolderLinks(matchingLinks);
 		}
 		if (!folderNode.ocrTablaId) return [];
 		return [
@@ -808,10 +854,14 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			setDocumentViewMode("cards");
 			return;
 		}
-		if (activeOcrTablaIdOverride && activeFolderLinks.some((link) => link.tablaId === activeOcrTablaIdOverride)) {
+		const preferredTablaId = activeFolderLinks[0]?.tablaId ?? null;
+		if (
+			activeOcrTablaIdOverride === preferredTablaId &&
+			activeFolderLinks.some((link) => link.tablaId === activeOcrTablaIdOverride)
+		) {
 			return;
 		}
-		setActiveOcrTablaIdOverride(activeFolderLinks[0]?.tablaId ?? null);
+		setActiveOcrTablaIdOverride(preferredTablaId);
 	}, [activeFolderLinks, activeOcrTablaIdOverride]);
 
 	useEffect(() => {
