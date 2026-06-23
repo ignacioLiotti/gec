@@ -6,7 +6,7 @@ tags: #permissions #roles #access-control #rbac
 
 The app uses a **layered permission system**:
 1. Membership roles (owner/admin/member) — coarse-grained
-2. Custom tenant roles — fine-grained, per-route/feature
+2. Custom tenant roles — fine-grained, per-route/feature, grant or deny
 3. Per-user overrides — individual exceptions
 
 ---
@@ -51,7 +51,7 @@ Admins create custom roles at `/admin/roles`.
 ```
 roles                         — id, tenant_id, name, description, color, is_default
 permissions                   — id, key, description, category, display_name, sort_order
-role_permissions              — role_id, permission_id (many-to-many)
+role_permissions              — role_id, permission_id, is_granted (true = grant, false = deny)
 user_roles                    — user_id, role_id, tenant_id
 macro_table_permissions       — macro_table_id, (user_id OR role_id), permission_level
 ```
@@ -59,6 +59,8 @@ macro_table_permissions       — macro_table_id, (user_id OR role_id), permissi
 **Permission Categories:** navigation, obras, certificados, macro, documents, data-flow, admin
 
 **Permission Levels (for macro tables):** `read`, `edit`, `admin`
+
+**Role permission states:** `Heredar` stores no row, `Permitir` stores `is_granted = true`, and `Bloquear` stores `is_granted = false`.
 
 **Role Templates** (migration 0060) — pre-configured role bundles:
 
@@ -91,15 +93,14 @@ Dashboard route access is available to all authenticated users and appears in th
 
 ### Delete lifecycle permissions
 
-Soft delete actions use explicit permissions so destructive capabilities can be assigned independently from broad admin access:
+Soft delete actions use explicit permissions for broad destructive capabilities, while individual document files can be sent to trash by any authenticated user with access to the obra:
 
 | Permission | Meaning |
 |---|---|
 | `obras:delete` | Send obras to the obra trash |
-| `documents:delete:file` | Send individual document files to the document trash |
 | `documents:delete:folder` | Send folders and their descendants to the document trash |
 
-`owner` and `admin` memberships still bypass custom role restrictions through `has_permission`. Migration 0102 backfills these three permissions into roles that already had `obras:admin`, and the `obra_manager` template includes them for new tenants/roles.
+`documents:delete:file` may still exist in older role data, but individual file delete no longer checks it. `owner` and `admin` memberships still bypass custom role restrictions through `has_permission` for permission-gated delete actions. Migration 0102 backfills the original delete permissions into roles that already had `obras:admin`, and the `obra_manager` template includes them for new tenants/roles.
 
 ### Admin configuration permissions
 
@@ -130,7 +131,17 @@ user_permission_overrides
   user_id, tenant_id, permission_id, is_granted (boolean)
 ```
 
-A user can be **granted** or **denied** a specific permission key regardless of their role.
+A regular member can be **granted** or **denied** a specific permission key for one tenant regardless of their custom roles.
+
+Resolution order:
+
+1. Superadmin and tenant `owner`/`admin` memberships bypass custom grants and denies.
+2. Explicit per-user deny (`is_granted = false`) blocks the permission for regular members.
+3. Explicit per-user grant (`is_granted = true`) grants the permission.
+4. Explicit role deny (`role_permissions.is_granted = false`) blocks the permission.
+5. Custom role grants apply only when no higher-precedence deny exists.
+
+This allows a tenant admin to make one user the exception when a role or baseline navigation item would otherwise allow or block access.
 
 ---
 
@@ -147,6 +158,14 @@ const visibleNavItems = navItems.filter(item => {
 });
 ```
 
+For baseline navigation, explicit user or role denies can hide otherwise available sidebar entries:
+
+- `nav:dashboard` hides Dashboard
+- `nav:excel` hides Excel/Obras
+- `nav:certificados` hides Certificados
+- `nav:macro` hides Macro table navigation
+- `nav:notifications` hides Notificaciones
+
 For document generation there is an additional feature-level filter on top of route access:
 
 - `nav:document-generation` enables the document surfaces in the sidebar
@@ -156,6 +175,8 @@ For document generation there is an additional feature-level filter on top of ro
 - `documents:drafts:all` allows seeing drafts created by other users
 
 This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document review/config capabilities server-side and the sidebar only renders privileged screens when allowed.
+
+A "documents-only" regular member can be configured by blocking the baseline nav permissions above on a custom role, or by denying them directly for that user, and not granting `documents:review` or `documents:templates`. The user will still see the `Documentos` section with `Generar Documentos` and `Historial` because document creation is baseline tenant-member access.
 
 ---
 
@@ -216,12 +237,30 @@ Permission levels: `read(1) < edit(2) < admin(3)`
 
 ### hasPermission(permissionKey)
 - Admin/superadmin → all permissions granted automatically
-- Check `user_permission_overrides` (direct grants)
-- Check `role_permissions` through `user_roles`
+- Check `user_permission_overrides` explicit denies
+- Check `user_permission_overrides` direct grants
+- Check `role_permissions` explicit role denies
+- Check `role_permissions` grants through `user_roles`, excluding denied keys
 
 ### getUserPermissionKeys()
 - For admin/superadmin: returns ALL permission keys from `permissions` table
-- For regular users: union of override keys + role permission keys
+- For regular users: union of granted override keys + role permission keys, excluding denied keys
+
+### Superadmin permission simulation
+
+Superadmins can open the user menu and activate a permission simulation. The
+simulation is stored in the `permission_simulation` HTTP-only cookie and is
+ignored for non-superadmins.
+
+When active, app-level permission context behaves like a regular member:
+
+- `isSuperAdmin` is exposed as `false`
+- `membershipRole` is exposed as `member`
+- `permissionKeys` comes only from the simulated key list
+- no-permission simulation uses an empty key list
+
+This is a support/debugging viewport only. It does not change memberships,
+roles, RLS, database permissions, or the real Supabase session.
 
 **Stack depth error handling:**
 ```typescript

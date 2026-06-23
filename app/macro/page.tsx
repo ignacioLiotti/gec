@@ -1263,7 +1263,7 @@ function MacroTablePanel({
         <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div
             data-wizard-target="macro-page-toolbar"
-            className="relative flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
+			className="relative flex min-w-0 items-center gap-2 overflow-x-auto rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:overflow-visible xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
             style={
               {
                 "--notch-bg": "white",
@@ -1278,8 +1278,8 @@ function MacroTablePanel({
             />
           </div>
           <div
-            className="relative flex items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 pb-0
-            xl:-mr-[1px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 z-10 -mb-[4px]"
+			className="relative z-10 flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2
+			xl:-mr-[1px] xl:-mb-[4px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 xl:pb-0"
             style={
               {
                 "--notch-bg": "white",
@@ -1327,9 +1327,9 @@ function MacroTablePanel({
         </div>
         <div
           data-wizard-target="macro-page-table"
-          className="flex flex-col gap-4 rounded-xl bg-card p-2.5 pr-0 pt-3.5 shadow-card xl:rounded-t-none"
+			className="flex min-w-0 flex-col gap-4 rounded-xl bg-card p-2 pt-3 shadow-card sm:p-2.5 sm:pr-0 sm:pt-3.5 xl:rounded-t-none"
         >
-          <FormTableContent className="my-0 overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[calc(100vh-400px)]" />
+			<FormTableContent className="my-0 max-w-full overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[70svh] md:max-h-[calc(100vh-400px)]" />
           <Separator className="bg-border" />
           <FormTablePagination />
         </div>
@@ -1558,7 +1558,7 @@ function MacroTablesPageContent() {
     <Tabs
       value={selectedId ?? macroTables[0].id}
       onValueChange={handleTabChange}
-      className="relative p-4 md:p-8 max-w-[calc(100vw-var(--sidebar-current-width))] overflow-hidden"
+		className="relative w-full overflow-hidden p-3 sm:p-4 md:max-w-[calc(100vw-var(--sidebar-current-width))] md:p-8"
     >
       <div className="relative">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1570,8 +1570,8 @@ function MacroTablesPageContent() {
               Filtra, busca y actualiza tus macrotablas desde una vista unificada.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:items-end" data-wizard-target="macro-page-tabs">
-            <div className="flex flex-wrap justify-end gap-2">
+			<div className="flex min-w-0 flex-col gap-2 sm:items-end" data-wizard-target="macro-page-tabs">
+				<div className="flex flex-wrap justify-start gap-2 sm:justify-end">
               <input
                 ref={insuranceFileInputRef}
                 type="file"
@@ -1594,13 +1594,15 @@ function MacroTablesPageContent() {
                 Importar pólizas
               </Button>
             </div>
-            <TabsList className={cn("flex justify-start rounded-lg p-1 h-11")}>
-              {macroTables.map((macroTable) => (
-                <TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
-                  {macroTable.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+				<div className="w-full min-w-0 overflow-x-auto sm:w-auto">
+					<TabsList className={cn("flex h-11 min-w-max justify-start rounded-lg p-1")}>
+						{macroTables.map((macroTable) => (
+							<TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
+								{macroTable.name}
+							</TabsTrigger>
+						))}
+					</TabsList>
+				</div>
           </div>
         </div>
         {macroTables.map((macroTable) => (

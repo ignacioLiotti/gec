@@ -1,11 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import UserOverrides from "./user-overrides";
 
-export default function UserAssignments({ users, tenantId }: { users: { user_id: string; full_name: string | null; email: string | null }[]; tenantId: string }) {
+type Permission = { id: string; key: string; description: string | null };
+type RoleOption = { id: string; name: string };
+type UserRoleAssignment = { role_id: string };
+
+export default function UserAssignments({
+  users,
+  tenantId,
+  allPermissions,
+}: {
+  users: { user_id: string; full_name: string | null; email: string | null }[];
+  tenantId: string;
+  allPermissions: Permission[];
+}) {
   const [selectedUser, setSelectedUser] = useState<string | null>(users[0]?.user_id ?? null);
-  const [roles, setRoles] = useState<any[]>([]);
-  const [userRoles, setUserRoles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [userRoles, setUserRoles] = useState<UserRoleAssignment[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -35,10 +48,13 @@ export default function UserAssignments({ users, tenantId }: { users: { user_id:
   }
 
   const assignedIds = new Set(userRoles.map((r) => r.role_id));
-  console.log("users", users);
+  const selectedUserLabel =
+    users.find((user) => user.user_id === selectedUser)?.full_name ??
+    users.find((user) => user.user_id === selectedUser)?.email ??
+    selectedUser;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       <div className="flex items-center gap-2">
         <select value={selectedUser ?? ""} onChange={(e) => setSelectedUser(e.target.value)} className="rounded-md border bg-background px-2 py-1 text-sm">
           {users.map((u) => (
@@ -76,6 +92,17 @@ export default function UserAssignments({ users, tenantId }: { users: { user_id:
           </tbody>
         </table>
       </div>
+      {selectedUser ? (
+        <div className="space-y-3">
+          <div>
+            <h4 className="font-medium">Excepciones de permisos</h4>
+            <p className="text-sm text-muted-foreground">
+              {selectedUserLabel}
+            </p>
+          </div>
+          <UserOverrides userId={selectedUser} allPermissions={allPermissions} />
+        </div>
+      ) : null}
     </div>
   );
 }

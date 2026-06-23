@@ -17,9 +17,14 @@ import {
 	type DemoCapability,
 	normalizeDemoCapabilities,
 } from "@/lib/demo-capabilities";
+import {
+	parsePermissionSimulationCookie,
+	PERMISSION_SIMULATION_COOKIE,
+	type PermissionSimulation,
+} from "@/lib/permission-simulation";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 export const DEMO_SESSION_COOKIE = "demo_session";
-const SUPERADMIN_EMAIL = "ignacioliotti@gmail.com";
 
 type TenantMembershipRow = MembershipLike & {
 	tenants?: { name: string | null } | { name: string | null }[] | null;
@@ -64,8 +69,10 @@ export type RequestAccessContext = {
 	tenantName: string | null;
 	memberships: TenantMembershipRow[];
 	isSuperAdmin: boolean;
+	actualIsSuperAdmin: boolean;
 	membershipRole: string | null;
 	demoSession: DemoSession | null;
+	permissionSimulation: PermissionSimulation | null;
 };
 
 function getTenantName(
@@ -262,6 +269,7 @@ export async function resolveDemoSessionFromCookies() {
 
 export async function resolveRequestAccessContext(): Promise<RequestAccessContext> {
 	const supabase = await createClient();
+	const cookieStore = await cookies();
 	const {
 		data: { user },
 	} = await supabase.auth.getUser();
@@ -276,13 +284,21 @@ export async function resolveRequestAccessContext(): Promise<RequestAccessContex
 			loadUserMemberships(supabase, user.id),
 		]);
 
-		const isSuperAdmin =
-			(profile?.is_superadmin ?? false) ||
-			user.email?.toLowerCase() === SUPERADMIN_EMAIL;
+		const isSuperAdmin = isSuperAdminUser(
+			user.id,
+			profile?.is_superadmin,
+			user.email,
+		);
+		const permissionSimulation = isSuperAdmin
+			? parsePermissionSimulationCookie(
+					cookieStore.get(PERMISSION_SIMULATION_COOKIE)?.value,
+				)
+			: null;
 		const resolvedMembership = await resolveTenantMembership(
 			memberships,
 			{ isSuperAdmin },
 		);
+		const isSimulatingPermissions = Boolean(permissionSimulation);
 
 		return {
 			actorType: "user",
@@ -291,9 +307,13 @@ export async function resolveRequestAccessContext(): Promise<RequestAccessContex
 			tenantId: resolvedMembership.tenantId,
 			tenantName: getTenantName(resolvedMembership.activeMembership as TenantMembershipRow | null),
 			memberships: resolvedMembership.memberships as TenantMembershipRow[],
-			isSuperAdmin,
-			membershipRole: resolvedMembership.activeMembership?.role ?? null,
+			isSuperAdmin: isSimulatingPermissions ? false : isSuperAdmin,
+			actualIsSuperAdmin: isSuperAdmin,
+			membershipRole: isSimulatingPermissions
+				? "member"
+				: (resolvedMembership.activeMembership?.role ?? null),
 			demoSession: null,
+			permissionSimulation,
 		};
 	}
 
@@ -317,12 +337,13 @@ export async function resolveRequestAccessContext(): Promise<RequestAccessContex
 			tenantName: demoSession.tenantName,
 			memberships: [demoMembership],
 			isSuperAdmin: false,
+			actualIsSuperAdmin: false,
 			membershipRole: "member",
 			demoSession,
+			permissionSimulation: null,
 		};
 	}
 
-	const cookieStore = await cookies();
 	const preferredTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value ?? null;
 
 	return {
@@ -333,7 +354,9 @@ export async function resolveRequestAccessContext(): Promise<RequestAccessContex
 		tenantName: null,
 		memberships: [],
 		isSuperAdmin: false,
+		actualIsSuperAdmin: false,
 		membershipRole: null,
 		demoSession: null,
+		permissionSimulation: null,
 	};
 }

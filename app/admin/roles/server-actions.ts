@@ -4,8 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { auth } from "@/lib/auth";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { revalidatePath } from "next/cache";
-
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -34,8 +33,11 @@ async function requireRolesAdmin(
 			.maybeSingle(),
 	]);
 
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = isSuperAdminUser(
+		user.id,
+		profile?.is_superadmin,
+		user.email,
+	);
 	const { tenantId } = await resolveTenantMembership(
 		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
 		{ isSuperAdmin }
@@ -227,7 +229,8 @@ export async function listRolePermissions({ roleId }: { roleId: string }) {
 	const { data } = await supabase
 		.from("role_permissions")
 		.select("permission_id")
-		.eq("role_id", roleId);
+		.eq("role_id", roleId)
+		.eq("is_granted", true);
 	return data ?? [];
 }
 
@@ -249,7 +252,10 @@ export async function grantPermissionToRole({
 	await requireRoleInTenant(supabase, roleId, tenantId);
 	await supabase
 		.from("role_permissions")
-		.insert({ role_id: roleId, permission_id: permissionId });
+		.upsert(
+			{ role_id: roleId, permission_id: permissionId, is_granted: true },
+			{ onConflict: "role_id,permission_id" }
+		);
 	revalidatePath("/admin/roles");
 }
 
@@ -291,7 +297,8 @@ export async function listUserOverrides({ userId }: { userId: string }) {
 	const { data } = await supabase
 		.from("user_permission_overrides")
 		.select("permission_id, is_granted")
-		.eq("user_id", userId);
+		.eq("user_id", userId)
+		.eq("tenant_id", tenantId);
 	return data ?? [];
 }
 
@@ -316,9 +323,94 @@ export async function setUserOverride({
 	await supabase
 		.from("user_permission_overrides")
 		.upsert(
-			{ user_id: userId, permission_id: permissionId, is_granted: isGranted },
-			{ onConflict: "user_id,permission_id" }
+			{
+				user_id: userId,
+				tenant_id: tenantId,
+				permission_id: permissionId,
+				is_granted: isGranted,
+			},
+			{ onConflict: "user_id,tenant_id,permission_id" }
 		);
+	revalidatePath("/admin/roles");
+}
+
+export async function removeUserOverride({
+	userId,
+	permissionId,
+}: {
+	userId: string;
+	permissionId: string;
+}) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
+	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
+	const { tenantId } = await requireRolesAdmin(supabase);
+	await requireUserInTenant(supabase, userId, tenantId);
+	await supabase
+		.from("user_permission_overrides")
+		.delete()
+		.eq("user_id", userId)
+		.eq("tenant_id", tenantId)
+		.eq("permission_id", permissionId);
+	revalidatePath("/admin/roles");
+}
+
+export async function setAllUserOverrides({
+	userId,
+	isGranted,
+}: {
+	userId: string;
+	isGranted: boolean;
+}) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
+	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
+	const { tenantId } = await requireRolesAdmin(supabase);
+	await requireUserInTenant(supabase, userId, tenantId);
+
+	const { data: permissions, error } = await supabase
+		.from("permissions")
+		.select("id");
+	if (error) throw error;
+
+	if (permissions?.length) {
+		await supabase.from("user_permission_overrides").upsert(
+			permissions.map((permission) => ({
+				user_id: userId,
+				tenant_id: tenantId,
+				permission_id: permission.id,
+				is_granted: isGranted,
+			})),
+			{ onConflict: "user_id,tenant_id,permission_id" }
+		);
+	}
+
+	revalidatePath("/admin/roles");
+}
+
+export async function clearUserOverrides({ userId }: { userId: string }) {
+	const session = await auth();
+	if (!session.data.user) throw new Error("Unauthorized");
+	const supabase = await createClient();
+	const {
+		data: { user: authUser },
+	} = await supabase.auth.getUser();
+	if (!authUser) throw new Error("Unauthorized");
+	const { tenantId } = await requireRolesAdmin(supabase);
+	await requireUserInTenant(supabase, userId, tenantId);
+	await supabase
+		.from("user_permission_overrides")
+		.delete()
+		.eq("user_id", userId)
+		.eq("tenant_id", tenantId);
 	revalidatePath("/admin/roles");
 }
 
@@ -421,27 +513,38 @@ export async function userPermissionSources({
 
 	const roleIds = (assigned ?? []).map((row) => row.role_id as string);
 
-	// Role permission grants
-	let roleGrants: { roleId: string; permissionId: string }[] = [];
+	// Role permission states
+	const roleGrants: { roleId: string; permissionId: string }[] = [];
+	const roleDenials: { roleId: string; permissionId: string }[] = [];
 	if (roleIds.length) {
 		const { data: rp } = await supabase
 			.from("role_permissions")
-			.select("role_id, permission_id")
+			.select("role_id, permission_id, is_granted")
 			.in("role_id", roleIds);
-		roleGrants = (rp ?? []).map((row) => ({
-			roleId: row.role_id as string,
-			permissionId: row.permission_id as string,
-		}));
+		for (const row of rp ?? []) {
+			const target = row.is_granted === false ? roleDenials : roleGrants;
+			target.push({
+				roleId: row.role_id as string,
+				permissionId: row.permission_id as string,
+			});
+		}
 	}
 
-	// Direct overrides (grants)
+	// Direct overrides
 	const { data: overrides } = await supabase
 		.from("user_permission_overrides")
-		.select("permission_id")
+		.select("permission_id, is_granted")
 		.eq("user_id", userId)
-		.eq("is_granted", true);
+		.eq("tenant_id", tenantId);
 	const overrideIds = new Set(
-		(overrides ?? []).map((row) => row.permission_id as string)
+		(overrides ?? [])
+			.filter((row) => row.is_granted)
+			.map((row) => row.permission_id as string)
+	);
+	const deniedOverrideIds = new Set(
+		(overrides ?? [])
+			.filter((row) => !row.is_granted)
+			.map((row) => row.permission_id as string)
 	);
 
 	// Admin via membership (owner/admin)
@@ -453,7 +556,13 @@ export async function userPermissionSources({
 		.maybeSingle();
 	const isAdmin = membership?.role === "owner" || membership?.role === "admin";
 
-	return { roleGrants, overrideIds: Array.from(overrideIds), isAdmin };
+	return {
+		roleGrants,
+		roleDenials,
+		overrideIds: Array.from(overrideIds),
+		deniedOverrideIds: Array.from(deniedOverrideIds),
+		isAdmin,
+	};
 }
 
 export async function updateMembershipRole({

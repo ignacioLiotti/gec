@@ -54,6 +54,11 @@ export interface RouteAccessConfig {
 	 * a non-admin member can access the route if every required permission is granted.
 	 */
 	requiredPermissions?: string[];
+	/**
+	 * Permission key whose explicit user/role deny hides or blocks an otherwise
+	 * baseline route for non-admin users.
+	 */
+	deniedByPermission?: string;
 }
 
 /**
@@ -70,14 +75,17 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	{
 		path: "/dashboard",
 		allowedRoles: [],
+		deniedByPermission: "nav:dashboard",
 	},
 	{
 		path: "/certificados",
 		allowedRoles: [], // Accessible to all authenticated users
+		deniedByPermission: "nav:certificados",
 	},
 	{
 		path: "/excel",
 		allowedRoles: [], // Accessible to all authenticated users
+		deniedByPermission: "nav:excel",
 	},
 	{
 		path: "/excel/data-flow",
@@ -100,14 +108,17 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	{
 		path: "/macro",
 		allowedRoles: [], // Macro tables - visibility controlled by sidebar_macro_tables
+		deniedByPermission: "nav:macro",
 	},
 	{
 		path: "/macro/[id]",
 		allowedRoles: [], // Individual macro table - visibility controlled by sidebar_macro_tables
+		deniedByPermission: "nav:macro",
 	},
 	{
 		path: "/notifications",
 		allowedRoles: [], // Accessible to all authenticated users
+		deniedByPermission: "nav:notifications",
 	},
 	{
 		path: "/document-generation",
@@ -126,6 +137,10 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 	},
 	{
 		path: "/admin",
+		allowedRoles: ["admin"],
+	},
+	{
+		path: "/admin/dashboard",
 		allowedRoles: ["admin"],
 	},
 	{

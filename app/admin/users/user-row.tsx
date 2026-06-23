@@ -2,6 +2,15 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
+type MembershipRole = "owner" | "admin" | "member";
+type UserRoleAssignment = { role_id: string };
+
+function toMembershipRole(value: string): MembershipRole {
+  return value === "owner" || value === "admin" || value === "member"
+    ? value
+    : "member";
+}
+
 export default function UserRow({
   row,
   tenantId,
@@ -13,9 +22,17 @@ export default function UserRow({
   allRoles: { id: string; name: string }[];
   allPermissions: { id: string; key: string; description: string | null }[];
 }) {
-  const [assignedRoles, setAssignedRoles] = useState<any[]>([]);
-  const [sources, setSources] = useState<{ roleGrants: { roleId: string; permissionId: string }[]; overrideIds: string[]; isAdmin: boolean } | null>(null);
-  const [selectedOrgRole, setSelectedOrgRole] = useState<string>(row.membership_role);
+  const [assignedRoles, setAssignedRoles] = useState<UserRoleAssignment[]>([]);
+  const [sources, setSources] = useState<{
+    roleGrants: { roleId: string; permissionId: string }[];
+    roleDenials: { roleId: string; permissionId: string }[];
+    overrideIds: string[];
+    deniedOverrideIds: string[];
+    isAdmin: boolean;
+  } | null>(null);
+  const [selectedOrgRole, setSelectedOrgRole] = useState<MembershipRole>(
+    toMembershipRole(row.membership_role),
+  );
   const [newRoleId, setNewRoleId] = useState<string>("");
   const [newPermissionId, setNewPermissionId] = useState<string>("");
   const [impersonateError, setImpersonateError] = useState<string | null>(null);
@@ -54,7 +71,7 @@ export default function UserRow({
 
   async function updateOrgRole() {
     const mod = await import("../roles/server-actions");
-    await mod.updateMembershipRole({ tenantId, userId: row.user_id, role: selectedOrgRole as any });
+    await mod.updateMembershipRole({ tenantId, userId: row.user_id, role: selectedOrgRole });
   }
 
   async function startImpersonation(event: FormEvent<HTMLFormElement>) {
@@ -86,9 +103,11 @@ export default function UserRow({
     location.reload();
   }
 
-  const assignedRoleIds = new Set(assignedRoles.map((r: any) => r.role_id));
+  const assignedRoleIds = new Set(assignedRoles.map((r) => r.role_id));
   const roleGrantSet = new Set((sources?.roleGrants ?? []).map((g) => g.permissionId));
+  const roleDenySet = new Set((sources?.roleDenials ?? []).map((g) => g.permissionId));
   const overrideSet = new Set(sources?.overrideIds ?? []);
+  const deniedOverrideSet = new Set(sources?.deniedOverrideIds ?? []);
 
   return (
     <tr className="border-t align-top">
@@ -106,7 +125,7 @@ export default function UserRow({
         <form action={updateOrgRole} className="flex items-center gap-2">
           <select
             value={selectedOrgRole}
-            onChange={(e) => setSelectedOrgRole(e.currentTarget.value)}
+            onChange={(e) => setSelectedOrgRole(toMembershipRole(e.currentTarget.value))}
             className="rounded-md border bg-background px-2 py-1 text-xs"
           >
             <option value="owner">propietario</option>
@@ -166,7 +185,7 @@ export default function UserRow({
             {allPermissions
               .filter((p) => {
                 const fromAdmin = sources?.isAdmin ?? false;
-                const fromRole = roleGrantSet.has(p.id);
+                const fromRole = roleGrantSet.has(p.id) && !roleDenySet.has(p.id);
                 const fromOverride = overrideSet.has(p.id);
                 return !(fromAdmin || fromRole || fromOverride);
               })
@@ -188,12 +207,20 @@ export default function UserRow({
           {allPermissions.map((p) => {
             const fromAdmin = sources?.isAdmin ?? false;
             const fromRole = roleGrantSet.has(p.id);
+            const fromRoleDeny = roleDenySet.has(p.id);
             const fromOverride = overrideSet.has(p.id);
-            const hasPerm = fromAdmin || fromOverride || fromRole;
-            const hint = fromAdmin
+            const deniedOverride = deniedOverrideSet.has(p.id);
+            const hasPerm =
+              fromAdmin ||
+              (!deniedOverride && (fromOverride || (fromRole && !fromRoleDeny)));
+            const hint = deniedOverride && !fromAdmin
+              ? "bloqueado directo"
+              : fromAdmin
               ? "vía admin de org."
               : fromOverride
                 ? "directo"
+                : fromRoleDeny
+                  ? "bloqueado via rol"
                 : fromRole
                   ? "vía rol"
                   : "no otorgado";

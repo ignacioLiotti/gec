@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
+import { ShieldCheck, ShieldOff, SlidersHorizontal } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Dialog,
 	DialogContent,
@@ -18,6 +21,10 @@ import {
 } from "@/components/ui/popover";
 import { HydratedDateText } from "@/components/ui/hydrated-date-text";
 import { cn } from "@/lib/utils";
+import type {
+	PermissionOption,
+	PermissionSimulation,
+} from "@/lib/permission-simulation";
 
 type UserMenuProps = {
 	email?: string | null;
@@ -28,7 +35,10 @@ type UserMenuProps = {
 		isAdmin: boolean;
 		isSuperAdmin: boolean;
 		tenantId: string | null;
+		actualIsSuperAdmin?: boolean;
+		permissionSimulation?: PermissionSimulation | null;
 	} | null;
+	permissionOptions?: PermissionOption[];
 	variant?: "default" | "sidebar";
 };
 
@@ -47,14 +57,24 @@ export default function UserMenu({
 	demoLabel,
 	demoMode = false,
 	userRoles,
+	permissionOptions = [],
 	variant = "default",
 }: UserMenuProps) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
+	const [simulationDialogOpen, setSimulationDialogOpen] = useState(false);
+	const [selectedPermissionKeys, setSelectedPermissionKeys] = useState<string[]>(
+		[],
+	);
+	const [simulationSaving, setSimulationSaving] = useState(false);
+	const [simulationError, setSimulationError] = useState<string | null>(null);
 	const [notifications, setNotifications] = useState<MenuNotification[]>([]);
 	const [loading, setLoading] = useState(false);
 	const isAuthed = Boolean(email);
 	const isDemo = demoMode && !isAuthed;
+	const canManagePermissionSimulation = Boolean(userRoles?.actualIsSuperAdmin);
+	const permissionSimulation = userRoles?.permissionSimulation ?? null;
+	const isPermissionSimulationActive = Boolean(permissionSimulation);
 
 	const [demoNotifications, setDemoNotifications] = useState<MenuNotification[]>([]);
 
@@ -91,6 +111,10 @@ export default function UserMenu({
 			},
 		]);
 	}, [isDemo]);
+
+	useEffect(() => {
+		setSelectedPermissionKeys(permissionSimulation?.permissionKeys ?? []);
+	}, [permissionSimulation]);
 
 	async function handleLogout() {
 		setMenuOpen(false);
@@ -150,6 +174,57 @@ export default function UserMenu({
 		[notifications],
 	);
 
+	const selectedPermissionKeySet = useMemo(
+		() => new Set(selectedPermissionKeys),
+		[selectedPermissionKeys],
+	);
+	const simulationLabel = isPermissionSimulationActive
+		? permissionSimulation?.permissionKeys.length
+			? `${permissionSimulation.permissionKeys.length} permisos`
+			: "Sin permisos"
+		: null;
+
+	function togglePermissionKey(permissionKey: string, checked: boolean) {
+		setSelectedPermissionKeys((current) => {
+			if (checked) {
+				return current.includes(permissionKey)
+					? current
+					: [...current, permissionKey].sort((left, right) =>
+							left.localeCompare(right),
+						);
+			}
+			return current.filter((key) => key !== permissionKey);
+		});
+	}
+
+	async function updatePermissionSimulation(permissionKeys: string[] | null) {
+		setSimulationSaving(true);
+		setSimulationError(null);
+		try {
+			const response = await fetch("/api/admin/permission-simulation", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(
+					permissionKeys == null
+						? { active: false }
+						: { permissionKeys },
+				),
+			});
+			if (!response.ok) {
+				throw new Error("No se pudo actualizar la simulacion");
+			}
+			window.location.reload();
+		} catch (error) {
+			setSimulationError(
+				error instanceof Error
+					? error.message
+					: "No se pudo actualizar la simulacion",
+			);
+		} finally {
+			setSimulationSaving(false);
+		}
+	}
+
 	return (
 		<>
 			<Popover
@@ -196,9 +271,15 @@ export default function UserMenu({
 							<div className="text-sm text-foreground/70">{email}</div>
 							{userRoles && (
 								<div className="mt-1 flex flex-wrap gap-1">
-									{userRoles.isSuperAdmin && (
+									{(userRoles.actualIsSuperAdmin ||
+										userRoles.isSuperAdmin) && (
 										<span className="inline-flex items-center rounded-full bg-purple-500/20 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300">
 											SuperAdministrador
+										</span>
+									)}
+									{isPermissionSimulationActive && (
+										<span className="inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+											Simulando: {simulationLabel}
 										</span>
 									)}
 									{userRoles.isAdmin && !userRoles.isSuperAdmin && (
@@ -244,6 +325,22 @@ export default function UserMenu({
 						>
 							Perfil
 						</Link>
+						{canManagePermissionSimulation && (
+							<button
+								onClick={() => {
+									setSimulationDialogOpen(true);
+									setMenuOpen(false);
+								}}
+								className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-foreground/10"
+							>
+								<span>Simular permisos</span>
+								{simulationLabel && (
+									<span className="truncate text-xs text-muted-foreground">
+										{simulationLabel}
+									</span>
+								)}
+							</button>
+						)}
 						<button
 							onClick={() => {
 								setDialogOpen(true);
@@ -328,6 +425,118 @@ export default function UserMenu({
 								))}
 							</ul>
 						)}
+					</div>
+				</DialogContent>
+			</Dialog>
+			<Dialog
+				open={simulationDialogOpen}
+				onOpenChange={setSimulationDialogOpen}
+			>
+				<DialogContent className="sm:max-w-xl">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<SlidersHorizontal className="size-4" />
+							Simular permisos
+						</DialogTitle>
+						<DialogDescription>
+							Vista efectiva para esta sesion de superadmin.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4 p-4 pt-0">
+						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => void updatePermissionSimulation([])}
+								disabled={simulationSaving}
+								className="justify-start"
+							>
+								<ShieldOff className="size-4" />
+								Sin permisos
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => void updatePermissionSimulation(null)}
+								disabled={simulationSaving || !isPermissionSimulationActive}
+								className="justify-start"
+							>
+								<ShieldCheck className="size-4" />
+								Desactivar
+							</Button>
+						</div>
+						<div className="flex items-center justify-between gap-3">
+							<div className="text-sm font-medium">Permisos especificos</div>
+							<div className="text-xs text-muted-foreground">
+								{selectedPermissionKeys.length} seleccionados
+							</div>
+						</div>
+						<div className="max-h-[46vh] overflow-auto rounded-md border">
+							{permissionOptions.length === 0 ? (
+								<div className="px-3 py-6 text-center text-sm text-muted-foreground">
+									No hay permisos disponibles
+								</div>
+							) : (
+								<ul className="divide-y">
+									{permissionOptions.map((permission) => {
+										const checked = selectedPermissionKeySet.has(permission.key);
+										return (
+											<li key={permission.key}>
+												<label className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-foreground/5">
+													<Checkbox
+														checked={checked}
+														onCheckedChange={(value) =>
+															togglePermissionKey(
+																permission.key,
+																value === true,
+															)
+														}
+														className="mt-0.5"
+													/>
+													<span className="min-w-0 flex-1">
+														<span className="block truncate text-sm font-medium">
+															{permission.displayName}
+														</span>
+														<span className="block truncate font-mono text-xs text-muted-foreground">
+															{permission.key}
+														</span>
+													</span>
+													{permission.category && (
+														<span className="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600">
+															{permission.category}
+														</span>
+													)}
+												</label>
+											</li>
+										);
+									})}
+								</ul>
+							)}
+						</div>
+						{simulationError && (
+							<div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+								{simulationError}
+							</div>
+						)}
+						<div className="flex justify-end gap-2">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => setSimulationDialogOpen(false)}
+								disabled={simulationSaving}
+							>
+								Cancelar
+							</Button>
+							<Button
+								type="button"
+								onClick={() =>
+									void updatePermissionSimulation(selectedPermissionKeys)
+								}
+								disabled={simulationSaving}
+							>
+								Aplicar seleccion
+							</Button>
+						</div>
 					</div>
 				</DialogContent>
 			</Dialog>

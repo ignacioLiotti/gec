@@ -1,12 +1,18 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { auth } from "@/lib/auth";
 import { getRouteAccessConfig } from "./route-access";
+import {
+	parsePermissionSimulationCookie,
+	permissionSimulationHas,
+	PERMISSION_SIMULATION_COOKIE,
+	type PermissionSimulation,
+} from "@/lib/permission-simulation";
+import { isSuperAdminUser } from "@/lib/superadmin";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
-const SUPERADMIN_EMAIL = "ignacioliotti@gmail.com";
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 
 export type PermissionLevel = "read" | "edit" | "admin";
@@ -46,7 +52,7 @@ function warnSupabaseError(
 	console.warn(context, error);
 }
 
-async function isSuperAdminUser(
+async function resolveIsSuperAdminUser(
 	supabase: Awaited<ReturnType<typeof createClient>>,
 	user: { id: string; email?: string },
 ) {
@@ -56,10 +62,14 @@ async function isSuperAdminUser(
 		.eq("user_id", user.id)
 		.maybeSingle();
 
-	return (
-		(profile?.is_superadmin ?? false) ||
-		user.id === SUPERADMIN_USER_ID ||
-		user.email?.toLowerCase() === SUPERADMIN_EMAIL
+	return isSuperAdminUser(user.id, profile?.is_superadmin, user.email);
+}
+
+async function resolveActivePermissionSimulation(isSuperAdmin: boolean) {
+	if (!isSuperAdmin) return null;
+	const cookieStore = await cookies();
+	return parsePermissionSimulationCookie(
+		cookieStore.get(PERMISSION_SIMULATION_COOKIE)?.value,
 	);
 }
 
@@ -90,6 +100,8 @@ export async function getUserRoles(): Promise<{
 	isAdmin: boolean;
 	isSuperAdmin: boolean;
 	tenantId: string | null;
+	actualIsSuperAdmin?: boolean;
+	permissionSimulation?: PermissionSimulation | null;
 }> {
 	const session = await auth();
 	if (!session.data.user) {
@@ -114,16 +126,22 @@ export async function getUserRoles(): Promise<{
 		};
 	}
 
-	const isSuperAdmin = await isSuperAdminUser(supabase, user);
+	const actualIsSuperAdmin = await resolveIsSuperAdminUser(supabase, user);
+	const permissionSimulation =
+		await resolveActivePermissionSimulation(actualIsSuperAdmin);
+	const isSimulatingPermissions = Boolean(permissionSimulation);
+	const isSuperAdmin = isSimulatingPermissions ? false : actualIsSuperAdmin;
 
 	// Get tenant membership for current user
 	const memberships = await loadUserTenantMemberships(supabase, user.id);
 
 	const { tenantId, activeMembership } = await resolveTenantMembership(
 		memberships,
-		{ isSuperAdmin }
+		{ isSuperAdmin: actualIsSuperAdmin }
 	);
-	const membershipRole = activeMembership?.role;
+	const membershipRole = isSimulatingPermissions
+		? "member"
+		: activeMembership?.role;
 
 	// Check if admin via membership
 	const isAdmin =
@@ -143,7 +161,7 @@ export async function getUserRoles(): Promise<{
 
 	// Get custom roles assigned to user within tenant (from user_roles table)
 	// Split into two queries to avoid RLS circular dependency issues
-	if (tenantId && !isAdmin && !isSuperAdmin) {
+	if (tenantId && !isAdmin && !isSuperAdmin && !isSimulatingPermissions) {
 		try {
 			// Step 1: Get role_ids from user_roles table (simpler query, avoids RLS circular dependency)
 			const { data: userRoleIds, error: userRoleIdsError } = await supabase
@@ -233,6 +251,8 @@ export async function getUserRoles(): Promise<{
 		isAdmin,
 		isSuperAdmin,
 		tenantId,
+		actualIsSuperAdmin,
+		permissionSimulation,
 	};
 }
 
@@ -263,6 +283,13 @@ export async function canAccessRoute(path: string): Promise<boolean> {
 	// Superadmin and admin always have access
 	if (isSuperAdmin || isAdmin) {
 		return true;
+	}
+
+	if (
+		config.deniedByPermission &&
+		await hasExplicitPermissionDeny(config.deniedByPermission)
+	) {
+		return false;
 	}
 
 	if (config.requiredPermissions?.length) {
@@ -314,10 +341,23 @@ export async function canAccessMacroTable(
 
 	const tenantId = macroTable.tenant_id;
 
-	const isSuperAdmin = await isSuperAdminUser(supabase, user);
+	const actualIsSuperAdmin = await resolveIsSuperAdminUser(supabase, user);
+	const permissionSimulation =
+		await resolveActivePermissionSimulation(actualIsSuperAdmin);
+	const isSuperAdmin = permissionSimulation ? false : actualIsSuperAdmin;
 
 	if (isSuperAdmin) {
 		return true;
+	}
+	if (permissionSimulation) {
+		const levelKeys: Record<PermissionLevel, string[]> = {
+			read: ["macro:read", "macro:edit", "macro:admin"],
+			edit: ["macro:edit", "macro:admin"],
+			admin: ["macro:admin"],
+		};
+		return levelKeys[requiredLevel].some((permissionKey) =>
+			permissionSimulationHas(permissionSimulation, permissionKey),
+		);
 	}
 
 	// Check if tenant admin
@@ -421,9 +461,15 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 		return false;
 	}
 
-	const isSuperAdmin = await isSuperAdminUser(supabase, user);
+	const actualIsSuperAdmin = await resolveIsSuperAdminUser(supabase, user);
+	const permissionSimulation =
+		await resolveActivePermissionSimulation(actualIsSuperAdmin);
 
-	if (isSuperAdmin) {
+	if (permissionSimulation) {
+		return permissionSimulationHas(permissionSimulation, permissionKey);
+	}
+
+	if (actualIsSuperAdmin) {
 		return true;
 	}
 
@@ -436,7 +482,7 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 
 	const { tenantId, activeMembership } = await resolveTenantMembership(
 		memberships,
-		{ isSuperAdmin }
+		{ isSuperAdmin: actualIsSuperAdmin }
 	);
 
 	if (!tenantId) {
@@ -455,6 +501,7 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 		.from("user_permission_overrides")
 		.select("is_granted, permissions!inner(key)")
 		.eq("user_id", user.id)
+		.eq("tenant_id", tenantId)
 		.eq("permissions.key", permissionKey)
 		.maybeSingle();
 
@@ -465,8 +512,8 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 		);
 	}
 
-	if (override?.is_granted) {
-		return true;
+	if (typeof override?.is_granted === "boolean") {
+		return override.is_granted;
 	}
 
 	// Check through roles
@@ -489,7 +536,7 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 
 		const { data: rolePerms, error: rolePermsError } = await supabase
 			.from("role_permissions")
-			.select("permissions!inner(key)")
+			.select("is_granted, permissions!inner(key)")
 			.in("role_id", roleIds)
 			.eq("permissions.key", permissionKey);
 
@@ -501,12 +548,118 @@ export async function hasPermission(permissionKey: string): Promise<boolean> {
 			return false;
 		}
 
-		if (rolePerms && rolePerms.length > 0) {
+		if (rolePerms?.some((rolePermission) => rolePermission.is_granted === false)) {
+			return false;
+		}
+
+		if (rolePerms?.some((rolePermission) => rolePermission.is_granted !== false)) {
 			return true;
 		}
 	}
 
 	return false;
+}
+
+/**
+ * Check if the active tenant has an explicit user or role deny for a permission.
+ * Owner/admin/superadmin memberships bypass custom denies by design.
+ */
+export async function hasExplicitPermissionDeny(
+	permissionKey: string
+): Promise<boolean> {
+	const session = await auth();
+	if (!session.data.user) {
+		return false;
+	}
+	const supabase = await createClient();
+	const user = await getAuthenticatedUser(supabase);
+
+	if (!user) {
+		return false;
+	}
+
+	const actualIsSuperAdmin = await resolveIsSuperAdminUser(supabase, user);
+	const permissionSimulation =
+		await resolveActivePermissionSimulation(actualIsSuperAdmin);
+
+	if (permissionSimulation || actualIsSuperAdmin) {
+		return false;
+	}
+
+	const memberships = await loadUserTenantMemberships(supabase, user.id);
+	const { tenantId, activeMembership } = await resolveTenantMembership(
+		memberships,
+		{ isSuperAdmin: actualIsSuperAdmin }
+	);
+
+	if (!tenantId) {
+		return false;
+	}
+
+	const isAdmin =
+		activeMembership?.role === "owner" || activeMembership?.role === "admin";
+	if (isAdmin) {
+		return false;
+	}
+
+	const { data: override, error } = await supabase
+		.from("user_permission_overrides")
+		.select("is_granted, permissions!inner(key)")
+		.eq("user_id", user.id)
+		.eq("tenant_id", tenantId)
+		.eq("permissions.key", permissionKey)
+		.maybeSingle();
+
+	if (error) {
+		warnSupabaseError(
+			"Could not fetch explicit permission deny; continuing without deny",
+			error,
+		);
+		return false;
+	}
+
+	if (override?.is_granted === false) {
+		return true;
+	}
+
+	if (override?.is_granted === true) {
+		return false;
+	}
+
+	const { data: userRoles, error: userRolesError } = await supabase
+		.from("user_roles")
+		.select("role_id, roles!inner(tenant_id)")
+		.eq("user_id", user.id)
+		.eq("roles.tenant_id", tenantId);
+
+	if (userRolesError) {
+		warnSupabaseError(
+			"Could not fetch explicit deny user roles; continuing without role deny",
+			userRolesError,
+		);
+		return false;
+	}
+
+	if (!userRoles?.length) {
+		return false;
+	}
+
+	const { data: roleDenials, error: roleDenialsError } = await supabase
+		.from("role_permissions")
+		.select("is_granted, permissions!inner(key)")
+		.in("role_id", userRoles.map((role) => role.role_id))
+		.eq("permissions.key", permissionKey)
+		.eq("is_granted", false);
+
+	if (roleDenialsError) {
+		warnSupabaseError(
+			"Could not fetch explicit role permission deny; continuing without role deny",
+			roleDenialsError,
+		);
+		return false;
+	}
+
+	return Boolean(roleDenials?.length);
 }
 
 /**
@@ -517,10 +670,19 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 	if (!session.data.user) {
 		return [];
 	}
-	const { isAdmin, isSuperAdmin, tenantId } = await getUserRoles();
+	const {
+		isAdmin,
+		isSuperAdmin,
+		tenantId,
+		permissionSimulation,
+	} = await getUserRoles();
 
 	if (!tenantId) {
 		return [];
+	}
+
+	if (permissionSimulation) {
+		return permissionSimulation.permissionKeys;
 	}
 
 	const supabase = await createClient();
@@ -539,12 +701,36 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 	}
 
 	const permissionKeys = new Set<string>();
+	const deniedPermissionKeys = new Set<string>();
+	const roleDeniedPermissionKeys = new Set<string>();
+
+	const { data: deniedOverrides, error: deniedOverridesError } = await supabase
+		.from("user_permission_overrides")
+		.select("permissions(key)")
+		.eq("user_id", user.id)
+		.eq("tenant_id", tenantId)
+		.eq("is_granted", false);
+
+	if (deniedOverridesError) {
+		warnSupabaseError(
+			"Could not fetch denied permission overrides; continuing without denies",
+			deniedOverridesError,
+		);
+	}
+
+	for (const o of deniedOverrides ?? []) {
+		const key = getPermissionRelationKey(o.permissions as PermissionRelation);
+		if (key) {
+			deniedPermissionKeys.add(key);
+		}
+	}
 
 	// Get direct overrides
 	const { data: overrides, error: overridesError } = await supabase
 		.from("user_permission_overrides")
 		.select("permissions(key)")
 		.eq("user_id", user.id)
+		.eq("tenant_id", tenantId)
 		.eq("is_granted", true);
 
 	if (overridesError) {
@@ -556,7 +742,7 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 
 	for (const o of overrides ?? []) {
 		const key = getPermissionRelationKey(o.permissions as PermissionRelation);
-		if (key) {
+		if (key && !deniedPermissionKeys.has(key)) {
 			permissionKeys.add(key);
 		}
 	}
@@ -581,7 +767,7 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 
 		const { data: rolePerms, error: rolePermsError } = await supabase
 			.from("role_permissions")
-			.select("permissions(key)")
+			.select("is_granted, permissions(key)")
 			.in("role_id", roleIds);
 
 		if (rolePermsError) {
@@ -594,11 +780,127 @@ export async function getUserPermissionKeys(): Promise<string[]> {
 
 		for (const rp of rolePerms ?? []) {
 			const key = getPermissionRelationKey(rp.permissions as PermissionRelation);
-			if (key) {
+			if (!key) {
+				continue;
+			}
+			if (rp.is_granted === false) {
+				roleDeniedPermissionKeys.add(key);
+				continue;
+			}
+			if (!deniedPermissionKeys.has(key) && !roleDeniedPermissionKeys.has(key)) {
 				permissionKeys.add(key);
+			}
+		}
+
+		for (const key of roleDeniedPermissionKeys) {
+			if (!permissionKeys.has(key) || deniedPermissionKeys.has(key)) continue;
+			const hasDirectGrant = (overrides ?? []).some((override) => {
+				const overrideKey = getPermissionRelationKey(
+					override.permissions as PermissionRelation
+				);
+				return overrideKey === key;
+			});
+			if (!hasDirectGrant) {
+				permissionKeys.delete(key);
 			}
 		}
 	}
 
 	return Array.from(permissionKeys);
+}
+
+export async function getUserDeniedPermissionKeys(): Promise<string[]> {
+	const session = await auth();
+	if (!session.data.user) {
+		return [];
+	}
+	const {
+		isAdmin,
+		isSuperAdmin,
+		tenantId,
+		permissionSimulation,
+	} = await getUserRoles();
+
+	if (!tenantId || isAdmin || isSuperAdmin || permissionSimulation) {
+		return [];
+	}
+
+	const supabase = await createClient();
+	const user = await getAuthenticatedUser(supabase);
+
+	if (!user) {
+		return [];
+	}
+
+	const { data: overrides, error } = await supabase
+		.from("user_permission_overrides")
+		.select("is_granted, permissions(key)")
+		.eq("user_id", user.id)
+		.eq("tenant_id", tenantId);
+
+	if (error) {
+		warnSupabaseError(
+			"Could not fetch denied permission keys; returning no denies",
+			error,
+		);
+		return [];
+	}
+
+	const grantedOverrides = new Set<string>();
+	const deniedKeys = new Set<string>();
+
+	for (const override of overrides ?? []) {
+		const key = getPermissionRelationKey(
+			override.permissions as PermissionRelation
+		);
+		if (!key) continue;
+		if (override.is_granted) {
+			grantedOverrides.add(key);
+		} else {
+			deniedKeys.add(key);
+		}
+	}
+
+	const { data: userRoles, error: userRolesError } = await supabase
+		.from("user_roles")
+		.select("role_id, roles!inner(tenant_id)")
+		.eq("user_id", user.id)
+		.eq("roles.tenant_id", tenantId);
+
+	if (userRolesError) {
+		warnSupabaseError(
+			"Could not fetch denied permission user roles; returning override denies only",
+			userRolesError,
+		);
+		return Array.from(deniedKeys);
+	}
+
+	if (!userRoles?.length) {
+		return Array.from(deniedKeys);
+	}
+
+	const { data: roleDenials, error: roleDenialsError } = await supabase
+		.from("role_permissions")
+		.select("permissions(key)")
+		.in("role_id", userRoles.map((role) => role.role_id))
+		.eq("is_granted", false);
+
+	if (roleDenialsError) {
+		warnSupabaseError(
+			"Could not fetch role denied permission keys; returning override denies only",
+			roleDenialsError,
+		);
+		return Array.from(deniedKeys);
+	}
+
+	for (const roleDeny of roleDenials ?? []) {
+		const key = getPermissionRelationKey(
+			roleDeny.permissions as PermissionRelation
+		);
+		if (key && !grantedOverrides.has(key)) {
+			deniedKeys.add(key);
+		}
+	}
+
+	return Array.from(deniedKeys);
 }

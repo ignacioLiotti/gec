@@ -225,7 +225,7 @@ export function WeekView({
   )
 
   return (
-    <div data-slot="week-view" className="flex h-full flex-col">
+    <div data-slot="week-view" className="flex h-full min-w-[720px] flex-col">
       {hasPastIncomplete && (
         <div className="text-destructive mb-2 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-1 text-xs font-medium">
           <span className="size-2 rounded-full bg-destructive" />

@@ -12,6 +12,28 @@ type AuthModalProps = {
   forcedOpen?: boolean;
 };
 
+const MOBILE_NAVIGATION_PREVIEW_ORIGIN =
+  "https://gec-git-mobile-navigation-ignacioliottis-projects.vercel.app";
+
+function getAuthRedirectOrigin() {
+  if (typeof window === "undefined") return "";
+
+  const { hostname, origin } = window.location;
+  if (
+    hostname === "gec-git-mobile-navigation-ignacioliottis-projects.vercel.app" ||
+    (hostname.startsWith("gec-") &&
+      hostname.endsWith("-ignacioliottis-projects.vercel.app"))
+  ) {
+    return MOBILE_NAVIGATION_PREVIEW_ORIGIN;
+  }
+
+  return origin;
+}
+
+function getAuthErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Algo salio mal";
+}
+
 function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
   const router = useRouter();
   const { push, refresh } = router;
@@ -98,9 +120,9 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         setEmail("");
         setPassword("");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[AUTH-MODAL] Error:", err);
-      setError(err?.message ?? "Algo salió mal");
+      setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -113,7 +135,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
     console.log("[AUTH-MODAL] handleGoogleSignIn started");
     try {
       const next = encodeURIComponent(returnTo ?? currentPathWithQuery);
-      const redirectTo = `${window.location.origin}/auth/callback?next=${next}`;
+      const redirectTo = `${getAuthRedirectOrigin()}/auth/callback?next=${next}`;
       console.log("[AUTH-MODAL] Calling signInWithOAuth, redirectTo:", redirectTo);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -123,9 +145,9 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
       });
       if (error) throw error;
       console.log("[AUTH-MODAL] signInWithOAuth initiated, redirecting to Google...");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[AUTH-MODAL] Google sign in error:", err);
-      setError(err?.message ?? "Algo salió mal");
+      setError(getAuthErrorMessage(err));
       setLoading(false);
     }
   }

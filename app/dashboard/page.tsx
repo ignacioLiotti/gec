@@ -2028,7 +2028,7 @@ function GlobalInsurancePoliciesPanel({
             </Button>
           </div>
         ) : null}
-        <div className="max-w-[calc(95vw-var(--sidebar-current-width))] overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+        <div className="max-w-full overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] md:max-w-[calc(95vw-var(--sidebar-current-width))]">
           {groupBy !== "none" && policiesQuery.isLoading ? (
             <div className="p-10 text-center text-sm text-stone-500">Cargando polizas...</div>
           ) : groupBy === "none" ? (
@@ -2877,8 +2877,8 @@ export default function Home() {
 
   // Show dashboard for authenticated users
   return (
-    <div className={cn("relative min-h-screen", DS.page)}>
-      <div className="mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 space-y-2 lg:pt-6">
+    <div className={cn("relative min-h-full overflow-hidden", DS.page)}>
+      <div className="mx-auto w-full space-y-2 px-3 py-4 sm:px-6 sm:py-8 lg:px-8 lg:pt-6">
         {/* Header */}
         <m.div
           data-wizard-target="dashboard-header"
@@ -2888,7 +2888,7 @@ export default function Home() {
         >
           <div className="grid gap-4 p-4 sm:p-2 lg:grid-cols-[1.1fr_auto] lg:items-start">
             <div className="space-y-1">
-              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-stone-900">
+              <h1 className="text-2xl font-semibold tracking-tight text-stone-900 sm:text-4xl">
                 Panel de Control
               </h1>
               <p className="text-sm text-stone-500">
@@ -2953,21 +2953,23 @@ export default function Home() {
           onChange={previewInsuranceImport}
         />
 
-        <Tabs value={dashboardTab} onValueChange={setDashboardTab} className="space-y-2">
-          <TabsList className="h-auto justify-start gap-1 rounded-xl border border-stone-200 bg-white p-1">
-            <TabsTrigger value="resumen" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
-              <BarChart3 className="size-3.5" />
-              Resumen
-            </TabsTrigger>
-            <TabsTrigger value="archivos" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
-              <FolderKanban className="size-3.5" />
-              Archivos globales
-            </TabsTrigger>
-            <TabsTrigger value="polizas" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
-              <ShieldCheck className="size-3.5" />
-              Polizas de seguro
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={dashboardTab} onValueChange={setDashboardTab} className="min-w-0 space-y-2">
+          <div className="min-w-0 overflow-x-auto">
+            <TabsList className="h-auto min-w-max justify-start gap-1 rounded-xl border border-stone-200 bg-white p-1">
+              <TabsTrigger value="resumen" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
+                <BarChart3 className="size-3.5" />
+                Resumen
+              </TabsTrigger>
+              <TabsTrigger value="archivos" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
+                <FolderKanban className="size-3.5" />
+                Archivos globales
+              </TabsTrigger>
+              <TabsTrigger value="polizas" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
+                <ShieldCheck className="size-3.5" />
+                Polizas de seguro
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="resumen" className="m-0">
             <div data-wizard-target="dashboard-stats" className="grid gap-6 lg:grid-cols-3">

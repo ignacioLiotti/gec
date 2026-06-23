@@ -1,29 +1,28 @@
 "use client";
 
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  Home,
-  Database,
-  FileCheck,
-  Layers,
-  Settings,
-  Shield,
-  FileText,
-  Eye,
-  Pencil,
+  Ban,
+  Check,
   Crown,
-  Route,
+  Database,
+  Eye,
+  FileCheck,
+  FileText,
+  Home,
+  Layers,
+  LockKeyhole,
   MousePointerClick,
   PanelLeft,
-  LockKeyhole,
+  Pencil,
+  Route,
+  RotateCcw,
+  Search,
+  Settings,
+  Shield,
 } from "lucide-react";
 
 type Permission = {
@@ -40,10 +39,14 @@ type PermissionsByCategory = {
   permissions: Permission[];
 };
 
+type PermissionAssignmentState = "inherit" | "grant" | "deny";
+
 type PermissionMatrixProps = {
   permissionsByCategory: PermissionsByCategory[];
   selectedPermissions: string[];
   onChange: (permissions: string[]) => void;
+  deniedPermissions?: string[];
+  onDeniedChange?: (permissions: string[]) => void;
   disabled?: boolean;
 };
 
@@ -251,211 +254,383 @@ function getPermissionDisplayName(permission: Permission) {
   return label || permission.key;
 }
 
+function getPermissionLevel(key: string): string | null {
+  const parts = key.split(":");
+  if (parts.length === 2) {
+    const level = parts[1];
+    if (["read", "edit", "admin"].includes(level)) {
+      return level;
+    }
+  }
+  return null;
+}
+
+function matchesPermission(permission: Permission, query: string) {
+  if (!query) return true;
+  const haystack = [
+    permission.key,
+    permission.display_name,
+    permission.description,
+    PERMISSION_LABEL_OVERRIDES[permission.key],
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
+function stateButtonClass(
+  currentState: PermissionAssignmentState,
+  option: PermissionAssignmentState,
+) {
+  if (currentState !== option) {
+    return "bg-background text-muted-foreground hover:bg-muted";
+  }
+  if (option === "grant") {
+    return "bg-emerald-600 text-white hover:bg-emerald-600";
+  }
+  if (option === "deny") {
+    return "bg-red-600 text-white hover:bg-red-600";
+  }
+  return "bg-foreground text-background hover:bg-foreground";
+}
+
 export function PermissionMatrix({
   permissionsByCategory,
   selectedPermissions,
   onChange,
+  deniedPermissions = [],
+  onDeniedChange,
   disabled = false,
 }: PermissionMatrixProps) {
-  const selected = new Set(selectedPermissions);
-  const visiblePermissionsByCategory = permissionsByCategory
-    .map((category) => ({
-      ...category,
-      permissions: category.permissions.filter(
-        (permission) => !UNSUPPORTED_PERMISSION_KEYS.has(permission.key),
-      ),
-    }))
-    .filter((category) => category.permissions.length > 0);
+  const visiblePermissionsByCategory = useMemo(
+    () =>
+      permissionsByCategory
+        .map((category) => ({
+          ...category,
+          permissions: category.permissions.filter(
+            (permission) => !UNSUPPORTED_PERMISSION_KEYS.has(permission.key),
+          ),
+        }))
+        .filter((category) => category.permissions.length > 0),
+    [permissionsByCategory],
+  );
+  const [activeCategory, setActiveCategory] = useState(
+    visiblePermissionsByCategory[0]?.category ?? "",
+  );
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const selected = useMemo(() => new Set(selectedPermissions), [selectedPermissions]);
+  const denied = useMemo(() => new Set(deniedPermissions), [deniedPermissions]);
+  const allPermissionKeys = useMemo(
+    () => visiblePermissionsByCategory.flatMap((category) => category.permissions.map((p) => p.key)),
+    [visiblePermissionsByCategory],
+  );
+  const activeCategoryKey =
+    visiblePermissionsByCategory.some((category) => category.category === activeCategory)
+      ? activeCategory
+      : (visiblePermissionsByCategory[0]?.category ?? "");
+  const displayedCategories = useMemo(() => {
+    const searchable = normalizedQuery
+      ? visiblePermissionsByCategory
+      : visiblePermissionsByCategory.filter(
+        (category) => category.category === activeCategoryKey,
+      );
 
-  const togglePermission = (key: string) => {
+    return searchable
+      .map((category) => ({
+        ...category,
+        permissions: category.permissions.filter((permission) =>
+          matchesPermission(permission, normalizedQuery),
+        ),
+      }))
+      .filter((category) => category.permissions.length > 0);
+  }, [activeCategoryKey, normalizedQuery, visiblePermissionsByCategory]);
+  const displayedPermissions = displayedCategories.flatMap(
+    (category) => category.permissions,
+  );
+
+  const orderPermissionKeys = (keys: Set<string>) => {
+    const ordered = allPermissionKeys.filter((key) => keys.has(key));
+    const unknown = Array.from(keys).filter((key) => !allPermissionKeys.includes(key));
+    return [...ordered, ...unknown];
+  };
+
+  const setPermissionState = (
+    key: string,
+    nextState: PermissionAssignmentState,
+  ) => {
     if (disabled) return;
 
-    const newSelected = new Set(selected);
-    if (newSelected.has(key)) {
-      newSelected.delete(key);
-    } else {
-      newSelected.add(key);
+    const nextSelected = new Set(selected);
+    const nextDenied = new Set(denied);
+    nextSelected.delete(key);
+    nextDenied.delete(key);
+
+    if (nextState === "grant") {
+      nextSelected.add(key);
     }
-    onChange(Array.from(newSelected));
+    if (nextState === "deny") {
+      nextDenied.add(key);
+    }
+
+    onChange(orderPermissionKeys(nextSelected));
+    onDeniedChange?.(orderPermissionKeys(nextDenied));
   };
 
-  const toggleCategory = (category: PermissionsByCategory) => {
+  const setPermissionsState = (
+    permissions: Permission[],
+    nextState: PermissionAssignmentState,
+  ) => {
     if (disabled) return;
 
-    const categoryKeys = category.permissions.map((p) => p.key);
-    const allSelected = categoryKeys.every((key) => selected.has(key));
-
-    const newSelected = new Set(selected);
-    if (allSelected) {
-      // Deselect all
-      categoryKeys.forEach((key) => newSelected.delete(key));
-    } else {
-      // Select all
-      categoryKeys.forEach((key) => newSelected.add(key));
-    }
-    onChange(Array.from(newSelected));
-  };
-
-  const getCategoryStatus = (category: PermissionsByCategory) => {
-    const categoryKeys = category.permissions.map((p) => p.key);
-    const selectedCount = categoryKeys.filter((key) => selected.has(key)).length;
-
-    if (selectedCount === 0) return "none";
-    if (selectedCount === categoryKeys.length) return "all";
-    return "partial";
-  };
-
-  // Extract permission level from key (e.g., "obras:read" -> "read")
-  const getPermissionLevel = (key: string): string | null => {
-    const parts = key.split(":");
-    if (parts.length === 2) {
-      const level = parts[1];
-      if (["read", "edit", "admin"].includes(level)) {
-        return level;
+    const nextSelected = new Set(selected);
+    const nextDenied = new Set(denied);
+    for (const permission of permissions) {
+      nextSelected.delete(permission.key);
+      nextDenied.delete(permission.key);
+      if (nextState === "grant") {
+        nextSelected.add(permission.key);
+      }
+      if (nextState === "deny") {
+        nextDenied.add(permission.key);
       }
     }
-    return null;
+
+    onChange(orderPermissionKeys(nextSelected));
+    onDeniedChange?.(orderPermissionKeys(nextDenied));
   };
+
+  const getPermissionState = (key: string): PermissionAssignmentState => {
+    if (denied.has(key)) return "deny";
+    if (selected.has(key)) return "grant";
+    return "inherit";
+  };
+
+  const getCategoryCounts = (category: PermissionsByCategory) => {
+    const grantCount = category.permissions.filter((p) => selected.has(p.key)).length;
+    const denyCount = category.permissions.filter((p) => denied.has(p.key)).length;
+    return {
+      grantCount,
+      denyCount,
+      inheritedCount: category.permissions.length - grantCount - denyCount,
+    };
+  };
+
+  const totalVisiblePermissionCount = allPermissionKeys.length;
+  const totalGrantCount = allPermissionKeys.filter((key) => selected.has(key)).length;
+  const totalDenyCount = allPermissionKeys.filter((key) => denied.has(key)).length;
+  const totalInheritedCount =
+    totalVisiblePermissionCount - totalGrantCount - totalDenyCount;
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
-        {(["menu", "page", "action"] as PermissionKind[]).map((kind) => (
-          <div key={kind} className="rounded-md border bg-card p-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${KIND_META[kind].className}`}>
-                {KIND_META[kind].icon}
-                {KIND_META[kind].label}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {kind === "menu"
-                ? "Solo decide si aparece en la navegacion/sidebar."
-                : kind === "page"
-                  ? "Permite ver una pantalla o leer datos."
-                  : "Permite ejecutar botones o endpoints sensibles."}
-            </p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-md border bg-card p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+            <Check className="size-4" />
+            Permitidos
           </div>
-        ))}
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {(["ui", "enforced"] as EnforcementLevel[]).map((level) => (
-          <div key={level} className="rounded-md border bg-card p-3">
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${ENFORCEMENT_META[level].className}`}>
-              {ENFORCEMENT_META[level].label}
-            </span>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {ENFORCEMENT_META[level].description}
-            </p>
+          <div className="mt-1 text-2xl font-semibold">{totalGrantCount}</div>
+        </div>
+        <div className="rounded-md border bg-card p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
+            <Ban className="size-4" />
+            Bloqueados
           </div>
-        ))}
+          <div className="mt-1 text-2xl font-semibold">{totalDenyCount}</div>
+        </div>
+        <div className="rounded-md border bg-card p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <RotateCcw className="size-4" />
+            Heredados
+          </div>
+          <div className="mt-1 text-2xl font-semibold">{totalInheritedCount}</div>
+        </div>
       </div>
-      <Accordion type="multiple" className="w-full max-h-[700px] overflow-y-auto" defaultValue={visiblePermissionsByCategory.map(c => c.category)}>
-        {visiblePermissionsByCategory.map((category) => {
-          const status = getCategoryStatus(category);
-          const selectedCount = category.permissions.filter((p) =>
-            selected.has(p.key)
-          ).length;
 
-          return (
-            <AccordionItem key={category.category} value={category.category}>
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-3 flex-1">
-                  <div
-                    className="flex items-center gap-2 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleCategory(category);
-                    }}
-                  >
-                    <Checkbox
-                      checked={status === "all"}
-                      className={status === "partial" ? "opacity-50" : ""}
-                      disabled={disabled}
-                    />
-                  </div>
-                  <span className="text-muted-foreground">
-                    {CATEGORY_ICONS[category.category] || <Shield className="size-4" />}
-                  </span>
-                  <span className="font-medium">
-                    {CATEGORY_LABELS[category.category] || category.category}
-                  </span>
-                  <Badge variant="secondary" className="ml-auto mr-2">
-                    {selectedCount}/{category.permissions.length}
-                  </Badge>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-2 pt-2">
-                  {category.permissions.map((permission) => {
-                    const level = getPermissionLevel(permission.key);
-                    const kind = getPermissionKind(permission);
-                    const enforcement = getPermissionEnforcement(permission);
-                    const help = getPermissionHelp(permission);
-                    return (
-                      <div
-                        key={permission.id}
-                        className="rounded-md border bg-background p-3"
-                      >
-                        <div className="flex items-start gap-3">
-                          <Checkbox
-                            id={permission.key}
-                            checked={selected.has(permission.key)}
-                            onCheckedChange={() => togglePermission(permission.key)}
-                            disabled={disabled}
-                            className="mt-1"
-                          />
-                          <Label
-                            htmlFor={permission.key}
-                            className="min-w-0 flex-1 cursor-pointer space-y-2"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              {level && (
-                                <span className="text-muted-foreground">
-                                  {LEVEL_ICONS[level]}
-                                </span>
-                              )}
-                              <span className="font-medium">
-                                {getPermissionDisplayName(permission)}
-                              </span>
-                              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${KIND_META[kind].className}`}>
-                                {KIND_META[kind].icon}
-                                {KIND_META[kind].label}
-                              </span>
-                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${ENFORCEMENT_META[enforcement].className}`}>
-                                {ENFORCEMENT_META[enforcement].label}
-                              </span>
-                              <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                                {permission.key}
-                              </code>
-                            </div>
-                            <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-                              <div className="rounded bg-muted/50 p-2">
-                                <span className="font-medium text-foreground">Habilita: </span>
-                                {help.summary}
-                              </div>
-                              <div className="rounded bg-muted/50 p-2">
-                                <LockKeyhole className="mr-1 inline size-3" />
-                                <span className="font-medium text-foreground">No implica: </span>
-                                {help.boundary}
-                              </div>
-                            </div>
-                          </Label>
-                        </div>
-                        {permission.description && permission.description !== help.summary && (
-                          <p className="mt-2 pl-8 text-xs text-muted-foreground">
-                            Descripcion tecnica: {permission.description}
-                          </p>
+      <div className="flex flex-col gap-3 rounded-md border bg-card p-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar permiso, pantalla o clave"
+            className="pl-9"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {visiblePermissionsByCategory.map((category) => {
+            const counts = getCategoryCounts(category);
+            const isActive = category.category === activeCategoryKey && !normalizedQuery;
+            return (
+              <button
+                key={category.category}
+                type="button"
+                onClick={() => {
+                  setActiveCategory(category.category);
+                  setQuery("");
+                }}
+                className={`flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm transition ${isActive ? "border-primary bg-primary/5" : "bg-background hover:bg-muted"
+                  }`}
+              >
+                <span className="text-muted-foreground">
+                  {CATEGORY_ICONS[category.category] || <Shield className="size-4" />}
+                </span>
+                <span className="font-medium">
+                  {CATEGORY_LABELS[category.category] || category.category}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {counts.grantCount}/{counts.denyCount}/{category.permissions.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm text-muted-foreground">
+          {displayedPermissions.length} permisos visibles
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPermissionsState(displayedPermissions, "inherit")}
+            disabled={disabled || displayedPermissions.length === 0}
+          >
+            <RotateCcw className="mr-1 size-4" />
+            Heredar visibles
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPermissionsState(displayedPermissions, "grant")}
+            disabled={disabled || displayedPermissions.length === 0}
+          >
+            <Check className="mr-1 size-4" />
+            Permitir visibles
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPermissionsState(displayedPermissions, "deny")}
+            disabled={disabled || displayedPermissions.length === 0}
+          >
+            <Ban className="mr-1 size-4" />
+            Bloquear visibles
+          </Button>
+        </div>
+      </div>
+
+      <div className="max-h-[360px] space-y-4 overflow-y-auto pr-1">
+        {displayedCategories.map((category) => (
+          <section key={category.category} className="space-y-2">
+            {normalizedQuery && (
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <span className="text-muted-foreground">
+                  {CATEGORY_ICONS[category.category] || <Shield className="size-4" />}
+                </span>
+                {CATEGORY_LABELS[category.category] || category.category}
+              </div>
+            )}
+            {category.permissions.map((permission) => {
+              const level = getPermissionLevel(permission.key);
+              const kind = getPermissionKind(permission);
+              const enforcement = getPermissionEnforcement(permission);
+              const help = getPermissionHelp(permission);
+              const state = getPermissionState(permission.key);
+              return (
+                <div
+                  key={permission.id}
+                  className={`rounded-md border bg-background p-3 transition ${state === "grant"
+                    ? "border-emerald-200"
+                    : state === "deny"
+                      ? "border-red-200"
+                      : ""
+                    }`}
+                >
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {level && (
+                          <span className="text-muted-foreground">
+                            {LEVEL_ICONS[level]}
+                          </span>
                         )}
+                        <span className="font-medium">
+                          {getPermissionDisplayName(permission)}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${KIND_META[kind].className}`}>
+                          {KIND_META[kind].icon}
+                          {KIND_META[kind].label}
+                        </span>
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${ENFORCEMENT_META[enforcement].className}`}>
+                          {ENFORCEMENT_META[enforcement].label}
+                        </span>
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          {permission.key}
+                        </code>
                       </div>
-                    );
-                  })}
+                      <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                        <div className="rounded bg-muted/50 p-2">
+                          <span className="font-medium text-foreground">Habilita: </span>
+                          {help.summary}
+                        </div>
+                        <div className="rounded bg-muted/50 p-2">
+                          <LockKeyhole className="mr-1 inline size-3" />
+                          <span className="font-medium text-foreground">No implica: </span>
+                          {help.boundary}
+                        </div>
+                      </div>
+                      {permission.description && permission.description !== help.summary && (
+                        <p className="text-xs text-muted-foreground">
+                          Descripcion tecnica: {permission.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="grid shrink-0 grid-cols-3 overflow-hidden rounded-md border text-xs xl:w-[270px]">
+                      {(["inherit", "grant", "deny"] as const).map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setPermissionState(permission.key, option)}
+                          disabled={disabled}
+                          className={`flex min-h-9 items-center justify-center gap-1 px-2 font-medium transition disabled:opacity-60 ${stateButtonClass(state, option)}`}
+                        >
+                          {option === "inherit" ? (
+                            <RotateCcw className="size-3" />
+                          ) : option === "grant" ? (
+                            <Check className="size-3" />
+                          ) : (
+                            <Ban className="size-3" />
+                          )}
+                          <span>
+                            {option === "inherit"
+                              ? "Heredar"
+                              : option === "grant"
+                                ? "Permitir"
+                                : "Bloquear"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+              );
+            })}
+          </section>
+        ))}
+        {displayedCategories.length === 0 && (
+          <div className="rounded-md border bg-card p-8 text-center text-sm text-muted-foreground">
+            No hay permisos que coincidan con la busqueda.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -464,11 +639,14 @@ export function PermissionMatrix({
 export function PermissionSummary({
   permissionsByCategory,
   selectedPermissions,
+  deniedPermissions = [],
 }: {
   permissionsByCategory: PermissionsByCategory[];
   selectedPermissions: string[];
+  deniedPermissions?: string[];
 }) {
   const selected = new Set(selectedPermissions);
+  const denied = new Set(deniedPermissions);
   const visiblePermissionsByCategory = permissionsByCategory
     .map((category) => ({
       ...category,
@@ -483,27 +661,24 @@ export function PermissionSummary({
       {visiblePermissionsByCategory.map((category) => {
         const categoryKeys = category.permissions.map((p) => p.key);
         const selectedCount = categoryKeys.filter((key) => selected.has(key)).length;
+        const deniedCount = categoryKeys.filter((key) => denied.has(key)).length;
 
-        if (selectedCount === 0) return null;
-
-        const status =
-          selectedCount === categoryKeys.length ? "full" : "partial";
+        if (selectedCount === 0 && deniedCount === 0) return null;
 
         return (
           <Badge
             key={category.category}
-            variant={status === "full" ? "default" : "secondary"}
-            className="text-xs"
+            variant={deniedCount > 0 ? "outline" : "secondary"}
+            className={deniedCount > 0 ? "border-red-200 text-red-700" : "text-xs"}
           >
             {CATEGORY_ICONS[category.category]}
             <span className="ml-1">
               {CATEGORY_LABELS[category.category] || category.category}
             </span>
-            {status === "partial" && (
-              <span className="ml-1 opacity-60">
-                ({selectedCount}/{categoryKeys.length})
-              </span>
-            )}
+            <span className="ml-1 opacity-70">
+              +{selectedCount}
+              {deniedCount > 0 ? ` / -${deniedCount}` : ""}
+            </span>
           </Badge>
         );
       })}
