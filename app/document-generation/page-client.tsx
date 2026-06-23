@@ -1976,7 +1976,7 @@ export function DocumentGenerationPageClient({
                 type="button"
                 variant="outline"
                 onClick={downloadGeneratedDocument}
-                disabled={loading || !generatedDownloadTarget || !canDownloadGeneratedDocument}
+                disabled={loading || !generatedDocument || !workId}
 								className="h-9 w-full rounded-md px-4 sm:w-auto"
               >
                 <Download className="mr-2 size-4" />
