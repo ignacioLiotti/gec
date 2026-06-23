@@ -30,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import FolderFront from "@/components/ui/FolderFront";
 import { NotchTail } from "@/components/ui/notch-tail";
 import type { FormTable as FormTableComponent } from "@/components/form-table/form-table";
-import type { CellType, ColumnDef, ColumnField, FormTableConfig, FormTableRow } from "@/components/form-table/types";
+import type { CellType, ColumnDef, ColumnField, FormTableConfig, FormTableRow, SaveRowsArgs } from "@/components/form-table/types";
 import { cn } from "@/lib/utils";
 import { formatReadableBytes } from "@/lib/tenant-expenses";
 import { evaluateTablaFormula, normalizeFolderName, normalizeFolderPath, toNumericValue } from "@/lib/tablas";
@@ -802,6 +802,28 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			return mapped;
 		});
 	}, [activeFolderLink?.columns, activeTablaRows]);
+	const handleSaveTablaRows = useCallback(async ({
+		rows,
+		dirtyRows,
+		deletedRowIds,
+	}: SaveRowsArgs<DocumentsNewTableRow>) => {
+		if (!obraId || !activeOcrTablaId) return;
+		const response = await fetch(`/api/obras/${obraId}/tablas/${activeOcrTablaId}/rows`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ rows, dirtyRows, deletedRowIds }),
+		});
+		if (!response.ok) {
+			const text = await response.text();
+			throw new Error(text || "No se pudieron guardar los cambios");
+		}
+		await Promise.all([
+			queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] }),
+			queryClient.invalidateQueries({
+				queryKey: ["obra", obraId, "documents-new", "tabla-rows", activeOcrTablaId],
+			}),
+		]);
+	}, [activeOcrTablaId, obraId, queryClient]);
 	const ocrTableConfig = useMemo<FormTableConfig<DocumentsNewTableRow, Record<string, never>> | null>(() => {
 		const columns = activeFolderLink?.columns ?? [];
 		if (!activeOcrTablaId || columns.length === 0) return null;
@@ -820,17 +842,20 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		return {
 			tableId: `documents-new-ocr-${obraId}-${activeOcrTablaId}`,
 			editMode: "active-cell",
-			readOnly: true,
+			onSave: handleSaveTablaRows,
+			allowAddRows: false,
+			allowDeleteRows: true,
 			searchPlaceholder: "Buscar en esta tabla",
 			columns: tableColumns,
 			defaultRows: tableRows,
 			disablePagination: true,
 			emptyStateMessage,
+			showActionsColumn: true,
 			showInlineSearch: true,
 			hideFooterPaginationSummary: true,
 			enableColumnResizing: true,
 		};
-	}, [activeFolderLink?.columns, activeOcrTablaId, obraId, tableRows, tablaRowsQuery.isFetching]);
+	}, [activeFolderLink?.columns, activeOcrTablaId, handleSaveTablaRows, obraId, tableRows, tablaRowsQuery.isFetching]);
 	const selectedDocumentRows = useMemo(() => {
 		const docPath = selectedDocument?.storagePath ?? null;
 		if (!docPath) return [] as DocumentsNewTableRow[];
@@ -841,6 +866,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		return {
 			...ocrTableConfig,
 			tableId: `${ocrTableConfig.tableId}-document-${selectedDocument.id}`,
+			readOnly: true,
+			onSave: undefined,
+			allowDeleteRows: false,
+			showActionsColumn: false,
 			defaultRows: selectedDocumentRows,
 			emptyStateMessage: tablaRowsQuery.isFetching
 				? "Cargando datos extraidos..."
