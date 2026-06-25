@@ -239,7 +239,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed bg-inherit inset-y-0 z-100 my-auto hidden h-[calc(100vh-12px)] w-(--sidebar-width) transform-gpu border border-transparent shadow-none transition-[left,right,width,transform,opacity,box-shadow,border-color] duration-(--sidebar-motion-duration) ease-(--sidebar-motion-ease) will-change-[width,transform] md:flex",
+          "fixed bg-inherit inset-y-0 z-[11] my-auto hidden h-[calc(100vh-12px)] w-(--sidebar-width) transform-gpu border border-transparent shadow-none transition-[left,right,width,transform,opacity,box-shadow,border-color] duration-(--sidebar-motion-duration) ease-(--sidebar-motion-ease) will-change-[width,transform] md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
