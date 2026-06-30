@@ -1,18 +1,10 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -21,6 +13,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
+import {
+  getObrasDetalleStatusParam,
+  OBRAS_DETALLE_ACTIVE_TAB_STORAGE_KEY,
+  OBRAS_DETALLE_DEFAULT_ACTIVE_TAB_ID,
+  readObrasDetalleActiveTabFromStorage,
+  type ObrasDetalleActiveTab,
+} from "@/lib/excel/obra-list-tabs";
 
 type ObraSummary = {
   id: string;
@@ -68,18 +67,15 @@ function getObraHref(obraId: string) {
   return `/excel/${obraId}`;
 }
 
-function getObraLabel(obra: ObraSummary) {
-  const obraNumber = normalizeObraNumber(obra.n);
-  const obraName = obra.designacionYUbicacion?.trim() || "";
-  return [obraNumber != null ? String(obraNumber) : "", obraName].filter(Boolean).join(" ");
-}
 
 export function ExcelObraName() {
   const pathname = usePathname();
   const router = useRouter();
   const { prefetch, push } = router;
   const { prefetchObra } = usePrefetchObra();
-  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+  const [activeListTab, setActiveListTab] = useState<ObrasDetalleActiveTab>(
+    OBRAS_DETALLE_DEFAULT_ACTIVE_TAB_ID,
+  );
 
   const match = pathname.match(/^\/excel\/([^/]+)(?:\/.*)?$/);
   const candidateObraId = match?.[1];
@@ -94,6 +90,30 @@ export function ExcelObraName() {
   };
 
   const pageName = getPageName();
+  useEffect(() => {
+    const syncActiveListTab = () => {
+      setActiveListTab(
+        readObrasDetalleActiveTabFromStorage() ?? OBRAS_DETALLE_DEFAULT_ACTIVE_TAB_ID,
+      );
+    };
+
+    syncActiveListTab();
+
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === OBRAS_DETALLE_ACTIVE_TAB_STORAGE_KEY ||
+        event.key === null
+      ) {
+        syncActiveListTab();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  const activeListStatus = getObrasDetalleStatusParam(activeListTab);
+
 
   const currentObraQuery = useQuery({
     queryKey: ["obra", obraId],
@@ -108,10 +128,13 @@ export function ExcelObraName() {
   });
 
   const obrasQuery = useQuery({
-    queryKey: ["obras", "nav", "n", "asc"],
+    queryKey: ["obras", "nav", "n", "asc", activeListTab],
     enabled: Boolean(obraId),
     queryFn: async () => {
-      const response = await fetch("/api/obras?orderBy=n&orderDir=asc");
+      const params = new URLSearchParams({ orderBy: "n", orderDir: "asc" });
+      if (activeListStatus) params.set("status", activeListStatus);
+
+      const response = await fetch(`/api/obras?${params.toString()}`);
       if (!response.ok) return [] as ObraSummary[];
       const data = await response.json();
       return Array.isArray(data?.detalleObras)
@@ -149,14 +172,17 @@ export function ExcelObraName() {
       prefetch(getObraHref(targetObra.id));
       prefetchObra(targetObra.id);
     },
-    [prefetchObra, router]
+    [prefetch, prefetchObra]
   );
 
   const handleNavigateToObra = (targetObra: ObraSummary | null | undefined) => {
     if (!targetObra?.id) return;
     prefetchObraRoute(targetObra);
-    setIsSelectorOpen(false);
     push(getObraHref(targetObra.id));
+  };
+
+  const handleBackToExcel = () => {
+    push("/excel");
   };
 
   const displayName = obraId ? obraState.obraName : pageName;
@@ -167,29 +193,32 @@ export function ExcelObraName() {
     : pageName;
 
   if (!displayName && !isLoading) return null;
+  const isNavigationLoading = Boolean(obraId) && obrasQuery.isLoading;
 
   return (
-    <div className="flex min-w-0 items-center gap-1 pr-2 -ml-2 py-1">
+    <div className="flex min-w-0 flex-1 items-center gap-1 pr-2 -ml-2 py-1">
       {obraId ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-8 rounded-full text-muted-foreground hover:text-foreground"
-          onMouseEnter={() => prefetchObraRoute(obraState.previousObra)}
-          onFocus={() => prefetchObraRoute(obraState.previousObra)}
-          onClick={() => handleNavigateToObra(obraState.previousObra)}
-          disabled={!obraState.previousObra?.id || isLoading}
-          aria-label={
-            obraState.previousObra?.n != null
-              ? `Ir a la obra ${obraState.previousObra.n}`
-              : "Ir a la obra anterior"
-          }
-        >
-          <ChevronLeft className="size-4" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 rounded-lg  px-2.5 mr-3 ml-2"
+                onMouseEnter={() => prefetch("/excel")}
+                onFocus={() => prefetch("/excel")}
+                onClick={handleBackToExcel}
+                aria-label="Volver a Excel"
+              >
+                <ArrowLeft className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="max-w-md text-md">Volver a Excel</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       ) : null}
-
       {isLoading ? (
         <Skeleton className="h-8 w-64" />
       ) : (
@@ -214,73 +243,60 @@ export function ExcelObraName() {
         </TooltipProvider>
       )}
 
-      {obraId ? (
-        <Popover open={isSelectorOpen} onOpenChange={setIsSelectorOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ml-2 h-8 rounded-full border-[#eadfce] bg-white px-3 text-xs text-[#5a5248] hover:bg-[#fcfaf7] sm:text-sm"
-              disabled={isLoading || obraState.obras.length === 0}
-              aria-label="Seleccionar otra obra"
-            >
-              <Search className="size-4" />
-              <span className="hidden sm:inline">Ir a obra</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-[min(32rem,calc(100vw-2rem))] p-0">
-            <Command>
-              <CommandInput placeholder="Buscar por numero o nombre..." />
-              <CommandList className="max-h-[22rem]">
-                <CommandEmpty>No se encontro ninguna obra.</CommandEmpty>
-                {obraState.obras.map((obra) => {
-                  const obraNumber = normalizeObraNumber(obra.n);
-                  const isCurrentObra = obra.id === obraId;
-
-                  return (
-                    <CommandItem
-                      key={obra.id}
-                      value={getObraLabel(obra)}
-                      onSelect={() => handleNavigateToObra(obra)}
-                      className="gap-3 px-3 py-2"
-                    >
-                      <span className="min-w-10 shrink-0 text-sm font-semibold tabular-nums text-orange-primary">
-                        {obraNumber != null ? obraNumber : "-"}
-                      </span>
-                      <span className="truncate text-sm text-foreground">
-                        {obra.designacionYUbicacion || "Obra sin nombre"}
-                      </span>
-                      {isCurrentObra ? (
-                        <Check className="ml-auto size-4 text-primary" />
-                      ) : null}
-                    </CommandItem>
-                  );
-                })}
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      ) : null}
 
       {obraId ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-8 rounded-full text-muted-foreground hover:text-foreground"
-          onMouseEnter={() => prefetchObraRoute(obraState.nextObra)}
-          onFocus={() => prefetchObraRoute(obraState.nextObra)}
-          onClick={() => handleNavigateToObra(obraState.nextObra)}
-          disabled={!obraState.nextObra?.id || isLoading}
-          aria-label={
-            obraState.nextObra?.n != null
-              ? `Ir a la obra ${obraState.nextObra.n}`
-              : "Ir a la obra siguiente"
-          }
-        >
-          <ChevronRight className="size-4" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1 pl-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                  onMouseEnter={() => prefetchObraRoute(obraState.previousObra)}
+                  onFocus={() => prefetchObraRoute(obraState.previousObra)}
+                  onClick={() => handleNavigateToObra(obraState.previousObra)}
+                  disabled={!obraState.previousObra?.id || isLoading || isNavigationLoading}
+                  aria-label={
+                    obraState.previousObra?.n != null
+                      ? `Ir a la obra ${obraState.previousObra.n}`
+                      : "Ir a la obra anterior"
+                  }
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-md text-md">Ir a la obra anterior</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                  onMouseEnter={() => prefetchObraRoute(obraState.nextObra)}
+                  onFocus={() => prefetchObraRoute(obraState.nextObra)}
+                  onClick={() => handleNavigateToObra(obraState.nextObra)}
+                  disabled={!obraState.nextObra?.id || isLoading || isNavigationLoading}
+                  aria-label={
+                    obraState.nextObra?.n != null
+                      ? `Ir a la obra ${obraState.nextObra.n}`
+                      : "Ir a la obra siguiente"
+                  }
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-md text-md">Ir a la obra siguiente</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       ) : null}
     </div>
   );

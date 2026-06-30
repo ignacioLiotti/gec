@@ -56,6 +56,10 @@ import {
 	GUIDED_EXCEL_STAGES,
 	GUIDED_EXCEL_TOUR_ID,
 } from "@/lib/demo-tours/excel-guided-flow";
+import {
+	OBRAS_DETALLE_ACTIVE_TAB_STORAGE_KEY,
+	OBRAS_DETALLE_DEFAULT_ACTIVE_TAB_ID,
+} from "@/lib/excel/obra-list-tabs";
 
 /**
  * Pure CSS tooltip for truncated text - no React state, no scroll listeners.
@@ -2794,6 +2798,8 @@ const obrasDetalleBaseConfig: Omit<
 	title: "Obras detalle",
 	description: "Gestione el dataset de obras con filtros avanzados y edición en línea.",
 	tabFilters,
+	defaultActiveTab: OBRAS_DETALLE_DEFAULT_ACTIVE_TAB_ID,
+	activeTabStorageKey: OBRAS_DETALLE_ACTIVE_TAB_STORAGE_KEY,
 	searchPlaceholder: "Buscar en columnas de obras",
 	// toolbarActions: <RowRulesDialogTrigger />,
 	defaultPageSize: 25,

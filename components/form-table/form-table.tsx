@@ -1592,6 +1592,43 @@ function hasSameRowIdentity<Row extends FormTableRow>(
 	return nextRows.every((row, index) => row.id === currentOrder[index]);
 }
 
+function resolveActiveTabId<Row extends FormTableRow>(
+	tabFilters: TabFilterOption<Row>[],
+	...preferredTabIds: Array<string | null | undefined>
+) {
+	for (const tabId of preferredTabIds) {
+		if (tabId && tabFilters.some((tab) => tab.id === tabId)) {
+			return tabId;
+		}
+	}
+	return tabFilters[0]?.id ?? null;
+}
+
+function readPersistedActiveTab(storageKey: string) {
+	if (typeof window === "undefined") return null;
+	try {
+		const raw = window.localStorage.getItem(storageKey);
+		if (!raw) return null;
+		try {
+			const parsed = JSON.parse(raw) as unknown;
+			return typeof parsed === "string" ? parsed : null;
+		} catch {
+			return raw;
+		}
+	} catch {
+		return null;
+	}
+}
+
+function writePersistedActiveTab(storageKey: string, activeTab: string) {
+	if (typeof window === "undefined") return;
+	try {
+		window.localStorage.setItem(storageKey, JSON.stringify(activeTab));
+	} catch {
+		// Ignore storage write failures.
+	}
+}
+
 // cell renderers moved to components/form-table/cell-renderers.tsx
 
 type FormTableProps<Row extends FormTableRow, Filters> = {
@@ -1808,6 +1845,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const defaultTabFilters = useMemo<TabFilterOption<Row>[]>(() => [{ id: "all", label: "Todas" }], []);
 	const tabFilters = Array.isArray(config.tabFilters) ? config.tabFilters : defaultTabFilters;
 	const hasTabFilters = Array.isArray(config.tabFilters) && tabFilters.length > 0;
+	const defaultActiveTab = useMemo(
+		() => resolveActiveTabId(tabFilters, config.defaultActiveTab),
+		[config.defaultActiveTab, tabFilters]
+	);
+	const activeTabStorageKey = config.activeTabStorageKey ?? null;
 	const searchPlaceholder = config.searchPlaceholder ?? "Buscar...";
 	const showInlineSearch = config.showInlineSearch !== false;
 	const hasFilters = typeof config.createFilters === "function";
@@ -1835,15 +1877,27 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	useEffect(() => {
 		searchRef.current = searchRequestKey;
 	}, [searchRequestKey]);
-	const [activeTab, setActiveTab] = useState<string | null>(tabFilters[0]?.id ?? null);
+	const [activeTab, setActiveTab] = useState<string | null>(defaultActiveTab);
+	const [restoredActiveTabStorageKey, setRestoredActiveTabStorageKey] = useState<string | null>(
+		() => (activeTabStorageKey ? null : "")
+	);
+	const activeTabStorageReady = !activeTabStorageKey || restoredActiveTabStorageKey === activeTabStorageKey;
 	useEffect(() => {
 		setActiveTab((current) => {
-			if (current && tabFilters.some((tab) => tab.id === current)) {
-				return current;
+			if (!activeTabStorageKey) {
+				return resolveActiveTabId(tabFilters, current, defaultActiveTab);
 			}
-			return tabFilters[0]?.id ?? null;
+
+			const storedActiveTab = readPersistedActiveTab(activeTabStorageKey);
+			return resolveActiveTabId(tabFilters, storedActiveTab, current, defaultActiveTab);
 		});
-	}, [tabFilters]);
+		setRestoredActiveTabStorageKey(activeTabStorageKey ?? "");
+	}, [activeTabStorageKey, defaultActiveTab, tabFilters]);
+	useEffect(() => {
+		if (!activeTabStorageKey || !activeTabStorageReady || !activeTab) return;
+		if (!tabFilters.some((tab) => tab.id === activeTab)) return;
+		writePersistedActiveTab(activeTabStorageKey, activeTab);
+	}, [activeTab, activeTabStorageKey, activeTabStorageReady, tabFilters]);
 	const createFiltersRef = useRef(config.createFilters);
 	createFiltersRef.current = config.createFilters;
 	const [filters, setFilters] = useState<Filters | undefined>(() => config.createFilters?.());
