@@ -827,15 +827,21 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const ocrTableConfig = useMemo<FormTableConfig<DocumentsNewTableRow, Record<string, never>> | null>(() => {
 		const columns = activeFolderLink?.columns ?? [];
 		if (!activeOcrTablaId || columns.length === 0) return null;
-		const tableColumns: ColumnDef<DocumentsNewTableRow>[] = columns.map((column) => ({
-			id: column.id,
-			label: column.label,
-			field: column.fieldKey as ColumnField<DocumentsNewTableRow>,
-			editable: false,
-			cellType: mapDataTypeToCellType(column.dataType),
-			required: column.required,
-			cellClassName: (row) => getConditionalClass(row[column.fieldKey], column.config),
-		}));
+		const tableColumns: ColumnDef<DocumentsNewTableRow>[] = columns.map((column) => {
+			const formula =
+				column.config && typeof column.config.formula === "string"
+					? column.config.formula.trim()
+					: "";
+			return {
+				id: column.id,
+				label: column.label,
+				field: column.fieldKey as ColumnField<DocumentsNewTableRow>,
+				editable: !formula,
+				cellType: mapDataTypeToCellType(column.dataType),
+				required: column.required,
+				cellClassName: (row) => getConditionalClass(row[column.fieldKey], column.config),
+			};
+		});
 		const emptyStateMessage = tablaRowsQuery.isFetching
 			? "Cargando datos extraidos..."
 			: "Sin datos extraidos todavia.";
