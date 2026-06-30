@@ -255,6 +255,10 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	/** CSS table layout mode. Defaults to fixed for spreadsheet-like tables. */
 	tableLayout?: "fixed" | "auto";
 	tabFilters?: TabFilterOption<Row>[];
+	/** Tab id selected on first render when no persisted tab is available. Defaults to the first tab. */
+	defaultActiveTab?: string;
+	/** localStorage key used to remember the active tab for this table. */
+	activeTabStorageKey?: string;
 	searchPlaceholder?: string;
 	defaultPageSize?: number;
 	pageSizeOptions?: number[];
