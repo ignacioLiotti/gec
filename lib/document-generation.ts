@@ -853,6 +853,85 @@ export function applyTemplateAutoInputData(
 	return next;
 }
 
+export function getTemplateSequenceFieldKeys(schema: TemplateSchema) {
+	return schema.fields
+		.filter(
+			(field) =>
+				field.type !== "table" &&
+				!field.repeatableGroup &&
+				field.autoPopulate === "next_sequence_number",
+		)
+		.map((field) => field.key);
+}
+
+export function parseTemplateSequenceNumber(value: unknown): number | null {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return Math.max(0, Math.trunc(value));
+	}
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	const directNumber = Number(trimmed.replace(",", "."));
+	if (Number.isFinite(directNumber)) {
+		return Math.max(0, Math.trunc(directNumber));
+	}
+	const numericParts = Array.from(trimmed.matchAll(/\d+/g));
+	if (numericParts.length === 0) return null;
+	const lastNumber = Number(numericParts[numericParts.length - 1]?.[0]);
+	return Number.isFinite(lastNumber) ? Math.max(0, Math.trunc(lastNumber)) : null;
+}
+
+export function getTemplateNextSequenceNumber(
+	schema: TemplateSchema,
+	existingInputData: Record<string, unknown>[],
+	fallbackExistingCount = 0,
+) {
+	const sequenceFieldKeys = getTemplateSequenceFieldKeys(schema);
+	if (sequenceFieldKeys.length === 0) return null;
+	let maxSequenceNumber: number | null = null;
+
+	for (const row of existingInputData) {
+		for (const fieldKey of sequenceFieldKeys) {
+			const sequenceNumber = parseTemplateSequenceNumber(row[fieldKey]);
+			if (sequenceNumber == null) continue;
+			maxSequenceNumber =
+				maxSequenceNumber == null
+					? sequenceNumber
+					: Math.max(maxSequenceNumber, sequenceNumber);
+		}
+	}
+
+	if (maxSequenceNumber != null) return maxSequenceNumber + 1;
+	return Math.max(0, fallbackExistingCount) + 1;
+}
+
+export function refreshTemplateSequenceInputData(
+	schema: TemplateSchema,
+	current: Record<string, unknown>,
+	nextSequenceNumber: number | null | undefined,
+) {
+	if (nextSequenceNumber == null) return current;
+	const next: Record<string, unknown> = { ...current };
+	for (const field of schema.fields) {
+		if (
+			field.type === "table" ||
+			field.repeatableGroup ||
+			field.autoPopulate !== "next_sequence_number"
+		) {
+			continue;
+		}
+		const currentValue = next[field.key];
+		const currentNumber = parseTemplateSequenceNumber(currentValue);
+		const isEmpty =
+			currentValue == null ||
+			(typeof currentValue === "string" && currentValue.trim().length === 0);
+		if (isEmpty || (currentNumber != null && currentNumber < nextSequenceNumber)) {
+			next[field.key] = String(nextSequenceNumber);
+		}
+	}
+	return next;
+}
+
 export function renderTemplateFileNamePattern(
 	pattern: string | null | undefined,
 	inputData: Record<string, unknown>,

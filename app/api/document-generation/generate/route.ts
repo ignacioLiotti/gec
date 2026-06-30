@@ -7,6 +7,7 @@ import {
   normalizeDocumentType,
   normalizeFolderGenerationPath,
   normalizeTemplateSchema,
+  refreshTemplateSequenceInputData,
   renderDocumentHtml,
   renderTemplateFileNamePattern,
   sanitizeGeneratedFileName,
@@ -18,6 +19,7 @@ import {
   canEditGeneratedDocument,
   insertGeneratedDocumentEvent,
   loadDocumentGenerationPermissions,
+  resolveGeneratedDocumentNextSequenceNumber,
   syncGeneratedDocumentExtractionRows,
   validateGenerationTarget,
 } from "@/lib/document-generation-server";
@@ -346,7 +348,19 @@ export async function POST(request: NextRequest) {
     }
 
     const schema = normalizeTemplateSchema(template.schema);
-    const hydratedInputData = applyTemplateAliasInputData(schema, buildInitialInputData(schema, inputData));
+    const baseInputData = buildInitialInputData(schema, inputData);
+    const nextSequenceNumber = editingGeneratedDocument
+      ? null
+      : await resolveGeneratedDocumentNextSequenceNumber(accessContext, {
+          workId,
+          folderPath,
+          documentType,
+          schema,
+        });
+    const hydratedInputData = applyTemplateAliasInputData(
+      schema,
+      refreshTemplateSequenceInputData(schema, baseInputData, nextSequenceNumber),
+    );
     const validationErrors = validateTemplateInput(schema, hydratedInputData);
     if (validationErrors.length > 0) {
       return NextResponse.json(

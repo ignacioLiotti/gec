@@ -144,6 +144,7 @@ type GeneratedDocumentResponse = {
     status: string;
     file_name: string;
     storage_path?: string;
+    input_data?: Record<string, unknown>;
   };
   relativeFolderPath: string;
   relativeFilePath: string;
@@ -1804,12 +1805,15 @@ export function DocumentGenerationPageClient({
       }
 
       setGeneratedDocument(payload);
+      const serverInputData = payload.generatedDocument.input_data ?? currentInputData;
+      inlineInputDataRef.current = serverInputData;
+      setInputData(serverInputData);
       if (editingGeneratedId) {
         setEditingGeneratedStatus(payload.generatedDocument.status);
       }
       setValidationErrors([]);
       setShowValidationReview(false);
-      await persistCreatableOptions(currentInputData);
+      await persistCreatableOptions(serverInputData);
       toast.success(editingGeneratedId ? "Documento actualizado." : "Documento generado y guardado en la carpeta.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo generar el documento");
