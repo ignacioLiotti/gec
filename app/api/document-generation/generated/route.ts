@@ -80,17 +80,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    let rows = (data ?? []) as Array<Record<string, unknown>>;
-    if (!permissions.canReview && !permissions.canViewAllDrafts) {
-      rows = rows.filter((row) => (
-        String(row.generated_by ?? "") === user.id ||
-        canEditGeneratedDocument({
-          canCreate: permissions.canCreate,
-          userId: user.id,
-          status: typeof row.status === "string" ? row.status : null,
-        })
-      ));
-    }
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
     const actorsById = await loadActorsByIds(rows.map((row) => String(row.generated_by ?? "")));
     const works = await loadWorks(accessContext);
 

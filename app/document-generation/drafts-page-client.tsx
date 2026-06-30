@@ -36,7 +36,6 @@ type HistoryResponse = {
 };
 
 type Props = {
-  canViewAllDrafts: boolean;
   permissions: DocumentGenerationPermissionMap;
 };
 
@@ -66,7 +65,7 @@ function statusLabel(status: string) {
   return GENERATED_DOCUMENT_STATUS_LABELS[status] ?? status;
 }
 
-export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Props) {
+export function DocumentDraftsPageClient({ permissions }: Props) {
   const [documents, setDocuments] = useState<HistoryListItem[]>([]);
   const [works, setWorks] = useState<Array<{ id: string; label: string }>>([]);
   const [creators, setCreators] = useState<Array<{ id: string; label: string }>>([]);
@@ -89,7 +88,7 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
         const query = new URLSearchParams();
         if (filters.status !== "ALL") query.set("status", filters.status);
         if (filters.workId) query.set("workId", filters.workId);
-        if (canViewAllDrafts && filters.createdBy) query.set("createdBy", filters.createdBy);
+        if (filters.createdBy) query.set("createdBy", filters.createdBy);
         if (filters.from) query.set("from", filters.from);
         if (filters.to) query.set("to", filters.to);
 
@@ -122,7 +121,7 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
     return () => {
       cancelled = true;
     };
-  }, [canViewAllDrafts, filters]);
+  }, [filters]);
 
   const selectedDocument = useMemo(
     () => documents.find((document) => document.id === selectedId) ?? null,
@@ -193,22 +192,18 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
                 </option>
               ))}
             </select>
-            {canViewAllDrafts ? (
-              <select
-                value={filters.createdBy}
-                onChange={(event) => setFilters((current) => ({ ...current, createdBy: event.target.value }))}
-                className="h-10 rounded-md border border-stone-200 bg-white px-3 text-sm"
-              >
-                <option value="">Todos los usuarios</option>
-                {creators.map((creator) => (
-                  <option key={creator.id} value={creator.id}>
-                    {creator.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="hidden xl:block" />
-            )}
+            <select
+              value={filters.createdBy}
+              onChange={(event) => setFilters((current) => ({ ...current, createdBy: event.target.value }))}
+              className="h-10 rounded-md border border-stone-200 bg-white px-3 text-sm"
+            >
+              <option value="">Todos los usuarios</option>
+              {creators.map((creator) => (
+                <option key={creator.id} value={creator.id}>
+                  {creator.label}
+                </option>
+              ))}
+            </select>
             <input
               type="date"
               value={filters.from}

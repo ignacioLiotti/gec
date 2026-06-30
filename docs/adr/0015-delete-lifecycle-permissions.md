@@ -15,6 +15,7 @@ Introduce three distinct permission keys:
 - `obras:delete`
 - `documents:delete:file`
 - `documents:delete:folder`
+- `documents:purge` for manual permanent purge from document history
 
 API routes must enforce these permissions through `has_permission`. Client UI may hide destructive actions based on the same permissions, but server-side checks remain authoritative.
 
@@ -22,12 +23,13 @@ Tenant `owner` and `admin` memberships continue to bypass custom role restrictio
 
 ## Consequences
 
-- Roles can grant obra, file, and folder deletion independently.
+- Roles can grant obra, file, folder deletion, and manual purge independently.
 - Existing roles with `obras:admin` keep their previous destructive capability.
-- Restore and permanent purge remain separate lifecycle concerns and are not granted by these delete permissions.
+- Restore remains a separate lifecycle concern. Manual permanent purge is governed by `documents:purge`, not by the trash/delete permissions.
 
 ## Related
 
 - `supabase/migrations/0102_delete_lifecycle_permissions.sql`
+- `supabase/migrations/0124_document_purge_permission.sql`
 - `docs/obsidian-brain/20 - Permissions System.md`
 - `docs/obsidian-brain/38 - Soft Delete Pattern.md`

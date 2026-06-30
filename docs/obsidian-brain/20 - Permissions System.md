@@ -99,8 +99,9 @@ Soft delete actions use explicit permissions for broad destructive capabilities,
 |---|---|
 | `obras:delete` | Send obras to the obra trash |
 | `documents:delete:folder` | Send folders and their descendants to the document trash |
+| `documents:purge` | Permanently delete document trash-history entries from Storage and mark them purged |
 
-`documents:delete:file` may still exist in older role data, but individual file delete no longer checks it. `owner` and `admin` memberships still bypass custom role restrictions through `has_permission` for permission-gated delete actions. Migration 0102 backfills the original delete permissions into roles that already had `obras:admin`, and the `obra_manager` template includes them for new tenants/roles.
+`documents:delete:file` may still exist in older role data, but individual file delete no longer checks it. `documents:purge` is intentionally separate from trash/delete permissions because it removes physical Storage objects and cannot be restored. `owner` and `admin` memberships still bypass custom role restrictions through `has_permission` for permission-gated delete actions. Migration 0102 backfills the original delete permissions into roles that already had `obras:admin`; migration 0124 adds `documents:purge` to roles that already had `obras:admin` and to the `obra_manager` template for new tenants/roles.
 
 ### Admin configuration permissions
 
@@ -182,36 +183,37 @@ A "documents-only" regular member can be configured by blocking the baseline nav
 
 ## Document Generation Permissions
 
-Document generation now has explicit feature permissions:
+Document generation now gives tenant members baseline creation access and keeps explicit feature permissions for review/config:
 
 | Permission | Purpose |
 |------|-------------|
-| `nav:document-generation` | Show document generation entries in the sidebar |
-| `documents:create` | Create documents, save drafts, resume own drafts |
 | `nav:document-ai` | Show Document AI workspace in the sidebar |
 | `document-ai:run` | Create and inspect auditable Document AI runs |
 | `document-ai:admin` | Rebuild Document AI index and manage generated outputs |
 | `documents:review` | Access the review queue and approve/reject documents |
 | `documents:templates` | Access template/configuration screens and mutate template overrides |
-| `documents:drafts:all` | View drafts created by other users in the tenant |
 
-**Screens gated by these permissions:**
+**Screen access model:**
 
-- `/document-generation` â†’ `documents:create`
-- `/document-generation/drafts` â†’ `documents:create` or `documents:drafts:all`
-- `/document-generation/review` â†’ `documents:review`
-- `/document-generation/templates` â†’ `documents:templates`
-- `/document-generation/config` â†’ `documents:templates`
+- `/document-generation` -> authenticated tenant member
+- `/document-generation/drafts` -> authenticated tenant member; generated-document history is tenant-wide, draft recovery remains own drafts only
+- generated documents in `GENERATED`, `UNDER_REVIEW`, or `REJECTED` can be edited by authenticated tenant members, regardless of who generated them
+- approved generated documents remain non-editable
+- `/document-generation/review` -> `documents:review`
+- `/document-generation/templates` -> `documents:templates`
+- `/document-generation/config` -> `documents:templates`
 
-**API routes gated by these permissions:**
+**API access model:**
 
-- `bootstrap`, `drafts POST`, `generate` â†’ `documents:create`
-- `drafts GET` â†’ `documents:create` for own drafts, `documents:drafts:all` for cross-user visibility
-- `generated GET/PATCH` â†’ `documents:review`
-- `templates GET/PUT` â†’ `documents:templates`
+- `bootstrap`, `drafts POST`, `generate` -> authenticated tenant member
+- `drafts GET` -> authenticated tenant member, own drafts only
+- generated list/detail -> authenticated tenant member for all generated documents in the tenant
+- generated regeneration -> authenticated tenant member when the generated document is `GENERATED`, `UNDER_REVIEW`, or `REJECTED`
+- generated approve/reject PATCH -> `documents:review`
+- `documents/access` refuses signed URLs and direct PDF downloads for generated documents whose status is `REJECTED`
+- `templates GET/PUT` -> `documents:templates`
 
 ---
-
 ## Route Guard (`lib/route-guard.ts`)
 
 Server-side auth and authorization utilities:

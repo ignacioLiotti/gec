@@ -6,16 +6,32 @@ import { ArrowLeft, Loader2, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+	AlertDialog,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { formatReadableBytes } from "@/lib/tenant-expenses";
 
+import { clearCachesForObra } from "../tabs/file-manager/cache";
+import { setDocumentsState } from "../tabs/file-manager/hooks/useDocumentsStore";
 import type { DeletedDocumentEntry } from "../tabs/file-manager/types";
 
 type TrashView = "active" | "history";
 type DeletesApiResponse = {
 	items?: DeletedDocumentEntry[];
+	error?: string;
+};
+
+type PermissionCheckResponse = {
+	permissions?: Record<string, boolean>;
 	error?: string;
 };
 
@@ -70,12 +86,15 @@ function statusVariant(status: DeletedDocumentEntry["status"]) {
 
 export function TrashPageClient({ obraId }: { obraId: string }) {
 	const router = useRouter();
-  const { push } = router;
+	const { push } = router;
 	const [tab, setTab] = useState<TrashView>("active");
 	const [activeItems, setActiveItems] = useState<DeletedDocumentEntry[]>([]);
 	const [historyItems, setHistoryItems] = useState<DeletedDocumentEntry[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [restoringId, setRestoringId] = useState<string | null>(null);
+	const [purgingId, setPurgingId] = useState<string | null>(null);
+	const [purgeTarget, setPurgeTarget] = useState<DeletedDocumentEntry | null>(null);
+	const [canPurge, setCanPurge] = useState(false);
 
 	const loadItems = useCallback(
 		async (view: TrashView) => {
@@ -124,6 +143,43 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 		void refreshBothViews();
 	}, [refreshBothViews]);
 
+	useEffect(() => {
+		let cancelled = false;
+
+		async function loadPurgePermission() {
+			try {
+				const response = await fetch("/api/permissions/check?key=documents:purge", {
+					cache: "no-store",
+				});
+				const payload = (await response.json().catch(() => ({}))) as PermissionCheckResponse;
+				if (!cancelled) {
+					setCanPurge(response.ok && payload.permissions?.["documents:purge"] === true);
+				}
+			} catch {
+				if (!cancelled) setCanPurge(false);
+			}
+		}
+
+		void loadPurgePermission();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const invalidateDocumentsCache = useCallback(() => {
+		clearCachesForObra(obraId);
+		setDocumentsState({
+			obraId,
+			fileTree: null,
+			ocrFolderLinks: [],
+			selectedFolder: null,
+			selectedDocument: null,
+			sheetDocument: null,
+			lastFetchedAt: null,
+		});
+		window.dispatchEvent(new CustomEvent("obra:documents-refresh"));
+	}, [obraId]);
+
 	const handleRestore = useCallback(
 		async (deleteId: string) => {
 			setRestoringId(deleteId);
@@ -138,6 +194,7 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 					throw new Error(payload.error || "No se pudo restaurar el elemento");
 				}
 				toast.success("Elemento restaurado");
+				invalidateDocumentsCache();
 				await refreshBothViews();
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "No se pudo restaurar el elemento");
@@ -145,8 +202,32 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 				setRestoringId(null);
 			}
 		},
-		[obraId, refreshBothViews],
+		[invalidateDocumentsCache, obraId, refreshBothViews],
 	);
+
+	const handlePurge = useCallback(async () => {
+		if (!purgeTarget) return;
+		setPurgingId(purgeTarget.id);
+		try {
+			const response = await fetch(`/api/obras/${obraId}/documents/deletes`, {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ deleteId: purgeTarget.id }),
+			});
+			const payload = (await response.json().catch(() => ({}))) as { error?: string };
+			if (!response.ok) {
+				throw new Error(payload.error || "No se pudo borrar definitivamente");
+			}
+			toast.success("Documento borrado definitivamente");
+			setPurgeTarget(null);
+			invalidateDocumentsCache();
+			await refreshBothViews();
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "No se pudo borrar definitivamente");
+		} finally {
+			setPurgingId(null);
+		}
+	}, [invalidateDocumentsCache, obraId, purgeTarget, refreshBothViews]);
 
 	const currentCount = useMemo(
 		() => (tab === "active" ? activeItems.length : historyItems.length),
@@ -254,40 +335,62 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 						) : (
 							<div className="divide-y divide-stone-200">
 								{historyItems.map((item) => (
-									<div key={item.id} className="p-4 space-y-2">
-										<div className="flex flex-wrap items-center gap-2">
-											<p className="text-sm font-medium text-stone-900">{item.fileName}</p>
-											<Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge>
-											<span className="text-xs text-stone-500">
-												{item.itemType === "folder" ? "Carpeta" : "Archivo"}
-											</span>
+									<div
+										key={item.id}
+										className="p-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+									>
+										<div className="min-w-0 flex-1 space-y-2">
+											<div className="flex flex-wrap items-center gap-2">
+												<p className="text-sm font-medium text-stone-900">{item.fileName}</p>
+												<Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge>
+												<span className="text-xs text-stone-500">
+													{item.itemType === "folder" ? "Carpeta" : "Archivo"}
+												</span>
+											</div>
+											<p className="text-xs text-stone-500 break-all">{item.storagePath}</p>
+											<div className="grid gap-1 text-xs text-stone-600 md:grid-cols-3">
+												<span>
+													Eliminado: {formatDateTimeLabel(item.deletedAt)} por{" "}
+													{item.deletedByLabel ?? item.deletedByUserId ?? "Sistema"}
+												</span>
+												<span>
+													Restaurado: {formatDateTimeLabel(item.restoredAt)} por{" "}
+													{item.restoredByLabel ?? item.restoredByUserId ?? "-"}
+												</span>
+												<span>
+													Purgado: {formatDateTimeLabel(item.purgedAt)} por{" "}
+													{item.purgedByLabel ?? item.purgedByUserId ?? "-"}
+												</span>
+											</div>
+											<div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500">
+												<span>Deadline de recuperacion: {formatDateTimeLabel(item.recoverUntil)}</span>
+												{item.purgeReason ? <span>Motivo purge: {item.purgeReason}</span> : null}
+												{item.purgeJobId ? <span>Job purge: {item.purgeJobId}</span> : null}
+												<span>
+													Tamano:{" "}
+													{item.itemType === "folder"
+														? `${item.fileCount} archivos (${formatReadableBytes(item.totalBytes ?? 0)})`
+														: formatReadableBytes(item.totalBytes ?? 0)}
+												</span>
+											</div>
 										</div>
-										<p className="text-xs text-stone-500 break-all">{item.storagePath}</p>
-										<div className="grid gap-1 text-xs text-stone-600 md:grid-cols-3">
-											<span>
-												Eliminado: {formatDateTimeLabel(item.deletedAt)} por{" "}
-												{item.deletedByLabel ?? item.deletedByUserId ?? "Sistema"}
-											</span>
-											<span>
-												Restaurado: {formatDateTimeLabel(item.restoredAt)} por{" "}
-												{item.restoredByLabel ?? item.restoredByUserId ?? "-"}
-											</span>
-											<span>
-												Purgado: {formatDateTimeLabel(item.purgedAt)} por{" "}
-												{item.purgedByLabel ?? item.purgedByUserId ?? "-"}
-											</span>
-										</div>
-										<div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500">
-											<span>Deadline de recuperacion: {formatDateTimeLabel(item.recoverUntil)}</span>
-											{item.purgeReason ? <span>Motivo purge: {item.purgeReason}</span> : null}
-											{item.purgeJobId ? <span>Job purge: {item.purgeJobId}</span> : null}
-											<span>
-												Tamano:{" "}
-												{item.itemType === "folder"
-													? `${item.fileCount} archivos (${formatReadableBytes(item.totalBytes ?? 0)})`
-													: formatReadableBytes(item.totalBytes ?? 0)}
-											</span>
-										</div>
+										{canPurge && item.status !== "purged" ? (
+											<Button
+												type="button"
+												size="sm"
+												variant="destructive"
+												className="shrink-0"
+												disabled={purgingId === item.id}
+												onClick={() => setPurgeTarget(item)}
+											>
+												{purgingId === item.id ? (
+													<Loader2 className="mr-2 size-3.5 animate-spin" />
+												) : (
+													<Trash2 className="mr-2 size-3.5" />
+												)}
+												Borrar
+											</Button>
+										) : null}
 									</div>
 								))}
 							</div>
@@ -303,6 +406,36 @@ export function TrashPageClient({ obraId }: { obraId: string }) {
 				</div>
 				<span>{currentCount} elementos</span>
 			</div>
+			<AlertDialog
+				open={Boolean(purgeTarget)}
+				onOpenChange={(open) => {
+					if (!open && !purgingId) setPurgeTarget(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Borrar definitivamente</AlertDialogTitle>
+						<AlertDialogDescription>
+							Esto elimina {purgeTarget?.itemType === "folder" ? "la carpeta" : "el documento"}{" "}
+							{purgeTarget ? `"${purgeTarget.fileName}"` : "seleccionado"} de Storage y de
+							las carpetas de la obra. No se puede deshacer.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={Boolean(purgingId)}>Cancelar</AlertDialogCancel>
+						<Button
+							type="button"
+							variant="destructive"
+							disabled={Boolean(purgingId)}
+							onClick={() => void handlePurge()}
+						>
+							{purgingId ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Trash2 className="mr-2 size-4" />}
+							Borrar definitivamente
+						</Button>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
 		</div>
 	);
 }

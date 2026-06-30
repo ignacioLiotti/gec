@@ -6,8 +6,11 @@ import {
 } from "@/lib/demo-session";
 import { fetchTenantPlan } from "@/lib/subscription-plans";
 import { incrementTenantUsage, logTenantUsageEvent } from "@/lib/tenant-usage";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type RouteContext = { params: Promise<{ id: string }> };
+type RequestSupabaseClient = Awaited<ReturnType<typeof resolveRequestAccessContext>>["supabase"];
+type AdminSupabaseClient = ReturnType<typeof createSupabaseAdminClient>;
 type DeleteItemType = "file" | "folder";
 type DeleteViewMode = "active" | "history";
 type DeleteLifecycleStatus = "deleted" | "restored" | "expired" | "purged";
@@ -55,6 +58,23 @@ type DeletedTreeEntry = {
 	itemType: DeleteItemType;
 	depth: number;
 	fileSizeBytes: number | null;
+};
+
+type PurgeRow = {
+	id: string;
+	item_type: DeleteItemType;
+	storage_bucket: string | null;
+	storage_path: string;
+	root_folder_path: string | null;
+	file_size_bytes: number | null;
+	restored_at: string | null;
+	purged_at: string | null;
+};
+
+type PurgeStorageFile = {
+	storagePath: string;
+	fileSizeBytes: number | null;
+	existsInStorage: boolean;
 };
 
 function normalizeStoragePath(path: string) {
@@ -133,6 +153,227 @@ async function hasDocumentDeletePermission(
 	});
 	if (error) throw error;
 	return data === true;
+}
+
+async function hasDocumentPurgePermission(
+	access: Awaited<ReturnType<typeof resolveRequestAccessContext>>,
+) {
+	if (access.actorType !== "user" || !access.user || !access.tenantId) {
+		return false;
+	}
+	const { data, error } = await access.supabase.rpc("has_permission", {
+		tenant: access.tenantId,
+		perm_key: "documents:purge",
+	});
+	if (error) throw error;
+	return data === true;
+}
+
+function getFileNameFromPath(path: string) {
+	return path.split("/").filter(Boolean).pop() ?? path;
+}
+
+function addPurgeStorageFile(
+	filesByPath: Map<string, PurgeStorageFile>,
+	file: PurgeStorageFile,
+) {
+	const existing = filesByPath.get(file.storagePath);
+	if (!existing) {
+		filesByPath.set(file.storagePath, file);
+		return;
+	}
+	if (file.existsInStorage && !existing.existsInStorage) {
+		filesByPath.set(file.storagePath, file);
+		return;
+	}
+	if (existing.fileSizeBytes == null && file.fileSizeBytes != null) {
+		filesByPath.set(file.storagePath, {
+			...existing,
+			fileSizeBytes: file.fileSizeBytes,
+		});
+	}
+}
+
+async function listStorageFilesForPurge(
+	admin: AdminSupabaseClient,
+	bucket: string,
+	folderPath: string,
+) {
+	const files: PurgeStorageFile[] = [];
+	const foldersToScan: string[] = [folderPath];
+
+	while (foldersToScan.length > 0) {
+		const currentFolder = foldersToScan.shift();
+		if (!currentFolder) continue;
+
+		const { data: entries, error } = await admin.storage
+			.from(bucket)
+			.list(currentFolder, {
+				limit: 1000,
+				sortBy: { column: "name", order: "asc" },
+			});
+		if (error) throw error;
+
+		for (const entry of entries ?? []) {
+			const fullPath = `${currentFolder}/${entry.name}`.replace(/\/{2,}/g, "/");
+			if (!entry.metadata) {
+				foldersToScan.push(fullPath.replace(/\/$/, ""));
+				continue;
+			}
+			files.push({
+				storagePath: fullPath,
+				fileSizeBytes:
+					typeof entry.metadata.size === "number" ? entry.metadata.size : null,
+				existsInStorage: true,
+			});
+		}
+	}
+
+	return files;
+}
+
+async function loadStorageFileForPurge(
+	admin: AdminSupabaseClient,
+	bucket: string,
+	storagePath: string,
+) {
+	const parentPath = storagePath.split("/").slice(0, -1).join("/");
+	const fileName = getFileNameFromPath(storagePath);
+	const { data: entries, error } = await admin.storage
+		.from(bucket)
+		.list(parentPath, { limit: 1000, search: fileName });
+	if (error) throw error;
+
+	const matched = (entries ?? []).find(
+		(entry) => entry.name === fileName && Boolean(entry.metadata),
+	);
+
+	return {
+		storagePath,
+		fileSizeBytes:
+			typeof matched?.metadata?.size === "number" ? matched.metadata.size : null,
+		existsInStorage: Boolean(matched),
+	} satisfies PurgeStorageFile;
+}
+
+function isStorageNotFoundError(error: unknown) {
+	const message = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
+	const statusCode = Number((error as { statusCode?: number } | null)?.statusCode ?? 0);
+	return statusCode === 404 || message.includes("not found");
+}
+
+async function removeStorageFiles(
+	admin: AdminSupabaseClient,
+	bucket: string,
+	files: PurgeStorageFile[],
+) {
+	const failedPaths: string[] = [];
+	for (const file of files) {
+		const { error } = await admin.storage.from(bucket).remove([file.storagePath]);
+		if (!error) continue;
+		if (isStorageNotFoundError(error)) continue;
+		console.error("[documents:deletes:delete] storage remove failed", {
+			path: file.storagePath,
+			error,
+		});
+		failedPaths.push(file.storagePath);
+	}
+	return failedPaths;
+}
+
+async function loadActiveDeletedPaths(
+	admin: AdminSupabaseClient,
+	params: {
+		tenantId: string;
+		obraId: string;
+		paths: string[];
+	},
+) {
+	const activeDeletedPaths = new Set<string>();
+	for (const pathChunk of chunk(params.paths, 200)) {
+		const { data, error } = await admin
+			.from("obra_document_deletes")
+			.select("storage_path")
+			.eq("tenant_id", params.tenantId)
+			.eq("obra_id", params.obraId)
+			.is("restored_at", null)
+			.is("purged_at", null)
+			.in("storage_path", pathChunk);
+		if (error) throw error;
+		for (const row of data ?? []) {
+			if (typeof row.storage_path === "string") {
+				activeDeletedPaths.add(row.storage_path);
+			}
+		}
+	}
+	return activeDeletedPaths;
+}
+
+async function cleanupPurgedDocumentReferences(
+	admin: AdminSupabaseClient,
+	obraId: string,
+	paths: string[],
+) {
+	const uniquePaths = Array.from(new Set(paths));
+	if (uniquePaths.length === 0) return;
+
+	for (const pathChunk of chunk(uniquePaths, 200)) {
+		const { error: uploadTrackingDeleteError } = await admin
+			.from("obra_document_uploads")
+			.delete()
+			.eq("obra_id", obraId)
+			.in("storage_path", pathChunk);
+		if (uploadTrackingDeleteError) {
+			console.error("[documents:deletes:delete] upload tracking cleanup failed", {
+				obraId,
+				error: uploadTrackingDeleteError,
+			});
+		}
+
+		const { error: ocrDocsDeleteError } = await admin
+			.from("ocr_document_processing")
+			.delete()
+			.eq("obra_id", obraId)
+			.in("source_path", pathChunk);
+		if (ocrDocsDeleteError) {
+			console.error("[documents:deletes:delete] ocr processing cleanup failed", {
+				obraId,
+				error: ocrDocsDeleteError,
+			});
+		}
+	}
+
+	const { data: tablaRows, error: tablaError } = await admin
+		.from("obra_tablas")
+		.select("id")
+		.eq("obra_id", obraId);
+	if (tablaError) {
+		console.error("[documents:deletes:delete] tabla fetch failed", {
+			obraId,
+			error: tablaError,
+		});
+		return;
+	}
+
+	const tablaIds = (tablaRows ?? [])
+		.map((tabla) => (typeof tabla.id === "string" ? tabla.id : null))
+		.filter((tablaId): tablaId is string => Boolean(tablaId));
+	if (tablaIds.length === 0) return;
+
+	for (const path of uniquePaths) {
+		const { error: rowsDeleteError } = await admin
+			.from("obra_tabla_rows")
+			.delete()
+			.in("tabla_id", tablaIds)
+			.contains("data", { __docPath: path });
+		if (rowsDeleteError) {
+			console.error("[documents:deletes:delete] tabla rows cleanup failed", {
+				obraId,
+				path,
+				error: rowsDeleteError,
+			});
+		}
+	}
 }
 
 function buildFolderTreeEntries(folderPath: string, fileRows: DeleteRow[]) {
@@ -254,7 +495,7 @@ async function resolveObraAccess(obraId: string) {
 }
 
 async function listFolderFilesRecursively(
-	supabase: Awaited<ReturnType<typeof resolveRequestAccessContext>>["supabase"],
+	supabase: RequestSupabaseClient,
 	folderPath: string,
 ) {
 	const files: CandidateFile[] = [];
@@ -298,7 +539,7 @@ async function listFolderFilesRecursively(
 }
 
 async function loadSingleFileCandidate(
-	supabase: Awaited<ReturnType<typeof resolveRequestAccessContext>>["supabase"],
+	supabase: RequestSupabaseClient,
 	storagePath: string,
 ) {
 	const lastSlash = storagePath.lastIndexOf("/");
@@ -750,6 +991,248 @@ export async function POST(request: Request, context: RouteContext) {
 		console.error("[documents:deletes:post]", error);
 		const message =
 			error instanceof Error ? error.message : "Error al eliminar documento/carpeta";
+		return NextResponse.json({ error: message }, { status: 500 });
+	}
+}
+
+export async function DELETE(request: Request, context: RouteContext) {
+	const { id: obraId } = await context.params;
+	if (!obraId) {
+		return NextResponse.json({ error: "Obra no encontrada" }, { status: 400 });
+	}
+
+	try {
+		const access = await resolveObraAccess(obraId);
+		if (access.error) return access.error;
+
+		if (!(await hasDocumentPurgePermission(access.access))) {
+			return NextResponse.json(
+				{ error: "No tenes permiso para borrar documentos definitivamente." },
+				{ status: 403 },
+			);
+		}
+
+		const body = await request.json().catch(() => ({}));
+		const deleteId = typeof body?.deleteId === "string" ? body.deleteId : "";
+		if (!deleteId) {
+			return NextResponse.json({ error: "deleteId requerido." }, { status: 400 });
+		}
+
+		const { data: targetDelete, error: targetError } = await access.access.supabase
+			.from("obra_document_deletes")
+			.select(
+				"id, item_type, storage_bucket, storage_path, root_folder_path, file_size_bytes, restored_at, purged_at",
+			)
+			.eq("id", deleteId)
+			.eq("tenant_id", access.tenantId)
+			.eq("obra_id", obraId)
+			.maybeSingle();
+		if (targetError) throw targetError;
+		if (!targetDelete) {
+			return NextResponse.json({ error: "Registro no encontrado." }, { status: 404 });
+		}
+
+		const targetRow = targetDelete as PurgeRow;
+		if (targetRow.purged_at) {
+			return NextResponse.json(
+				{ error: "El elemento ya fue eliminado definitivamente." },
+				{ status: 410 },
+			);
+		}
+
+		const storagePath = normalizeStoragePath(targetRow.storage_path);
+		if (!storagePath || !isPathInsideObra(obraId, storagePath)) {
+			return NextResponse.json(
+				{ error: "La ruta no pertenece a la obra." },
+				{ status: 400 },
+			);
+		}
+		if (targetRow.item_type === "folder" && storagePath === obraId) {
+			return NextResponse.json(
+				{ error: "No se puede eliminar la carpeta raiz." },
+				{ status: 400 },
+			);
+		}
+
+		const admin = createSupabaseAdminClient();
+		const bucket = targetRow.storage_bucket || DOCUMENTS_BUCKET;
+		const lifecycleRowsById = new Map<string, PurgeRow>([[targetRow.id, targetRow]]);
+
+		if (targetRow.item_type === "folder") {
+			const { data: childRows, error: childRowsError } = await admin
+				.from("obra_document_deletes")
+				.select(
+					"id, item_type, storage_bucket, storage_path, root_folder_path, file_size_bytes, restored_at, purged_at",
+				)
+				.eq("tenant_id", access.tenantId)
+				.eq("obra_id", obraId)
+				.eq("root_folder_path", storagePath)
+				.is("purged_at", null);
+			if (childRowsError) throw childRowsError;
+			for (const row of (childRows ?? []) as PurgeRow[]) {
+				lifecycleRowsById.set(row.id, row);
+			}
+		}
+
+		const filesByPath = new Map<string, PurgeStorageFile>();
+		if (targetRow.item_type === "folder") {
+			const storageFiles = await listStorageFilesForPurge(admin, bucket, storagePath);
+			for (const file of storageFiles) {
+				addPurgeStorageFile(filesByPath, file);
+			}
+		} else {
+			addPurgeStorageFile(
+				filesByPath,
+				await loadStorageFileForPurge(admin, bucket, storagePath),
+			);
+		}
+
+		for (const row of lifecycleRowsById.values()) {
+			if (row.item_type !== "file") continue;
+			addPurgeStorageFile(filesByPath, {
+				storagePath: normalizeStoragePath(row.storage_path),
+				fileSizeBytes:
+					typeof row.file_size_bytes === "number" ? row.file_size_bytes : null,
+				existsInStorage: false,
+			});
+		}
+
+		const storageFiles = Array.from(filesByPath.values()).filter((file) =>
+			isPathInsideObra(obraId, file.storagePath),
+		);
+		const purgePaths = storageFiles.map((file) => file.storagePath);
+
+		if (purgePaths.length > 0) {
+			for (const pathChunk of chunk(purgePaths, 200)) {
+				const { data: rowsForPaths, error: rowsForPathsError } = await admin
+					.from("obra_document_deletes")
+					.select(
+						"id, item_type, storage_bucket, storage_path, root_folder_path, file_size_bytes, restored_at, purged_at",
+					)
+					.eq("tenant_id", access.tenantId)
+					.eq("obra_id", obraId)
+					.is("purged_at", null)
+					.in("storage_path", pathChunk);
+				if (rowsForPathsError) throw rowsForPathsError;
+				for (const row of (rowsForPaths ?? []) as PurgeRow[]) {
+					lifecycleRowsById.set(row.id, row);
+				}
+			}
+		}
+
+		const activeDeletedPaths = purgePaths.length > 0
+			? await loadActiveDeletedPaths(admin, {
+				tenantId: access.tenantId,
+				obraId,
+				paths: purgePaths,
+			})
+			: new Set<string>();
+		const bytesToDecrement = storageFiles.reduce((sum, file) => {
+			if (!file.existsInStorage || activeDeletedPaths.has(file.storagePath)) return sum;
+			const size = typeof file.fileSizeBytes === "number" && file.fileSizeBytes > 0
+				? file.fileSizeBytes
+				: 0;
+			return sum + size;
+		}, 0);
+
+		let usageAdjusted = false;
+		let plan: Awaited<ReturnType<typeof fetchTenantPlan>> | null = null;
+		if (bytesToDecrement > 0) {
+			plan = await fetchTenantPlan(access.access.supabase, access.tenantId);
+			try {
+				await incrementTenantUsage(
+					access.access.supabase,
+					access.tenantId,
+					{ storageBytes: -bytesToDecrement },
+					plan.limits,
+				);
+				usageAdjusted = true;
+			} catch (usageError) {
+				const err = usageError as Error & { code?: string };
+				return NextResponse.json(
+					{ error: err.message || "No se pudo actualizar el uso de almacenamiento." },
+					{ status: usageErrorToStatus(err.code) },
+				);
+			}
+		}
+
+		const failedPaths = await removeStorageFiles(admin, bucket, storageFiles);
+		if (failedPaths.length > 0) {
+			if (usageAdjusted && plan) {
+				await incrementTenantUsage(
+					access.access.supabase,
+					access.tenantId,
+					{ storageBytes: bytesToDecrement },
+					plan.limits,
+				).catch((rollbackError) =>
+					console.error(
+						"[documents:deletes:delete] failed to rollback storage usage",
+						rollbackError,
+					),
+				);
+			}
+			return NextResponse.json(
+				{
+					error: "No se pudieron borrar todos los archivos de Storage.",
+					failedPaths,
+				},
+				{ status: 502 },
+			);
+		}
+
+		await cleanupPurgedDocumentReferences(admin, obraId, purgePaths);
+
+		const nowIso = new Date().toISOString();
+		const purgeJobId = `manual-document-purge-${deleteId}-${nowIso}`;
+		const purgeIds = Array.from(lifecycleRowsById.keys());
+		for (const idsChunk of chunk(purgeIds, 200)) {
+			const { error: purgeError } = await admin
+				.from("obra_document_deletes")
+				.update({
+					purged_at: nowIso,
+					purged_by: access.actorUserId,
+					purged_by_email: access.actorEmail,
+					purge_job_id: purgeJobId,
+					purge_reason: "manual_history_delete",
+				})
+				.in("id", idsChunk)
+				.eq("tenant_id", access.tenantId)
+				.eq("obra_id", obraId)
+				.is("purged_at", null);
+			if (purgeError) throw purgeError;
+		}
+
+		if (bytesToDecrement > 0) {
+			await logTenantUsageEvent(access.access.supabase, {
+				tenantId: access.tenantId,
+				kind: "storage_bytes",
+				amount: -bytesToDecrement,
+				context: "documents_manual_purge",
+				metadata: {
+					obraId,
+					deleteId,
+					itemType: targetRow.item_type,
+					storagePath,
+					purgedPaths: purgePaths,
+					purgedFileCount: storageFiles.length,
+				},
+			});
+		}
+
+		return NextResponse.json({
+			ok: true,
+			deleteId,
+			itemType: targetRow.item_type,
+			storagePath,
+			purgedCount: purgeIds.length,
+			purgedFileCount: storageFiles.length,
+			bytesPurged: bytesToDecrement,
+			purgedPaths: purgePaths,
+		});
+	} catch (error) {
+		console.error("[documents:deletes:delete]", error);
+		const message =
+			error instanceof Error ? error.message : "Error al borrar definitivamente";
 		return NextResponse.json({ error: message }, { status: 500 });
 	}
 }
