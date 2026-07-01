@@ -75,6 +75,13 @@ export type CellSuggestionKind =
 	| "text"
 	| "select";
 
+export type ColumnFilterType =
+	| "text"
+	| "number"
+	| "date"
+	| "boolean"
+	| "enum";
+
 export type CellSuggestion<Row extends FormTableRow> = {
 	kind: CellSuggestionKind;
 	suggestedValue: unknown;
@@ -178,6 +185,7 @@ export type ColumnDef<Row extends FormTableRow> = {
 	/** Allows a normally read-only column to be editable only while the row has no initial snapshot. */
 	editableWhenNewRow?: boolean;
 	cellType?: CellType;
+	filterType?: ColumnFilterType | false;
 	cellConfig?: CellConfig<Row>;
 	sortFn?: (a: Row, b: Row) => number;
 	searchFn?: (row: Row, query: string) => boolean;

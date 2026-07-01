@@ -1612,6 +1612,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enablePin: true,
 		editable: false,
 		cellType: "text",
+		filterType: "number",
 		width: 25,
 		enableResize: false,
 		enableSort: false,
@@ -1695,6 +1696,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enableHide: true,
 		enablePin: false,
 		cellType: "text",
+		filterType: "number",
 		sortFn: (a, b) => toNumber(a.supDeObraM2) - toNumber(b.supDeObraM2),
 		searchFn: (row, query) => String(row.supDeObraM2 ?? "").includes(query),
 		defaultValue: null,
@@ -1810,6 +1812,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enableHide: true,
 		enablePin: false,
 		cellType: "text",
+		filterType: "number",
 		sortFn: (a, b) => toNumber(a.segunContrato) - toNumber(b.segunContrato),
 		searchFn: (row, query) => String(row.segunContrato ?? "").includes(query),
 		defaultValue: null,
@@ -1821,6 +1824,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enableHide: true,
 		enablePin: false,
 		cellType: "text",
+		filterType: "number",
 		sortFn: (a, b) => toNumber(a.prorrogasAcordadas) - toNumber(b.prorrogasAcordadas),
 		searchFn: (row, query) => String(row.prorrogasAcordadas ?? "").includes(query),
 		defaultValue: null,
@@ -1832,6 +1836,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enableHide: true,
 		enablePin: false,
 		cellType: "text",
+		filterType: "number",
 		sortFn: (a, b) => toNumber(a.plazoTotal) - toNumber(b.plazoTotal),
 		searchFn: (row, query) => String(row.plazoTotal ?? "").includes(query),
 		defaultValue: null,
@@ -1843,6 +1848,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enableHide: true,
 		enablePin: false,
 		cellType: "text",
+		filterType: "number",
 		sortFn: (a, b) => toNumber(a.plazoTransc) - toNumber(b.plazoTransc),
 		searchFn: (row, query) => String(row.plazoTransc ?? "").includes(query),
 		defaultValue: null,
@@ -1854,6 +1860,7 @@ const columns: ColumnDef<ObrasDetalleRow>[] = [
 		enableHide: true,
 		enablePin: false,
 		cellType: "badge",
+		filterType: "number",
 		cellClassName: "group-hover:text-orange-primary group-hover:font-semibold",
 		cellConfig: {
 			renderReadOnly: ({ value, row }) =>
@@ -2000,6 +2007,12 @@ const buildFormulaColumn = (
 		resolvedCellType === "select"
 			? sanitizeMainTableSelectOptions(config.selectOptions)
 			: [];
+	const usesNumberFilter =
+		resolvedCellType === "number" ||
+		resolvedCellType === "currency" ||
+		format === "number" ||
+		format === "currency";
+	const filterType = usesNumberFilter ? "number" : undefined;
 	const getValue = (row: ObrasDetalleRow) => evaluateFormulaValue(row, formula);
 
 	return {
@@ -2010,6 +2023,7 @@ const buildFormulaColumn = (
 		enablePin: false,
 		editable: false,
 		cellType: resolvedCellType,
+		filterType,
 		cellConfig: applySuggestionDetectionOverride(
 			{
 				...(resolvedCellType === "currency"

@@ -13,12 +13,20 @@ import {
 	FormTableToolbar,
 } from "@/components/form-table/form-table";
 import {
+	countActiveAutoColumnFilters,
+	createAutoColumnFilters,
+	matchesAutoColumnFilters,
+	renderAutoColumnFilters,
+	type AutoColumnFilters,
+} from "@/components/form-table/column-filters";
+import {
 	createObrasDetalleConfig,
 	invalidateObrasTableSessionCache,
 	mapObraToDetailRow,
 	type MainTableColumnConfig,
 	type ObrasDetalleRow,
 } from "@/components/form-table/configs/obras-detalle";
+import type { FormTableConfig } from "@/components/form-table/types";
 import { Button } from "@/components/ui/button";
 import {
 	Sheet,
@@ -317,10 +325,35 @@ export default function DesktopExcelPageClient({
 			readOnly: false,
 			optimizationPreset: "legacy",
 		});
+		const {
+			createFilters: _createFilters,
+			renderFilters: _renderFilters,
+			applyFilters: _applyFilters,
+			countActiveFilters: _countActiveFilters,
+			fetchRows: _fetchRows,
+			csvExport: _csvExport,
+			...baseConfigWithoutFilters
+		} = baseConfig;
+		const generatedFilterColumns = baseConfig.columns;
+		const generatedFilterConfig: FormTableConfig<ObrasDetalleRow, AutoColumnFilters> = {
+			...baseConfigWithoutFilters,
+			columns: generatedFilterColumns,
+			serverSideData: false,
+			createFilters: () => createAutoColumnFilters(generatedFilterColumns),
+			renderFilters: ({ filters, onChange }) =>
+				renderAutoColumnFilters({
+					columns: generatedFilterColumns,
+					filters,
+					onChange,
+				}),
+			applyFilters: (row, filters) =>
+				matchesAutoColumnFilters(row, generatedFilterColumns, filters),
+			countActiveFilters: countActiveAutoColumnFilters,
+		};
 		return hydratedRows == null
-			? baseConfig
+			? generatedFilterConfig
 			: {
-				...baseConfig,
+				...generatedFilterConfig,
 				defaultRows: hydratedRows,
 			};
 	}, [hydratedRows, mainTableColumnsConfig]);
