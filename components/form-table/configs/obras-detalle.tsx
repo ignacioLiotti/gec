@@ -2763,12 +2763,18 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 	};
 
 const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["onSave"] =
-	async ({ rows }: SaveRowsArgs<ObrasDetalleRow>) => {
+	async ({ rows, dirtyRows }: SaveRowsArgs<ObrasDetalleRow>) => {
+		const rowsToSave =
+			dirtyRows.length > 0
+				? dirtyRows
+				: rows.filter((row) => row.__pendingNavigation);
+		if (rowsToSave.length === 0) return;
+
 		const payload = {
-			detalleObras: rows.map((row, index) => mapDetailRowToPayload(row, index)),
+			updates: rowsToSave.map((row, index) => mapDetailRowToPayload(row, index)),
 		};
-		const response = await fetch("/api/obras", {
-			method: "PUT",
+		const response = await fetch("/api/obras/bulk", {
+			method: "PATCH",
 			headers: {
 				"Content-Type": "application/json",
 			},
@@ -2777,9 +2783,11 @@ const saveObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>[
 		if (!response.ok) {
 			const errorPayload = await response.json().catch(() => ({}));
 			const baseMessage = errorPayload?.error ?? "No se pudieron guardar las obras";
-			const detailErrors = Array.isArray(errorPayload?.details?.fieldErrors?.detalleObras)
-				? (errorPayload.details.fieldErrors.detalleObras as string[])
-				: [];
+			const fieldErrors = errorPayload?.details?.fieldErrors ?? {};
+			const detailErrors = [
+				...(Array.isArray(fieldErrors.detalleObras) ? fieldErrors.detalleObras : []),
+				...(Array.isArray(fieldErrors.updates) ? fieldErrors.updates : []),
+			] as string[];
 			const uniqueDetailErrors = Array.from(
 				new Set(detailErrors.map((msg) => String(msg).trim()).filter(Boolean))
 			);

@@ -48,7 +48,7 @@ Actual DB column names (snake_case):
 ## Obra Lifecycle
 
 ```
-Create obra (POST /api/obras)
+Create obra (PATCH /api/obras/bulk)
     ↓
 applyObraDefaults() — seeds default folders + tablas from admin templates
     ↓
@@ -71,11 +71,11 @@ All routes are tenant-scoped (RLS).
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/obras` | List obras (with `?q=`, `?limit=`, `?page=`) |
-| POST | `/api/obras` | Create obra |
+| PUT | `/api/obras` | Explicit full sync; requires `fullSync: true` and soft-deletes omitted obras |
 | GET | `/api/obras/[id]` | Get single obra |
 | PATCH | `/api/obras/[id]` | Update obra fields |
 | DELETE | `/api/obras/[id]` | Delete obra |
-| POST | `/api/obras/bulk` | Bulk import obras |
+| PATCH | `/api/obras/bulk` | Partial upsert/import obras without deleting omitted obras |
 
 ### Query Parameters
 - `?q=` — full-text search

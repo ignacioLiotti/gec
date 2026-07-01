@@ -2649,11 +2649,11 @@ export default function Home() {
         porcentaje: 0,
       };
 
-      const saveResponse = await fetch("/api/obras", {
-        method: "PUT",
+      const saveResponse = await fetch("/api/obras/bulk", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          detalleObras: [...currentObras, obraToCreate],
+          updates: [obraToCreate],
         }),
       });
 

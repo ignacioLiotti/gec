@@ -47,7 +47,7 @@
 ## Flow: Obra Completion (100%)
 
 1. **User updates percentage to 100% in Excel UI**
-2. **PUT /api/obras** processes update
+2. **PATCH /api/obras/[id]** processes update
 
 3. **Three Parallel Actions:**
 
@@ -88,7 +88,7 @@
 
 ## Key Functions Responsibility
 
-**PUT /api/obras**
+**PATCH /api/obras/[id]**
 - Entry point for obra updates
 - Detects completion (100%)
 - Orchestrates all three notification paths
@@ -121,7 +121,7 @@
 ## Dependencies Between Components
 
 ```
-PUT /api/obras (triggers)
+PATCH /api/obras/[id] (triggers)
   → emitEvent("obra.completed") 
     → lookupRule(registry)
     → rule.recipients(ctx)
@@ -168,7 +168,7 @@ CRON_SECRET                 # Cron auth
    - Location: app/api/schedules/dispatch/route.ts:37
 
 3. **Synchronous flujo execution**
-   - Could slow down PUT /api/obras if many actions
+   - Could slow down the obra completion mutation if many actions
    - Should be async job
 
 4. **No retry logic**
@@ -184,7 +184,7 @@ CRON_SECRET                 # Cron auth
 ```
 obra.porcentaje = 100
 
-PUT /api/obras
+PATCH /api/obras/[id]
   ├─ Insert in-app notification: "Obra completada" ✓
   ├─ Queue email: "Seguimiento" (2min later)
   ├─ Query flujo_actions (if any)
@@ -210,7 +210,7 @@ PUT /api/obras
 ## Testing Points
 
 1. Test obra completion:
-   - PUT /api/obras with porcentaje: 100
+   - PATCH /api/obras/[id] with porcentaje: 100
    - Check notifications table for in-app message
    - Check Resend logs for email (2min later)
 
