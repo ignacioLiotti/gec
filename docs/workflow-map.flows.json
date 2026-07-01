@@ -380,7 +380,7 @@
         {
           "from": "form-table",
           "to": "api",
-          "label": "POST /api/obras",
+          "label": "PATCH /api/obras/bulk",
           "passes": "tenant-scoped obra payload",
           "notes": "The route handler enforces tenant membership before persistence."
         },

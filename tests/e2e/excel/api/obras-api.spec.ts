@@ -78,6 +78,49 @@ test.describe("Excel obras API", () => {
 		});
 	});
 
+	test("PUT /api/obras rejects legacy partial sync without deleting omitted obras", async ({
+		request,
+	}) => {
+		const keptName = buildExcelObraName("Legacy Put Kept");
+		const omittedName = buildExcelObraName("Legacy Put Omitted");
+		createdNames.push(keptName, omittedName);
+
+		await createObraViaBulkApi(request, {
+			designacionYUbicacion: keptName,
+			porcentaje: 15,
+		});
+		await createObraViaBulkApi(request, {
+			designacionYUbicacion: omittedName,
+			porcentaje: 25,
+		});
+
+		const obrasBefore = await fetchAuthenticatedObras(request);
+		const keptObra = obrasBefore.find(
+			(obra) => obra.designacionYUbicacion === keptName,
+		);
+		if (!keptObra) {
+			throw new Error("Expected kept obra to exist before legacy PUT check");
+		}
+
+		const response = await request.put("/api/obras", {
+			data: {
+				detalleObras: [keptObra],
+			},
+		});
+
+		expect(response.status()).toBe(409);
+		await expect(response.json()).resolves.toMatchObject({
+			error: expect.stringContaining("fullSync=true"),
+		});
+
+		const obrasAfter = await fetchAuthenticatedObras(request);
+		const namesAfter = new Set(
+			obrasAfter.map((obra) => obra.designacionYUbicacion),
+		);
+		expect(namesAfter.has(keptName)).toBe(true);
+		expect(namesAfter.has(omittedName)).toBe(true);
+	});
+
 	test("GET /api/obras status filters split in-process and completed obras", async ({
 		request,
 	}) => {

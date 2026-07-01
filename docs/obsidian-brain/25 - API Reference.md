@@ -18,8 +18,8 @@ All API routes:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/obras` | List obras (`?q=`, `?limit=`, `?page=`) |
-| POST | `/api/obras` | Create obra |
-| POST | `/api/obras/bulk` | Bulk import obras |
+| PUT | `/api/obras` | Full-sync obras; requires `fullSync: true` and soft-deletes omitted obras |
+| PATCH | `/api/obras/bulk` | Partial upsert/import obras; does not delete omitted obras |
 | GET | `/api/obras/[id]` | Get obra |
 | PATCH | `/api/obras/[id]` | Update obra |
 | DELETE | `/api/obras/[id]` | Delete obra |

@@ -760,6 +760,22 @@ export async function PUT(request: Request) {
 		return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
 	}
 
+	const isExplicitFullSync =
+		typeof body === "object" &&
+		body !== null &&
+		!Array.isArray(body) &&
+		(body as Record<string, unknown>).fullSync === true;
+
+	if (!isExplicitFullSync) {
+		return NextResponse.json(
+			{
+				error:
+					"PUT /api/obras requiere fullSync=true porque elimina obras omitidas. Use PATCH /api/obras/bulk para cambios parciales.",
+			},
+			{ status: 409 },
+		);
+	}
+
 	const parsingResult = obrasFormSchema.safeParse(body);
 	if (!parsingResult.success) {
 		return NextResponse.json(
