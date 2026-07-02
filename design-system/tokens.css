@@ -1,0 +1,210 @@
+@layer base {
+	:root {
+		--font-sans:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+			"Segoe UI", sans-serif;
+		--font-mono:
+			"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+		--shadow-card:
+			0 1px 0 0 #ffffff inset, 0 0 0 1px #e2e2e2, 0 8px 18px -16px #1b1b1b66;
+		--shadow-dropdown: 0 8px 4px -2px #1b1b1b14, inset 0 2px 0 #ffffffe6;
+		--shadow-raised:
+			0 1px 0 0 #ffffff inset, 0 -1px 0 0 #dcdcdc inset, 0 0 0 1px #e2e2e2,
+			0 8px 18px -16px #1b1b1b66;
+		--shadow-raised-hover:
+			0 1px 0 0 #ffffff inset, 0 -1px 0 0 #dcdcdc inset, 0 0 0 1px #dcdcdc,
+			0 10px 22px -16px #1b1b1b80;
+		--shadow-pressed:
+			0 1px 0 0 var(--elevation-top) inset,
+			0 -1px 0 0 var(--elevation-background) inset,
+			0 0 0 1px var(--elevation-ring), 0 1px 2px -2px var(--elevation-halo);
+		--shadow-pressed-elevated:
+			0 1px 0 0 var(--elevation-top) inset, 0 0 0 1px var(--elevation-ring),
+			0 1px 2px -2px var(--elevation-halo);
+		--shadow-recessed:
+			inset 0 1px 0 0 #dcdcdc, inset 0 -1px 0 0 #ffffff, 0 0 0 1px #dcdcdc;
+		--shadow-glass:
+			0 1px 0 0 #ffffffcc inset, 0 0 0 1px #ffffff99 inset, 0 0 0 1px #e2e2e2cc,
+			0 14px 32px -26px #1b1b1b99;
+		--shadow-panel:
+			0 18px 36px -30px #1b1b1ba6, inset 0 1px 0 rgb(255 255 255 / 0.9);
+		--shadow-modal: 0 30px 90px #1b1b1b47;
+
+		--background: 0 0% 92%;
+		--foreground: 0 0% 11%;
+		--canvas: 0 0% 92%;
+		--canvas-muted: 0 0% 92%;
+		--surface: 0 0% 97%;
+		--surface-muted: 0 0% 96%;
+		--surface-raised: 0 0% 97%;
+		--surface-recessed: 0 0% 92%;
+		--surface-warm: 33 100% 98%;
+		--surface-glass: 0 0% 97%;
+		--content: 0 0% 11%;
+		--content-secondary: 0 0% 26%;
+		--content-muted: 0 0% 37%;
+		--content-disabled: 0 0% 62%;
+		--card: 0 0% 100%;
+		--card-foreground: 0 0% 11%;
+		--popover: 0 0% 100%;
+		--popover-foreground: 0 0% 11%;
+		--primary: 221 83% 53%;
+		--primary-foreground: 0 0% 100%;
+		--orange-primary: 20 100% 50%;
+		--secondary: 167 64% 40%;
+		--secondary-foreground: 0 0% 100%;
+		--muted: 0 0% 92%;
+		--muted-foreground: 0 0% 37%;
+		--accent: 36 92% 56%;
+		--accent-soft: 33 100% 96%;
+		--accent-border: 32 90% 69%;
+		--accent-foreground: 24 88% 10%;
+		--destructive: 357 60% 49%;
+		--destructive-foreground: 0 0% 100%;
+		--success: 148 60% 36%;
+		--success-foreground: 0 0% 100%;
+		--warning: 40 96% 52%;
+		--warning-foreground: 24 88% 10%;
+		--border: 0 0% 89%;
+		--border-soft: 0 0% 89%;
+		--border-strong: 0 0% 86%;
+		--input: 0 0% 86%;
+		--ring: 221 83% 53%;
+		--table-row-alt: 0 0% 96%;
+		--table-row-hover: 0 0% 94%;
+		--scrollbar-thumb: 0 0% 72%;
+		--scrollbar-thumb-hover: 0 0% 58%;
+
+		--radius-sm: 0.375rem;
+		--radius-md: 0.5rem;
+		--radius-lg: 0.75rem;
+		--radius-xl: 1rem;
+	}
+
+	.dark {
+		--background: 222 47% 7%;
+		--foreground: 210 40% 96%;
+		--canvas: 222 47% 7%;
+		--canvas-muted: 222 35% 11%;
+		--surface: 222 38% 10%;
+		--surface-muted: 220 26% 16%;
+		--surface-raised: 222 33% 13%;
+		--surface-recessed: 222 34% 8%;
+		--surface-warm: 24 32% 13%;
+		--surface-glass: 222 38% 12%;
+		--content: 210 40% 96%;
+		--content-secondary: 214 28% 82%;
+		--content-muted: 216 18% 70%;
+		--content-disabled: 216 14% 50%;
+		--card: 222 38% 10%;
+		--card-foreground: 210 40% 96%;
+		--popover: 222 38% 10%;
+		--popover-foreground: 210 40% 96%;
+		--primary: 217 91% 60%;
+		--primary-foreground: 222 47% 7%;
+		--orange-primary: 24 92% 58%;
+		--secondary: 167 64% 46%;
+		--secondary-foreground: 222 47% 7%;
+		--muted: 220 26% 16%;
+		--muted-foreground: 216 18% 70%;
+		--accent: 38 92% 60%;
+		--accent-soft: 24 32% 13%;
+		--accent-border: 24 70% 45%;
+		--accent-foreground: 24 88% 10%;
+		--destructive: 0 72% 55%;
+		--destructive-foreground: 0 0% 100%;
+		--success: 150 64% 42%;
+		--success-foreground: 222 47% 7%;
+		--warning: 40 96% 58%;
+		--warning-foreground: 24 88% 10%;
+		--border: 220 26% 20%;
+		--border-soft: 220 22% 18%;
+		--border-strong: 220 18% 28%;
+		--input: 220 26% 20%;
+		--ring: 217 91% 60%;
+		--table-row-alt: 220 26% 13%;
+		--table-row-hover: 220 26% 17%;
+		--scrollbar-thumb: 220 18% 30%;
+		--scrollbar-thumb-hover: 216 18% 44%;
+	}
+
+	* {
+		@apply border-stroke-soft;
+		scrollbar-color: hsl(var(--scrollbar-thumb)) transparent;
+		scrollbar-width: thin;
+	}
+
+	*::-webkit-scrollbar {
+		height: 10px;
+		width: 10px;
+	}
+
+	*::-webkit-scrollbar-track,
+	*::-webkit-scrollbar-corner {
+		background: transparent;
+	}
+
+	*::-webkit-scrollbar-thumb {
+		background-color: hsl(var(--scrollbar-thumb) / 0.8);
+		background-clip: padding-box;
+		border: 3px solid transparent;
+		border-radius: 999px;
+	}
+
+	*::-webkit-scrollbar-thumb:hover {
+		background-color: hsl(var(--scrollbar-thumb-hover) / 0.9);
+	}
+
+	html {
+		scrollbar-gutter: stable;
+		text-rendering: optimizeLegibility;
+	}
+
+	body {
+		@apply bg-canvas text-content antialiased;
+		font-family: var(--font-sans);
+	}
+}
+
+@layer components {
+	.acme-surface {
+		@apply border border-stroke-soft bg-surface text-content shadow-card;
+	}
+}
+
+@utility shadow-card {
+	box-shadow: var(--shadow-card);
+}
+
+@utility shadow-dropdown {
+	box-shadow: var(--shadow-dropdown);
+}
+
+@utility shadow-raised {
+	box-shadow: var(--shadow-raised);
+}
+
+@utility shadow-raised-hover {
+	box-shadow: var(--shadow-raised-hover);
+}
+
+@utility shadow-pressed {
+	box-shadow: var(--shadow-pressed);
+}
+
+@utility shadow-recessed {
+	box-shadow: var(--shadow-recessed);
+}
+
+@utility shadow-glass {
+	box-shadow: var(--shadow-glass);
+}
+
+@utility shadow-panel {
+	box-shadow: var(--shadow-panel);
+}
+
+@utility shadow-modal {
+	box-shadow: var(--shadow-modal);
+}
