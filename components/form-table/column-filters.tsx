@@ -21,6 +21,7 @@ import {
 	type TextFilterValue,
 } from "@/components/form-table/filter-components";
 import type { CellType, ColumnDef, ColumnFilterType, FormTableRow } from "@/components/form-table/types";
+import { getMainTableSelectOptionId, resolveMainTableSelectOption } from "@/lib/main-table-select";
 
 export type AutoColumnFilterValue =
 	| { type: "text"; value: TextFilterValue }
@@ -304,14 +305,44 @@ const booleanMatches = (value: unknown, filter: BooleanFilterCondition) => {
 	return filter === "yes" ? boolValue : !boolValue;
 };
 
-const enumMatches = (value: unknown, filter: EnumFilterValue) => {
+const normalizedToken = (value: unknown) => normalizeText(value).trim();
+
+const enumMatches = <Row extends FormTableRow>(
+	value: unknown,
+	filter: EnumFilterValue,
+	column: ColumnDef<Row>
+) => {
 	if (filter.values.length === 0) return true;
-	const cell = normalizeText(value).trim();
-	const matches = filter.values.some((candidate) => normalizeText(candidate).trim() === cell);
+	const selectOptions = column.cellConfig?.selectOptions ?? [];
+	const selectName = column.cellConfig?.selectName ?? column.id;
+	const resolvedOption = resolveMainTableSelectOption(value, selectOptions, selectName);
+	const cellTokens = new Set<string>();
+	const addCellToken = (candidate: unknown) => {
+		const token = normalizedToken(candidate);
+		if (token) cellTokens.add(token);
+	};
+
+	addCellToken(value);
+	addCellToken(resolvedOption?.text);
+
+	for (let index = 0; index < selectOptions.length; index += 1) {
+		const option = selectOptions[index];
+		const optionId = getMainTableSelectOptionId(option, selectName, index);
+		if (cellTokens.has(normalizedToken(option.text)) || cellTokens.has(normalizedToken(optionId))) {
+			addCellToken(option.text);
+			addCellToken(optionId);
+		}
+	}
+
+	const matches = filter.values.some((candidate) => cellTokens.has(normalizedToken(candidate)));
 	return filter.mode === "exclude" ? !matches : matches;
 };
 
-const matchesFilterValue = (value: unknown, filter: AutoColumnFilterValue | undefined) => {
+const matchesFilterValue = <Row extends FormTableRow>(
+	value: unknown,
+	filter: AutoColumnFilterValue | undefined,
+	column: ColumnDef<Row>
+) => {
 	if (!filter || !isAutoColumnFilterActive(filter)) return true;
 	switch (filter.type) {
 		case "text":
@@ -323,7 +354,7 @@ const matchesFilterValue = (value: unknown, filter: AutoColumnFilterValue | unde
 		case "boolean":
 			return booleanMatches(value, filter.value);
 		case "enum":
-			return enumMatches(value, filter.value);
+			return enumMatches(value, filter.value, column);
 		default:
 			return true;
 	}
@@ -338,7 +369,7 @@ export function matchesAutoColumnFilters<Row extends FormTableRow>(
 	for (const { column, type } of getAutoFilterColumns(columns)) {
 		const filter = filters[column.id];
 		if (filter && filter.type !== type) continue;
-		if (!matchesFilterValue(row[column.field], filter)) return false;
+		if (!matchesFilterValue(row[column.field], filter, column)) return false;
 	}
 	return true;
 }
