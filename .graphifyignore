@@ -1,0 +1,6 @@
+# Keep Graphify focused on project-owned architecture.
+graphify-out/
+public/pdf-worker/
+.well-known/workflow/
+public/landing-pages/exports/
+.codex-tmp/

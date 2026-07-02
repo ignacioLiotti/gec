@@ -53,7 +53,7 @@ app/layout.tsx              Root layout (server component — fetches user, role
         │     ├── Main nav items (filtered by role)
         │     ├── Macro tables section (from sidebar_macro_tables, role-filtered)
         │     ├── Admin section (admin/owner only)
-        │     ├── Superadmin section (is_superadmin or ignacioliotti@gmail.com)
+        │     ├── Superadmin section (resolved by lib/superadmin.ts)
         │     └── Footer: User profile card
         ├── Header
         │     ├── ExcelObraName (shows obra name on /excel/[id] routes)

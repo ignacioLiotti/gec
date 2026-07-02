@@ -1,0 +1,19 @@
+diff --git a/app/dashboard/page.tsx b/app/dashboard/page.tsx
+index 759037d..ffff2f4 100644
+--- a/app/dashboard/page.tsx
++++ b/app/dashboard/page.tsx
+@@ -2649,11 +2810,11 @@ export default function Home() {
+         porcentaje: 0,
+       };
+ 
+-      const saveResponse = await fetch("/api/obras", {
+-        method: "PUT",
++      const saveResponse = await fetch("/api/obras/bulk", {
++        method: "PATCH",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+-          detalleObras: [...currentObras, obraToCreate],
++          updates: [obraToCreate],
+         }),
+       });
+ 
