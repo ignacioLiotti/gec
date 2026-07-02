@@ -6,7 +6,29 @@
   <title>Sintesis — Sistema operativo de obras | Dossier comercial</title>
   <meta name="description" content="Documentos, datos, alertas y equipo de cada obra en un solo lugar. Landing y dossier comercial de Síntesis, enfoque operativo." />
   <link rel="stylesheet" href="shared/sintesis-tokens.css" />
-  <link rel="stylesheet" href="shared/landing.css" />
+  <link rel="stylesheet" href="shared/landing.css?v=doc-extraction-frame-6" />
+
+  <!-- Tailwind Play CDN — enables utility classes inside the shared JSX components.
+       Preflight is disabled so Tailwind's base reset doesn't override landing.css.
+       Loaded after landing.css so utilities win on explicit conflicts. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      corePlugins: { preflight: false },
+      theme: {
+        extend: {
+          colors: {
+            "orange-primary": "var(--orange-primary)",
+          },
+          fontFamily: {
+            sans: ["var(--font-sans)"],
+            serif: ["var(--font-serif)"],
+            mono: ["var(--font-mono)"],
+          },
+        },
+      },
+    };
+  </script>
 
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
@@ -16,15 +38,19 @@
   <div id="root" data-screen-label="Landing - Operativo"></div>
 
   <script type="text/babel" src="shared/chrome.jsx"></script>
-  <script type="text/babel" src="shared/sections.jsx"></script>
-  <script type="text/babel" src="shared/mocks.jsx"></script>
+  <script type="text/babel" src="shared/sections.jsx?v=landing-snap-1"></script>
+  <script type="text/babel" src="shared/mocks.jsx?v=doc-extraction-35"></script>
+  <script type="text/babel" src="shared/document-navigation-animation.jsx?v=document-nav-15"></script>
+  <script type="text/babel" src="shared/pendientes-flow-animation.jsx?v=pendientes-flow-12"></script>
 
   <script type="text/babel">
     function App() {
+      useLandingStepScroll();
+
       const stats = [
         { eyebrow: "Toda la obra", value: "1 lugar", label: "Documentos, datos, alertas y reportes de cada obra, juntos y conectados.", orange: true },
         { eyebrow: "Sin doble carga", value: "1 carga", label: "El documento se sube una vez; sus datos alimentan tablas, alertas y reportes solos." },
-        { eyebrow: "Mismo equipo", value: "1 verdad", label: "Dirección, administración, obra y oficina técnica miran la misma información." },
+        { eyebrow: "Mismo equipo", value: "1 fuente", label: "Dirección, administración, obra y oficina técnica miran la misma información." },
       ];
 
       const problema = {
@@ -60,24 +86,25 @@
             anchor: "Documentos",
             title: "La obra junta <em>todos sus papeles</em>.",
             lead: "Cada obra reúne sus documentos, datos, certificados, reportes y pendientes en un mismo lugar. La cartera completa se lee en una tabla que se edita como un Excel.",
-            frame: "warm",
-            mock: <ObrasOverview variant="operativo" />,
+            frame: "cool document-navigation-frame",
+            mock: <DocumentNavigationAnimation />,
           },
           {
             anchor: "Extracción",
             title: "De la foto o el PDF <em>al dato</em>.",
             lead: "El sistema lee los documentos que subís, detecta de qué tipo son y completa fechas, montos, proveedores y vencimientos. Cada dato queda marcado con su origen: extraído, manual o mixto.",
-            frame: "cool",
-            mock: <AccionRapida />,
+            frame: "cool doc-extraction-frame",
+            mock: <DocumentExtractionAnimation />,
           },
           {
             anchor: "Alertas",
             title: "Vencimientos y pendientes <em>que avisan a tiempo</em>.",
             lead: "Cada obra tiene pendientes, calendario, recordatorios y alertas atadas a documentos por vencer o tareas sin cerrar. El seguimiento deja de depender de la memoria.",
-            frame: "warm",
-            mock: <FlujoBoard />,
+            frame: "warm pendientes-flow-frame",
+            mock: <PendientesFlowVideo />,
           },
           {
+            hidden: true,
             anchor: "Equipo",
             title: "Quién ve y toca <em>cada parte</em>.",
             lead: "Roles y permisos por módulo, con excepciones por obra. La información queda donde corresponde sin frenar el trabajo del día a día — y cada cambio queda registrado.",
@@ -242,24 +269,24 @@
           <Hero
             variant="operativo"
             eyebrow="Documentación y operación de obra"
-            title='Ordená documentos, datos y alertas de obra <em>en un solo lugar</em>.'
-            lead="Síntesis centraliza la documentación de cada obra, extrae los datos desde fotos y PDFs, avisa de vencimientos y desvíos, y mantiene a administración, obra y dirección trabajando sobre la misma información."
+            title='Ordená tus documentos de obra <em>en un solo lugar</em>.'
+            lead="Síntesis centraliza tu documentación, digitaliza documentos al instante, avisa de vencimientos y desvíos, todo para mantener la dirección de tu obra simple y unificada."
             primaryCta="Ver demo con una obra real"
             secondaryCta="Probar en una obra 30 días"
             trust={["Documentos por obra", "Extracción de datos", "Alertas y vencimientos", "Roles y permisos", "Exportable a Excel/PDF"]}
           />
-          <DossierBar note="Guardala como PDF y compartila con quien decide: incluye el producto pantalla por pantalla, los módulos, la ficha técnica y el plan de arranque." />
+          {/* <DossierBar note="Guardala como PDF y compartila con quien decide: incluye el producto pantalla por pantalla, los módulos, la ficha técnica y el plan de arranque." /> */}
           <StatsStrip items={stats} />
           <Split {...problema} />
           <QuickReference {...quick} />
-          <AnchoredFeatures {...anchored} />
+          <AnchoredFeatures {...anchored} hideHeader />
           <Perfiles {...perfiles} />
-          <Flujo {...flujo} />
-          <DemoSection {...demo} />
+          {/* <Flujo {...flujo} /> */}
+          {/* <DemoSection {...demo} /> */}
           <ModuloCatalogo {...modulos} />
-          <FichaTecnica {...ficha} />
+          {/* <FichaTecnica {...ficha} /> */}
           <DarkSteps {...darkSteps} />
-          <Split {...split} />
+          <Split {...split} stacked />
           <Cierre {...cierre} />
           <Footer variant="operativo" />
         </>

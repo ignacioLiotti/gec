@@ -1,4 +1,11 @@
-/* global React */
+"use client";
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+import * as React from "react";
+
+import { IBell, IDoc, IDownload, IFilter } from "./landing-chrome";
+
 const { useState } = React;
 
 // ============================================================
@@ -4257,7 +4264,8 @@ function CarteraDashboard() {
 	);
 }
 
-Object.assign(window, {
+
+export {
 	ObrasOverview,
 	ObraDetail,
 	PermisosMatrix,
@@ -4276,4 +4284,4 @@ Object.assign(window, {
 	StatusBadge,
 	SegmentControl,
 	PillTabs,
-});
+};

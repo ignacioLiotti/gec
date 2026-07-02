@@ -1,5 +1,13 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+import FinancieroLandingClient from "../_components/financiero-landing-client";
+
+export const metadata: Metadata = {
+	title: "Sintesis — Control financiero de obras",
+	description:
+		"Certificados, avances, saldos y respaldo documental por obra. Landing y dossier comercial de Sintesis, enfoque financiero.",
+};
 
 export default function FinancieroLandingPage() {
-	redirect("/landing-pages/landings/Sintesis%20-%20Financiero.html");
+	return <FinancieroLandingClient />;
 }

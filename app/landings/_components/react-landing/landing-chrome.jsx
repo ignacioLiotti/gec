@@ -1,4 +1,9 @@
-/* global React */
+"use client";
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+import * as React from "react";
+
 const { useState, useEffect, useRef } = React;
 
 // ============================================================
@@ -225,32 +230,6 @@ const IDownload = (p) => (
 	</Icon>
 );
 
-Object.assign(window, {
-	IArrow,
-	ICheck,
-	IPlay,
-	ISpark,
-	IAlert,
-	IFolder,
-	ILayers,
-	ITable,
-	IShield,
-	IZap,
-	IBell,
-	IUsers,
-	IWallet,
-	IChart,
-	IDoc,
-	IRefresh,
-	IBuilding,
-	IKey,
-	IEye,
-	IFilter,
-	ITrend,
-	IClock,
-	IDownload,
-});
-
 // ============================================================
 // NAV
 // ============================================================
@@ -260,7 +239,7 @@ function Nav({ variant }) {
 			? { href: "/landings/financiero", label: "Ver enfoque financiero" }
 			: { href: "/landings/operativo", label: "Ver enfoque operativo" };
 	return (
-		<nav className='nav'>
+		<nav className={`nav nav-${variant || "default"}`}>
 			<div className='nav-inner'>
 				<a
 					className='nav-brand'
@@ -434,21 +413,61 @@ function Hero({
 	primaryCta,
 	secondaryCta,
 	trust,
+	visual,
 }) {
+	const isOperativo = variant === "operativo" && visual;
+	const titleEmMatch = title.match(/^(.*)<em>(.*)<\/em>(.*)$/);
+	const titleBeforeEm = titleEmMatch?.[1]?.trim();
+	const titleEm = titleEmMatch?.[2]?.trim();
+	const titleAfterEm = titleEmMatch?.[3]?.trim();
+	const titleBeforeWords = titleBeforeEm ? titleBeforeEm.split(" ") : [];
+	const titleBridge =
+		titleBeforeWords.length > 2 ? titleBeforeWords.slice(-2).join(" ") : "";
+	const titleMain = titleBridge
+		? titleBeforeWords.slice(0, -2).join(" ")
+		: titleBeforeEm;
+	const titleEmWords = titleEm ? titleEm.split(" ") : [];
+	const titleEmLastWord = titleEmWords.length > 1 ? titleEmWords.pop() : "";
+	const titleEmBeforeIcon = titleEmWords.join(" ");
+
 	return (
-		<section className='hero'>
+		<section className={`hero hero-${variant || "default"}`}>
 			<HeroBackground variant={variant} />
-			<div className='wrap-narrow'>
+			<div className={isOperativo ? "hero-copy-wrap" : "wrap-narrow"}>
 				<div className='hero-eyebrow-row'>
 					<span className='hero-eyebrow'>
 						<span className='hero-eyebrow-dot' />
 						{eyebrow}
 					</span>
 				</div>
-				<h1
-					className='serif-display hero-title'
-					dangerouslySetInnerHTML={{ __html: title }}
-				/>
+				{isOperativo && titleBeforeEm && titleEm ? (
+					<h1 className='serif-display hero-title hero-title-structured'>
+						<span className='hero-title-line'>{titleMain}</span>
+						<span className='hero-title-line hero-title-combo'>
+							{titleBridge ? <span>{titleBridge}</span> : null}
+							<em>
+								{titleEmBeforeIcon || titleEm}
+								{titleEmLastWord ? (
+									<>
+										{" "}
+										<span
+											className='hero-title-mark'
+											aria-hidden='true'>
+											<IDoc size={34} />
+										</span>{" "}
+										{titleEmLastWord}
+									</>
+								) : null}
+							</em>
+						</span>
+						{titleAfterEm ? titleAfterEm : null}
+					</h1>
+				) : (
+					<h1
+						className='serif-display hero-title max-w-full! text-[clamp(36px,4.2vw,80px)]!'
+						dangerouslySetInnerHTML={{ __html: title }}
+					/>
+				)}
 				<p className='hero-lead'>{lead}</p>
 				<div className='hero-cta-row'>
 					<button
@@ -459,12 +478,52 @@ function Hero({
 					</button>
 					<button className='btn btn-light'>{secondaryCta}</button>
 				</div>
-				<div className='hero-trust'>
-					{trust.map((t) => (
-						<span key={t}>{t}</span>
-					))}
-				</div>
+				{isOperativo ? (
+					<div className='hero-proof'>
+						<div
+							className='hero-proof-avatars'
+							aria-hidden='true'>
+							{trust.slice(0, 5).map((t, i) => (
+								<span
+									key={t}
+									style={{ "--avatar-index": i }}
+								/>
+							))}
+						</div>
+						<p>
+							{trust.slice(0, 3).join(", ")}
+							<br />
+							<span>{trust.slice(3).join(" / ")}</span>
+						</p>
+					</div>
+				) : (
+					<div className='hero-trust'>
+						{trust.map((t) => (
+							<span key={t}>{t}</span>
+						))}
+					</div>
+				)}
 			</div>
+			{isOperativo ? (
+				<div className='hero-product-stage'>
+					<div className='hero-product-window'>
+						<div className='hero-product-menubar'>
+							<div className='hero-product-brand'>
+								<span className='hero-product-logo' />
+								<strong>Sintesis</strong>
+							</div>
+							<div className='hero-product-menu-links'>
+								<span>Obras</span>
+								<span>Documentos</span>
+								<span>Alertas</span>
+								<span>Reportes</span>
+							</div>
+							<div className='hero-product-status'>Hoy 9:41</div>
+						</div>
+						<div className='hero-product-screen'>{visual}</div>
+					</div>
+				</div>
+			) : null}
 		</section>
 	);
 }
@@ -611,4 +670,33 @@ function Footer({ variant }) {
 	);
 }
 
-Object.assign(window, { Nav, Hero, HeroBackground, StatsStrip, Footer });
+export {
+	IArrow,
+	ICheck,
+	IPlay,
+	ISpark,
+	IAlert,
+	IFolder,
+	ILayers,
+	ITable,
+	IShield,
+	IZap,
+	IBell,
+	IUsers,
+	IWallet,
+	IChart,
+	IDoc,
+	IRefresh,
+	IBuilding,
+	IKey,
+	IEye,
+	IFilter,
+	ITrend,
+	IClock,
+	IDownload,
+	Nav,
+	Hero,
+	HeroBackground,
+	StatsStrip,
+	Footer,
+};

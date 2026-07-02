@@ -1,4 +1,11 @@
-/* global React */
+"use client";
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+import * as React from "react";
+
+import { IArrow, IDownload } from "./landing-chrome";
+
 const { useState, useEffect, useRef } = React;
 
 const WRAP =
@@ -115,7 +122,7 @@ function EmbedFrameArt({ variant = "cool", seed = 0 }) {
 					y='-6%'
 					width='112%'
 					height='112%'>
-					<feGaussianBlur stdDeviation='1' />
+					<feGaussianBlur stdDeviation='8' />
 				</filter>
 				<filter id={uid + "-grain"}>
 					<feTurbulence
@@ -1110,7 +1117,8 @@ function FichaTecnica({ eyebrow, title, lead, rows }) {
 	);
 }
 
-Object.assign(window, {
+
+export {
 	useLandingStepScroll,
 	QuickReference,
 	AnchoredFeatures,
@@ -1124,4 +1132,4 @@ Object.assign(window, {
 	ModuloCatalogo,
 	FichaTecnica,
 	ProofStrip,
-});
+};

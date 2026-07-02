@@ -1,3 +1,343 @@
+/* Static landing styles for the React landing modules. */
+/* =====================================================================
+   Sintesis Design System — Tokens
+   Lifted from app/globals.css + observed usage in app/page.tsx
+   ===================================================================== */
+
+:root {
+	/* ---------- Brand ---------- */
+	--orange-primary: #ff5800;       /* signature construction-signal orange */
+	--orange-500:     #f97316;       /* tailwind orange-500, used in motion/glows */
+	--orange-400:     #fb923c;
+	--orange-300:     #fdba74;
+	--orange-100:     #ffedd5;
+	--orange-50:      #fff7ed;
+
+	/* ---------- Canvas / neutrals (warm stone) ---------- */
+	--stone-50:  #fafaf9;
+	--stone-100: #f5f5f4;
+	--stone-200: #e7e5e4;
+	--stone-300: #d6d3d1;
+	--stone-400: #a8a29e;
+	--stone-500: #78716c;
+	--stone-600: #57534e;
+	--stone-700: #44403c;
+	--stone-800: #292524;
+	--stone-900: #1c1917;
+
+	/* ---------- Semantic surfaces ---------- */
+	--background: #f8f8f6;           /* oklch(0.975 0 106) — warm off-white */
+	--foreground: #252525;           /* oklch(0.145 0 0) — near black */
+	--card: #ffffff;
+	--card-foreground: var(--foreground);
+	--popover: #ffffff;
+	--popover-foreground: var(--foreground);
+	--primary: #444444;              /* dark neutral button bg */
+	--primary-foreground: #fafafa;
+	--secondary: #f3f3f3;
+	--secondary-foreground: #343434;
+	--muted: #e6e6e3;
+	--muted-foreground: #777777;
+	--accent: #f3f3f3;
+	--accent-foreground: #343434;
+	--destructive: #c9323a;
+	--border: rgba(28, 25, 23, 0.08);
+	--input: #e8e8e8;
+	--ring: #b1b1b1;
+
+	/* ---------- Sidebar (app shell) ---------- */
+	--sidebar: #f0efea;              /* warm off-white, slightly tinted */
+	--sidebar-foreground: hsl(240 5.3% 26.1%);
+	--sidebar-primary: hsl(240 5.9% 10%);
+	--sidebar-primary-foreground: hsl(0 0% 98%);
+	--sidebar-accent: hsl(50, 17%, 93%);
+	--sidebar-accent-foreground: hsl(240 5.9% 10%);
+	--sidebar-border: hsl(220 13% 91%);
+	--sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+	/* ---------- Radii ---------- */
+	--radius: 0.375rem;              /* 6px — base */
+	--radius-sm: calc(var(--radius) - 4px); /* 2px */
+	--radius-md: calc(var(--radius) - 2px); /* 4px */
+	--radius-lg: var(--radius);              /* 6px */
+	--radius-xl: calc(var(--radius) + 4px);  /* 10px */
+	--radius-2xl: 1rem;                      /* 16px — marketing surfaces */
+	--radius-3xl: 1.5rem;                    /* 24px — outer frames */
+
+	/* ---------- Shadows ---------- */
+	--shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.03);
+	--shadow-card:
+		0 0 0 1px #ffffff14 inset, 0 0 0 1px #09090b1f,
+		0 0.7px 0.9px -1px #09090b14, 0 3px 4px -2px #09090b24;
+	--shadow-button-default:
+		0px 2px 4px rgba(0, 0, 0, 0.10),
+		0px 0px 0px 1px #0D0D0D;
+	--shadow-button-default-hover:
+		0px 4px 8px rgba(0, 0, 0, 0.15),
+		0px 0px 0px 1px #0D0D0D;
+	--shadow-button-secondary:
+		0px 2px 4px rgba(0, 0, 0, 0.10),
+		0px 0px 0px 1px rgba(0, 0, 0, 0.16);
+	--shadow-button-outline:
+		0 0 0 1px #00000012,
+		0 1px 0 0 #fff inset,
+		0 8px 3px 0 #0b090c03,
+		0 5px 3px 0 #0b090c08,
+		0 2px 2px 0 #0b090c0d,
+		0 1px 1px 0 #0b090c0f,
+		0 -1px 0 0 #0000001f inset;
+	--shadow-orange-glow: 0 0 28px 8px rgba(249, 115, 22, 0.25);
+	--shadow-orange-soft: 0 0 0 6px rgba(249, 115, 22, 0.10);
+
+	/* ---------- Gradients ---------- */
+	--bg-login-button:
+		radial-gradient(100% 50% at 50% 0, #fff3 0, #fff0 100%),
+		rgba(250, 250, 250, 0.5);
+	--bg-button-default:
+		linear-gradient(180deg, #201E25 0%, #323137 100%),
+		linear-gradient(180deg, #4B4951 0%, #313036 70%);
+	--bg-button-secondary:
+		linear-gradient(180deg, rgba(227,227,227,0.4) 0%, rgba(227,227,227,0.2) 100%),
+		linear-gradient(180deg, #FDFDFD 0%, rgba(241,241,241,0) 100%);
+
+	/* ---------- Type — families ---------- */
+	--font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		"Helvetica Neue", Arial, sans-serif;
+	--font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+		Consolas, monospace;
+	--font-serif: var(--font-geist-serif), Georgia, "Times New Roman", serif;
+
+	/* ---------- Type — fluid scale (based on observed usage) ---------- */
+	--fs-eyebrow:   10px;   /* uppercase tracked labels */
+	--fs-eyebrow-l: 11px;
+	--fs-xs:   12px;
+	--fs-sm:   13px;        /* shadcn --text-sm = 0.8125rem */
+	--fs-base: 14px;
+	--fs-lg:   16px;
+	--fs-xl:   18px;
+	--fs-2xl:  20px;
+	--fs-3xl:  24px;
+	--fs-h2:   28px;        /* section H2 desktop */
+	--fs-h1-m: 36px;        /* hero H1 mobile */
+	--fs-h1:   72px;        /* hero H1 desktop */
+	--fs-stat: 120px;       /* stat counter desktop */
+
+	/* ---------- Data-source legend (Documentos) ---------- */
+	--src-extraction:  #16a34a;   /* green-600 — extracción de datos */
+	--src-manual:      #2563eb;   /* blue-600 — entrada manual */
+	--src-mixed:       #9333ea;   /* purple-600 — extracción + manual */
+
+	/* ---------- Notch (signature) ---------- */
+	--notch-bg:      var(--card);
+	--notch-stroke:  var(--border);
+	--notch-tray:    var(--stone-100);
+
+	/* ---------- Type — weight anchors ---------- */
+	--fw-light:     300;
+	--fw-regular:   400;
+	--fw-medium:    500;
+	--fw-semibold:  600;
+	--fw-bold:      700;
+	--fw-black:     900;
+}
+
+/* ---------- Base ---------- */
+html, body {
+	background: var(--background);
+	color: var(--foreground);
+	font-family: var(--font-sans);
+	font-size: var(--fs-base);
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* =====================================================================
+   Semantic typographic primitives
+   ===================================================================== */
+
+.h1-hero {
+	font-family: var(--font-sans);
+	font-weight: var(--fw-light);
+	font-size: var(--fs-h1-m);
+	line-height: 1.05;
+	letter-spacing: -0.02em;
+	color: var(--stone-900);
+}
+@media (min-width: 768px) {
+	.h1-hero { font-size: var(--fs-h1); line-height: 0.95; }
+}
+
+.h2 {
+	font-family: var(--font-sans);
+	font-weight: var(--fw-bold);
+	font-size: var(--fs-xl);
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+	color: var(--stone-900);
+}
+@media (min-width: 768px) {
+	.h2 { font-size: var(--fs-h2); }
+}
+
+.h3 {
+	font-family: var(--font-sans);
+	font-weight: var(--fw-semibold);
+	font-size: var(--fs-lg);
+	line-height: 1.3;
+	color: var(--stone-900);
+}
+
+.eyebrow {
+	font-family: var(--font-sans);
+	font-weight: var(--fw-bold);
+	font-size: var(--fs-eyebrow);
+	text-transform: uppercase;
+	letter-spacing: 0.15em;
+	color: var(--stone-400);
+}
+
+.eyebrow-active {
+	composes: eyebrow;
+	color: #d65a07; /* orange-600 */
+}
+
+.body {
+	font-family: var(--font-sans);
+	font-weight: var(--fw-regular);
+	font-size: var(--fs-base);
+	line-height: 1.6;
+	color: var(--stone-800);
+}
+
+.body-sm {
+	font-family: var(--font-sans);
+	font-size: var(--fs-sm);
+	line-height: 1.55;
+	color: var(--stone-500);
+}
+
+.mono {
+	font-family: var(--font-mono);
+	font-feature-settings: "tnum" 1;
+}
+
+.stat {
+	font-family: var(--font-sans);
+	font-weight: var(--fw-black);
+	font-size: 72px;
+	line-height: 1;
+	letter-spacing: -0.04em;
+	color: var(--stone-900);
+	font-variant-numeric: tabular-nums;
+}
+@media (min-width: 768px) {
+	.stat { font-size: var(--fs-stat); }
+}
+
+.wordmark {
+	font-family: var(--font-sans);
+	font-weight: var(--fw-bold);
+	letter-spacing: 0.15em;
+	text-transform: uppercase;
+}
+
+.kbd {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	padding: 2px 6px;
+	border-radius: 4px;
+	background: var(--stone-100);
+	border: 1px solid var(--stone-200);
+	color: var(--stone-600);
+}
+
+/* =====================================================================
+   Signature: NOTCH TAILS — concave bezier joining a "tab" to a tray.
+   .notch-tab    → a pill that hosts content and grows tails at its base.
+   .notch-tray   → the surface (page bg) the tab sits in.
+   .notch-tail   → svg element placed at the active tab's bottom-left
+                   and bottom-right corners.
+   The tail's fill should equal the tab's background; its stroke should
+   equal the tab's border. Drives the recessed/folder-tab look on
+   sectioned navs (General / Flujo / Documentos).
+   ===================================================================== */
+.notch-tab {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 18px;
+	background: var(--notch-bg);
+	border: 1px solid var(--notch-stroke);
+	border-bottom-color: transparent;
+	border-radius: 10px 10px 0 0;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--stone-900);
+	cursor: pointer;
+}
+.notch-tab--idle {
+	background: transparent;
+	border-color: transparent;
+	color: var(--stone-500);
+}
+.notch-tab--idle:hover {
+	color: var(--stone-700);
+}
+.notch-tail {
+	position: absolute;
+	bottom: -1px;
+	height: 28px;
+	width: 40px;
+	pointer-events: none;
+}
+.notch-tail--right { right: -39px; }
+.notch-tail--left  { left:  -39px; transform: scaleX(-1); }
+
+/* Variant: full-bleed bar of tabs joined to a tray surface below.
+   Use this when the tab strip sits flush with the content below it
+   (the Documentos pattern). */
+.notch-bar {
+	display: flex;
+	align-items: flex-end;
+	gap: 0;
+	background: var(--notch-tray);
+	border-bottom: 1px solid var(--border);
+	padding: 8px 16px 0;
+}
+
+/* Pillbox toolbar — search + chip buttons recessed into a rounded tray.
+   Two of these placed side-by-side reproduce the Tus Obras header. */
+.tray {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px;
+	background: #fff;
+	border: 1px solid var(--stone-200);
+	border-radius: 12px;
+	box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+}
+.tray__chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	height: 32px;
+	border-radius: 8px;
+	border: 0;
+	background: transparent;
+	font: inherit;
+	font-size: 12px;
+	color: var(--stone-700);
+	cursor: pointer;
+}
+.tray__chip:hover { background: var(--stone-100); }
+.tray__chip--active { background: var(--stone-100); color: var(--stone-900); font-weight: 500; }
+.tray__chip--dark { background: var(--stone-900); color: #fff; }
+.tray__chip--dark:hover { background: var(--stone-800); }
+
+
 /* Landing page styles — multica-inspired, Sintesis brand */
 
 * {
@@ -281,6 +621,290 @@ body {
 	height: 6px;
 	border-radius: 9999px;
 	background: var(--stone-400);
+}
+
+/* Operativo hero: light centered product reveal */
+.nav-operativo {
+	position: sticky;
+	top: 0;
+	border-bottom: 0;
+	background: #f7f5f1;
+	padding: 28px 24px 0;
+}
+.nav-operativo .nav-inner {
+	max-width: 1080px;
+	min-height: 58px;
+	border-radius: 9999px;
+	padding: 8px 8px 8px 20px;
+	background: rgba(255, 255, 255, 0.76);
+	border: 1px solid rgba(28, 25, 23, 0.08);
+	box-shadow:
+		0 18px 45px rgba(28, 25, 23, 0.08),
+		inset 0 1px 0 rgba(255, 255, 255, 0.8);
+	backdrop-filter: blur(18px) saturate(140%);
+	-webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+.nav-operativo .nav-brand,
+.nav-operativo .nav-links a,
+.nav-operativo .btn-ghost {
+	color: var(--stone-700);
+}
+.nav-operativo .nav-brand {
+	letter-spacing: -0.02em;
+	text-transform: none;
+	font-size: 15px;
+}
+.nav-operativo .nav-brand-dot,
+.hero-product-logo {
+	background: var(--orange-primary);
+	box-shadow: 0 0 0 4px rgba(255, 88, 0, 0.18);
+}
+.nav-operativo .nav-links a:hover,
+.nav-operativo .nav-brand:hover {
+	color: var(--stone-950, #0c0a09);
+}
+.nav-operativo .btn {
+	background: rgba(28, 25, 23, 0.06);
+	color: var(--stone-800);
+	box-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.7) inset,
+		0 1px 2px rgba(28, 25, 23, 0.05);
+}
+.nav-operativo .btn-primary {
+	background: var(--orange-primary);
+	color: #fff;
+	box-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.22) inset,
+		0 12px 28px rgba(255, 88, 0, 0.22);
+}
+.hero-operativo {
+	padding: 126px 24px 0;
+	background:
+		linear-gradient(180deg, #fbfaf7 0%, #f7f5f1 72%, #f2eee7 100%);
+	color: var(--stone-900);
+}
+.hero-operativo .hero-bg {
+	display: none;
+}
+.hero-copy-wrap {
+	position: relative;
+	z-index: 2;
+	max-width: 1120px;
+	margin: 0 auto;
+	text-align: center;
+}
+.hero-operativo .hero-eyebrow-row {
+	margin-bottom: 34px;
+}
+.hero-operativo .hero-eyebrow {
+	padding: 7px 15px 7px 8px;
+	background: rgba(255, 255, 255, 0.84);
+	border-color: rgba(28, 25, 23, 0.08);
+	color: var(--stone-600);
+	box-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.8) inset,
+		0 8px 20px rgba(28, 25, 23, 0.05);
+}
+.hero-operativo .hero-eyebrow-dot {
+	width: auto;
+	height: auto;
+	padding: 2px 8px;
+	background: rgba(255, 88, 0, 0.18);
+	box-shadow: none;
+	animation: none;
+	color: #ffb37a;
+	font-size: 10px;
+	line-height: 1.3;
+}
+.hero-operativo .hero-eyebrow-dot::before {
+	content: "01";
+}
+.hero-operativo .hero-title {
+	max-width: 100%;
+	color: #14110f;
+	font-family: var(--font-sans);
+	font-size: clamp(52px, 5.8vw, 82px);
+	font-weight: 760;
+	line-height: 1;
+	letter-spacing: 0;
+}
+.hero-title-structured {
+	display: grid;
+	justify-items: center;
+	gap: 6px;
+}
+.hero-title-line {
+	display: block;
+}
+.hero-title-combo {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.16em;
+	flex-wrap: nowrap;
+}
+.hero-operativo .hero-title em {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.1em;
+	margin: 0 0.02em;
+	padding: 0 0.2em 0.07em;
+	border-radius: 9999px;
+	background: #ffd9c4;
+	color: var(--orange-primary);
+	font-style: normal;
+	line-height: 0.96;
+	white-space: nowrap;
+}
+.hero-title-mark {
+	display: inline-flex;
+	width: 0.72em;
+	height: 0.72em;
+	align-items: center;
+	justify-content: center;
+	vertical-align: -0.09em;
+	border-radius: 0.22em;
+	background:
+		linear-gradient(145deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 42%),
+		linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+	color: #fff;
+	box-shadow:
+		0 0 0 0.04em rgba(255, 255, 255, 0.74),
+		0 0.11em 0.28em rgba(37, 99, 235, 0.28);
+	transform: rotate(-5deg);
+}
+.hero-title-mark svg {
+	width: 0.42em;
+	height: 0.42em;
+	stroke-width: 2.25;
+}
+.hero-operativo .hero-lead {
+	margin-top: 30px;
+	color: var(--stone-600);
+	font-size: 18px;
+}
+.hero-operativo .hero-cta-row {
+	margin-top: 42px;
+}
+.hero-operativo .btn {
+	min-height: 48px;
+	padding: 14px 24px;
+	transition:
+		transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+		background 160ms ease,
+		box-shadow 160ms ease;
+}
+.hero-operativo .btn:active,
+.nav-operativo .btn:active {
+	transform: scale(0.97);
+}
+.hero-operativo .btn-primary {
+	background: var(--orange-primary);
+	color: #fff;
+	box-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.22) inset,
+		0 12px 30px rgba(255, 88, 0, 0.35);
+}
+.hero-operativo .btn-light {
+	border: 0;
+	background: rgba(28, 25, 23, 0.08);
+	color: var(--stone-800);
+	box-shadow:
+		0 1px 0 rgba(255, 255, 255, 0.55) inset,
+		0 8px 18px rgba(28, 25, 23, 0.06);
+}
+.hero-proof {
+	display: inline-flex;
+	align-items: center;
+	gap: 16px;
+	margin-top: 32px;
+	color: var(--stone-600);
+	text-align: left;
+}
+.hero-proof-avatars {
+	display: flex;
+	align-items: center;
+	padding-left: 14px;
+}
+.hero-proof-avatars span {
+	width: 34px;
+	height: 34px;
+	margin-left: -12px;
+	border: 2px solid #f7f5f1;
+	border-radius: 9999px;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)),
+		hsl(calc(24 + var(--avatar-index) * 32) 70% 52%);
+}
+.hero-proof p {
+	margin: 0;
+	font-size: 13.5px;
+	line-height: 1.35;
+}
+.hero-proof span {
+	color: var(--stone-500);
+}
+.hero-product-stage {
+	position: relative;
+	z-index: 1;
+	width: min(92vw, 1540px);
+	margin: 80px auto 0;
+	padding-bottom: 0;
+}
+.hero-product-window {
+	overflow: hidden;
+	border-radius: 26px 26px 0 0;
+	border: 1px solid rgba(28, 25, 23, 0.1);
+	background: #f7f5f1;
+	box-shadow:
+		0 -1px 0 rgba(255, 255, 255, 0.8),
+		0 24px 80px rgba(28, 25, 23, 0.16);
+}
+.hero-product-menubar {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 28px;
+	min-height: 44px;
+	padding: 0 26px;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 246, 238, 0.74)),
+		#fff2e9;
+	color: #151515;
+	font-size: 13px;
+	font-weight: 650;
+}
+.hero-product-brand,
+.hero-product-menu-links,
+.hero-product-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 18px;
+	min-width: 0;
+}
+.hero-product-logo {
+	width: 18px;
+	height: 18px;
+	border-radius: 9999px;
+}
+.hero-product-menu-links {
+	justify-content: flex-start;
+	color: rgba(21, 21, 21, 0.78);
+}
+.hero-product-status {
+	justify-content: flex-end;
+	white-space: nowrap;
+}
+.hero-product-screen {
+	height: clamp(420px, 42vw, 660px);
+	overflow: hidden;
+	background: var(--background);
+}
+.hero-product-screen > * {
+	min-height: 100%;
+}
+.hero-operativo + .stats {
+	border-top: 0;
 }
 
 /* ----- Stats strip ----- */
@@ -854,6 +1478,32 @@ body {
 	.nav-links {
 		display: none;
 	}
+	.nav-operativo {
+		padding: 18px 16px 0;
+	}
+	.nav-operativo .nav-inner {
+		min-height: 54px;
+		padding-left: 16px;
+	}
+	.hero-operativo {
+		padding-top: 88px;
+	}
+	.hero-operativo .hero-title {
+		max-width: 100%;
+	}
+	.hero-title-combo {
+		flex-wrap: wrap;
+	}
+	.hero-product-stage {
+		width: calc(100vw - 32px);
+		margin-top: 58px;
+	}
+	.hero-product-screen {
+		height: 430px;
+	}
+	.hero-product-menu-links {
+		display: none;
+	}
 	.stats {
 		width: calc(100% - 32px);
 	}
@@ -866,6 +1516,62 @@ body {
 	}
 }
 @media (max-width: 640px) {
+	.nav-operativo .nav-actions .btn-ghost {
+		display: none;
+	}
+	.nav-operativo .btn-primary {
+		padding: 10px 14px;
+		font-size: 12px;
+	}
+	.hero-operativo {
+		padding: 72px 16px 0;
+	}
+	.hero-operativo .hero-eyebrow {
+		max-width: 100%;
+		letter-spacing: 0.08em;
+	}
+	.hero-operativo .hero-title {
+		font-size: 44px;
+		max-width: 100%;
+	}
+	.hero-title-structured {
+		gap: 8px;
+	}
+	.hero-title-combo {
+		gap: 0.1em;
+	}
+	.hero-operativo .hero-title em {
+		max-width: calc(100vw - 44px);
+		font-size: 0.9em;
+	}
+	.hero-title-mark {
+		width: 0.82em;
+		height: 0.82em;
+		vertical-align: -0.12em;
+	}
+	.hero-operativo .hero-lead {
+		font-size: 16px;
+	}
+	.hero-proof {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+	}
+	.hero-product-stage {
+		width: calc(100vw - 24px);
+		margin-top: 48px;
+	}
+	.hero-product-window {
+		border-radius: 20px 20px 0 0;
+	}
+	.hero-product-menubar {
+		grid-template-columns: 1fr auto;
+		padding: 0 16px;
+	}
+	.hero-product-screen {
+		height: 360px;
+	}
 	.dark-grid {
 		grid-template-columns: 1fr;
 	}
