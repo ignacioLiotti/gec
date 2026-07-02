@@ -1,0 +1,607 @@
+{
+  "id": "whole-app-architecture-investigation",
+  "title": "How the whole app holds together",
+  "summary": "**Default.** `next.config.ts` boots a Next.js app with workflow support, PDF tracing, Sentry instrumentation, and the app router shell.\n\n**Path.** `RootLayout` resolves `resolveRequestAccessContext()`, passes tenant/demo/user state into `PathnameLayoutShell`, and the obra workspace fans out into document, extraction, generation, and reporting routes.\n\n**Invariant.** The app stays coherent when tenant access, storage paths, lineage keys, generated PDFs, and workflow side effects all preserve the same `tenantId` and `obraId` boundaries.",
+  "purpose": "investigation",
+  "kind": "architecture-trace",
+  "authoredAt": {
+    "sha": "786d99f48e9c60070e9b2823784c074663a9d05b",
+    "ref": "mobile-navigation"
+  },
+  "markers": [
+    {
+      "id": "next-runtime-config",
+      "label": "Next runtime configuration",
+      "sourcePath": "next.config.ts",
+      "description": "`next.config.ts` is the runtime boundary for the app. It enables React strict mode and React Compiler, pins the Turbopack root, traces Chromium files for `/api/pdf-render`, and raises the server action body limit for large document-generation payloads.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 10,
+        "endLine": 33,
+        "focusLine": 17,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "workflow-sentry-wrapper",
+      "label": "Workflow and Sentry wrapper",
+      "sourcePath": "next.config.ts",
+      "description": "`buildConfig()` decides whether `withWorkflow()` wraps the Next config, then conditionally wraps production Vercel builds with Sentry. This is where background workflow support joins the app before deployment.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 116,
+        "endLine": 124,
+        "focusLine": 120,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "root-layout-resolves-access",
+      "label": "Root layout resolves access",
+      "sourcePath": "app/layout.tsx",
+      "description": "`RootLayout` creates the request-scoped Supabase client and calls `resolveRequestAccessContext()` before rendering the shell. This is the first central join between cookies, user identity, tenant selection, demo access, and UI state.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 120,
+        "endLine": 143,
+        "focusLine": 121,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "cookie-supabase-client",
+      "label": "Cookie-backed Supabase client",
+      "sourcePath": "utils/supabase/server.ts",
+      "description": "`createClient()` builds the server-side Supabase client from request cookies and `NEXT_PUBLIC_SUPABASE_*` configuration. Server components can read cookies, while cookie writes are best-effort because some calls happen from Server Components.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 5,
+        "endLine": 34,
+        "focusLine": 8,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "admin-supabase-client",
+      "label": "Service-role Supabase client",
+      "sourcePath": "utils/supabase/admin.ts",
+      "description": "`createSupabaseAdminClient()` is the explicit service-role bypass. It obtains `SUPABASE_SERVICE_ROLE_KEY` through `requireVersionedSecret()` and disables persisted auth sessions, so callers need a clear server-only reason to use it.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 5,
+        "endLine": 20,
+        "focusLine": 7,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "access-context-subject",
+      "label": "Access context chooses user or demo",
+      "kind": "subject",
+      "sourcePath": "lib/demo-session.ts",
+      "description": "`resolveRequestAccessContext()` is the investigation target for the whole app. It returns a normal user context when Supabase auth has a user, otherwise it resolves a demo session and swaps to an admin-backed Supabase client with a synthetic demo user and membership.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 270,
+        "endLine": 340,
+        "focusLine": 270,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "layout-shell-receives-context",
+      "label": "Layout shell receives app state",
+      "sourcePath": "app/layout.tsx",
+      "description": "`PathnameLayoutShell` receives the user, roles, document permissions, tenants, demo session, and demo capabilities. This is the server-to-client handoff that makes navigation, permissions, and visible app state consistent after access resolution.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 326,
+        "endLine": 344,
+        "focusLine": 333,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "admin-configuration-surface",
+      "label": "Admin configuration surfaces",
+      "sourcePath": "app/admin/AGENT_CONTEXT.md",
+      "description": "`app/admin` owns tenant and superadmin configuration surfaces: users, roles, defaults, document flows, macro tables, tenant secrets, demo links, and tenant management. Its local rules require tenant resolution and admin/superadmin checks before these configuration screens mutate database-backed behavior.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 3,
+        "endLine": 30,
+        "focusLine": 5,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "excel-page-initial-data",
+      "label": "Excel page initial data",
+      "sourcePath": "lib/excel/page-data.ts",
+      "description": "`getExcelPageInitialData()` reuses `resolveRequestAccessContext()` for the obras list. It refuses anonymous access, checks demo capability for `excel`, and loads tenant main-table configuration and obras together.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 169,
+        "endLine": 195,
+        "focusLine": 172,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "excel-list-client-hydrates",
+      "label": "Excel list hydrates client state",
+      "sourcePath": "app/excel/desktop-excel-page-full.tsx",
+      "description": "`DesktopExcelPageClient` receives server-loaded table config and obras, then maps the obra rows into the client table state. This is the main portfolio surface before the user drills into a single obra.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 249,
+        "endLine": 268,
+        "focusLine": 266,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "file-manager-upload-call",
+      "label": "File manager uploads document",
+      "sourcePath": "app/excel/[obraId]/tabs/file-manager/file-manager.tsx",
+      "description": "`FileManager` sends selected files to `/api/obras/${obraId}/documents/upload` with `file` and `folderPath` in `FormData`. The UI expects the route to return the final storage path and possibly renamed file name after collision handling.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 3838,
+        "endLine": 3864,
+        "focusLine": 3847,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "upload-route-tenant-gate",
+      "label": "Upload route gates tenant access",
+      "sourcePath": "app/api/obras/[id]/documents/upload/route.ts",
+      "description": "`POST /documents/upload` resolves access, rejects anonymous callers, checks demo `excel` capability, requires `tenantId`, and verifies the `obra` belongs to the current tenant and is not soft-deleted before touching storage.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 89,
+        "endLine": 116,
+        "focusLine": 96,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "upload-route-writes-storage",
+      "label": "Upload route writes storage",
+      "sourcePath": "app/api/obras/[id]/documents/upload/route.ts",
+      "description": "The upload route checks tenant storage budget, generates a collision-safe storage path, writes the file to the `obra-documents` bucket, and records upload metadata in `obra_document_uploads` when a real user is present.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 152,
+        "endLine": 184,
+        "focusLine": 177,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "upload-route-tracks-document",
+      "label": "Upload route tracks document",
+      "sourcePath": "app/api/obras/[id]/documents/upload/route.ts",
+      "description": "`obra_document_uploads` stores the bucket, storage path, file name, and uploader. The response returns the normalized path and file name the file manager uses to update its tree.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 236,
+        "endLine": 260,
+        "focusLine": 237,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "ocr-import-tenant-gate",
+      "label": "OCR import gates tenant access",
+      "sourcePath": "app/api/obras/[id]/tablas/import/ocr-multi/route.ts",
+      "description": "`POST /tablas/import/ocr-multi` follows the same access pattern as upload. It resolves access, keeps the Supabase client for later writes, rejects anonymous callers, and gates demo sessions on the `excel` capability before reading table or document state.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 990,
+        "endLine": 1024,
+        "focusLine": 1012,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "lineage-key-derivation",
+      "label": "Lineage key derivation",
+      "sourcePath": "lib/lineage.ts",
+      "description": "`deriveLineageRowKeys()` prefers a business key when configured, otherwise derives structural keys from compacted parent/item data and normalized content fingerprints. This is the domain identity layer that lets imports update rows instead of creating duplicates.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 183,
+        "endLine": 218,
+        "focusLine": 201,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "ocr-import-upserts-lineage",
+      "label": "OCR import upserts lineage rows",
+      "sourcePath": "app/api/obras/[id]/tablas/import/ocr-multi/route.ts",
+      "description": "The OCR route derives `lineage_row_key`, reads existing materialization versions, prepares `obra_tabla_rows`, and upserts on `tabla_id,lineage_row_key`. This preserves stable row identity across repeated extractions from the same document contract.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 1558,
+        "endLine": 1622,
+        "focusLine": 1616,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "document-generation-gate",
+      "label": "Document generation gates access",
+      "sourcePath": "app/api/document-generation/generate/route.ts",
+      "description": "`POST /api/document-generation/generate` resolves the same access context, creates an admin client for storage writes, rejects anonymous callers, and loads document-generation permissions before rendering a document.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 177,
+        "endLine": 205,
+        "focusLine": 179,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "document-generation-renders-pdf",
+      "label": "Document generation calls PDF renderer",
+      "sourcePath": "app/api/document-generation/generate/route.ts",
+      "description": "The generation route renders template HTML, POSTs it to `/api/pdf-render`, converts the PDF response to bytes, then uploads the resulting PDF to `obra-documents` under either the existing generated-document path or a collision-safe new path.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 378,
+        "endLine": 455,
+        "focusLine": 384,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "pdf-renderer-browser",
+      "label": "PDF renderer launches Chromium",
+      "sourcePath": "app/api/pdf-render/route.ts",
+      "description": "`POST /api/pdf-render` accepts HTML, resolves Puppeteer launch options, starts Chromium, loads the HTML with `domcontentloaded`, and returns a PDF buffer. This route is the clearest candidate for a future internal Vercel Service because it carries the heavy Chromium runtime.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 161,
+        "endLine": 222,
+        "focusLine": 184,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "obra-completion-emits-event",
+      "label": "Obra completion emits event",
+      "sourcePath": "app/api/obras/route.ts",
+      "description": "When an obra crosses completion logic in the bulk route, the API emits `obra.completed` with a prepared context. Completion is not just data persistence; it can trigger notification and workflow side effects.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 1168,
+        "endLine": 1184,
+        "focusLine": 1175,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "notification-engine-starts-workflow",
+      "label": "Notification engine starts workflow",
+      "sourcePath": "lib/notifications/engine.ts",
+      "description": "`emitEvent()` expands notification effects, resolves conditional fields and scheduled dates, filters disabled effects, and starts `deliverEffectsWorkflow()` through the workflow runtime.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 43,
+        "endLine": 114,
+        "focusLine": 109,
+        "contextLines": 2
+      }
+    },
+    {
+      "id": "workflow-delivers-effects",
+      "label": "Workflow delivers effects",
+      "sourcePath": "lib/notifications/workflows.ts",
+      "description": "`deliverEffectsWorkflow()` runs as a workflow, sleeps until scheduled delivery times when needed, then writes in-app notifications or sends email via workflow-safe helpers. This closes the loop from obra events back to users.",
+      "snippet": {
+        "kind": "slice",
+        "startLine": 23,
+        "endLine": 99,
+        "focusLine": 65,
+        "contextLines": 2
+      }
+    }
+  ],
+  "views": [
+    {
+      "kind": "sequence",
+      "actors": [
+        {
+          "name": "runtime",
+          "label": "Runtime"
+        },
+        {
+          "name": "access",
+          "label": "Access"
+        },
+        {
+          "name": "workspace",
+          "label": "Workspace"
+        },
+        {
+          "name": "api",
+          "label": "API"
+        },
+        {
+          "name": "domain",
+          "label": "Domain"
+        },
+        {
+          "name": "background",
+          "label": "Background"
+        }
+      ],
+      "markers": [
+        {
+          "markerId": "next-runtime-config",
+          "name": "runtime.next.config",
+          "participant": "runtime"
+        },
+        {
+          "markerId": "workflow-sentry-wrapper",
+          "name": "runtime.next.workflowSentry",
+          "participant": "runtime"
+        },
+        {
+          "markerId": "root-layout-resolves-access",
+          "name": "runtime.layout.resolveAccess",
+          "participant": "runtime"
+        },
+        {
+          "markerId": "cookie-supabase-client",
+          "name": "access.supabase.cookieClient",
+          "participant": "access"
+        },
+        {
+          "markerId": "admin-supabase-client",
+          "name": "access.supabase.adminClient",
+          "participant": "access"
+        },
+        {
+          "markerId": "access-context-subject",
+          "name": "access.demoSession.resolveRequestAccessContext",
+          "participant": "access"
+        },
+        {
+          "markerId": "layout-shell-receives-context",
+          "name": "runtime.layout.shellContext",
+          "participant": "runtime"
+        },
+        {
+          "markerId": "admin-configuration-surface",
+          "name": "workspace.admin.configurationSurface",
+          "participant": "workspace"
+        },
+        {
+          "markerId": "excel-page-initial-data",
+          "name": "workspace.excel.initialData",
+          "participant": "workspace"
+        },
+        {
+          "markerId": "excel-list-client-hydrates",
+          "name": "workspace.excel.clientHydrates",
+          "participant": "workspace"
+        },
+        {
+          "markerId": "file-manager-upload-call",
+          "name": "workspace.fileManager.uploadCall",
+          "participant": "workspace"
+        },
+        {
+          "markerId": "upload-route-tenant-gate",
+          "name": "api.documents.uploadGate",
+          "participant": "api"
+        },
+        {
+          "markerId": "upload-route-writes-storage",
+          "name": "api.documents.writeStorage",
+          "participant": "api"
+        },
+        {
+          "markerId": "upload-route-tracks-document",
+          "name": "api.documents.trackUpload",
+          "participant": "api"
+        },
+        {
+          "markerId": "ocr-import-tenant-gate",
+          "name": "api.ocr.importGate",
+          "participant": "api"
+        },
+        {
+          "markerId": "lineage-key-derivation",
+          "name": "domain.lineage.deriveKeys",
+          "participant": "domain"
+        },
+        {
+          "markerId": "ocr-import-upserts-lineage",
+          "name": "api.ocr.upsertLineageRows",
+          "participant": "api"
+        },
+        {
+          "markerId": "document-generation-gate",
+          "name": "api.documentGeneration.gate",
+          "participant": "api"
+        },
+        {
+          "markerId": "document-generation-renders-pdf",
+          "name": "api.documentGeneration.renderPdf",
+          "participant": "api"
+        },
+        {
+          "markerId": "pdf-renderer-browser",
+          "name": "background.pdfRenderer.chromium",
+          "participant": "background"
+        },
+        {
+          "markerId": "obra-completion-emits-event",
+          "name": "api.obras.completionEvent",
+          "participant": "api"
+        },
+        {
+          "markerId": "notification-engine-starts-workflow",
+          "name": "background.notifications.startWorkflow",
+          "participant": "background"
+        },
+        {
+          "markerId": "workflow-delivers-effects",
+          "name": "background.workflow.deliverEffects",
+          "participant": "background"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e01",
+          "fromEvent": "next-runtime-config",
+          "toEvent": "workflow-sentry-wrapper",
+          "label": "wraps build"
+        },
+        {
+          "id": "e02",
+          "fromEvent": "workflow-sentry-wrapper",
+          "toEvent": "root-layout-resolves-access",
+          "label": "serves requests"
+        },
+        {
+          "id": "e03",
+          "fromEvent": "root-layout-resolves-access",
+          "toEvent": "cookie-supabase-client",
+          "label": "creates"
+        },
+        {
+          "id": "e04",
+          "fromEvent": "cookie-supabase-client",
+          "toEvent": "admin-supabase-client",
+          "label": "contrasts with"
+        },
+        {
+          "id": "e05",
+          "fromEvent": "admin-supabase-client",
+          "toEvent": "access-context-subject",
+          "label": "used for demo path"
+        },
+        {
+          "id": "e06",
+          "fromEvent": "access-context-subject",
+          "toEvent": "layout-shell-receives-context",
+          "label": "passes state"
+        },
+        {
+          "id": "e07",
+          "fromEvent": "layout-shell-receives-context",
+          "toEvent": "admin-configuration-surface",
+          "label": "configuration branch"
+        },
+        {
+          "id": "e08",
+          "fromEvent": "layout-shell-receives-context",
+          "toEvent": "excel-page-initial-data",
+          "label": "workspace branch"
+        },
+        {
+          "id": "e09",
+          "fromEvent": "excel-page-initial-data",
+          "toEvent": "excel-list-client-hydrates",
+          "label": "hydrates"
+        },
+        {
+          "id": "e10",
+          "fromEvent": "excel-list-client-hydrates",
+          "toEvent": "file-manager-upload-call",
+          "label": "drills into obra"
+        },
+        {
+          "id": "e11",
+          "fromEvent": "file-manager-upload-call",
+          "toEvent": "upload-route-tenant-gate",
+          "label": "POST"
+        },
+        {
+          "id": "e12",
+          "fromEvent": "upload-route-tenant-gate",
+          "toEvent": "upload-route-writes-storage",
+          "label": "after auth"
+        },
+        {
+          "id": "e13",
+          "fromEvent": "upload-route-writes-storage",
+          "toEvent": "upload-route-tracks-document",
+          "label": "records"
+        },
+        {
+          "id": "e14",
+          "fromEvent": "file-manager-upload-call",
+          "toEvent": "ocr-import-tenant-gate",
+          "label": "import branch"
+        },
+        {
+          "id": "e15",
+          "fromEvent": "ocr-import-tenant-gate",
+          "toEvent": "lineage-key-derivation",
+          "label": "derives identity"
+        },
+        {
+          "id": "e16",
+          "fromEvent": "lineage-key-derivation",
+          "toEvent": "ocr-import-upserts-lineage",
+          "label": "upserts"
+        },
+        {
+          "id": "e17",
+          "fromEvent": "layout-shell-receives-context",
+          "toEvent": "document-generation-gate",
+          "label": "generation branch"
+        },
+        {
+          "id": "e18",
+          "fromEvent": "document-generation-gate",
+          "toEvent": "document-generation-renders-pdf",
+          "label": "renders"
+        },
+        {
+          "id": "e19",
+          "fromEvent": "document-generation-renders-pdf",
+          "toEvent": "pdf-renderer-browser",
+          "label": "calls"
+        },
+        {
+          "id": "e20",
+          "fromEvent": "layout-shell-receives-context",
+          "toEvent": "obra-completion-emits-event",
+          "label": "mutation branch"
+        },
+        {
+          "id": "e21",
+          "fromEvent": "obra-completion-emits-event",
+          "toEvent": "notification-engine-starts-workflow",
+          "label": "emits"
+        },
+        {
+          "id": "e22",
+          "fromEvent": "notification-engine-starts-workflow",
+          "toEvent": "workflow-delivers-effects",
+          "label": "starts"
+        }
+      ],
+      "layout": {
+        "laneOrder": [
+          "runtime",
+          "access",
+          "workspace",
+          "api",
+          "domain",
+          "background"
+        ]
+      }
+    }
+  ],
+  "createdAt": "2026-07-02T10:16:00.000-03:00",
+  "updatedAt": "2026-07-02T10:16:00.000-03:00"
+}
