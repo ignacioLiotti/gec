@@ -12,20 +12,28 @@ import {
 	Check,
 	Circle,
 	Clock3,
+	Columns3,
 	FileText,
 	Flag,
+	GripVertical,
 	Info,
 	Link2,
+	ListChecks,
 	Loader2,
 	Package,
 	Pause,
 	Plus,
 	Play,
 	Save,
+	Settings2,
 	Shield,
+	SlidersHorizontal,
+	Sparkles,
 	Star,
+	Table2,
 	Trash2,
 	Truck,
+	type LucideIcon,
 	User,
 	Wrench,
 	X,
@@ -174,6 +182,68 @@ const FLAG_CONFIGS: Array<{
 		{ key: "enableSuggestions", label: "Suger.", defaultOn: true },
 	];
 
+type SummaryCardProps = {
+	icon: LucideIcon;
+	label: string;
+	value: string | number;
+	description: string;
+	tone?: "orange" | "stone" | "blue" | "green";
+};
+
+const summaryToneClass: Record<NonNullable<SummaryCardProps["tone"]>, string> = {
+	orange: "bg-orange-50 text-orange-700 ring-orange-200/80",
+	stone: "bg-stone-100 text-stone-700 ring-stone-200/90",
+	blue: "bg-sky-50 text-sky-700 ring-sky-200/80",
+	green: "bg-emerald-50 text-emerald-700 ring-emerald-200/80",
+};
+
+function SummaryCard({
+	description,
+	icon: Icon,
+	label,
+	tone = "stone",
+	value,
+}: SummaryCardProps) {
+	return (
+		<div className="rounded-2xl border border-stone-200/80 bg-white/90 p-4 shadow-[0_1px_0_rgba(255,255,255,0.92)_inset,0_10px_24px_-20px_rgba(28,25,23,0.45)]">
+			<div className="flex items-start justify-between gap-4">
+				<div>
+					<p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+						{label}
+					</p>
+					<p className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">{value}</p>
+				</div>
+				<div className={cn("rounded-xl p-2 ring-1", summaryToneClass[tone])}>
+					<Icon className="size-4" />
+				</div>
+			</div>
+			<p className="mt-3 text-xs leading-5 text-stone-500">{description}</p>
+		</div>
+	);
+}
+
+function SaveStatusBadge({ hasUnsavedChanges }: { hasUnsavedChanges: boolean }) {
+	return (
+		<span
+			aria-live="polite"
+			className={cn(
+				"inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]",
+				hasUnsavedChanges
+					? "border-orange-200 bg-orange-50 text-orange-700"
+					: "border-emerald-200 bg-emerald-50 text-emerald-700"
+			)}
+		>
+			<span
+				className={cn(
+					"size-2 rounded-full",
+					hasUnsavedChanges ? "bg-orange-500" : "bg-emerald-500"
+				)}
+			/>
+			{hasUnsavedChanges ? "Cambios sin guardar" : "Configuracion guardada"}
+		</span>
+	);
+}
+
 type ConfigTableRowProps = {
 	column: MainTableColumnConfig;
 	index: number;
@@ -288,48 +358,64 @@ const ConfigTableRow = memo(function ConfigTableRow({
 	};
 
 	return (
-		<tr className="border-b last:border-b-0 align-top transition-colors hover:bg-muted/20">
+		<tr className="group border-b border-stone-200/80 align-top transition-colors hover:bg-[#fbfaf6]">
 			{/* Orden */}
-			<td className="px-5 py-4">
-				<div className="flex flex-col items-center gap-0.5">
-					<Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => onMoveUp(index)}>
-						<span className="sr-only">Mover hacia arriba</span>
-						<ArrowUp className="size-3.5" />
-					</Button>
-					<Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => onMoveDown(index)}>
-						<span className="sr-only">Mover hacia abajo</span>
-						<ArrowDown className="size-3.5" />
-					</Button>
+			<td className="px-4 py-4">
+				<div className="flex items-center gap-1">
+					<GripVertical className="size-4 text-stone-300 transition-colors group-hover:text-stone-500" />
+					<div className="grid gap-1">
+						<Button type="button" variant="secondary" size="icon-sm" className="size-6 rounded-md" onClick={() => onMoveUp(index)}>
+							<span className="sr-only">Mover hacia arriba</span>
+							<ArrowUp className="size-3.5" />
+						</Button>
+						<Button type="button" variant="secondary" size="icon-sm" className="size-6 rounded-md" onClick={() => onMoveDown(index)}>
+							<span className="sr-only">Mover hacia abajo</span>
+							<ArrowDown className="size-3.5" />
+						</Button>
+					</div>
 				</div>
 			</td>
 
 			{/* ID */}
-			<td className="px-5 py-4">
-				<code className="rounded-lg bg-muted/60 px-1.5 py-0.5 text-[11px] font-mono">
-					{column.id}
-				</code>
+			<td className="px-4 py-4">
+				<div className="grid gap-1.5">
+					<code className="w-fit rounded-lg border border-stone-200 bg-stone-100 px-2 py-1 text-[11px] font-mono text-stone-700 shadow-[0_1px_0_rgba(255,255,255,0.78)_inset]">
+						{column.id}
+					</code>
+					<Badge
+						variant="outline"
+						className={cn(
+							"h-5 w-fit border-stone-200 px-2 text-[10px] capitalize leading-none text-stone-600",
+							column.kind === "formula" && "border-sky-200 bg-sky-50 text-sky-700",
+							column.kind === "custom" && "border-violet-200 bg-violet-50 text-violet-700",
+							column.kind === "base" && "border-stone-200 bg-white text-stone-600"
+						)}
+					>
+						{column.kind === "formula" ? "calculada" : column.kind === "custom" ? "personalizada" : "base"}
+					</Badge>
+				</div>
 			</td>
 
 			{/* Etiqueta */}
-			<td className="px-5 py-4">
+			<td className="px-4 py-4">
 				<Input
 					name={`column_label_${column.id}`}
 					autoComplete="off"
 					value={column.label}
 					onChange={(event) => onUpdateColumn(index, { label: event.target.value })}
-					className="h-8"
+					className="h-9 min-w-[220px] rounded-xl border-stone-200 bg-white shadow-[0_1px_0_rgba(255,255,255,0.85)_inset]"
 				/>
 			</td>
 
 			{/* Tipo de celda (always visible) */}
-			<td className="px-5 py-4">
+			<td className="px-4 py-4">
 				<Select
 					value={column.cellType ?? (column.kind === "formula" ? "number" : "text")}
 					onValueChange={(value) =>
 						handleCellTypeChange(value as NonNullable<MainTableColumnConfig["cellType"]>)
 					}
 				>
-					<SelectTrigger className="h-8">
+					<SelectTrigger className="h-9 min-w-[140px] bg-white">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -341,10 +427,10 @@ const ConfigTableRow = memo(function ConfigTableRow({
 					</SelectContent>
 				</Select>
 			</td>
-			<td className="px-5 py-4 min-w-[360px]">
+			<td className="min-w-[380px] px-4 py-4">
 				{(column.cellType ?? (column.kind === "formula" ? "number" : "text")) === "select" ? (
-					<div className="space-y-2">
-						<div className="grid grid-cols-[1fr_120px_110px_220px_34px] gap-1.5 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+					<div className="space-y-2 rounded-2xl border border-stone-200 bg-white/70 p-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]">
+						<div className="grid grid-cols-[1fr_120px_110px_180px_34px] gap-1.5 px-1 text-[10px] uppercase tracking-[0.12em] text-stone-500">
 							<span>Titulo</span>
 							<span>Color</span>
 							<span>Icono</span>
@@ -357,7 +443,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 							selectOptions.map((option, optionIndex) => (
 								<div
 									key={`${column.id}-opt-${optionIndex}`}
-									className="grid grid-cols-[1fr_120px_110px_220px_34px] gap-1.5"
+									className="grid grid-cols-[1fr_120px_110px_180px_34px] gap-1.5"
 								>
 									<Input
 										name={`column_${column.id}_option_${optionIndex}_label`}
@@ -366,7 +452,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 										onChange={(event) =>
 											updateSelectOptionAt(optionIndex, { text: event.target.value })
 										}
-										className="h-8"
+										className="h-8 bg-white"
 										placeholder="Titulo de opcion"
 									/>
 									<Select
@@ -377,7 +463,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 											})
 										}
 									>
-										<SelectTrigger className="h-8">
+										<SelectTrigger className="h-8 bg-white">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -399,7 +485,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 											})
 										}
 									>
-										<SelectTrigger className="h-8">
+										<SelectTrigger className="h-8 bg-white">
 											{(() => {
 												const currentIconValue = option.icon ?? NO_ICON_VALUE;
 												if (currentIconValue === NO_ICON_VALUE) {
@@ -434,7 +520,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 											))}
 										</SelectContent>
 									</Select>
-									<div className="flex items-center gap-2 rounded-md border px-2 py-1.5">
+									<div className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5">
 										{(() => {
 											const IconComponent = option.icon
 												? SELECT_ICON_BY_NAME[option.icon]
@@ -457,9 +543,9 @@ const ConfigTableRow = memo(function ConfigTableRow({
 									</div>
 									<Button
 										type="button"
-										variant="ghost"
-										size="icon"
-										className="size-8"
+										variant="secondary"
+										size="icon-sm"
+										className="size-8 rounded-lg"
 										onClick={() => removeSelectOptionAt(optionIndex)}
 									>
 										<span className="sr-only">Eliminar opción</span>
@@ -474,7 +560,9 @@ const ConfigTableRow = memo(function ConfigTableRow({
 						</Button>
 					</div>
 				) : (
-					<span className="text-xs text-muted-foreground">Solo para tipo Select</span>
+					<div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-xs text-stone-500">
+						Solo para tipo Select
+					</div>
 				)}
 			</td>
 
@@ -482,12 +570,12 @@ const ConfigTableRow = memo(function ConfigTableRow({
 			{!isSimplified && (
 				<>
 					{/* Clase */}
-					<td className="px-5 py-4">
+					<td className="px-4 py-4">
 						<Select
 							value={column.kind}
 							onValueChange={(value) => handleKindChange(value as MainTableColumnConfig["kind"])}
 						>
-							<SelectTrigger className="h-8">
+							<SelectTrigger className="h-9 min-w-[130px] bg-white">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -499,7 +587,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 					</td>
 
 					{/* Ancho */}
-					<td className="px-5 py-4">
+					<td className="px-4 py-4">
 						<Input
 							type="number"
 							name={`column_width_${column.id}`}
@@ -510,17 +598,17 @@ const ConfigTableRow = memo(function ConfigTableRow({
 									width: event.target.value ? Number(event.target.value) : undefined,
 								})
 							}
-							className="h-8"
+							className="h-9 w-24 rounded-xl border-stone-200 bg-white"
 						/>
 					</td>
 
 					{/* Fórmula / Fuente */}
-					<td className="px-5 py-4">
+					<td className="px-4 py-4">
 						{column.kind === "formula" ? (
 							<div className="space-y-2">
-								<div className="rounded-2xl bg-muted/40 px-3 py-2.5">
+								<div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-3 py-2.5">
 									<p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Interpretación</p>
-									<p className="mt-1 text-[11px] leading-relaxed text-foreground/70">
+									<p className="mt-1 text-[11px] leading-relaxed text-sky-950/70">
 										{describeFormulaForUser(column.formula)}
 									</p>
 								</div>
@@ -530,21 +618,21 @@ const ConfigTableRow = memo(function ConfigTableRow({
 									placeholder="[campo_a] + [campo_b]"
 									value={column.formula ?? ""}
 									onChange={(event) => onUpdateColumn(index, { formula: event.target.value })}
-									className="h-8 font-mono text-xs"
+									className="h-9 rounded-xl border-stone-200 bg-white font-mono text-xs"
 								/>
 							</div>
 						) : column.kind === "custom" ? (
-							<p className="text-xs text-muted-foreground">
+							<p className="rounded-2xl border border-violet-100 bg-violet-50/80 px-3 py-2.5 text-xs leading-5 text-violet-950/70">
 								Valor editable por obra (tenant).
 							</p>
 						) : (
 							<div className="space-y-1.5">
-								<p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Campo fuente</p>
+								<p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500">Campo fuente</p>
 								<Select
 									value={column.baseColumnId ?? column.id}
 									onValueChange={(value) => onUpdateColumn(index, { baseColumnId: value })}
 								>
-									<SelectTrigger className="h-8">
+									<SelectTrigger className="h-9 min-w-[220px] bg-white">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -560,8 +648,8 @@ const ConfigTableRow = memo(function ConfigTableRow({
 					</td>
 
 					{/* Flags */}
-					<td className="px-5 py-4">
-						<div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+					<td className="px-4 py-4">
+						<div className="grid grid-cols-2 gap-2 rounded-2xl border border-stone-200 bg-white/70 p-3 text-xs shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]">
 							{FLAG_CONFIGS.map(({ key, label, defaultOn, disabledWhen }) => {
 								const rawValue = column[key];
 								const checked = typeof rawValue === "boolean" ? rawValue : defaultOn;
@@ -581,12 +669,12 @@ const ConfigTableRow = memo(function ConfigTableRow({
 					</td>
 
 					{/* Acción */}
-					<td className="px-5 py-4 text-right">
+					<td className="px-4 py-4 text-right">
 						<Button
 							type="button"
-							variant="ghost"
-							size="icon"
-							className="size-8"
+							variant="destructiveSecondary"
+							size="icon-sm"
+							className="size-8 rounded-lg"
 							onClick={() => {
 								const confirmed = window.confirm("¿Eliminar esta columna de la configuración?");
 								if (!confirmed) return;
@@ -680,6 +768,17 @@ export default function AdminMainTableConfigPage() {
 		() => JSON.stringify(columns) !== initialColumnsJson,
 		[columns, initialColumnsJson]
 	);
+
+	const columnSummary = useMemo(() => {
+		const active = columns.filter((column) => column.enabled !== false).length;
+		const calculated = columns.filter((column) => column.kind === "formula").length;
+		const custom = columns.filter((column) => column.kind === "custom").length;
+		const select = columns.filter(
+			(column) => (column.cellType ?? (column.kind === "formula" ? "number" : "text")) === "select"
+		).length;
+
+		return { active, calculated, custom, select, total: columns.length };
+	}, [columns]);
 
 	useEffect(() => {
 		if (!hasUnsavedChanges) return;
@@ -834,33 +933,42 @@ export default function AdminMainTableConfigPage() {
 	}
 
 	return (
-		<div className="space-y-8 p-6">
+		<div className="min-h-screen space-y-5 bg-[#e5e1d8] p-4 text-stone-950 sm:p-6">
 
 			{/* Header */}
-			<div className="flex items-start justify-between gap-6">
-				<div>
-					<h1 className="text-2xl font-semibold tracking-tight">
+			<div className="mx-auto flex max-w-[1800px] flex-col items-start justify-between gap-6 rounded-[28px] border border-stone-200/90 bg-white p-6 shadow-[0_1px_0_rgba(255,255,255,0.92)_inset,0_18px_44px_rgba(40,36,28,0.16)] xl:flex-row">
+				<div className="min-w-0">
+					<div className="mb-5 flex flex-wrap items-center gap-2">
+						<div className="flex size-10 items-center justify-center rounded-2xl bg-stone-950 text-white shadow-[0_1px_0_rgba(255,255,255,0.14)_inset,0_10px_24px_-18px_rgba(0,0,0,0.9)]">
+							<Table2 className="size-4" />
+						</div>
+						<SaveStatusBadge hasUnsavedChanges={hasUnsavedChanges} />
+						<span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-500">
+							Tenant-wide
+						</span>
+					</div>
+					<h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
 						Configuración de Tabla Principal
 					</h1>
-					<p className="mt-1 text-sm leading-6 text-muted-foreground">
+					<p className="mt-3 max-w-3xl text-sm leading-6 text-stone-600">
 						Definí columnas por tenant para la tabla principal de obras.
 					</p>
-					<p aria-live="polite" className="mt-0.5 text-xs text-muted-foreground">
+					<p aria-live="polite" className="mt-2 text-xs text-stone-500">
 						{hasUnsavedChanges ? "Tenés cambios sin guardar…" : "Todos los cambios guardados."}
 					</p>
 				</div>
 
 				{/* Simplified / Advanced toggle — only visible to admins */}
 				{isAdmin && (
-					<div className="shrink-0 grid grid-cols-2 overflow-hidden rounded-2xl border">
+					<div className="grid shrink-0 grid-cols-2 overflow-hidden rounded-2xl border border-stone-200 bg-stone-100 p-1 shadow-[inset_0_2px_6px_rgba(40,36,28,0.12)]">
 						<button
 							type="button"
 							onClick={() => setIsSimplified(true)}
 							className={cn(
-								"px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] transition-colors",
+								"rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-[background-color,color,box-shadow]",
 								isSimplified
-									? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
-									: "bg-background text-muted-foreground hover:text-foreground"
+									? "bg-white text-stone-950 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_4px_12px_rgba(40,36,28,0.12)]"
+									: "text-stone-500 hover:text-stone-800"
 							)}
 						>
 							Simplificado
@@ -869,10 +977,10 @@ export default function AdminMainTableConfigPage() {
 							type="button"
 							onClick={() => setIsSimplified(false)}
 							className={cn(
-								"px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] transition-colors",
+								"rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-[background-color,color,box-shadow]",
 								!isSimplified
-									? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
-									: "bg-background text-muted-foreground hover:text-foreground"
+									? "bg-stone-950 text-white shadow-[0_1px_0_rgba(255,255,255,0.14)_inset,0_8px_18px_-14px_rgba(0,0,0,0.9)]"
+									: "text-stone-500 hover:text-stone-800"
 							)}
 						>
 							Avanzado
@@ -881,12 +989,43 @@ export default function AdminMainTableConfigPage() {
 				)}
 			</div>
 
+			<section className="mx-auto grid max-w-[1800px] gap-3 sm:grid-cols-2 lg:grid-cols-4">
+				<SummaryCard
+					icon={Columns3}
+					label="Columnas"
+					value={columnSummary.total}
+					description="Campos definidos para la tabla principal."
+					tone="stone"
+				/>
+				<SummaryCard
+					icon={ListChecks}
+					label="Visibles"
+					value={columnSummary.active}
+					description="Columnas habilitadas en la experiencia diaria."
+					tone="green"
+				/>
+				<SummaryCard
+					icon={SlidersHorizontal}
+					label="Custom / select"
+					value={`${columnSummary.custom}/${columnSummary.select}`}
+					description="Campos propios y opciones controladas."
+					tone="orange"
+				/>
+				<SummaryCard
+					icon={Sparkles}
+					label="Calculadas"
+					value={columnSummary.calculated}
+					description="Valores derivados de otros campos."
+					tone="blue"
+				/>
+			</section>
+
 			{/* Add column panels — advanced only */}
 			{!isSimplified && (
-				<section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+				<section className="mx-auto grid max-w-[1800px] gap-4 md:grid-cols-2 2xl:grid-cols-3">
 
 					{/* Base column */}
-					<div className="rounded-3xl border bg-background p-5 space-y-4">
+					<div className="space-y-4 rounded-3xl border border-stone-200/90 bg-white p-5 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_-24px_rgba(28,25,23,0.55)]">
 						<div>
 							<p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Tipo base</p>
 							<h3 className="mt-1.5 text-base font-semibold">Columna Base</h3>
@@ -929,7 +1068,7 @@ export default function AdminMainTableConfigPage() {
 					</div>
 
 					{/* Formula column */}
-					<div className="rounded-3xl border bg-background p-5 space-y-4">
+					<div className="space-y-4 rounded-3xl border border-stone-200/90 bg-white p-5 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_-24px_rgba(28,25,23,0.55)]">
 						<div>
 							<p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Tipo calculada</p>
 							<h3 className="mt-1.5 text-base font-semibold">Columna Calculada</h3>
@@ -992,7 +1131,7 @@ export default function AdminMainTableConfigPage() {
 					</div>
 
 					{/* Custom column */}
-					<div className="rounded-3xl border bg-background p-5 space-y-4">
+					<div className="space-y-4 rounded-3xl border border-stone-200/90 bg-white p-5 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_-24px_rgba(28,25,23,0.55)]">
 						<div>
 							<p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Tipo personalizada</p>
 							<h3 className="mt-1.5 text-base font-semibold">Columna Personalizada</h3>
@@ -1052,21 +1191,25 @@ export default function AdminMainTableConfigPage() {
 			)}
 
 			{/* Active columns */}
-			<section className="space-y-4">
-				<div className="flex items-center justify-between">
+			<section className="mx-auto max-w-[1800px] space-y-4 rounded-[28px] border border-stone-200/90 bg-white p-4 shadow-[0_1px_0_rgba(255,255,255,0.92)_inset,0_18px_44px_rgba(40,36,28,0.14)]">
+				<div className="flex flex-wrap items-center justify-between gap-4 px-1">
 					<div className="space-y-1">
-						<p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">
+						<p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
 							Columnas activas
 						</p>
-						<p className="text-sm text-muted-foreground">
+						<p className="text-sm text-stone-600">
 							{columns.length === 0
 								? "No hay columnas configuradas."
 								: `${columns.length} ${columns.length === 1 ? "columna definida" : "columnas definidas"} para la tabla principal.`}
 						</p>
 					</div>
+					<div className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-500 shadow-[inset_0_2px_6px_rgba(40,36,28,0.08)]">
+						<Settings2 className="size-3.5" />
+						{isSimplified ? "Vista simple" : "Vista avanzada"}
+					</div>
 				</div>
 
-				<div className="overflow-x-auto rounded-3xl border">
+				<div className="overflow-x-auto rounded-3xl border border-stone-200 bg-stone-50/70 shadow-[inset_0_2px_8px_rgba(40,36,28,0.08)]">
 					{columns.length === 0 ? (
 						<div className="p-10 text-center text-sm text-muted-foreground">
 							{isSimplified
@@ -1074,9 +1217,9 @@ export default function AdminMainTableConfigPage() {
 								: "Agregá al menos una columna desde los paneles de arriba."}
 						</div>
 					) : (
-						<table className={cn("w-full text-sm", !isSimplified && "min-w-[1760px]")}>
-							<thead>
-								<tr className="border-b">
+						<table className={cn("w-full border-separate border-spacing-0 text-sm", !isSimplified && "min-w-[1760px]")}>
+							<thead className="sticky top-0 z-10">
+								<tr className="border-b bg-stone-100/95 backdrop-blur">
 									<th className="w-[72px] px-5 py-3 text-left text-xs uppercase tracking-[0.16em] text-muted-foreground font-medium">Orden</th>
 									<th className="w-[160px] px-5 py-3 text-left text-xs uppercase tracking-[0.16em] text-muted-foreground font-medium">ID</th>
 									<th className="px-5 py-3 text-left text-xs uppercase tracking-[0.16em] text-muted-foreground font-medium">Etiqueta</th>
@@ -1114,24 +1257,25 @@ export default function AdminMainTableConfigPage() {
 			</section>
 
 			{/* Footer */}
-			<div className="flex items-center justify-between gap-4 border-t pt-5">
+			<div className="sticky bottom-4 z-20 mx-auto flex max-w-[1800px] flex-col items-stretch justify-between gap-3 rounded-3xl border border-stone-200 bg-white/95 p-3 shadow-[0_1px_0_rgba(255,255,255,0.92)_inset,0_18px_44px_rgba(40,36,28,0.18)] backdrop-blur sm:flex-row sm:items-center sm:gap-4">
 				{!isSimplified && (
 					<Button
 						type="button"
-						variant="ghost"
+						variant="secondary"
 						size="sm"
-						className="text-muted-foreground"
+						className="rounded-xl text-stone-600"
 						onClick={() => setColumns(DEFAULT_MAIN_TABLE_COLUMN_CONFIG)}
 					>
 						Restaurar por defecto
 					</Button>
 				)}
-				<div className={cn("flex gap-3", isSimplified && "ml-auto")}>
+				<div className={cn("flex items-center gap-3", isSimplified && "ml-auto")}>
+					<SaveStatusBadge hasUnsavedChanges={hasUnsavedChanges} />
 					<Button
 						type="button"
 						onClick={saveConfig}
 						disabled={saving}
-						className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
+						className="h-10 rounded-xl px-5"
 					>
 						{saving ? (
 							<Loader2 className="size-4 mr-1.5 animate-spin" />

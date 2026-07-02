@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { AnimatePresence, m } from "framer-motion";
 import { toast } from "sonner";
@@ -200,6 +200,103 @@ const SELECT_BADGE_CLASS_BY_COLOR: Record<string, string> = {
   red: "border-red-300 bg-red-100 text-red-800",
   violet: "border-violet-300 bg-violet-100 text-violet-800",
 };
+
+const COLUMN_TYPE_BADGE_CONFIG: Record<
+  ColumnConfig["columnType"],
+  {
+    label: string;
+    longLabel: string;
+    variant: ComponentProps<typeof Badge>["variant"];
+    className?: string;
+  }
+> = {
+  source: {
+    label: "Fuente",
+    longLabel: "Columna fuente",
+    variant: "outline",
+  },
+  computed: {
+    label: "Calculada",
+    longLabel: "Columna calculada",
+    variant: "secondary",
+    className: "bg-amber-500/80",
+  },
+  custom: {
+    label: "Personalizada",
+    longLabel: "Columna personalizada",
+    variant: "default",
+    className: "bg-purple-500",
+  },
+};
+
+type MacroTableBadgeKind =
+  | "selected-sources"
+  | "template-count"
+  | "obra-count"
+  | "obra-selected-count"
+  | "columns-count"
+  | "column-type"
+  | "select-option";
+
+type MacroTableBadgeProps = ComponentProps<typeof Badge> & {
+  kind: MacroTableBadgeKind;
+  columnType?: ColumnConfig["columnType"];
+  labelSize?: "short" | "long";
+  selectColor?: MainTableSelectOption["color"] | null;
+  active?: boolean;
+  muted?: boolean;
+};
+
+function MacroTableBadge({
+  kind,
+  columnType,
+  labelSize = "short",
+  selectColor,
+  active,
+  muted,
+  className,
+  children,
+  variant,
+  ...props
+}: MacroTableBadgeProps) {
+  const columnTypeConfig = columnType ? COLUMN_TYPE_BADGE_CONFIG[columnType] : null;
+  const badgeVariant =
+    variant ??
+    (kind === "template-count"
+      ? active
+        ? "secondary"
+        : "outline"
+      : kind === "selected-sources"
+        ? "secondary"
+        : kind === "column-type"
+          ? columnTypeConfig?.variant
+          : kind === "select-option" || kind === "obra-count" || kind === "columns-count"
+            ? "outline"
+            : undefined);
+  const badgeClassName = cn(
+    kind === "selected-sources" && "gap-1",
+    kind === "template-count" && "ml-1 text-xs",
+    (kind === "obra-count" || kind === "obra-selected-count" || kind === "columns-count") && "text-xs",
+    kind === "obra-selected-count" && "bg-cyan-500",
+    kind === "column-type" && columnTypeConfig?.className,
+    kind === "select-option" &&
+      "max-w-[130px] overflow-hidden text-ellipsis whitespace-nowrap",
+    kind === "select-option" && selectColor ? SELECT_BADGE_CLASS_BY_COLOR[selectColor] : null,
+    muted && "opacity-50",
+    className
+  );
+
+  return (
+    <Badge variant={badgeVariant} className={badgeClassName} {...props}>
+      {kind === "column-type" && columnTypeConfig
+        ? labelSize === "long"
+          ? columnTypeConfig.longLabel
+          : columnTypeConfig.label
+        : children}
+    </Badge>
+  );
+}
+
 const createDefaultSelectOptions = () =>
   cloneMainTableSelectOptions(DEFAULT_MAIN_TABLE_SELECT_OPTIONS);
 const ACCORDION_PLACEMENTS = [
@@ -953,26 +1050,7 @@ export default function EditMacroTablePage() {
     >
       <div className="space-y-1 border-b border-border/60 px-4 py-3">
         <p className="font-semibold">{column.label || "Sin nombre"}</p>
-        <Badge
-          variant={
-            column.columnType === "custom"
-              ? "default"
-              : column.columnType === "computed"
-                ? "secondary"
-                : "outline"
-          }
-          className={cn(
-            "text-[10px]",
-            column.columnType === "custom" && "bg-purple-500",
-            column.columnType === "computed" && "bg-amber-500/80"
-          )}
-        >
-          {column.columnType === "custom"
-            ? "Personalizada"
-            : column.columnType === "computed"
-              ? "Calculada"
-              : "Fuente"}
-        </Badge>
+        <MacroTableBadge kind="column-type" columnType={column.columnType} className="text-[10px]" />
       </div>
       <div className="grid grid-rows-[repeat(3,minmax(0,1fr))]">
         {PREVIEW_ROW_INDICES.map((rowIndex) => (
@@ -1251,10 +1329,10 @@ export default function EditMacroTablePage() {
                     Tablas de las que se agregan datos
                   </CardDescription>
                 </div>
-                <Badge variant="secondary" className="gap-1">
+                <MacroTableBadge kind="selected-sources">
                   <Database className="size-3" />
                   {selectedSources.length} seleccionadas
-                </Badge>
+                </MacroTableBadge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1291,15 +1369,9 @@ export default function EditMacroTablePage() {
                         >
                           <FileStack className="size-3.5" />
                           {template.name}
-                          <Badge
-                            variant={isSelected ? "secondary" : "outline"}
-                            className={cn(
-                              "text-xs ml-1",
-                              matchCount === 0 && "opacity-50"
-                            )}
-                          >
+                          <MacroTableBadge kind="template-count" active={isSelected} muted={matchCount === 0}>
                             {matchCount} {matchCount === 1 ? "tabla" : "tablas"}
-                          </Badge>
+                          </MacroTableBadge>
                         </Button>
                       );
                     })}
@@ -1391,13 +1463,13 @@ export default function EditMacroTablePage() {
                           <div className="flex items-center gap-3">
                             <Building2 className="size-4 text-muted-foreground" />
                             <span className="font-medium">{obra.designacionYUbicacion}</span>
-                            <Badge variant="outline" className="text-xs">
+                            <MacroTableBadge kind="obra-count">
                               {obra.tablas.length} tablas
-                            </Badge>
+                            </MacroTableBadge>
                             {selectedCount > 0 && (
-                              <Badge className="text-xs bg-cyan-500">
+                              <MacroTableBadge kind="obra-selected-count">
                                 {selectedCount} seleccionadas
-                              </Badge>
+                              </MacroTableBadge>
                             )}
                           </div>
                           {isExpanded ? (
@@ -1517,9 +1589,9 @@ export default function EditMacroTablePage() {
                         Click en una columna para editarla en el panel lateral
                       </p>
                     </div>
-                    <Badge variant="outline" className="text-xs">
+                    <MacroTableBadge kind="columns-count">
                       {columns.length} columnas
-                    </Badge>
+                    </MacroTableBadge>
                   </div>
 
                   {columns.length === 0 ? (
@@ -1579,26 +1651,11 @@ export default function EditMacroTablePage() {
                                               <p className="truncate font-semibold leading-tight">
                                                 {col.label || "Sin nombre"}
                                               </p>
-                                              <Badge
-                                                variant={
-                                                  col.columnType === "custom"
-                                                    ? "default"
-                                                    : col.columnType === "computed"
-                                                      ? "secondary"
-                                                      : "outline"
-                                                }
-                                                className={cn(
-                                                  "text-[10px]",
-                                                  col.columnType === "custom" && "bg-purple-500",
-                                                  col.columnType === "computed" && "bg-amber-500/80"
-                                                )}
-                                              >
-                                                {col.columnType === "custom"
-                                                  ? "Personalizada"
-                                                  : col.columnType === "computed"
-                                                    ? "Calculada"
-                                                    : "Fuente"}
-                                              </Badge>
+                                              <MacroTableBadge
+                                                kind="column-type"
+                                                columnType={col.columnType}
+                                                className="text-[10px]"
+                                              />
                                             </div>
                                             <button
                                               type="button"
@@ -1712,25 +1769,11 @@ export default function EditMacroTablePage() {
                       {selectedColumn ? (
                         <div className="space-y-4">
                           <div className="flex items-center justify-between gap-3">
-                            <Badge
-                              variant={
-                                selectedColumn.columnType === "custom"
-                                  ? "default"
-                                  : selectedColumn.columnType === "computed"
-                                    ? "secondary"
-                                    : "outline"
-                              }
-                              className={cn(
-                                selectedColumn.columnType === "custom" && "bg-purple-500",
-                                selectedColumn.columnType === "computed" && "bg-amber-500/80"
-                              )}
-                            >
-                              {selectedColumn.columnType === "custom"
-                                ? "Columna personalizada"
-                                : selectedColumn.columnType === "computed"
-                                  ? "Columna calculada"
-                                : "Columna fuente"}
-                            </Badge>
+                            <MacroTableBadge
+                              kind="column-type"
+                              columnType={selectedColumn.columnType}
+                              labelSize="long"
+                            />
                             <div className="flex items-center gap-1">
                               <Button
                                 variant="ghost"
@@ -1898,15 +1941,9 @@ export default function EditMacroTablePage() {
                                       </SelectContent>
                                     </Select>
                                     <div className="flex items-center rounded-md border px-2 py-2">
-                                      <Badge
-                                        variant="outline"
-                                        className={cn(
-                                          "max-w-[130px] overflow-hidden text-ellipsis whitespace-nowrap",
-                                          option.color ? SELECT_BADGE_CLASS_BY_COLOR[option.color] : null
-                                        )}
-                                      >
+                                      <MacroTableBadge kind="select-option" selectColor={option.color}>
                                         {option.text || "Sin titulo"}
-                                      </Badge>
+                                      </MacroTableBadge>
                                     </div>
                                     {selectedColumn.columnType === "source" ? (
                                       <span />

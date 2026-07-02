@@ -13,6 +13,7 @@ The Admin Panel (`/admin`) is restricted to users with `owner` or `admin` member
 | Route | Purpose |
 |-------|---------|
 | `/admin` | Admin dashboard |
+| `/admin/dashboard` | Read-only administrative dashboard for policies, works, document review, and alerts |
 | `/admin/users` | User management + invitations |
 | `/admin/roles` | Role and permission management |
 | `/admin/obra-defaults` | Default folder/tabla templates + quick actions |
