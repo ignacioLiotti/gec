@@ -23,6 +23,18 @@ describe("applyOcrExtractionRowPolicy", () => {
 		expect(result).toEqual([{ a: 1 }]);
 	});
 
+	it("keeps multiple item rows when legacy single-row defaults include maxRows=1", () => {
+		const rows = [{ periodo: "7/2025" }, { periodo: "8/2025" }, { periodo: "9/2025" }];
+
+		const result = applyOcrExtractionRowPolicy(
+			rows,
+			{ extractionRowMode: "single", extractionMaxRows: 1 },
+			{ hasItemColumns: true },
+		);
+
+		expect(result).toEqual(rows);
+	});
+
 	it("defaults to a single row when the table has no item columns", () => {
 		const rows = [{ a: 1 }, { a: 2 }];
 

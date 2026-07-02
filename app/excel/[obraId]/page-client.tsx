@@ -36,7 +36,7 @@ import {
 } from "@/lib/main-table-columns";
 import { evaluateMathExpression } from "@/lib/safe-math-expression";
 import { ObraGeneralTab } from "./tabs/general-tab";
-import { obraOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
+import { obraOverviewTour, presentacionObraTour } from "@/lib/demo-tours/screen-tour-flows";
 import {
 	GUIDED_EXCEL_STAGE_PARAM,
 	GUIDED_EXCEL_STAGES,
@@ -262,7 +262,7 @@ const toIsoDateTime = (value: string | null) => {
 };
 
 function scheduleSecondaryTabWarmup(callback: () => void) {
-	if (typeof window === "undefined") return () => {};
+	if (typeof window === "undefined") return () => { };
 	const win = window as Window & {
 		requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
 		cancelIdleCallback?: (handle: number) => void;
@@ -2082,6 +2082,10 @@ function ObraDetailPageContent({
 			setQueryParams({ tab: value, tour: "documentos-overview" });
 			return;
 		}
+		if (value === "documentos" && activeTour === "demo-obra") {
+			setQueryParams({ tab: value, tour: "demo-documentos" });
+			return;
+		}
 		setQueryParams({ tab: value }); // Background URL sync
 	}, [queryParams, setQueryParams]);
 
@@ -2945,7 +2949,7 @@ function ObraDetailPageContent({
 			return;
 		}
 
-	(Object.entries(updates) as Array<[DerivedCertificadosField, number]>).forEach(
+		(Object.entries(updates) as Array<[DerivedCertificadosField, number]>).forEach(
 			([field, nextValue]) => {
 				form.setFieldValue(field, nextValue);
 				nextPendingDerivedFieldValues[field] = nextValue;
@@ -3603,6 +3607,7 @@ function ObraDetailPageContent({
 	return (
 		<div className="relative container max-w-full mx-auto px-4 pt-2">
 			<DemoPageTour flow={obraOverviewTour} />
+			<DemoPageTour flow={presentacionObraTour} />
 			{ilagMaterialsReportFlow ? (
 				<ContextualWizard
 					open={isIlagMaterialsWizardOpen}
@@ -3690,7 +3695,7 @@ function ObraDetailPageContent({
 			) : (
 				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
 					<div className="flex-1 min-w-0">
-						<div className="mb-3 flex min-w-0 flex-col gap-3 border-b border-stone-200 pb-3 pt-2 xl:flex-row xl:items-center xl:justify-between">
+						<div className="mb-3 flex min-w-0 flex-col gap-3 pb-3 pt-2 xl:flex-row xl:items-center xl:justify-between">
 							<ExcelObraName />
 							<div className="flex flex-wrap items-center gap-2 xl:justify-end">
 								{activeTab === "documentos" || activeTab === "documentos-new" ? (
@@ -3734,6 +3739,7 @@ function ObraDetailPageContent({
 								) : null}
 							</div>
 						</div>
+						<span className=" flex h-[3px] mb-3 -mt-3 w-full bg-[#e4e6ea] border-b-[1.5px] border-white " />
 						<Tabs
 							value={activeTab}
 							onValueChange={handleTabChange}

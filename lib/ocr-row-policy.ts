@@ -31,6 +31,12 @@ export function applyOcrExtractionRowPolicy(
 	const rowMode = explicitRowMode ?? inferredRowMode;
 
 	if (rowMode === "single") {
+		// Legacy OCR folder defaults stored single+maxRows=1 even for item tables.
+		// When the extraction already produced multiple items, keep them instead
+		// of silently dropping every row after the first.
+		if (options?.hasItemColumns && maxRows === 1 && items.length > 1) {
+			return items;
+		}
 		return items.length > 0 ? [items[0]] : [];
 	}
 

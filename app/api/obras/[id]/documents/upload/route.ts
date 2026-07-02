@@ -5,7 +5,7 @@ import {
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
 import { fetchTenantPlan } from "@/lib/subscription-plans";
-import { incrementTenantUsage, logTenantUsageEvent } from "@/lib/tenant-usage";
+import { fetchTenantUsage, incrementTenantUsage, logTenantUsageEvent } from "@/lib/tenant-usage";
 import { normalizeFolderPath } from "@/lib/tablas";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -74,6 +74,18 @@ function usageErrorToStatus(code?: string) {
 	return 400;
 }
 
+function formatBytes(bytes: number) {
+	if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+	const units = ["B", "KB", "MB", "GB", "TB"];
+	let value = bytes;
+	let unitIndex = 0;
+	while (value >= 1024 && unitIndex < units.length - 1) {
+		value /= 1024;
+		unitIndex += 1;
+	}
+	return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
 export async function POST(request: Request, context: RouteContext) {
 	const { id: obraId } = await context.params;
 	if (!obraId) {
@@ -137,6 +149,22 @@ export async function POST(request: Request, context: RouteContext) {
 				? file.size
 				: 0;
 		const plan = await fetchTenantPlan(supabase, tenantId);
+		if (uploadedSize > 0 && plan.limits.storageBytes != null) {
+			const usage = await fetchTenantUsage(supabase, tenantId);
+			const remainingBytes = Math.max(0, plan.limits.storageBytes - usage.storageBytes);
+			if (uploadedSize > remainingBytes) {
+				return NextResponse.json(
+					{
+						error: `El archivo pesa ${formatBytes(uploadedSize)} y el espacio disponible es ${formatBytes(remainingBytes)}.`,
+						code: "STORAGE_LIMIT_EXCEEDED",
+						maxUploadBytes: remainingBytes,
+						planStorageLimitBytes: plan.limits.storageBytes,
+						currentStorageBytes: usage.storageBytes,
+					},
+					{ status: 402 },
+				);
+			}
+		}
 
 		let storageFileName = baseStorageFileName;
 		let storagePath = `${normalizedFolderPath}/${storageFileName}`;

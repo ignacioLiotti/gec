@@ -13,12 +13,20 @@ import {
 	FormTableToolbar,
 } from "@/components/form-table/form-table";
 import {
+	countActiveAutoColumnFilters,
+	createAutoColumnFilters,
+	matchesAutoColumnFilters,
+	renderAutoColumnFilters,
+	type AutoColumnFilters,
+} from "@/components/form-table/column-filters";
+import {
 	createObrasDetalleConfig,
 	invalidateObrasTableSessionCache,
 	mapObraToDetailRow,
 	type MainTableColumnConfig,
 	type ObrasDetalleRow,
 } from "@/components/form-table/configs/obras-detalle";
+import type { FormTableConfig } from "@/components/form-table/types";
 import { Button } from "@/components/ui/button";
 import {
 	Sheet,
@@ -40,6 +48,8 @@ import {
 	getGuidedExcelStage,
 	isGuidedExcelTour,
 } from "@/lib/demo-tours/excel-guided-flow";
+import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
+import { presentacionCarteraTour } from "@/lib/demo-tours/screen-tour-flows";
 
 const ContextualWizard = dynamic(
 	() =>
@@ -317,10 +327,35 @@ export default function DesktopExcelPageClient({
 			readOnly: false,
 			optimizationPreset: "legacy",
 		});
+		const {
+			createFilters: _createFilters,
+			renderFilters: _renderFilters,
+			applyFilters: _applyFilters,
+			countActiveFilters: _countActiveFilters,
+			fetchRows: _fetchRows,
+			csvExport: _csvExport,
+			...baseConfigWithoutFilters
+		} = baseConfig;
+		const generatedFilterColumns = baseConfig.columns;
+		const generatedFilterConfig: FormTableConfig<ObrasDetalleRow, AutoColumnFilters> = {
+			...baseConfigWithoutFilters,
+			columns: generatedFilterColumns,
+			serverSideData: false,
+			createFilters: () => createAutoColumnFilters(generatedFilterColumns),
+			renderFilters: ({ filters, onChange }) =>
+				renderAutoColumnFilters({
+					columns: generatedFilterColumns,
+					filters,
+					onChange,
+				}),
+			applyFilters: (row, filters) =>
+				matchesAutoColumnFilters(row, generatedFilterColumns, filters),
+			countActiveFilters: countActiveAutoColumnFilters,
+		};
 		return hydratedRows == null
-			? baseConfig
+			? generatedFilterConfig
 			: {
-				...baseConfig,
+				...generatedFilterConfig,
 				defaultRows: hydratedRows,
 			};
 	}, [hydratedRows, mainTableColumnsConfig]);
@@ -599,6 +634,7 @@ export default function DesktopExcelPageClient({
 
 			<FormTable config={tableConfig}>
 				<div className="relative space-y-5">
+					<DemoPageTour flow={presentacionCarteraTour} />
 					<div className="flex flex-col gap-4">
 						<div className="flex w-full flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 							<div data-wizard-target="excel-page-header">

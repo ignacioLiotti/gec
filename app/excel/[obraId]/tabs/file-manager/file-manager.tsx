@@ -124,7 +124,7 @@ import { HoverCardPortal } from '@radix-ui/react-hover-card';
 import { GlassyIcon } from '@/components/ui/glassy-icon';
 import { NotchTail } from "@/components/ui/notch-tail";
 import { resolveSpreadsheetSectionType } from '@/lib/spreadsheet-preview-summary';
-import { documentosOverviewTour } from '@/lib/demo-tours/screen-tour-flows';
+import { documentosOverviewTour, presentacionDocumentosTour } from '@/lib/demo-tours/screen-tour-flows';
 import {
   GUIDED_EXCEL_STAGE_PARAM,
   GUIDED_EXCEL_STAGES,
@@ -655,21 +655,59 @@ function getAutoSelectedCertificadoOcrTablaIds(links: OcrFolderLink[]): string[]
   const uniqueLinks = Array.from(new Map(links.map((link) => [link.tablaId, link])).values());
   if (uniqueLinks.length === 0) return [];
 
-  const pmcResumenLink = uniqueLinks.find((link) =>
-    normalizeFolderName(link.tablaName ?? '').includes('pmc-resumen')
-  );
+  const pmcResumenLink = uniqueLinks.find((link) => getCertificadoTableSelectorScore(link) === 0);
   if (!pmcResumenLink) return [];
 
   const hasCertificadoCompanionTable = uniqueLinks.some((link) => {
-    const normalizedName = normalizeFolderName(link.tablaName ?? '');
-    return normalizedName.includes('pmc-items') || normalizedName.includes('curva-plan');
+    const score = getCertificadoTableSelectorScore(link);
+    return score === 1 || score === 2;
   });
 
   return hasCertificadoCompanionTable ? [pmcResumenLink.tablaId] : [];
 }
 
+function getCertificadoTableSelectorScore(link: OcrFolderLink): number | null {
+  const normalizedName = normalizeFolderName(link.tablaName ?? '');
+  if (normalizedName.includes('pmc-resumen')) return 0;
+  if (normalizedName.includes('pmc-items')) return 1;
+  if (normalizedName.includes('curva-plan')) return 2;
+
+  const fieldKeys = new Set(link.columns.map((column) => column.fieldKey));
+  const looksLikeResumen =
+    fieldKeys.has('monto_certificado') &&
+    (fieldKeys.has('monto_acumulado') || fieldKeys.has('avance_fisico_acumulado_pct'));
+  const looksLikeItems =
+    (fieldKeys.has('item_code') || fieldKeys.has('descripcion')) &&
+    (fieldKeys.has('avance_periodo_pct') || fieldKeys.has('monto_presente'));
+  const looksLikePlan =
+    fieldKeys.has('periodo') &&
+    fieldKeys.has('avance_mensual_pct') &&
+    fieldKeys.has('avance_acumulado_pct');
+
+  if (looksLikeResumen) return 0;
+  if (looksLikeItems) return 1;
+  if (looksLikePlan) return 2;
+  return null;
+}
+
 function sortTableLinksForSelector(links: OcrFolderLink[]): OcrFolderLink[] {
   if (links.length <= 1) return links;
+
+  const certificadoScores = links.map((link, index) => ({
+    index,
+    link,
+    score: getCertificadoTableSelectorScore(link),
+  }));
+  if (certificadoScores.some((entry) => entry.score !== null)) {
+    return certificadoScores
+      .toSorted((left, right) => {
+        const leftScore = left.score ?? 99;
+        const rightScore = right.score ?? 99;
+        if (leftScore !== rightScore) return leftScore - rightScore;
+        return left.index - right.index;
+      })
+      .map((entry) => entry.link);
+  }
 
   const hasPresupuesto = links.some((link) => normalizeFolderName(link.tablaName ?? '').includes('presupuesto'));
   const hasMateriales = links.some((link) => normalizeFolderName(link.tablaName ?? '').includes('material'));
@@ -1134,12 +1172,13 @@ function FileManagerContent({
   const deletePermissionsQuery = useQuery({
     queryKey: ['permissions-check', 'document-delete', obraId],
     queryFn: () =>
-      fetchPermissionChecks(['documents:delete:file', 'documents:delete:folder']),
+      fetchPermissionChecks(['documents:delete:folder']),
     enabled: Boolean(obraId),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
-  const canDeleteFile = Boolean(deletePermissionsQuery.data?.['documents:delete:file']);
+  // File deletes are allowed to any authenticated obra user; folders remain permission-gated.
+  const canDeleteFile = true;
   const canDeleteFolder = Boolean(deletePermissionsQuery.data?.['documents:delete:folder']);
   const canDeleteItem = useCallback(
     (item: FileSystemItem | null | undefined) => {
@@ -6863,6 +6902,11 @@ function FileManagerContent({
   return (
     <div className="relative min-h-[calc(100vh-9rem)] flex flex-col gap-4">
       <DemoPageTour flow={documentosOverviewTour} />
+      <DemoPageTour
+        flow={presentacionDocumentosTour}
+        finishLabel="Ver tablas consolidadas →"
+        nextHref="/macro?tour=demo-macro"
+      />
       {guidedDocumentsFlow ? (
         <ContextualWizard
           open

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Building2, FolderClock, ShieldCheck, Workflow } from "lucide-react";
+import { Building2, FolderClock, FolderOpen, ShieldCheck, Workflow } from "lucide-react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ const tabs = [
 	{ value: "polizas", label: "Pólizas", icon: ShieldCheck },
 	{ value: "flujo", label: "Flujo", icon: Workflow },
 	// { value: "certificates", label: "Certificados", icon: Receipt },
+	{ value: "documentos", label: "Documentos Legacy", icon: FolderOpen },
 	{ value: "documentos-new", label: "Documentos New", icon: FolderClock },
 ];
 

@@ -133,9 +133,10 @@ The delete is fully auditable and shows who deleted the record and when.
 
 The app has restore flows for the current trash systems:
 
-- Delete actions are permission-gated: `obras:delete` for obras, `documents:delete:file` for files, and `documents:delete:folder` for folders. Tenant `owner`/`admin` still bypass custom role restrictions through `has_permission`.
+- Delete actions are permission-gated for broad destructive scopes: `obras:delete` for obras and `documents:delete:folder` for folders. Individual document files can be sent to trash by any authenticated user with access to the obra; `documents:delete:file` is legacy role data and is no longer enforced for file deletes.
 - Deleted obras are tracked in `obra_deletes` and can be restored by tenant admins within 30 days via `/api/obras/deletes/restore`.
 - Deleted files/folders are tracked in `obra_document_deletes` and can be restored within 30 days via `/api/obras/[id]/documents/deletes/restore`.
+- Users with `documents:purge` can permanently purge a document history entry via `DELETE /api/obras/[id]/documents/deletes`; restored history items are removed from the live obra folder as part of that purge.
 - Expired delete events are not recoverable from the UI/API. Maintenance jobs mark them as purged after retention.
 
 Manual SQL restore should be reserved for exceptional admin repair, because it can bypass audit fields, usage accounting, and delete-event state.
@@ -144,7 +145,7 @@ Manual SQL restore should be reserved for exceptional admin repair, because it c
 
 Purge does not mean the same thing for every entity:
 
-- Document purge removes the physical Storage object and cleans known document-derived metadata such as upload tracking, OCR processing rows, and extracted rows linked by `__docPath`.
+- Document purge, whether retention-driven or manually triggered from history, removes the physical Storage object and cleans known document-derived metadata such as upload tracking, OCR processing rows, and extracted rows linked by `__docPath`.
 - Obra purge removes files under the obra Storage prefix and marks the obra/delete event as purged. The obra row and related database records may remain for audit/history unless a future migration defines a stronger data-erasure contract.
 
 If product/legal requirements demand complete erasure of all obra child data, that needs a separate ADR and migration plan.

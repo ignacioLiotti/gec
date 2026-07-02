@@ -698,6 +698,69 @@ function normalizeLooseKey(value: string) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+const NEAR_TABLE_ID_MIN_LENGTH = 24;
+const NEAR_TABLE_ID_MAX_DISTANCE = 2;
+
+function boundedEditDistance(left: string, right: string, maxDistance: number) {
+  if (left === right) return 0;
+  if (Math.abs(left.length - right.length) > maxDistance) return maxDistance + 1;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    let rowMinimum = current[0];
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      const deletion = previous[rightIndex] + 1;
+      const insertion = current[rightIndex - 1] + 1;
+      const substitution = previous[rightIndex - 1] + cost;
+      const distance = Math.min(deletion, insertion, substitution);
+      current[rightIndex] = distance;
+      rowMinimum = Math.min(rowMinimum, distance);
+    }
+
+    if (rowMinimum > maxDistance) return maxDistance + 1;
+    previous = current;
+  }
+
+  return previous[right.length] ?? maxDistance + 1;
+}
+
+function findNearTableIdEntry(
+  entries: Array<[string, unknown]>,
+  tablaId: string,
+) {
+  const normalizedTablaId = normalizeLooseKey(tablaId);
+  if (normalizedTablaId.length < NEAR_TABLE_ID_MIN_LENGTH) return null;
+
+  let bestMatch:
+    | { key: string; value: Record<string, unknown>; distance: number }
+    | null = null;
+  let bestDistanceMatchCount = 0;
+
+  for (const [key, value] of entries) {
+    if (typeof value !== "object" || value === null) continue;
+    const normalizedKey = normalizeLooseKey(key);
+    if (normalizedKey.length < NEAR_TABLE_ID_MIN_LENGTH) continue;
+    const distance = boundedEditDistance(
+      normalizedKey,
+      normalizedTablaId,
+      NEAR_TABLE_ID_MAX_DISTANCE,
+    );
+    if (distance > NEAR_TABLE_ID_MAX_DISTANCE) continue;
+
+    if (!bestMatch || distance < bestMatch.distance) {
+      bestMatch = { key, value: value as Record<string, unknown>, distance };
+      bestDistanceMatchCount = 1;
+    } else if (distance === bestMatch.distance) {
+      bestDistanceMatchCount += 1;
+    }
+  }
+
+  return bestMatch && bestDistanceMatchCount === 1 ? bestMatch : null;
+}
+
 function buildColumnCandidateKeys(column: ColumnMeta) {
   const candidates = [
     column.fieldKey,
@@ -883,6 +946,16 @@ function resolveTableExtraction(
     if (normalizedKey === normalizedTablaId || normalizedKey === normalizedTablaName) {
       return value as Record<string, unknown>;
     }
+  }
+
+  const nearTableIdMatch = findNearTableIdEntry(entries, def.tablaId);
+  if (nearTableIdMatch) {
+    console.warn("[tablas:ocr-import-multi] recovered near table id match", {
+      expectedTablaId: def.tablaId,
+      receivedKey: nearTableIdMatch.key,
+      distance: nearTableIdMatch.distance,
+    });
+    return nearTableIdMatch.value;
   }
 
   if (totalExpectedTables === 1 && entries.length === 1) {
