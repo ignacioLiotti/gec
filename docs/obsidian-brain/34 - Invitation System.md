@@ -147,6 +147,7 @@ CREATE POLICY "users_read_own_invitations" ON invitations
 Invitation emails are sent via **Resend** (`RESEND_API_KEY`):
 - From: `RESEND_FROM_EMAIL`
 - Template: Plain transactional email with invitation link
+- Link host: canonical `APP_URL` first, then marketing/public app host config. Production falls back to `https://sintesis.dev` and does not use Vercel preview/deployment URLs by default.
 - If Resend is not configured → logs warning, invitation exists in DB but email is never sent
 
 ---

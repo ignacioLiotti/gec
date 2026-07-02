@@ -33,7 +33,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
   const [loading, setLoading] = useState(false);
-  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,9 +62,9 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
 
     if (result.error) {
       toast.error(result.error);
-    } else if (result.success && result.token) {
+    } else if (result.success && result.inviteLink) {
       toast.success(`Invitación enviada a ${email.trim()}`);
-      setInviteToken(result.token);
+      setInviteLink(result.inviteLink);
       setEmail("");
     }
   };
@@ -73,14 +73,13 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
     setOpen(false);
     setEmail("");
     setRole("member");
-    setInviteToken(null);
+    setInviteLink(null);
   };
 
   const copyInviteLink = () => {
-    if (!inviteToken) return;
+    if (!inviteLink) return;
 
-    const inviteUrl = `${window.location.origin}/invitations/${inviteToken}`;
-    navigator.clipboard.writeText(inviteUrl);
+    navigator.clipboard.writeText(inviteLink);
     toast.success("Enlace de invitación copiado al portapapeles");
   };
 
@@ -100,7 +99,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {inviteToken ? (
+        {inviteLink ? (
           // Success state - show invite link
           <div className="space-y-4 py-4">
             <div className="flex items-center justify-center py-6">
@@ -114,7 +113,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
               <div className="flex gap-2">
                 <Input
                   id="invite-link"
-                  value={`${window.location.origin}/invitations/${inviteToken}`}
+                  value={inviteLink}
                   readOnly
                   className="font-mono text-sm"
                 />
@@ -128,7 +127,7 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setInviteToken(null)}>
+              <Button type="button" variant="outline" onClick={() => setInviteLink(null)}>
                 Invitar Otro
               </Button>
               <Button type="button" onClick={handleClose}>

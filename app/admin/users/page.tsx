@@ -1,160 +1,210 @@
-import { createClient } from "@/utils/supabase/server";
+import { canStartImpersonation } from "@/lib/impersonation-access";
+import { isSuperAdminUser } from "@/lib/superadmin";
+import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
-import UserRow from "./user-row";
+import { createClient } from "@/utils/supabase/server";
 import { InviteUsersDialog } from "./_components/invite-users-dialog";
 import { PendingInvitationsList } from "./_components/pending-invitations-list";
-import { resolveTenantMembership } from "@/lib/tenant-selection";
-
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+import { UsersPageClient } from "./users-page-client";
+import { Separator } from "@/components/ui/separator";
 
 export default async function AdminUsersPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  console.log("[admin/users] current user", user?.id);
-  if (!user) return <div className="p-6 text-sm">Iniciá sesión primero.</div>;
+	const supabase = await createClient();
+	const {
+		data: { user },
+	} = await supabase.auth.getUser();
 
-  const { data: memberships, error: membershipsError } = await supabase
-    .from("memberships")
-    .select("tenant_id, role")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true });
-  console.log("[admin/users] memberships", memberships, membershipsError);
+	if (!user) return <div className="p-6 text-sm">Inicia sesion primero.</div>;
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("is_superadmin")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  console.log("[admin/users] profile lookup", profile, profileError);
-  const isSuperAdmin = (profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const { data: memberships } = await supabase
+		.from("memberships")
+		.select("tenant_id, role")
+		.eq("user_id", user.id)
+		.order("created_at", { ascending: true });
 
-  const { tenantId } = await resolveTenantMembership(
-    (memberships ?? []) as { tenant_id: string | null; role: string | null }[],
-    { isSuperAdmin }
-  );
-  console.log("[admin/users] resolved tenantId", tenantId);
-  if (!tenantId) return <div className="p-6 text-sm">No se encontró membresía de organización.</div>;
+	const { data: profile } = await supabase
+		.from("profiles")
+		.select("is_superadmin")
+		.eq("user_id", user.id)
+		.maybeSingle();
+	const isSuperAdmin = isSuperAdminUser(
+		user.id,
+		profile?.is_superadmin,
+		user.email,
+	);
 
-  let canAdmin: boolean | null = null;
-  let permError: unknown = null;
-  if (!isSuperAdmin) {
-    const permResult = await supabase.rpc("has_permission", {
-      tenant: tenantId,
-      perm_key: "admin:roles",
-    });
-    canAdmin = permResult.data;
-    permError = permResult.error;
-  } else {
-    canAdmin = true;
-  }
-  console.log("[admin/users] has_permission admin:roles =", canAdmin, permError);
-  const effectiveAdmin = (typeof canAdmin === "boolean" ? canAdmin : null) ?? isSuperAdmin;
-  if (!effectiveAdmin) return <div className="p-6 text-sm">Sin permisos de administrador.</div>;
+	const { tenantId } = await resolveTenantMembership(
+		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
+		{ isSuperAdmin },
+	);
+	if (!tenantId) {
+		return (
+			<div className="p-6 text-sm">
+				No se encontro membresia de organizacion.
+			</div>
+		);
+	}
 
-  const [{ data: members }, { data: roles }, { data: permissions }] = await Promise.all([
-    supabase
-      .from("memberships")
-      .select("user_id, role")
-      .eq("tenant_id", tenantId),
-    supabase
-      .from("roles")
-      .select("id, name")
-      .eq("tenant_id", tenantId)
-      .order("name"),
-    supabase.from("permissions").select("id, key, description").order("key"),
-  ]);
-  console.log("[admin/users] fetched members", members);
-  console.log("[admin/users] fetched roles", roles);
-  console.log("[admin/users] fetched permissions", permissions);
+	const [rolesPermission, usersPermission] = isSuperAdmin
+		? [{ data: true }, { data: true }]
+		: await Promise.all([
+			supabase.rpc("has_permission", {
+				tenant: tenantId,
+				perm_key: "admin:roles",
+			}),
+			supabase.rpc("has_permission", {
+				tenant: tenantId,
+				perm_key: "admin:users",
+			}),
+		]);
 
-  // Get user data from auth.users (email is in auth.users, not profiles)
-  const memberIds = (members ?? []).map((m) => m.user_id);
-  const admin = createSupabaseAdminClient();
+	const canManageRoles = Boolean(rolesPermission.data ?? isSuperAdmin);
+	const canManageUsers = Boolean(usersPermission.data ?? isSuperAdmin);
+	if (!canManageRoles) {
+		return <div className="p-6 text-sm">Sin permisos de administrador.</div>;
+	}
 
-  const users = await Promise.all(
-    memberIds.map(async (userId) => {
-      const membership = members?.find((m) => m.user_id === userId);
-      try {
-        const { data } = await admin.auth.admin.getUserById(userId);
-        return {
-          user_id: data.user?.id ?? userId,
-          full_name: data.user?.user_metadata?.display_name ?? data.user?.user_metadata?.full_name ?? null,
-          email: data.user?.email ?? null,
-          membership_role: membership?.role ?? "member",
-        };
-      } catch (error) {
-        console.error(`Failed to fetch user ${userId}:`, error);
-        return {
-          user_id: userId,
-          full_name: null,
-          email: null,
-          membership_role: membership?.role ?? "member",
-        };
-      }
-    })
-  );
-  console.log("[admin/users] fetched users from auth", users);
+	const [{ data: members }, { data: roles }, { data: permissions }] =
+		await Promise.all([
+			supabase
+				.from("memberships")
+				.select("user_id, role")
+				.eq("tenant_id", tenantId)
+				.order("role", { ascending: true }),
+			supabase
+				.from("roles")
+				.select("id, name, description, color")
+				.eq("tenant_id", tenantId)
+				.order("name"),
+			supabase
+				.from("permissions")
+				.select("id, key, description, category, display_name, sort_order")
+				.order("category")
+				.order("sort_order"),
+		]);
 
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Usuarios</h1>
-        <InviteUsersDialog tenantId={tenantId} />
-      </div>
-      <PendingInvitationsList tenantId={tenantId} />
-      <UsersTable
-        rows={users}
-        tenantId={tenantId}
-        allRoles={roles ?? []}
-        allPermissions={permissions ?? []}
-      />
-    </div>
-  );
+	const memberIds = (members ?? []).map((member) => member.user_id);
+	const [userRolesResult, overridesResult] =
+		memberIds.length > 0
+			? await Promise.all([
+				supabase
+					.from("user_roles")
+					.select("user_id, role_id, roles!inner(tenant_id)")
+					.in("user_id", memberIds)
+					.eq("roles.tenant_id", tenantId),
+				supabase
+					.from("user_permission_overrides")
+					.select("user_id, is_granted")
+					.eq("tenant_id", tenantId)
+					.in("user_id", memberIds),
+			])
+			: [{ data: [] }, { data: [] }];
+
+	const roleIdsByUser = new Map<string, string[]>();
+	for (const assignment of userRolesResult.data ?? []) {
+		const current = roleIdsByUser.get(assignment.user_id) ?? [];
+		current.push(assignment.role_id);
+		roleIdsByUser.set(assignment.user_id, current);
+	}
+
+	const overrideCountsByUser = new Map<
+		string,
+		{ granted: number; denied: number }
+	>();
+	for (const override of overridesResult.data ?? []) {
+		const current = overrideCountsByUser.get(override.user_id) ?? {
+			granted: 0,
+			denied: 0,
+		};
+		if (override.is_granted) {
+			current.granted += 1;
+		} else {
+			current.denied += 1;
+		}
+		overrideCountsByUser.set(override.user_id, current);
+	}
+
+	const admin = createSupabaseAdminClient();
+	const users = await Promise.all(
+		memberIds.map(async (userId) => {
+			const membership = members?.find((member) => member.user_id === userId);
+			const overrideCounts = overrideCountsByUser.get(userId) ?? {
+				granted: 0,
+				denied: 0,
+			};
+
+			try {
+				const { data } = await admin.auth.admin.getUserById(userId);
+				return {
+					user_id: data.user?.id ?? userId,
+					full_name:
+						data.user?.user_metadata?.display_name ??
+						data.user?.user_metadata?.full_name ??
+						null,
+					email: data.user?.email ?? null,
+					membership_role: membership?.role ?? "member",
+					assigned_role_ids: roleIdsByUser.get(userId) ?? [],
+					override_count: overrideCounts.granted,
+					denied_override_count: overrideCounts.denied,
+					created_at: data.user?.created_at ?? null,
+					last_sign_in_at: data.user?.last_sign_in_at ?? null,
+				};
+			} catch (error) {
+				console.error(`Failed to fetch user ${userId}:`, error);
+				return {
+					user_id: userId,
+					full_name: null,
+					email: null,
+					membership_role: membership?.role ?? "member",
+					assigned_role_ids: roleIdsByUser.get(userId) ?? [],
+					override_count: overrideCounts.granted,
+					denied_override_count: overrideCounts.denied,
+					created_at: null,
+					last_sign_in_at: null,
+				};
+			}
+		}),
+	);
+
+	const impersonationAccess = canStartImpersonation({
+		isSuperAdmin,
+		actorEmail: user.email,
+	});
+
+	return (
+		<div className="min-h-screen bg-[#f0f1f3] px-4 py-6 text-stone-950 sm:px-6 lg:px-8">
+			<div className="mx-auto max-w-7xl space-y-6">
+				<div className="flex flex-col gap-5  sm:flex-row sm:items-end sm:justify-between">
+					<div className="space-y-2">
+						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
+							Administracion
+						</p>
+						<div>
+							<h1 className="text-3xl font-semibold tracking-tight">
+								Usuarios
+							</h1>
+							<p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
+								Roles, permisos y perfiles de la organizacion en una sola
+								vista.
+							</p>
+						</div>
+					</div>
+					<div className="flex items-center gap-2">
+						{canManageUsers ? <InviteUsersDialog tenantId={tenantId} /> : null}
+					</div>
+				</div>
+
+				<Separator />
+
+				<PendingInvitationsList tenantId={tenantId} />
+				<UsersPageClient
+					users={users}
+					tenantId={tenantId}
+					allRoles={roles ?? []}
+					allPermissions={permissions ?? []}
+					canImpersonate={impersonationAccess.allowed}
+				/>
+			</div>
+		</div>
+	);
 }
-
-function UsersTable({
-  rows,
-  tenantId,
-  allRoles,
-  allPermissions,
-}: {
-  rows: { user_id: string; full_name: string | null; email: string | null; membership_role: string }[];
-  tenantId: string;
-  allRoles: { id: string; name: string }[];
-  allPermissions: { id: string; key: string; description: string | null }[];
-}) {
-  return (
-    <div className="overflow-hidden rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="bg-foreground/5">
-          <tr className="text-left">
-            <th className="px-3 py-2">Usuario</th>
-            <th className="px-3 py-2">Rol de Org.</th>
-            <th className="px-3 py-2">Roles Asignados</th>
-            <th className="px-3 py-2">Modificaciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <UserRow
-              key={r.user_id}
-              row={r}
-              tenantId={tenantId}
-              allRoles={allRoles}
-              allPermissions={allPermissions}
-            />
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td className="px-3 py-6 text-foreground/60" colSpan={4}>Sin usuarios.</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// UserRow moved to ./user-row (client component)
