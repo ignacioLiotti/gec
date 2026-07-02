@@ -12,6 +12,8 @@ import {
 	type MacroTableWithColumns,
 } from "@/components/report/builders/macro-report-config";
 import { ContextualWizard, type WizardFlow } from "@/components/ui/contextual-wizard";
+import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
+import { presentacionReporteTour } from "@/lib/demo-tours/screen-tour-flows";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -172,6 +174,11 @@ function MacroTableReportContent() {
 			<ReportPage
 				config={reportConfig}
 				backUrl={`/macro?macroId=${macroTable?.id}`}
+			/>
+			<DemoPageTour
+				flow={presentacionReporteTour}
+				finishLabel="Cerrar el recorrido →"
+				nextHref="/dashboard?tour=demo-cierre"
 			/>
 			{macroReportFlow ? (
 				<ContextualWizard

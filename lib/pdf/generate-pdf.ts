@@ -113,8 +113,11 @@ function buildReportHtml(contentHtml: string, options: GeneratePdfOptions): stri
 	return `
 		<div class="report-header">
 			<div class="company-name">${escapeHtml(options.companyName)}</div>
-			<div class="report-title">${escapeHtml(options.reportTitle)}</div>
-			<div class="report-date">${escapeHtml(options.date)}</div>
+			<div class="report-doc-head">
+				<div class="report-label">Reporte</div>
+				<div class="report-title">${escapeHtml(options.reportTitle)}</div>
+				<div class="report-date">Emitido ${escapeHtml(options.date)}</div>
+			</div>
 		</div>
 		<div class="report-content">
 			${contentHtml}

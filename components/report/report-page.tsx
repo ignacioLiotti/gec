@@ -6,12 +6,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileDown, ChevronLeft, Filter, Settings, Loader2, FileSpreadsheet } from "lucide-react";
+import {
+	FileDown,
+	ChevronLeft,
+	Filter,
+	Settings,
+	Loader2,
+	FileSpreadsheet,
+	Share2,
+	Sparkles,
+	Columns3,
+	Layers,
+	Eye,
+	Save,
+	Trash2,
+	Search,
+	BarChart3,
+} from "lucide-react";
 import { toast } from "sonner";
 import type {
 	ReportConfig,
@@ -33,6 +49,24 @@ type ReportPageProps<Row, Filters> = {
 	readOnly?: boolean;
 };
 
+type SavedReportPreset<Filters> = {
+	id: string;
+	name: string;
+	filters?: Partial<Filters>;
+	report_state?: Partial<ReportState>;
+};
+
+type SavedReportTemplate<Filters> = {
+	id: string;
+	name: string;
+	payload?: {
+		filters?: Partial<Filters>;
+		reportState?: Partial<ReportState>;
+	};
+};
+
+type ReportSidebarPanel = "settings" | "filters" | "columns" | "visual" | "presets";
+
 function normalizeWizardLabel(value: string): string {
 	return value
 		.normalize("NFD")
@@ -40,6 +74,28 @@ function normalizeWizardLabel(value: string): string {
 		.toLowerCase()
 		.replace(/\s+/g, "")
 		.trim();
+}
+
+const DEFAULT_VISIBLE_FILTER_FIELDS = 7;
+const DEFAULT_VISIBLE_COLUMN_CONTROLS = 9;
+
+function hasFilterValue(value: unknown): boolean {
+	if (Array.isArray(value)) return value.length > 0;
+	if (typeof value === "string") {
+		const normalized = value.trim().toLowerCase();
+		return normalized.length > 0 && normalized !== "all";
+	}
+	return value != null && value !== false;
+}
+
+function getAggregationLabel(opt: AggregationType): string {
+	if (opt === "none") return "Sin total";
+	if (opt === "sum") return "Suma";
+	if (opt === "count") return "Contar";
+	if (opt === "count-checked") return "Contar marcados";
+	if (opt === "average") return "Promedio";
+	if (opt === "min") return "Minimo";
+	return "Maximo";
 }
 
 const naturalSortCollator = new Intl.Collator("es", {
@@ -230,13 +286,16 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 	const [isSharing, setIsSharing] = useState(false);
 	const [isExportingXlsx, setIsExportingXlsx] = useState(false);
-	const [presets, setPresets] = useState<any[]>([]);
-	const [templates, setTemplates] = useState<any[]>([]);
+	const [presets, setPresets] = useState<SavedReportPreset<Filters>[]>([]);
+	const [templates, setTemplates] = useState<SavedReportTemplate<Filters>[]>([]);
 	const [presetName, setPresetName] = useState("");
 	const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 	const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
 	const [shareUrl, setShareUrl] = useState<string | null>(null);
 	const [shareExpiryDays, setShareExpiryDays] = useState<string>("7");
+	const [showAllFilters, setShowAllFilters] = useState(false);
+	const [showAllColumns, setShowAllColumns] = useState(false);
+	const [activePanel, setActivePanel] = useState<ReportSidebarPanel>("settings");
 	const [isCompareEnabled, setIsCompareEnabled] = useState(
 		typeof localSnapshot?.compareEnabled === "boolean"
 			? localSnapshot.compareEnabled
@@ -343,7 +402,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		try {
 			const res = await fetch(`/api/reports/presets?reportKey=${configRef.current.id}`);
 			if (!res.ok) throw new Error("No se pudieron cargar los presets");
-			const payload = await res.json();
+			const payload = (await res.json()) as { presets?: SavedReportPreset<Filters>[] };
 			setPresets(payload.presets ?? []);
 		} catch (err) {
 			console.error(err);
@@ -354,7 +413,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		try {
 			const res = await fetch(`/api/reports/templates?reportKey=${configRef.current.id}`);
 			if (!res.ok) throw new Error("No se pudieron cargar las plantillas");
-			const payload = await res.json();
+			const payload = (await res.json()) as { templates?: SavedReportTemplate<Filters>[] };
 			setTemplates(payload.templates ?? []);
 		} catch (err) {
 			console.error(err);
@@ -465,7 +524,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		}
 	}, [config.id, filters, loadPresets, presetName, reportState]);
 
-	const handleApplyPreset = useCallback((preset: any) => {
+	const handleApplyPreset = useCallback((preset: SavedReportPreset<Filters>) => {
 		const nextFilters = (prev: Filters) => ({ ...prev, ...(preset.filters ?? {}) });
 		setFilters(nextFilters);
 		setDraftFilters(nextFilters);
@@ -479,14 +538,14 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		toast.success("Preset aplicado");
 	}, []);
 
-	const handleApplyTemplate = useCallback((template: any) => {
-		const payload = template.payload ?? {};
-		if (payload.filters) {
+	const handleApplyTemplate = useCallback((template: SavedReportTemplate<Filters>) => {
+		const payload = template.payload;
+		if (payload?.filters) {
 			const nextFilters = (prev: Filters) => ({ ...prev, ...(payload.filters ?? {}) });
 			setFilters(nextFilters);
 			setDraftFilters(nextFilters);
 		}
-		if (payload.reportState) {
+		if (payload?.reportState) {
 			setReportState((prev) => ({ ...prev, ...payload.reportState }));
 		}
 		toast.success("Plantilla aplicada");
@@ -669,7 +728,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 				.filter((id) => !keepIds.includes(id));
 		const byType = (types: string[]) =>
 			columns.filter((col) => types.includes(col.type)).map((col) => col.id);
-		const templates: Array<{ id: string; name: string; payload: any }> = [];
+		const templates: SavedReportTemplate<Filters>[] = [];
 		if (config.templateCategory === "obras") {
 			templates.push({
 				id: "obras-resumen-financiero",
@@ -831,6 +890,122 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		[columns, reportState.hiddenColumnIds]
 	);
 
+	const activeFilterCount = useMemo(() => {
+		return (filterFields ?? []).reduce(
+			(count, field) => count + (hasFilterValue(filters[field.id]) ? 1 : 0),
+			0
+		);
+	}, [filterFields, filters]);
+
+	const priorityColumnIds = useMemo(() => {
+		const ids = new Set<string>();
+		for (const col of columns) {
+			const normalizedLabel = normalizeWizardLabel(col.label);
+			const isPriority =
+				normalizedLabel === "obra" ||
+				normalizedLabel.includes("documento") ||
+				normalizedLabel.includes("unidad") ||
+				normalizedLabel.includes("cantidad") ||
+				normalizedLabel.includes("descripcion") ||
+				normalizedLabel.includes("descriptivo") ||
+				(normalizedLabel.includes("precio") && normalizedLabel.includes("total"));
+			if (isPriority) ids.add(col.id);
+		}
+		return ids;
+	}, [columns]);
+
+	const displayedColumns = useMemo(() => {
+		if (showAllColumns || columns.length <= DEFAULT_VISIBLE_COLUMN_CONTROLS) return columns;
+		return columns.filter(
+			(col, index) =>
+				index < DEFAULT_VISIBLE_COLUMN_CONTROLS || priorityColumnIds.has(col.id)
+		);
+	}, [columns, priorityColumnIds, showAllColumns]);
+
+	const hiddenColumnControlCount = columns.length - displayedColumns.length;
+
+	const displayedFilterFields = useMemo(() => {
+		const fields = filterFields ?? [];
+		if (showAllFilters || fields.length <= DEFAULT_VISIBLE_FILTER_FIELDS) return fields;
+		return fields.filter((field, index) => {
+			const fieldId = normalizeWizardLabel(String(field.id));
+			const fieldLabel = normalizeWizardLabel(field.label);
+			const isSearch = fieldId === "search" || fieldLabel.includes("buscar");
+			const isDescription =
+				fieldId.includes("descripcion") ||
+				fieldLabel.includes("descripcion") ||
+				fieldLabel.includes("descriptivo");
+			const isActive =
+				hasFilterValue(filters[field.id]) || hasFilterValue(draftFilters[field.id]);
+			return index < DEFAULT_VISIBLE_FILTER_FIELDS || isSearch || isDescription || isActive;
+		});
+	}, [draftFilters, filterFields, filters, showAllFilters]);
+
+	const hiddenFilterFieldCount = (filterFields?.length ?? 0) - displayedFilterFields.length;
+
+	const activeGroupLabel = useMemo(() => {
+		if (reportState.viewMode === "full") return "Sin agrupar";
+		return groupByOptions.find((opt) => opt.id === reportState.viewMode)?.label ?? "Agrupado";
+	}, [groupByOptions, reportState.viewMode]);
+
+	const quickFilterField = useMemo(() => {
+		return (
+			(filterFields ?? []).find((field) => {
+				const fieldId = normalizeWizardLabel(String(field.id));
+				const fieldLabel = normalizeWizardLabel(field.label);
+				return (
+					field.type === "text" &&
+					(fieldId === "search" ||
+						fieldLabel.includes("buscar") ||
+						fieldId.includes("descripcion") ||
+						fieldLabel.includes("descripcion") ||
+						fieldLabel.includes("descriptivo"))
+				);
+			}) ?? null
+		);
+	}, [filterFields]);
+
+	const quickColumnToggles = useMemo(() => {
+		const preferred = columns.filter((col) => {
+			const normalizedLabel = normalizeWizardLabel(col.label);
+			return (
+				normalizedLabel.includes("documento") ||
+				normalizedLabel.includes("unidad") ||
+				normalizedLabel.includes("cantidad")
+			);
+		});
+		return (preferred.length > 0 ? preferred : columns.slice(0, 3)).slice(0, 3);
+	}, [columns]);
+
+	const quickTotalColumn = useMemo(() => {
+		const totalColumn =
+			columns.find((col) => normalizeWizardLabel(col.label) === "preciototal") ??
+			columns.find((col) => {
+				const normalizedLabel = normalizeWizardLabel(col.label);
+				return normalizedLabel.includes("precio") && normalizedLabel.includes("total");
+			}) ??
+			columns.find((col) => {
+				const normalizedLabel = normalizeWizardLabel(col.label);
+				return normalizedLabel.includes("total");
+			});
+		return totalColumn ?? columns.find((col) => col.type === "currency" || col.type === "number") ?? null;
+	}, [columns]);
+
+	const quickGroupOptions = useMemo(() => groupByOptions.slice(0, 3), [groupByOptions]);
+
+	const sectionClassName =
+		"rounded-lg border border-[#d7dce2] bg-[#f8f9fb] p-3 shadow-[0_1px_0_rgba(255,255,255,.92)_inset,0_8px_18px_rgba(30,41,59,.06)]";
+	const sectionHeaderClassName =
+		"text-[10px] font-bold uppercase tracking-[0.18em] text-[#a8a29e]";
+	const inputClassName =
+		"h-8 border-[#d9dee5] bg-white text-xs text-[#1f2937] shadow-[inset_0_1px_2px_rgba(30,41,59,.05)]";
+	const softButtonClassName =
+		"h-8 border-[#d9dee5] bg-[#f9fafb] text-[11px] text-[#334155] hover:bg-white active:scale-[0.98]";
+	const activeButtonClassName =
+		"h-8 bg-[#1f2937] text-[11px] text-[#f8fafc] hover:bg-[#111827] active:scale-[0.98]";
+	const dockButtonClassName =
+		"min-h-[76px] rounded-lg border border-[#d7dce2] bg-[#f8f9fb] p-3 text-left shadow-[0_1px_0_rgba(255,255,255,.92)_inset,0_8px_18px_rgba(30,41,59,.06)] transition duration-150 hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_1px_0_rgba(255,255,255,.96)_inset,0_12px_24px_rgba(30,41,59,.09)] active:translate-y-0 active:scale-[0.985]";
+
 	// Handle back navigation
 	const handleBack = useCallback(() => {
 		if (backUrl) {
@@ -838,24 +1013,30 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 		} else {
 			back();
 		}
-	}, [backUrl, router]);
+	}, [back, backUrl, push]);
 
 	return (
 		<Fragment>
-			<div className="flex h-[calc(100vh-4rem)] overflow-hidden w-full">
+			<div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-[#d7dce2]">
 				{/* Main Content - Report Preview */}
-				<div className="flex-1 flex flex-col min-w-0 bg-[#f4f5f7] dark:bg-zinc-900 relative">
+				<div className="relative flex min-w-0 flex-1 flex-col bg-[#f3f4f5] dark:bg-zinc-900">
 					{/* Toolbar */}
-					<div className="flex items-center gap-3 px-4 py-2.5 bg-[#e9ebef] dark:bg-zinc-800 border-b border-[#d5d8df] dark:border-zinc-700 no-print shrink-0">
+					<div className="no-print flex shrink-0 items-center gap-3 border-b border-[#d7dce2] bg-[#f0f1f3] px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,.86)] dark:border-zinc-700 dark:bg-zinc-800">
 						<Button
 							variant="ghost"
 							size="sm"
 							onClick={handleBack}
-							className="gap-1.5 text-[#2b2f36] dark:text-zinc-300 hover:bg-[#d9dde4] dark:hover:bg-zinc-700"
+							className="gap-1.5 text-[#1f2937] hover:bg-[#e5e7eb] dark:text-zinc-300 dark:hover:bg-zinc-700"
 						>
 							<ChevronLeft className="size-4" />
 							Volver
 						</Button>
+						<div className="hidden items-center gap-2 text-xs text-[#78716c] md:flex">
+							<span className="size-2 rounded-full bg-[#ff5800]" />
+							<span className="font-mono">{data.length} filas</span>
+							<span className="text-[#cbd5e1]">/</span>
+							<span>{activeGroupLabel}</span>
+						</div>
 						<div
 							className="ml-auto flex items-center gap-2"
 							data-wizard-target="report-export-actions"
@@ -885,10 +1066,20 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 								Excel
 							</Button>
 							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setIsShareDialogOpen(true)}
+								disabled={readOnly || isLoading}
+								className="gap-2"
+							>
+								<Share2 className="size-4" />
+								Compartir
+							</Button>
+							<Button
 								onClick={handleGeneratePdf}
 								disabled={isGeneratingPdf || isLoading}
 								size="sm"
-								className="gap-2 bg-[#2b2f36] hover:bg-[#1f2328] text-[#f7f7f8] dark:bg-zinc-600 dark:hover:bg-zinc-500"
+								className="gap-2 bg-[#1f2937] text-[#f8fafc] hover:bg-[#111827] dark:bg-zinc-600 dark:hover:bg-zinc-500"
 							>
 								{isGeneratingPdf ? (
 									<Loader2 className="size-4 animate-spin" />
@@ -901,17 +1092,17 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					</div>
 
 					{/* Paper area */}
-					<div data-wizard-target="report-preview-area" className="flex-1 overflow-auto flex justify-center py-8 px-4">
+					<div data-wizard-target="report-preview-area" className="flex flex-1 justify-center overflow-auto px-4 py-8">
 						<div ref={reportContentRef} className="flex flex-col gap-8">
 							{isLoading ? (
 								<div className="report-paper pdf-preview ">
 									<div className="report-body flex items-center justify-center py-16">
-										<Loader2 className="size-6 animate-spin text-[#7a8088]" />
+										<Loader2 className="size-6 animate-spin text-[#a8a29e]" />
 									</div>
 								</div>
 							) : groupedData.length === 0 ? (
 								<div className="report-paper pdf-preview ">
-									<div className="report-body flex items-center justify-center py-20 text-[#7a8088]">
+									<div className="report-body flex items-center justify-center py-20 text-[#78716c]">
 										Sin datos para mostrar
 									</div>
 								</div>
@@ -922,18 +1113,26 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 
 									{/* Document Header */}
 									<div className="report-header-block">
-										<div className="report-company font-serif">
-											{reportState.companyName}
+										<div className="report-brand">
+											<span className="report-brand-dot" />
+											<div>
+												<div className="report-company">
+													{reportState.companyName}
+												</div>
+												<div className="report-kicker">Sintesis</div>
+											</div>
+										</div>
+										<div className="report-doc-head">
+											<p className="report-doc-title">Reporte</p>
+											<p className="report-title-text">
+												{reportState.description}
+											</p>
+											<p className="report-date-text font-mono">
+												<span>Emitido</span>
+												<span>{reportState.date}</span>
+											</p>
 										</div>
 										<div className="report-divider" />
-										<div className="report-meta">
-											<div className="report-title-text font-serif">
-												{reportState.description}
-											</div>
-											<div className="report-date-text font-mono">
-												{reportState.date}
-											</div>
-										</div>
 									</div>
 
 									{/* Report Tables */}
@@ -970,62 +1169,201 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 					</div>
 				</div>
 
-				{/* Right Sidebar - Filters & Settings */}
-				<div className="w-80 border-l border-[#d5d8df] dark:border-zinc-700 bg-[#f0f2f5] dark:bg-zinc-800 flex flex-col shrink-0">
-					<Tabs defaultValue="settings" className="flex-1 flex flex-col">
-						<div className="px-4 pt-4 pb-3 border-b border-[#d5d8df] dark:border-zinc-700 ">
-							<TabsList className="flex w-full flex-wrap gap-1 bg-[#e2e5eb] dark:bg-zinc-700">
-								<TabsTrigger
-									value="settings"
-									data-wizard-target="report-tab-settings"
-									className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600"
+				{/* Right Sidebar - Report Workshop */}
+				<div className="no-print flex w-[22.5rem] shrink-0 flex-col border-l border-[#d7dce2] bg-[#eef0f2] shadow-[inset_1px_0_0_rgba(255,255,255,.72)] dark:border-zinc-700 dark:bg-zinc-800">
+					<Tabs
+						value={activePanel}
+						onValueChange={(value) => setActivePanel(value as ReportSidebarPanel)}
+						className="flex min-h-0 flex-1 flex-col"
+					>
+						<div className="border-b border-[#d7dce2] bg-[#f0f1f3] px-4 pb-3 pt-4 shadow-[inset_0_1px_0_rgba(255,255,255,.9)] dark:border-zinc-700 dark:bg-zinc-800">
+							<div className="flex items-start gap-3">
+								<span className="mt-1 size-3 shrink-0 rounded-full bg-[#ff5800] shadow-[0_0_0_3px_rgba(255,88,0,.12)]" />
+								<div className="min-w-0">
+									<p className={sectionHeaderClassName}>Taller del reporte</p>
+									<h2 className="truncate text-sm font-semibold text-[#1c1917] dark:text-zinc-100">
+										{config.title}
+									</h2>
+								</div>
+							</div>
+							<div className="mt-3 grid grid-cols-3 gap-2">
+								<div className="rounded-md border border-[#d7dce2] bg-white/80 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.9)]">
+									<div className="font-mono text-sm font-semibold text-[#1c1917]">{data.length}</div>
+									<div className="text-[10px] uppercase tracking-[0.12em] text-[#a8a29e]">filas</div>
+								</div>
+								<div className="rounded-md border border-[#d7dce2] bg-white/80 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.9)]">
+									<div className="font-mono text-sm font-semibold text-[#1c1917]">
+										{visibleColumns.length}/{columns.length}
+									</div>
+									<div className="text-[10px] uppercase tracking-[0.12em] text-[#a8a29e]">cols</div>
+								</div>
+								<div className="rounded-md border border-[#d7dce2] bg-white/80 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.9)]">
+									<div className="font-mono text-sm font-semibold text-[#1c1917]">{activeFilterCount}</div>
+									<div className="text-[10px] uppercase tracking-[0.12em] text-[#a8a29e]">filtros</div>
+								</div>
+							</div>
+							<div className="mt-3 grid grid-cols-4 gap-1.5">
+								<button
+									type="button"
+									className={`flex h-7 items-center justify-center gap-1 rounded-md border text-[11px] transition active:scale-[0.97] ${
+										activePanel === "settings"
+											? "border-[#1f2937] bg-[#1f2937] text-white"
+											: "border-[#d7dce2] bg-white/75 text-[#475569] hover:bg-white"
+									}`}
+									onClick={() => setActivePanel("settings")}
 								>
 									<Settings className="size-3.5" />
-									Configuracion
-								</TabsTrigger>
-								<TabsTrigger
-									value="filters"
-									data-wizard-target="report-tab-filters"
-									className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600"
+									Inicio
+								</button>
+								<button
+									type="button"
+									data-wizard-target="report-filters-panel"
+									className={`flex h-7 items-center justify-center gap-1 rounded-md border text-[11px] transition active:scale-[0.97] ${
+										activePanel === "filters"
+											? "border-[#1f2937] bg-[#1f2937] text-white"
+											: "border-[#d7dce2] bg-white/75 text-[#475569] hover:bg-white"
+									}`}
+									onClick={() => setActivePanel("filters")}
 								>
 									<Filter className="size-3.5" />
 									Filtros
-								</TabsTrigger>
-								{/* <TabsTrigger value="visual" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
-									Vista
-								</TabsTrigger>
-								<TabsTrigger value="presets" className="gap-1.5 text-[11px] px-2 w-[calc(50%-0.125rem)] data-[state=active]:bg-[#f7f7f8] dark:data-[state=active]:bg-zinc-600">
-									Presets
-								</TabsTrigger> */}
-							</TabsList>
+								</button>
+								<button
+									type="button"
+									data-wizard-target="report-config-columns"
+									className={`flex h-7 items-center justify-center gap-1 rounded-md border text-[11px] transition active:scale-[0.97] ${
+										activePanel === "columns"
+											? "border-[#1f2937] bg-[#1f2937] text-white"
+											: "border-[#d7dce2] bg-white/75 text-[#475569] hover:bg-white"
+									}`}
+									onClick={() => setActivePanel("columns")}
+								>
+									<Columns3 className="size-3.5" />
+									Columnas
+								</button>
+								<button
+									type="button"
+									className={`flex h-7 items-center justify-center gap-1 rounded-md border text-[11px] transition active:scale-[0.97] ${
+										activePanel === "visual"
+											? "border-[#1f2937] bg-[#1f2937] text-white"
+											: "border-[#d7dce2] bg-white/75 text-[#475569] hover:bg-white"
+									}`}
+									onClick={() => setActivePanel("visual")}
+								>
+									<Sparkles className="size-3.5" />
+									Estilo
+								</button>
+							</div>
 						</div>
 
 						{/* SETTINGS TAB */}
 						<TabsContent value="settings" className="flex-1 p-0 m-0 overflow-hidden">
-							<ScrollArea className="h-full max-h-[calc(100vh-10rem)]">
-								<div className="p-4 space-y-5">
-									{/* Header fields */}
-									<div className="space-y-3" data-wizard-target="report-config-columns">
-										<h3 className="text-[11px] font-semibold text-[#7b828c] dark:text-zinc-400 uppercase tracking-widest">
-											Encabezado
-										</h3>
+							<ScrollArea className="h-full">
+								<div className="space-y-4 p-4">
+									<div className="grid grid-cols-2 gap-2">
+										<button
+											type="button"
+											data-wizard-target="report-filters-panel"
+											className={dockButtonClassName}
+											onClick={() => setActivePanel("filters")}
+										>
+											<div className="flex items-center justify-between gap-2">
+												<Filter className="size-4 text-[#475569]" />
+												<span className="rounded-full border border-[#d7dce2] bg-white px-2 py-0.5 font-mono text-[10px] text-[#64748b]">
+													{activeFilterCount}
+												</span>
+											</div>
+											<p className="mt-2 text-xs font-semibold text-[#1f2937]">Filtros</p>
+											<p className="mt-0.5 text-[11px] text-[#64748b]">
+												{activeFilterCount > 0 ? "Ajustar activos" : "Abrir busqueda"}
+											</p>
+										</button>
+										<button
+											type="button"
+											data-wizard-target="report-config-columns"
+											className={dockButtonClassName}
+											onClick={() => setActivePanel("columns")}
+										>
+											<div className="flex items-center justify-between gap-2">
+												<Columns3 className="size-4 text-[#475569]" />
+												<span className="rounded-full border border-[#d7dce2] bg-white px-2 py-0.5 font-mono text-[10px] text-[#64748b]">
+													{visibleColumns.length}/{columns.length}
+												</span>
+											</div>
+											<p className="mt-2 text-xs font-semibold text-[#1f2937]">Columnas</p>
+											<p className="mt-0.5 text-[11px] text-[#64748b]">{activeGroupLabel}</p>
+										</button>
+										<button
+											type="button"
+											className={dockButtonClassName}
+											onClick={() => setActivePanel("visual")}
+										>
+											<div className="flex items-center justify-between gap-2">
+												<Eye className="size-4 text-[#475569]" />
+												<span className="rounded-full border border-[#d7dce2] bg-white px-2 py-0.5 text-[10px] text-[#64748b]">
+													{reportState.summaryDisplay === "card" ? "card" : "fila"}
+												</span>
+											</div>
+											<p className="mt-2 text-xs font-semibold text-[#1f2937]">Estilo</p>
+											<p className="mt-0.5 text-[11px] text-[#64748b]">
+												{reportState.showMiniCharts ? "Mini graficos on" : "Resumen simple"}
+											</p>
+										</button>
+										<button
+											type="button"
+											className={dockButtonClassName}
+											onClick={() => setActivePanel("presets")}
+										>
+											<div className="flex items-center justify-between gap-2">
+												<Layers className="size-4 text-[#475569]" />
+												<span className="rounded-full border border-[#d7dce2] bg-white px-2 py-0.5 font-mono text-[10px] text-[#64748b]">
+													{presets.length}
+												</span>
+											</div>
+											<p className="mt-2 text-xs font-semibold text-[#1f2937]">Presets</p>
+											<p className="mt-0.5 text-[11px] text-[#64748b]">Guardar o aplicar</p>
+										</button>
+									</div>
+
+									<section className={sectionClassName}>
+										<div className="mb-3 flex items-center justify-between gap-2">
+											<h3 className={sectionHeaderClassName}>Documento</h3>
+											<Settings className="size-4 text-[#78716c]" />
+										</div>
 										<div className="space-y-2">
-											<div className="space-y-1">
-												<Label className="text-xs text-[#5f6670] dark:text-zinc-400">Empresa</Label>
-												<Input
-													value={reportState.companyName}
-													onChange={(e) =>
-														setReportState((prev) => ({
-															...prev,
-															companyName: e.target.value,
-														}))
-													}
-													className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
-													disabled={readOnly}
-												/>
+											<div className="grid grid-cols-2 gap-2">
+												<div className="space-y-1">
+													<Label className="text-xs text-[#57534e] dark:text-zinc-400">Empresa</Label>
+													<Input
+														value={reportState.companyName}
+														onChange={(e) =>
+															setReportState((prev) => ({
+																...prev,
+																companyName: e.target.value,
+															}))
+														}
+														className={inputClassName}
+														disabled={readOnly}
+													/>
+												</div>
+												<div className="space-y-1">
+													<Label className="text-xs text-[#57534e] dark:text-zinc-400">Fecha</Label>
+													<Input
+														type="date"
+														value={reportState.date}
+														onChange={(e) =>
+															setReportState((prev) => ({
+																...prev,
+																date: e.target.value,
+															}))
+														}
+														className={inputClassName}
+														disabled={readOnly}
+													/>
+												</div>
 											</div>
 											<div className="space-y-1">
-												<Label className="text-xs text-[#5f6670] dark:text-zinc-400">Descripcion</Label>
+												<Label className="text-xs text-[#57534e] dark:text-zinc-400">Descripcion</Label>
 												<Input
 													value={reportState.description}
 													onChange={(e) =>
@@ -1034,23 +1372,258 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 															description: e.target.value,
 														}))
 													}
-													className="h-8 text-sm bg-[#f7f7f8] dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600"
+													className={inputClassName}
 													disabled={readOnly}
 												/>
 											</div>
 										</div>
-									</div>
+									</section>
 
-									<Separator className="bg-[#d5d8df] dark:bg-zinc-700" />
+									{quickFilterField && (
+										<section className={sectionClassName}>
+											<div className="mb-3 flex items-center justify-between gap-2">
+												<div>
+													<h3 className={sectionHeaderClassName}>Filtro rapido</h3>
+													<p className="mt-1 text-[11px] text-[#78716c]">{quickFilterField.label}</p>
+												</div>
+												<Search className="size-4 text-[#78716c]" />
+											</div>
+											<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+												<Input
+													data-wizard-target="report-filter-input-descripcion"
+													placeholder={quickFilterField.placeholder}
+													value={String(draftFilters[quickFilterField.id] || "")}
+													onChange={(e) =>
+														setDraftFilters((prev) => ({
+															...prev,
+															[quickFilterField.id]: e.target.value,
+														}))
+													}
+													className={inputClassName}
+													disabled={readOnly}
+												/>
+												<Button
+													data-wizard-target="report-apply-filters-button"
+													size="sm"
+													className={activeButtonClassName}
+													onClick={() => setFilters(draftFilters)}
+													disabled={readOnly}
+												>
+													Aplicar
+												</Button>
+											</div>
+										</section>
+									)}
+
+									<section className={sectionClassName}>
+										<div className="mb-3 flex items-center justify-between gap-2">
+											<div>
+												<h3 className={sectionHeaderClassName}>Atajos</h3>
+												<p className="mt-1 text-[11px] text-[#78716c]">Acciones frecuentes sin abrir listas</p>
+											</div>
+											<Sparkles className="size-4 text-[#78716c]" />
+										</div>
+										{quickGroupOptions.length > 0 && (
+											<div className="space-y-2">
+												<Label className="text-xs text-[#57534e] dark:text-zinc-400">Agrupar por</Label>
+												<div className="grid grid-cols-2 gap-2">
+													<Button
+														variant={reportState.viewMode === "full" ? "default" : "outline"}
+														size="sm"
+														className={
+															reportState.viewMode === "full"
+																? activeButtonClassName
+																: softButtonClassName
+														}
+														onClick={() => setReportState((prev) => ({ ...prev, viewMode: "full" }))}
+														disabled={readOnly}
+													>
+														Sin agrupar
+													</Button>
+													{quickGroupOptions.map((option) => {
+														const normalizedLabel = normalizeWizardLabel(option.label);
+														const isGrouped = reportState.viewMode === option.id;
+														return (
+															<Button
+																key={option.id}
+																variant={isGrouped ? "default" : "outline"}
+																size="sm"
+																data-wizard-target={
+																	normalizedLabel === "obra"
+																		? "report-config-agrupar-obra"
+																		: normalizedLabel.includes("descripcion") ||
+																			  normalizedLabel.includes("descriptivo")
+																			? "report-config-agrupar-descripcion"
+																			: undefined
+																}
+																className={isGrouped ? activeButtonClassName : softButtonClassName}
+																onClick={() =>
+																	setReportState((prev) => ({
+																		...prev,
+																		viewMode: isGrouped ? "full" : option.id,
+																	}))
+																}
+																disabled={readOnly}
+															>
+																{option.label}
+															</Button>
+														);
+													})}
+												</div>
+											</div>
+										)}
+										{quickTotalColumn && (
+											<div
+												className="mt-3 space-y-1.5"
+												data-wizard-target={
+													normalizeWizardLabel(quickTotalColumn.label) === "preciototal"
+														? "report-config-total-precio-total"
+														: undefined
+												}
+											>
+												<Label className="text-xs text-[#57534e] dark:text-zinc-400">
+													Total destacado: {quickTotalColumn.label}
+												</Label>
+												<select
+													className="h-8 w-full rounded-md border border-[#d9dee5] bg-white px-2 py-1 text-xs text-[#1f2937] shadow-[inset_0_1px_2px_rgba(30,41,59,.05)]"
+													value={reportState.aggregations[quickTotalColumn.id] || "none"}
+													onChange={(e) =>
+														setAggregation(quickTotalColumn.id, e.target.value as AggregationType)
+													}
+													disabled={
+														readOnly || reportState.hiddenColumnIds.includes(quickTotalColumn.id)
+													}
+												>
+													{getAggregationOptions(quickTotalColumn.type || "text").map((opt) => (
+														<option key={opt} value={opt}>
+															{getAggregationLabel(opt as AggregationType)}
+														</option>
+													))}
+												</select>
+											</div>
+										)}
+										{quickColumnToggles.length > 0 && (
+											<div className="mt-3 space-y-1.5">
+												<Label className="text-xs text-[#57534e] dark:text-zinc-400">
+													Columnas clave
+												</Label>
+												<div className="grid grid-cols-1 gap-1.5">
+													{quickColumnToggles.map((col) => {
+														const normalizedLabel = normalizeWizardLabel(col.label);
+														const isVisible = !reportState.hiddenColumnIds.includes(col.id);
+														const checkboxWizardTarget =
+															normalizedLabel.includes("documento")
+																? "report-config-toggle-documento"
+																: normalizedLabel.includes("unidad")
+																	? "report-config-toggle-unidad"
+																	: normalizedLabel.includes("cantidad")
+																		? "report-config-toggle-cantidad"
+																		: undefined;
+														return (
+															<label
+																key={col.id}
+																className="flex h-8 items-center justify-between gap-2 rounded-md border border-[#d9dee5] bg-white px-2.5 text-xs text-[#1f2937] shadow-[inset_0_1px_0_rgba(255,255,255,.9)]"
+															>
+																<span className="truncate">{col.label}</span>
+																<Checkbox
+																	data-wizard-target={checkboxWizardTarget}
+																	checked={isVisible}
+																	onCheckedChange={() => toggleColumnVisibility(col.id)}
+																	disabled={readOnly}
+																/>
+															</label>
+														);
+													})}
+												</div>
+											</div>
+										)}
+									</section>
+
+									<div className="hidden">
+									{(suggestedTemplates.length > 0 || templates.length > 0) && (
+										<section className={sectionClassName}>
+											<div className="mb-3 flex items-center justify-between gap-2">
+												<h3 className={sectionHeaderClassName}>Plantillas rapidas</h3>
+												<Sparkles className="size-4 text-[#ff5800]" />
+											</div>
+											<div className="grid grid-cols-1 gap-2">
+												{suggestedTemplates.map((template) => (
+													<Button
+														key={template.id}
+														variant="outline"
+														size="sm"
+														className={`${softButtonClassName} justify-between`}
+														onClick={() => handleApplyTemplate(template)}
+													>
+														<span className="truncate">{template.name}</span>
+														<span className="text-[10px] text-[#a8a29e]">Sugerida</span>
+													</Button>
+												))}
+												{templates.slice(0, 3).map((template) => (
+													<Button
+														key={template.id}
+														variant="outline"
+														size="sm"
+														className={`${softButtonClassName} justify-between`}
+														onClick={() => handleApplyTemplate(template)}
+													>
+														<span className="truncate">{template.name}</span>
+														<span className="text-[10px] text-[#a8a29e]">Aplicar</span>
+													</Button>
+												))}
+											</div>
+										</section>
+									)}
+
+									{/* Header fields */}
+									<section className={sectionClassName} data-wizard-target="report-config-columns">
+										<div className="mb-3 flex items-center justify-between gap-2">
+											<h3 className={sectionHeaderClassName}>Encabezado</h3>
+											<Settings className="size-4 text-[#78716c]" />
+										</div>
+										<div className="space-y-2">
+											<div className="space-y-1">
+												<Label className="text-xs text-[#57534e] dark:text-zinc-400">Empresa</Label>
+												<Input
+													value={reportState.companyName}
+													onChange={(e) =>
+														setReportState((prev) => ({
+															...prev,
+															companyName: e.target.value,
+														}))
+													}
+													className={inputClassName}
+													disabled={readOnly}
+												/>
+											</div>
+											<div className="space-y-1">
+												<Label className="text-xs text-[#57534e] dark:text-zinc-400">Descripcion</Label>
+												<Input
+													value={reportState.description}
+													onChange={(e) =>
+														setReportState((prev) => ({
+															...prev,
+															description: e.target.value,
+														}))
+													}
+													className={inputClassName}
+													disabled={readOnly}
+												/>
+											</div>
+										</div>
+									</section>
+
+									<Separator className="bg-[#d7dce2] dark:bg-zinc-700" />
 
 									{config.compare && (
 										<>
-											<div className="space-y-3">
-												<h3 className="text-[11px] font-semibold text-[#7b828c] dark:text-zinc-400 uppercase tracking-widest">
-													Comparar
-												</h3>
+											<section className={sectionClassName}>
+												<div className="mb-3 flex items-center justify-between gap-2">
+													<h3 className={sectionHeaderClassName}>Comparar</h3>
+													<BarChart3 className="size-4 text-[#78716c]" />
+												</div>
 												<div className="flex items-center justify-between gap-2">
-													<span className="text-xs text-[#3a3f45] dark:text-zinc-300">
+													<span className="text-xs text-[#44403c] dark:text-zinc-300">
 														Comparar período anterior
 													</span>
 													<Checkbox
@@ -1059,26 +1632,286 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 														disabled={readOnly}
 													/>
 												</div>
-											</div>
-											<Separator className="bg-[#d5d8df] dark:bg-zinc-700" />
+											</section>
+											<Separator className="bg-[#d7dce2] dark:bg-zinc-700" />
 										</>
 									)}
 
+									<section
+										id="report-filters-section"
+										className={sectionClassName}
+										data-wizard-target="report-filters-panel"
+									>
+										<div className="mb-3 flex items-center justify-between gap-2">
+											<div>
+												<h3 className={sectionHeaderClassName}>Filtros</h3>
+												<p className="mt-1 text-[11px] text-[#78716c]">
+													{activeFilterCount > 0
+														? `${activeFilterCount} activos`
+														: "Sin filtros activos"}
+												</p>
+											</div>
+											<Search className="size-4 text-[#78716c]" />
+										</div>
+
+										{!readOnly && (
+											<div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+												<Select
+													value={selectedPresetId ?? "__none__"}
+													onValueChange={(value) => {
+														if (value === "__none__") return;
+														const preset = presets.find((p) => p.id === value);
+														if (!preset) return;
+														const nextFilters = (prev: Filters) => ({
+															...prev,
+															...(preset.filters ?? {}),
+														});
+														setFilters(nextFilters);
+														setDraftFilters(nextFilters);
+														setSelectedPresetId(preset.id);
+														toast.success("Filtro aplicado");
+													}}
+												>
+													<SelectTrigger className={inputClassName}>
+														<SelectValue placeholder="Filtro guardado" />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="__none__">Filtro guardado</SelectItem>
+														{presets.map((preset) => (
+															<SelectItem key={preset.id} value={preset.id}>
+																{preset.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												<Button
+													size="sm"
+													variant="outline"
+													className={softButtonClassName}
+													onClick={handleSaveFiltersOnly}
+												>
+													<Save className="size-3.5" />
+													Guardar
+												</Button>
+											</div>
+										)}
+
+										<div className="space-y-2">
+											{displayedFilterFields.length === 0 ? (
+												<p className="rounded-md border border-dashed border-[#d9dee5] px-3 py-2 text-xs text-[#78716c]">
+													Este reporte no tiene filtros configurados.
+												</p>
+											) : (
+												displayedFilterFields.map((field) => {
+													const fieldId = String(field.id);
+													const fieldIdNormalized = normalizeWizardLabel(fieldId);
+													const fieldLabelNormalized = normalizeWizardLabel(field.label);
+													const isDescripcionField =
+														fieldIdNormalized.includes("descripcion") ||
+														fieldLabelNormalized.includes("descripcion") ||
+														fieldLabelNormalized.includes("descriptivo");
+													return (
+														<div key={String(field.id)} className="space-y-1.5">
+															<Label className="text-xs text-[#57534e] dark:text-zinc-400">
+																{field.label}
+															</Label>
+															{field.type === "text" && (
+																<Input
+																	data-wizard-target={
+																		isDescripcionField
+																			? "report-filter-input-descripcion"
+																			: undefined
+																	}
+																	placeholder={field.placeholder}
+																	value={String(draftFilters[field.id] || "")}
+																	onChange={(e) =>
+																		setDraftFilters((prev) => ({
+																			...prev,
+																			[field.id]: e.target.value,
+																		}))
+																	}
+																	className={inputClassName}
+																	disabled={readOnly}
+																/>
+															)}
+															{field.type === "number" && (
+																<Input
+																	type="number"
+																	placeholder={field.placeholder}
+																	value={String(draftFilters[field.id] || "")}
+																	onChange={(e) =>
+																		setDraftFilters((prev) => ({
+																			...prev,
+																			[field.id]: e.target.value,
+																		}))
+																	}
+																	className={inputClassName}
+																	disabled={readOnly}
+																/>
+															)}
+															{field.type === "date" && (
+																<Input
+																	type="date"
+																	value={String(draftFilters[field.id] || "")}
+																	onChange={(e) =>
+																		setDraftFilters((prev) => ({
+																			...prev,
+																			[field.id]: e.target.value,
+																		}))
+																	}
+																	className={inputClassName}
+																	disabled={readOnly}
+																/>
+															)}
+															{field.type === "select" && field.options && (
+																<select
+																	className={`${inputClassName} w-full rounded-md px-2.5`}
+																	value={String(draftFilters[field.id] || "")}
+																	onChange={(e) =>
+																		setDraftFilters((prev) => ({
+																			...prev,
+																			[field.id]: e.target.value,
+																		}))
+																	}
+																	disabled={readOnly}
+																>
+																	{field.options.map((opt) => (
+																		<option key={opt.value} value={opt.value}>
+																			{opt.label}
+																		</option>
+																	))}
+																</select>
+															)}
+															{field.type === "multi-select" && field.options && (
+																<div className="space-y-2 rounded-md border border-[#d9dee5] bg-white px-2.5 py-2">
+																	{field.options.map((opt) => {
+																		const current = Array.isArray(draftFilters[field.id])
+																			? (draftFilters[field.id] as string[])
+																			: [];
+																		const checked = current.includes(opt.value);
+																		return (
+																			<label
+																				key={opt.value}
+																				className="flex items-center gap-2 text-xs text-[#292524] dark:text-zinc-200"
+																			>
+																				<Checkbox
+																					checked={checked}
+																					onCheckedChange={(nextChecked) =>
+																						setDraftFilters((prev) => {
+																							const prevValues = Array.isArray(prev[field.id])
+																								? ([...(prev[field.id] as string[])] as string[])
+																								: [];
+																							const nextValues = nextChecked
+																								? Array.from(new Set([...prevValues, opt.value]))
+																								: prevValues.filter((value) => value !== opt.value);
+																							return {
+																								...prev,
+																								[field.id]: nextValues,
+																							};
+																						})
+																					}
+																					disabled={readOnly}
+																				/>
+																				<span>{opt.label}</span>
+																			</label>
+																		);
+																	})}
+																</div>
+															)}
+															{field.type === "boolean-toggle" && (
+																<div className="grid grid-cols-3 gap-1.5">
+																	{[
+																		{ value: "all", label: "Todos" },
+																		{ value: "si", label: "Si" },
+																		{ value: "no", label: "No" },
+																	].map((opt) => (
+																		<Button
+																			key={opt.value}
+																			variant={
+																				draftFilters[field.id] === opt.value
+																					? "default"
+																					: "outline"
+																			}
+																			size="sm"
+																			className={
+																				draftFilters[field.id] === opt.value
+																					? activeButtonClassName
+																					: softButtonClassName
+																			}
+																			onClick={() =>
+																				setDraftFilters((prev) => ({
+																					...prev,
+																					[field.id]: opt.value,
+																				}))
+																			}
+																			disabled={readOnly}
+																		>
+																			{opt.label}
+																		</Button>
+																	))}
+																</div>
+															)}
+														</div>
+													);
+												})
+											)}
+										</div>
+
+										{hiddenFilterFieldCount > 0 && (
+											<Button
+												variant="outline"
+												size="sm"
+												className={`${softButtonClassName} mt-3 w-full`}
+												onClick={() => setShowAllFilters(true)}
+											>
+												Mostrar {hiddenFilterFieldCount} filtros mas
+											</Button>
+										)}
+
+										<div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+											<Button
+												data-wizard-target="report-apply-filters-button"
+												size="sm"
+												className={activeButtonClassName}
+												onClick={() => setFilters(draftFilters)}
+												disabled={readOnly}
+											>
+												<Filter className="size-3.5" />
+												Aplicar
+											</Button>
+											<Button
+												size="sm"
+												variant="outline"
+												className={softButtonClassName}
+												onClick={handleResetFilters}
+												disabled={readOnly}
+											>
+												Reiniciar
+											</Button>
+										</div>
+									</section>
+
+									<Separator className="bg-[#d7dce2] dark:bg-zinc-700" />
+
 									{/* View Mode */}
 									{/* Column config */}
-									<div className="space-y-3">
+									<section id="report-columns-section" className={sectionClassName}>
 										<div className="flex items-center justify-between gap-2">
-											<h3 className="text-[11px] font-semibold text-[#7b828c] dark:text-zinc-400 uppercase tracking-widest">
-												Configurar columnas
-											</h3>
+											<div>
+												<h3 className={sectionHeaderClassName}>Columnas</h3>
+												<p className="mt-1 text-[11px] text-[#78716c]">
+													{visibleColumns.length} visibles de {columns.length}
+												</p>
+											</div>
 											{groupByOptions.length > 0 && (
 												<Button
 													variant={reportState.viewMode === "full" ? "default" : "outline"}
 													size="sm"
-													className={`h-7 px-2 text-[11px] ${reportState.viewMode === "full"
-														? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
-														: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
-														}`}
+													className={
+														reportState.viewMode === "full"
+															? activeButtonClassName
+															: softButtonClassName
+													}
 													onClick={() =>
 														setReportState((prev) => ({ ...prev, viewMode: "full" }))
 													}
@@ -1089,9 +1922,9 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 											)}
 										</div>
 										{reportState.viewMode !== "full" && (
-											<div className="rounded border border-[#d5d8df] dark:border-zinc-700 bg-[#f7f7f8] dark:bg-zinc-800/70 p-2.5 space-y-2">
+											<div className="mt-3 space-y-2 rounded-md border border-[#d9dee5] bg-white p-2.5">
 												<div className="space-y-1">
-													<Label className="text-xs text-[#5f6670] dark:text-zinc-400">
+													<Label className="text-xs text-[#57534e] dark:text-zinc-400">
 														Orden global de grupos
 													</Label>
 													<Select
@@ -1104,7 +1937,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 															}))
 														}
 													>
-														<SelectTrigger className="h-8 text-xs bg-white dark:bg-zinc-700 border-[#d5d8df] dark:border-zinc-600">
+														<SelectTrigger className={inputClassName}>
 															<SelectValue placeholder="Nombre del grupo" />
 														</SelectTrigger>
 														<SelectContent>
@@ -1123,11 +1956,11 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 															reportState.groupSortDirection === "asc" ? "default" : "outline"
 														}
 														size="sm"
-														className={`h-7 text-[11px] ${
+														className={
 															reportState.groupSortDirection === "asc"
-																? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
-																: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
-														}`}
+																? activeButtonClassName
+																: softButtonClassName
+														}
 														onClick={() =>
 															setReportState((prev) => ({
 																...prev,
@@ -1143,11 +1976,11 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 															reportState.groupSortDirection === "desc" ? "default" : "outline"
 														}
 														size="sm"
-														className={`h-7 text-[11px] ${
+														className={
 															reportState.groupSortDirection === "desc"
-																? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
-																: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
-														}`}
+																? activeButtonClassName
+																: softButtonClassName
+														}
 														onClick={() =>
 															setReportState((prev) => ({
 																...prev,
@@ -1161,8 +1994,8 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												</div>
 											</div>
 										)}
-										<div className="space-y-2.5 max-h-[calc(90vh-22rem)] overflow-y-auto">
-											{columns.map((col) => {
+										<div className="mt-3 space-y-2">
+											{displayedColumns.map((col) => {
 												const isVisible = !reportState.hiddenColumnIds.includes(col.id);
 												const normalizedLabel = normalizeWizardLabel(col.label);
 												const checkboxWizardTarget =
@@ -1189,9 +2022,9 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												return (
 													<div
 														key={col.id}
-														className={`rounded border px-2.5 py-2 space-y-2 ${isVisible
-															? "border-[#d5d8df] dark:border-zinc-700 bg-[#f7f7f8] dark:bg-zinc-800/70"
-															: "border-[#e3e6ec] dark:border-zinc-700/60 bg-[#eef1f5] dark:bg-zinc-800/40 opacity-60"
+														className={`space-y-2 rounded-md border px-2.5 py-2 ${isVisible
+															? "border-[#d9dee5] bg-white dark:border-zinc-700 dark:bg-zinc-800/70"
+															: "border-[#e1e5ea] bg-[#eceff2] opacity-65 dark:border-zinc-700/60 dark:bg-zinc-800/40"
 															}`}
 													>
 														<div className="flex items-center justify-between gap-2">
@@ -1205,7 +2038,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 																/>
 																<Label
 																	htmlFor={`col-${col.id}`}
-																	className="text-xs font-medium cursor-pointer text-[#2b2f36] dark:text-zinc-200 truncate"
+																	className="cursor-pointer truncate text-xs font-medium text-[#292524] dark:text-zinc-200"
 																>
 																	{col.label}
 																</Label>
@@ -1223,8 +2056,8 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 																				: undefined
 																	}
 																	className={`h-7 px-2 text-[11px] ${isGrouped
-																		? "bg-[#2b2f36] text-[#f7f7f8] hover:bg-[#1f2328]"
-																		: "border-[#d5d8df] text-[#3a3f45] hover:bg-[#e2e5eb] bg-transparent"
+																		? "bg-[#1f2937] text-[#f8fafc] hover:bg-[#111827]"
+																		: "border-[#d9dee5] bg-[#f9fafb] text-[#334155] hover:bg-white"
 																		}`}
 																	onClick={() =>
 																		setReportState((prev) => ({
@@ -1246,11 +2079,11 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 																	: undefined
 															}
 														>
-															<span className="text-[11px] text-[#5f6670] dark:text-zinc-400">
+															<span className="text-[11px] text-[#78716c] dark:text-zinc-400">
 																Total
 															</span>
 															<select
-																className="flex-1 rounded border border-[#d5d8df] dark:border-zinc-600 bg-white/70 dark:bg-zinc-700 px-2 py-1 text-[11px] text-[#2b2f36] dark:text-zinc-200"
+																className="flex-1 rounded-md border border-[#d9dee5] bg-white px-2 py-1 text-[11px] text-[#1f2937] shadow-[inset_0_1px_2px_rgba(30,41,59,.05)] dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-200"
 																value={reportState.aggregations[col.id] || "none"}
 																onChange={(e) =>
 																	setAggregation(col.id, e.target.value as AggregationType)
@@ -1259,19 +2092,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 															>
 																{getAggregationOptions(col.type || "text").map((opt) => (
 																	<option key={opt} value={opt}>
-																		{opt === "none"
-																			? "Sin total"
-																			: opt === "sum"
-																				? "Suma"
-																				: opt === "count"
-																					? "Contar"
-																					: opt === "count-checked"
-																						? "Contar marcados"
-																						: opt === "average"
-																							? "Promedio"
-																							: opt === "min"
-																								? "Mínimo"
-																								: "Máximo"}
+																		{getAggregationLabel(opt as AggregationType)}
 																	</option>
 																))}
 															</select>
@@ -1280,7 +2101,462 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 												);
 											})}
 										</div>
+										{hiddenColumnControlCount > 0 && (
+											<Button
+												variant="outline"
+												size="sm"
+												className={`${softButtonClassName} mt-3 w-full`}
+												onClick={() => setShowAllColumns(true)}
+											>
+												Mostrar {hiddenColumnControlCount} columnas mas
+											</Button>
+										)}
+									</section>
+
+									<section id="report-visual-section" className={sectionClassName}>
+										<div className="mb-3 flex items-center justify-between gap-2">
+											<div>
+												<h3 className={sectionHeaderClassName}>Estilo</h3>
+												<p className="mt-1 text-[11px] text-[#78716c]">
+													Resumen y mini graficos
+												</p>
+											</div>
+											<Eye className="size-4 text-[#78716c]" />
+										</div>
+										<div className="grid grid-cols-2 gap-2">
+											<Button
+												variant={reportState.summaryDisplay === "row" ? "default" : "outline"}
+												size="sm"
+												className={
+													reportState.summaryDisplay === "row"
+														? activeButtonClassName
+														: softButtonClassName
+												}
+												onClick={() =>
+													setReportState((prev) => ({ ...prev, summaryDisplay: "row" }))
+												}
+												disabled={readOnly}
+											>
+												Fila total
+											</Button>
+											<Button
+												variant={reportState.summaryDisplay === "card" ? "default" : "outline"}
+												size="sm"
+												className={
+													reportState.summaryDisplay === "card"
+														? activeButtonClassName
+														: softButtonClassName
+												}
+												onClick={() =>
+													setReportState((prev) => ({ ...prev, summaryDisplay: "card" }))
+												}
+												disabled={readOnly}
+											>
+												Tarjeta
+											</Button>
+										</div>
+										<div className="mt-3 flex items-center justify-between gap-2">
+											<span className="text-xs text-[#44403c] dark:text-zinc-300">
+												Mini graficos
+											</span>
+											<Checkbox
+												checked={reportState.showMiniCharts}
+												onCheckedChange={(value) =>
+													setReportState((prev) => ({
+														...prev,
+														showMiniCharts: Boolean(value),
+													}))
+												}
+												disabled={readOnly}
+											/>
+										</div>
+										{reportState.showMiniCharts && (
+											<div className="mt-2 grid grid-cols-2 gap-2">
+												<Button
+													variant={
+														reportState.summaryChartType === "bar"
+															? "default"
+															: "outline"
+													}
+													size="sm"
+													className={
+														reportState.summaryChartType === "bar"
+															? activeButtonClassName
+															: softButtonClassName
+													}
+													onClick={() =>
+														setReportState((prev) => ({ ...prev, summaryChartType: "bar" }))
+													}
+													disabled={readOnly}
+												>
+													Barras
+												</Button>
+												<Button
+													variant={
+														reportState.summaryChartType === "line"
+															? "default"
+															: "outline"
+													}
+													size="sm"
+													className={
+														reportState.summaryChartType === "line"
+															? activeButtonClassName
+															: softButtonClassName
+													}
+													onClick={() =>
+														setReportState((prev) => ({ ...prev, summaryChartType: "line" }))
+													}
+													disabled={readOnly}
+												>
+													Lineas
+												</Button>
+											</div>
+										)}
+									</section>
+
+									{!readOnly && (
+										<section className={sectionClassName}>
+											<div className="mb-3 flex items-center justify-between gap-2">
+												<div>
+													<h3 className={sectionHeaderClassName}>Presets</h3>
+													<p className="mt-1 text-[11px] text-[#78716c]">
+														Guardar esta mesa de trabajo
+													</p>
+												</div>
+												<Layers className="size-4 text-[#78716c]" />
+											</div>
+											<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+												<Input
+													placeholder="Nombre del preset"
+													value={presetName}
+													onChange={(e) => setPresetName(e.target.value)}
+													className={inputClassName}
+													disabled={readOnly}
+												/>
+												<Button
+													size="sm"
+													className={activeButtonClassName}
+													onClick={handleSavePreset}
+													disabled={readOnly}
+												>
+													<Save className="size-3.5" />
+													Guardar
+												</Button>
+											</div>
+											<div className="mt-3 space-y-1.5">
+												{presets.length === 0 ? (
+													<p className="text-xs text-[#78716c]">No hay presets guardados.</p>
+												) : (
+													presets.slice(0, 4).map((preset) => (
+														<div key={preset.id} className="flex items-center gap-2">
+															<Button
+																variant="outline"
+																size="sm"
+																className={`${softButtonClassName} min-w-0 flex-1 justify-between`}
+																onClick={() => handleApplyPreset(preset)}
+															>
+																<span className="truncate">{preset.name}</span>
+																<span className="text-[10px] text-[#a8a29e]">Aplicar</span>
+															</Button>
+															<Button
+																variant="outline"
+																size="icon-sm"
+																title="Eliminar preset"
+																className="border-[#d9dee5] bg-[#f9fafb] text-[#8a3b3b] hover:bg-white hover:text-[#a23f3f]"
+																onClick={() => handleDeletePreset(preset.id)}
+																disabled={readOnly}
+															>
+																<Trash2 className="size-3.5" />
+															</Button>
+														</div>
+													))
+												)}
+											</div>
+										</section>
+									)}
 									</div>
+								</div>
+							</ScrollArea>
+						</TabsContent>
+
+						{/* COLUMNS PANEL */}
+						<TabsContent value="columns" className="flex-1 p-0 m-0 overflow-hidden">
+							<ScrollArea className="h-full">
+								<div className="space-y-4 p-4" data-wizard-target="report-config-columns">
+									<section className={sectionClassName}>
+										<div className="flex items-start justify-between gap-3">
+											<div>
+												<h3 className={sectionHeaderClassName}>Panel de columnas</h3>
+												<p className="mt-1 text-xs text-[#475569]">
+													{visibleColumns.length} visibles de {columns.length}
+												</p>
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												className={softButtonClassName}
+												onClick={() => setActivePanel("settings")}
+											>
+												Inicio
+											</Button>
+										</div>
+									</section>
+
+									{groupByOptions.length > 0 && (
+										<section className={sectionClassName}>
+											<div className="mb-3 flex items-center justify-between gap-2">
+												<div>
+													<h3 className={sectionHeaderClassName}>Agrupar</h3>
+													<p className="mt-1 text-[11px] text-[#78716c]">{activeGroupLabel}</p>
+												</div>
+												<Layers className="size-4 text-[#78716c]" />
+											</div>
+											<div className="grid grid-cols-2 gap-2">
+												<Button
+													variant={reportState.viewMode === "full" ? "default" : "outline"}
+													size="sm"
+													className={
+														reportState.viewMode === "full"
+															? activeButtonClassName
+															: softButtonClassName
+													}
+													onClick={() => setReportState((prev) => ({ ...prev, viewMode: "full" }))}
+													disabled={readOnly}
+												>
+													Sin agrupar
+												</Button>
+												{groupByOptions.map((option) => {
+													const normalizedLabel = normalizeWizardLabel(option.label);
+													const isGrouped = reportState.viewMode === option.id;
+													return (
+														<Button
+															key={option.id}
+															variant={isGrouped ? "default" : "outline"}
+															size="sm"
+															data-wizard-target={
+																normalizedLabel === "obra"
+																	? "report-config-agrupar-obra"
+																	: normalizedLabel.includes("descripcion") ||
+																		  normalizedLabel.includes("descriptivo")
+																		? "report-config-agrupar-descripcion"
+																		: undefined
+															}
+															className={isGrouped ? activeButtonClassName : softButtonClassName}
+															onClick={() =>
+																setReportState((prev) => ({
+																	...prev,
+																	viewMode: isGrouped ? "full" : option.id,
+																}))
+															}
+															disabled={readOnly}
+														>
+															{option.label}
+														</Button>
+													);
+												})}
+											</div>
+											{reportState.viewMode !== "full" && (
+												<div className="mt-3 space-y-2 rounded-md border border-[#d9dee5] bg-white p-2.5">
+													<div className="space-y-1">
+														<Label className="text-xs text-[#57534e] dark:text-zinc-400">
+															Orden global de grupos
+														</Label>
+														<Select
+															value={reportState.groupSortColumnId ?? "__group_key__"}
+															disabled={readOnly}
+															onValueChange={(value) =>
+																setReportState((prev) => ({
+																	...prev,
+																	groupSortColumnId: value === "__group_key__" ? null : value,
+																}))
+															}
+														>
+															<SelectTrigger className={inputClassName}>
+																<SelectValue placeholder="Nombre del grupo" />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="__group_key__">Nombre del grupo</SelectItem>
+																{columns.map((col) => (
+																	<SelectItem key={`column-panel-group-sort-${col.id}`} value={col.id}>
+																		{col.label}
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													</div>
+													<div className="grid grid-cols-2 gap-2">
+														<Button
+															variant={
+																reportState.groupSortDirection === "asc" ? "default" : "outline"
+															}
+															size="sm"
+															className={
+																reportState.groupSortDirection === "asc"
+																	? activeButtonClassName
+																	: softButtonClassName
+															}
+															onClick={() =>
+																setReportState((prev) => ({
+																	...prev,
+																	groupSortDirection: "asc",
+																}))
+															}
+															disabled={readOnly}
+														>
+															Ascendente
+														</Button>
+														<Button
+															variant={
+																reportState.groupSortDirection === "desc" ? "default" : "outline"
+															}
+															size="sm"
+															className={
+																reportState.groupSortDirection === "desc"
+																	? activeButtonClassName
+																	: softButtonClassName
+															}
+															onClick={() =>
+																setReportState((prev) => ({
+																	...prev,
+																	groupSortDirection: "desc",
+																}))
+															}
+															disabled={readOnly}
+														>
+															Descendente
+														</Button>
+													</div>
+												</div>
+											)}
+										</section>
+									)}
+
+									<section className={sectionClassName}>
+										<div className="mb-3 flex items-center justify-between gap-2">
+											<div>
+												<h3 className={sectionHeaderClassName}>Visibilidad y totales</h3>
+												<p className="mt-1 text-[11px] text-[#78716c]">
+													Columnas principales del reporte
+												</p>
+											</div>
+											<Columns3 className="size-4 text-[#78716c]" />
+										</div>
+										<div className="space-y-2">
+											{displayedColumns.map((col) => {
+												const isVisible = !reportState.hiddenColumnIds.includes(col.id);
+												const normalizedLabel = normalizeWizardLabel(col.label);
+												const checkboxWizardTarget =
+													normalizedLabel.includes("documento")
+														? "report-config-toggle-documento"
+														: normalizedLabel.includes("unidad")
+															? "report-config-toggle-unidad"
+															: normalizedLabel.includes("cantidad")
+																? "report-config-toggle-cantidad"
+																: undefined;
+												const groupOption =
+													groupByOptions.find((opt) => opt.id === `col-${col.id}`) ??
+													groupByOptions.find((opt) =>
+														opt.id.toLowerCase().includes(col.id.toLowerCase())
+													) ??
+													groupByOptions.find((opt) =>
+														opt.label.toLowerCase().includes(col.label.toLowerCase())
+													) ??
+													null;
+												const isGrouped = groupOption
+													? reportState.viewMode === groupOption.id
+													: false;
+
+												return (
+													<div
+														key={`column-panel-${col.id}`}
+														className={`space-y-2 rounded-md border px-2.5 py-2 transition ${
+															isVisible
+																? "border-[#d9dee5] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,.9)]"
+																: "border-[#e1e5ea] bg-[#eceff2] opacity-70"
+														}`}
+													>
+														<div className="flex items-center justify-between gap-2">
+															<label className="flex min-w-0 items-center gap-2">
+																<Checkbox
+																	data-wizard-target={checkboxWizardTarget}
+																	checked={isVisible}
+																	onCheckedChange={() => toggleColumnVisibility(col.id)}
+																	disabled={readOnly}
+																/>
+																<span className="truncate text-xs font-medium text-[#292524]">
+																	{col.label}
+																</span>
+															</label>
+															{groupOption && (
+																<Button
+																	variant={isGrouped ? "default" : "outline"}
+																	size="sm"
+																	data-wizard-target={
+																		normalizedLabel === "obra"
+																			? "report-config-agrupar-obra"
+																			: normalizedLabel.includes("descripcion") ||
+																				  normalizedLabel.includes("descriptivo")
+																				? "report-config-agrupar-descripcion"
+																				: undefined
+																	}
+																	className={`h-7 px-2 text-[11px] ${
+																		isGrouped
+																			? "bg-[#1f2937] text-[#f8fafc] hover:bg-[#111827]"
+																			: "border-[#d9dee5] bg-[#f9fafb] text-[#334155] hover:bg-white"
+																	}`}
+																	onClick={() =>
+																		setReportState((prev) => ({
+																			...prev,
+																			viewMode: isGrouped ? "full" : groupOption.id,
+																		}))
+																	}
+																	disabled={readOnly || !isVisible}
+																>
+																	{isGrouped ? "Agrupado" : "Agrupar"}
+																</Button>
+															)}
+														</div>
+														<div
+															className="flex items-center gap-2"
+															data-wizard-target={
+																normalizedLabel === "preciototal"
+																	? "report-config-total-precio-total"
+																	: undefined
+															}
+														>
+															<span className="text-[11px] text-[#78716c] dark:text-zinc-400">
+																Total
+															</span>
+															<select
+																className="flex-1 rounded-md border border-[#d9dee5] bg-white px-2 py-1 text-[11px] text-[#1f2937] shadow-[inset_0_1px_2px_rgba(30,41,59,.05)]"
+																value={reportState.aggregations[col.id] || "none"}
+																onChange={(e) =>
+																	setAggregation(col.id, e.target.value as AggregationType)
+																}
+																disabled={readOnly || !isVisible}
+															>
+																{getAggregationOptions(col.type || "text").map((opt) => (
+																	<option key={opt} value={opt}>
+																		{getAggregationLabel(opt as AggregationType)}
+																	</option>
+																))}
+															</select>
+														</div>
+													</div>
+												);
+											})}
+										</div>
+										{hiddenColumnControlCount > 0 && (
+											<Button
+												variant="outline"
+												size="sm"
+												className={`${softButtonClassName} mt-3 w-full`}
+												onClick={() => setShowAllColumns(true)}
+											>
+												Mostrar {hiddenColumnControlCount} columnas mas
+											</Button>
+										)}
+									</section>
 								</div>
 							</ScrollArea>
 						</TabsContent>
@@ -1289,6 +2565,26 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 						<TabsContent value="filters" className="flex-1 p-0 m-0 overflow-hidden">
 							<ScrollArea className="h-full">
 								<div className="p-4 space-y-5" data-wizard-target="report-filters-panel">
+									<section className={sectionClassName}>
+										<div className="flex items-start justify-between gap-3">
+											<div>
+												<h3 className={sectionHeaderClassName}>Panel de filtros</h3>
+												<p className="mt-1 text-xs text-[#475569]">
+													{activeFilterCount > 0
+														? `${activeFilterCount} filtros activos`
+														: "Sin filtros activos"}
+												</p>
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												className={softButtonClassName}
+												onClick={() => setActivePanel("settings")}
+											>
+												Inicio
+											</Button>
+										</div>
+									</section>
 									{!readOnly && (
 										<div className="space-y-2 rounded border border-[#d5d8df] dark:border-zinc-600 bg-[#f7f7f8] dark:bg-zinc-700 p-2.5">
 											<Label className="text-xs text-[#5f6670] dark:text-zinc-400">
@@ -1512,6 +2808,24 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 						<TabsContent value="visual" className="flex-1 p-0 m-0 overflow-hidden">
 							<ScrollArea className="h-full">
 								<div className="p-4 space-y-5">
+									<section className={sectionClassName}>
+										<div className="flex items-start justify-between gap-3">
+											<div>
+												<h3 className={sectionHeaderClassName}>Panel de estilo</h3>
+												<p className="mt-1 text-xs text-[#475569]">
+													Resumen, tarjetas y mini graficos
+												</p>
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												className={softButtonClassName}
+												onClick={() => setActivePanel("settings")}
+											>
+												Inicio
+											</Button>
+										</div>
+									</section>
 									<div className="space-y-3">
 										<h3 className="text-[11px] font-semibold text-[#7b828c] dark:text-zinc-400 uppercase tracking-widest">
 											Resumen de tabla
@@ -1640,6 +2954,24 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 						<TabsContent value="presets" className="flex-1 p-0 m-0 overflow-hidden">
 							<ScrollArea className="h-full">
 								<div className="p-4 space-y-5">
+									<section className={sectionClassName}>
+										<div className="flex items-start justify-between gap-3">
+											<div>
+												<h3 className={sectionHeaderClassName}>Panel de presets</h3>
+												<p className="mt-1 text-xs text-[#475569]">
+													{presets.length} guardados y {templates.length + suggestedTemplates.length} plantillas
+												</p>
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												className={softButtonClassName}
+												onClick={() => setActivePanel("settings")}
+											>
+												Inicio
+											</Button>
+										</div>
+									</section>
 									<div className="space-y-3">
 										<h3 className="text-[11px] font-semibold text-[#7b828c] dark:text-zinc-400 uppercase tracking-widest">
 											Presets guardados
