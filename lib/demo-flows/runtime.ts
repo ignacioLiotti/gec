@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import {
 	DEFAULT_DEMO_FLOW_ID,
+	DEFAULT_ENABLED_DEMO_FLOW_IDS,
 	demoFlowRegistry,
 } from "@/lib/demo-flows/registry";
 import type {
@@ -69,7 +70,7 @@ export function getEnabledDemoFlows(
 	const ids =
 		settings.enabledFlowIds.length > 0
 			? settings.enabledFlowIds
-			: [DEFAULT_DEMO_FLOW_ID];
+			: DEFAULT_ENABLED_DEMO_FLOW_IDS;
 
 	return ids
 		.map((id) => demoFlowRegistry[id])
