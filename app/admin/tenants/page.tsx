@@ -4,8 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { TenantSwitchButton } from "@/components/tenant-switch-button";
-
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 type TenantRecord = {
 	id: string;
@@ -42,11 +41,14 @@ export default async function TenantsAdminPage() {
 		.select("is_superadmin")
 		.eq("user_id", user.id)
 		.maybeSingle();
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = isSuperAdminUser(
+		user.id,
+		profile?.is_superadmin,
+		user.email,
+	);
 
 	// Check if user should see all organizations
-	const showAllOrgs = isSuperAdmin || user.email === "ignacioliotti@gmail.com";
+	const showAllOrgs = isSuperAdmin;
 
 	const { data: memberships, error: membershipError } = await supabase
 		.from("memberships")

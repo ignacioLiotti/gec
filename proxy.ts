@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { getRouteAccessConfig } from "./lib/route-access";
+import {
+	parsePermissionSimulationCookie,
+	permissionSimulationHas,
+	PERMISSION_SIMULATION_COOKIE,
+} from "@/lib/permission-simulation";
+import { isSuperAdminUser } from "@/lib/superadmin";
 import { getClientIp, rateLimitByIp } from "@/lib/security/rate-limit";
 import {
 	evaluateTenantSubscriptionAccess,
@@ -10,7 +16,6 @@ import {
 import { supabaseServerFetch } from "@/utils/supabase/fetch";
 
 const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
 const rateLimitEnabled =
 	(process.env.RATE_LIMIT_IP ?? "120") !== "0" &&
 	!!process.env.UPSTASH_REDIS_REST_URL &&
@@ -56,7 +61,7 @@ const securityHeaders: Record<string, string> = {
 	"referrer-policy": "strict-origin-when-cross-origin",
 	"content-security-policy": [
 		`default-src ${trustedSources.join(" ")}`,
-		`script-src ${trustedSources.concat(autodeskSources).join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com ${vercelSources.join(" ")}`,
+		`script-src ${trustedSources.concat(autodeskSources).join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com ${vercelSources.join(" ")}`,
 		`style-src ${trustedSources.concat(autodeskSources).join(" ")} 'unsafe-inline'`,
 		`img-src ${trustedSources.concat(autodeskSources).join(" ")} data: blob:`,
 		`font-src ${trustedSources.concat(autodeskSources).join(" ")}`,
@@ -284,8 +289,17 @@ export async function proxy(req: NextRequest) {
 			.eq("user_id", user.id)
 			.maybeSingle();
 
-		const isSuperAdmin =
-			(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+		const isSuperAdmin = isSuperAdminUser(
+			user.id,
+			profile?.is_superadmin,
+			user.email,
+		);
+		const permissionSimulation = isSuperAdmin
+			? parsePermissionSimulationCookie(
+					req.cookies.get(PERMISSION_SIMULATION_COOKIE)?.value,
+				)
+			: null;
+		const effectiveIsSuperAdmin = permissionSimulation ? false : isSuperAdmin;
 
 		const { data: memberships, error: membershipsError } = await supabase
 			.from("memberships")
@@ -319,9 +333,13 @@ export async function proxy(req: NextRequest) {
 		const activeMembership = preferredMembership ?? resolvedMemberships?.[0];
 
 		const tenantId = activeMembership?.tenant_id ?? DEFAULT_TENANT_ID;
-		const membershipRole = activeMembership?.role;
+		const membershipRole = permissionSimulation
+			? "member"
+			: activeMembership?.role;
 		const isAdmin =
-			membershipRole === "owner" || membershipRole === "admin" || isSuperAdmin;
+			membershipRole === "owner" ||
+			membershipRole === "admin" ||
+			effectiveIsSuperAdmin;
 
 		if (!isSuperAdmin && tenantId && !isBillingPaywallBypassPath(pathname)) {
 			const { data: subscription, error: subscriptionError } = await supabase
@@ -393,7 +411,7 @@ export async function proxy(req: NextRequest) {
 			}
 		}
 
-		if (isSuperAdmin || isAdmin) {
+		if (effectiveIsSuperAdmin || isAdmin) {
 			return attachSecurityHeaders(res);
 		}
 
@@ -401,17 +419,23 @@ export async function proxy(req: NextRequest) {
 		// fine-grained permissions configured for admin surfaces.
 		let hasAccess = !config || config.allowedRoles.length === 0;
 		if (config?.requiredPermissions?.length) {
-			const permissionResults = await Promise.all(
-				config.requiredPermissions.map((permissionKey) =>
-					supabase.rpc("has_permission", {
-						tenant: tenantId,
-						perm_key: permissionKey,
-					}),
-				),
-			);
-			hasAccess = permissionResults.every(
-				(result) => !result.error && result.data === true,
-			);
+			if (permissionSimulation) {
+				hasAccess = config.requiredPermissions.every((permissionKey) =>
+					permissionSimulationHas(permissionSimulation, permissionKey),
+				);
+			} else {
+				const permissionResults = await Promise.all(
+					config.requiredPermissions.map((permissionKey) =>
+						supabase.rpc("has_permission", {
+							tenant: tenantId,
+							perm_key: permissionKey,
+						}),
+					),
+				);
+				hasAccess = permissionResults.every(
+					(result) => !result.error && result.data === true,
+				);
+			}
 		}
 
 		if (!hasAccess) {

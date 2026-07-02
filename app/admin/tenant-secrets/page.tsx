@@ -1,8 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import TenantSecretsPanel from "./tenant-secrets-panel";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
-
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 type PageProps = {
 	searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -37,8 +36,11 @@ export default async function TenantSecretsPage({ searchParams }: PageProps) {
 		.eq("user_id", user.id)
 		.maybeSingle();
 
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = isSuperAdminUser(
+		user.id,
+		profile?.is_superadmin,
+		user.email,
+	);
 
 	if (membershipError && !isSuperAdmin) {
 		return (

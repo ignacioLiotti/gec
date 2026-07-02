@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createClient } from "@/utils/supabase/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SUPERADMIN_EMAIL = "ignacioliotti@gmail.com";
 
 async function canSwitchTenant(
 	supabase: Awaited<ReturnType<typeof createClient>>,
@@ -24,17 +24,13 @@ async function canSwitchTenant(
 		return true;
 	}
 
-	if (userEmail?.toLowerCase() === SUPERADMIN_EMAIL) {
-		return true;
-	}
-
 	const { data: profile } = await supabase
 		.from("profiles")
 		.select("is_superadmin")
 		.eq("user_id", userId)
 		.maybeSingle();
 
-	return Boolean(profile?.is_superadmin);
+	return isSuperAdminUser(userId, profile?.is_superadmin, userEmail);
 }
 
 function setTenantCookie(response: NextResponse, tenantId: string) {

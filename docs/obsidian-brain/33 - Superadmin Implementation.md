@@ -4,23 +4,25 @@ tags: #security #superadmin #admin #database
 
 ## Overview
 
-The superadmin is a **hardcoded, elevated user** that bypasses all tenant restrictions. This is not a configurable role — it's a single UUID baked into triggers and functions.
+The superadmin is the app-owner identity that bypasses tenant restrictions. App-level checks are centralized in `lib/superadmin.ts` and resolve from `profiles.is_superadmin`, `SUPERADMIN_USER_IDS`, or `SUPERADMIN_EMAILS`. Older database triggers still reference the original owner UUID directly.
 
 ---
 
-## Hardcoded Identity
+## App-Level Identity
 
 | Field | Value |
 |-------|-------|
-| User ID | `77b936fb-3e92-4180-b601-15c31125811e` |
-| Email | `ignacioliotti@gmail.com` |
+| User IDs | `SUPERADMIN_USER_IDS` (comma-separated UUIDs) |
+| Emails | `SUPERADMIN_EMAILS` (comma-separated emails) |
 | Profile flag | `profiles.is_superadmin = true` |
+
+Production should keep the app owner configured in env and/or with `profiles.is_superadmin = true`.
 
 ---
 
 ## Auto-Enrollment in Every Tenant
 
-Two database triggers enforce superadmin presence (migrations 0027, 0028):
+Two legacy database triggers enforce the original owner UUID presence (migrations 0027, 0028):
 
 ### Trigger 1: Auto-add on new tenant creation
 ```sql

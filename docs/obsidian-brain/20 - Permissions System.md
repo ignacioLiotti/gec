@@ -98,8 +98,9 @@ Soft delete actions use explicit permissions for broad destructive capabilities,
 |---|---|
 | `obras:delete` | Send obras to the obra trash |
 | `documents:delete:folder` | Send folders and their descendants to the document trash |
+| `documents:purge` | Permanently delete document trash-history entries from Storage and mark them purged |
 
-`documents:delete:file` may still exist in older role data, but individual file delete no longer checks it. `owner` and `admin` memberships still bypass custom role restrictions through `has_permission` for permission-gated delete actions. Migration 0102 backfills the original delete permissions into roles that already had `obras:admin`, and the `obra_manager` template includes them for new tenants/roles.
+`documents:delete:file` may still exist in older role data, but individual file delete no longer checks it. `documents:purge` is intentionally separate from trash/delete permissions because it removes physical Storage objects and cannot be restored. `owner` and `admin` memberships still bypass custom role restrictions through `has_permission` for permission-gated delete actions. Migration 0102 backfills the original delete permissions into roles that already had `obras:admin`; migration 0122 adds `documents:purge` to roles that already had `obras:admin` and to the `obra_manager` template for new tenants/roles.
 
 ### Admin configuration permissions
 
@@ -192,7 +193,7 @@ Document generation now gives tenant members baseline creation access and keeps 
 **Screen access model:**
 
 - `/document-generation` -> authenticated tenant member
-- `/document-generation/drafts` -> authenticated tenant member, own drafts only
+- `/document-generation/drafts` -> authenticated tenant member; generated-document history is tenant-wide, draft recovery remains own drafts only
 - generated documents in `GENERATED`, `UNDER_REVIEW`, or `REJECTED` can be edited by authenticated tenant members, regardless of who generated them
 - approved generated documents remain non-editable
 - `/document-generation/review` â†’ `documents:review`
@@ -203,7 +204,7 @@ Document generation now gives tenant members baseline creation access and keeps 
 
 - `bootstrap`, `drafts POST`, `generate` -> authenticated tenant member
 - `drafts GET` -> authenticated tenant member, own drafts only
-- generated list/detail -> authenticated tenant member for own documents and tenant-editable generated documents; `documents:review` can inspect the review queue broadly
+- generated list/detail -> authenticated tenant member for all generated documents in the tenant
 - generated regeneration -> authenticated tenant member when the generated document is `GENERATED`, `UNDER_REVIEW`, or `REJECTED`
 - generated approve/reject PATCH -> `documents:review`
 - `documents/access` refuses signed URLs and direct PDF downloads for generated documents whose status is `REJECTED`

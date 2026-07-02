@@ -6,8 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { auth } from "@/lib/auth";
-
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 function slugify(value: string) {
 	return value
@@ -47,8 +46,11 @@ async function assertTenantAdminAccess(tenantId: string) {
 		.eq("user_id", user.id)
 		.maybeSingle();
 
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = isSuperAdminUser(
+		user.id,
+		profile?.is_superadmin,
+		user.email,
+	);
 
 	if (!isSuperAdmin) {
 		const { data: membership } = await supabase

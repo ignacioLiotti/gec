@@ -9,8 +9,7 @@ import {
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { fetchTenantPlan } from "@/lib/subscription-plans";
 import { fetchTenantUsage } from "@/lib/tenant-usage";
-
-const SUPERADMIN_USER_ID = "77b936fb-3e92-4180-b601-15c31125811e";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 type MembershipRow = { tenant_id: string | null; role: string | null };
 type TenantSupabase =
@@ -44,8 +43,11 @@ async function resolveTenantContext(
 		.eq("user_id", user.id)
 		.maybeSingle();
 
-	const isSuperAdmin =
-		(profile?.is_superadmin ?? false) || user.id === SUPERADMIN_USER_ID;
+	const isSuperAdmin = isSuperAdminUser(
+		user.id,
+		profile?.is_superadmin,
+		user.email,
+	);
 
 	const { tenantId } = await resolveTenantMembership(
 		(memberships ?? []) as MembershipRow[],

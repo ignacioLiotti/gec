@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import { canStartImpersonation } from "@/lib/impersonation-access";
+import { getClientIp, rateLimitByIp } from "@/lib/security/rate-limit";
+import { isSuperAdminUser } from "@/lib/superadmin";
 
 export async function POST(req: NextRequest) {
 	const formData = await req.formData();
@@ -8,7 +11,17 @@ export async function POST(req: NextRequest) {
 	if (!targetUserId)
 		return NextResponse.json({ error: "user_id required" }, { status: 400 });
 
+	const ip = getClientIp(req) ?? "unknown";
+	const limit = await rateLimitByIp(`impersonate:${ip}`);
+	if (!limit.success) {
+		return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+	}
+	if (limit.pending) {
+		await limit.pending;
+	}
+
 	const res = NextResponse.json({ ok: true });
+	const admin = createSupabaseAdminClient();
 
 	const supabase = createServerClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,27 +43,31 @@ export async function POST(req: NextRequest) {
 		}
 	);
 
-	// Ensure requester is authenticated and has admin permission in at least one tenant
+	// Ensure requester is authenticated and is the app-owner superadmin.
 	const {
 		data: { user },
 	} = await supabase.auth.getUser();
 	if (!user)
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-	// Require requester to be owner/admin on at least one tenant
-	const { data: adminMembership, error: roleErr } = await supabase
-		.from("memberships")
-		.select("role")
+	const { data: profile } = await supabase
+		.from("profiles")
+		.select("is_superadmin")
 		.eq("user_id", user.id)
-		.in("role", ["owner", "admin"]) // enforce elevated roles only
-		.order("created_at", { ascending: true })
-		.limit(1)
 		.maybeSingle();
-	if (roleErr || !adminMembership) {
+
+	const access = canStartImpersonation({
+		isSuperAdmin: isSuperAdminUser(
+			user.id,
+			profile?.is_superadmin,
+			user.email,
+		),
+		actorEmail: user.email,
+	});
+	if (!access.allowed) {
 		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 	}
 
-	const admin = createSupabaseAdminClient();
 	const { data: targetUser } = await admin.auth.admin.getUserById(targetUserId);
 	if (!targetUser || !targetUser.user?.email) {
 		return NextResponse.json(
@@ -109,6 +126,23 @@ export async function POST(req: NextRequest) {
 			{ error: "Failed to impersonate" },
 			{ status: 500 }
 		);
+	}
+
+	const { error: auditError } = await admin.from("audit_log").insert({
+		tenant_id: access.auditTenantId,
+		actor_id: user.id,
+		actor_email: user.email ?? null,
+		table_name: "impersonation",
+		row_pk: { target_user_id: targetUserId },
+		action: "INSERT",
+		context: {
+			kind: "impersonation_start",
+			ip,
+			target_email: targetUser.user.email,
+		},
+	});
+	if (auditError) {
+		console.error("[impersonate] failed to write audit log", auditError);
 	}
 
 	return res;

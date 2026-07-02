@@ -152,8 +152,8 @@ Admin → /admin/users → "Invite User" dialog
 
 ## Super Admin
 
-- `profiles.is_superadmin = true` flag — OR hardcoded ID: `77b936fb-3e92-4180-b601-15c31125811e`
-- Special access also for email: `ignacioliotti@gmail.com` (owner/founder)
+- App-level checks use `lib/superadmin.ts`: `profiles.is_superadmin = true`, `SUPERADMIN_USER_IDS`, or `SUPERADMIN_EMAILS`
+- The production owner/founder identity should be configured in env and/or `profiles.is_superadmin`
 - They can access any tenant by switching to it
 - Falls back to `DEFAULT_TENANT_ID` if they have no memberships
 - In layout: admins/superadmins get ALL tenants via admin client (bypasses RLS)

@@ -3,6 +3,7 @@ import {
 	hasDemoCapability,
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
+import { permissionSimulationHas } from "@/lib/permission-simulation";
 
 type SidebarMacroTableJoin = {
 	macro_table_id: string;
@@ -67,11 +68,17 @@ export async function GET() {
 			});
 		}
 
-		const isAdmin = membership?.role === "admin" || membership?.role === "owner";
+		const isAdmin =
+			!access.permissionSimulation &&
+			(membership?.role === "admin" || membership?.role === "owner");
 		const isSuperAdmin = access.isSuperAdmin;
+		const hasSimulatedMacroAccess =
+			permissionSimulationHas(access.permissionSimulation, "macro:read") ||
+			permissionSimulationHas(access.permissionSimulation, "macro:edit") ||
+			permissionSimulationHas(access.permissionSimulation, "macro:admin");
 
 		// If admin/superadmin, show all macro tables marked for sidebar
-		if (isAdmin || isSuperAdmin) {
+		if (isAdmin || isSuperAdmin || hasSimulatedMacroAccess) {
 			// Get tables that have any sidebar assignment
 			const { data: sidebarTables } = await supabase
 				.from("sidebar_macro_tables")
