@@ -4,6 +4,7 @@ import {
   type DocumentGenerationPermissionMap,
   loadDocumentGenerationPermissions,
 } from "@/lib/document-generation-server";
+import { documentPermissionsFromPermissionSimulation } from "@/lib/permission-simulation";
 
 export type DocumentAccessResult = {
   supabase: Awaited<ReturnType<typeof createClient>>;
@@ -17,8 +18,9 @@ export async function resolveDocumentAccess(): Promise<DocumentAccessResult> {
   const supabase = await createClient();
   const access = await resolveRequestAccessContext();
 
-  const permissions =
-    access.tenantId && access.user?.id
+  const permissions = access.permissionSimulation
+    ? documentPermissionsFromPermissionSimulation(access.permissionSimulation)
+    : access.tenantId && access.user?.id
       ? await loadDocumentGenerationPermissions({
           supabase,
           tenantId: access.tenantId,

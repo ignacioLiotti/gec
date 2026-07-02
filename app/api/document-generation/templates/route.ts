@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       supabase: access.supabase,
       tenantId,
       userId: user?.id ?? null,
+      permissionSimulation: access.permissionSimulation,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
     if (!permissions.canManageTemplates) {
@@ -86,6 +87,7 @@ export async function PUT(request: NextRequest) {
       supabase,
       tenantId,
       userId: user?.id ?? null,
+      permissionSimulation: access.permissionSimulation,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
     if (!permissions.canManageTemplates) {

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
@@ -13,6 +12,7 @@ import {
   loadTenantUserOptions,
   loadTemplates,
   loadWorks,
+  resolveGeneratedDocumentNextSequenceNumber,
   resolveGenerationContext,
 } from "@/lib/document-generation-server";
 
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       supabase,
       tenantId,
       userId: user?.id ?? null,
+      permissionSimulation: access.permissionSimulation,
     };
     const workId = request.nextUrl.searchParams.get("workId");
     const folderPath = normalizeFolderGenerationPath(request.nextUrl.searchParams.get("folderPath"));
@@ -59,16 +60,16 @@ export async function GET(request: NextRequest) {
       templates,
     });
     const resolvedDocumentType = context.resolvedDocumentType;
-    const existingSequenceCount =
-      workId && resolvedDocumentType
-        ? await countExistingDocuments({
-            supabase: access.supabase,
-            tenantId,
+    const nextSequenceNumber =
+      workId && resolvedDocumentType && context.selectedTemplate
+        ? await resolveGeneratedDocumentNextSequenceNumber(accessContext, {
             workId,
-            documentType: resolvedDocumentType,
             folderPath: context.resolvedFolderPath,
+            documentType: resolvedDocumentType,
+            schema: context.selectedTemplate.schema,
           })
-        : 0;
+        : null;
+    const existingSequenceCount = nextSequenceNumber == null ? 0 : Math.max(0, nextSequenceNumber - 1);
     const workLabel = workSummary
       ? [workSummary.n != null ? String(workSummary.n) : "", workSummary.designacion_y_ubicacion ?? ""]
           .filter(Boolean)
@@ -110,31 +111,4 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Error al cargar la configuracion";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-async function countExistingDocuments({
-  supabase,
-  tenantId,
-  workId,
-  documentType,
-  folderPath,
-}: {
-  supabase: SupabaseClient;
-  tenantId: string;
-  workId: string;
-  documentType: string;
-  folderPath?: string | null;
-}) {
-  let query = supabase
-    .from("generated_documents")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenantId)
-    .eq("obra_id", workId)
-    .eq("document_type", documentType);
-  if (folderPath) {
-    query = query.eq("folder_path", folderPath);
-  }
-  const { count, error } = await query;
-  if (error) throw error;
-  return count ?? 0;
 }

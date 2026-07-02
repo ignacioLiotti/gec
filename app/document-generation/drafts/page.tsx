@@ -15,10 +15,7 @@ export default async function DocumentGenerationDraftsPage() {
 
   return (
     <DocumentGenerationShell permissions={access.permissions}>
-      <DocumentDraftsPageClient
-        canViewAllDrafts={access.permissions.canViewAllDrafts}
-        permissions={access.permissions}
-      />
+      <DocumentDraftsPageClient />
     </DocumentGenerationShell>
   );
 }

@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       supabase,
       tenantId,
       userId: user.id,
+      permissionSimulation: access.permissionSimulation,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
     if (!permissions.canCreate) {

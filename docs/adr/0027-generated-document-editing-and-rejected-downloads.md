@@ -15,6 +15,7 @@ Why this ADR exists:
 Consequences:
 
 - ownership no longer limits editability for generated documents in editable statuses
+- generated-document history and detail are visible to authenticated members of the same tenant
 - draft ownership remains unchanged; drafts are still scoped to the creating user
 - storage access must check generated-document status before returning bytes or signed URLs
 - document review permission still controls approval and rejection decisions

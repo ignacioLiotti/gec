@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import { renderDocumentHtml } from "@/lib/document-generation";
 import {
   canEditGeneratedDocument,
   formatWorkLabel,
@@ -31,6 +32,11 @@ function mapStatusBucket(statuses: string[]) {
   return Array.from(expanded);
 }
 
+function readSingleRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const access = await resolveRequestAccessContext();
@@ -47,6 +53,7 @@ export async function GET(request: NextRequest) {
       supabase,
       tenantId,
       userId: user.id,
+      permissionSimulation: access.permissionSimulation,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
 
@@ -55,6 +62,8 @@ export async function GET(request: NextRequest) {
     const documentType = request.nextUrl.searchParams.get("documentType")?.trim();
     const from = request.nextUrl.searchParams.get("from")?.trim();
     const to = request.nextUrl.searchParams.get("to")?.trim();
+    const includePreview = request.nextUrl.searchParams.get("includePreview") === "1";
+    const summaryOnly = request.nextUrl.searchParams.get("summary") === "1";
     const statusFilter = mapStatusBucket(
       (request.nextUrl.searchParams.get("status") ?? "")
         .split(",")
@@ -65,7 +74,11 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("generated_documents")
       .select(
-        "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, file_name, status, input_data, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name)",
+        includePreview
+          ? "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_path, file_name, status, input_data, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name, content_html)"
+          : summaryOnly
+            ? "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_path, file_name, status, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name)"
+            : "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_path, file_name, status, input_data, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name)",
       )
       .eq("tenant_id", tenantId)
       .order("generated_at", { ascending: false });
@@ -80,23 +93,35 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    let rows = (data ?? []) as Array<Record<string, unknown>>;
-    if (!permissions.canReview && !permissions.canViewAllDrafts) {
-      rows = rows.filter((row) => (
-        String(row.generated_by ?? "") === user.id ||
-        canEditGeneratedDocument({
-          canCreate: permissions.canCreate,
-          userId: user.id,
-          status: typeof row.status === "string" ? row.status : null,
-        })
-      ));
-    }
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
     const actorsById = await loadActorsByIds(rows.map((row) => String(row.generated_by ?? "")));
     const works = await loadWorks(accessContext);
 
     const documents = rows.map((row) => {
-      const obra = row.obras as { n: number | null; designacion_y_ubicacion: string | null } | null;
+      const obra = readSingleRelation(
+        row.obras as
+          | { n: number | null; designacion_y_ubicacion: string | null }
+          | Array<{ n: number | null; designacion_y_ubicacion: string | null }>
+          | null,
+      );
       const actor = actorsById[String(row.generated_by ?? "")] ?? null;
+      const inputData =
+        !summaryOnly && row.input_data && typeof row.input_data === "object" && !Array.isArray(row.input_data)
+          ? row.input_data
+          : {};
+      const template = readSingleRelation(
+        row.document_generation_templates as
+          | { name?: string; content_html?: string | null }
+          | Array<{ name?: string; content_html?: string | null }>
+          | null,
+      );
+      const previewHtml =
+        includePreview && template?.content_html
+          ? renderDocumentHtml(template.content_html, inputData as Record<string, unknown>, {
+              workName: obra ? formatWorkLabel(obra) : "",
+              generatedAt: String(row.generated_at ?? ""),
+            })
+          : "";
       return {
         id: String(row.id),
         workId: String(row.obra_id),
@@ -105,17 +130,16 @@ export async function GET(request: NextRequest) {
         documentType: String(row.document_type ?? ""),
         templateId: String(row.template_id ?? ""),
         templateName:
-          ((row.document_generation_templates as { name?: string } | null)?.name as string | undefined) ?? null,
+          (template?.name as string | undefined) ?? null,
         sourceDraftId: row.source_draft_id ? String(row.source_draft_id) : null,
+        storagePath: String(row.storage_path ?? ""),
         fileName: String(row.file_name ?? ""),
         status: String(row.status ?? ""),
-        inputData:
-          row.input_data && typeof row.input_data === "object" && !Array.isArray(row.input_data)
-            ? row.input_data
-            : {},
+        inputData,
         generatedAt: String(row.generated_at ?? ""),
         updatedAt: String(row.updated_at ?? ""),
         createdBy: actor,
+        previewHtml,
         canEdit: canEditGeneratedDocument({
           canCreate: permissions.canCreate,
           userId: user.id,

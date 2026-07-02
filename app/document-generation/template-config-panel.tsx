@@ -27,10 +27,8 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { normalizeFieldKey } from "@/lib/tablas";
 import { cn } from "@/lib/utils";
-import { DocumentGenerationNav } from "./document-nav";
 
 type FolderConfig = {
   path: string;
@@ -47,7 +45,6 @@ type TemplateConfigResponse = {
 
 type Props = {
   workId: string;
-  permissions?: DocumentGenerationPermissionMap | null;
 };
 
 type EditableTemplate = {
@@ -990,11 +987,7 @@ export function TemplateConfigProvider({ workId, children }: { workId: string; c
   return <TemplateConfigContext.Provider value={value}>{children}</TemplateConfigContext.Provider>;
 }
 
-export function TemplatePickerCard({
-  permissions,
-}: {
-  permissions?: DocumentGenerationPermissionMap | null;
-}) {
+export function TemplatePickerCard() {
   const { templates, loading, selectedTemplateId, handleTemplateSelect } = useTemplateConfig();
 
   return (
@@ -1007,7 +1000,6 @@ export function TemplatePickerCard({
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <CardTitle className="text-2xl tracking-[-0.04em]">Elige un template</CardTitle>
-              <DocumentGenerationNav permissions={permissions} />
             </div>
             <CardDescription className="mt-2 max-w-xl text-sm leading-6">
               Elige la plantilla base que vas a ajustar para este tenant. La idea es que la seleccion ya comunique alcance, version y destino.
@@ -2301,23 +2293,19 @@ export function TemplateConfigEditorPanel() {
   );
 }
 
-export function TemplateConfigPanel({ workId, permissions }: Props) {
+export function TemplateConfigPanel({ workId }: Props) {
   return (
     <TemplateConfigProvider workId={workId}>
-      <TemplateConfigSteps permissions={permissions} />
+      <TemplateConfigSteps />
     </TemplateConfigProvider>
   );
 }
 
-function TemplateConfigSteps({
-  permissions,
-}: {
-  permissions?: DocumentGenerationPermissionMap | null;
-}) {
+function TemplateConfigSteps() {
   const { selectedTemplateId, selectedTemplate, handleTemplateSelect } = useTemplateConfig();
 
   if (!selectedTemplateId || !selectedTemplate) {
-    return <TemplatePickerCard permissions={permissions} />;
+    return <TemplatePickerCard />;
   }
 
   return (
@@ -2331,7 +2319,6 @@ function TemplateConfigSteps({
             <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
               {selectedTemplate.name}
             </h1>
-            <DocumentGenerationNav permissions={permissions} />
           </div>
           <p className="mt-1 text-sm text-stone-500">
             Configura metadata, campos y preview para este template.

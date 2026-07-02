@@ -15,7 +15,7 @@ export default async function DocumentGenerationPage() {
 
   return (
     <DocumentGenerationShell permissions={access.permissions}>
-      <DocumentGenerationPageClient permissions={access.permissions} />
+      <DocumentGenerationPageClient />
     </DocumentGenerationShell>
   );
 }

@@ -169,6 +169,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       supabase,
       tenantId,
       userId: user.id,
+      permissionSimulation: access.permissionSimulation,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
 
@@ -189,11 +190,6 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       userId: user.id,
       status: typeof document.status === "string" ? document.status : null,
     });
-    const isGeneratedByUser = String(document.generated_by ?? "") === user.id;
-    if (!permissions.canReview && !canEdit && !isGeneratedByUser) {
-      return NextResponse.json({ error: "Sin permisos para ver este documento generado." }, { status: 403 });
-    }
-
     const actorIds = [
       String(document.generated_by ?? ""),
       ...(((document.generated_document_events as Array<{ created_by?: string | null }> | null) ?? []).map(
@@ -301,6 +297,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       supabase,
       tenantId,
       userId: user.id,
+      permissionSimulation: access.permissionSimulation,
     };
     const permissions = await loadDocumentGenerationPermissions(accessContext);
     if (!permissions.canReview) {

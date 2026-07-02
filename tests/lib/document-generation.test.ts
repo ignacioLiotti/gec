@@ -5,7 +5,10 @@ import {
   applyTemplateAliasInputData,
   buildDocumentGenerationExtractionRows,
   buildInitialInputData,
+  getTemplateNextSequenceNumber,
   normalizeTemplateSchema,
+  parseTemplateSequenceNumber,
+  refreshTemplateSequenceInputData,
   renderDocumentHtml,
   validateTemplateInput,
 } from "@/lib/document-generation";
@@ -22,6 +25,33 @@ describe("document-generation helpers", () => {
     expect(buildInitialInputData(schema)).toEqual({
       title: "Certificado",
     });
+  });
+
+  it("computes the next folder sequence from existing document input data", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "nro", label: "Nro", type: "text", required: true, autoPopulate: "next_sequence_number" },
+      ],
+    });
+
+    expect(parseTemplateSequenceNumber("OC-009")).toBe(9);
+    expect(getTemplateNextSequenceNumber(schema, [{ nro: "1" }, { nro: "OC-009" }], 2)).toBe(10);
+    expect(getTemplateNextSequenceNumber(schema, [{ otro: "sin nro" }], 3)).toBe(4);
+  });
+
+  it("refreshes stale auto sequence values without lowering manual future values", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "nro", label: "Nro", type: "text", required: true, autoPopulate: "next_sequence_number" },
+        { key: "detalle", label: "Detalle", type: "text", required: false },
+      ],
+    });
+
+    expect(refreshTemplateSequenceInputData(schema, { nro: "1", detalle: "manual" }, 2)).toEqual({
+      nro: "2",
+      detalle: "manual",
+    });
+    expect(refreshTemplateSequenceInputData(schema, { nro: "5" }, 2)).toEqual({ nro: "5" });
   });
 
   it("validates required fields", () => {

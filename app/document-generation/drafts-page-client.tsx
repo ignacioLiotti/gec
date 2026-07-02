@@ -7,9 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { GENERATED_DOCUMENT_STATUS_LABELS } from "@/lib/document-generation";
-import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
-import { DocumentGenerationNav } from "./document-nav";
 
 type HistoryListItem = {
   id: string;
@@ -33,11 +31,6 @@ type HistoryResponse = {
   documents: HistoryListItem[];
   works: Array<{ id: string; label: string }>;
   creators: Array<{ id: string; label: string }>;
-};
-
-type Props = {
-  canViewAllDrafts: boolean;
-  permissions: DocumentGenerationPermissionMap;
 };
 
 function formatDate(value: string) {
@@ -66,7 +59,7 @@ function statusLabel(status: string) {
   return GENERATED_DOCUMENT_STATUS_LABELS[status] ?? status;
 }
 
-export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Props) {
+export function DocumentDraftsPageClient() {
   const [documents, setDocuments] = useState<HistoryListItem[]>([]);
   const [works, setWorks] = useState<Array<{ id: string; label: string }>>([]);
   const [creators, setCreators] = useState<Array<{ id: string; label: string }>>([]);
@@ -89,7 +82,7 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
         const query = new URLSearchParams();
         if (filters.status !== "ALL") query.set("status", filters.status);
         if (filters.workId) query.set("workId", filters.workId);
-        if (canViewAllDrafts && filters.createdBy) query.set("createdBy", filters.createdBy);
+        if (filters.createdBy) query.set("createdBy", filters.createdBy);
         if (filters.from) query.set("from", filters.from);
         if (filters.to) query.set("to", filters.to);
 
@@ -122,7 +115,7 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
     return () => {
       cancelled = true;
     };
-  }, [canViewAllDrafts, filters]);
+  }, [filters]);
 
   const selectedDocument = useMemo(
     () => documents.find((document) => document.id === selectedId) ?? null,
@@ -151,7 +144,6 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
                 <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
                   Documentos creados.
                 </h1>
-                <DocumentGenerationNav permissions={permissions} />
               </div>
               <p className="mt-1 text-sm text-stone-500">
                 Filtra por fecha, obra y estado para revisar o editar documentos disponibles.
@@ -193,22 +185,18 @@ export function DocumentDraftsPageClient({ canViewAllDrafts, permissions }: Prop
                 </option>
               ))}
             </select>
-            {canViewAllDrafts ? (
-              <select
-                value={filters.createdBy}
-                onChange={(event) => setFilters((current) => ({ ...current, createdBy: event.target.value }))}
-                className="h-10 rounded-md border border-stone-200 bg-white px-3 text-sm"
-              >
-                <option value="">Todos los usuarios</option>
-                {creators.map((creator) => (
-                  <option key={creator.id} value={creator.id}>
-                    {creator.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="hidden xl:block" />
-            )}
+            <select
+              value={filters.createdBy}
+              onChange={(event) => setFilters((current) => ({ ...current, createdBy: event.target.value }))}
+              className="h-10 rounded-md border border-stone-200 bg-white px-3 text-sm"
+            >
+              <option value="">Todos los usuarios</option>
+              {creators.map((creator) => (
+                <option key={creator.id} value={creator.id}>
+                  {creator.label}
+                </option>
+              ))}
+            </select>
             <input
               type="date"
               value={filters.from}

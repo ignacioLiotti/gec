@@ -1,12 +1,12 @@
 import { resolveDocumentAccess } from "../document-access";
 import { DocumentGenerationShell } from "../document-shell";
-import { TemplateConfigPanel } from "../template-config-panel";
+import { ApprovedDocumentsPageClient } from "../approved-documents-page-client";
 
-export default async function DocumentGenerationConfigPage() {
+export default async function ApprovedDocumentsPage() {
   const access = await resolveDocumentAccess();
 
   if (!access.user) {
-    return <div className="p-6 text-sm">Inicia sesion para ver configuracion.</div>;
+    return <div className="p-6 text-sm">Inicia sesion para ver documentos aprobados.</div>;
   }
 
   if (!access.tenantId) {
@@ -15,15 +15,15 @@ export default async function DocumentGenerationConfigPage() {
 
   return (
     <DocumentGenerationShell permissions={access.permissions}>
-      <div className="px-4 py-6 sm:px-6">
-        {access.permissions.canManageTemplates ? (
-          <TemplateConfigPanel workId="" />
-        ) : (
+      {access.permissions.canReview ? (
+        <ApprovedDocumentsPageClient />
+      ) : (
+        <div className="p-6">
           <div className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-600">
-            No tienes permisos para editar configuracion de plantillas.
+            No tienes permisos para ver documentos aprobados.
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </DocumentGenerationShell>
   );
 }

@@ -55,9 +55,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
-import { DocumentGenerationNav } from "./document-nav";
 
 type WorkOption = {
   id: string;
@@ -144,6 +142,7 @@ type GeneratedDocumentResponse = {
     status: string;
     file_name: string;
     storage_path?: string;
+    input_data?: Record<string, unknown>;
   };
   relativeFolderPath: string;
   relativeFilePath: string;
@@ -1084,11 +1083,7 @@ function TextAreaInput({
   );
 }
 
-export function DocumentGenerationPageClient({
-  permissions,
-}: {
-  permissions: DocumentGenerationPermissionMap;
-}) {
+export function DocumentGenerationPageClient() {
   const router = useRouter();
   const { push, replace } = router;
   const pathname = usePathname();
@@ -1490,13 +1485,25 @@ export function DocumentGenerationPageClient({
     await loadBootstrap({ workId, folderPath: value, documentType: nextDocumentType || undefined });
   };
 
+  const commitInputData = useCallback((nextData: Record<string, unknown>) => {
+    inlineInputDataRef.current = nextData;
+    setInputData(nextData);
+  }, []);
+
+  const updateInputDataFromLatest = useCallback((updater: (current: Record<string, unknown>) => Record<string, unknown>) => {
+    const nextData = updater(inlineInputDataRef.current);
+    inlineInputDataRef.current = nextData;
+    setInputData(nextData);
+    return nextData;
+  }, []);
+
   const handleTemplateChange = (value: string) => {
     setTemplateId(value);
     setValidationErrors([]);
     const nextTemplate = templates.find((template) => template.id === value) ?? null;
     if (!nextTemplate) return;
-    setInputData(
-      applyTemplateAutoInputData(nextTemplate.schema, buildInitialInputData(nextTemplate.schema, inputData), {
+    commitInputData(
+      applyTemplateAutoInputData(nextTemplate.schema, buildInitialInputData(nextTemplate.schema, inlineInputDataRef.current), {
         selectedContextId: workId,
         selectedContextLabel: workLabel,
         documentType,
@@ -1506,7 +1513,7 @@ export function DocumentGenerationPageClient({
   };
 
   const handleFieldChange = (field: TemplateField, value: string) => {
-    setInputData((current) => (current[field.key] === value ? current : {
+    updateInputDataFromLatest((current) => (current[field.key] === value ? current : {
       ...current,
       [field.key]: value,
     }));
@@ -1523,7 +1530,7 @@ export function DocumentGenerationPageClient({
     value: string,
     token?: string,
   ) => {
-    setInputData((current) => {
+    updateInputDataFromLatest((current) => {
       const rows = readRepeatableRows(current, groupKey).slice();
       while (rows.length <= rowIndex) {
         rows.push({});
@@ -1640,18 +1647,22 @@ export function DocumentGenerationPageClient({
   };
 
   const addRepeatableRow = (groupKey: string, fields: TemplateField[]) => {
-    setInputData((current) => ({
+    updateInputDataFromLatest((current) => ({
       ...current,
       [groupKey]: [...readRepeatableRows(current, groupKey), createRepeatableRow(fields)],
     }));
   };
 
   const duplicateRepeatableRow = (groupKey: string, rowIndex: number) => {
-    setInputData((current) => {
+    updateInputDataFromLatest((current) => {
       const rows = readRepeatableRows(current, groupKey);
       const next = rows.slice();
       const source = rows[rowIndex];
-      next.splice(rowIndex + 1, 0, source);
+      const duplicate =
+        source && typeof source === "object" && !Array.isArray(source)
+          ? { ...(source as Record<string, unknown>) }
+          : source;
+      next.splice(rowIndex + 1, 0, duplicate);
       return {
         ...current,
         [groupKey]: next,
@@ -1660,7 +1671,7 @@ export function DocumentGenerationPageClient({
   };
 
   const removeRepeatableRow = (groupKey: string, rowIndex: number) => {
-    setInputData((current) => ({
+    updateInputDataFromLatest((current) => ({
       ...current,
       [groupKey]: readRepeatableRows(current, groupKey).filter((_, index) => index !== rowIndex),
     }));
@@ -1734,8 +1745,9 @@ export function DocumentGenerationPageClient({
       setDraftId(payload.draft.id);
       setDraftStatus(payload.draft.status);
       setValidationErrors(payload.draft.validation_errors ?? []);
-      setInputData(payload.draft.input_data ?? currentInputData);
-      await persistCreatableOptions(payload.draft.input_data ?? currentInputData);
+      const nextInputData = payload.draft.input_data ?? currentInputData;
+      commitInputData(nextInputData);
+      await persistCreatableOptions(nextInputData);
       toast.success("Borrador guardado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo guardar el borrador");
@@ -1785,12 +1797,14 @@ export function DocumentGenerationPageClient({
 
       setGeneratedDocument(payload);
       setGeneratedDownloadTarget(buildDownloadTargetFromGeneratedResponse(payload, workId));
+      const serverInputData = payload.generatedDocument.input_data ?? currentInputData;
+      commitInputData(serverInputData);
       if (editingGeneratedId) {
         setEditingGeneratedStatus(payload.generatedDocument.status);
       }
       setValidationErrors([]);
       setShowValidationReview(false);
-      await persistCreatableOptions(currentInputData);
+      await persistCreatableOptions(serverInputData);
       toast.success(editingGeneratedId ? "Documento actualizado." : "Documento generado y guardado en la carpeta.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo generar el documento");
@@ -1897,11 +1911,10 @@ export function DocumentGenerationPageClient({
 
   return (
     <div className="w-full ">
-			<div className="sticky top-14 z-40 border-b border-stone-200 bg-white md:top-0">
-				<div className="flex flex-col gap-3 px-3 py-3 sm:px-6 sm:py-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="sticky top-14 z-40 border-b border-stone-200 bg-white md:top-0">
+        <div className="flex flex-col gap-3 px-3 py-3 sm:px-6 sm:py-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <DocumentGenerationNav permissions={permissions} className="w-full sm:w-auto" />
               <div className="inline-flex rounded-md border border-stone-200 bg-stone-50 p-1">
                 <button
                   type="button"
@@ -1931,13 +1944,13 @@ export function DocumentGenerationPageClient({
             </div>
           </div>
 
-					<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <Button
               type="button"
               variant="ghost"
               onClick={handleSaveDraft}
               disabled={savingDraft || loading || Boolean(editingGeneratedId)}
-							className="h-9 w-full rounded-md px-4 text-stone-700 sm:w-auto"
+              className="h-9 w-full rounded-md px-4 text-stone-700 sm:w-auto"
               hidden={Boolean(editingGeneratedId)}
             >
               {savingDraft ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
@@ -1949,7 +1962,7 @@ export function DocumentGenerationPageClient({
                 variant="outline"
                 onClick={downloadGeneratedDocument}
                 disabled={loading || !generatedDownloadTarget || !canDownloadGeneratedDocument}
-								className="h-9 w-full rounded-md px-4 sm:w-auto"
+                className="h-9 w-full rounded-md px-4 sm:w-auto"
               >
                 <Download className="mr-2 size-4" />
                 Descargar
@@ -1959,7 +1972,7 @@ export function DocumentGenerationPageClient({
               type="button"
               onClick={handleGenerate}
               disabled={generating || loading || !selectedTemplate}
-							className="h-9 w-full rounded-md bg-[linear-gradient(180deg,#201E25_0%,#323137_100%)] px-4 text-white shadow-[0_2px_4px_rgba(0,0,0,0.10),0_0_0_1px_#0D0D0D] sm:w-auto"
+              className="h-9 w-full rounded-md bg-[linear-gradient(180deg,#201E25_0%,#323137_100%)] px-4 text-white shadow-[0_2px_4px_rgba(0,0,0,0.10),0_0_0_1px_#0D0D0D] sm:w-auto"
             >
               {generating ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -1973,8 +1986,8 @@ export function DocumentGenerationPageClient({
       </div>
 
       {editorMode === "inline" ? (
-				<div className="min-h-[calc(100svh-7rem)] bg-[#e9e7e1] px-3 py-4 sm:px-6 md:min-h-[calc(100vh-162px)]">
-					<div className="mx-auto grid min-w-0 gap-4 xl:grid-cols-[260px_minmax(0,1fr)_220px]">
+        <div className="min-h-[calc(100svh-7rem)] bg-[#e9e7e1] px-3 py-4 sm:px-6 md:min-h-[calc(100vh-162px)]">
+          <div className="mx-auto grid min-w-0 gap-4 xl:grid-cols-[260px_minmax(0,1fr)_220px]">
             <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] xl:sticky xl:top-24 xl:self-start">
               <div className="grid gap-3">
                 <FormField label="Obra" required>
@@ -2089,7 +2102,7 @@ export function DocumentGenerationPageClient({
                 </div>
               </div>
 
-								<div className="max-h-[60svh] overflow-auto bg-[#d8d4c6] px-2 py-5 sm:px-5 md:max-h-[calc(100vh-200px)]">
+              <div className="max-h-[60svh] overflow-auto bg-[#d8d4c6] px-2 py-5 sm:px-5 md:max-h-[calc(100vh-200px)]">
                 {selectedTemplate ? (
                   <div className="mx-auto w-fit pb-6">
                     <div
@@ -2248,8 +2261,8 @@ export function DocumentGenerationPageClient({
         </div>
       ) : (
 
-				<div className="grid min-h-[calc(100svh-7rem)] grid-cols-1 md:min-h-[calc(100vh-162px)] xl:grid-cols-[minmax(480px,1fr)_minmax(0,0.5fr)]">
-					<div className="overflow-y-auto xl:border-r">
+        <div className="grid min-h-[calc(100svh-7rem)] grid-cols-1 md:min-h-[calc(100vh-162px)] xl:grid-cols-[minmax(480px,1fr)_minmax(0,0.5fr)]">
+          <div className="overflow-y-auto xl:border-r">
             <div className="px-4 pb-5 sm:px-6">
               <div className="mx-auto flex flex-col gap-4 mt-4">
                 <SectionCard
@@ -2521,7 +2534,7 @@ export function DocumentGenerationPageClient({
             </div>
           </div>
 
-					<aside className="flex max-h-[70svh] min-h-[420px] flex-col overflow-hidden bg-[#e9e7e1] xl:sticky xl:top-0 xl:max-h-[100vh] xl:min-h-[640px]">
+          <aside className="flex max-h-[70svh] min-h-[420px] flex-col overflow-hidden bg-[#e9e7e1] xl:sticky xl:top-0 xl:max-h-[100vh] xl:min-h-[640px]">
             <div className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-3">
               <div className="flex items-center gap-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">

@@ -13,7 +13,7 @@ The original document-generation flow treated creation, template administration,
 Document generation is now split into dedicated surfaces:
 
 - `/document-generation` for create/edit
-- `/document-generation/drafts` for draft recovery
+- `/document-generation/drafts` for generated-document history and draft recovery
 - `/document-generation/review` for approval review
 - `/document-generation/templates` and `/document-generation/config` for template administration
 
@@ -22,7 +22,7 @@ Access is controlled by capability permissions instead of a single route-level a
 - `documents:review`
 - `documents:templates`
 
-API routes and RLS policies must enforce the same split. Creation and own-draft management are baseline access for authenticated tenant members, review actions require `documents:review`, and template mutation requires `documents:templates`.
+API routes and RLS policies must enforce the same split. Creation, generated-document history, and own-draft management are baseline access for authenticated tenant members, review actions require `documents:review`, and template mutation requires `documents:templates`.
 
 ## Consequences
 
@@ -30,6 +30,7 @@ API routes and RLS policies must enforce the same split. Creation and own-draft 
 - Tenant admins still bypass these checks through the existing `has_permission(...)` admin path.
 - New role templates are required only for reviewers and document managers.
 - Future document-generation features should be tenant-member access by default unless they mutate review decisions or template/configuration state.
+- Generated documents are visible tenant-wide to authenticated tenant members; private drafts remain scoped to the creating user.
 
 ## Alternatives considered
 

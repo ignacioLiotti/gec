@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
+import {
+  documentPermissionsFromPermissionSimulation,
+  type PermissionSimulation,
+} from "@/lib/permission-simulation";
 import { ensureTablaDataType } from "@/lib/tablas";
 import { resolveDocumentSeries } from "@/lib/document-ai/continuity/resolve-document-series";
 import type { DocumentAiRow } from "@/lib/document-ai/schemas/types";
@@ -15,6 +19,8 @@ import {
   type DocumentAiSourceRow,
   DOCUMENT_TYPES,
   type ExtractionTableColumn,
+  getTemplateNextSequenceNumber,
+  getTemplateSequenceFieldKeys,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
   normalizeTemplateSchema,
@@ -27,6 +33,7 @@ type AccessContext = {
   supabase: SupabaseClient;
   tenantId: string;
   userId: string | null;
+  permissionSimulation?: PermissionSimulation | null;
 };
 
 type TemplateRow = {
@@ -185,6 +192,10 @@ export async function hasDocumentGenerationPermission(
 export async function loadDocumentGenerationPermissions(
   access: AccessContext,
 ): Promise<DocumentGenerationPermissionMap> {
+  if (access.permissionSimulation) {
+    return documentPermissionsFromPermissionSimulation(access.permissionSimulation);
+  }
+
   if (!access.userId) {
     return {
       canSeeNavigation: false,
@@ -690,6 +701,46 @@ export async function validateGenerationTarget(
   }
 
   return { valid: true, error: null };
+}
+
+export async function resolveGeneratedDocumentNextSequenceNumber(
+  access: AccessContext,
+  args: {
+    workId: string;
+    folderPath: string;
+    documentType: DocumentType;
+    schema: TemplateSchema;
+    excludeGeneratedDocumentId?: string | null;
+  },
+) {
+  if (getTemplateSequenceFieldKeys(args.schema).length === 0) return null;
+  const normalizedFolderPath = normalizeFolderGenerationPath(args.folderPath);
+  if (!normalizedFolderPath) return null;
+
+  let query = access.supabase
+    .from("generated_documents")
+    .select("id, input_data", { count: "exact" })
+    .eq("tenant_id", access.tenantId)
+    .eq("obra_id", args.workId)
+    .eq("folder_path", normalizedFolderPath)
+    .eq("document_type", args.documentType)
+    .range(0, 4999);
+
+  if (args.excludeGeneratedDocumentId) {
+    query = query.neq("id", args.excludeGeneratedDocumentId);
+  }
+
+  const { data, count, error } = await query;
+  if (error) throw error;
+
+  const inputRows = (data ?? [])
+    .map((row) =>
+      row.input_data && typeof row.input_data === "object" && !Array.isArray(row.input_data)
+        ? (row.input_data as Record<string, unknown>)
+        : {},
+    );
+
+  return getTemplateNextSequenceNumber(args.schema, inputRows, count ?? inputRows.length);
 }
 
 export async function insertGeneratedDocumentEvent(
