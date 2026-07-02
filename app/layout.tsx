@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import "@xyflow/react/dist/style.css";
 import "react-grid-layout/css/styles.css";
@@ -31,6 +30,7 @@ import {
 	getUserPermissionKeys,
 } from "@/lib/route-guard";
 import { loadDocumentGenerationPermissions } from "@/lib/document-generation-server";
+import { ReactScanLoader } from "@/components/react-scan-loader";
 
 const DEBUG_AUTH = process.env.DEBUG_AUTH === "true";
 const ENABLE_REACT_SCAN =
@@ -317,18 +317,10 @@ export default async function RootLayout({
 
 	return (
 		<html lang="en">
-			<head>
-				{ENABLE_REACT_SCAN && (
-					<Script
-						crossOrigin="anonymous"
-						src="https://unpkg.com/react-scan/dist/auto.global.js"
-						strategy="beforeInteractive"
-					/>
-				)}
-			</head>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
 			>
+				{ENABLE_REACT_SCAN && <ReactScanLoader />}
 				{ENABLE_VERCEL_CLIENT_TELEMETRY && <SpeedInsights />}
 				<QueryClientProvider>
 					<LazyMotionProvider>

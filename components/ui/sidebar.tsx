@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
-import { cva, VariantProps } from "class-variance-authority"
+import { type VariantProps } from "class-variance-authority"
 import { PanelLeftIcon } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -24,6 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { sidebarMenuButtonVariants } from "@/components/ui/sidebar-menu-button-variants"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -489,49 +490,6 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
   )
 }
 
-const sidebarMenuButtonVariants = cva(
-  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 text-left text-sm outline-none transition-[width,height,padding,gap,color,background-color,box-shadow,transform] duration-300 ease-(--sidebar-motion-ease) leading-normal cursor-pointer " +
-  "border border-transparent " +
-  "[background-origin:border-box] [background-clip:padding-box,border-box] " +
-  "[background-image:linear-gradient(180deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.01)_100%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_100%)] " +
-  // "shadow-[0px_1px_2px_rgba(0,0,0,0.05)] " +
-  "text-muted-foreground " +
-
-  // Hover (soft lift, not color flash)
-  // "hover:shadow-[0px_4px_8px_rgba(0,0,0,0.08)] " +
-  // "hover:text-foreground hover:shadow-[0px_4px_10px_rgba(0,0,0,0.12),0px_0px_0px_1px_#44444454] " +
-  // "hover:[background-image:linear-gradient(180deg,rgba(255,255,255,0.05)_0%,rgba(255,255,255,0.02)_100%),linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.06)_100%)] " +
-
-  // Active (selected page)
-  "data-[active=true]:text-foreground " +
-  "data-[active=true]:bg-white data-[active=true]:shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset,0_8px_3px_0_#0b090c03,0_5px_3px_0_#0b090c08,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_-1px_0_0_#0000001f_inset] " +
-
-  // Press
-  "active:translate-y-[1px] " +
-
-  // Disabled
-  "disabled:pointer-events-none disabled:opacity-50 " +
-  "aria-disabled:pointer-events-none aria-disabled:opacity-50 " +
-
-  "group-data-[collapsible=icon]:h-(--sidebar-menu-button-height)! group-data-[collapsible=icon]:w-8! group-data-[collapsible=icon]:gap-0! group-data-[collapsible=icon]:p-2! " +
-  "[&>span:last-child]:min-w-0 [&>span:last-child]:truncate [&>span:last-child]:transition-[opacity,transform] [&>span:last-child]:duration-200 [&>span:last-child]:ease-(--sidebar-motion-ease) group-data-[collapsible=icon]:[&>span:last-child]:-translate-x-1 group-data-[collapsible=icon]:[&>span:last-child]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0", {
-  variants: {
-    variant: {
-      default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-    },
-    size: {
-      default: "h-9 sm:h-8 [--sidebar-menu-button-height:2.25rem] sm:[--sidebar-menu-button-height:2rem]",
-      sm: "h-8 text-sm sm:h-7 sm:text-xs [--sidebar-menu-button-height:2rem] sm:[--sidebar-menu-button-height:1.75rem]",
-      lg: "h-12 text-base sm:text-sm [--sidebar-menu-button-height:3rem] group-data-[collapsible=icon]:p-0!",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-    size: "default",
-  },
-}
-)
-
 function SidebarMenuButton({
   asChild = false,
   isActive = false,
@@ -757,5 +715,6 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
+  sidebarMenuButtonVariants,
   useSidebar,
 }

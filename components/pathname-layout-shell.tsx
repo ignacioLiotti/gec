@@ -175,7 +175,7 @@ export function PathnameLayoutShell({
 						activeTenantName={activeTenantName}
 					/>
 					<ImpersonateBanner />
-					<main className="flex min-h-[calc(100svh-3.5rem)] flex-1 flex-col gap-4 bg-[#fafafa] md:min-h-0">
+					<main className="flex min-h-[calc(100svh-3.5rem)] flex-1 flex-col gap-4 bg-[#f0f1f3] md:min-h-0">
 						{children}
 					</main>
 				</SidebarInset>

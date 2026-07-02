@@ -51,9 +51,10 @@ const buttonVariants = cva(
           "hover:bg-stone-200 hover:shadow-[0_2px_4px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,.70)]",
         // Secondary — lighter variant, paper-like
         secondary:
-          "bg-stone-100 text-stone-700 " +
-          "shadow-[0_1px_2px_rgba(0,0,0,.06),0_1px_3px_rgba(0,0,0,.04),inset_0_1px_0_rgba(255,255,255,.70)] " +
-          "hover:bg-stone-200 hover:shadow-[0_2px_4px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,.70)]",
+          "bg-stone-100 text-stone-700 border-none " +
+          "hover:bg-stone-200 hover:shadow-[0_2px_4px_rgba(0,0,0,.08),inset_0_1px_0_rgba(255,255,255,1)]" +
+          "bg-white shadow-[0_1px_0_0_#fff_inset,0_-1px_0_0_#0000001f_inset,0_0_0_1px_#00000024,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_5px_8px_-7px_#0b090c08] " +
+          "active:translate-y-[1px] active:shadow-[0_1px_0_0_#fff_inset,0_0px_0_0_#0000001f_inset,0_0_0_1px_#00000012,0_1px_1px_0_#0b090c0f,0_3px_6px_-6px_#0b090c14] ",
         // Destructive — delete / danger
         destructive:
           "bg-[#C9323A] text-[#FFF5F4] " +
@@ -75,8 +76,7 @@ const buttonVariants = cva(
           "hover:bg-green-100",
         // Ghost — no background, hover fill
         ghost:
-          "border-transparent bg-transparent text-stone-700 shadow-none " +
-          "hover:bg-stone-100 hover:text-stone-900",
+          "relative m-0 inline-flex h-[88px] w-[88px] shrink-0 items-center justify-center rounded-full border border-[#d9d9d9] bg-[#fefeff] text-[#5c6878] shadow-[0px_10px_24px_-12px_#00000033,0px_2px_6px_#00000012] transition-[border,background-color,color,opacity,box-shadow] duration-150 hover:bg-[#f7f7f7] hover:border-[#cfcfcf] active:bg-[#f4f4f4] disabled:pointer-events-none disabled:opacity-50",
         // Link — inline text navigation
         link:
           "border-transparent bg-transparent text-primary shadow-none " +
