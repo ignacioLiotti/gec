@@ -1,4 +1,5 @@
 import type { resolveRequestAccessContext } from "@/lib/demo-session";
+import { permissionSimulationHas } from "@/lib/permission-simulation";
 
 type AccessContext = Awaited<ReturnType<typeof resolveRequestAccessContext>>;
 
@@ -10,6 +11,9 @@ type AccessContext = Awaited<ReturnType<typeof resolveRequestAccessContext>>;
 export async function hasDocumentAiPermission(access: AccessContext) {
   if (access.actorType === "demo") return false;
   if (!access.tenantId || !access.user?.id) return false;
+  if (access.permissionSimulation) {
+    return permissionSimulationHas(access.permissionSimulation, "document-ai:run");
+  }
   if (access.isSuperAdmin || ["owner", "admin"].includes(access.membershipRole ?? "")) {
     return true;
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import { permissionSimulationHas } from "@/lib/permission-simulation";
 import { renderReportHtml } from "@/lib/document-ai/renderers/render-html";
 import type { ReportComposition } from "@/lib/document-ai/schemas/types";
 
@@ -13,10 +14,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     if (!user && actorType !== "demo") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!tenantId || !user?.id) return NextResponse.json({ error: "No tenant" }, { status: 400 });
 
-    const { data: allowed } = await supabase.rpc("has_permission", {
-      tenant: tenantId,
-      perm_key: "document-ai:run",
-    });
+    const { data: realAllowed } = access.permissionSimulation
+      ? { data: false }
+      : await supabase.rpc("has_permission", {
+          tenant: tenantId,
+          perm_key: "document-ai:run",
+        });
+    const allowed = access.permissionSimulation
+      ? permissionSimulationHas(access.permissionSimulation, "document-ai:run")
+      : realAllowed;
     if (!allowed && !access.isSuperAdmin && !["owner", "admin"].includes(access.membershipRole ?? "")) {
       return NextResponse.json({ error: "Sin permisos para Document AI." }, { status: 403 });
     }

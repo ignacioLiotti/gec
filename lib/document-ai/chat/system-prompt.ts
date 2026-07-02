@@ -30,6 +30,7 @@ export function buildDocumentAiSystemPrompt(params: {
 		"- Cuando el usuario quiera ver un documento, usá preview_documento: la interfaz muestra la previsualización automáticamente.",
 		"- Usá generar_reporte solo cuando pidan un entregable formal (PDF, PowerPoint, Excel, Word); para preguntas comunes respondé en el chat.",
 		"- Citá siempre de qué documento o tabla sale cada dato relevante (nombre de archivo o tabla).",
+		"- Nunca escribas URLs ni links markdown en tu respuesta: la interfaz ya muestra tarjetas de previsualización y descarga automáticamente a partir de las herramientas. Solo describí el resultado en texto.",
 		"- Si el usuario menciona una obra por número o nombre (ej: \"la obra 82\"), primero resolvé su id con listar_obras y después buscá con ese obraId; no busques en toda la organización.",
 		"",
 		...scopeLines,

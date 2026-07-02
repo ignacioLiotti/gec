@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import { permissionSimulationHas } from "@/lib/permission-simulation";
 import { DocumentAiPageClient } from "./page-client";
 
 export default async function DocumentAiPage() {
@@ -12,11 +13,13 @@ export default async function DocumentAiPage() {
   }
   if (access.actorType === "demo") redirect("/excel");
 
-  const [{ data: allowed }, { data: obras }] = await Promise.all([
-    access.supabase.rpc("has_permission", {
-      tenant: access.tenantId,
-      perm_key: "document-ai:run",
-    }),
+  const [{ data: realAllowed }, { data: obras }] = await Promise.all([
+    access.permissionSimulation
+      ? Promise.resolve({ data: false })
+      : access.supabase.rpc("has_permission", {
+          tenant: access.tenantId,
+          perm_key: "document-ai:run",
+        }),
     access.supabase
       .from("obras")
       .select("id, n, designacion_y_ubicacion")
@@ -24,6 +27,9 @@ export default async function DocumentAiPage() {
       .is("deleted_at", null)
       .order("n", { ascending: true }),
   ]);
+  const allowed = access.permissionSimulation
+    ? permissionSimulationHas(access.permissionSimulation, "document-ai:run")
+    : realAllowed;
 
   if (!allowed && !access.isSuperAdmin && !["owner", "admin"].includes(access.membershipRole ?? "")) {
     return <div className="p-6 text-sm">No tenes permisos para usar Document AI.</div>;

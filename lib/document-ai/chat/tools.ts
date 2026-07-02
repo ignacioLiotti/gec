@@ -49,6 +49,16 @@ function normalizeFileName(name: string) {
 	return name.normalize("NFC").trim().toLowerCase();
 }
 
+/** Collapses a file name to alphanumerics for loose matching across naming styles
+ * (e.g. "CERT 8 - CLUB SPORTIVO.PDF" vs "cert-8-club-sportivo.pdf"). */
+function normalizeForMatch(name: string) {
+	return name
+		.normalize("NFC")
+		.toLowerCase()
+		.replace(/\.[a-z0-9]+$/i, "")
+		.replace(/[^a-z0-9]+/g, "");
+}
+
 /**
  * Signs a storage path, falling back to a directory listing when the exact
  * path is missing. `__docPath`/`source_path` can drift from the real object
@@ -334,56 +344,71 @@ export function buildDocumentAiChatTools(params: ToolFactoryParams) {
 				if (candidate.startsWith(`${DOCUMENTS_BUCKET}/`)) {
 					candidate = candidate.slice(DOCUMENTS_BUCKET.length + 1);
 				}
-				let validated = validateStoragePath(candidate, tenantObras);
-				let resolvedPath = candidate;
-				if (!validated && candidate && !candidate.includes("..")) {
-					// The model sometimes drops the obra prefix; try to resolve the
-					// path against known processed documents (RLS keeps this
-					// tenant-scoped, and the match is re-validated anyway).
-					const escaped = candidate.replace(/[%_]/g, "\\$&");
-					const { data: matches } = await supabase
-						.from("ocr_document_processing")
-						.select("source_path")
-						.like("source_path", `%${escaped}`)
-						.limit(5);
-					for (const match of matches ?? []) {
-						const path = typeof match.source_path === "string" ? match.source_path : "";
-						const check = validateStoragePath(path, tenantObras);
-						if (check) {
-							validated = check;
-							resolvedPath = path;
-							break;
-						}
-					}
-				}
-				if (!validated) {
-					console.warn("[document-ai/chat] preview_documento rejected path", { storagePath });
+				if (!candidate || candidate.includes("..")) {
 					return collect("preview_documento", args, {
 						error: "El documento no pertenece a una obra de esta organización.",
 					});
 				}
+
+				let validated = validateStoragePath(candidate, tenantObras);
+				let signed = validated
+					? await signDocument(admin, DOCUMENTS_BUCKET, candidate, SIGNED_URL_TTL_SECONDS)
+					: { path: candidate, signedUrl: null as string | null, error: "ruta no reconocida" };
+
+				if (!signed.signedUrl) {
+					// `__docPath` can drift from the real object after folder moves, and
+					// the model sometimes passes only a display file name. Resolve
+					// against ocr_document_processing (RLS-scoped to this tenant),
+					// matching by normalized file name, and re-validate the result.
+					const targetName = normalizeForMatch(candidate.split("/").pop() ?? "");
+					const obraFilter = validated ? [validated.obraId] : scope.obraIds.length > 0 ? scope.obraIds : null;
+					let query = supabase
+						.from("ocr_document_processing")
+						.select("source_bucket, source_path, source_file_name, obra_id");
+					if (obraFilter) query = query.in("obra_id", obraFilter);
+					const { data: candidates } = await query.limit(500);
+					for (const match of candidates ?? []) {
+						const fileName = typeof match.source_file_name === "string" ? match.source_file_name : "";
+						if (!fileName || normalizeForMatch(fileName) !== targetName) continue;
+						const matchPath = typeof match.source_path === "string" ? match.source_path : "";
+						const matchValidated = validateStoragePath(matchPath, tenantObras);
+						if (!matchValidated) continue;
+						const bucket =
+							typeof match.source_bucket === "string" && match.source_bucket ? match.source_bucket : DOCUMENTS_BUCKET;
+						const retry = await signDocument(admin, bucket, matchPath, SIGNED_URL_TTL_SECONDS);
+						if (retry.signedUrl) {
+							signed = retry;
+							validated = matchValidated;
+							break;
+						}
+					}
+				}
+
+				if (!validated || !signed.signedUrl) {
+					console.warn("[document-ai/chat] preview_documento failed", {
+						storagePath,
+						candidate,
+						error: signed.error,
+					});
+					return collect("preview_documento", args, {
+						error: validated
+							? `No se pudo firmar el documento: ${signed.error ?? "desconocido"}`
+							: "El documento no pertenece a una obra de esta organización.",
+					});
+				}
+
 				const { data: deleted } = await supabase
 					.from("obra_document_deletes")
 					.select("storage_path")
 					.eq("tenant_id", tenantId)
 					.eq("obra_id", validated.obraId)
-					.eq("storage_path", resolvedPath)
+					.eq("storage_path", signed.path)
 					.is("restored_at", null)
 					.maybeSingle();
 				if (deleted) {
 					return collect("preview_documento", args, { error: "El documento fue eliminado." });
 				}
-				const signed = await signDocument(admin, DOCUMENTS_BUCKET, resolvedPath, SIGNED_URL_TTL_SECONDS);
-				if (!signed.signedUrl) {
-					console.warn("[document-ai/chat] preview_documento sign failed", {
-						storagePath,
-						resolvedPath,
-						error: signed.error,
-					});
-					return collect("preview_documento", args, {
-						error: `No se pudo firmar el documento: ${signed.error ?? "desconocido"}`,
-					});
-				}
+
 				const nombre = signed.path.split("/").pop() ?? "documento";
 				const extension = nombre.toLowerCase().split(".").pop() ?? "";
 				return collect("preview_documento", args, {

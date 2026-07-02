@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
+import { permissionSimulationHas } from "@/lib/permission-simulation";
 import { rebuildDocumentAiIndex } from "@/lib/document-ai/index/build-document-ai-index";
 
 export async function POST(request: NextRequest) {
@@ -8,10 +9,15 @@ export async function POST(request: NextRequest) {
     const { supabase, user, tenantId, actorType } = access;
     if (!user && actorType !== "demo") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!tenantId || !user?.id) return NextResponse.json({ error: "No tenant" }, { status: 400 });
-    const { data: allowed } = await supabase.rpc("has_permission", {
-      tenant: tenantId,
-      perm_key: "document-ai:admin",
-    });
+    const { data: realAllowed } = access.permissionSimulation
+      ? { data: false }
+      : await supabase.rpc("has_permission", {
+          tenant: tenantId,
+          perm_key: "document-ai:admin",
+        });
+    const allowed = access.permissionSimulation
+      ? permissionSimulationHas(access.permissionSimulation, "document-ai:admin")
+      : realAllowed;
     if (!allowed && !access.isSuperAdmin && !["owner", "admin"].includes(access.membershipRole ?? "")) {
       return NextResponse.json({ error: "Sin permisos para reconstruir el indice." }, { status: 403 });
     }
