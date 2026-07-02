@@ -72,6 +72,7 @@ import {
   isMacroFilterActive,
   matchesMacroFilters,
   matchesMacroSearch,
+  matchesMacroSearchValue,
   type MacroTableFilters,
 } from "@/lib/macro-table-filters";
 import type {
@@ -81,7 +82,7 @@ import type {
   MacroTableRow as MacroRow,
   MacroTableSource,
 } from "@/lib/macro-tables";
-import { macroOverviewTour } from "@/lib/demo-tours/screen-tour-flows";
+import { macroOverviewTour, presentacionMacroTour } from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
 import {
@@ -131,9 +132,19 @@ type MacroAccordionSort = {
   columnId: string;
   direction: "asc" | "desc";
 } | null;
+type MacroAccordionCellDraft = {
+  sourceRowId: string;
+  columnId: string;
+  value: unknown;
+};
+
+function getMacroAccordionCellDraftKey(rowId: string, columnId: string) {
+  return `${rowId}::${columnId}`;
+}
 
 type InsurancePolicyPreviewRow = {
   rowNumber: number;
+  importAction?: "create" | "update";
   obraId: string | null;
   obraLabel: string;
   policyNumber: string;
@@ -378,18 +389,66 @@ function handleMacroAccordionKeyDown(event: React.KeyboardEvent<HTMLTableElement
   focusMacroAccordionCell(table, nextRowIndex, nextColumnIndex);
 }
 
-function MacroAccordionCell({
-  row,
-  column,
-  editable,
-  onSave,
+function escapeMacroHighlightRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightedMacroAccordionText({
+  text,
+  query,
 }: {
+  text: string;
+  query: string;
+}) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return <>{text}</>;
+
+  const regex = new RegExp(`(${escapeMacroHighlightRegExp(trimmedQuery)})`, "ig");
+  const parts = text.split(regex);
+  const lowerQuery = trimmedQuery.toLowerCase();
+  const hasDirectMatch = parts.some((part) => part.toLowerCase() === lowerQuery);
+
+  if (hasDirectMatch) {
+    return (
+      <>
+        {parts.map((part, index) =>
+          part.toLowerCase() === lowerQuery ? (
+            <mark key={`${part}-${index}`} className="rounded-sm bg-yellow-200 px-0.5">
+              {part}
+            </mark>
+          ) : (
+            <span key={`${part}-${index}`}>{part}</span>
+          )
+        )}
+      </>
+    );
+  }
+
+  if (matchesMacroSearchValue(text, trimmedQuery)) {
+    return <mark className="rounded-sm bg-yellow-200 px-0.5">{text}</mark>;
+  }
+
+  return <>{text}</>;
+}
+
+function MacroAccordionCell(props: {
   row: MacroRow;
   column: MacroDisplayColumn;
   editable: boolean;
+  highlightQuery?: string;
+  value?: unknown;
+  onChangeValue?: (value: unknown) => void;
   onSave: (args: { rowId: string; columnId: string; value: unknown }) => Promise<void>;
 }) {
-  const rawValue = row[column.id];
+  const {
+    row,
+    column,
+    editable,
+    highlightQuery = "",
+    onChangeValue,
+    onSave,
+  } = props;
+  const rawValue = "value" in props ? props.value : row[column.id];
   const [value, setValue] = useState(() =>
     normalizeEditableCellValue(rawValue, column.dataType)
   );
@@ -401,6 +460,7 @@ function MacroAccordionCell({
 
   const commit = useCallback(
     async (nextValue: unknown = value) => {
+      if (onChangeValue) return;
       const normalizedOriginal = normalizeEditableCellValue(rawValue, column.dataType);
       if (String(nextValue) === String(normalizedOriginal)) return;
       setIsSaving(true);
@@ -414,11 +474,16 @@ function MacroAccordionCell({
         setIsSaving(false);
       }
     },
-    [column.dataType, column.id, onSave, rawValue, row.id, value]
+    [column.dataType, column.id, onChangeValue, onSave, rawValue, row.id, value]
   );
 
   if (!editable) {
-    return <>{formatMacroAccordionValue(rawValue, column)}</>;
+    return (
+      <HighlightedMacroAccordionText
+        text={formatMacroAccordionValue(rawValue, column)}
+        query={highlightQuery}
+      />
+    );
   }
 
   if (column.dataType === "boolean") {
@@ -431,7 +496,11 @@ function MacroAccordionCell({
         onChange={(event) => {
           const nextValue = event.currentTarget.checked;
           setValue(nextValue);
-          void commit(nextValue);
+          if (onChangeValue) {
+            onChangeValue(nextValue);
+          } else {
+            void commit(nextValue);
+          }
         }}
         className="size-4 rounded border-stone-300"
       />
@@ -443,8 +512,14 @@ function MacroAccordionCell({
       type={column.dataType === "date" ? "date" : "text"}
       value={String(value)}
       disabled={isSaving}
-      onChange={(event) => setValue(event.currentTarget.value)}
-      onBlur={() => void commit()}
+      onChange={(event) => {
+        const nextValue = event.currentTarget.value;
+        setValue(nextValue);
+        onChangeValue?.(nextValue);
+      }}
+      onBlur={() => {
+        if (!onChangeValue) void commit();
+      }}
       className="h-8 min-w-36 bg-white"
     />
   );
@@ -505,12 +580,24 @@ function compareMacroAccordionValues(
 function MacroAccordionDetailTable({
   rows,
   columns,
+  searchColumns = columns,
+  highlightQuery = "",
   isEditableColumn,
+  drafts,
+  onChangeCell,
   onSaveCell,
 }: {
   rows: MacroRow[];
   columns: MacroDisplayColumn[];
+  searchColumns?: MacroDisplayColumn[];
+  highlightQuery?: string;
   isEditableColumn: (column: MacroDisplayColumn) => boolean;
+  drafts?: Record<string, MacroAccordionCellDraft>;
+  onChangeCell?: (args: {
+    row: MacroRow;
+    column: MacroDisplayColumn;
+    value: unknown;
+  }) => void;
   onSaveCell: (args: { rowId: string; columnId: string; value: unknown }) => Promise<void>;
 }) {
   const [sort, setSort] = useState<MacroAccordionSort>(null);
@@ -593,30 +680,62 @@ function MacroAccordionDetailTable({
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((childRow, rowIndex) => (
-              <tr
-                key={childRow.id}
-                className={rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}
-              >
-                {columns.map((column, columnIndex) => (
-                  <td
-                    key={column.id}
-                    data-macro-accordion-cell="true"
-                    data-row-index={rowIndex}
-                    data-column-index={columnIndex}
-                    tabIndex={-1}
-                    className="border-b border-stone-100 px-3 py-2 focus:outline focus:outline-2 focus:outline-orange-primary"
-                  >
-                    <MacroAccordionCell
-                      row={childRow}
-                      column={column}
-                      editable={isEditableColumn(column)}
-                      onSave={onSaveCell}
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {sortedRows.map((childRow, rowIndex) => {
+              const rowMatchesSearch =
+                highlightQuery.trim().length > 0 &&
+                matchesMacroSearch(childRow, searchColumns, highlightQuery);
+
+              return (
+                <tr
+                  key={childRow.id}
+                  className={cn(
+                    rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
+                    rowMatchesSearch && "bg-yellow-50/70 shadow-[inset_3px_0_0_rgba(234,179,8,0.85)]"
+                  )}
+                >
+                  {columns.map((column, columnIndex) => {
+                    const cellMatchesSearch =
+                      highlightQuery.trim().length > 0 &&
+                      matchesMacroSearchValue(childRow[column.id], highlightQuery);
+
+                    return (
+                      <td
+                        key={column.id}
+                        data-macro-accordion-cell="true"
+                        data-row-index={rowIndex}
+                        data-column-index={columnIndex}
+                        tabIndex={-1}
+                        className={cn(
+                          "border-b border-stone-100 px-3 py-2 focus:outline focus:outline-2 focus:outline-orange-primary",
+                          cellMatchesSearch && "bg-yellow-100/70"
+                        )}
+                      >
+                        {(() => {
+                          const draftKey = getMacroAccordionCellDraftKey(childRow.id, column.id);
+                          const draft = drafts?.[draftKey];
+                          const controlledProps = onChangeCell
+                            ? {
+                              value: draft ? draft.value : childRow[column.id],
+                              onChangeValue: (value: unknown) => onChangeCell({ row: childRow, column, value }),
+                            }
+                            : {};
+                          return (
+                            <MacroAccordionCell
+                              row={childRow}
+                              column={column}
+                              editable={isEditableColumn(column)}
+                              highlightQuery={highlightQuery}
+                              {...controlledProps}
+                              onSave={onSaveCell}
+                            />
+                          );
+                        })()}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -785,6 +904,10 @@ function MacroTablePanel({
   const queryParams = new URLSearchParams(searchParams);
   const getSearchParam = (key: string): string | null => queryParams.get(key);
   const queryClient = useQueryClient();
+  const [accordionCellDrafts, setAccordionCellDrafts] = useState<Record<string, MacroAccordionCellDraft>>({});
+  const [macroSearchQuery, setMacroSearchQuery] = useState("");
+  const macroSearchKey = macroSearchQuery.trim();
+  const accordionCellDraftCount = Object.keys(accordionCellDrafts).length;
   const columns = useMemo(() => macroTable.columns ?? [], [macroTable.columns]);
   const displayColumns = useMemo<MacroDisplayColumn[]>(() => {
     return columns.map((column) => {
@@ -830,6 +953,47 @@ function MacroTablePanel({
     () => displayColumns.find(isMacroAccordionGroupColumn) ?? null,
     [displayColumns]
   );
+  const stageAccordionCellChange = useCallback(
+    ({
+      row,
+      column,
+      value,
+    }: {
+      row: MacroRow;
+      column: MacroDisplayColumn;
+      value: unknown;
+    }) => {
+      const key = getMacroAccordionCellDraftKey(row.id, column.id);
+      const originalValue = normalizeEditableCellValue(row[column.id], column.dataType);
+      setAccordionCellDrafts((current) => {
+        const hasDraft = Object.prototype.hasOwnProperty.call(current, key);
+        if (String(value) === String(originalValue)) {
+          if (!hasDraft) return current;
+          const next = { ...current };
+          delete next[key];
+          return next;
+        }
+        const existing = current[key];
+        if (existing && String(existing.value) === String(value)) {
+          return current;
+        }
+        return {
+          ...current,
+          [key]: {
+            sourceRowId: row.id,
+            columnId: column.id,
+            value,
+          },
+        };
+      });
+    },
+    []
+  );
+  const clearAccordionCellDrafts = useCallback(() => {
+    setAccordionCellDrafts((current) =>
+      Object.keys(current).length === 0 ? current : {}
+    );
+  }, []);
 
   const fetchRows = useCallback(
     async ({
@@ -969,16 +1133,34 @@ function MacroTablePanel({
         columnId: string;
         value: unknown;
       }> = [];
+      const addCustomValue = (value: {
+        sourceRowId: string;
+        columnId: string;
+        value: unknown;
+      }) => {
+        const existingIndex = customValues.findIndex(
+          (item) =>
+            item.sourceRowId === value.sourceRowId &&
+            item.columnId === value.columnId
+        );
+        if (existingIndex >= 0) {
+          customValues[existingIndex] = value;
+        } else {
+          customValues.push(value);
+        }
+      };
 
       for (const row of dirtyRows) {
         for (const colId of editableColumnIds) {
-          customValues.push({
+          addCustomValue({
             sourceRowId: row.id,
             columnId: colId,
             value: row[colId],
           });
         }
       }
+
+      Object.values(accordionCellDrafts).forEach(addCustomValue);
 
       if (customValues.length === 0) return;
 
@@ -994,8 +1176,9 @@ function MacroTablePanel({
       }
 
       queryClient.invalidateQueries({ queryKey: ["macro-table-rows", tableId] });
+      clearAccordionCellDrafts();
     },
-    [columns, macroTable.id, queryClient]
+    [accordionCellDrafts, clearAccordionCellDrafts, columns, macroTable.id, queryClient]
   );
 
   const saveAccordionCell = useCallback(
@@ -1033,6 +1216,21 @@ function MacroTablePanel({
   );
   const accordionDetailColumns = useMemo(
     () => displayColumns.filter(isMacroAccordionDetailColumn),
+    [displayColumns]
+  );
+  const isInsurancePolicyMacro = useMemo(
+    () =>
+      displayColumns.some((column) => {
+        const label = column.label
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+        return (
+          column.sourceFieldKey === "policyNumber" ||
+          column.id === "policyNumber" ||
+          label.includes("poliza")
+        );
+      }),
     [displayColumns]
   );
   const config = useMemo<FormTableConfig<MacroTableRowData, MacroTableFilters> | null>(() => {
@@ -1100,10 +1298,17 @@ function MacroTablePanel({
       enableColumnResizing: true,
       tableLayout: "auto",
       columns: columnDefs,
+      dirtyFields: accordionDetailColumns
+        .filter(isAccordionEditableColumn)
+        .map((column) => column.id),
       fetchRows,
       serverSideData: true,
+      externalUnsavedChanges: accordionCellDraftCount > 0,
       onSave,
-      searchPlaceholder: "Buscar certificados, obras o estados...",
+      onDiscardChanges: clearAccordionCellDrafts,
+      searchPlaceholder: isInsurancePolicyMacro
+        ? "Buscar por nro de poliza, obra o estado..."
+        : "Buscar certificados, obras o estados...",
       defaultPageSize: 50,
       pageSizeOptions: [25, 50, 100],
       createFilters: () => ({}),
@@ -1145,6 +1350,13 @@ function MacroTablePanel({
         accordionDetailColumns.length > 0 || accordionGroupColumn
           ? {
             triggerLabel: "detalle",
+            autoOpenKey: macroSearchKey,
+            defaultOpen: (row: MacroTableRowData) =>
+              macroSearchKey.length > 0 &&
+              Array.isArray(row._macroAccordionRows) &&
+              row._macroAccordionRows.some((childRow) =>
+                matchesMacroSearch(childRow, displayColumns, macroSearchKey)
+              ),
             contentClassName: "bg-white",
             renderTrigger: ({
               row,
@@ -1175,7 +1387,7 @@ function MacroTablePanel({
                 </Button>
               );
             },
-            renderContent: (row: MacroTableRowData) => {
+            renderContent: (row: MacroTableRowData, accordion) => {
               const childRows = Array.isArray(row._macroAccordionRows)
                 ? row._macroAccordionRows
                 : [];
@@ -1187,7 +1399,11 @@ function MacroTablePanel({
                   <MacroAccordionDetailTable
                     rows={childRows}
                     columns={detailColumns}
+                    searchColumns={displayColumns}
+                    highlightQuery={macroSearchKey}
                     isEditableColumn={isAccordionEditableColumn}
+                    drafts={accordionCellDrafts}
+                    onChangeCell={stageAccordionCellChange}
                     onSaveCell={saveAccordionCell}
                   />
                 );
@@ -1211,6 +1427,9 @@ function MacroTablePanel({
                           row={row}
                           column={column}
                           editable={isAccordionEditableColumn(column)}
+                          highlightQuery={macroSearchKey}
+                          value={accordion.getValue(column.id)}
+                          onChangeValue={(value) => accordion.setValue(column.id, value)}
                           onSave={saveAccordionCell}
                         />
                       </p>
@@ -1231,19 +1450,25 @@ function MacroTablePanel({
       editMode: "active-cell",
     };
   }, [
+    accordionCellDraftCount,
+    accordionCellDrafts,
     accordionDetailColumns,
     accordionGroupColumn,
+    clearAccordionCellDrafts,
     displayColumns,
     fetchRows,
     fetchAllRowsForExport,
     isAccordionEditableColumn,
+    isInsurancePolicyMacro,
     isManuallyEditableColumn,
     isObraRedirectColumn,
+    macroSearchKey,
     macroTable.description,
     macroTable.id,
     macroTable.name,
     onSave,
     saveAccordionCell,
+    stageAccordionCellChange,
     tableColumns,
   ]);
 
@@ -1258,12 +1483,16 @@ function MacroTablePanel({
   }
 
   return (
-    <FormTable config={config}>
+    <FormTable
+      config={config}
+      searchQuery={macroSearchQuery}
+      onSearchQueryChange={setMacroSearchQuery}
+    >
       <div className="relative ">
         <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div
             data-wizard-target="macro-page-toolbar"
-			className="relative flex min-w-0 items-center gap-2 overflow-x-auto rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:overflow-visible xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
+            className="relative flex min-w-0 items-center gap-2 overflow-x-auto rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:overflow-visible xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
             style={
               {
                 "--notch-bg": "white",
@@ -1278,8 +1507,8 @@ function MacroTablePanel({
             />
           </div>
           <div
-			className="relative z-10 flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2
-			xl:-mr-[1px] xl:-mb-[4px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 xl:pb-0"
+            className="relative z-10 flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2
+            xl:-mr-[1px] xl:-mb-[4px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 xl:pb-0"
             style={
               {
                 "--notch-bg": "white",
@@ -1292,15 +1521,21 @@ function MacroTablePanel({
               flow={macroOverviewTour}
               buttonClassName="gap-2 rounded-lg border-[#e8e1d8] bg-white px-3.5 text-[#5a5248] hover:bg-[#fcfaf7] hover:text-[#1f1a17]"
             />
+            <DemoPageTour flow={presentacionMacroTour} />
             <Button
               variant="outline"
               size="sm"
               className={toolButtonClass}
               data-wizard-target="macro-generar-reporte"
               onClick={() => {
-                const isTourActive = getSearchParam("tour") === "macro-overview";
-                const dest = `/macro/${macroTable.id}/reporte${isTourActive ? "?tour=macro-report" : ""}`;
-                push(dest);
+                const activeTour = getSearchParam("tour");
+                const tourQuery =
+                  activeTour === "macro-overview"
+                    ? "?tour=macro-report"
+                    : activeTour === "demo-macro"
+                      ? "?tour=demo-reporte"
+                      : "";
+                push(`/macro/${macroTable.id}/reporte${tourQuery}`);
               }}
             >
               <FileText className="size-4" />
@@ -1327,9 +1562,9 @@ function MacroTablePanel({
         </div>
         <div
           data-wizard-target="macro-page-table"
-			className="flex min-w-0 flex-col gap-4 rounded-xl bg-card p-2 pt-3 shadow-card sm:p-2.5 sm:pr-0 sm:pt-3.5 xl:rounded-t-none"
+          className="flex min-w-0 flex-col gap-4 rounded-xl bg-card p-2 pt-3 shadow-card sm:p-2.5 sm:pr-0 sm:pt-3.5 xl:rounded-t-none"
         >
-			<FormTableContent className="my-0 max-w-full overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[70svh] md:max-h-[calc(100vh-400px)]" />
+          <FormTableContent className="my-0 max-w-full overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[70svh] md:max-h-[calc(100vh-400px)]" />
           <Separator className="bg-border" />
           <FormTablePagination />
         </div>
@@ -1519,6 +1754,7 @@ function MacroTablesPageContent() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fila</TableHead>
+                    <TableHead>Accion</TableHead>
                     <TableHead>Obra detectada</TableHead>
                     <TableHead>Póliza</TableHead>
                     <TableHead>Sección</TableHead>
@@ -1530,6 +1766,14 @@ function MacroTablesPageContent() {
                   {insurancePreviewRows.map((row) => (
                     <TableRow key={`${row.rowNumber}-${row.policyNumber}`}>
                       <TableCell>{row.rowNumber}</TableCell>
+                      <TableCell>
+                        <span className={row.importAction === "update"
+                          ? "inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700"
+                          : "inline-flex rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-bold text-orange-700"}
+                        >
+                          {row.importAction === "update" ? "Edita existente" : "Crea nueva"}
+                        </span>
+                      </TableCell>
                       <TableCell>{row.obraLabel || "-"}</TableCell>
                       <TableCell>{row.policyNumber || "-"}</TableCell>
                       <TableCell>{row.section || "-"}</TableCell>
@@ -1558,7 +1802,7 @@ function MacroTablesPageContent() {
     <Tabs
       value={selectedId ?? macroTables[0].id}
       onValueChange={handleTabChange}
-		className="relative w-full overflow-hidden p-3 sm:p-4 md:max-w-[calc(100vw-var(--sidebar-current-width))] md:p-8"
+      className="relative w-full overflow-hidden p-3 sm:p-4 md:max-w-[calc(100vw-var(--sidebar-current-width))] md:p-8"
     >
       <div className="relative">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1570,8 +1814,8 @@ function MacroTablesPageContent() {
               Filtra, busca y actualiza tus macrotablas desde una vista unificada.
             </p>
           </div>
-			<div className="flex min-w-0 flex-col gap-2 sm:items-end" data-wizard-target="macro-page-tabs">
-				<div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+          <div className="flex min-w-0 flex-col gap-2 sm:items-end" data-wizard-target="macro-page-tabs">
+            <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
               <input
                 ref={insuranceFileInputRef}
                 type="file"
@@ -1594,15 +1838,15 @@ function MacroTablesPageContent() {
                 Importar pólizas
               </Button>
             </div>
-				<div className="w-full min-w-0 overflow-x-auto sm:w-auto">
-					<TabsList className={cn("flex h-11 min-w-max justify-start rounded-lg p-1")}>
-						{macroTables.map((macroTable) => (
-							<TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
-								{macroTable.name}
-							</TabsTrigger>
-						))}
-					</TabsList>
-				</div>
+            <div className="w-full min-w-0 overflow-x-auto sm:w-auto">
+              <TabsList className={cn("flex h-11 min-w-max justify-start rounded-lg p-1")}>
+                {macroTables.map((macroTable) => (
+                  <TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
+                    {macroTable.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           </div>
         </div>
         {macroTables.map((macroTable) => (
@@ -1630,6 +1874,7 @@ function MacroTablesPageContent() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Fila</TableHead>
+                  <TableHead>Accion</TableHead>
                   <TableHead>Obra detectada</TableHead>
                   <TableHead>Póliza</TableHead>
                   <TableHead>Sección</TableHead>
@@ -1641,6 +1886,14 @@ function MacroTablesPageContent() {
                 {insurancePreviewRows.map((row) => (
                   <TableRow key={`${row.rowNumber}-${row.policyNumber}`}>
                     <TableCell>{row.rowNumber}</TableCell>
+                    <TableCell>
+                      <span className={row.importAction === "update"
+                        ? "inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700"
+                        : "inline-flex rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-bold text-orange-700"}
+                      >
+                        {row.importAction === "update" ? "Edita existente" : "Crea nueva"}
+                      </span>
+                    </TableCell>
                     <TableCell>{row.obraLabel || "-"}</TableCell>
                     <TableCell>{row.policyNumber || "-"}</TableCell>
                     <TableCell>{row.section || "-"}</TableCell>

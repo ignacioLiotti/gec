@@ -63,6 +63,20 @@ const normalizeText = (value: unknown) =>
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
+const normalizeCompactText = (value: unknown) =>
+  normalizeText(value).replace(/[^a-z0-9]/g, "");
+
+export function matchesMacroSearchValue(value: unknown, query: string | undefined) {
+  const normalizedQuery = normalizeText(query ?? "").trim();
+  if (!normalizedQuery) return true;
+  const normalizedValue = normalizeText(value);
+  if (normalizedValue.includes(normalizedQuery)) return true;
+
+  const compactQuery = normalizeCompactText(query);
+  if (!compactQuery) return false;
+  return normalizeCompactText(value).includes(compactQuery);
+}
+
 const parseDateAtStartOfDay = (value: unknown) => {
   if (!value) return null;
   const date = new Date(String(value));
@@ -263,7 +277,5 @@ export function matchesMacroSearch(
     ...columns.map((column) => row[column.id]),
   ];
 
-  return searchableValues.some((value) =>
-    normalizeText(value).includes(normalizedQuery)
-  );
+  return searchableValues.some((value) => matchesMacroSearchValue(value, normalizedQuery));
 }
