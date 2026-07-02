@@ -3,6 +3,7 @@ import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import type { Table } from "@tanstack/react-table";
 import type {
 	AccordionRowConfig,
+	ColumnField,
 	ColumnDef,
 	FormFieldComponent,
 	FormTableConfig,
@@ -121,6 +122,8 @@ export type FormTableRowState<Row extends FormTableRow> = {
 	handleClearCell: (rowId: string, column: ColumnDef<Row>) => void;
 	handleRestoreCell: (rowId: string, column: ColumnDef<Row>) => void;
 	handleCommitCellValue: (rowId: string, column: ColumnDef<Row>, value: unknown) => boolean;
+	setCellValue: (rowId: string, field: ColumnField<Row>, value: unknown) => void;
+	updateRow: (rowId: string, updater: (row: Row) => Row) => void;
 	handleCopyCell: (value: unknown) => Promise<void>;
 	handleCopyColumn: (column: ColumnDef<Row>) => Promise<void>;
 	handleCopyRow: (row: Row) => Promise<void>;

@@ -12,7 +12,9 @@ import {
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
+	AccordionRowRenderContext,
 	AccordionRowConfig,
+	ColumnField,
 	ColumnDef,
 	FormFieldComponent,
 	FormTableRow,
@@ -106,6 +108,8 @@ type TableRowProps<Row extends FormTableRow> = {
 	onDelete: (rowId: string) => void;
 	onClearCell: (rowId: string, column: ColumnDef<Row>) => void;
 	onRestoreCell: (rowId: string, column: ColumnDef<Row>) => void;
+	onSetCellValue: (rowId: string, field: ColumnField<Row>, value: unknown) => void;
+	onUpdateRow: (rowId: string, updater: (row: Row) => Row) => void;
 	onCopyCell: (value: unknown) => void;
 	onCopyColumn: (column: ColumnDef<Row>) => void;
 	onCopyRow: (row: Row) => void;
@@ -155,6 +159,8 @@ function TableRowInner<Row extends FormTableRow>({
 	onDelete,
 	onClearCell,
 	onRestoreCell,
+	onSetCellValue,
+	onUpdateRow,
 	onCopyCell,
 	onCopyColumn,
 	onCopyRow,
@@ -193,6 +199,34 @@ function TableRowInner<Row extends FormTableRow>({
 			cancelHoverIntent();
 		};
 	}, [cancelHoverIntent]);
+	const getAccordionFieldName = useCallback(
+		(field: ColumnField<Row>) =>
+			`rowsById.${rowData.id}.${field}` as `rowsById.${string}.${Extract<keyof Row, string>}`,
+		[rowData.id]
+	);
+	const setAccordionValue = useCallback(
+		(field: ColumnField<Row>, value: unknown) => {
+			onSetCellValue(rowData.id, field, value);
+		},
+		[onSetCellValue, rowData.id]
+	);
+	const updateAccordionRow = useCallback(
+		(updater: (row: Row) => Row) => {
+			onUpdateRow(rowData.id, updater);
+		},
+		[onUpdateRow, rowData.id]
+	);
+	const accordionRenderContext: AccordionRowRenderContext<Row> = {
+		rowId: rowData.id,
+		FieldComponent,
+		columnsById,
+		getFieldName: getAccordionFieldName,
+		getValue: (field) => rowData[field],
+		setValue: setAccordionValue,
+		updateRow: updateAccordionRow,
+		isDirty: isRowDirty,
+		isCellDirty: (column) => isCellDirty(rowData.id, column),
+	};
 
 	const actionsCell = showActionsColumn ? (
 		<td
@@ -532,7 +566,7 @@ function TableRowInner<Row extends FormTableRow>({
 							accordionRowConfig.contentClassName
 						)}
 					>
-						{accordionRowConfig.renderContent(rowData)}
+						{accordionRowConfig.renderContent(rowData, accordionRenderContext)}
 					</td>
 				</tr>
 			)}
@@ -546,6 +580,7 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		prevProps.activeCell?.rowId === rowId || nextProps.activeCell?.rowId === rowId;
 	const prevHoveredAffectsRow =
 		prevProps.hoveredCell?.rowId === rowId || nextProps.hoveredCell?.rowId === rowId;
+	const accordionConfigAffectsRow = prevProps.isExpanded || nextProps.isExpanded;
 	return (
 		prevProps.row.id === nextProps.row.id &&
 		prevProps.row.original === nextProps.row.original &&
@@ -562,6 +597,8 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 			(prevProps.hoveredCell?.rowId === nextProps.hoveredCell?.rowId &&
 				prevProps.hoveredCell?.columnId === nextProps.hoveredCell?.columnId)) &&
 		prevProps.isExpanded === nextProps.isExpanded &&
+		(!accordionConfigAffectsRow ||
+			prevProps.accordionRowConfig === nextProps.accordionRowConfig) &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
 		prevProps.showActionsColumn === nextProps.showActionsColumn &&
 		prevProps.actionsColumnPosition === nextProps.actionsColumnPosition &&
@@ -577,6 +614,8 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		prevProps.bulkSelectedCount === nextProps.bulkSelectedCount &&
 		prevProps.isRowBulkSelected === nextProps.isRowBulkSelected &&
 		prevProps.onCommitCellValue === nextProps.onCommitCellValue &&
+		prevProps.onSetCellValue === nextProps.onSetCellValue &&
+		prevProps.onUpdateRow === nextProps.onUpdateRow &&
 		prevProps.onBulkSelectionStart === nextProps.onBulkSelectionStart &&
 		prevProps.onBulkSelectionExtend === nextProps.onBulkSelectionExtend &&
 		prevProps.onBulkSelectionEnd === nextProps.onBulkSelectionEnd

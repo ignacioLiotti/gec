@@ -1,4 +1,4 @@
-import type { ColumnDef, FormTableRow } from "./types";
+import type { ColumnDef, ColumnField, FormTableRow } from "./types";
 import { shallowEqualValues } from "./table-utils";
 
 type DirtyRowResult<Row extends FormTableRow> = {
@@ -25,7 +25,8 @@ export function computeRowDirty<Row extends FormTableRow>(
 	rowId: string,
 	rowsById: Record<string, Row>,
 	columns: ColumnDef<Row>[],
-	initialRowsById: Record<string, Row>
+	initialRowsById: Record<string, Row>,
+	dirtyFields: ColumnField<Row>[] = []
 ): DirtyRowResult<Row> {
 	const dirtyCells: ColumnDef<Row>[] = [];
 	const currentRow = rowsById[rowId];
@@ -39,8 +40,10 @@ export function computeRowDirty<Row extends FormTableRow>(
 		return { dirty: true, cells: dirtyCells };
 	}
 
+	const columnFields = new Set<ColumnField<Row>>();
 	for (const column of columns) {
-		if (column.field === ("id" as any)) continue;
+		if (String(column.field) === "id") continue;
+		columnFields.add(column.field);
 		const currentValue = currentRow[column.field];
 		const initialValue = initialRow[column.field];
 		if (!shallowEqualValues(currentValue, initialValue)) {
@@ -48,7 +51,12 @@ export function computeRowDirty<Row extends FormTableRow>(
 		}
 	}
 
-	return { dirty: dirtyCells.length > 0, cells: dirtyCells };
+	const hasDirtyExtraField = dirtyFields.some((field) => {
+		if (String(field) === "id" || columnFields.has(field)) return false;
+		return !shallowEqualValues(currentRow[field], initialRow[field]);
+	});
+
+	return { dirty: dirtyCells.length > 0 || hasDirtyExtraField, cells: dirtyCells };
 }
 
 export function hasUnsavedChanges<Row extends FormTableRow>(
@@ -56,13 +64,16 @@ export function hasUnsavedChanges<Row extends FormTableRow>(
 	initialRowOrder: string[],
 	rowsById: Record<string, Row>,
 	columns: ColumnDef<Row>[],
-	initialRowsById: Record<string, Row>
+	initialRowsById: Record<string, Row>,
+	dirtyFields: ColumnField<Row>[] = []
 ) {
 	if (rowOrder.length !== initialRowOrder.length) return true;
 	for (let i = 0; i < rowOrder.length; i += 1) {
 		if (rowOrder[i] !== initialRowOrder[i]) return true;
 	}
-	return rowOrder.some((rowId) => computeRowDirty(rowId, rowsById, columns, initialRowsById).dirty);
+	return rowOrder.some((rowId) =>
+		computeRowDirty(rowId, rowsById, columns, initialRowsById, dirtyFields).dirty
+	);
 }
 
 

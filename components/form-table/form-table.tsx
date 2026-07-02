@@ -513,6 +513,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 		handleClearCell,
 		handleRestoreCell,
 		handleCommitCellValue,
+		setCellValue,
+		updateRow,
 		handleCopyCell,
 		handleCopyColumn,
 		handleCopyRow,
@@ -1124,6 +1126,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												onDelete={handleDelete}
 												onClearCell={handleClearCell}
 												onRestoreCell={handleRestoreCell}
+												onSetCellValue={setCellValue}
+												onUpdateRow={updateRow}
 												onCopyCell={handleCopyCell}
 												onCopyColumn={handleCopyColumn}
 												onCopyRow={handleCopyRow}
@@ -1190,6 +1194,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											onDelete={handleDelete}
 											onClearCell={handleClearCell}
 											onRestoreCell={handleRestoreCell}
+											onSetCellValue={setCellValue}
+											onUpdateRow={updateRow}
 											onCopyCell={handleCopyCell}
 											onCopyColumn={handleCopyColumn}
 											onCopyRow={handleCopyRow}
@@ -1479,6 +1485,7 @@ function buildDirtyIndex<Row extends FormTableRow>(
 	rowsById: Record<string, Row>,
 	columns: ColumnDef<Row>[],
 	initialRowsById: Record<string, Row>,
+	dirtyFields: ColumnField<Row>[] = [],
 	cache?: Map<string, RowDirtyCacheEntry<Row>>
 ) {
 	let hasChanges = rowOrder.length !== initialRowOrder.length;
@@ -1522,17 +1529,27 @@ function buildDirtyIndex<Row extends FormTableRow>(
 		} else {
 			const dirtyCells: ColumnDef<Row>[] = [];
 			const dirtyCellIds = new Set<string>();
+			let hasExtraDirtyField = false;
+			const columnFields = new Set<ColumnField<Row>>();
 			for (const column of columns) {
 				if (String(column.field) === "id") continue;
+				columnFields.add(column.field);
 				if (!shallowEqualValues(currentRow[column.field], initialRow[column.field])) {
 					dirtyCells.push(column);
 					dirtyCellIds.add(column.id);
 				}
 			}
+			for (const field of dirtyFields) {
+				if (String(field) === "id" || columnFields.has(field)) continue;
+				if (!shallowEqualValues(currentRow[field], initialRow[field])) {
+					hasExtraDirtyField = true;
+					break;
+				}
+			}
 			entry = {
 				row: currentRow,
 				initialRow,
-				dirty: dirtyCells.length > 0,
+				dirty: dirtyCells.length > 0 || hasExtraDirtyField,
 				cellDirtyIds: dirtyCellIds,
 				dirtyCells,
 				dirtyCellIdsKey: dirtyCells.map((column) => column.id).join(","),
@@ -1575,6 +1592,7 @@ function hasSameRowIdentity<Row extends FormTableRow>(
 	return nextRows.every((row, index) => row.id === currentOrder[index]);
 }
 
+
 function resolveActiveTabId<Row extends FormTableRow>(
 	tabFilters: TabFilterOption<Row>[],
 	...preferredTabIds: Array<string | null | undefined>
@@ -1611,7 +1629,6 @@ function writePersistedActiveTab(storageKey: string, activeTab: string) {
 		// Ignore storage write failures.
 	}
 }
-
 // cell renderers moved to components/form-table/cell-renderers.tsx
 
 type FormTableProps<Row extends FormTableRow, Filters> = {
@@ -2005,6 +2022,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const accordionAlwaysOpen = Boolean(accordionRowConfig?.alwaysOpen);
 	const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(() => new Set());
 	const autoExpandedRowsRef = useRef<Set<string>>(new Set());
+	const previousAccordionAutoOpenKeyRef = useRef<string | number | null | undefined>(
+		accordionRowConfig?.autoOpenKey,
+	);
 
 	const hasInitialRow = useCallback(
 		(rowId: string) => Boolean(initialValuesRef.current.rowsById[rowId]),
@@ -2054,6 +2074,11 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	useEffect(() => {
 		if (!hasAccordionRows || accordionAlwaysOpen) return;
+		const autoOpenKey = accordionRowConfig?.autoOpenKey;
+		if (previousAccordionAutoOpenKeyRef.current !== autoOpenKey) {
+			previousAccordionAutoOpenKeyRef.current = autoOpenKey;
+			autoExpandedRowsRef.current.clear();
+		}
 		const defaultOpen = accordionRowConfig?.defaultOpen;
 		if (!defaultOpen) return;
 		setExpandedRowIds((prev) => {
@@ -2176,12 +2201,16 @@ export function FormTable<Row extends FormTableRow, Filters>({
 
 	const dirtyRowCacheRef = useRef<{
 		columns: ColumnDef<Row>[] | null;
+		dirtyFieldsKey: string;
 		map: Map<string, RowDirtyCacheEntry<Row>>;
-	}>({ columns: null, map: new Map() });
+	}>({ columns: null, dirtyFieldsKey: "", map: new Map() });
+	const dirtyFields = useMemo(() => config.dirtyFields ?? [], [config.dirtyFields]);
+	const dirtyFieldsKey = dirtyFields.join(",");
 	const dirtyIndex = useMemo(() => {
 		const cache = dirtyRowCacheRef.current;
-		if (cache.columns !== columns) {
+		if (cache.columns !== columns || cache.dirtyFieldsKey !== dirtyFieldsKey) {
 			cache.columns = columns;
+			cache.dirtyFieldsKey = dirtyFieldsKey;
 			cache.map.clear();
 		}
 		return buildDirtyIndex(
@@ -2190,9 +2219,10 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			rowsById,
 			columns,
 			dirtyBaseline.rowsById,
+			dirtyFields,
 			cache.map
 		);
-	}, [rowOrder, rowsById, columns, dirtyBaseline]);
+	}, [rowOrder, rowsById, columns, dirtyBaseline, dirtyFields, dirtyFieldsKey]);
 
 	useEffect(() => {
 		if (fetchRowsFn) return;
@@ -2218,7 +2248,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		[dirtyIndex]
 	);
 
-	const hasUnsavedChanges = dirtyIndex.hasChanges;
+	const hasUnsavedChanges =
+		dirtyIndex.hasChanges || config.externalUnsavedChanges === true;
 
 	useEffect(() => {
 		if (!enableColumnResizing || typeof window === "undefined") return;
@@ -2944,6 +2975,31 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		[isReadOnly, setFormFieldValue]
 	);
 
+	const setCellValue = useCallback(
+		(rowId: string, field: ColumnField<Row>, value: unknown) => {
+			if (isReadOnly) return;
+			setFormFieldValue(`rowsById.${rowId}.${field}` as const, () => value);
+		},
+		[isReadOnly, setFormFieldValue]
+	);
+
+	const updateRow = useCallback(
+		(rowId: string, updater: (row: Row) => Row) => {
+			if (isReadOnly) return;
+			setFormFieldValue("rowsById", (prev: Record<string, Row> = {}) => {
+				const currentRow = prev[rowId];
+				if (!currentRow) return prev;
+				const nextRow = updater(currentRow);
+				if (nextRow === currentRow) return prev;
+				return {
+					...prev,
+					[rowId]: nextRow,
+				};
+			});
+		},
+		[isReadOnly, setFormFieldValue]
+	);
+
 	const handleCopyCell = useCallback(async (value: unknown) => {
 		const success = await copyToClipboard(value == null ? "" : String(value));
 		toast[success ? "success" : "error"](
@@ -3176,8 +3232,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			});
 			return changed ? next : prev;
 		});
+		config.onDiscardChanges?.();
 		toast.info("Cambios descartados");
-	}, [hasUnsavedChanges, isReadOnly, setFormFieldValue]);
+	}, [config, hasUnsavedChanges, isReadOnly, setFormFieldValue]);
 
 	const contextValue = useMemo<FormTableContextValue<Row, Filters>>(() => ({
 		config,
@@ -3281,6 +3338,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			handleClearCell,
 			handleRestoreCell,
 			handleCommitCellValue: commitBulkCellValue,
+			setCellValue,
+			updateRow,
 			handleCopyCell,
 			handleCopyColumn,
 			handleCopyRow,
@@ -3349,6 +3408,8 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		handleSave,
 		handleSearchInputChange,
 		handleSetPageSize,
+		setCellValue,
+		updateRow,
 		hasAccordionRows,
 		hasFilters,
 		hasInitialRow,

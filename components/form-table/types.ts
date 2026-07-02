@@ -38,6 +38,18 @@ export type FormFieldComponent<Row extends FormTableRow> = (props: {
 	validators?: FieldValidators;
 }) => ReactNode;
 
+export type AccordionRowRenderContext<Row extends FormTableRow> = {
+	rowId: string;
+	FieldComponent: FormFieldComponent<Row>;
+	columnsById: Record<string, ColumnDef<Row>>;
+	getFieldName: (field: ColumnField<Row>) => `rowsById.${string}.${Extract<keyof Row, string>}`;
+	getValue: (field: ColumnField<Row>) => unknown;
+	setValue: (field: ColumnField<Row>, value: unknown) => void;
+	updateRow: (updater: (row: Row) => Row) => void;
+	isDirty: boolean;
+	isCellDirty: (column: ColumnDef<Row>) => boolean;
+};
+
 export type CellType =
 	| "text"
 	| "number"
@@ -62,6 +74,13 @@ export type CellSuggestionKind =
 	| "math"
 	| "text"
 	| "select";
+
+export type ColumnFilterType =
+	| "text"
+	| "number"
+	| "date"
+	| "boolean"
+	| "enum";
 
 export type CellSuggestion<Row extends FormTableRow> = {
 	kind: CellSuggestionKind;
@@ -124,7 +143,7 @@ export type CellConfig<Row extends FormTableRow> = {
 };
 
 export type AccordionRowConfig<Row extends FormTableRow> = {
-	renderContent: (row: Row) => ReactNode;
+	renderContent: (row: Row, context: AccordionRowRenderContext<Row>) => ReactNode;
 	renderTrigger?: (args: {
 		row: Row;
 		isOpen: boolean;
@@ -132,6 +151,7 @@ export type AccordionRowConfig<Row extends FormTableRow> = {
 	}) => ReactNode;
 	triggerLabel?: string;
 	defaultOpen?: (row: Row) => boolean;
+	autoOpenKey?: string | number | null;
 	contentClassName?: string;
 	alwaysOpen?: boolean;
 };
@@ -166,6 +186,7 @@ export type ColumnDef<Row extends FormTableRow> = {
 	/** Allows a normally read-only column to be editable only while the row has no initial snapshot. */
 	editableWhenNewRow?: boolean;
 	cellType?: CellType;
+	filterType?: ColumnFilterType | false;
 	cellConfig?: CellConfig<Row>;
 	sortFn?: (a: Row, b: Row) => number;
 	searchFn?: (row: Row, query: string) => boolean;
@@ -281,8 +302,13 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 			args: FormTableCsvExportArgs<Row, Filters>,
 		) => FormTableCsvExport | null | Promise<FormTableCsvExport | null>;
 	};
+	/** Extra row fields to include in dirty tracking even when they are not visible table columns. */
+	dirtyFields?: ColumnField<Row>[];
+	/** Additional dirty state owned by custom content rendered inside the table. */
+	externalUnsavedChanges?: boolean;
 	createRow?: () => Row;
 	onSave?: (args: SaveRowsArgs<Row>) => Promise<void>;
+	onDiscardChanges?: () => void;
 	emptyStateMessage?: string;
 	accordionRow?: AccordionRowConfig<Row>;
 	showInlineSearch?: boolean;
