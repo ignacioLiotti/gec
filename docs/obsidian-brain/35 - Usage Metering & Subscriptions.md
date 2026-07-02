@@ -91,6 +91,42 @@ CREATE TABLE public.tenant_usage_events (
 
 Granular log for debugging and billing disputes.
 
+### whatsapp_usage_policies (migration 0116)
+```sql
+CREATE TABLE public.whatsapp_usage_policies (
+  tenant_id UUID PRIMARY KEY REFERENCES tenants(id),
+  monthly_budget_cents INTEGER DEFAULT 2000,
+  service_messages_limit INTEGER,
+  utility_templates_limit INTEGER DEFAULT 400,
+  marketing_templates_limit INTEGER DEFAULT 0,
+  authentication_templates_limit INTEGER DEFAULT 0,
+  file_uploads_limit INTEGER DEFAULT 300,
+  storage_bytes_limit BIGINT DEFAULT 2147483648,
+  data_queries_limit INTEGER DEFAULT 300,
+  manual_submissions_limit INTEGER DEFAULT 300,
+  recurring_contacts_limit INTEGER DEFAULT 25,
+  recurring_reminders_per_contact_per_week INTEGER DEFAULT 1
+);
+```
+
+This table is the WhatsApp-specific operational budget. It complements the older aggregate `whatsapp_message_budget_override` by splitting WhatsApp into paid template categories, free/service conversations, uploads, storage, data queries, manual form submissions, and recurring reminder guardrails.
+
+### whatsapp_templates (migration 0116)
+```sql
+CREATE TABLE public.whatsapp_templates (
+  tenant_id UUID REFERENCES tenants(id),
+  name TEXT,
+  category TEXT,
+  language TEXT,
+  status TEXT,
+  body TEXT,
+  variables JSONB,
+  meta_template_id TEXT
+);
+```
+
+Template rows are an internal registry for Meta-approved templates. Actual approval and billing category still live in Meta; the app stores local intent, status, variables, and the form/reminder use case.
+
 ---
 
 ## Enforcement Function

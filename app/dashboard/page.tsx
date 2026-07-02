@@ -51,6 +51,7 @@ import {
 } from "@/lib/demo-tours/screen-tour-flows";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type Obra = {
   id: string;
@@ -462,6 +463,160 @@ function SimpleGroupedBars({
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function MobileActionDashboard({
+  obras,
+  stats,
+  selectedObraId,
+  onSelectedObraIdChange,
+  onCreateObra,
+  prefetchObra,
+}: {
+  obras: Obra[];
+  stats: DashboardStats | null;
+  selectedObraId: string;
+  onSelectedObraIdChange: (obraId: string) => void;
+  onCreateObra: () => void;
+  prefetchObra: (obraId: string) => void;
+}) {
+  const selectedObra = obras.find((obra) => obra.id === selectedObraId) ?? null;
+  const recentMobileObras = obras.slice(0, 4);
+  const actionCardClassName = "group relative overflow-hidden rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] outline-none transition-[transform,box-shadow,border-color,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_18px_45px_rgba(15,23,42,0.14)] focus-visible:-translate-y-0.5 focus-visible:border-sky-300 focus-visible:ring-4 focus-visible:ring-sky-500/20 focus-visible:shadow-[0_18px_45px_rgba(15,23,42,0.16)] active:translate-y-0 active:scale-[0.985]";
+  const recentObraClassName = "group flex min-h-14 items-center gap-3 rounded-xl border border-stone-200 bg-white px-3 py-2 shadow-[0_1px_0_rgba(0,0,0,0.03)] outline-none transition-[transform,box-shadow,border-color,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_14px_34px_rgba(15,23,42,0.12)] focus-visible:-translate-y-0.5 focus-visible:border-sky-300 focus-visible:ring-4 focus-visible:ring-sky-500/20 focus-visible:shadow-[0_14px_34px_rgba(15,23,42,0.14)] active:translate-y-0 active:scale-[0.985]";
+
+  return (
+    <div className="md:hidden">
+      <div className="mx-auto flex min-h-[calc(100svh-3.5rem)] max-w-md flex-col gap-3 px-3 py-4">
+        <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Dashboard</p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-stone-950">Acciones rapidas</h1>
+              <p className="mt-1 text-sm text-stone-500">
+                Elegi si queres revisar documentos o entrar directo a una obra.
+              </p>
+            </div>
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-stone-700">
+              <Activity className="size-5" />
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-stone-500">Obras</p>
+              <p className="mt-0.5 text-lg font-semibold text-stone-950 tabular-nums">{stats?.total ?? obras.length}</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-stone-500">Activas</p>
+              <p className="mt-0.5 text-lg font-semibold text-stone-950 tabular-nums">{stats?.inProgress ?? 0}</p>
+            </div>
+          </div>
+        </section>
+
+        <Link
+          href="/document-generation/review"
+          prefetch={false}
+          className={actionCardClassName}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-700 ring-1 ring-orange-100 transition-[background-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-105 group-hover:bg-orange-100 group-hover:shadow-[0_8px_20px_rgba(234,88,12,0.18)] group-focus-visible:scale-105 group-focus-visible:bg-orange-100 group-focus-visible:shadow-[0_8px_20px_rgba(234,88,12,0.18)]">
+              <FileText className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-stone-950 transition-colors group-hover:text-stone-900 group-focus-visible:text-stone-900">Revision de documentos</p>
+              <p className="mt-1 text-sm leading-5 text-stone-500">
+                Ir a la cola de documentos para revisar, aprobar o corregir.
+              </p>
+            </div>
+            <ArrowRight className="mt-1 size-4 shrink-0 text-stone-400 transition-[color,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:translate-x-1 group-hover:text-stone-700 group-focus-visible:translate-x-1 group-focus-visible:text-stone-700" />
+          </div>
+        </Link>
+
+        <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-[box-shadow,border-color,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-within:border-sky-300 focus-within:ring-4 focus-within:ring-sky-500/20 focus-within:shadow-[0_18px_45px_rgba(15,23,42,0.14)]">
+          <div className="flex items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">
+              <FolderKanban className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-stone-950">Abrir una obra</p>
+              <p className="mt-1 text-sm leading-5 text-stone-500">
+                Busca por numero o nombre y entra al panel operativo.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <ObraDestinationCombobox
+              obras={obras}
+              value={selectedObraId}
+              onChange={onSelectedObraIdChange}
+              placeholder={obras.length > 0 ? "Buscar obra" : "Sin obras disponibles"}
+              disabled={obras.length === 0}
+            />
+            {selectedObra ? (
+              <Button asChild className="h-11 w-full gap-2 bg-stone-900 text-white shadow-[0_8px_22px_rgba(15,23,42,0.16)] transition-[transform,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:bg-stone-800 hover:shadow-[0_14px_32px_rgba(15,23,42,0.22)] focus-visible:ring-4 focus-visible:ring-sky-500/25 active:translate-y-0 active:scale-[0.98]">
+                <Link
+                  href={`/excel/${selectedObra.id}`}
+                  prefetch={false}
+                  onMouseEnter={() => prefetchObra(selectedObra.id)}
+                >
+                  Abrir obra seleccionada
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            ) : obras.length > 0 ? (
+              <Button disabled className="h-11 w-full gap-2">
+                Selecciona una obra
+              </Button>
+            ) : (
+              <Button onClick={onCreateObra} className="h-11 w-full gap-2 bg-stone-900 text-white shadow-[0_8px_22px_rgba(15,23,42,0.16)] transition-[transform,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:bg-stone-800 hover:shadow-[0_14px_32px_rgba(15,23,42,0.22)] focus-visible:ring-4 focus-visible:ring-sky-500/25 active:translate-y-0 active:scale-[0.98]">
+                <Plus className="size-4" />
+                Crear primera obra
+              </Button>
+            )}
+          </div>
+        </section>
+
+        {recentMobileObras.length > 0 ? (
+          <section className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Recientes</p>
+              <Link href="/excel" prefetch={false} className="rounded-md px-2 py-1 text-xs font-medium text-stone-700 outline-none transition-[background-color,color,box-shadow] duration-200 hover:bg-white hover:text-stone-950 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-sky-500/20">
+                Ver todas
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {recentMobileObras.map((obra) => (
+                <Link
+                  key={obra.id}
+                  href={`/excel/${obra.id}`}
+                  prefetch={false}
+                  onMouseEnter={() => prefetchObra(obra.id)}
+                  className={recentObraClassName}
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 font-mono text-xs font-semibold text-stone-700 transition-[background-color,color,transform] duration-200 group-hover:scale-105 group-hover:bg-stone-900 group-hover:text-white group-focus-visible:scale-105 group-focus-visible:bg-stone-900 group-focus-visible:text-white">
+                    {obra.n}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-stone-950 transition-colors group-hover:text-stone-900 group-focus-visible:text-stone-900">{obra.designacionYUbicacion}</span>
+                    <span className="mt-0.5 block truncate text-xs text-stone-500">{obra.entidadContratante}</span>
+                  </span>
+                  {obra.porcentaje >= 100 ? (
+                    <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <span className="shrink-0 text-xs font-semibold text-stone-500 tabular-nums transition-colors group-hover:text-stone-800 group-focus-visible:text-stone-800">
+                      {Math.round(obra.porcentaje)}%
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -2366,6 +2521,7 @@ function buildDashboardCurvePoints(
 export default function Home() {
   const queryClient = useQueryClient();
   const { prefetchObra } = usePrefetchObra();
+  const isMobile = useIsMobile();
   const [isCreating, setIsCreating] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newObra, setNewObra] = useState({
@@ -2377,6 +2533,7 @@ export default function Home() {
   const [newlyAddedObraId, setNewlyAddedObraId] = useState<string | null>(null);
   const [selectedPreviewObraId, setSelectedPreviewObraId] = useState<string | null>(null);
   const [previewCurveObraId, setPreviewCurveObraId] = useState<string | null>(null);
+  const [mobileObraId, setMobileObraId] = useState("");
   const [isCompanyFileUploading, setIsCompanyFileUploading] = useState(false);
   const [insurancePreviewRows, setInsurancePreviewRows] = useState<InsurancePolicyPreviewRow[]>([]);
   const [isInsuranceImportOpen, setIsInsuranceImportOpen] = useState(false);
@@ -2412,6 +2569,10 @@ export default function Home() {
 
   useEffect(() => {
     setPreviewCurveObraId(null);
+    if (isMobile) {
+      return;
+    }
+
     if (!selectedPreviewObra?.id) return;
 
     const timeoutId = window.setTimeout(() => {
@@ -2419,7 +2580,7 @@ export default function Home() {
     }, 200);
 
     return () => window.clearTimeout(timeoutId);
-  }, [selectedPreviewObra?.id]);
+  }, [isMobile, selectedPreviewObra?.id]);
 
   // Calculate statistics from the cached data
   const stats = useMemo<DashboardStats | null>(() => {
@@ -2537,7 +2698,7 @@ export default function Home() {
 
   const selectedPreviewCurveQuery = useQuery({
     queryKey: ["dashboard", "obra-preview-curve", previewCurveObraId ?? "none"],
-    enabled: Boolean(previewCurveObraId),
+    enabled: !isMobile && Boolean(previewCurveObraId),
     staleTime: 60 * 1000,
     queryFn: async () => {
       const obraId = previewCurveObraId!;
@@ -2882,6 +3043,7 @@ export default function Home() {
         {/* Header */}
         <m.div
           data-wizard-target="dashboard-header"
+          className="hidden md:block"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
@@ -2953,7 +3115,16 @@ export default function Home() {
           onChange={previewInsuranceImport}
         />
 
-        <Tabs value={dashboardTab} onValueChange={setDashboardTab} className="min-w-0 space-y-2">
+        <MobileActionDashboard
+          obras={obras}
+          stats={stats}
+          selectedObraId={mobileObraId}
+          onSelectedObraIdChange={setMobileObraId}
+          onCreateObra={() => setDialogOpen(true)}
+          prefetchObra={prefetchObra}
+        />
+
+        <Tabs value={dashboardTab} onValueChange={setDashboardTab} className="hidden min-w-0 space-y-2 md:block">
           <div className="min-w-0 overflow-x-auto">
             <TabsList className="h-auto min-w-max justify-start gap-1 rounded-xl border border-stone-200 bg-white p-1">
               <TabsTrigger value="resumen" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">

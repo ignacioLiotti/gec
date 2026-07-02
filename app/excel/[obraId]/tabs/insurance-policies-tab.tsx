@@ -4,6 +4,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+	ArrowRight,
 	Check,
 	Clock3,
 	FileSpreadsheet,
@@ -14,24 +15,29 @@ import {
 	Save,
 	Search,
 	Shield,
+	Trash2,
 	TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ObraDestinationCombobox } from "@/components/obra-destination-combobox";
 import { cn } from "@/lib/utils";
 
 type RuleType = "on_finish" | "days_after" | "months_after";
 type PolicyStatusFilter = "all" | "active" | "dueSoon" | "expired" | "cancelled";
 type PolicySortKey = "policy" | "endDate" | "rule" | "calculatedDate" | "status";
-type EditingSection = "responsibles" | "calculatedDate" | "balanceStatus" | null;
+type EditingSection = "responsibles" | "calculatedDate" | "balanceStatus" | "insuredAmount" | "endDate" | "premiumPrize" | null;
 type PolicyStatus = "active" | "dueSoon" | "expired" | "cancelled";
 
 type Policy = {
 	id: string;
+	obra_id: string | null;
 	policy_number: string;
 	section: string | null;
 	coverage_period: string | null;
@@ -53,14 +59,29 @@ type Policy = {
 	is_cancelled: boolean;
 };
 
+type PolicyListPayload = {
+	policies: Policy[];
+	pagination?: { total: number; limit: number; page: number; totalPages: number };
+};
+
 type TenantUser = {
 	id: string;
 	full_name: string | null;
 	email: string | null;
 };
 
+type ObraOption = {
+	id: string;
+	n: number | string | null;
+	designacionYUbicacion: string;
+	porcentaje: number;
+};
+
 type PolicyDraft = {
 	endDate: string;
+	insuredAmount: string;
+	premium: string;
+	prize: string;
 	balance: string;
 	status: string;
 	definitiveReceptionDate: string;
@@ -203,6 +224,9 @@ function ruleDescription(policy: Policy, draft: PolicyDraft) {
 function getPolicyDraft(policy: Policy, drafts: Record<string, PolicyDraft>): PolicyDraft {
 	return drafts[policy.id] ?? {
 		endDate: policy.end_date?.slice(0, 10) ?? "",
+		insuredAmount: policy.insured_amount == null ? "" : String(policy.insured_amount),
+		premium: policy.premium == null ? "" : String(policy.premium),
+		prize: policy.prize == null ? "" : String(policy.prize),
 		balance: policy.balance == null ? "" : String(policy.balance),
 		status: policy.status ?? "",
 		definitiveReceptionDate: policy.definitive_reception_date?.slice(0, 10) ?? "",
@@ -215,6 +239,9 @@ function getPolicyDraft(policy: Policy, drafts: Record<string, PolicyDraft>): Po
 function isPolicyDraftDirty(policy: Policy, draft: PolicyDraft) {
 	return (
 		draft.endDate !== (policy.end_date?.slice(0, 10) ?? "") ||
+		draft.insuredAmount !== (policy.insured_amount == null ? "" : String(policy.insured_amount)) ||
+		draft.premium !== (policy.premium == null ? "" : String(policy.premium)) ||
+		draft.prize !== (policy.prize == null ? "" : String(policy.prize)) ||
 		draft.balance !== (policy.balance == null ? "" : String(policy.balance)) ||
 		draft.status !== (policy.status ?? "") ||
 		draft.definitiveReceptionDate !== (policy.definitive_reception_date?.slice(0, 10) ?? "") ||
@@ -256,16 +283,51 @@ function statusLabel(status: PolicyStatus) {
 }
 
 function statusClasses(status: PolicyStatus) {
-	if (status === "cancelled") return "border-stone-200 bg-stone-100 text-stone-700";
+	if (status === "cancelled") return "border-sky-200 bg-sky-50 text-sky-800";
 	if (status === "expired") return "border-orange-300 bg-orange-50 text-orange-700";
 	if (status === "dueSoon") return "border-amber-200 bg-amber-50 text-amber-700";
 	return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
 function statusHeaderGradient(status: PolicyStatus) {
-	if (status === "cancelled") return "from-stone-100/90 to-white";
+	if (status === "cancelled") return "from-sky-50/95 via-white to-white";
 	if (status === "expired" || status === "dueSoon") return "from-orange-50/95 to-white";
 	return "from-emerald-50/95 to-white";
+}
+
+function statusAccentClasses(status: PolicyStatus) {
+	if (status === "cancelled") return "text-sky-800";
+	if (status === "expired") return "text-orange-700";
+	if (status === "dueSoon") return "text-amber-700";
+	return "text-emerald-700";
+}
+
+function statusProgressClasses(status: PolicyStatus) {
+	if (status === "cancelled") return "bg-sky-500";
+	if (status === "expired") return "bg-orange-500";
+	if (status === "dueSoon") return "bg-amber-500";
+	return "bg-emerald-500";
+}
+
+function statusPillClasses(status: PolicyStatus) {
+	if (status === "cancelled") return "border-sky-200 bg-sky-50 text-sky-800";
+	if (status === "expired") return "border-orange-200 bg-orange-50 text-orange-700";
+	if (status === "dueSoon") return "border-amber-200 bg-amber-50 text-amber-700";
+	return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
+function selectedPolicyRowClasses(status: PolicyStatus) {
+	if (status === "cancelled") return "bg-sky-50/65 shadow-card border-l-4 border-sky-300";
+	if (status === "expired") return "bg-white shadow-card border-l-4 border-orange-300";
+	if (status === "dueSoon") return "bg-amber-50/55 shadow-card border-l-4 border-amber-300";
+	return "bg-emerald-50/55 shadow-card border-l-4 border-emerald-300";
+}
+
+function statusRingClasses(status: PolicyStatus) {
+	if (status === "cancelled") return "ring-2 ring-sky-100";
+	if (status === "expired") return "ring-2 ring-orange-100";
+	if (status === "dueSoon") return "ring-2 ring-amber-100";
+	return "ring-2 ring-emerald-100";
 }
 
 function StatusIcon({ status, className }: { status: PolicyStatus; className?: string }) {
@@ -415,7 +477,7 @@ function PeriodProgressField({ policy }: { policy: Policy }) {
 	const period = getPeriodProgress(policy);
 	const status = policyStatus(policy);
 	const dueDays = daysUntil(policy.calculated_cancellation_date ?? policy.end_date);
-	const progressColor = status === "cancelled" ? "bg-stone-400" : "bg-orange-500";
+	const progressColor = statusProgressClasses(status);
 	const dueBadge =
 		dueDays === null
 			? null
@@ -436,7 +498,7 @@ function PeriodProgressField({ policy }: { policy: Policy }) {
 						Excel
 					</span>
 					{dueBadge ? (
-						<span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-black text-orange-700">
+						<span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-black transition-colors duration-500 ease-out", statusPillClasses(status))}>
 							{dueBadge}
 						</span>
 					) : null}
@@ -444,14 +506,14 @@ function PeriodProgressField({ policy }: { policy: Policy }) {
 			</div>
 			{period ? (
 				<div className="space-y-2">
-					<div className="relative h-5 overflow-hidden bg-stone-100">
+					<div className="relative h-5 overflow-hidden rounded-sm bg-stone-100 transition-colors duration-500 ease-out">
 						<div className="absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent_0,transparent_8px,rgba(120,113,108,0.14)_8px,rgba(120,113,108,0.14)_14px)]" />
 						<div
-							className={cn("relative h-full transition-[width] duration-200 ease-out", progressColor)}
+							className={cn("relative h-full transition-[width,background-color] duration-500 ease-out", progressColor)}
 							style={{ width: `${period.percent}%` }}
 						/>
 						<span
-							className="absolute top-0 h-full w-0.5 bg-stone-900"
+							className="absolute top-0 h-full w-0.5 bg-stone-900/75 transition-colors duration-500 ease-out"
 							style={{ left: `calc(${period.percent}% - 1px)` }}
 						/>
 					</div>
@@ -532,6 +594,64 @@ function EmptyPolicyDetailState({ onImportHint }: { onImportHint: () => void }) 
 	);
 }
 
+function LoadingPolicyListState() {
+	return (
+		<div className="space-y-1 p-2" aria-label="Cargando polizas">
+			{Array.from({ length: 5 }).map((_, index) => (
+				<div key={index} className="flex min-h-[72px] items-center gap-3 rounded-lg bg-white px-3 py-3">
+					<Skeleton className="size-8 shrink-0 rounded-full" />
+					<div className="min-w-0 flex-1 space-y-2">
+						<Skeleton className="h-4 w-32" />
+						<Skeleton className="h-3 w-20" />
+					</div>
+					<div className="space-y-2">
+						<Skeleton className="ml-auto h-3 w-16" />
+						<Skeleton className="ml-auto h-3 w-10" />
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function LoadingPolicyDetailState() {
+	return (
+		<div className="min-h-[560px]" aria-label="Cargando detalle de poliza">
+			<div className="flex items-start justify-between gap-6 border-b border-stone-200 bg-gradient-to-b from-stone-50 to-white px-6 py-5">
+				<div className="flex min-w-0 flex-1 items-start gap-4">
+					<Skeleton className="size-11 shrink-0 rounded-xl" />
+					<div className="min-w-0 flex-1 space-y-3">
+						<div className="flex gap-2">
+							<Skeleton className="h-3 w-16" />
+							<Skeleton className="h-3 w-20" />
+							<Skeleton className="h-3 w-12" />
+						</div>
+						<Skeleton className="h-8 w-48" />
+						<Skeleton className="h-3 w-56" />
+						<Skeleton className="h-10 max-w-4xl" />
+					</div>
+				</div>
+				<div className="flex shrink-0 gap-2">
+					<Skeleton className="h-10 w-20 rounded-lg" />
+					<Skeleton className="h-10 w-28 rounded-lg" />
+				</div>
+			</div>
+			<div className="space-y-4 px-5 py-5">
+				<Skeleton className="h-[116px] rounded-xl" />
+				<div className="grid gap-4 md:grid-cols-2">
+					{Array.from({ length: 6 }).map((_, index) => (
+						<div key={index} className="min-h-[104px] rounded-xl border border-stone-200 bg-white p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+							<Skeleton className="h-3 w-32" />
+							<Skeleton className="mt-5 h-6 w-40" />
+							<Skeleton className="mt-2 h-3 w-56" />
+						</div>
+					))}
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 	const queryClient = useQueryClient();
 	const [form, setForm] = useState(EMPTY_POLICY_FORM);
@@ -545,9 +665,15 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 	const [policyDrafts, setPolicyDrafts] = useState<Record<string, PolicyDraft>>({});
 	const [savingPolicyId, setSavingPolicyId] = useState<string | null>(null);
 	const [editingSection, setEditingSection] = useState<EditingSection>(null);
+	const [movePolicy, setMovePolicy] = useState<Policy | null>(null);
+	const [moveTargetObraId, setMoveTargetObraId] = useState("");
+	const [movingPolicyId, setMovingPolicyId] = useState<string | null>(null);
+	const [deletePolicy, setDeletePolicy] = useState<Policy | null>(null);
+	const [deletingPolicyId, setDeletingPolicyId] = useState<string | null>(null);
+	const policiesQueryKey = ["obra", obraId, "insurance-policies", deferredSearchTerm, statusFilter, sortKey, sortDirection] as const;
 
 	const policiesQuery = useQuery({
-		queryKey: ["obra", obraId, "insurance-policies", deferredSearchTerm, statusFilter, sortKey, sortDirection],
+		queryKey: policiesQueryKey,
 		queryFn: async () => {
 			const params = new URLSearchParams({
 				limit: String(MAX_RENDERED_POLICY_LIST_ITEMS),
@@ -558,12 +684,25 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 			});
 			const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/insurance-policies?${params.toString()}`);
 			if (!response.ok) throw new Error("No se pudieron cargar las polizas");
-			return (await response.json()) as {
-				policies: Policy[];
-				pagination?: { total: number; limit: number; page: number; totalPages: number };
-			};
+			return (await response.json()) as PolicyListPayload;
 		},
 		staleTime: POLICY_LIST_STALE_TIME_MS,
+	});
+
+	const obrasQuery = useQuery({
+		queryKey: ["insurance-policies", "move-target-obras"],
+		queryFn: async () => {
+			const response = await fetch("/api/obras?orderBy=updated_at&orderDir=desc");
+			if (!response.ok) return [] as ObraOption[];
+			const payload = (await response.json()) as { detalleObras?: Array<Record<string, unknown>> };
+			return (payload.detalleObras ?? []).map((obra) => ({
+				id: String(obra.id ?? ""),
+				n: (obra.n as number | string | null) ?? null,
+				designacionYUbicacion: String(obra.designacionYUbicacion ?? "Sin designacion"),
+				porcentaje: Number(obra.porcentaje ?? 0) || 0,
+			})).filter((obra) => obra.id);
+		},
+		staleTime: POLICY_METADATA_STALE_TIME_MS,
 	});
 
 	const recipientsQuery = useQuery({
@@ -590,7 +729,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 	const policies = useMemo(() => policiesQuery.data?.policies ?? [], [policiesQuery.data?.policies]);
 	const policiesTotal = policiesQuery.data?.pagination?.total ?? policies.length;
 	const users = recipientsQuery.data?.users ?? [];
+	const obras = obrasQuery.data ?? [];
 	const responsibleUserIds = settingsQuery.data?.responsibleUserIds ?? [];
+	const isInitialPoliciesLoading = policiesQuery.isLoading && !policiesQuery.data;
 
 	const policyItems = useMemo(() => {
 		return policies.map((policy) => {
@@ -684,6 +825,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 		const draft = getPolicyDraft(policy, policyDrafts);
 		const payload: {
 			endDate: string | null;
+			insuredAmount: string | null;
+			premium: string | null;
+			prize: string | null;
 			balance: string | null;
 			status: string | null;
 			definitiveReceptionDate: string | null;
@@ -691,6 +835,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 			cancellationRuleOffset?: number;
 		} = {
 			endDate: draft.endDate || null,
+			insuredAmount: draft.insuredAmount.trim() || null,
+			premium: draft.premium.trim() || null,
+			prize: draft.prize.trim() || null,
 			balance: draft.balance.trim() || null,
 			status: draft.status.trim() || null,
 			definitiveReceptionDate: draft.definitiveReceptionDate || null,
@@ -723,17 +870,86 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 	}
 
 	async function toggleCancelled(policy: Policy, checked: boolean) {
-		const response = await fetch(`/api/insurance-policies/${policy.id}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ isCancelled: checked }),
-		});
-		if (!response.ok) {
-			toast.error(await getResponseErrorMessage(response, "No se pudo actualizar la poliza"));
-			return;
+		const previous = queryClient.getQueryData<PolicyListPayload>(policiesQueryKey);
+		queryClient.setQueryData<PolicyListPayload>(policiesQueryKey, (current) =>
+			current
+				? {
+					...current,
+					policies: current.policies.map((item) =>
+						item.id === policy.id ? { ...item, is_cancelled: checked } : item,
+					),
+				}
+				: current,
+		);
+		try {
+			const response = await fetch(`/api/insurance-policies/${policy.id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ isCancelled: checked }),
+			});
+			if (!response.ok) {
+				throw new Error(await getResponseErrorMessage(response, "No se pudo actualizar la poliza"));
+			}
+			await refreshPolicies();
+			toast.success(checked ? "Poliza marcada como dada de baja" : "Baja revertida");
+		} catch (error) {
+			if (previous) queryClient.setQueryData(policiesQueryKey, previous);
+			toast.error(error instanceof Error ? error.message : "No se pudo actualizar la poliza");
 		}
-		await refreshPolicies();
-		toast.success(checked ? "Poliza marcada como dada de baja" : "Baja revertida");
+	}
+
+	function openMovePolicyDialog(policy: Policy) {
+		const fallbackTarget = obras.find((obra) => obra.id !== (policy.obra_id ?? obraId))?.id ?? "";
+		setMovePolicy(policy);
+		setMoveTargetObraId(fallbackTarget);
+	}
+
+	async function moveSelectedPolicy() {
+		if (!movePolicy || !moveTargetObraId) return;
+		setMovingPolicyId(movePolicy.id);
+		try {
+			const response = await fetch(`/api/insurance-policies/${movePolicy.id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ obraId: moveTargetObraId }),
+			});
+			if (!response.ok) throw new Error(await getResponseErrorMessage(response, "No se pudo mover la poliza"));
+			setSelectedPolicyId(null);
+			setMovePolicy(null);
+			setMoveTargetObraId("");
+			await refreshPolicies();
+			toast.success("Poliza movida a otra obra");
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "No se pudo mover la poliza");
+		} finally {
+			setMovingPolicyId(null);
+		}
+	}
+
+	async function deleteSelectedPolicy() {
+		if (!deletePolicy) return;
+		setDeletingPolicyId(deletePolicy.id);
+		try {
+			const response = await fetch(`/api/insurance-policies/${deletePolicy.id}`, {
+				method: "DELETE",
+			});
+			if (!response.ok) throw new Error(await getResponseErrorMessage(response, "No se pudo eliminar la poliza"));
+			const deletedPolicyId = deletePolicy.id;
+			setPolicyDrafts((current) => {
+				const next = { ...current };
+				delete next[deletedPolicyId];
+				return next;
+			});
+			setSelectedPolicyId((current) => (current === deletedPolicyId ? null : current));
+			setEditingSection(null);
+			setDeletePolicy(null);
+			await refreshPolicies();
+			toast.success("Poliza eliminada");
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "No se pudo eliminar la poliza");
+		} finally {
+			setDeletingPolicyId(null);
+		}
 	}
 
 	async function updateResponsibles(nextUserIds: string[]) {
@@ -804,78 +1020,83 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 				</div>
 
 				<div className="max-h-[420px] overflow-y-auto bg-stone-50 lg:max-h-[calc(85vh-360px)] shadow-card m-4">
-					{renderedPolicyItems.map((item) => {
-						const { policy, status, dueDate, dueDays: days } = item;
-						const active = selectedPolicy?.id === policy.id;
-						return (
-							<button
-								key={policy.id}
-								type="button"
-								className={cn(
-									"relative flex min-h-[72px] w-full items-center gap-3 px-5 py-3 text-left transition hover:bg-stone-100 hover:outline",
-									active && "bg-white shadow-card border-l-4 border-orange-300",
-								)}
-								onClick={() => setSelectedPolicyId(policy.id)}
-							>
-								<span
-									className={cn("flex size-8 shrink-0 items-center justify-center rounded-full border-2", statusClasses(status), active && "ring-2 ring-orange-100")}
-									title={listStatusDescription(status)}
-								>
-									<StatusIcon status={status} className={status === "expired" ? "size-3.5" : "size-3"} />
-								</span>
-								<span className="min-w-0 flex-1">
-									<span className="flex min-w-0 items-center gap-1.5">
-										<span className="truncate text-[15px] font-bold text-stone-900">{policy.policy_number}</span>
-										{policy.section ? (
-											<span className="shrink-0 rounded-md border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-stone-600">
-												{policy.section}
-											</span>
-										) : null}
-										{status !== "active" ? (
-											<span
-												className={cn(
-													"shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase",
-													status === "expired" && "border-orange-200 bg-orange-50 text-orange-700",
-													status === "dueSoon" && "border-amber-200 bg-amber-50 text-amber-700",
-													status === "cancelled" && "border-stone-200 bg-stone-100 text-stone-600",
-												)}
-											>
-												{listStatusLabel(policy, status)}
-											</span>
-										) : null}
-									</span>
-								</span>
-								<span className="text-right">
-									<span className="block text-[11px] font-semibold text-stone-500">{formatDisplayDate(dueDate)}</span>
-									{days !== null ? (
+					{isInitialPoliciesLoading ? (
+						<LoadingPolicyListState />
+					) : (
+						<>
+							{renderedPolicyItems.map((item) => {
+								const { policy, status, dueDate, dueDays: days } = item;
+								const active = selectedPolicy?.id === policy.id;
+								return (
+									<button
+										key={policy.id}
+										type="button"
+										className={cn(
+											"relative flex min-h-[72px] w-full items-center gap-3 px-5 py-3 text-left transition-all duration-300 ease-out hover:bg-stone-100 hover:outline",
+											active && selectedPolicyRowClasses(status),
+										)}
+										onClick={() => setSelectedPolicyId(policy.id)}
+									>
 										<span
 											className={cn(
-												"block text-[10px] font-bold",
-												status === "expired" && "text-orange-700",
-												status === "dueSoon" && "text-amber-700",
-												status === "active" && "text-emerald-600",
-												status === "cancelled" && "text-stone-400",
+												"flex size-8 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 ease-out",
+												statusClasses(status),
+												active && statusRingClasses(status),
 											)}
+											title={listStatusDescription(status)}
 										>
-											{days < 0 ? `${Math.abs(days)}d tarde` : `${days}d`}
+											<StatusIcon status={status} className={status === "expired" ? "size-3.5" : "size-3"} />
 										</span>
-									) : null}
-								</span>
-							</button>
-						);
-					})}
-					{policiesTotal > renderedPolicyItems.length ? (
-						<div className="px-4 py-3 text-center text-xs text-stone-500">
-							Mostrando {renderedPolicyItems.length} de {policiesTotal}. Usa busqueda o filtros para acotar.
-						</div>
-					) : null}
-					{visiblePolicyItems.length === 0 ? (
-						policies.length === 0 ? (
-							<EmptyPolicyListState onImportHint={showImportHint} />
-						) : (
-							<div className="px-4 py-12 text-center text-sm font-medium text-stone-500">No hay resultados.</div>
-						)
-					) : null}
+										<span className="min-w-0 flex-1">
+											<span className="flex min-w-0 items-center gap-1.5">
+												<span className="truncate text-[15px] font-bold text-stone-900">{policy.policy_number}</span>
+												{policy.section ? (
+													<span className="shrink-0 rounded-md border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-stone-600">
+														{policy.section}
+													</span>
+												) : null}
+												{status !== "active" ? (
+													<span
+														className={cn(
+															"shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase transition-colors duration-300 ease-out",
+															statusPillClasses(status),
+														)}
+													>
+														{listStatusLabel(policy, status)}
+													</span>
+												) : null}
+											</span>
+										</span>
+										<span className="text-right">
+											<span className="block text-[11px] font-semibold text-stone-500">{formatDisplayDate(dueDate)}</span>
+											{days !== null ? (
+												<span
+													className={cn(
+														"block text-[10px] font-bold transition-colors duration-300 ease-out",
+														statusAccentClasses(status),
+													)}
+												>
+													{days < 0 ? `${Math.abs(days)}d tarde` : `${days}d`}
+												</span>
+											) : null}
+										</span>
+									</button>
+								);
+							})}
+							{policiesTotal > renderedPolicyItems.length ? (
+								<div className="px-4 py-3 text-center text-xs text-stone-500">
+									Mostrando {renderedPolicyItems.length} de {policiesTotal}. Usa busqueda o filtros para acotar.
+								</div>
+							) : null}
+							{visiblePolicyItems.length === 0 ? (
+								policies.length === 0 ? (
+									<EmptyPolicyListState onImportHint={showImportHint} />
+								) : (
+									<div className="px-4 py-12 text-center text-sm font-medium text-stone-500">No hay resultados.</div>
+								)
+							) : null}
+						</>
+					)}
 				</div>
 
 				<div className="m-3 rounded-lg border border-stone-200 bg-white p-3 shadow-sm">
@@ -909,11 +1130,20 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 			</aside>
 
 			<section className="min-w-0 overflow-hidden rounded-xl bg-white shadow-card m-0.5">
-				{selectedPolicy && selectedDraft ? (
+				{isInitialPoliciesLoading ? (
+					<LoadingPolicyDetailState />
+				) : selectedPolicy && selectedDraft ? (
 					<>
-						<div className={cn("flex items-start justify-between gap-6 border-b border-stone-200 bg-gradient-to-b px-6 py-5", statusHeaderGradient(selectedStatus))}>
+						<div className={cn(
+							"flex items-start justify-between gap-6 border-b border-stone-200 bg-gradient-to-b px-6 py-5 transition-[background-color,border-color,box-shadow] duration-500 ease-out",
+							statusHeaderGradient(selectedStatus),
+							selectedStatus === "cancelled" && "shadow-[inset_0_1px_0_rgba(14,165,233,0.18)]",
+						)}>
 							<div className="flex min-w-0 flex-1 items-start gap-4">
-								<div className={cn("relative flex size-11 shrink-0 items-center justify-center rounded-xl border-2", statusClasses(selectedStatus))}>
+								<div className={cn(
+									"relative flex size-11 shrink-0 items-center justify-center rounded-xl border-2 transition-all duration-500 ease-out",
+									statusClasses(selectedStatus),
+								)}>
 									<StatusIcon status={selectedStatus} className={selectedStatus === "expired" ? "size-5" : "size-[18px]"} />
 								</div>
 								<div className="min-w-0 flex-1">
@@ -931,11 +1161,8 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 									</h2>
 									<div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-bold">
 										<span className={cn(
-											"inline-flex items-center gap-1.5",
-											selectedStatus === "expired" && "text-orange-700",
-											selectedStatus === "cancelled" && "text-stone-500",
-											selectedStatus === "dueSoon" && "text-amber-700",
-											selectedStatus === "active" && "text-emerald-700",
+											"inline-flex items-center gap-1.5 transition-colors duration-500 ease-out",
+											statusAccentClasses(selectedStatus),
 										)}>
 											<span className="size-1.5 rounded-full bg-current" />
 											{statusLabel(selectedStatus)}
@@ -951,29 +1178,87 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 									</p>
 								</div>
 							</div>
-							<label className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 shadow-sm">
-								<Checkbox
-									checked={selectedPolicy.is_cancelled}
-									onCheckedChange={(checked) => void toggleCancelled(selectedPolicy, checked === true)}
-								/>
-								<span className="text-xs font-bold text-stone-700">Dar de baja</span>
-							</label>
+							<div className="flex shrink-0 flex-wrap items-center gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-10 gap-2 rounded-lg bg-white"
+									onClick={() => openMovePolicyDialog(selectedPolicy)}
+								>
+									<ArrowRight className="size-4" />
+									Mover
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-10 gap-2 rounded-lg border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50 hover:text-red-800"
+									onClick={() => setDeletePolicy(selectedPolicy)}
+								>
+									<Trash2 className="size-4" />
+									Eliminar
+								</Button>
+								<label
+									className={cn(
+										"flex h-10 items-center gap-2 rounded-lg border px-3 py-2 shadow-sm transition-all duration-300 ease-out",
+										selectedPolicy.is_cancelled
+											? "border-sky-200 bg-sky-50 text-sky-900 shadow-sky-100/60"
+											: "border-stone-200 bg-white text-stone-700 hover:border-stone-300",
+									)}
+								>
+									<Checkbox
+										className="transition-all duration-300 ease-out data-[state=checked]:border-sky-600 data-[state=checked]:bg-sky-600"
+										checked={selectedPolicy.is_cancelled}
+										onCheckedChange={(checked) => void toggleCancelled(selectedPolicy, checked === true)}
+									/>
+									<span className="text-xs font-bold">Dar de baja</span>
+								</label>
+							</div>
 						</div>
 						<div className="space-y-4 px-5 py-5">
 							<div className="rounded-xl border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
 								<PeriodProgressField policy={selectedPolicy} />
 							</div>
 							<div className="grid gap-4 md:grid-cols-2">
-								<DetailField label="Monto asegurado" value={formatMoney(selectedPolicy.insured_amount, selectedPolicy.currency)} />
-								<DetailField label="Fecha de finalizacion">
-									<div className="mt-2 space-y-0.5">
-										<p className="text-xl font-black tracking-tight text-stone-900">
-											{formatDisplayDate(selectedDraft.endDate)}
+								<DetailField label="Monto asegurado" tone="editable" onEdit={() => setEditingSection("insuredAmount")}>
+									{editingSection === "insuredAmount" ? (
+										<Input
+											value={selectedDraft.insuredAmount}
+											placeholder="Monto asegurado"
+											inputMode="decimal"
+											className="mt-2 h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+											onChange={(event) => updatePolicyDraft(selectedPolicy, { insuredAmount: event.target.value })}
+										/>
+									) : (
+										<p className="mt-2.5 text-xl font-black tracking-tight text-stone-900">
+											{formatMoney(selectedDraft.insuredAmount, selectedPolicy.currency)}
 										</p>
-										<p className="text-xs font-semibold text-stone-500">
-											Fecha importada de la poliza; no define la baja automatica.
-										</p>
-									</div>
+									)}
+								</DetailField>
+								<DetailField label="Fecha de finalizacion" tone="editable" onEdit={() => setEditingSection("endDate")}>
+									{editingSection === "endDate" ? (
+										<div className="mt-2 space-y-1.5">
+											<Input
+												type="date"
+												value={selectedDraft.endDate}
+												className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+												onChange={(event) => updatePolicyDraft(selectedPolicy, { endDate: event.target.value })}
+											/>
+											<p className="text-xs font-semibold text-stone-500">
+												Fecha importada de la poliza; no define la baja automatica.
+											</p>
+										</div>
+									) : (
+										<div className="mt-2 space-y-0.5">
+											<p className="text-xl font-black tracking-tight text-stone-900">
+												{formatDisplayDate(selectedDraft.endDate)}
+											</p>
+											<p className="text-xs font-semibold text-stone-500">
+												Fecha importada de la poliza; no define la baja automatica.
+											</p>
+										</div>
+									)}
 								</DetailField>
 								<DetailField
 									label="Responsables"
@@ -1119,15 +1404,44 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 										) : null}
 									</div>
 								</DetailField>
-								<DetailField label="Premio / prima">
-									<div className="mt-2 space-y-0.5">
-										<p className="text-xl font-black tracking-tight text-stone-900">
-											{formatMoney(selectedPolicy.prize, selectedPolicy.currency)}
-											<span className="mx-2 text-stone-300">/</span>
-											<span className="text-stone-500">{formatMoney(selectedPolicy.premium, selectedPolicy.currency)}</span>
-										</p>
-										<p className="text-xs font-semibold text-stone-500">Premio total / prima neta</p>
-									</div>
+								<DetailField label="Premio / prima" tone="editable" onEdit={() => setEditingSection("premiumPrize")}>
+									{editingSection === "premiumPrize" ? (
+										<div className="mt-2 grid gap-2 sm:grid-cols-2">
+											<label className="space-y-1">
+												<span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">
+													Premio
+												</span>
+												<Input
+													value={selectedDraft.prize}
+													placeholder="Premio"
+													inputMode="decimal"
+													className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+													onChange={(event) => updatePolicyDraft(selectedPolicy, { prize: event.target.value })}
+												/>
+											</label>
+											<label className="space-y-1">
+												<span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">
+													Prima
+												</span>
+												<Input
+													value={selectedDraft.premium}
+													placeholder="Prima"
+													inputMode="decimal"
+													className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+													onChange={(event) => updatePolicyDraft(selectedPolicy, { premium: event.target.value })}
+												/>
+											</label>
+										</div>
+									) : (
+										<div className="mt-2 space-y-0.5">
+											<p className="text-xl font-black tracking-tight text-stone-900">
+												{formatMoney(selectedDraft.prize, selectedPolicy.currency)}
+												<span className="mx-2 text-stone-300">/</span>
+												<span className="text-stone-500">{formatMoney(selectedDraft.premium, selectedPolicy.currency)}</span>
+											</p>
+											<p className="text-xs font-semibold text-stone-500">Premio total / prima neta</p>
+										</div>
+									)}
 								</DetailField>
 								<DetailField label="Saldo / estado importado" tone="editable" onEdit={() => setEditingSection("balanceStatus")}>
 									{editingSection === "balanceStatus" ? (
@@ -1207,6 +1521,102 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 					<EmptyPolicyDetailState onImportHint={showImportHint} />
 				)}
 			</section>
+
+			<Dialog open={Boolean(movePolicy)} onOpenChange={(open) => {
+				if (movingPolicyId) return;
+				if (!open) {
+					setMovePolicy(null);
+					setMoveTargetObraId("");
+				}
+			}}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Mover poliza a otra obra</DialogTitle>
+						<DialogDescription>
+							Selecciona la obra destino para reasignar la poliza. La poliza saldra de esta pestana despues de moverla.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-3">
+						<div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+							<p className="text-sm font-bold text-stone-900">{movePolicy?.policy_number ?? "Poliza"}</p>
+							<p className="mt-0.5 text-xs font-medium text-stone-500">
+								Obra actual: {obraId}
+							</p>
+						</div>
+						<label className="block space-y-1.5">
+							<span className="text-[10px] font-bold uppercase tracking-[0.14em] text-stone-500">Obra destino</span>
+							<ObraDestinationCombobox
+								obras={obras}
+								value={moveTargetObraId}
+								onChange={setMoveTargetObraId}
+								excludedObraId={movePolicy?.obra_id ?? obraId}
+								disabled={obrasQuery.isLoading}
+							/>
+						</label>
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="secondary"
+							disabled={Boolean(movingPolicyId)}
+							onClick={() => {
+								setMovePolicy(null);
+								setMoveTargetObraId("");
+							}}
+						>
+							Cancelar
+						</Button>
+						<Button
+							type="button"
+							className="gap-2"
+							disabled={!moveTargetObraId || Boolean(movingPolicyId)}
+							onClick={() => void moveSelectedPolicy()}
+						>
+							{movingPolicyId ? <Clock3 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+							Mover
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog open={Boolean(deletePolicy)} onOpenChange={(open) => {
+				if (deletingPolicyId) return;
+				if (!open) setDeletePolicy(null);
+			}}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Eliminar poliza</DialogTitle>
+						<DialogDescription>
+							Esta accion elimina la poliza de la obra y actualiza la macrotabla sincronizada.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+						<p className="text-sm font-bold text-red-950">{deletePolicy?.policy_number ?? "Poliza"}</p>
+						<p className="mt-0.5 text-xs font-medium text-red-800">
+							No se enviara a papelera. Para conservar el historial operativo, usa Dar de baja.
+						</p>
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="secondary"
+							disabled={Boolean(deletingPolicyId)}
+							onClick={() => setDeletePolicy(null)}
+						>
+							Cancelar
+						</Button>
+						<Button
+							type="button"
+							className="gap-2 bg-red-600 text-white hover:bg-red-700"
+							disabled={Boolean(deletingPolicyId)}
+							onClick={() => void deleteSelectedPolicy()}
+						>
+							{deletingPolicyId ? <Clock3 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+							Eliminar
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
