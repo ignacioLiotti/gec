@@ -694,6 +694,91 @@ export async function validateGenerationTarget(
   return { valid: true, error: null };
 }
 
+type DeletedDocumentPathRow = {
+  storage_path?: string | null;
+  item_type?: string | null;
+};
+
+function buildDeletedStoragePathChecker(deleteRows: DeletedDocumentPathRow[]) {
+  const deletedFilePaths = new Set<string>();
+  const deletedFolderPaths: string[] = [];
+
+  for (const row of deleteRows) {
+    const storagePath = typeof row.storage_path === "string" ? row.storage_path.trim() : "";
+    if (!storagePath) continue;
+    if (row.item_type === "folder") {
+      deletedFolderPaths.push(storagePath);
+    } else {
+      deletedFilePaths.add(storagePath);
+    }
+  }
+
+  return (storagePath: string) => {
+    if (!storagePath) return false;
+    if (deletedFilePaths.has(storagePath)) return true;
+    const legacyNormalizedStoragePath = normalizeFolderGenerationPath(storagePath);
+    if (legacyNormalizedStoragePath && deletedFilePaths.has(legacyNormalizedStoragePath)) {
+      return true;
+    }
+    return deletedFolderPaths.some(
+      (folderPath) =>
+        storagePath === folderPath ||
+        storagePath.startsWith(`${folderPath}/`) ||
+        legacyNormalizedStoragePath === folderPath ||
+        legacyNormalizedStoragePath.startsWith(`${folderPath}/`),
+    );
+  };
+}
+
+function isDirectFileInStorageFolder(storagePath: string, workId: string, folderPath: string) {
+  if (!storagePath.startsWith(`${workId}/`)) return false;
+  const relativePath = storagePath.slice(`${workId}/`.length);
+  const segments = relativePath.split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+  segments.pop();
+  return normalizeFolderGenerationPath(segments.join("/")) === folderPath;
+}
+
+export async function resolveGeneratedDocumentFolderFileCount(
+  access: AccessContext,
+  args: {
+    workId: string;
+    folderPath: string;
+  },
+) {
+  const normalizedFolderPath = normalizeFolderGenerationPath(args.folderPath);
+  if (!normalizedFolderPath) return 0;
+  const scopedStorageLikePrefix = `${args.workId}/${normalizedFolderPath}/%`;
+
+  const [uploadsResult, deleteRowsResult] = await Promise.all([
+    access.supabase
+      .from("obra_document_uploads")
+      .select("storage_path")
+      .eq("obra_id", args.workId)
+      .like("storage_path", scopedStorageLikePrefix)
+      .range(0, 9999),
+    access.supabase
+      .from("obra_document_deletes")
+      .select("storage_path, item_type")
+      .eq("tenant_id", access.tenantId)
+      .eq("obra_id", args.workId)
+      .is("restored_at", null)
+      .is("purged_at", null),
+  ]);
+  if (uploadsResult.error) throw uploadsResult.error;
+  if (deleteRowsResult.error) throw deleteRowsResult.error;
+
+  const isDeletedPath = buildDeletedStoragePathChecker(deleteRowsResult.data ?? []);
+  const activeFilePaths = new Set<string>();
+  for (const upload of uploadsResult.data ?? []) {
+    const storagePath = typeof upload.storage_path === "string" ? upload.storage_path.trim() : "";
+    if (!storagePath || isDeletedPath(storagePath)) continue;
+    if (!isDirectFileInStorageFolder(storagePath, args.workId, normalizedFolderPath)) continue;
+    activeFilePaths.add(storagePath);
+  }
+
+  return activeFilePaths.size;
+}
 export async function resolveGeneratedDocumentNextSequenceNumber(
   access: AccessContext,
   args: {
@@ -721,7 +806,14 @@ export async function resolveGeneratedDocumentNextSequenceNumber(
     query = query.neq("id", args.excludeGeneratedDocumentId);
   }
 
-  const { data, count, error } = await query;
+  const [generatedDocumentsResult, folderFileCount] = await Promise.all([
+    query,
+    resolveGeneratedDocumentFolderFileCount(access, {
+      workId: args.workId,
+      folderPath: normalizedFolderPath,
+    }),
+  ]);
+  const { data, count, error } = generatedDocumentsResult;
   if (error) throw error;
 
   const inputRows = (data ?? [])
@@ -730,8 +822,9 @@ export async function resolveGeneratedDocumentNextSequenceNumber(
         ? (row.input_data as Record<string, unknown>)
         : {},
     );
+  const fallbackExistingCount = Math.max(folderFileCount, count ?? inputRows.length);
 
-  return getTemplateNextSequenceNumber(args.schema, inputRows, count ?? inputRows.length);
+  return getTemplateNextSequenceNumber(args.schema, inputRows, fallbackExistingCount);
 }
 
 export async function insertGeneratedDocumentEvent(

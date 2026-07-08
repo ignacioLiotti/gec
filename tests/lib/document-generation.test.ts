@@ -36,6 +36,7 @@ describe("document-generation helpers", () => {
 
     expect(parseTemplateSequenceNumber("OC-009")).toBe(9);
     expect(getTemplateNextSequenceNumber(schema, [{ nro: "1" }, { nro: "OC-009" }], 2)).toBe(10);
+    expect(getTemplateNextSequenceNumber(schema, [{ nro: "2" }], 5)).toBe(6);
     expect(getTemplateNextSequenceNumber(schema, [{ otro: "sin nro" }], 3)).toBe(4);
   });
 

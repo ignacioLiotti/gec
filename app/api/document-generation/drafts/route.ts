@@ -7,6 +7,7 @@ import {
   normalizeDocumentType,
   normalizeFolderGenerationPath,
   normalizeTemplateSchema,
+  refreshTemplateSequenceInputData,
   validateTemplateInput,
 } from "@/lib/document-generation";
 import {
@@ -14,6 +15,7 @@ import {
   formatWorkLabel,
   loadActorsByIds,
   loadDocumentGenerationPermissions,
+  resolveGeneratedDocumentNextSequenceNumber,
   loadWorks,
   validateGenerationTarget,
 } from "@/lib/document-generation-server";
@@ -278,7 +280,16 @@ export async function POST(request: NextRequest) {
     }
 
     const schema = normalizeTemplateSchema(template.schema);
-    const hydratedInputData = applyTemplateAliasInputData(schema, buildInitialInputData(schema, inputData));
+    const nextSequenceNumber = await resolveGeneratedDocumentNextSequenceNumber(accessContext, {
+      workId,
+      folderPath,
+      documentType,
+      schema,
+    });
+    const hydratedInputData = applyTemplateAliasInputData(
+      schema,
+      refreshTemplateSequenceInputData(schema, buildInitialInputData(schema, inputData), nextSequenceNumber),
+    );
     const validationErrors = validateTemplateInput(schema, hydratedInputData);
     const status = validationErrors.length === 0 ? "READY_TO_GENERATE" : "DRAFT";
 

@@ -38,6 +38,7 @@ import {
   normalizeDocumentType,
   escapeHtml,
   renderDocumentHtml,
+  refreshTemplateSequenceInputData,
   type DocumentAiContext,
   type TemplateField,
   type TemplateSelectOption,
@@ -92,6 +93,19 @@ type BootstrapResponse = {
   };
 };
 
+function refreshAutoSequenceInputData(
+  template: DocumentTemplateSummary | null,
+  inputData: Record<string, unknown>,
+  existingSequenceCount: number,
+  options?: { refreshSequence?: boolean },
+) {
+  if (!template || options?.refreshSequence === false) return inputData;
+  return refreshTemplateSequenceInputData(
+    template.schema,
+    inputData,
+    Math.max(0, existingSequenceCount) + 1,
+  );
+}
 type DraftResponse = {
   draft: {
     id: string;
@@ -1107,7 +1121,7 @@ export function DocumentGenerationPageClient({
   const loadBootstrap = useCallback(
     async (
       params?: { workId?: string; folderPath?: string; documentType?: string },
-      options?: { templateId?: string; inputData?: Record<string, unknown>; replaceInputData?: boolean },
+      options?: { templateId?: string; inputData?: Record<string, unknown>; replaceInputData?: boolean; refreshSequence?: boolean },
     ) => {
       setLoading(true);
       try {
@@ -1122,20 +1136,29 @@ export function DocumentGenerationPageClient({
           throw new Error(payload.error || "No se pudo cargar la configuracion");
         }
 
+        const sequenceCount = payload.context.existingSequenceCount ?? payload.context.existingDocumentCount ?? 0;
+        const nextTemplateId = options?.templateId ?? payload.context.selectedTemplate?.id ?? "";
+        const nextTemplate = payload.templates.find((template) => template.id === nextTemplateId) ?? payload.context.selectedTemplate ?? null;
+
         setWorks(payload.works);
         setWorkLabel(payload.context.workLabel);
-        setExistingSequenceCount(payload.context.existingSequenceCount ?? payload.context.existingDocumentCount ?? 0);
+        setExistingSequenceCount(sequenceCount);
         setFolderConfigs(payload.folderConfigs);
         setTemplates(payload.templates);
         setDynamicOptions({ tenantUsers: payload.dynamicOptions?.tenantUsers ?? [] });
         setFolderPath(payload.context.folderPath ?? (params?.folderPath ?? ""));
         setDocumentType(payload.context.documentType ?? "");
-        setTemplateId(options?.templateId ?? payload.context.selectedTemplate?.id ?? "");
-        setInputData((current) =>
-          options?.replaceInputData
+        setTemplateId(nextTemplateId);
+        setInputData((current) => {
+          const mergedInputData = options?.replaceInputData
             ? { ...payload.context.initialInputData, ...(options.inputData ?? {}) }
-            : { ...payload.context.initialInputData, ...current },
-        );
+            : { ...payload.context.initialInputData, ...current };
+          const nextInputData = refreshAutoSequenceInputData(nextTemplate, mergedInputData, sequenceCount, {
+            refreshSequence: options?.refreshSequence,
+          });
+          inlineInputDataRef.current = nextInputData;
+          return nextInputData;
+        });
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Error al cargar datos");
       } finally {
@@ -1235,6 +1258,7 @@ export function DocumentGenerationPageClient({
               templateId: payload.document.templateId,
               inputData: payload.document.inputData,
               replaceInputData: true,
+              refreshSequence: false,
             },
           );
         } catch (error) {
@@ -1467,12 +1491,19 @@ export function DocumentGenerationPageClient({
     setValidationErrors([]);
     const nextTemplate = templates.find((template) => template.id === value) ?? null;
     if (!nextTemplate) return;
-    commitInputData(
-      applyTemplateAutoInputData(nextTemplate.schema, buildInitialInputData(nextTemplate.schema, inlineInputDataRef.current), {
+    const nextInputData = applyTemplateAutoInputData(
+      nextTemplate.schema,
+      buildInitialInputData(nextTemplate.schema, inlineInputDataRef.current),
+      {
         selectedContextId: workId,
         selectedContextLabel: workLabel,
         documentType,
         existingSequenceCount,
+      },
+    );
+    commitInputData(
+      refreshAutoSequenceInputData(nextTemplate, nextInputData, existingSequenceCount, {
+        refreshSequence: !isEditingGeneratedDocument,
       }),
     );
   };
@@ -1721,7 +1752,6 @@ export function DocumentGenerationPageClient({
   };
 
   const handleSaveDraft = async () => {
-    const currentInputData = inlineInputDataRef.current;
     flushInlineDraftData();
     if (editingGeneratedId) {
       toast.error("Los documentos emitidos se actualizan directo al guardar cambios.");
@@ -1730,6 +1760,13 @@ export function DocumentGenerationPageClient({
     if (!workId || !folderPath || !documentType || !templateId) {
       toast.error("Completa obra, carpeta, tipo documental y plantilla.");
       return;
+    }
+
+    const currentInputData = selectedTemplate
+      ? refreshAutoSequenceInputData(selectedTemplate, inlineInputDataRef.current, existingSequenceCount)
+      : inlineInputDataRef.current;
+    if (currentInputData !== inlineInputDataRef.current) {
+      commitInputData(currentInputData);
     }
 
     setSavingDraft(true);
@@ -1766,8 +1803,15 @@ export function DocumentGenerationPageClient({
   };
 
   const handleGenerate = async () => {
-    const currentInputData = inlineInputDataRef.current;
     flushInlineDraftData();
+    const currentInputData = selectedTemplate
+      ? refreshAutoSequenceInputData(selectedTemplate, inlineInputDataRef.current, existingSequenceCount, {
+        refreshSequence: !isEditingGeneratedDocument,
+      })
+      : inlineInputDataRef.current;
+    if (currentInputData !== inlineInputDataRef.current) {
+      commitInputData(currentInputData);
+    }
     const clientValidationErrors = selectedTemplate
       ? validateTemplateInput(selectedTemplate.schema, currentInputData)
       : [];

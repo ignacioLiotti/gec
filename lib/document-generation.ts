@@ -901,8 +901,10 @@ export function getTemplateNextSequenceNumber(
 		}
 	}
 
-	if (maxSequenceNumber != null) return maxSequenceNumber + 1;
-	return Math.max(0, fallbackExistingCount) + 1;
+	const nextFromExistingRows =
+		maxSequenceNumber == null ? 1 : maxSequenceNumber + 1;
+	const nextFromFallbackCount = Math.max(0, fallbackExistingCount) + 1;
+	return Math.max(nextFromExistingRows, nextFromFallbackCount);
 }
 
 export function refreshTemplateSequenceInputData(
