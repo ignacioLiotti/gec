@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This folder owns tenant and superadmin configuration surfaces: users, roles, obra defaults, document flows, macro tables, main table columns, audit log, expenses, tenant secrets, demo links, and tenant management.
+This folder owns tenant and superadmin configuration surfaces: users, roles, obra defaults, macro tables, main table columns, audit log, expenses, tenant secrets, demo links, and tenant management.
 
 This is a routing/map context. `app/admin` is too broad for one operational context; use this file to identify the target subfolder, then read the closest subfolder `AGENT_CONTEXT.md` when it exists.
 
@@ -11,7 +11,7 @@ This is a routing/map context. `app/admin` is too broad for one operational cont
 - `users/**`: tenant member list, invitations, membership roles, impersonation banner.
 - `roles/**`: custom roles, permission matrix, role assignments, user overrides, macro table permissions.
 - `obra-defaults/**`: tenant default folder/table/OCR template/data-folder configuration and reporting defaults.
-- `document-flows/**`, `document-flows-2/**`: admin surfaces for document-flow/extraction contract concepts.
+- Legacy `document-flows/**` and `document-flows-2/**` admin routes were removed; use `/excel/data-flow` for the canonical general data-flow surface.
 - `macro-tables/**`: macro table creation/editing, sources, columns, previews.
 - `main-table-config/page.tsx`: tenant configuration for main obras table columns and select/badge options.
 - `audit-log/**`: audit trail UI.

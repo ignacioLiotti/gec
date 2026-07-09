@@ -3605,7 +3605,7 @@ function ObraDetailPageContent({
 	}, [push, setQueryParams]);
 
 	return (
-		<div className="relative container max-w-full mx-auto px-4 pt-2">
+		<div className="relative container mx-auto max-w-full px-3 pt-4 sm:px-4 md:px-16 md:pt-8">
 			<DemoPageTour flow={obraOverviewTour} />
 			<DemoPageTour flow={presentacionObraTour} />
 			{ilagMaterialsReportFlow ? (
@@ -3695,7 +3695,7 @@ function ObraDetailPageContent({
 			) : (
 				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
 					<div className="flex-1 min-w-0">
-						<div className="mb-3 flex min-w-0 flex-col gap-3 pb-3 pt-2 xl:flex-row xl:items-center xl:justify-between">
+						<div className="mb-3 flex min-w-0 flex-col gap-3 pb-3 xl:flex-row xl:items-center xl:justify-between">
 							<ExcelObraName />
 							<div className="flex flex-wrap items-center gap-2 xl:justify-end">
 								{activeTab === "documentos" || activeTab === "documentos-new" ? (
@@ -3830,28 +3830,28 @@ function ObraDetailPageContent({
 												animate={{ opacity: 1 }}
 												className="flex justify-end"
 											>
-												<div className="inline-flex items-center rounded-md border border-stone-200 bg-stone-50 p-1">
+												<div className="inline-grid grid-cols-2 items-center gap-1 rounded-lg border border-stroke-soft bg-surface-recessed p-0.5">
 													<Button
 														type="button"
 														variant={!isGeneralTabEditMode ? "default" : "ghost"}
 														size="sm"
-														className="gap-2 h-8 px-3"
+														className="h-8 min-w-8 justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none sm:min-w-[7.75rem]"
 														aria-pressed={!isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(false)}
 													>
-														<Eye className="size-4" />
-														<span className={cn("hidden sm:inline text-base md:text-sm", !isGeneralTabEditMode ? "inline" : "hidden")}>Vista previa</span>
+														<Eye className="size-4 shrink-0" />
+														<span className="hidden truncate sm:inline">Vista previa</span>
 													</Button>
 													<Button
 														type="button"
 														variant={isGeneralTabEditMode ? "default" : "ghost"}
 														size="sm"
-														className="gap-2 h-8 px-3"
+														className="h-8 min-w-8 justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none sm:min-w-[7.75rem]"
 														aria-pressed={isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(true)}
 													>
-														<Pencil className="size-4" />
-														<span className={cn("hidden sm:inline text-base md:text-sm", isGeneralTabEditMode ? "inline" : "hidden")}>Edición</span>
+														<Pencil className="size-4 shrink-0" />
+														<span className="hidden truncate sm:inline">Edición</span>
 													</Button>
 												</div>
 											</m.div>

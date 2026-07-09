@@ -1,3 +1,15 @@
+/**
+ * Data-flow builder — tenant/obra calculation configs and their evaluation.
+ *
+ * Model (ADRs 0003, 0004, 0005): the tenant-level "Data-flow General" defines
+ * calculations, results, and the General-tab layout for all obras; an obra
+ * config stores only local diffs and overrides tenant elements by stable id.
+ * Evaluation always merges the two into the "Configuracion Efectiva".
+ * Base KPIs (contrato, certificado a la fecha, saldo, avance) are ordinary
+ * builder results — never hardcoded UI nodes. Layout persists as a
+ * 12-column grid (`gridX/gridY/gridH/width`); the editor and the General tab
+ * must interpret that grid with identical column/row-height/gap contracts.
+ */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { evaluateMathExpression } from "@/lib/safe-math-expression";

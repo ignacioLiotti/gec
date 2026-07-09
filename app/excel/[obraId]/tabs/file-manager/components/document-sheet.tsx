@@ -22,6 +22,7 @@ type DocumentSheetProps = {
 	highlightRetryAction?: boolean;
 	onPreviousDocument?: (() => void) | null;
 	onNextDocument?: (() => void) | null;
+	previewActivity?: { phase: "uploading" | "extracting"; label?: string } | null;
 };
 
 export const DocumentSheet = memo(function DocumentSheet({
@@ -38,6 +39,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 	highlightRetryAction = false,
 	onPreviousDocument = null,
 	onNextDocument = null,
+	previewActivity = null,
 }: DocumentSheetProps) {
 	if (!isOpen || !document) {
 		return null;
@@ -56,11 +58,18 @@ export const DocumentSheet = memo(function DocumentSheet({
 	const showDocumentPagination = Boolean(onPreviousDocument || onNextDocument);
 	const arePaginationButtonsDisabled = isDataSheetOpen;
 	const showOcrProcessingOverlay = document.ocrDocumentStatus === "pending" || document.ocrDocumentStatus === "processing";
-	const processingOverlayLabel = retryingOcr
-		? "Reprocesando OCR..."
-		: document.ocrDocumentStatus === "pending"
-			? "OCR en cola..."
-			: "Procesando OCR...";
+	const showUploadPreviewOverlay = previewActivity?.phase === "uploading";
+	const showScanOverlay = previewActivity?.phase === "extracting" || showOcrProcessingOverlay;
+	const showActivityOverlay = showUploadPreviewOverlay || showScanOverlay;
+	const activityOverlayLabel =
+		previewActivity?.label ??
+		(showUploadPreviewOverlay
+			? "Subiendo documento..."
+			: retryingOcr
+				? "Reprocesando OCR..."
+				: document.ocrDocumentStatus === "pending"
+					? "OCR en cola..."
+					: "Procesando OCR...");
 	const ocrFailureFollowUpMessage =
 		document.ocrErrorCode === "LINEAGE_RECONCILIATION_CONFLICT"
 			? "Impacto: este documento no se reconcilio automaticamente con su materializacion anterior. Siguiente paso: revisa Lineage o reprocesa el documento."
@@ -181,29 +190,52 @@ export const DocumentSheet = memo(function DocumentSheet({
 						showDataToggle={showDataToggle}
 						isDataSheetOpen={isDataSheetOpen}
 					/>
-					{showOcrProcessingOverlay ? (
-						<div className="pointer-events-none absolute inset-0 z-30 overflow-hidden ocr-scan-overlay">
-							<div className="absolute inset-0 ocr-scan-tint" />
-							<div className="absolute inset-0 ocr-scan-grid" />
-							<div
-								className="absolute inset-x-0 h-44 ocr-scan-beam"
-								aria-hidden="true"
-							>
-								<div className="absolute inset-0 ocr-scan-beam-halo" />
-								<div className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 ocr-scan-beam-core" />
-							</div>
+					{showActivityOverlay ? (
+						<div className={cn(
+							"pointer-events-none absolute inset-0 z-30 overflow-hidden",
+							showUploadPreviewOverlay ? "upload-preview-overlay" : "ocr-scan-overlay"
+						)}>
+							{showUploadPreviewOverlay ? (
+								<>
+									<div className="absolute inset-0 upload-preview-tint" />
+									<div className="absolute left-0 top-0 h-1 upload-preview-progress" />
+								</>
+							) : (
+								<>
+									<div className="absolute inset-0 ocr-scan-tint" />
+									<div className="absolute inset-0 ocr-scan-grid" />
+									<div className="absolute left-[11%] top-[16%] h-[9%] w-[46%] ocr-scan-target ocr-scan-target-a" />
+									<div className="absolute right-[12%] top-[31%] h-[12%] w-[28%] ocr-scan-target ocr-scan-target-b" />
+									<div className="absolute left-[17%] top-[53%] h-[8%] w-[58%] ocr-scan-target ocr-scan-target-c" />
+									<div className="absolute right-[16%] bottom-[18%] h-[10%] w-[34%] ocr-scan-target ocr-scan-target-d" />
+									<div
+										className="absolute inset-x-0 h-44 ocr-scan-beam"
+										aria-hidden="true"
+									>
+										<div className="absolute inset-0 ocr-scan-beam-halo" />
+										<div className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 ocr-scan-beam-core" />
+									</div>
+								</>
+							)}
 							<div className="absolute inset-x-0 bottom-5 flex justify-center px-4">
 								<div
 									className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] backdrop-blur-sm"
-									style={{
-										border: "1px solid rgba(255, 88, 0, 0.7)",
-										backgroundColor: "rgba(255, 88, 0, 0.16)",
-										color: "var(--color-orange-primary, #ff5800)",
-										boxShadow: "0 18px 38px rgba(255, 88, 0, 0.32)",
-									}}
+									style={showUploadPreviewOverlay
+										? {
+											border: "1px solid rgba(120, 113, 108, 0.35)",
+											backgroundColor: "rgba(255, 255, 255, 0.84)",
+											color: "rgb(68, 64, 60)",
+											boxShadow: "0 18px 38px rgba(28, 25, 23, 0.18)",
+										}
+										: {
+											border: "1px solid rgba(255, 88, 0, 0.7)",
+											backgroundColor: "rgba(255, 88, 0, 0.16)",
+											color: "var(--color-orange-primary, #ff5800)",
+											boxShadow: "0 18px 38px rgba(255, 88, 0, 0.32)",
+										}}
 								>
 									<Loader2 className="size-3.5 animate-spin" />
-									{processingOverlayLabel}
+									{activityOverlayLabel}
 								</div>
 							</div>
 						</div>
@@ -213,6 +245,29 @@ export const DocumentSheet = memo(function DocumentSheet({
 						.ocr-scan-overlay {
 							backdrop-filter: blur(1px);
 							--ocr-orange-rgb: 255, 88, 0;
+						}
+						.upload-preview-overlay {
+							backdrop-filter: blur(0.5px);
+						}
+
+						.upload-preview-tint {
+							background: linear-gradient(
+								180deg,
+								rgba(255, 255, 255, 0.08) 0%,
+								rgba(255, 255, 255, 0.32) 100%
+							);
+						}
+
+						.upload-preview-progress {
+							width: 42%;
+							background: linear-gradient(
+								90deg,
+								rgba(255, 88, 0, 0) 0%,
+								rgba(255, 88, 0, 0.86) 45%,
+								rgba(255, 88, 0, 0) 100%
+							);
+							box-shadow: 0 0 18px rgba(255, 88, 0, 0.45);
+							animation: upload-preview-progress 1.2s ease-in-out infinite;
 						}
 
 						.ocr-scan-tint {
@@ -233,6 +288,58 @@ export const DocumentSheet = memo(function DocumentSheet({
 								transparent 7px
 							);
 							opacity: 0.42;
+						}
+
+						.ocr-scan-target {
+							border: 1px solid rgba(var(--ocr-orange-rgb), 0.86);
+							background:
+								linear-gradient(90deg, rgba(var(--ocr-orange-rgb), 0.14), rgba(var(--ocr-orange-rgb), 0.03)),
+								repeating-linear-gradient(
+									90deg,
+									rgba(var(--ocr-orange-rgb), 0.22) 0,
+									rgba(var(--ocr-orange-rgb), 0.22) 1px,
+									transparent 1px,
+									transparent 9px
+								);
+							box-shadow:
+								0 0 0 1px rgba(var(--ocr-orange-rgb), 0.22) inset,
+								0 0 18px rgba(var(--ocr-orange-rgb), 0.42);
+							animation: ocr-scan-target-pulse 2.1s ease-in-out infinite;
+						}
+
+						.ocr-scan-target::before,
+						.ocr-scan-target::after {
+							content: "";
+							position: absolute;
+							width: 10px;
+							height: 10px;
+							border-color: rgba(var(--ocr-orange-rgb), 1);
+						}
+
+						.ocr-scan-target::before {
+							left: -1px;
+							top: -1px;
+							border-left: 2px solid;
+							border-top: 2px solid;
+						}
+
+						.ocr-scan-target::after {
+							right: -1px;
+							bottom: -1px;
+							border-right: 2px solid;
+							border-bottom: 2px solid;
+						}
+
+						.ocr-scan-target-b {
+							animation-delay: 0.35s;
+						}
+
+						.ocr-scan-target-c {
+							animation-delay: 0.7s;
+						}
+
+						.ocr-scan-target-d {
+							animation-delay: 1.05s;
 						}
 
 						.ocr-scan-beam {
@@ -268,6 +375,21 @@ export const DocumentSheet = memo(function DocumentSheet({
 							animation: ocr-scan-flicker 0.12s steps(2, end) infinite;
 						}
 
+						@keyframes upload-preview-progress {
+							0% {
+								transform: translateX(-110%);
+								opacity: 0.2;
+							}
+							18%,
+							72% {
+								opacity: 1;
+							}
+							100% {
+								transform: translateX(255%);
+								opacity: 0.2;
+							}
+						}
+
 						@keyframes ocr-scan-sweep {
 							0% {
 								opacity: 0;
@@ -285,6 +407,19 @@ export const DocumentSheet = memo(function DocumentSheet({
 							100% {
 								opacity: 0;
 								top: 115%;
+							}
+						}
+
+						@keyframes ocr-scan-target-pulse {
+							0%,
+							100% {
+								opacity: 0.34;
+								transform: scale(0.985);
+							}
+							40%,
+							65% {
+								opacity: 1;
+								transform: scale(1);
 							}
 						}
 

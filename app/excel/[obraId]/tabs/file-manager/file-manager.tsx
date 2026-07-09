@@ -5761,6 +5761,9 @@ function FileManagerContent({
       // title: activeFolderLink?.tablaName ?? selectedFolder?.name ?? 'Tabla OCR',
       searchPlaceholder: 'Buscar en esta tabla',
       columns: allColumns,
+      showRowNumbers: true,
+      rowNumberColumnWidth: 42,
+      actionsColumnWidth: 108,
       allowAddRows: allowInlineAddRows,
       revealNewRowOnAdd: true,
       createRow: allowInlineAddRows ? createInlineRow : undefined,
@@ -6027,7 +6030,7 @@ function FileManagerContent({
       disablePagination: true,
       emptyStateMessage,
       showInlineSearch: true,
-      toolbarMode: 'extras',
+      toolbarMode: 'default',
       toolbarSearchEnd: (
         <Button
           type="button"
@@ -6623,7 +6626,7 @@ function FileManagerContent({
                 <p>Configuralas desde la pestana Tablas para ver los datos aca.</p>
               </div>
             ) : (
-              <div className="flex flex-col h-full px-4">
+              <div className="flex h-full flex-col">
                 {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
                     <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
@@ -6639,7 +6642,7 @@ function FileManagerContent({
                     </Button>
                   </div>
                 )}
-                <div data-wizard-target="documents-extracted-data-table" className=" -mt-4">
+                <div data-wizard-target="documents-extracted-data-table" className="min-h-0 flex-1 px-4 pb-4">
                   <FormTable key={ocrFormTableConfig.tableId} config={ocrFormTableConfig} innerClassName="max-h-[50vh] min-h-[50vh]" />
                 </div>
               </div>

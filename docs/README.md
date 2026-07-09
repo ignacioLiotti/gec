@@ -1,68 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Documentation Index
 
-## Getting Started
+All project documentation lives under `docs/`, plus three root-level files:
 
-First, run the development server:
+- [`../README.md`](../README.md) — project overview and quick start
+- [`../CONTEXT.md`](../CONTEXT.md) — **canonical domain vocabulary and business rules** (required reading before touching domain logic)
+- [`../AGENTS.md`](../AGENTS.md) / [`../CLAUDE.md`](../CLAUDE.md) — contract for AI agents working in this repo
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## By audience
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| You are… | Start here |
+| --- | --- |
+| A new developer | [dev/getting-started.md](dev/getting-started.md) |
+| A customer / end user | [guide/README.md](guide/README.md) (Spanish) |
+| An AI agent | `../AGENTS.md`, then the nearest `AGENT_CONTEXT.md` to your target folder |
+| Reviewing architecture | [obsidian-brain/00 - Home.md](<obsidian-brain/00 - Home.md>) and [architecture/README.md](architecture/README.md) |
+| Making a governed change (schema, permissions, extraction, migrations) | [adr/README.md](adr/README.md) |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Directory guide
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### `dev/` — developer handbook
 
-## Learn More
+Onboarding, project structure, testing, and conventions. Written for humans joining the project.
 
-To learn more about Next.js, take a look at the following resources:
+### `guide/` — customer-facing user guide (Spanish)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+How to use the product: obras, documentos, extraccion, tablas, administracion.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### `obsidian-brain/` — architecture second brain
 
-## Deploy on Vercel
+~40 interconnected notes covering every subsystem: multi-tenancy & auth, routing, dynamic tables, macro tables, OCR pipeline, workflows, notifications, reports, database schema, RLS, admin panel, invitations, WhatsApp, usage metering, and more. Open the folder as an Obsidian vault for the graph view; start at `00 - Home.md`. This is the deepest technical reference in the repo.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### `adr/` — architecture decision records
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Numbered, immutable decisions with context and tradeoffs (`0001`–`00xx`). See [adr/README.md](adr/README.md) and [adr/TEMPLATE.md](adr/TEMPLATE.md). Create a new ADR when changing architecture, data model, storage, permissions, extraction flow, or anything with meaningful tradeoffs.
 
-## Local Supabase (barebones)
+### `domain/` — domain docs
 
-Prerequisites:
+Deep domain write-ups that extend `CONTEXT.md` (e.g. [domain/insurance-policies.md](domain/insurance-policies.md)).
 
-- Install the Supabase CLI: see `https://supabase.com/docs/guides/cli`.
-- Install Docker Desktop and have it running.
+### `architecture/` — architecture docs
 
-Setup:
+Cross-cutting technical contracts. See [architecture/README.md](architecture/README.md).
 
-1. Copy envs: `cp env.example .env.local` (Windows PowerShell: `Copy-Item env.example .env.local`).
-2. Start stack: `npm run supabase:start`.
-3. Check status: `npm run supabase:status`.
-4. Stop stack: `npm run supabase:stop`.
+### `styleguide/` — design system & UI patterns
 
-Project config lives in `supabase/config.toml`. Default ports:
+`styleguide/design-system.md` is required reading before changing product UI. See also [sintesis-ds.md](sintesis-ds.md) (design-system migration guide) and [styleguide/table-bulk-edit.md](styleguide/table-bulk-edit.md).
 
-- API: `54321` (REST), DB: `54322` (Postgres). URL and anon key from `env.example` are set for local.
+### `epics/` — product epics
 
-Client usage:
-Create a client in components/pages using the helper:
+Larger product initiatives (lineage/identity, global document-flow editor, data-flow visualization).
 
-```ts
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+### `test-plan/` — manual test plans
 
-const supabase = createSupabaseBrowserClient();
-```
+E.g. [test-plan/obra-flows.md](test-plan/obra-flows.md).
 
-Notes:
+## Operational runbooks (top level)
 
-- This is a minimal local setup for development only.
-- Do not commit real service role keys.
+- [secrets-rotation.md](secrets-rotation.md) — rotating tenant/API secrets
+- [supabase-backup.md](supabase-backup.md) — backup strategy
+- [uptime-monitoring.md](uptime-monitoring.md) — monitoring setup
+- [load-testing.md](load-testing.md) — load-test harness
+- [orphan-cleanup.md](orphan-cleanup.md) — cleaning orphaned storage/rows
+- [route-access-configuration.md](route-access-configuration.md) — configuring route access rules
+- [mercadopago-billing-and-limits.md](mercadopago-billing-and-limits.md) — billing integration and plan limits
+- [domain-split-rollout.md](domain-split-rollout.md) — domain rollout notes
+
+## Planning & roadmap (top level)
+
+- [roadmap.md](roadmap.md), [roadmap-feature.md](roadmap-feature.md), [roadmap-debt.md](roadmap-debt.md)
+- [feature-map.md](feature-map.md) — feature inventory
+- [domain-model-backlog.md](domain-model-backlog.md) — pending domain modeling work
+- [todo-ocr-improvements.md](todo-ocr-improvements.md)
+
+## Conventions for adding docs
+
+- Domain semantics → `domain/` (and update `CONTEXT.md` if vocabulary changes)
+- A decision with tradeoffs → new numbered ADR in `adr/`
+- Subsystem explanation → new note in `obsidian-brain/` (link it from `00 - Home.md`)
+- Folder-local guidance for agents → `AGENT_CONTEXT.md` next to the code
+- Use the established Spanish domain terms; do not translate them ad hoc.

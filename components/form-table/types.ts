@@ -329,6 +329,10 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	actionsColumnLabel?: string | null;
 	/** Whether the actions column may show row deletion. Defaults to true when rows are editable. */
 	allowDeleteRows?: boolean;
+	/** Renders a fixed spreadsheet-style row number gutter. Defaults to false. */
+	showRowNumbers?: boolean;
+	/** Fixed width for the row number gutter in pixels. Defaults to 42. */
+	rowNumberColumnWidth?: number;
 	/** Controls whether the default toolbar should show the "Agregar fila" button. Defaults to true. */
 	allowAddRows?: boolean;
 	/** When true, clears view constraints (search/filters/sort/tab) after adding a row so the new row is visible immediately. */

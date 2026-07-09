@@ -7,6 +7,7 @@ import { acceptInvitation, declineInvitation } from "@/app/admin/users/invitatio
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, UserPlus, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
 
 interface InvitationDetails {
   id: string;
@@ -29,7 +30,7 @@ export default function InvitationPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     async function loadInvitation() {
@@ -87,7 +88,7 @@ export default function InvitationPage() {
     const result = await acceptInvitation(token);
 
     if (result.error) {
-      if (result.alreadyMember) {
+      if ("alreadyMember" in result && result.alreadyMember) {
         // Redirect to app if already a member
         push("/");
       } else {
@@ -251,7 +252,7 @@ export default function InvitationPage() {
             <Button
               onClick={handleAccept}
               className="flex-1 bg-blue-600 hover:bg-blue-700"
-              disabled={processing || isExpired || (user && error !== null)}
+              disabled={processing || isExpired || (Boolean(user) && error !== null)}
             >
               {processing ? (
                 <>

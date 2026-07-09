@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserManagementNav } from "../../_components/user-management-nav";
 import { Plus, Shield, Users } from "lucide-react";
 import { RoleCard } from "./role-card";
 import { RoleEditor } from "./role-editor";
@@ -59,22 +60,24 @@ export function RolesPageClient({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Shield className="size-6" />
-            Roles y Permisos
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Gestiona los roles y permisos de tu organizacion
-          </p>
+      <header className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold flex items-center gap-2">
+              <Shield className="size-6" />
+              Roles y Permisos
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Gestiona los roles y permisos de tu organizacion
+            </p>
+          </div>
+          <Button onClick={handleCreateRole}>
+            <Plus className="size-4 mr-1" />
+            Crear Rol
+          </Button>
         </div>
-        <Button onClick={handleCreateRole}>
-          <Plus className="size-4 mr-1" />
-          Crear Rol
-        </Button>
-      </div>
+        <UserManagementNav active="roles" />
+      </header>
 
       {/* Main Content */}
       <Tabs defaultValue="roles" className="space-y-6">

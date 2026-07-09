@@ -1,4 +1,4 @@
-import { renderExcelLandingPage } from "./landing-page";
+import { renderExcelLandingRoute } from "./excel-landing-server";
 import {
 	EXCEL_LOAD_MODE_QUERY_PARAM,
 	resolveExcelLoadMode,
@@ -14,5 +14,5 @@ export default async function ExcelPage({ searchParams }: ExcelPageProps) {
 		resolvedSearchParams[EXCEL_LOAD_MODE_QUERY_PARAM],
 		"after-form",
 	);
-	return renderExcelLandingPage(loadMode);
+	return renderExcelLandingRoute(loadMode);
 }

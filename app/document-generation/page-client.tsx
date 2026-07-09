@@ -29,15 +29,17 @@ import {
 import { toast } from "sonner";
 
 import {
-  DOCUMENT_TYPE_LABELS,
   GENERATED_DOCUMENT_STATUS_LABELS,
+  applyTemplateFormulaInputData,
   applyTemplateAutoInputData,
   buildInitialInputData,
   type DocumentTemplateSummary,
   type DocumentType,
+  formatDocumentTypeLabel,
   normalizeDocumentType,
   escapeHtml,
   renderDocumentHtml,
+  refreshTemplateSequenceInputData,
   type DocumentAiContext,
   type TemplateField,
   type TemplateSelectOption,
@@ -72,6 +74,7 @@ type FolderConfig = {
 type BootstrapResponse = {
   works: WorkOption[];
   folderConfigs: FolderConfig[];
+  allTemplates?: DocumentTemplateSummary[];
   templates: DocumentTemplateSummary[];
   dynamicOptions?: {
     tenantUsers?: TemplateSelectOption[];
@@ -90,6 +93,23 @@ type BootstrapResponse = {
   };
 };
 
+function refreshAutoSequenceInputData(
+  template: DocumentTemplateSummary | null,
+  inputData: Record<string, unknown>,
+  existingSequenceCount: number,
+  options?: { refreshSequence?: boolean },
+) {
+  if (!template) return inputData;
+  const sequencedInputData =
+    options?.refreshSequence === false
+      ? inputData
+      : refreshTemplateSequenceInputData(
+        template.schema,
+        inputData,
+        Math.max(0, existingSequenceCount) + 1,
+      );
+  return applyTemplateFormulaInputData(template.schema, sequencedInputData);
+}
 type DraftResponse = {
   draft: {
     id: string;
@@ -1114,6 +1134,7 @@ export function DocumentGenerationPageClient() {
   const [existingSequenceCount, setExistingSequenceCount] = useState(0);
   const [folderConfigs, setFolderConfigs] = useState<FolderConfig[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);
+  const [templateCatalog, setTemplateCatalog] = useState<DocumentTemplateSummary[]>([]);
   const [dynamicOptions, setDynamicOptions] = useState<DynamicFieldOptions>({ tenantUsers: [] });
   const [inputData, setInputData] = useState<Record<string, unknown>>({});
   const [draftId, setDraftId] = useState<string>(initialDraftId);
@@ -1132,12 +1153,15 @@ export function DocumentGenerationPageClient() {
   const [editorMode, setEditorMode] = useState<"inline" | "form">("inline");
   const inlineDocumentRootRef = useRef<HTMLDivElement | null>(null);
   const inlineInputDataRef = useRef<Record<string, unknown>>({});
+  const bootstrapRequestIdRef = useRef(0);
 
   const loadBootstrap = useCallback(
     async (
       params?: { workId?: string; folderPath?: string; documentType?: string },
-      options?: { templateId?: string; inputData?: Record<string, unknown>; replaceInputData?: boolean },
+      options?: { templateId?: string; inputData?: Record<string, unknown>; replaceInputData?: boolean; refreshSequence?: boolean },
     ) => {
+      const requestId = bootstrapRequestIdRef.current + 1;
+      bootstrapRequestIdRef.current = requestId;
       setLoading(true);
       try {
         const query = new URLSearchParams();
@@ -1150,25 +1174,47 @@ export function DocumentGenerationPageClient() {
         if (!response.ok) {
           throw new Error(payload.error || "No se pudo cargar la configuracion");
         }
+        if (requestId !== bootstrapRequestIdRef.current) return;
+
+        const sequenceCount = payload.context.existingSequenceCount ?? payload.context.existingDocumentCount ?? 0;
+        const nextTemplateCatalog = payload.allTemplates ?? payload.templates;
+        const nextTemplateId = options?.templateId ?? payload.context.selectedTemplate?.id ?? "";
+        const nextTemplate =
+          payload.templates.find((template) => template.id === nextTemplateId) ??
+          nextTemplateCatalog.find((template) => template.id === nextTemplateId) ??
+          payload.context.selectedTemplate ??
+          null;
 
         setWorks(payload.works);
         setWorkLabel(payload.context.workLabel);
-        setExistingSequenceCount(payload.context.existingSequenceCount ?? payload.context.existingDocumentCount ?? 0);
+        setExistingSequenceCount(sequenceCount);
         setFolderConfigs(payload.folderConfigs);
         setTemplates(payload.templates);
+        setTemplateCatalog(nextTemplateCatalog);
         setDynamicOptions({ tenantUsers: payload.dynamicOptions?.tenantUsers ?? [] });
         setFolderPath(payload.context.folderPath ?? (params?.folderPath ?? ""));
         setDocumentType(payload.context.documentType ?? "");
-        setTemplateId(options?.templateId ?? payload.context.selectedTemplate?.id ?? "");
-        setInputData((current) =>
-          options?.replaceInputData
-            ? { ...payload.context.initialInputData, ...(options.inputData ?? {}) }
-            : { ...payload.context.initialInputData, ...current },
-        );
+        setTemplateId(nextTemplateId);
+        setInputData((current) => {
+          if (requestId !== bootstrapRequestIdRef.current) return current;
+          const shouldReplaceInputData = options?.replaceInputData ?? true;
+          const mergedInputData = shouldReplaceInputData
+            ? { ...payload.context.initialInputData, ...(options?.inputData ?? {}) }
+            : { ...payload.context.initialInputData, ...current, ...(options?.inputData ?? {}) };
+          const nextInputData = refreshAutoSequenceInputData(nextTemplate, mergedInputData, sequenceCount, {
+            refreshSequence: options?.refreshSequence,
+          });
+          inlineInputDataRef.current = nextInputData;
+          return nextInputData;
+        });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Error al cargar datos");
+        if (requestId === bootstrapRequestIdRef.current) {
+          toast.error(error instanceof Error ? error.message : "Error al cargar datos");
+        }
       } finally {
-        setLoading(false);
+        if (requestId === bootstrapRequestIdRef.current) {
+          setLoading(false);
+        }
       }
     },
     [],
@@ -1266,6 +1312,7 @@ export function DocumentGenerationPageClient() {
               templateId: payload.document.templateId,
               inputData: payload.document.inputData,
               replaceInputData: true,
+              refreshSequence: false,
             },
           );
         } catch (error) {
@@ -1333,20 +1380,12 @@ export function DocumentGenerationPageClient() {
     );
   }, [documentType, folderConfigs]);
   const documentTypeOptions = useMemo(() => {
-    const selectedFolderConfig = folderConfigs.find((config) => config.path === folderPath) ?? null;
     const configuredTypes = new Set<DocumentType>();
-    const sourceTypes =
-      selectedFolderConfig?.allowedDocumentTypes.length
-        ? selectedFolderConfig.allowedDocumentTypes
-        : folderConfigs.flatMap((config) => config.allowedDocumentTypes);
-
-    for (const configuredType of sourceTypes) {
+    for (const configuredType of folderConfigs.flatMap((config) => config.allowedDocumentTypes)) {
       configuredTypes.add(configuredType);
     }
-    if (configuredTypes.size === 0) {
-      for (const template of templates) {
-        configuredTypes.add(template.documentType);
-      }
+    for (const template of templateCatalog) {
+      configuredTypes.add(template.documentType);
     }
     if (documentType) {
       configuredTypes.add(documentType);
@@ -1354,9 +1393,9 @@ export function DocumentGenerationPageClient() {
 
     return Array.from(configuredTypes).map((value) => ({
       value,
-      label: DOCUMENT_TYPE_LABELS[value] ?? value,
+      label: formatDocumentTypeLabel(value),
     }));
-  }, [documentType, folderConfigs, folderPath, templates]);
+  }, [documentType, folderConfigs, templateCatalog]);
 
   const standaloneFields = useMemo(
     () => selectedTemplateFields.filter((field) => !field.repeatableGroup && field.type !== "table"),
@@ -1438,12 +1477,18 @@ export function DocumentGenerationPageClient() {
 
   const handleWorkChange = async (value: string) => {
     setWorkId(value);
+    setTemplateId("");
+    inlineInputDataRef.current = {};
+    setInputData({});
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
     setGeneratedDownloadTarget(null);
     setValidationErrors([]);
-    await loadBootstrap({ workId: value, folderPath, documentType: documentType || undefined });
+    await loadBootstrap(
+      { workId: value, folderPath, documentType: documentType || undefined },
+      { replaceInputData: true },
+    );
   };
 
   const handleDocumentTypeChange = async (value: string) => {
@@ -1460,12 +1505,18 @@ export function DocumentGenerationPageClient() {
     const resolvedFolderPath = shouldKeepFolder ? folderPath : "";
     setDocumentType(nextType);
     setFolderPath(resolvedFolderPath);
+    setTemplateId("");
+    inlineInputDataRef.current = {};
+    setInputData({});
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
     setGeneratedDownloadTarget(null);
     setValidationErrors([]);
-    await loadBootstrap({ workId, folderPath: resolvedFolderPath, documentType: nextType || undefined });
+    await loadBootstrap(
+      { workId, folderPath: resolvedFolderPath, documentType: nextType || undefined },
+      { replaceInputData: true },
+    );
   };
 
   const handleFolderChange = async (value: string) => {
@@ -1477,37 +1528,56 @@ export function DocumentGenerationPageClient() {
         : "";
     setFolderPath(value);
     setDocumentType(nextDocumentType);
+    setTemplateId("");
+    inlineInputDataRef.current = {};
+    setInputData({});
     setDraftId("");
     setDraftStatus("");
     setGeneratedDocument(null);
     setGeneratedDownloadTarget(null);
     setValidationErrors([]);
-    await loadBootstrap({ workId, folderPath: value, documentType: nextDocumentType || undefined });
+    await loadBootstrap(
+      { workId, folderPath: value, documentType: nextDocumentType || undefined },
+      { replaceInputData: true },
+    );
   };
 
   const commitInputData = useCallback((nextData: Record<string, unknown>) => {
-    inlineInputDataRef.current = nextData;
-    setInputData(nextData);
-  }, []);
+    const derivedData = selectedTemplate
+      ? applyTemplateFormulaInputData(selectedTemplate.schema, nextData)
+      : nextData;
+    inlineInputDataRef.current = derivedData;
+    setInputData(derivedData);
+  }, [selectedTemplate]);
 
   const updateInputDataFromLatest = useCallback((updater: (current: Record<string, unknown>) => Record<string, unknown>) => {
     const nextData = updater(inlineInputDataRef.current);
-    inlineInputDataRef.current = nextData;
-    setInputData(nextData);
-    return nextData;
-  }, []);
+    const derivedData = selectedTemplate
+      ? applyTemplateFormulaInputData(selectedTemplate.schema, nextData)
+      : nextData;
+    inlineInputDataRef.current = derivedData;
+    setInputData(derivedData);
+    return derivedData;
+  }, [selectedTemplate]);
 
   const handleTemplateChange = (value: string) => {
     setTemplateId(value);
     setValidationErrors([]);
     const nextTemplate = templates.find((template) => template.id === value) ?? null;
     if (!nextTemplate) return;
-    commitInputData(
-      applyTemplateAutoInputData(nextTemplate.schema, buildInitialInputData(nextTemplate.schema, inlineInputDataRef.current), {
+    const nextInputData = applyTemplateAutoInputData(
+      nextTemplate.schema,
+      buildInitialInputData(nextTemplate.schema, inlineInputDataRef.current),
+      {
         selectedContextId: workId,
         selectedContextLabel: workLabel,
         documentType,
         existingSequenceCount,
+      },
+    );
+    commitInputData(
+      refreshAutoSequenceInputData(nextTemplate, nextInputData, existingSequenceCount, {
+        refreshSequence: !isEditingGeneratedDocument,
       }),
     );
   };
@@ -1712,7 +1782,6 @@ export function DocumentGenerationPageClient() {
   };
 
   const handleSaveDraft = async () => {
-    const currentInputData = inlineInputDataRef.current;
     flushInlineDraftData();
     if (editingGeneratedId) {
       toast.error("Los documentos emitidos se actualizan directo al guardar cambios.");
@@ -1721,6 +1790,13 @@ export function DocumentGenerationPageClient() {
     if (!workId || !folderPath || !documentType || !templateId) {
       toast.error("Completa obra, carpeta, tipo documental y plantilla.");
       return;
+    }
+
+    const currentInputData = selectedTemplate
+      ? refreshAutoSequenceInputData(selectedTemplate, inlineInputDataRef.current, existingSequenceCount)
+      : inlineInputDataRef.current;
+    if (currentInputData !== inlineInputDataRef.current) {
+      commitInputData(currentInputData);
     }
 
     setSavingDraft(true);
@@ -1757,8 +1833,15 @@ export function DocumentGenerationPageClient() {
   };
 
   const handleGenerate = async () => {
-    const currentInputData = inlineInputDataRef.current;
     flushInlineDraftData();
+    const currentInputData = selectedTemplate
+      ? refreshAutoSequenceInputData(selectedTemplate, inlineInputDataRef.current, existingSequenceCount, {
+        refreshSequence: !isEditingGeneratedDocument,
+      })
+      : inlineInputDataRef.current;
+    if (currentInputData !== inlineInputDataRef.current) {
+      commitInputData(currentInputData);
+    }
     const clientValidationErrors = selectedTemplate
       ? validateTemplateInput(selectedTemplate.schema, currentInputData)
       : [];

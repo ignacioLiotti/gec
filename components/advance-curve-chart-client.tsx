@@ -80,8 +80,10 @@ export function AdvanceCurveChart({
 	const minX = Math.min(...chartData.map((d) => d.x));
 	const maxX = Math.max(...chartData.map((d) => d.x));
 	const markerX =
-		Number.isFinite(currentMonthOrder)
-			? Math.max(minX, Math.min(maxX, currentMonthOrder))
+		Number.isFinite(currentMonthOrder) &&
+		currentMonthOrder >= minX &&
+		currentMonthOrder <= maxX
+			? currentMonthOrder
 			: null;
 	const timelineLabel = (() => {
 		if (markerX == null) return null;
@@ -326,10 +328,12 @@ export function AdvanceCurveChart({
 						<span className="h-2.5 w-2.5 rounded-full bg-[#ff5800]" />
 						<span className="text-muted-foreground">PMC Resumen (avance fisico acumulado)</span>
 					</div>
-					<div className="flex items-center gap-2">
-						<span className="h-0.5 w-3 bg-amber-500" />
-						<span className="text-muted-foreground">Hoy (tiempo transcurrido)</span>
-					</div>
+					{markerX != null ? (
+						<div className="flex items-center gap-2">
+							<span className="h-0.5 w-3 bg-amber-500" />
+							<span className="text-muted-foreground">Hoy (tiempo transcurrido)</span>
+						</div>
+					) : null}
 					<div className="flex items-center gap-2">
 						<span className="h-2.5 w-3 rounded-sm bg-[#ffedd5]" />
 						<span className="text-muted-foreground">Mes sin certificados</span>

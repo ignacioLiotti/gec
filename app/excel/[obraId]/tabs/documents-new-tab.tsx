@@ -102,6 +102,24 @@ type ReprocessTableResult = {
 type TablaRowsPayload = {
 	rows?: TablaDataRow[];
 };
+type UploadPreviewPhase = "uploading" | "extracting" | "settled";
+
+type UploadPreviewState = {
+	id: string;
+	fileName: string;
+	mimeType: string;
+	size: number;
+	objectUrl: string;
+	phase: UploadPreviewPhase;
+	isOcrFolder: boolean;
+	storagePath: string | null;
+	uploadedAt: string | null;
+};
+
+type UploadedPreviewResult = {
+	fileName: string;
+	storagePath: string;
+};
 
 type FolderState = {
 	path: string;
@@ -145,6 +163,8 @@ const INITIAL_VISIBLE_FILES = 80;
 const FOLDER_STALE_TIME = 10 * 60 * 1000;
 const TABLE_ROWS_STALE_TIME = 30 * 1000;
 const PDF_THUMBNAIL_MAX_SIZE = 220;
+const EXTRACTION_POLL_INTERVAL_MS = 1200;
+const EXTRACTION_POLL_TIMEOUT_MS = 30_000;
 
 let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
 const pdfThumbnailCache = new Map<string, string>();
@@ -544,6 +564,85 @@ function containsFiles(dataTransfer?: DataTransfer | null) {
 	return false;
 }
 
+function isUploadPreviewableFile(file: File) {
+	const ext = getFileExtension(file.name);
+	return file.type.startsWith("image/") || file.type === "application/pdf" || ext === "pdf" || IMAGE_EXTENSIONS.has(ext);
+}
+
+function buildUploadPreviewDocument(preview: UploadPreviewState): FileSystemItem {
+	const uploaded = preview.phase !== "uploading";
+	return {
+		id: preview.id,
+		name: preview.fileName,
+		type: "file",
+		storagePath: preview.storagePath ?? undefined,
+		size: preview.size,
+		mimetype: preview.mimeType || undefined,
+		uploadedAt: uploaded ? preview.uploadedAt : null,
+		uploadedByLabel: uploaded ? "Subido recien" : null,
+		ocrDocumentStatus: preview.phase === "extracting" && preview.isOcrFolder ? "processing" : undefined,
+	};
+}
+
+function findFileByStoragePath(payload: DocumentsListPayload | null | undefined, storagePath: string) {
+	const normalizedStoragePath = normalizeFolderPath(storagePath);
+	if (!normalizedStoragePath) return null;
+	const roots = [payload?.folder, payload?.tree].filter((item): item is FileSystemItem => Boolean(item));
+	const stack = [...roots];
+	const visited = new Set<string>();
+	while (stack.length > 0) {
+		const item = stack.shift();
+		if (!item || visited.has(item.id)) continue;
+		visited.add(item.id);
+		if (item.type === "file" && normalizeFolderPath(item.storagePath ?? "") === normalizedStoragePath) {
+			return item;
+		}
+		if (item.children?.length) stack.push(...item.children);
+	}
+	return null;
+}
+
+function wait(ms: number) {
+	return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForOcrDocumentSettlement({
+	initialPayload,
+	obraId,
+	selectedFolderPath,
+	storagePath,
+}: {
+	initialPayload: DocumentsListPayload | null;
+	obraId: string;
+	selectedFolderPath: string;
+	storagePath: string;
+}) {
+	let latestPayload = initialPayload;
+	let latestDocument = findFileByStoragePath(latestPayload, storagePath);
+	const deadline = Date.now() + EXTRACTION_POLL_TIMEOUT_MS;
+
+	while (
+		latestDocument?.ocrDocumentStatus !== "completed" &&
+		latestDocument?.ocrDocumentStatus !== "failed" &&
+		Date.now() < deadline
+	) {
+		await wait(EXTRACTION_POLL_INTERVAL_MS);
+		try {
+			latestPayload = await fetchDocumentsList(obraId, selectedFolderPath);
+			latestDocument = findFileByStoragePath(latestPayload, storagePath);
+		} catch (error) {
+			console.error("[documents-new] OCR status refresh failed", error);
+		}
+	}
+
+	return {
+		document: latestDocument,
+		payload: latestPayload,
+		timedOut:
+			latestDocument?.ocrDocumentStatus !== "completed" &&
+			latestDocument?.ocrDocumentStatus !== "failed",
+	};
+}
 function FilePreview({
 	item,
 	signedUrl,
@@ -689,6 +788,8 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 	const [isFileDragActive, setIsFileDragActive] = useState(false);
 	const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+	const [uploadPreview, setUploadPreview] = useState<UploadPreviewState | null>(null);
+	const uploadPreviewRef = useRef<UploadPreviewState | null>(null);
 	const reprocessAllAbortRef = useRef(false);
 	const previewRequestIdRef = useRef(0);
 
@@ -743,13 +844,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	}, [
 		allLinks,
 		folderLookupKeys,
-		folderNode?.dataInputMethod,
-		folderNode?.ocrEnabled,
-		folderNode?.ocrFolderName,
-		folderNode?.ocrTablaColumns,
-		folderNode?.ocrTablaId,
-		folderNode?.ocrTablaName,
-		folderNode?.ocrTablaRows,
+		folderNode,
 		obraId,
 		selectedFolderPath,
 	]);
@@ -886,7 +981,11 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			disablePagination: true,
 			emptyStateMessage,
 			showActionsColumn: true,
+			showRowNumbers: true,
+			rowNumberColumnWidth: 42,
+			actionsColumnWidth: 88,
 			showInlineSearch: true,
+			toolbarMode: "default",
 			hideFooterPaginationSummary: true,
 			enableColumnResizing: true,
 		};
@@ -913,19 +1012,26 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	}, [ocrTableConfig, selectedDocument, selectedDocumentRows, tablaRowsQuery.isFetching]);
 
 	useEffect(() => {
-		if (activeFolderLinks.length === 0) {
-			setActiveOcrTablaIdOverride(null);
-			setDocumentViewMode("cards");
-			return;
-		}
-		const preferredTablaId = activeFolderLinks[0]?.tablaId ?? null;
-		if (
-			activeOcrTablaIdOverride === preferredTablaId &&
-			activeFolderLinks.some((link) => link.tablaId === activeOcrTablaIdOverride)
-		) {
-			return;
-		}
-		setActiveOcrTablaIdOverride(preferredTablaId);
+		let cancelled = false;
+		queueMicrotask(() => {
+			if (cancelled) return;
+			if (activeFolderLinks.length === 0) {
+				setActiveOcrTablaIdOverride(null);
+				setDocumentViewMode("cards");
+				return;
+			}
+			const preferredTablaId = activeFolderLinks[0]?.tablaId ?? null;
+			if (
+				activeOcrTablaIdOverride === preferredTablaId &&
+				activeFolderLinks.some((link) => link.tablaId === activeOcrTablaIdOverride)
+			) {
+				return;
+			}
+			setActiveOcrTablaIdOverride(preferredTablaId);
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [activeFolderLinks, activeOcrTablaIdOverride]);
 
 	useEffect(() => {
@@ -952,6 +1058,57 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		};
 	}, []);
 
+	const clearUploadPreview = useCallback(() => {
+		const currentPreview = uploadPreviewRef.current;
+		if (currentPreview) {
+			URL.revokeObjectURL(currentPreview.objectUrl);
+		}
+		uploadPreviewRef.current = null;
+		setUploadPreview(null);
+	}, []);
+
+	const startUploadPreview = useCallback((file: File, previewIsOcrFolder: boolean) => {
+		clearUploadPreview();
+		const preview: UploadPreviewState = {
+			id: `upload-preview-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+			fileName: file.name,
+			mimeType: file.type || (getFileExtension(file.name) === "pdf" ? "application/pdf" : ""),
+			size: file.size,
+			objectUrl: URL.createObjectURL(file),
+			phase: "uploading",
+			isOcrFolder: previewIsOcrFolder,
+			storagePath: null,
+			uploadedAt: null,
+		};
+		uploadPreviewRef.current = preview;
+		setUploadPreview(preview);
+		setSelectedDocument(buildUploadPreviewDocument(preview));
+		setPreviewUrl(preview.objectUrl);
+		setIsDocumentDataSheetOpen(false);
+		setIsDocumentSheetOpen(true);
+		return preview;
+	}, [clearUploadPreview]);
+
+	const updateUploadPreview = useCallback((previewId: string, patch: Partial<UploadPreviewState>) => {
+		const currentPreview = uploadPreviewRef.current;
+		if (!currentPreview || currentPreview.id !== previewId) return null;
+		const nextPreview = { ...currentPreview, ...patch };
+		uploadPreviewRef.current = nextPreview;
+		setUploadPreview(nextPreview);
+		setSelectedDocument(buildUploadPreviewDocument(nextPreview));
+		setPreviewUrl(nextPreview.objectUrl);
+		return nextPreview;
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			const currentPreview = uploadPreviewRef.current;
+			if (currentPreview) {
+				URL.revokeObjectURL(currentPreview.objectUrl);
+				uploadPreviewRef.current = null;
+			}
+		};
+	}, []);
 	useEffect(() => {
 		let cancelled = false;
 		if (!previewPathKey) return;
@@ -985,6 +1142,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		setSearch("");
 		setDocumentViewMode("cards");
 		setActiveOcrTablaIdOverride(null);
+		clearUploadPreview();
 		setSelectedDocument(null);
 		setPreviewUrl(null);
 		setIsDocumentSheetOpen(false);
@@ -1016,8 +1174,14 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		const folderPath = normalizeFolderPath(
 			selectedFolderPath ? `${obraId}/${selectedFolderPath}` : obraId,
 		);
+		const previewFile = filesArray.find(isUploadPreviewableFile) ?? null;
+		const uploadPreviewSession = previewFile
+			? { file: previewFile, preview: startUploadPreview(previewFile, isOcrFolder) }
+			: null;
 		setIsUploadingFiles(true);
 		let uploadedCount = 0;
+		let uploadedPreviewResult: UploadedPreviewResult | null = null;
+		let refreshedPayload: DocumentsListPayload | null = null;
 
 		try {
 			for (const file of filesArray) {
@@ -1035,20 +1199,109 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 					throw new Error(payload.error || "No se pudieron subir los documentos.");
 				}
 
+				const uploadedFileName = typeof payload.fileName === "string" && payload.fileName.trim().length > 0
+					? payload.fileName.trim()
+					: file.name;
+				const uploadedStoragePath = typeof payload.path === "string" && payload.path.trim().length > 0
+					? normalizeFolderPath(payload.path)
+					: normalizeFolderPath(`${folderPath}/${uploadedFileName}`);
+
+				if (uploadPreviewSession?.file === file) {
+					uploadedPreviewResult = {
+						fileName: uploadedFileName,
+						storagePath: uploadedStoragePath,
+					};
+				}
+
 				uploadedCount += 1;
 			}
 
-			await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] });
+			if (uploadPreviewSession && uploadedPreviewResult) {
+				updateUploadPreview(uploadPreviewSession.preview.id, {
+					fileName: uploadedPreviewResult.fileName,
+					storagePath: uploadedPreviewResult.storagePath,
+					phase: uploadPreviewSession.preview.isOcrFolder ? "extracting" : "settled",
+					uploadedAt: new Date().toISOString(),
+				});
+				if (uploadPreviewSession.preview.isOcrFolder) {
+					setIsUploadingFiles(false);
+				}
+			}
+
+			try {
+				refreshedPayload = await fetchDocumentsList(obraId, selectedFolderPath);
+				queryClient.setQueryData(
+					["obra", obraId, "documents-new", "folder", selectedFolderPath],
+					refreshedPayload,
+				);
+			} catch (refreshError) {
+				console.error("[documents-new] refresh after upload failed", refreshError);
+				await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] });
+			}
+
+			let extractionTimedOut = false;
+			if (
+				uploadPreviewSession &&
+				uploadedPreviewResult &&
+				uploadPreviewSession.preview.isOcrFolder &&
+				uploadPreviewRef.current?.id === uploadPreviewSession.preview.id
+			) {
+				const extractionResult = await waitForOcrDocumentSettlement({
+					initialPayload: refreshedPayload,
+					obraId,
+					selectedFolderPath,
+					storagePath: uploadedPreviewResult.storagePath,
+				});
+				refreshedPayload = extractionResult.payload;
+				extractionTimedOut = extractionResult.timedOut;
+				if (refreshedPayload) {
+					queryClient.setQueryData(
+						["obra", obraId, "documents-new", "folder", selectedFolderPath],
+						refreshedPayload,
+					);
+				}
+			}
+
+			if (uploadPreviewSession && uploadedPreviewResult && uploadPreviewRef.current?.id === uploadPreviewSession.preview.id) {
+				const settledPreview = updateUploadPreview(uploadPreviewSession.preview.id, {
+					fileName: uploadedPreviewResult.fileName,
+					storagePath: uploadedPreviewResult.storagePath,
+					phase: "settled",
+				});
+				const refreshedDocument = findFileByStoragePath(refreshedPayload, uploadedPreviewResult.storagePath);
+				if (settledPreview && refreshedDocument) {
+					setSelectedDocument(refreshedDocument);
+					setPreviewUrl(settledPreview.objectUrl);
+				}
+			}
+
 			toast.success(`${uploadedCount} archivo${uploadedCount === 1 ? "" : "s"} subido${uploadedCount === 1 ? "" : "s"}.`);
+			if (extractionTimedOut) {
+				toast.message("La extracción continúa en segundo plano. Podés seguir trabajando y volver más tarde.");
+			}
 		} catch (error) {
 			if (uploadedCount > 0) {
 				await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] });
+			} else if (uploadPreviewSession) {
+				clearUploadPreview();
+				setSelectedDocument(null);
+				setPreviewUrl(null);
+				setIsDocumentSheetOpen(false);
 			}
 			toast.error(error instanceof Error ? error.message : "No se pudieron subir los documentos.");
 		} finally {
 			setIsUploadingFiles(false);
 		}
-	}, [isUploadingFiles, obraId, queryClient, selectedFolderPath]);
+	}, [
+		clearUploadPreview,
+		isOcrFolder,
+		isUploadingFiles,
+		obraId,
+		queryClient,
+		selectedFolderPath,
+		startUploadPreview,
+		updateUploadPreview,
+	]);
 
 	const handleDocumentAreaDragEnter = useCallback((event: DragEvent<HTMLElement>) => {
 		if (!containsFiles(event.dataTransfer)) return;
@@ -1302,6 +1555,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 
 	const handleOpenDocumentPreview = useCallback(
 		async (document: FileSystemItem) => {
+			clearUploadPreview();
 			setSelectedDocument(document);
 			setIsDocumentSheetOpen(true);
 			setIsDocumentDataSheetOpen(false);
@@ -1336,18 +1590,19 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				toast.error("No se pudo cargar la previsualizacion del documento.");
 			}
 		},
-		[obraId, signedUrls],
+		[clearUploadPreview, obraId, signedUrls],
 	);
 
 	const handleDocumentSheetOpenChange = useCallback((open: boolean) => {
 		setIsDocumentSheetOpen(open);
 		if (!open) {
 			previewRequestIdRef.current += 1;
+			clearUploadPreview();
 			setIsDocumentDataSheetOpen(false);
 			setSelectedDocument(null);
 			setPreviewUrl(null);
 		}
-	}, []);
+	}, [clearUploadPreview]);
 
 	const toggleDocumentDataSheet = useCallback(() => {
 		if (!documentDataTableConfig) return;
@@ -1426,7 +1681,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		obraId,
 		queryClient,
 		resolveDeleteStoragePath,
-		selectedDocument?.id,
+		selectedDocument,
 		tablaRowsQuery,
 	]);
 
@@ -1441,6 +1696,18 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			: null;
 	const canReprocessSelectedDocument = Boolean(selectedDocument?.storagePath);
 	const canShowSelectedDocumentData = Boolean(selectedDocument?.storagePath && documentDataTableConfig);
+	const isUploadPreviewSelected = Boolean(
+		uploadPreview &&
+		selectedDocument &&
+		(selectedDocument.id === uploadPreview.id ||
+			Boolean(uploadPreview.storagePath && selectedDocument.storagePath === uploadPreview.storagePath)),
+	);
+	const documentPreviewActivity = uploadPreview && uploadPreview.phase !== "settled" && isUploadPreviewSelected
+		? {
+			phase: uploadPreview.phase,
+			label: uploadPreview.phase === "uploading" ? "Subiendo documento..." : "Extrayendo datos...",
+		}
+		: null;
 
 	const skeletonContent = (
 		<div className="space-y-4">
@@ -1543,8 +1810,8 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			{tablaRowsQuery.error instanceof Error ? tablaRowsQuery.error.message : "No se pudieron cargar los datos extraidos"}
 		</div>
 	) : ocrTableConfig ? (
-		<div data-wizard-target="documents-extracted-data-table" className="px-4 pt-4 max-w-[calc(96vw-var(--sidebar-current-width))]">
-			<FormTable key={ocrTableConfig.tableId} config={ocrTableConfig} innerClassName="max-h-[50vh] min-h-[50vh]" />
+		<div data-wizard-target="documents-extracted-data-table" className="min-h-0 px-4 pt-3 max-w-[calc(96vw-var(--sidebar-current-width))]">
+			<FormTable key={ocrTableConfig.tableId} config={ocrTableConfig} innerClassName="max-h-[58vh] min-h-[58vh]" />
 		</div>
 	) : null;
 
@@ -1606,7 +1873,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		<div className="mb-0">
 			<div className="flex flex-wrap items-end justify-between gap-3">
 				<div
-					className="relative z-10 flex h-full items-center gap-3 overflow-visible rounded-tl-xl border border-b-0 border-[#d9d9d9] bg-white px-4 py-3"
+					className="relative z-10 flex h-full items-center gap-3 overflow-visible rounded-tl-xl bg-surface shadow-[0_2px_0_0_#f7f7f7,0_1px_0_0_#fff_inset,0_0_0_1px_#e2e2e2] px-4 py-3"
 					style={
 						{
 							"--notch-bg": "white",
@@ -1682,7 +1949,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 
 				{showArchivosTablaToggle ? (
 					<div
-						className="relative z-10 flex h-full flex-wrap items-center gap-2 overflow-visible rounded-tl-none border-l-0 rounded-tr-xl border border-b-0 border-[#d9d9d9] bg-white px-4 pb-0 pl-1 pt-3"
+						className="relative z-10 flex h-full flex-wrap items-center gap-2 overflow-visible rounded-tl-none border-l-0 rounded-tr-xl bg-surface shadow-[0_2px_0_0_#f7f7f7,0_1px_0_0_#fff_inset,0_0_0_1px_#e2e2e2] px-4 pb-0 pl-1 pt-3"
 						style={
 							{
 								"--notch-bg": "white",
@@ -1691,30 +1958,30 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 						}
 					>
 						<NotchTail side="left" className="mb-[4px] h-[48px] " />
-						<div className="inline-flex items-center rounded-md border border-[#d9d9d9] bg-stone-50 p-0.5">
+						<div className="inline-grid grid-cols-2 items-center gap-1 rounded-lg border border-stroke-soft bg-surface-recessed p-0.5">
 							<Button
 								type="button"
 								data-wizard-target="documents-view-mode-cards"
 								variant={documentViewMode === "cards" ? "default" : "ghost"}
 								size="sm"
-								className="h-8 gap-1.5 px-3"
+								className="h-8 min-w-[5.75rem] justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none"
 								aria-pressed={documentViewMode === "cards"}
 								onClick={() => setDocumentViewMode("cards")}
 							>
-								<File className="size-3.5" />
-								Archivos
+								<File className="size-3.5 shrink-0" />
+								<span className="truncate">Archivos</span>
 							</Button>
 							<Button
 								type="button"
 								data-wizard-target="documents-view-mode-table"
 								variant={documentViewMode === "table" ? "default" : "ghost"}
 								size="sm"
-								className="h-8 gap-1.5 px-3"
+								className="h-8 min-w-[5.75rem] justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none"
 								aria-pressed={documentViewMode === "table"}
 								onClick={() => setDocumentViewMode("table")}
 							>
-								<Table2 className="size-3.5" />
-								Tabla
+								<Table2 className="size-3.5 shrink-0" />
+								<span className="truncate">Tabla</span>
 							</Button>
 						</div>
 					</div>
@@ -1724,16 +1991,16 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	);
 
 	return (
-		<TabsContent value="documentos-new" className="space-y-4">
-			<section className={cn("min-h-[640px] overflow-hidden ", !isOcrFolder && "rounded-lg border border-[#d9d9d9] shadow-sm")}>
-				<div className="-mb-1">
+		<TabsContent value="documentos-new" className="space-y-4 mb-16">
+			<section className={cn("min-h-[640px] overflow-hidden rounded-xl ", !isOcrFolder && "rounded-xl ")}>
+				<div className="-mb-1 mx-[1px]">
 					{isOcrFolder ? ocrHeader : normalHeader}
 				</div>
 				<div
 					className={cn(
-						"relative min-h-[560px] bg-white transition-colors",
+						"relative min-h-[inherit] mb-[1px] mx-[1px] bg-surface shadow-card transition-colors",
 						isOcrFolder
-							? "rounded-b-lg border border-[#d9d9d9] p-4 pt-4"
+							? "rounded-b-lg p-4 pt-4 pb-0"
 							: "p-4",
 						(isFileDragActive || isUploadingFiles) && "bg-amber-50/40 ring-2 ring-inset ring-amber-500",
 					)}
@@ -1777,6 +2044,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				onToggleDataSheet={toggleDocumentDataSheet}
 				showDataToggle={canShowSelectedDocumentData}
 				isDataSheetOpen={isDocumentDataSheetOpen}
+				previewActivity={documentPreviewActivity}
 				onPreviousDocument={previousDocument ? () => void handleOpenDocumentPreview(previousDocument) : null}
 				onNextDocument={nextDocument ? () => void handleOpenDocumentPreview(nextDocument) : null}
 			/>

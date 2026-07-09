@@ -12,6 +12,7 @@ type TestRow = FormTableRow & {
 	amount: number;
 	status: boolean;
 	progress: number;
+	tipo: string;
 	ignored: string;
 };
 
@@ -20,6 +21,16 @@ const columns: ColumnDef<TestRow>[] = [
 	{ id: "amount", label: "Monto", field: "amount", cellType: "currency" },
 	{ id: "status", label: "Activo", field: "status", cellType: "checkbox" },
 	{ id: "progress", label: "Avance", field: "progress", cellType: "badge", filterType: "number" },
+	{
+		id: "tipo",
+		label: "Tipo",
+		field: "tipo",
+		cellType: "select",
+		cellConfig: {
+			selectName: "tipo",
+			selectOptions: [{ text: "Publico" }, { text: "Privado" }],
+		},
+	},
 	{ id: "ignored", label: "Ignorado", field: "ignored", cellType: "text", filterType: false },
 ];
 
@@ -31,6 +42,7 @@ describe("auto column filters", () => {
 		expect(filters.amount?.type).toBe("number");
 		expect(filters.status?.type).toBe("boolean");
 		expect(filters.progress?.type).toBe("number");
+		expect(filters.tipo?.type).toBe("enum");
 		expect(filters.ignored).toBeUndefined();
 	});
 
@@ -46,14 +58,67 @@ describe("auto column filters", () => {
 		expect(countActiveAutoColumnFilters(filters)).toBe(4);
 		expect(
 			matchesAutoColumnFilters(
-				{ id: "1", name: "Obra Central", amount: 1500, status: true, progress: 50, ignored: "x" },
+				{ id: "1", name: "Obra Central", amount: 1500, status: true, progress: 50, tipo: "tipo__publico", ignored: "x" },
 				columns,
 				filters
 			)
 		).toBe(true);
 		expect(
 			matchesAutoColumnFilters(
-				{ id: "2", name: "Obra Central", amount: 900, status: true, progress: 50, ignored: "x" },
+				{ id: "2", name: "Obra Central", amount: 900, status: true, progress: 50, tipo: "tipo__publico", ignored: "x" },
+				columns,
+				filters
+			)
+		).toBe(false);
+	});
+
+	it("matches select filters against stored option ids and visible labels", () => {
+		const filters: AutoColumnFilters = {
+			...createAutoColumnFilters(columns),
+			tipo: { type: "enum", value: { mode: "include", values: ["Publico"] } },
+		};
+
+		expect(
+			matchesAutoColumnFilters(
+				{
+					id: "1",
+					name: "Obra Central",
+					amount: 1500,
+					status: true,
+					progress: 50,
+					tipo: "tipo__publico",
+					ignored: "x",
+				},
+				columns,
+				filters
+			)
+		).toBe(true);
+		expect(
+			matchesAutoColumnFilters(
+				{
+					id: "2",
+					name: "Obra Central",
+					amount: 1500,
+					status: true,
+					progress: 50,
+					tipo: "Publico",
+					ignored: "x",
+				},
+				columns,
+				filters
+			)
+		).toBe(true);
+		expect(
+			matchesAutoColumnFilters(
+				{
+					id: "3",
+					name: "Obra Central",
+					amount: 1500,
+					status: true,
+					progress: 50,
+					tipo: "tipo__privado",
+					ignored: "x",
+				},
 				columns,
 				filters
 			)

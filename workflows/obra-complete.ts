@@ -14,6 +14,15 @@ type WorkflowParams = {
 	followUpSendAt?: string | null;
 };
 
+/**
+ * Durable two-email sequence for a completed obra: send the completion email,
+ * sleep until `followUpSendAt` (invalid/past/missing dates fall back to 2
+ * minutes), then send the follow-up.
+ *
+ * Steps are checkpointed by the workflow runtime, so the step sequence is a
+ * versioned contract — reordering or renaming steps can strand in-flight
+ * runs mid-sequence. Side effects belong only inside "use step" functions.
+ */
 export async function sendObraCompletionWorkflow(params: WorkflowParams) {
 	"use workflow";
 

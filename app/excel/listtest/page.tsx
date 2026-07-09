@@ -1,5 +1,5 @@
-import { renderExcelLandingPage } from "../landing-page";
+import { renderExcelLandingRoute } from "../excel-landing-server";
 
 export default async function ExcelListTestPage() {
-	return renderExcelLandingPage("after-list");
+	return renderExcelLandingRoute("after-list");
 }

@@ -17,6 +17,7 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 	ContextMenuSeparator,
+	ContextMenuLabel,
 } from "@/components/ui/context-menu";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -265,9 +266,18 @@ function CellContent<Row extends FormTableRow>({
 			{/* Lazy mount: only render content after first open */}
 			{menuOpened && (
 				<ContextMenuContent className="w-56 z-[10000000]">
+					<ContextMenuLabel>
+						<div className="min-w-0">
+							<p className="truncate text-sm font-semibold">Acciones de celda</p>
+							<p className="truncate text-xs font-normal text-content-muted">
+								{column.label}
+							</p>
+						</div>
+					</ContextMenuLabel>
+					<ContextMenuSeparator />
 					{canRestore && onRestoreValue && (
 						<>
-							<ContextMenuItem onClick={onRestoreValue} className="bg-amber-100/50 rounded-none">
+							<ContextMenuItem onClick={onRestoreValue} className="bg-warning/15 text-warning-foreground focus:bg-warning/20">
 								Restaurar valor previo
 							</ContextMenuItem>
 							<ContextMenuSeparator />

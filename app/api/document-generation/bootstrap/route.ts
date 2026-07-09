@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
   applyTemplateAutoInputData,
+  applyTemplateFormulaInputData,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
 } from "@/lib/document-generation";
@@ -12,6 +13,7 @@ import {
   loadTenantUserOptions,
   loadTemplates,
   loadWorks,
+  resolveGeneratedDocumentFolderFileCount,
   resolveGeneratedDocumentNextSequenceNumber,
   resolveGenerationContext,
 } from "@/lib/document-generation-server";
@@ -69,27 +71,39 @@ export async function GET(request: NextRequest) {
             schema: context.selectedTemplate.schema,
           })
         : null;
-    const existingSequenceCount = nextSequenceNumber == null ? 0 : Math.max(0, nextSequenceNumber - 1);
+    const folderFileCount =
+      nextSequenceNumber == null && workId && context.resolvedFolderPath
+        ? await resolveGeneratedDocumentFolderFileCount(accessContext, {
+            workId,
+            folderPath: context.resolvedFolderPath,
+          })
+        : 0;
+    const existingSequenceCount =
+      nextSequenceNumber == null ? folderFileCount : Math.max(0, nextSequenceNumber - 1);
     const workLabel = workSummary
       ? [workSummary.n != null ? String(workSummary.n) : "", workSummary.designacion_y_ubicacion ?? ""]
           .filter(Boolean)
           .join(" ")
           .trim()
       : null;
-    const initialInputData = applyTemplateAutoInputData(
+    const initialInputData = applyTemplateFormulaInputData(
       context.selectedTemplate?.schema ?? { fields: [] },
-      context.initialInputData,
-      {
-        selectedContextId: workId ?? null,
-        selectedContextLabel: workLabel,
-        documentType: resolvedDocumentType,
-        existingSequenceCount,
-      },
+      applyTemplateAutoInputData(
+        context.selectedTemplate?.schema ?? { fields: [] },
+        context.initialInputData,
+        {
+          selectedContextId: workId ?? null,
+          selectedContextLabel: workLabel,
+          documentType: resolvedDocumentType,
+          existingSequenceCount,
+        },
+      ),
     );
 
     return NextResponse.json({
       works,
       folderConfigs,
+      allTemplates: templates,
       templates: context.filteredTemplates,
       dynamicOptions: {
         tenantUsers: tenantUserOptions,

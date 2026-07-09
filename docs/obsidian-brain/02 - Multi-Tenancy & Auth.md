@@ -150,6 +150,12 @@ Admin → /admin/users → "Invite User" dialog
 
 ---
 
+Joining an existing tenant is invitation-only. Knowing a tenant UUID is never sufficient to create a membership. `accept_tenant_invitation(token)` validates the authenticated email and consumes the invitation in the same transaction that creates the membership.
+
+## New Tenant Provisioning
+
+`create_tenant_from_blueprint(name, blueprint)` creates the tenant, owner membership, and the versioned standard construction configuration in one transaction. The blueprint uses symbolic keys and does not copy another tenant's IDs or business data. After creation, the user is redirected to `/setup`, whose progress is derived from the actual tenant configuration.
+
 ## Super Admin
 
 - App-level checks use `lib/superadmin.ts`: `profiles.is_superadmin = true`, `SUPERADMIN_USER_IDS`, or `SUPERADMIN_EMAILS`

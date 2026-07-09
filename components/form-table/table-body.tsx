@@ -9,7 +9,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
 	AccordionRowRenderContext,
@@ -81,6 +81,8 @@ type TableRowProps<Row extends FormTableRow> = {
 	dirtyCellIds: string;
 	hiddenColumnIdsKey: string;
 	stickyStateKey: string;
+	showRowNumbers: boolean;
+	rowNumberColumnWidth: number;
 	showActionsColumn: boolean;
 	actionsColumnPosition: "start" | "end";
 	actionsColumnWidth: number;
@@ -143,6 +145,8 @@ function TableRowInner<Row extends FormTableRow>({
 	dirtyCellIds,
 	hiddenColumnIdsKey,
 	stickyStateKey,
+	showRowNumbers,
+	rowNumberColumnWidth,
 	showActionsColumn,
 	actionsColumnPosition,
 	actionsColumnWidth,
@@ -179,6 +183,7 @@ function TableRowInner<Row extends FormTableRow>({
 	const resolvedRowElementClassName = rowElementClassName?.(rowData, rowIndex);
 	const colorInfo = rowColorInfo?.(rowData, rowIndex);
 	const overlayBadges = rowOverlayBadges?.(rowData, rowIndex) ?? [];
+	const rowSurfaceClassName = rowIndex % 2 === 0 ? "bg-card" : "bg-table-row-alt";
 	const activeColumn =
 		activeCell?.rowId === rowData.id ? columnsById[activeCell.columnId] ?? null : null;
 	const shouldExpandActiveTextRow = Boolean(
@@ -231,9 +236,9 @@ function TableRowInner<Row extends FormTableRow>({
 	const actionsCell = showActionsColumn ? (
 		<td
 			className={cn(
-				"whitespace-nowrap px-1 py-2 text-center outline outline-border border-border group-hover:bg-orange-50/45 space-y-2",
-				actionsColumnPosition === "end" && "px-4 text-right",
-				rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
+				"h-11 whitespace-nowrap border-b border-r border-stroke-soft px-2 text-center transition-colors group-hover:bg-table-row-hover",
+				actionsColumnPosition === "end" && "text-right",
+				rowSurfaceClassName,
 				colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 				colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
 				resolvedRowClassName
@@ -290,7 +295,7 @@ function TableRowInner<Row extends FormTableRow>({
 							size="sm"
 							aria-expanded={isExpanded}
 							onClick={() => onToggleAccordion(rowData.id)}
-							className="gap-1 text-muted-foreground hover:text-foreground"
+							className="h-7 gap-1 text-content-muted hover:text-content"
 						>
 							{isExpanded ? (
 								<>
@@ -310,12 +315,14 @@ function TableRowInner<Row extends FormTableRow>({
 			{canDeleteRows ? (
 				<Button
 					type="button"
-					variant="ghost"
-					size="sm"
+					variant="destructiveSecondary"
+					size="icon-sm"
 					onClick={() => onDelete(rowData.id)}
-					className="text-destructive hover:text-destructive"
+					className="size-7 opacity-70 transition-opacity group-hover:opacity-100"
+					aria-label="Eliminar fila"
+					title="Eliminar fila"
 				>
-					Eliminar
+					<Trash2 className="size-3.5" />
 				</Button>
 			) : null}
 		</td>
@@ -335,8 +342,8 @@ function TableRowInner<Row extends FormTableRow>({
 					}
 				}}
 				className={cn(
-					"border-b group relative",
-					rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
+					"group relative border-b border-stroke-soft",
+					rowSurfaceClassName,
 					isRowDirty
 						? "group/row-dirty shadow-[inset_0_0_0_2px_rgba(217,119,6,0.85)] border border-amber-500 z-[100]"
 						: "",
@@ -346,6 +353,23 @@ function TableRowInner<Row extends FormTableRow>({
 					" has-[textarea:focus]:align-top",
 				)}
 			>
+				{showRowNumbers && (
+					<td
+						className={cn(
+							"sticky left-0 z-[35] h-11 border-b border-r border-stroke-soft px-2 text-center text-[11px] font-semibold tabular-nums text-content-disabled transition-colors group-hover:bg-table-row-hover",
+							rowSurfaceClassName,
+							colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
+							resolvedRowClassName
+						)}
+						style={{
+							width: rowNumberColumnWidth,
+							minWidth: rowNumberColumnWidth,
+							maxWidth: rowNumberColumnWidth,
+						}}
+					>
+						{rowIndex + 1}
+					</td>
+				)}
 				{actionsColumnPosition === "start" ? actionsCell : null}
 				{filteredCells.map((cell, cellIndex) => {
 					const columnId = cell.column.id;
@@ -356,15 +380,15 @@ function TableRowInner<Row extends FormTableRow>({
 					const cellBulkEditing = cellBulkSelected && bulkSelectedCount > 1;
 
 					const baseClassName = cn(
-						"outline outline-border border-border relative h-8",
+						"relative h-11 border-b border-r border-stroke-soft",
 						// isActiveExpandedTextCell && "overflow-visible align-top",
 						"has-[textarea:focus]:h-auto has-[textarea:focus]:max-h-40 has-[textarea:focus]:overflow-visible has-[textarea:focus]:align-top",
 						!cellBulkSelected &&
-						"hover:shadow-[inset_0_0_0_2px_rgba(249,115,22,0.85)] hover:z-[1] focus-within:shadow-[inset_0_0_0_2px_var(--color-orange-primary)] focus-within:z-[1]",
-						rowIndex % 2 === 0 ? "bg-white" : "bg-[#fafafa]",
+						"hover:shadow-[inset_0_0_0_1px_rgba(249,115,22,0.55)] hover:z-[1] focus-within:shadow-[inset_0_0_0_2px_var(--color-orange-primary)] focus-within:z-[1]",
+						rowSurfaceClassName,
 						colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 						colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
-						!cellBulkSelected && "group-hover:bg-orange-50/45",
+						!cellBulkSelected && "group-hover:bg-table-row-hover",
 						typeof columnMeta.cellClassName === "function"
 							? columnMeta.cellClassName(rowData)
 							: columnMeta.cellClassName,
@@ -473,8 +497,8 @@ function TableRowInner<Row extends FormTableRow>({
 				{actionsColumnPosition === "end" && showActionsColumn && (
 					<td
 						className={cn(
-							"px-4 py-3 text-right outline outline-border border-border group-hover:bg-orange-50/45 space-y-2",
-							rowIndex % 2 === 0 ? "bg-white" : "bg-[hsl(50,17%,98%)]",
+							"h-11 border-b px-3 text-right transition-colors group-hover:bg-table-row-hover",
+							rowSurfaceClassName,
 							colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
 							colorInfo?.previewing && "shadow-[inset_0_0_0_2px_rgba(14,165,233,0.85)]",
 							resolvedRowClassName
@@ -526,7 +550,7 @@ function TableRowInner<Row extends FormTableRow>({
 										size="sm"
 										aria-expanded={isExpanded}
 										onClick={() => onToggleAccordion(rowData.id)}
-										className="gap-1 text-muted-foreground hover:text-foreground"
+										className="h-7 gap-1 text-content-muted hover:text-content"
 									>
 										{isExpanded ? (
 											<>
@@ -546,12 +570,14 @@ function TableRowInner<Row extends FormTableRow>({
 						{canDeleteRows ? (
 							<Button
 								type="button"
-								variant="ghost"
-								size="sm"
+								variant="destructiveSecondary"
+								size="icon-sm"
 								onClick={() => onDelete(rowData.id)}
-								className="text-destructive hover:text-destructive"
+								className="size-7 opacity-70 transition-opacity group-hover:opacity-100"
+								aria-label="Eliminar fila"
+								title="Eliminar fila"
 							>
-								Eliminar
+								<Trash2 className="size-3.5" />
 							</Button>
 						) : null}
 					</td>
@@ -560,7 +586,7 @@ function TableRowInner<Row extends FormTableRow>({
 			{accordionRowConfig && isExpanded && (
 				<tr className="bg-muted/40">
 					<td
-						colSpan={visibleLeafCount + (showActionsColumn ? 1 : 0)}
+						colSpan={visibleLeafCount + (showActionsColumn ? 1 : 0) + (showRowNumbers ? 1 : 0)}
 						className={cn(
 							"px-6 py-4 text-left text-sm text-foreground border-b border-border",
 							accordionRowConfig.contentClassName
@@ -600,6 +626,8 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 		(!accordionConfigAffectsRow ||
 			prevProps.accordionRowConfig === nextProps.accordionRowConfig) &&
 		prevProps.hasInitialSnapshot === nextProps.hasInitialSnapshot &&
+		prevProps.showRowNumbers === nextProps.showRowNumbers &&
+		prevProps.rowNumberColumnWidth === nextProps.rowNumberColumnWidth &&
 		prevProps.showActionsColumn === nextProps.showActionsColumn &&
 		prevProps.actionsColumnPosition === nextProps.actionsColumnPosition &&
 		prevProps.actionsColumnWidth === nextProps.actionsColumnWidth &&

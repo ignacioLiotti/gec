@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, UserPlus, Loader2, CheckCircle2, Clock, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { STANDARD_TENANT_BLUEPRINT_KEY } from "@/lib/tenant-blueprints/constants";
 
 interface PendingInvitation {
 	id: string;
@@ -33,20 +34,14 @@ function OnboardingPageContent() {
 	const searchParams = useSearchParams();
 	const queryParams = new URLSearchParams(searchParams);
 	const [mode, setMode] = useState<Mode>("join");
-	const [user, setUser] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
 	const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
 	const [acceptingId, setAcceptingId] = useState<string | null>(null);
 	const [creatingTenant, setCreatingTenant] = useState(false);
 	const [tenantName, setTenantName] = useState("");
-	const [nowMs, setNowMs] = useState(0);
 
 	const errorMessage = queryParams.get("error");
 	const previewMode = queryParams.get("preview") === "1" || queryParams.get("preview") === "true";
-
-	useEffect(() => {
-		setNowMs(Date.now());
-	}, []);
 
 	useEffect(() => {
 		async function init() {
@@ -59,8 +54,6 @@ function OnboardingPageContent() {
 				push("/");
 				return;
 			}
-
-			setUser(currentUser);
 
 			// Check if user already has memberships (unless preview mode)
 			const { data: memberships } = await supabase
@@ -123,13 +116,14 @@ function OnboardingPageContent() {
 		try {
 			const formData = new FormData();
 			formData.append("name", tenantName.trim());
+			formData.append("blueprint", STANDARD_TENANT_BLUEPRINT_KEY);
 
 			await createTenantAction("/onboarding", formData);
 
 			// createTenantAction redirigirá, pero si no lo hace, mostrar éxito
 			toast.success("¡Organización creada!");
-		} catch (error: any) {
-			toast.error(error?.message || "Error al crear la organización");
+		} catch (error: unknown) {
+			toast.error(error instanceof Error ? error.message : "Error al crear la organización");
 			setCreatingTenant(false);
 		}
 	};
@@ -234,7 +228,10 @@ function OnboardingPageContent() {
 								<div className="space-y-3">
 									{invitations.map((invitation) => {
 										const expiresAt = new Date(invitation.expires_at);
-										const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - nowMs) / (1000 * 60 * 60)));
+										const expirationLabel = new Intl.DateTimeFormat("es-AR", {
+											dateStyle: "medium",
+											timeZone: "UTC",
+										}).format(expiresAt);
 
 										return (
 											<Card key={invitation.id} className="border-2 hover:border-[#ff5800]/30 transition-colors">
@@ -264,12 +261,7 @@ function OnboardingPageContent() {
 																</div>
 																<div className="flex items-center gap-2 text-[#666666]">
 																	<Clock className="size-4" />
-																	<span>
-																		Expira en{" "}
-																		{timeRemaining < 24
-																			? `${timeRemaining} horas`
-																			: `${Math.floor(timeRemaining / 24)} días`}
-																	</span>
+																								<span>Vence el {expirationLabel}</span>
 																</div>
 															</div>
 														</div>
@@ -312,7 +304,7 @@ function OnboardingPageContent() {
 							<div>
 								<h3 className="text-lg font-semibold mb-2 text-[#444444]">Crear Nueva Organización</h3>
 								<p className="text-sm text-[#666666] mb-4">
-									Inicia tu propio espacio de trabajo e invita a miembros del equipo después
+									Prepararemos carpetas, certificados, compras, roles y tableros. Después te guiaremos para crear tu primera obra.
 								</p>
 							</div>
 
@@ -326,7 +318,7 @@ function OnboardingPageContent() {
 										type="text"
 										value={tenantName}
 										onChange={(e) => setTenantName(e.target.value)}
-										placeholder="ej., Acme Inc, Equipo de Ingeniería"
+										placeholder="Ej.: Constructora del Litoral"
 										className="w-full px-4 py-2 border border-[#d4d3ce] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5800] focus:border-transparent"
 										required
 										minLength={3}

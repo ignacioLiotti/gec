@@ -12,6 +12,7 @@ import {
 	Columns3Cog,
 	Database,
 	Brain,
+	CircleHelp,
 	FileText,
 	Globe2,
 	Home,
@@ -21,7 +22,6 @@ import {
 	MessageCircle,
 	PlusCircle,
 	Settings2,
-	ShieldCheck,
 	Table2,
 	Users,
 	Wallet,
@@ -69,6 +69,7 @@ import type {
 	PermissionSimulation,
 } from "@/lib/permission-simulation";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
+import { cn } from "@/lib/utils";
 
 type NavItem = {
 	title: string;
@@ -114,6 +115,16 @@ const navItems: NavItem[] = [
 		icon: Bell,
 		deniedByPermission: "nav:notifications",
 	},
+	{
+		title: "Facturación",
+		href: "/billing",
+		icon: Wallet,
+	},
+	{
+		title: "Ayuda",
+		href: "/help",
+		icon: CircleHelp,
+	},
 ];
 
 const documentNavItems: NavItem[] = [
@@ -141,26 +152,10 @@ const documentNavItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
 	{
-		title: "Dashboard admin",
-		href: "/admin/dashboard",
-		icon: BarChart3,
-	},
-	{
 		title: "Usuarios",
 		href: "/admin/users",
 		icon: Users,
 		requiredPermissions: ["admin:users"],
-	},
-	{
-		title: "Roles y Permisos",
-		href: "/admin/roles",
-		icon: ShieldCheck,
-		requiredPermissions: ["admin:roles"],
-	},
-	{
-		title: "Facturacion",
-		href: "/billing",
-		icon: Wallet,
 	},
 	{
 		title: "Configuracion de Obras",
@@ -169,9 +164,15 @@ const adminItems: NavItem[] = [
 		requiredPermissions: ["admin:obra-defaults"],
 	},
 	{
-		title: "Flujos documentales",
-		href: "/admin/document-flows",
-		icon: Table2,
+		title: "Tabla Principal",
+		href: "/admin/main-table-config",
+		icon: Columns3Cog,
+		requiredPermissions: ["admin:main-table-config"],
+	},
+	{
+		title: "Macro Tablas",
+		href: "/macro",
+		icon: Layers,
 	},
 	{
 		title: "WhatsApp",
@@ -180,31 +181,18 @@ const adminItems: NavItem[] = [
 		requiredPermissions: ["admin:whatsapp"],
 	},
 	{
-		title: "Document Flow 2",
-		href: "/admin/document-flows-2",
-		icon: Waypoints,
-	},
-	{
-		title: "Tabla Principal",
-		href: "/admin/main-table-config",
-		icon: Columns3Cog,
-		requiredPermissions: ["admin:main-table-config"],
-	},
-	{
-		title: "Demo Links",
-		href: "/admin/demo-links",
-		icon: KeyRound,
-	},
-	{
-		title: "Auditoria",
+		title: "Auditoría",
 		href: "/admin/audit-log",
 		icon: FileText,
 		requiredPermissions: ["admin:audit"],
 	},
+];
+
+const internalItems: NavItem[] = [
 	{
-		title: "Macro Tablas",
-		href: "/macro",
-		icon: Layers,
+		title: "Dashboard admin",
+		href: "/admin/dashboard",
+		icon: BarChart3,
 	},
 	{
 		title: "Gastos API",
@@ -214,6 +202,11 @@ const adminItems: NavItem[] = [
 ];
 
 const ignacioItems: NavItem[] = [
+	{
+		title: "Demo Links",
+		href: "/admin/demo-links",
+		icon: KeyRound,
+	},
 	{
 		title: "Organizaciones",
 		href: "/admin/tenants",
@@ -417,20 +410,27 @@ export function AppSidebar({
 	const searchParams = useSearchParams();
 	const queryParams = new URLSearchParams(searchParams);
 	const getSearchParam = (key: string): string | null => queryParams.get(key);
-	const router = useRouter();
-	const { refresh } = router;
 	const { isMobile, state, setOpenMobile } = useSidebar();
 	const isCollapsed = !isMobile && state === "collapsed";
 	const [switchingTenantId, setSwitchingTenantId] = React.useState<
 		string | null
 	>(null);
-	const [macroTables, setMacroTables] = React.useState<SidebarMacroTable[]>(
-		sidebarMacroTables ?? [],
-	);
+	const [tenantMenuOpen, setTenantMenuOpen] = React.useState(false);
+	const [fetchedMacroTables, setFetchedMacroTables] = React.useState<{
+		tenantId: string;
+		tables: SidebarMacroTable[];
+	} | null>(null);
 	const tenantOptions = tenants ?? [];
 	const canCreateTenant = Boolean(user && !demoMode);
 	const activeTenantId = userRoles?.tenantId ?? null;
 	const activeMacroTableId = getSearchParam("macroId");
+	const macroTables = React.useMemo(() => {
+		if (!activeTenantId) return [];
+		if (sidebarMacroTables) return sidebarMacroTables;
+		return fetchedMacroTables?.tenantId === activeTenantId
+			? fetchedMacroTables.tables
+			: [];
+	}, [activeTenantId, fetchedMacroTables, sidebarMacroTables]);
 	const permissionKeySet = React.useMemo(
 		() => new Set(userRoles?.permissionKeys ?? []),
 		[userRoles?.permissionKeys],
@@ -441,17 +441,11 @@ export function AppSidebar({
 	);
 
 	React.useEffect(() => {
-		setMacroTables(sidebarMacroTables ?? []);
-	}, [sidebarMacroTables]);
-
-	React.useEffect(() => {
-		if (!userRoles?.tenantId) {
-			setMacroTables([]);
-			return;
-		}
+		if (!activeTenantId) return;
 		if (sidebarMacroTables) return;
 
 		let cancelled = false;
+		const tenantId = activeTenantId;
 		(async () => {
 			try {
 				const response = await fetch("/api/sidebar-macro-tables", {
@@ -462,7 +456,10 @@ export function AppSidebar({
 					tables?: SidebarMacroTable[];
 				};
 				if (!cancelled) {
-					setMacroTables(Array.isArray(payload.tables) ? payload.tables : []);
+					setFetchedMacroTables({
+						tenantId,
+						tables: Array.isArray(payload.tables) ? payload.tables : [],
+					});
 				}
 			} catch (error) {
 				if (!cancelled) {
@@ -474,32 +471,21 @@ export function AppSidebar({
 		return () => {
 			cancelled = true;
 		};
-	}, [demoMode, sidebarMacroTables, userRoles?.tenantId]);
+	}, [activeTenantId, sidebarMacroTables]);
 
 	const handleTenantSwitch = React.useCallback(
-		async (tenantId: string) => {
+		(tenantId: string) => {
 			if (isMobile) {
 				setOpenMobile(false);
 			}
+			setTenantMenuOpen(false);
 			setSwitchingTenantId(tenantId);
-			try {
-				const response = await fetch(`/api/tenants/${tenantId}/switch`, {
-					method: "POST",
-				});
-				if (!response.ok) {
-					console.error("[tenant-switch] failed", response.status);
-					return;
-				}
-				refresh();
-			} catch (error) {
-				console.error("[tenant-switch] error", error);
-			} finally {
-				setSwitchingTenantId((current) =>
-					current === tenantId ? null : current,
-				);
-			}
+			const nextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+			window.location.assign(
+				`/api/tenants/${tenantId}/switch?next=${encodeURIComponent(nextPath)}`
+			);
 		},
-		[isMobile, refresh, setOpenMobile],
+		[isMobile, setOpenMobile, setSwitchingTenantId, setTenantMenuOpen],
 	);
 	const activeTenant =
 		tenantOptions.find((tenant) => tenant.id === activeTenantId) ??
@@ -639,9 +625,9 @@ export function AppSidebar({
 		return filteredNavItems[filteredNavItems.length - 1]?.href ?? null;
 	}, [canAccessRoute, filteredNavItems, macroTables]);
 
-	const filteredAdminItems = React.useMemo(
-		() =>
-			adminItems.filter((item) => {
+	const filterAdminSectionItems = React.useCallback(
+		(items: NavItem[]) =>
+			items.filter((item) => {
 				if (userRoles?.isAdmin || userRoles?.isSuperAdmin) return true;
 				if (!canAccessRoute(item.href)) return false;
 				if (!item.requiredPermissions?.length) return false;
@@ -650,6 +636,16 @@ export function AppSidebar({
 				);
 			}),
 		[canAccessRoute, permissionKeySet, userRoles],
+	);
+
+	const filteredAdminItems = React.useMemo(
+		() => filterAdminSectionItems(adminItems),
+		[filterAdminSectionItems],
+	);
+
+	const filteredInternalItems = React.useMemo(
+		() => (userRoles?.isSuperAdmin ? internalItems : []),
+		[userRoles],
 	);
 
 	const filteredIgnacioItems = React.useMemo(
@@ -704,37 +700,52 @@ export function AppSidebar({
 								</SidebarMenuButton>
 							</div>
 							{tenantOptions.length > 0 ? (
-								<DropdownMenu>
+								<DropdownMenu open={tenantMenuOpen} onOpenChange={setTenantMenuOpen}>
 									<DropdownMenuTrigger asChild>
-										{isCollapsed ? (
-											<button
-												className="flex w-full items-center justify-center rounded-md border bg-sidebar-accent/40 py-2.5"
-												type="button"
-												title={activeTenant?.name ?? "Seleccionar organizacion"}
+										<button
+											className={cn(
+												"flex w-full rounded-md border bg-sidebar-accent/40 text-left text-sm font-medium transition-[padding,gap] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+												isCollapsed
+													? "items-center justify-center px-2 py-2.5"
+													: "items-center justify-between px-3 py-2.5"
+											)}
+											type="button"
+											aria-label={activeTenant?.name ?? "Seleccionar organizacion"}
+										>
+											<Building2
+												className={cn(
+													"size-5 shrink-0 text-muted-foreground transition-[margin] duration-300",
+													!isCollapsed && "mr-2"
+												)}
+											/>
+											<div
+												className={cn(
+													"min-w-0 flex-1 transition-[opacity,transform,width] duration-200",
+													isCollapsed
+														? "w-0 -translate-x-1 overflow-hidden opacity-0"
+														: "w-auto translate-x-0 opacity-100"
+												)}
 											>
-												<Building2 className="size-5 text-muted-foreground" />
-											</button>
-										) : (
-											<button
-												className="flex w-full items-center justify-between rounded-md border bg-sidebar-accent/40 px-3 py-2.5 text-left text-sm font-medium"
-												type="button"
-											>
-												<div className="min-w-0">
-													<p className="text-xs font-normal text-muted-foreground">
-														Organizacion
-													</p>
-													<p className="truncate">
-														{activeTenant?.name ?? "Seleccionar"}
-													</p>
-												</div>
-												<ChevronDown className="ml-2 size-4 text-muted-foreground" />
-											</button>
-										)}
+												<p className="text-xs font-normal text-muted-foreground">
+													Organizacion
+												</p>
+												<p className="truncate">
+													{activeTenant?.name ?? "Seleccionar"}
+												</p>
+											</div>
+											<ChevronDown
+												className={cn(
+													"ml-2 size-4 shrink-0 text-muted-foreground transition-opacity duration-200",
+													isCollapsed && "sr-only ml-0 opacity-0"
+												)}
+											/>
+										</button>
 									</DropdownMenuTrigger>
 									<DropdownMenuContent
 										align="start"
-										side="bottom"
-										className="w-64"
+										side={isCollapsed ? "right" : "bottom"}
+										sideOffset={isCollapsed ? 8 : 4}
+										className="z-[10000001] w-64"
 									>
 										<DropdownMenuLabel>Organizaciones</DropdownMenuLabel>
 										<DropdownMenuSeparator />
@@ -771,6 +782,15 @@ export function AppSidebar({
 										{canCreateTenant && (
 											<>
 												<DropdownMenuSeparator />
+												<DropdownMenuItem asChild>
+													<SidebarPrefetchLink
+														href="/setup"
+														className="flex items-center gap-2"
+													>
+														<Settings2 className="size-4" />
+														<span>Puesta en marcha</span>
+													</SidebarPrefetchLink>
+												</DropdownMenuItem>
 												<DropdownMenuItem asChild>
 													<SidebarPrefetchLink
 														href="/tenants/new"
@@ -1019,6 +1039,36 @@ export function AppSidebar({
 							<SidebarGroupContent>
 								<SidebarMenu>
 									{filteredAdminItems.map((item) => {
+										const isActive =
+											pathname === item.href || pathname.startsWith(item.href);
+										return (
+											<SidebarMenuItem key={item.title}>
+												<SidebarMenuButton
+													asChild
+													isActive={isActive}
+													tooltip={item.title}
+												>
+													<SidebarPrefetchLink href={item.href} navIcon={<item.icon className="size-4" />}>
+														<span>{item.title}</span>
+													</SidebarPrefetchLink>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					</>
+				)}
+
+				{filteredInternalItems.length > 0 && (
+					<>
+						<Separator />
+						<SidebarGroup>
+							<SidebarGroupLabel>Herramientas internas</SidebarGroupLabel>
+							<SidebarGroupContent>
+								<SidebarMenu>
+									{filteredInternalItems.map((item) => {
 										const isActive =
 											pathname === item.href || pathname.startsWith(item.href);
 										return (

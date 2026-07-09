@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -26,9 +26,17 @@ import { toast } from "sonner";
 
 interface InviteUsersDialogProps {
   tenantId: string;
+  triggerLabel?: string;
+  triggerSize?: ButtonProps["size"];
+  triggerVariant?: ButtonProps["variant"];
 }
 
-export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
+export function InviteUsersDialog({
+  tenantId,
+  triggerLabel = "Invitar Usuarios",
+  triggerSize,
+  triggerVariant,
+}: InviteUsersDialogProps) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
@@ -86,9 +94,13 @@ export function InviteUsersDialog({ tenantId }: InviteUsersDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogTrigger asChild>
-        <Button onClick={() => setOpen(true)}>
+        <Button
+          onClick={() => setOpen(true)}
+          size={triggerSize}
+          variant={triggerVariant}
+        >
           <UserPlus className="mr-2 size-4" />
-          Invitar Usuarios
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">

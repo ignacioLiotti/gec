@@ -13,6 +13,13 @@ Help agents work with focused local context, small changes, and explicit validat
 5. Do not explore sibling folders unless there is a concrete dependency, failing check, or unclear contract.
 6. Check related domain docs, ADRs, architecture docs, or styleguide docs referenced by local context.
 
+## Design system
+
+- Before changing product UI, read `docs/styleguide/design-system.md`.
+- App code should import UI primitives from `@/components/ui/*`; do not import directly from `@/design-system/*` unless editing the design-system layer itself.
+- Use token classes from the design-system guide for product UI colors, spacing, surfaces, borders, and text.
+- Keep report/document output, charts, calendars, landing pages, and viewer canvases on their existing domain-specific visual rules unless the task explicitly targets them.
+
 ## Editing rules
 
 - Keep changes small and focused.

@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import { m } from "framer-motion";
 import {
@@ -14,10 +14,12 @@ import {
 	Hash,
 	Landmark,
 	LineChart as LineChartIcon,
+	Loader2,
 	MapPin,
 	Percent,
 	Ruler,
 	TrendingUp,
+	Wand2,
 } from "lucide-react";
 import type { Obra } from "@/app/excel/schema";
 import { AdvanceCurveChart } from "@/components/advance-curve-chart";
@@ -177,6 +179,65 @@ const EMPTY_MAIN_TABLE_COLUMNS: MainTableColumnConfig[] = [];
 const EMPTY_MAIN_TABLE_COLUMN_VALUES: Record<string, unknown> = {};
 const EMPTY_CERTIFICADOS_ROWS: TablaDataRow[] = [];
 const EMPTY_DATA_FLOW_SUGGESTIONS: DataFlowSuggestion[] = [];
+
+type CurveQuickRow = {
+	id: string;
+	data?: Record<string, unknown>;
+};
+
+async function fetchCurveTableRowsForQuickAction(obraId: string, tablaId: string) {
+	const allRows: CurveQuickRow[] = [];
+	for (let page = 1; page <= 10; page += 1) {
+		const response = await fetch(
+			`/api/obras/${obraId}/tablas/${tablaId}/rows?page=${page}&limit=200&includeCount=0`
+		);
+		const payload = await response.json().catch(() => ({} as Record<string, unknown>));
+		if (!response.ok) {
+			throw new Error(
+				typeof payload.error === "string"
+					? payload.error
+					: "No se pudieron leer las filas actuales de Curva Plan."
+			);
+		}
+		const rows = Array.isArray(payload.rows)
+			? payload.rows.filter(
+				(row: unknown): row is CurveQuickRow =>
+					Boolean(row) &&
+					typeof row === "object" &&
+					typeof (row as CurveQuickRow).id === "string"
+			)
+			: [];
+		allRows.push(...rows);
+		const pagination =
+			payload.pagination && typeof payload.pagination === "object"
+				? (payload.pagination as { hasNextPage?: boolean })
+				: null;
+		if (!pagination?.hasNextPage) break;
+	}
+	return allRows;
+}
+
+function buildBaseCurveRows(monthCount: number) {
+	const safeMonthCount = Math.max(2, Math.round(monthCount));
+	const monthlyBase = 100 / safeMonthCount;
+	let accumulated = 0;
+
+	return Array.from({ length: safeMonthCount }, (_, index) => {
+		const isLast = index === safeMonthCount - 1;
+		const monthly = isLast
+			? Number((100 - accumulated).toFixed(2))
+			: Number(monthlyBase.toFixed(2));
+		accumulated = isLast ? 100 : Number((accumulated + monthly).toFixed(2));
+
+		return {
+			id: crypto.randomUUID(),
+			source: "manual",
+			periodo: `Mes ${index + 1}`,
+			avance_mensual_pct: monthly,
+			avance_acumulado_pct: accumulated,
+		};
+	});
+}
 
 function CurveChartLoadingState() {
 	const gridColumns = Array.from({ length: 7 }, (_, index) => index);
@@ -979,6 +1040,8 @@ export function ObraGeneralTab({
 	isResolvingDataFlowSuggestion = false,
 	onFinishObra,
 }: GeneralTabProps) {
+	const [isCreatingBaseCurve, setIsCreatingBaseCurve] = useState(false);
+	const [baseCurveError, setBaseCurveError] = useState<string | null>(null);
 	const extraMainTableColumns = mainTableColumns.filter((column) => {
 		if (column.kind === "custom") return true;
 		const sourceId = column.baseColumnId ?? column.id;
@@ -1019,6 +1082,53 @@ export function ObraGeneralTab({
 	const curveHasSinglePlanPoint =
 		reportsData?.curve != null &&
 		curvePlanPointsCount === 1;
+	const curveBaseMonthCount = Math.round(Number(form.state.values.plazoTotal ?? 0));
+	const canCreateBaseCurve =
+		Boolean(curveImportConfig?.curvaPlanTableId) &&
+		(curveMissingPlanData || curveHasOnlyRealProgress || curveHasSinglePlanPoint) &&
+		curveBaseMonthCount >= 2;
+	const handleCreateBaseCurve = useCallback(async () => {
+		const curvaPlanTableId = curveImportConfig?.curvaPlanTableId;
+		if (!curvaPlanTableId || curveBaseMonthCount < 2) return;
+
+		setIsCreatingBaseCurve(true);
+		setBaseCurveError(null);
+		try {
+			const existingRows = await fetchCurveTableRowsForQuickAction(
+				curveImportConfig.obraId,
+				curvaPlanTableId,
+			);
+			const baseRows = buildBaseCurveRows(curveBaseMonthCount);
+			const response = await fetch(
+				`/api/obras/${curveImportConfig.obraId}/tablas/${curvaPlanTableId}/rows`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						dirtyRows: baseRows,
+						deletedRowIds: existingRows.map((row) => row.id),
+					}),
+				}
+			);
+			const payload = await response.json().catch(() => ({} as Record<string, unknown>));
+			if (!response.ok) {
+				throw new Error(
+					typeof payload.error === "string"
+						? payload.error
+						: "No se pudo crear la Curva Plan base."
+				);
+			}
+			await curveImportConfig.onImported?.();
+		} catch (error) {
+			setBaseCurveError(
+				error instanceof Error ? error.message : "No se pudo crear la Curva Plan base."
+			);
+		} finally {
+			setIsCreatingBaseCurve(false);
+		}
+	}, [curveBaseMonthCount, curveImportConfig]);
 	const hasUnsavedValues = (values: Record<string, unknown>) =>
 		(Object.keys(initialFormValues) as Array<keyof Obra>).some((key) => {
 			const currentValue = values[key as string];
@@ -1994,14 +2104,41 @@ export function ObraGeneralTab({
 										{reportsData?.curve ? (
 											<div className="space-y-3">
 												{curveMissingPlanData || curveMissingRealData || curveHasOnlyRealProgress || curveHasSinglePlanPoint ? (
-													<div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-														{curveMissingPlanData
-															? `${reportsData.curve.planTableName} no tiene filas cargadas. La curva planificada va a aparecer cuando cargues la planilla de Curva Plan.`
-															: curveMissingRealData
-																? `${reportsData.curve.resumenTableName} no tiene certificados cargados para comparar contra la curva planificada.`
-																: curveHasOnlyRealProgress
-																	? "Hay certificados cargados, pero no hay puntos de Curva Plan para comparar contra el avance real."
-																	: "Curva Plan tiene un solo punto cargado. Carga al menos dos periodos para ver la linea planificada."}
+													<div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+														<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+															<p>
+																{curveMissingPlanData
+																	? `${reportsData.curve.planTableName} no tiene filas cargadas.`
+																	: curveMissingRealData
+																		? `${reportsData.curve.resumenTableName} no tiene certificados cargados para comparar contra la curva planificada.`
+																		: curveHasOnlyRealProgress
+																			? "Hay certificados cargados, pero Curva Plan no tiene avances validos para comparar contra el avance real."
+																			: "Curva Plan tiene un solo punto cargado. Carga al menos dos periodos para ver la linea planificada."}
+																{canCreateBaseCurve
+																	? ` Se puede crear una curva base de ${curveBaseMonthCount} meses desde el plazo de obra.`
+																	: null}
+															</p>
+															{canCreateBaseCurve ? (
+																<Button
+																	type="button"
+																	size="sm"
+																	variant="outline"
+																	className="shrink-0 gap-2 border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+																	onClick={() => void handleCreateBaseCurve()}
+																	disabled={isCreatingBaseCurve}
+																>
+																	{isCreatingBaseCurve ? (
+																		<Loader2 className="size-4 animate-spin" />
+																	) : (
+																		<Wand2 className="size-4" />
+																	)}
+																	Crear curva base
+																</Button>
+															) : null}
+														</div>
+														{baseCurveError ? (
+															<p className="text-[12px] text-red-700">{baseCurveError}</p>
+														) : null}
 													</div>
 												) : null}
 												<AdvanceCurveChart points={reportsData.curve.points} />

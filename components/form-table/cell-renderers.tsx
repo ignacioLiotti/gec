@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -65,6 +65,62 @@ import { resolveCellSuggestion } from "./cell-suggestions";
 import { escapeRegExp, formatDateSafe } from "./table-utils";
 
 export type EditableCellValue = string | number | readonly string[] | null | undefined;
+
+const CELL_SYNC_ON_CHANGE_DEBOUNCE_MS = 180;
+const NO_PENDING_SYNC = Symbol("no-pending-sync");
+
+function useDebouncedFormSync(syncToForm: (value: unknown) => void) {
+	const syncToFormRef = useRef(syncToForm);
+	const syncTimeoutRef = useRef<number | null>(null);
+	const pendingValueRef = useRef<unknown | typeof NO_PENDING_SYNC>(NO_PENDING_SYNC);
+
+	useEffect(() => {
+		syncToFormRef.current = syncToForm;
+	}, [syncToForm]);
+
+	const clearPendingSync = useCallback(() => {
+		if (syncTimeoutRef.current !== null) {
+			window.clearTimeout(syncTimeoutRef.current);
+			syncTimeoutRef.current = null;
+		}
+		pendingValueRef.current = NO_PENDING_SYNC;
+	}, []);
+
+	const scheduleSync = useCallback((value: unknown) => {
+		clearPendingSync();
+		pendingValueRef.current = value;
+		syncTimeoutRef.current = window.setTimeout(() => {
+			syncTimeoutRef.current = null;
+			const pendingValue = pendingValueRef.current;
+			pendingValueRef.current = NO_PENDING_SYNC;
+			if (pendingValue !== NO_PENDING_SYNC) {
+				syncToFormRef.current(pendingValue);
+			}
+		}, CELL_SYNC_ON_CHANGE_DEBOUNCE_MS);
+	}, [clearPendingSync]);
+
+	const flushSync = useCallback((value: unknown) => {
+		clearPendingSync();
+		syncToFormRef.current(value);
+	}, [clearPendingSync]);
+
+	useEffect(
+		() => () => {
+			if (syncTimeoutRef.current !== null) {
+				window.clearTimeout(syncTimeoutRef.current);
+				syncTimeoutRef.current = null;
+			}
+			const pendingValue = pendingValueRef.current;
+			pendingValueRef.current = NO_PENDING_SYNC;
+			if (pendingValue !== NO_PENDING_SYNC) {
+				syncToFormRef.current(pendingValue);
+			}
+		},
+		[],
+	);
+
+	return { clearPendingSync, flushSync, scheduleSync };
+}
 
 function toIsoDateOnly(date: Date): string {
 	return formatDateAsIso(date);
@@ -385,6 +441,7 @@ function LocalInput<Row extends FormTableRow>({
 	const [draftValue, setDraftValue] = useState<string | null>(null);
 	const localValue = draftValue ?? displayedExternal;
 	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
+	const { clearPendingSync, flushSync, scheduleSync } = useDebouncedFormSync(syncToForm);
 
 	const suggestion = useMemo(
 		() =>
@@ -406,9 +463,9 @@ function LocalInput<Row extends FormTableRow>({
 		setDraftValue(nextValue);
 		setIgnoredSuggestionKey(null);
 		if (syncOnChange || forceSyncOnChange) {
-			syncToForm(nextValue);
+			scheduleSync(nextValue);
 		}
-	}, [forceSyncOnChange, syncOnChange, syncToForm]);
+	}, [forceSyncOnChange, scheduleSync, syncOnChange]);
 
 	const handleBlur = useCallback(() => {
 		const finalValue = transformOnBlur ? transformOnBlur(localValue) : localValue;
@@ -417,12 +474,14 @@ function LocalInput<Row extends FormTableRow>({
 			: localValue !== displayedExternal;
 
 		if (shouldSync) {
-			syncToForm(finalValue);
+			flushSync(finalValue);
+		} else {
+			clearPendingSync();
 		}
 
 		setDraftValue(null);
 		onBlur?.();
-	}, [localValue, syncToForm, onBlur, transformOnBlur, displayedExternal, externalValue]);
+	}, [clearPendingSync, externalValue, flushSync, localValue, onBlur, transformOnBlur, displayedExternal]);
 
 	return (
 		<>
@@ -438,7 +497,7 @@ function LocalInput<Row extends FormTableRow>({
 				onApply={() => {
 					if (!visibleSuggestion) return;
 					setDraftValue(visibleSuggestion.suggestedDisplayValue);
-					syncToForm(visibleSuggestion.suggestedValue);
+					flushSync(visibleSuggestion.suggestedValue);
 					setIgnoredSuggestionKey(null);
 				}}
 				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
@@ -474,6 +533,7 @@ function LocalTextarea<Row extends FormTableRow>({
 	const [draftValue, setDraftValue] = useState<string | null>(null);
 	const localValue = draftValue ?? displayedExternal;
 	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
+	const { clearPendingSync, flushSync, scheduleSync } = useDebouncedFormSync(syncToForm);
 
 	const suggestion = useMemo(
 		() =>
@@ -495,17 +555,19 @@ function LocalTextarea<Row extends FormTableRow>({
 		setDraftValue(nextValue);
 		setIgnoredSuggestionKey(null);
 		if (syncOnChange || forceSyncOnChange) {
-			syncToForm(nextValue);
+			scheduleSync(nextValue);
 		}
-	}, [forceSyncOnChange, syncOnChange, syncToForm]);
+	}, [forceSyncOnChange, scheduleSync, syncOnChange]);
 
 	const handleBlur = useCallback(() => {
 		if (localValue !== displayedExternal) {
-			syncToForm(localValue);
+			flushSync(localValue);
+		} else {
+			clearPendingSync();
 		}
 		setDraftValue(null);
 		onBlur?.();
-	}, [localValue, displayedExternal, onBlur, syncToForm]);
+	}, [clearPendingSync, displayedExternal, flushSync, localValue, onBlur]);
 
 	return (
 		<>
@@ -521,7 +583,7 @@ function LocalTextarea<Row extends FormTableRow>({
 				onApply={() => {
 					if (!visibleSuggestion) return;
 					setDraftValue(visibleSuggestion.suggestedDisplayValue);
-					syncToForm(visibleSuggestion.suggestedValue);
+					flushSync(visibleSuggestion.suggestedValue);
 					setIgnoredSuggestionKey(null);
 				}}
 				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
@@ -656,12 +718,12 @@ function renderSelectOptionBadge(
 	return (
 		<Badge
 			variant="outline"
+			leadingIcon={IconComponent ? <IconComponent className="size-3" /> : null}
 			className={cn(
-				"gap-1.5",
+				"min-w-0 max-w-full",
 				option.color ? SELECT_BADGE_CLASS_BY_COLOR[option.color] : null
 			)}
 		>
-			{IconComponent ? <IconComponent className="size-3" /> : null}
 			<HighlightedText text={option.text} query={highlightQuery} />
 		</Badge>
 	);
@@ -1082,11 +1144,12 @@ export function renderEditableContent<Row extends FormTableRow>({
 									{matched ? (
 										renderSelectOptionBadge(matched, highlightQuery)
 									) : (
-										<Badge variant="outline" className="min-w-0 max-w-full gap-1.5 truncate">
-											<Circle className="size-3 shrink-0" />
-											<span className="truncate">
-												{currentText || "Sin definir"}
-											</span>
+										<Badge
+											variant="outline"
+											leadingIcon={<Circle className="size-3" />}
+											className="min-w-0 max-w-full"
+										>
+											{currentText || "Sin definir"}
 										</Badge>
 									)}
 									<span
@@ -1097,7 +1160,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 									</span>
 								</span>
 							</SelectTrigger>
-							<SelectContent>
+							<SelectContent className="z-[10000001]">
 								{!column.required ? (
 									<SelectItem value={clearValue}>Sin definir</SelectItem>
 								) : null}

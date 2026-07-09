@@ -1,3 +1,24 @@
+/**
+ * Lineage Row Key derivation — the stable business identity of extracted rows.
+ *
+ * `row.id` is a mutable materialization id: reimporting a document may create
+ * new rows. `lineage_row_key` is what survives, so macro-table overrides,
+ * calculations, and audit trails keep pointing at the same business entity
+ * across reimports (ADR 0001, ADR 0002).
+ *
+ * Identity strategy, in priority order (see CONTEXT.md "Regla canonica de
+ * identidad y lineage de fila extraida"):
+ *   1. explicit business key declared by the document template
+ *   2. structural derivation (file + normalized-content fingerprints
+ *      + table identity + item logical key)
+ *   3. deterministic positional fallback (position is never the primary
+ *      identity outside this fallback)
+ *
+ * When two rows in one import collapse to the same key, this module throws
+ * `LineageReconciliationConflictError` (stable code
+ * `LINEAGE_RECONCILIATION_CONFLICT`) instead of silently re-binding —
+ * ambiguity must surface to the user, never be guessed away.
+ */
 import { createHash } from "node:crypto";
 
 type LineageColumnMeta = {

@@ -1,18 +1,21 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import {
 	Ban,
+	Building2,
+	CalendarClock,
 	Check,
 	ChevronRight,
+	Crown,
+	KeyRound,
 	Loader2,
 	LockKeyhole,
+	Mail,
 	Minus,
 	Plus,
 	RotateCcw,
 	Search,
-	Settings2,
 	ShieldCheck,
 	Sparkles,
 	UserCog,
@@ -25,7 +28,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	Select,
 	SelectContent,
@@ -33,17 +35,14 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { UserManagementNav } from "../_components/user-management-nav";
+import { InviteUsersDialog } from "./_components/invite-users-dialog";
 
 type MembershipRole = "owner" | "admin" | "member";
 type OverrideState = "inherit" | "grant" | "deny";
+type UserFilter = "all" | MembershipRole | "with_roles" | "overrides";
 
 type UserCardData = {
 	user_id: string;
@@ -144,13 +143,19 @@ type UsersPageClientProps = {
 	allRoles: RoleOption[];
 	allPermissions: PermissionOption[];
 	canImpersonate: boolean;
+	canManageUsers: boolean;
 };
 
 const MEMBERSHIP_LABELS: Record<MembershipRole, string> = {
 	owner: "Propietario",
-	admin: "Admin",
+	admin: "Administrador",
 	member: "Miembro",
 };
+
+const USER_STATUS_LABELS = {
+	active: "Activo",
+	pending: "Pendiente",
+} as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
 	admin: "Administracion",
@@ -233,6 +238,33 @@ function permissionLabel(permission: PermissionOption) {
 	return permission.display_name ?? permission.key;
 }
 
+function getUserHandle(user: Pick<UserCardData, "full_name" | "email" | "user_id">) {
+	const source = user.email ?? user.full_name ?? user.user_id;
+	const handle = source
+		.replace(/@.*/, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9._-]+/g, ".");
+	return `@${handle || user.user_id.slice(0, 8)}`;
+}
+
+function getUserStatus(user: Pick<UserCardData, "last_sign_in_at">) {
+	return user.last_sign_in_at ? "active" : "pending";
+}
+
+function getPrimaryRoleLabel(
+	user: Pick<UserCardData, "assigned_role_ids" | "membership_role">,
+	rolesById: Map<string, RoleOption>,
+) {
+	const firstAssignedRole = user.assigned_role_ids
+		.map((roleId) => rolesById.get(roleId))
+		.find(Boolean);
+
+	return (
+		firstAssignedRole?.name ??
+		MEMBERSHIP_LABELS[toMembershipRole(user.membership_role)]
+	);
+}
+
 function formatDate(value: string | null) {
 	if (!value) return "Sin registro";
 	return new Intl.DateTimeFormat("es-AR", {
@@ -240,6 +272,15 @@ function formatDate(value: string | null) {
 		month: "short",
 		year: "numeric",
 	}).format(new Date(value));
+}
+
+function formatActivity(value: string | null) {
+	if (!value) return "Sin ingreso";
+	return formatDate(value);
+}
+
+function shortId(value: string) {
+	return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -306,26 +347,28 @@ export function UsersPageClient({
 	allRoles,
 	allPermissions,
 	canImpersonate,
+	canManageUsers,
 }: UsersPageClientProps) {
 	const [usersState, setUsersState] = React.useState<UserCardData[]>(users);
 	const [query, setQuery] = React.useState("");
+	const [userFilter, setUserFilter] = React.useState<UserFilter>("all");
 	const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
 		() => new Set(),
 	);
-	const [activeUserId, setActiveUserId] = React.useState<string | null>(null);
+	const [activeUserId, setActiveUserId] = React.useState<string | null>(
+		() => users[0]?.user_id ?? null,
+	);
 	const [activeAccess, setActiveAccess] = React.useState<UserAccessState | null>(
 		null,
 	);
-	const [selectedOrgRole, setSelectedOrgRole] =
-		React.useState<MembershipRole>("member");
+	const [selectedOrgRoleDraft, setSelectedOrgRoleDraft] = React.useState<{
+		userId: string;
+		role: MembershipRole;
+	} | null>(null);
 	const [loadingAccess, setLoadingAccess] = React.useState(false);
 	const [savingKey, setSavingKey] = React.useState<string | null>(null);
 	const [batchRoleId, setBatchRoleId] = React.useState("");
 	const [batchPermissionId, setBatchPermissionId] = React.useState("");
-
-	React.useEffect(() => {
-		setUsersState(users);
-	}, [users]);
 
 	const rolesById = React.useMemo(
 		() => new Map(allRoles.map((role) => [role.id, role])),
@@ -358,31 +401,41 @@ export function UsersPageClient({
 		[activeUserId, usersState],
 	);
 
-	React.useEffect(() => {
-		if (!activeUser) return;
-		setSelectedOrgRole(toMembershipRole(activeUser.membership_role));
-	}, [activeUser]);
+	const selectedOrgRole =
+		activeUser && selectedOrgRoleDraft?.userId === activeUser.user_id
+			? selectedOrgRoleDraft.role
+			: toMembershipRole(activeUser?.membership_role);
+
+	const handleSelectedOrgRoleChange = React.useCallback(
+		(role: MembershipRole) => {
+			if (!activeUser) return;
+			setSelectedOrgRoleDraft({ userId: activeUser.user_id, role });
+		},
+		[activeUser],
+	);
 
 	React.useEffect(() => {
 		if (!activeUserId) {
-			setActiveAccess(null);
 			return;
 		}
+		const userId = activeUserId;
 
 		let cancelled = false;
-		setLoadingAccess(true);
-		loadUserAccess(tenantId, activeUserId)
-			.then((access) => {
+		async function loadActiveAccess() {
+			setLoadingAccess(true);
+			try {
+				const access = await loadUserAccess(tenantId, userId);
 				if (!cancelled) setActiveAccess(access);
-			})
-			.catch((error) => {
+			} catch (error) {
 				if (!cancelled) {
 					toast.error(getErrorMessage(error, "No se pudo cargar el usuario"));
 				}
-			})
-			.finally(() => {
+			} finally {
 				if (!cancelled) setLoadingAccess(false);
-			});
+			}
+		}
+
+		void loadActiveAccess();
 
 		return () => {
 			cancelled = true;
@@ -391,9 +444,27 @@ export function UsersPageClient({
 
 	const filteredUsers = React.useMemo(() => {
 		const normalizedQuery = query.trim().toLowerCase();
-		if (!normalizedQuery) return usersState;
 
 		return usersState.filter((user) => {
+			if (
+				userFilter !== "all" &&
+				userFilter !== "with_roles" &&
+				userFilter !== "overrides" &&
+				toMembershipRole(user.membership_role) !== userFilter
+			) {
+				return false;
+			}
+			if (userFilter === "with_roles" && user.assigned_role_ids.length === 0) {
+				return false;
+			}
+			if (
+				userFilter === "overrides" &&
+				user.override_count + user.denied_override_count === 0
+			) {
+				return false;
+			}
+			if (!normalizedQuery) return true;
+
 			const roleNames = user.assigned_role_ids
 				.map((roleId) => rolesById.get(roleId)?.name ?? "")
 				.join(" ");
@@ -409,7 +480,7 @@ export function UsersPageClient({
 				.toLowerCase();
 			return haystack.includes(normalizedQuery);
 		});
-	}, [query, rolesById, usersState]);
+	}, [query, rolesById, userFilter, usersState]);
 
 	const selectedUsers = React.useMemo(
 		() => usersState.filter((user) => selectedIds.has(user.user_id)),
@@ -587,6 +658,7 @@ export function UsersPageClient({
 						: user,
 				),
 			);
+			setSelectedOrgRoleDraft(null);
 			await refreshAccessForUsers([activeUser.user_id]);
 			toast.success("Rol de organizacion actualizado");
 		} catch (error) {
@@ -653,492 +725,257 @@ export function UsersPageClient({
 	}
 
 	return (
-		<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
-			<section className="space-y-4">
-				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<div className="relative w-full sm:max-w-sm">
-						<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+		<div className="space-y-5">
+			<header className="space-y-5">
+				<div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+					<div className="min-w-0 space-y-2">
+						<h1 className="text-3xl font-semibold tracking-tight text-content">
+							Usuarios
+						</h1>
+						<p className="max-w-2xl text-sm leading-6 text-content-secondary">
+							Invitá personas, asigná responsabilidades y revisá accesos desde un solo lugar.
+						</p>
+					</div>
+
+					<div className="flex flex-wrap items-center gap-2">
+						<Badge
+							variant="success"
+							shape="pill"
+							className="h-8 px-3"
+							leadingIcon={<ShieldCheck className="size-3.5" />}
+						>
+							Administrador
+						</Badge>
+						{canImpersonate ? (
+							<Badge
+								variant="outline"
+								shape="pill"
+								className="h-8 px-3"
+								leadingIcon={<Crown className="size-3.5" />}
+							>
+								Superadministrador
+							</Badge>
+						) : null}
+						{canManageUsers ? (
+							<InviteUsersDialog
+								tenantId={tenantId}
+								triggerLabel="Invitar persona"
+								triggerSize="sm"
+								triggerVariant="dark"
+							/>
+						) : null}
+					</div>
+				</div>
+
+				<UserManagementNav active="users" />
+
+				<div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+					<div className="relative w-full lg:max-w-[28rem]">
+						<Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-content-muted" />
 						<Input
 							type="search"
 							value={query}
 							onChange={(event) => setQuery(event.currentTarget.value)}
-							placeholder="Buscar usuario, email o rol"
-							className="pl-9"
+							placeholder="Buscar por nombre, rol o correo"
+							className="h-11 pl-10"
 						/>
 					</div>
-					<div className="flex items-center gap-2">
+					<Select
+						value={userFilter}
+						onValueChange={(value) => setUserFilter(value as UserFilter)}
+					>
+						<SelectTrigger className="h-11 w-full lg:w-44">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent align="start">
+							<SelectItem value="all">Todas las personas</SelectItem>
+							<SelectItem value="owner">Propietarios</SelectItem>
+							<SelectItem value="admin">Administradores</SelectItem>
+							<SelectItem value="member">Miembros</SelectItem>
+							<SelectItem value="with_roles">Con roles asignados</SelectItem>
+							<SelectItem value="overrides">Con permisos especiales</SelectItem>
+						</SelectContent>
+					</Select>
+				</div>
+			</header>
+
+			<section className="rounded-lg border border-stroke-soft bg-surface px-4 py-3 shadow-card">
+				<div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+					<div className="min-w-0">
+						<p className="text-sm font-semibold text-content">
+							{selectedUsers.length} seleccionadas
+						</p>
+						<p className="text-sm text-content-secondary">
+							{selectedUsers.length > 0
+								? "Los cambios se aplicarán a todas las personas seleccionadas."
+								: "Seleccioná personas para realizar una acción conjunta."}
+						</p>
+					</div>
+
+					<div className="flex flex-wrap items-center gap-2">
+						<Select
+							disabled={allRoles.length === 0}
+							value={batchRoleId || "none"}
+							onValueChange={(value) =>
+								setBatchRoleId(value === "none" ? "" : value)
+							}
+						>
+							<SelectTrigger size="sm" className="w-full sm:w-40">
+								<SelectValue placeholder="Rol" />
+							</SelectTrigger>
+							<SelectContent align="end">
+								<SelectItem value="none">Elegir rol</SelectItem>
+								{allRoles.map((role) => (
+									<SelectItem key={role.id} value={role.id}>
+										{role.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 						<Button
 							type="button"
 							variant="outline"
 							size="sm"
-							onClick={toggleVisibleSelection}
-							disabled={filteredUsers.length === 0}
+							disabled={
+								!batchRoleId || selectedUsers.length === 0 || Boolean(savingKey)
+							}
+							onClick={() => applyBatchRole(true)}
 						>
-							{visibleSelected ? (
-								<Minus className="size-4" />
-							) : (
-								<Check className="size-4" />
-							)}
-							{visibleSelected ? "Limpiar vista" : "Seleccionar vista"}
+							<UserRound className="size-4" />
+							Asignar rol
 						</Button>
-						<Button asChild type="button" variant="ghost" size="sm">
-							<Link href="/admin/roles">
-								<Settings2 className="size-4" />
-								Roles
-							</Link>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							disabled={
+								!batchRoleId || selectedUsers.length === 0 || Boolean(savingKey)
+							}
+							onClick={() => applyBatchRole(false)}
+						>
+							<Minus className="size-4" />
+							Quitar rol
+						</Button>
+						<Select
+							disabled={allPermissions.length === 0}
+							value={batchPermissionId || "none"}
+							onValueChange={(value) =>
+								setBatchPermissionId(value === "none" ? "" : value)
+							}
+						>
+							<SelectTrigger size="sm" className="w-full sm:w-48">
+								<SelectValue placeholder="Permiso" />
+							</SelectTrigger>
+							<SelectContent align="end">
+								<SelectItem value="none">Elegir permiso</SelectItem>
+								{allPermissions.map((permission) => (
+									<SelectItem key={permission.id} value={permission.id}>
+										{permissionLabel(permission)}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<Button
+							type="button"
+							variant="dark"
+							size="sm"
+							disabled={
+								!batchPermissionId ||
+								selectedUsers.length === 0 ||
+								Boolean(savingKey)
+							}
+							onClick={() => applyBatchPermission("grant")}
+						>
+							<Check className="size-4" />
+							Permitir
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							disabled={
+								!batchPermissionId ||
+								selectedUsers.length === 0 ||
+								Boolean(savingKey)
+							}
+							onClick={() => applyBatchPermission("inherit")}
+						>
+							<LockKeyhole className="size-4" />
+							Usar valor del rol
 						</Button>
 					</div>
 				</div>
-
-				{filteredUsers.length === 0 ? (
-					<div className="rounded-lg border border-dashed border-stone-300 bg-white/70 px-6 py-16 text-center text-sm text-stone-500">
-						Sin usuarios para mostrar.
-					</div>
-				) : (
-					<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-						{filteredUsers.map((user) => (
-							<UserCard
-								key={user.user_id}
-								user={user}
-								rolesById={rolesById}
-								selected={selectedIds.has(user.user_id)}
-								onSelect={() => toggleSelected(user.user_id)}
-								onOpen={() => setActiveUserId(user.user_id)}
-							/>
-						))}
-					</div>
-				)}
 			</section>
 
-			<aside className="sticky top-4 h-fit rounded-lg border border-stone-200 bg-white p-4 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_18px_40px_-34px_rgba(0,0,0,0.55)]">
-				<div className="flex items-center gap-3">
-					<div className="grid size-10 place-items-center rounded-lg bg-stone-100 text-stone-700">
-						<Users className="size-5" />
-					</div>
-					<div>
-						<p className="text-sm font-semibold">Seleccionados</p>
-						<p className="text-xs text-stone-500">
-							{selectedUsers.length} de {usersState.length} usuarios
-						</p>
-					</div>
-				</div>
-
-				<div className="mt-5 space-y-4">
-					<div className="space-y-2">
-						<p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-							Roles
-						</p>
-						<select
-							value={batchRoleId}
-							onChange={(event) => setBatchRoleId(event.currentTarget.value)}
-							className="h-9 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-stone-500"
-						>
-							<option value="">Elegir rol</option>
-							{allRoles.map((role) => (
-								<option key={role.id} value={role.id}>
-									{role.name}
-								</option>
-							))}
-						</select>
-						<div className="grid grid-cols-2 gap-2">
-							<Button
-								type="button"
-								size="sm"
-								disabled={!batchRoleId || selectedUsers.length === 0 || Boolean(savingKey)}
-								onClick={() => applyBatchRole(true)}
-							>
-								<Plus className="size-4" />
-								Asignar
-							</Button>
+			<div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
+				<section className="space-y-3">
+					<div className="flex flex-wrap items-end justify-between gap-3">
+						<div>
+							<h2 className="text-lg font-semibold text-content">Personas</h2>
+							<p className="text-sm text-content-secondary">
+								{filteredUsers.length} resultados
+							</p>
+						</div>
+						<div className="flex items-center gap-2">
+							<Badge variant="outline" className="h-7 px-3" count={usersState.length}>
+								En total
+							</Badge>
 							<Button
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={!batchRoleId || selectedUsers.length === 0 || Boolean(savingKey)}
-								onClick={() => applyBatchRole(false)}
+								onClick={toggleVisibleSelection}
+								disabled={filteredUsers.length === 0}
 							>
-								<Minus className="size-4" />
-								Quitar
+								{visibleSelected ? (
+									<Minus className="size-4" />
+								) : (
+									<Check className="size-4" />
+								)}
+							{visibleSelected ? "Quitar selección" : "Seleccionar visibles"}
 							</Button>
 						</div>
 					</div>
 
-					<div className="h-px bg-stone-200" />
-
-					<div className="space-y-2">
-						<p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-							Permisos directos
-						</p>
-						<select
-							value={batchPermissionId}
-							onChange={(event) =>
-								setBatchPermissionId(event.currentTarget.value)
-							}
-							className="h-9 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-stone-500"
-						>
-							<option value="">Elegir permiso</option>
-							{allPermissions.map((permission) => (
-								<option key={permission.id} value={permission.id}>
-									{permission.key}
-								</option>
+					{filteredUsers.length === 0 ? (
+						<div className="rounded-lg border border-dashed border-stroke bg-surface px-6 py-16 text-center text-sm text-content-muted">
+							No encontramos personas con esos filtros.
+						</div>
+					) : (
+						<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+							{filteredUsers.map((user) => (
+								<UserCard
+									key={user.user_id}
+									user={user}
+									rolesById={rolesById}
+									selected={selectedIds.has(user.user_id)}
+									active={activeUserId === user.user_id}
+									onSelect={() => toggleSelected(user.user_id)}
+									onOpen={() => setActiveUserId(user.user_id)}
+								/>
 							))}
-						</select>
-						<div className="grid grid-cols-3 gap-2">
-							<Button
-								type="button"
-								variant="successSecondary"
-								size="sm"
-								disabled={
-									!batchPermissionId ||
-									selectedUsers.length === 0 ||
-									Boolean(savingKey)
-								}
-								onClick={() => applyBatchPermission("grant")}
-							>
-								<Check className="size-4" />
-								Permitir
-							</Button>
-							<Button
-								type="button"
-								variant="destructiveSecondary"
-								size="sm"
-								disabled={
-									!batchPermissionId ||
-									selectedUsers.length === 0 ||
-									Boolean(savingKey)
-								}
-								onClick={() => applyBatchPermission("deny")}
-							>
-								<Ban className="size-4" />
-								Bloquear
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={
-									!batchPermissionId ||
-									selectedUsers.length === 0 ||
-									Boolean(savingKey)
-								}
-								onClick={() => applyBatchPermission("inherit")}
-							>
-								<RotateCcw className="size-4" />
-								Heredar
-							</Button>
 						</div>
-					</div>
-				</div>
-			</aside>
+					)}
+				</section>
 
-			<Sheet
-				open={Boolean(activeUser)}
-				onOpenChange={(open) => {
-					if (!open) setActiveUserId(null);
-				}}
-			>
-				<SheetContent className="w-full border-l border-stone-200 bg-[#fbfaf7] p-0 sm:max-w-2xl">
-					{activeUser ? (
-						<ScrollArea className="h-full">
-							<SheetHeader className="border-b border-stone-200 bg-white px-6 py-5">
-								<div className="flex items-start gap-4 pr-8">
-									<UserColorCloud user={activeUser} size="large" />
-									<div className="min-w-0 flex-1">
-										<SheetTitle className="truncate text-xl">
-											{getUserLabel(activeUser)}
-										</SheetTitle>
-										<SheetDescription className="mt-1 truncate">
-											{activeUser.email ?? activeUser.user_id}
-										</SheetDescription>
-										<div className="mt-3 flex flex-wrap gap-2">
-											<Badge variant="outline" className="bg-white">
-												{MEMBERSHIP_LABELS[
-													toMembershipRole(activeUser.membership_role)
-												]}
-											</Badge>
-											<Badge variant="outline" className="bg-white">
-												{activeAccess?.roleIds.length ?? activeUser.assigned_role_ids.length} roles
-											</Badge>
-											<Badge variant="outline" className="bg-white">
-												{activeUser.override_count + activeUser.denied_override_count} excepciones
-											</Badge>
-										</div>
-									</div>
-								</div>
-							</SheetHeader>
-
-							<div className="space-y-6 px-6 py-6">
-								<section className="grid gap-3 sm:grid-cols-2">
-									<ProfileDatum label="ID" value={activeUser.user_id} mono />
-									<ProfileDatum
-										label="Alta"
-										value={formatDate(activeUser.created_at)}
-									/>
-									<ProfileDatum
-										label="Ultimo ingreso"
-										value={formatDate(activeUser.last_sign_in_at)}
-									/>
-									<ProfileDatum
-										label="Email"
-										value={activeUser.email ?? "Sin email"}
-									/>
-								</section>
-
-								<section className="rounded-lg border border-stone-200 bg-white p-4">
-									<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-										<div>
-											<h3 className="text-sm font-semibold">
-												Rol de organizacion
-											</h3>
-											<p className="mt-1 text-xs text-stone-500">
-												Owner y admin tienen acceso total.
-											</p>
-										</div>
-										<div className="flex items-center gap-2">
-											<Select
-												value={selectedOrgRole}
-												onValueChange={(value) =>
-													setSelectedOrgRole(toMembershipRole(value))
-												}
-											>
-												<SelectTrigger className="w-36">
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value="owner">Propietario</SelectItem>
-													<SelectItem value="admin">Admin</SelectItem>
-													<SelectItem value="member">Miembro</SelectItem>
-												</SelectContent>
-											</Select>
-											<Button
-												type="button"
-												size="sm"
-												disabled={savingKey === "membership"}
-												onClick={updateMembershipRole}
-											>
-												{savingKey === "membership" ? (
-													<Loader2 className="size-4 animate-spin" />
-												) : (
-													<Check className="size-4" />
-												)}
-												Guardar
-											</Button>
-										</div>
-									</div>
-								</section>
-
-								<section className="space-y-3">
-									<div className="flex items-center justify-between gap-3">
-										<div>
-											<h3 className="text-sm font-semibold">Roles</h3>
-											<p className="mt-1 text-xs text-stone-500">
-												Roles custom del tenant.
-											</p>
-										</div>
-										{loadingAccess ? (
-											<Loader2 className="size-4 animate-spin text-stone-400" />
-										) : null}
-									</div>
-									{allRoles.length === 0 ? (
-										<div className="rounded-lg border border-dashed border-stone-300 bg-white/70 px-4 py-8 text-center text-sm text-stone-500">
-											No hay roles configurados.
-										</div>
-									) : (
-										<div className="grid gap-2 sm:grid-cols-2">
-											{allRoles.map((role) => {
-												const assigned = Boolean(
-													activeAccess?.roleIds.includes(role.id),
-												);
-												const isSaving =
-													savingKey ===
-													`role:${activeUser.user_id}:${role.id}`;
-												return (
-													<button
-														key={role.id}
-														type="button"
-														disabled={Boolean(savingKey) && !isSaving}
-														onClick={() =>
-															setUserRole(
-																activeUser.user_id,
-																role.id,
-																!assigned,
-															)
-														}
-														className={cn(
-															"flex min-h-16 items-start gap-3 rounded-lg border bg-white p-3 text-left transition hover:border-stone-400 disabled:opacity-60",
-															assigned
-																? "border-stone-900 shadow-[0_0_0_2px_rgba(0,0,0,0.03)]"
-																: "border-stone-200",
-														)}
-													>
-														<span
-															className="mt-1 size-3 rounded-full"
-															style={{
-																backgroundColor:
-																	role.color ?? "rgb(120 113 108)",
-															}}
-														/>
-														<span className="min-w-0 flex-1">
-															<span className="block truncate text-sm font-semibold">
-																{role.name}
-															</span>
-															{role.description ? (
-																<span className="mt-1 line-clamp-2 block text-xs text-stone-500">
-																	{role.description}
-																</span>
-															) : null}
-														</span>
-														{isSaving ? (
-															<Loader2 className="size-4 animate-spin text-stone-500" />
-														) : assigned ? (
-															<Check className="size-4 text-emerald-600" />
-														) : (
-															<Plus className="size-4 text-stone-400" />
-														)}
-													</button>
-												);
-											})}
-										</div>
-									)}
-								</section>
-
-								<section className="space-y-4">
-									<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-										<div>
-											<h3 className="text-sm font-semibold">
-												Permisos del usuario
-											</h3>
-											<p className="mt-1 text-xs text-stone-500">
-												Excepciones directas sobre roles.
-											</p>
-										</div>
-										<div className="flex flex-wrap gap-2">
-											<Button
-												type="button"
-												variant="successSecondary"
-												size="sm"
-												disabled={
-													!activeAccess ||
-													activeAccess.sources.isAdmin ||
-													Boolean(savingKey)
-												}
-												onClick={() => setAllOverrides(activeUser.user_id, "grant")}
-											>
-												<Check className="size-4" />
-												Permitir todos
-											</Button>
-											<Button
-												type="button"
-												variant="destructiveSecondary"
-												size="sm"
-												disabled={
-													!activeAccess ||
-													activeAccess.sources.isAdmin ||
-													Boolean(savingKey)
-												}
-												onClick={() => setAllOverrides(activeUser.user_id, "deny")}
-											>
-												<Ban className="size-4" />
-												Bloquear todos
-											</Button>
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												disabled={
-													!activeAccess ||
-													activeAccess.sources.isAdmin ||
-													Boolean(savingKey)
-												}
-												onClick={() =>
-													setAllOverrides(activeUser.user_id, "inherit")
-												}
-											>
-												<RotateCcw className="size-4" />
-												Heredar todos
-											</Button>
-										</div>
-									</div>
-
-									{activeAccess?.sources.isAdmin ? (
-										<div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-											Este usuario conserva acceso total por su rol de
-											organizacion.
-										</div>
-									) : null}
-
-									{loadingAccess ? (
-										<div className="grid place-items-center rounded-lg border border-stone-200 bg-white py-12">
-											<Loader2 className="size-5 animate-spin text-stone-400" />
-										</div>
-									) : (
-										<div className="space-y-5">
-											{permissionsByCategory.map((group) => (
-												<div key={group.category} className="space-y-2">
-													<div className="flex items-center gap-2">
-														<Sparkles className="size-4 text-stone-400" />
-														<h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-															{categoryLabel(group.category)}
-														</h4>
-													</div>
-													<div className="grid gap-2">
-														{group.permissions.map((permission) => (
-															<PermissionCard
-																key={permission.id}
-																permission={permission}
-																sources={activeAccess?.sources ?? null}
-																disabled={Boolean(savingKey)}
-																saving={
-																	savingKey ===
-																	`permission:${activeUser.user_id}:${permission.id}`
-																}
-																onChange={(state) =>
-																	setPermissionOverride(
-																		activeUser.user_id,
-																		permission.id,
-																		state,
-																	)
-																}
-															/>
-														))}
-													</div>
-												</div>
-											))}
-										</div>
-									)}
-								</section>
-
-								{canImpersonate ? (
-									<section className="rounded-lg border border-stone-200 bg-white p-4">
-										<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-											<div>
-												<h3 className="text-sm font-semibold">Suplantacion</h3>
-												<p className="mt-1 text-xs text-stone-500">
-													Entrar temporalmente como este usuario.
-												</p>
-											</div>
-											<Button
-												type="button"
-												variant="dark"
-												size="sm"
-												disabled={savingKey === `impersonate:${activeUser.user_id}`}
-												onClick={() => startImpersonation(activeUser.user_id)}
-											>
-												{savingKey === `impersonate:${activeUser.user_id}` ? (
-													<Loader2 className="size-4 animate-spin" />
-												) : (
-													<UserCog className="size-4" />
-												)}
-												Suplantar usuario
-											</Button>
-										</div>
-									</section>
-								) : null}
-							</div>
-						</ScrollArea>
-					) : null}
-				</SheetContent>
-			</Sheet>
+				<UserDetailPanel
+					user={activeUser}
+					allRoles={allRoles}
+					allPermissions={allPermissions}
+					permissionsByCategory={permissionsByCategory}
+					activeAccess={activeAccess}
+					loadingAccess={loadingAccess}
+					selectedOrgRole={selectedOrgRole}
+					savingKey={savingKey}
+					canImpersonate={canImpersonate}
+					onSelectedOrgRoleChange={handleSelectedOrgRoleChange}
+					onUpdateMembershipRole={updateMembershipRole}
+					onSetUserRole={setUserRole}
+					onSetPermissionOverride={setPermissionOverride}
+					onSetAllOverrides={setAllOverrides}
+					onStartImpersonation={startImpersonation}
+				/>
+			</div>
 		</div>
 	);
 }
@@ -1147,19 +984,23 @@ function UserCard({
 	user,
 	rolesById,
 	selected,
+	active,
 	onSelect,
 	onOpen,
 }: {
 	user: UserCardData;
 	rolesById: Map<string, RoleOption>;
 	selected: boolean;
+	active: boolean;
 	onSelect: () => void;
 	onOpen: () => void;
 }) {
 	const membershipRole = toMembershipRole(user.membership_role);
+	const status = getUserStatus(user);
 	const assignedRoles = user.assigned_role_ids
 		.map((roleId) => rolesById.get(roleId))
 		.filter((role): role is RoleOption => Boolean(role));
+	const primaryRole = getPrimaryRoleLabel(user, rolesById);
 
 	return (
 		<article
@@ -1173,21 +1014,21 @@ function UserCard({
 				}
 			}}
 			className={cn(
-				"group min-h-[13rem] cursor-pointer rounded-lg border bg-white p-4 text-left shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_14px_30px_-28px_rgba(0,0,0,0.45)] transition hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_18px_40px_-28px_rgba(0,0,0,0.5)] focus:outline-none focus:ring-2 focus:ring-stone-900/10",
-				selected
-					? "border-stone-900 ring-2 ring-stone-900/5"
-					: "border-stone-200",
+				"group min-h-[13.75rem] cursor-pointer rounded-lg border bg-card p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-stroke hover:shadow-raised-hover focus:outline-none focus:ring-2 focus:ring-orange-primary/20",
+				active && "border-stroke-strong ring-2 ring-stroke-soft",
+				selected && "border-orange-primary ring-2 ring-orange-primary/15",
+				!active && !selected && "border-stroke-soft",
 			)}
 		>
 			<div className="flex items-start justify-between gap-3">
 				<div className="flex min-w-0 items-center gap-3">
 					<UserColorCloud user={user} />
 					<div className="min-w-0">
-						<h2 className="truncate text-sm font-semibold">
+						<h2 className="truncate text-sm font-semibold text-content">
 							{getUserLabel(user)}
 						</h2>
-						<p className="mt-1 truncate text-xs text-stone-500">
-							{user.email ?? user.user_id}
+						<p className="mt-1 truncate text-xs text-content-secondary">
+							{getUserHandle(user)}
 						</p>
 					</div>
 				</div>
@@ -1195,88 +1036,472 @@ function UserCard({
 					checked={selected}
 					onClick={(event) => event.stopPropagation()}
 					onCheckedChange={() => onSelect()}
-					aria-label={selected ? "Quitar seleccion" : "Seleccionar usuario"}
+					aria-label={selected ? "Quitar de la selección" : "Seleccionar persona"}
 					className="mt-1"
 				/>
 			</div>
 
-			<div className="mt-5 flex flex-wrap gap-2">
+			<div className="mt-4 flex flex-wrap gap-2">
 				<Badge
-					variant="outline"
-					className={cn(
-						"bg-white",
-						membershipRole === "member"
-							? "text-stone-600"
-							: "border-emerald-200 bg-emerald-50 text-emerald-700",
-					)}
+					variant={membershipRole === "member" ? "outline" : "info"}
+					leadingIcon={<ShieldCheck className="size-3" />}
 				>
-					<ShieldCheck className="size-3" />
 					{MEMBERSHIP_LABELS[membershipRole]}
 				</Badge>
-				<Badge variant="outline" className="bg-white text-stone-600">
-					<UserRound className="size-3" />
-					{assignedRoles.length} roles
+				<Badge
+					variant={status === "active" ? "success" : "warning"}
+					dot
+				>
+					{USER_STATUS_LABELS[status]}
 				</Badge>
 			</div>
 
-			<div className="mt-4 min-h-14">
-				{assignedRoles.length > 0 ? (
-					<div className="flex flex-wrap gap-1.5">
-						{assignedRoles.slice(0, 4).map((role) => (
-							<span
-								key={role.id}
-								className="inline-flex max-w-full items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-2 py-1 text-[11px] font-medium text-stone-700"
-							>
-								<span
-									className="size-2 rounded-full"
-									style={{ backgroundColor: role.color ?? "rgb(120 113 108)" }}
-								/>
-								<span className="truncate">{role.name}</span>
-							</span>
-						))}
-						{assignedRoles.length > 4 ? (
-							<span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-1 text-[11px] font-medium text-stone-500">
-								+{assignedRoles.length - 4}
-							</span>
-						) : null}
-					</div>
-				) : (
-					<p className="text-xs text-stone-400">Sin roles custom.</p>
-				)}
+			<div className="mt-4 space-y-2 text-sm text-content-secondary">
+				<div className="flex min-w-0 items-center gap-2">
+					<Mail className="size-4 shrink-0 text-content-muted" />
+					<span className="truncate">{user.email ?? user.user_id}</span>
+				</div>
+				<div className="flex items-center justify-between gap-3">
+					<span className="min-w-0 truncate">{primaryRole}</span>
+					<span className="shrink-0 text-xs">{formatActivity(user.last_sign_in_at)}</span>
+				</div>
 			</div>
 
-			<div className="mt-5 flex items-center justify-between border-t border-stone-100 pt-3">
-				<div className="flex items-center gap-2 text-xs text-stone-500">
-					<span>{user.override_count} permitidos</span>
-					<span className="size-1 rounded-full bg-stone-300" />
+			<div className="mt-4 flex min-h-7 flex-wrap items-center gap-1.5">
+				{assignedRoles.slice(0, 2).map((role) => (
+					<span
+						key={role.id}
+						className="inline-flex max-w-full items-center gap-1 rounded-md border border-stroke-soft bg-surface px-2 py-1 text-[11px] font-medium text-content-secondary"
+					>
+						<span
+							className="size-2 rounded-full"
+							style={{ backgroundColor: role.color ?? "rgb(120 113 108)" }}
+						/>
+						<span className="truncate">{role.name}</span>
+					</span>
+				))}
+				{assignedRoles.length > 2 ? (
+					<span className="rounded-md border border-stroke-soft bg-surface px-2 py-1 text-[11px] font-medium text-content-muted">
+						Y {assignedRoles.length - 2} más
+					</span>
+				) : null}
+			</div>
+
+			<div className="mt-4 flex items-center justify-between border-t border-stroke-soft pt-3">
+				<div className="flex items-center gap-2 text-xs text-content-muted">
+					<span>{user.override_count} permisos directos</span>
+					<span className="size-1 rounded-full bg-stroke" />
 					<span>{user.denied_override_count} bloqueados</span>
 				</div>
-				<ChevronRight className="size-4 text-stone-400 transition group-hover:translate-x-0.5 group-hover:text-stone-700" />
+				<ChevronRight className="size-4 text-content-muted transition group-hover:translate-x-0.5 group-hover:text-content" />
 			</div>
 		</article>
+	);
+}
+
+function isPermissionEffective(permissionId: string, sources: PermissionSources) {
+	const roleGrantSet = new Set(
+		sources.roleGrants.map((grant) => grant.permissionId),
+	);
+	const roleDenySet = new Set(
+		sources.roleDenials.map((deny) => deny.permissionId),
+	);
+	const overrideSet = new Set(sources.overrideIds);
+	const deniedOverrideSet = new Set(sources.deniedOverrideIds);
+
+	return (
+		sources.isAdmin ||
+		(!deniedOverrideSet.has(permissionId) &&
+			(overrideSet.has(permissionId) ||
+				(roleGrantSet.has(permissionId) && !roleDenySet.has(permissionId))))
+	);
+}
+
+function UserDetailPanel({
+	user,
+	allRoles,
+	allPermissions,
+	permissionsByCategory,
+	activeAccess,
+	loadingAccess,
+	selectedOrgRole,
+	savingKey,
+	canImpersonate,
+	onSelectedOrgRoleChange,
+	onUpdateMembershipRole,
+	onSetUserRole,
+	onSetPermissionOverride,
+	onSetAllOverrides,
+	onStartImpersonation,
+}: {
+	user: UserCardData | null;
+	allRoles: RoleOption[];
+	allPermissions: PermissionOption[];
+	permissionsByCategory: { category: string; permissions: PermissionOption[] }[];
+	activeAccess: UserAccessState | null;
+	loadingAccess: boolean;
+	selectedOrgRole: MembershipRole;
+	savingKey: string | null;
+	canImpersonate: boolean;
+	onSelectedOrgRoleChange: (role: MembershipRole) => void;
+	onUpdateMembershipRole: () => void;
+	onSetUserRole: (
+		userId: string,
+		roleId: string,
+		shouldAssign: boolean,
+	) => void;
+	onSetPermissionOverride: (
+		userId: string,
+		permissionId: string,
+		state: OverrideState,
+	) => void;
+	onSetAllOverrides: (userId: string, state: OverrideState) => void;
+	onStartImpersonation: (userId: string) => void;
+}) {
+	if (!user) {
+		return (
+			<aside className="sticky top-4 grid min-h-[26rem] place-items-center rounded-lg border border-stroke-soft bg-surface p-6 text-center shadow-card">
+				<div className="max-w-64 space-y-3">
+					<div className="mx-auto grid size-14 place-items-center rounded-lg border border-stroke-soft bg-surface-recessed text-content-muted">
+						<Users className="size-6" />
+					</div>
+					<div>
+						<h2 className="text-base font-semibold text-content">
+							Ninguna persona seleccionada
+						</h2>
+						<p className="mt-1 text-sm leading-6 text-content-secondary">
+							Elegí una persona de la lista para revisar sus roles y permisos.
+						</p>
+					</div>
+				</div>
+			</aside>
+		);
+	}
+
+	const membershipRole = toMembershipRole(user.membership_role);
+	const status = getUserStatus(user);
+	const roleCount = activeAccess?.roleIds.length ?? user.assigned_role_ids.length;
+	const permissionCount = activeAccess
+		? allPermissions.filter((permission) =>
+				isPermissionEffective(permission.id, activeAccess.sources),
+			).length
+		: user.override_count;
+
+	return (
+		<aside className="sticky top-4 h-fit max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-stroke-soft bg-surface shadow-card">
+			<div className="border-b border-stroke-soft px-5 py-5">
+				<div className="flex items-start gap-4">
+					<UserColorCloud user={user} size="large" />
+					<div className="min-w-0 flex-1">
+						<h2 className="truncate text-lg font-semibold text-content">
+							{getUserLabel(user)}
+						</h2>
+						<p className="mt-1 truncate text-sm text-content-secondary">
+							{user.email ?? user.user_id}
+						</p>
+						<div className="mt-3 flex flex-wrap gap-2">
+							<Badge
+								variant={membershipRole === "member" ? "outline" : "info"}
+							>
+								{MEMBERSHIP_LABELS[membershipRole]}
+							</Badge>
+							<Badge
+								variant={status === "active" ? "success" : "warning"}
+								dot
+							>
+								{USER_STATUS_LABELS[status]}
+							</Badge>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div className="max-h-[calc(100vh-9rem)] overflow-y-auto px-5 py-4">
+				<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+					<ProfileDatum
+					label="Roles"
+					value={`${roleCount} asignados`}
+						icon={<Building2 className="size-4" />}
+					/>
+					<ProfileDatum
+					label="Último ingreso"
+						value={formatActivity(user.last_sign_in_at)}
+						icon={<CalendarClock className="size-4" />}
+					/>
+					<ProfileDatum
+					label="Permisos"
+					value={`${permissionCount} habilitados`}
+						icon={<KeyRound className="size-4" />}
+					/>
+					<ProfileDatum
+					label="Identificador"
+						value={shortId(user.user_id)}
+						mono
+						icon={<UserRound className="size-4" />}
+					/>
+				</div>
+
+				<section className="mt-5 space-y-2">
+					<div className="flex items-center justify-between gap-3">
+						<h3 className="text-sm font-semibold text-content">Rol en la organización</h3>
+						{loadingAccess ? (
+							<Loader2 className="size-4 animate-spin text-content-muted" />
+						) : null}
+					</div>
+					<div className="flex gap-2">
+						<Select
+							value={selectedOrgRole}
+							onValueChange={(value) =>
+								onSelectedOrgRoleChange(toMembershipRole(value))
+							}
+						>
+							<SelectTrigger className="h-10 flex-1">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent align="end">
+							<SelectItem value="owner">Propietario</SelectItem>
+							<SelectItem value="admin">Administrador</SelectItem>
+							<SelectItem value="member">Miembro</SelectItem>
+							</SelectContent>
+						</Select>
+						<Button
+							type="button"
+							size="sm"
+							disabled={savingKey === "membership"}
+							onClick={onUpdateMembershipRole}
+						>
+							{savingKey === "membership" ? (
+								<Loader2 className="size-4 animate-spin" />
+							) : (
+								<Check className="size-4" />
+							)}
+						Guardar
+						</Button>
+					</div>
+				</section>
+
+				<section className="mt-5 space-y-3">
+					<div>
+						<h3 className="text-sm font-semibold text-content">Responsabilidades</h3>
+						<p className="mt-1 text-xs text-content-secondary">
+							Elegí qué tipo de trabajo puede realizar esta persona.
+						</p>
+					</div>
+					{allRoles.length === 0 ? (
+						<div className="rounded-lg border border-dashed border-stroke bg-surface-recessed px-4 py-6 text-center text-sm text-content-muted">
+							Todavía no hay roles configurados.
+						</div>
+					) : (
+						<div className="grid gap-2">
+							{allRoles.map((role) => {
+								const assigned = activeAccess
+									? activeAccess.roleIds.includes(role.id)
+									: user.assigned_role_ids.includes(role.id);
+								const isSaving =
+									savingKey === `role:${user.user_id}:${role.id}`;
+								return (
+									<button
+										key={role.id}
+										type="button"
+										disabled={Boolean(savingKey) && !isSaving}
+										onClick={() =>
+											onSetUserRole(user.user_id, role.id, !assigned)
+										}
+										className={cn(
+											"flex min-h-14 items-start gap-3 rounded-lg border bg-card p-3 text-left transition hover:border-stroke disabled:opacity-60",
+											assigned
+												? "border-stroke-strong"
+												: "border-stroke-soft",
+										)}
+									>
+										<span
+											className="mt-1 size-3 shrink-0 rounded-full"
+											style={{
+												backgroundColor: role.color ?? "rgb(120 113 108)",
+											}}
+										/>
+										<span className="min-w-0 flex-1">
+											<span className="block truncate text-sm font-semibold text-content">
+												{role.name}
+											</span>
+											{role.description ? (
+												<span className="mt-1 line-clamp-2 block text-xs text-content-secondary">
+													{role.description}
+												</span>
+											) : null}
+										</span>
+										{isSaving ? (
+											<Loader2 className="size-4 animate-spin text-content-muted" />
+										) : assigned ? (
+											<Check className="size-4 text-success" />
+										) : (
+											<Plus className="size-4 text-content-muted" />
+										)}
+									</button>
+								);
+							})}
+						</div>
+					)}
+				</section>
+
+				<section className="mt-5 space-y-3">
+					<div className="flex flex-wrap items-start justify-between gap-3">
+						<div>
+							<h3 className="text-sm font-semibold text-content">
+								Permisos avanzados
+							</h3>
+							<p className="mt-1 text-xs text-content-secondary">
+								{permissionCount} habilitados
+							</p>
+						</div>
+						<div className="flex flex-wrap gap-2">
+							<Button
+								type="button"
+								variant="successSecondary"
+								size="xs"
+								disabled={
+									!activeAccess ||
+									activeAccess.sources.isAdmin ||
+									Boolean(savingKey)
+								}
+								onClick={() => onSetAllOverrides(user.user_id, "grant")}
+							>
+								<Check className="size-3.5" />
+								Permitir todos
+							</Button>
+							<Button
+								type="button"
+								variant="destructiveSecondary"
+								size="xs"
+								disabled={
+									!activeAccess ||
+									activeAccess.sources.isAdmin ||
+									Boolean(savingKey)
+								}
+								onClick={() => onSetAllOverrides(user.user_id, "deny")}
+							>
+								<Ban className="size-3.5" />
+								Bloquear todos
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="xs"
+								disabled={
+									!activeAccess ||
+									activeAccess.sources.isAdmin ||
+									Boolean(savingKey)
+								}
+								onClick={() => onSetAllOverrides(user.user_id, "inherit")}
+							>
+								<RotateCcw className="size-3.5" />
+								Usar roles
+							</Button>
+						</div>
+					</div>
+
+					{activeAccess?.sources.isAdmin ? (
+						<div className="rounded-lg border border-warning/35 bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
+							Esta persona tiene acceso completo por su rol en la organización.
+						</div>
+					) : null}
+
+					{loadingAccess ? (
+						<div className="grid place-items-center rounded-lg border border-stroke-soft bg-card py-10">
+							<Loader2 className="size-5 animate-spin text-content-muted" />
+						</div>
+					) : (
+						<div className="space-y-4">
+							{permissionsByCategory.map((group) => (
+								<div key={group.category} className="space-y-2">
+									<div className="flex items-center gap-2">
+										<Sparkles className="size-4 text-content-muted" />
+										<h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-content-muted">
+											{categoryLabel(group.category)}
+										</h4>
+									</div>
+									<div className="grid gap-2">
+										{group.permissions.map((permission) => (
+											<PermissionCard
+												key={permission.id}
+												permission={permission}
+												sources={activeAccess?.sources ?? null}
+												disabled={Boolean(savingKey)}
+												saving={
+													savingKey ===
+													`permission:${user.user_id}:${permission.id}`
+												}
+												onChange={(state) =>
+													onSetPermissionOverride(
+														user.user_id,
+														permission.id,
+														state,
+													)
+												}
+											/>
+										))}
+									</div>
+								</div>
+							))}
+						</div>
+					)}
+				</section>
+
+				{canImpersonate ? (
+					<section className="mt-5 rounded-lg border border-stroke-soft bg-card p-4">
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<h3 className="text-sm font-semibold text-content">
+									Suplantación temporal
+								</h3>
+								<p className="mt-1 text-xs text-content-secondary">
+									Entrá temporalmente con la misma vista y permisos para brindar soporte.
+								</p>
+							</div>
+							<Button
+								type="button"
+								variant="dark"
+								size="sm"
+								disabled={savingKey === `impersonate:${user.user_id}`}
+								onClick={() => onStartImpersonation(user.user_id)}
+							>
+								{savingKey === `impersonate:${user.user_id}` ? (
+									<Loader2 className="size-4 animate-spin" />
+								) : (
+									<UserCog className="size-4" />
+								)}
+								Ingresar como esta persona
+							</Button>
+						</div>
+					</section>
+				) : null}
+			</div>
+		</aside>
 	);
 }
 
 function ProfileDatum({
 	label,
 	value,
+	icon,
 	mono = false,
 }: {
 	label: string;
 	value: string;
+	icon?: React.ReactNode;
 	mono?: boolean;
 }) {
 	return (
-		<div className="min-w-0 rounded-lg border border-stone-200 bg-white px-3 py-2.5">
-			<p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-400">
+		<div className="min-w-0 rounded-lg border border-stroke-soft bg-card px-3 py-2.5">
+			<div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-content-muted">
+				{icon}
 				{label}
-			</p>
+			</div>
 			<p
 				className={cn(
-					"mt-1 truncate text-sm text-stone-800",
+					"mt-1 truncate text-sm text-content",
 					mono && "font-mono text-xs",
 				)}
-				title={value}
 			>
 				{value}
 			</p>
@@ -1330,103 +1555,83 @@ function PermissionCard({
 	const sourceLabel = deniedOverride && !fromAdmin
 		? "Bloqueo directo"
 		: fromAdmin
-			? "Admin"
+			? "Administrador"
 			: fromOverride
-				? "Directo"
+				? "Permiso directo"
 				: fromRoleDeny
-					? "Bloqueo por rol"
+					? "Bloqueado por rol"
 					: fromRole
-						? "Rol"
+						? "Permitido por rol"
 						: "Sin acceso";
 	const controlsDisabled = disabled || saving || fromAdmin || !sources;
+	const offState: OverrideState = fromRole && !fromRoleDeny ? "deny" : "inherit";
 
 	return (
-		<div className="rounded-lg border border-stone-200 bg-white p-3">
-			<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-				<div className="min-w-0">
-					<div className="flex flex-wrap items-center gap-2">
-						<p className="truncate font-mono text-xs font-semibold text-stone-900">
-							{permission.key}
+		<div className="rounded-lg border border-stroke-soft bg-card p-3">
+			<div className="flex items-start gap-3">
+				<div className="grid size-9 shrink-0 place-items-center rounded-md border border-stroke-soft bg-surface-recessed text-content-muted">
+					{effective ? (
+						<LockKeyhole className="size-4" />
+					) : (
+						<Ban className="size-4" />
+					)}
+				</div>
+				<div className="min-w-0 flex-1">
+					<div className="flex min-w-0 flex-wrap items-center gap-2">
+						<p className="text-sm font-semibold text-content">
+							{permissionLabel(permission)}
 						</p>
-						<span
-							className={cn(
-								"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+						<Badge
+							variant={
 								effective
-									? "bg-emerald-50 text-emerald-700"
-									: "bg-stone-100 text-stone-500",
-							)}
+									? "success"
+									: deniedOverride || fromRoleDeny
+										? "destructive"
+										: "outline"
+							}
 						>
-							{effective ? (
-								<LockKeyhole className="size-3" />
-							) : (
-								<Ban className="size-3" />
-							)}
 							{sourceLabel}
-						</span>
+						</Badge>
 					</div>
-					<p className="mt-1 text-sm font-medium text-stone-800">
-						{permissionLabel(permission)}
-					</p>
 					{permission.description ? (
-						<p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-500">
+						<p className="mt-1 line-clamp-2 text-xs leading-5 text-content-secondary">
 							{permission.description}
 						</p>
 					) : null}
+					<details className="mt-2 text-xs text-content-muted">
+						<summary className="cursor-pointer select-none font-medium hover:text-content">
+							Ver detalle técnico
+						</summary>
+						<code className="mt-1 block break-all rounded bg-surface-recessed px-2 py-1 font-mono">
+							{permission.key}
+						</code>
+					</details>
+					{overrideState !== "inherit" ? (
+						<button
+							type="button"
+							disabled={controlsDisabled}
+							onClick={() => onChange("inherit")}
+							className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-content-muted underline-offset-4 hover:text-content hover:underline disabled:pointer-events-none disabled:opacity-50"
+						>
+							<RotateCcw className="size-3.5" />
+							Usar permiso del rol
+						</button>
+					) : null}
 				</div>
-
-				<div className="grid shrink-0 grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-stone-50 text-[11px] font-medium">
-					<PermissionStateButton
-						state="inherit"
-						activeState={overrideState}
+				<div className="flex shrink-0 items-center gap-2">
+					{saving ? (
+						<Loader2 className="size-4 animate-spin text-content-muted" />
+					) : null}
+					<Switch
+						checked={effective}
 						disabled={controlsDisabled}
-						onChange={onChange}
-					/>
-					<PermissionStateButton
-						state="grant"
-						activeState={overrideState}
-						disabled={controlsDisabled}
-						onChange={onChange}
-					/>
-					<PermissionStateButton
-						state="deny"
-						activeState={overrideState}
-						disabled={controlsDisabled}
-						onChange={onChange}
+						onCheckedChange={(checked) =>
+							onChange(checked ? "grant" : offState)
+						}
+						aria-label={`${effective ? "Deshabilitar" : "Habilitar"} ${permissionLabel(permission)}`}
 					/>
 				</div>
 			</div>
 		</div>
-	);
-}
-
-function PermissionStateButton({
-	state,
-	activeState,
-	disabled,
-	onChange,
-}: {
-	state: OverrideState;
-	activeState: OverrideState;
-	disabled: boolean;
-	onChange: (state: OverrideState) => void;
-}) {
-	const active = state === activeState;
-	const label =
-		state === "inherit" ? "Heredar" : state === "grant" ? "Permitir" : "Bloquear";
-	return (
-		<button
-			type="button"
-			disabled={disabled}
-			onClick={() => onChange(state)}
-			className={cn(
-				"px-2 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50",
-				active && state === "inherit" && "bg-stone-900 text-white",
-				active && state === "grant" && "bg-emerald-600 text-white",
-				active && state === "deny" && "bg-red-600 text-white",
-				!active && "bg-white text-stone-600 hover:bg-stone-100",
-			)}
-		>
-			{label}
-		</button>
 	);
 }

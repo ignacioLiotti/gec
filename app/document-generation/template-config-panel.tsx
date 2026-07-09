@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import {
   DOCUMENT_TYPE_LABELS,
+  formatDocumentTypeLabel,
   type DocumentTemplateSummary,
   type FolderFieldSuggestion,
   normalizeDocumentType,
@@ -60,6 +61,19 @@ type EditableTemplate = {
   fileNamePattern: string;
 };
 
+type NewDocumentTypeDraft = {
+  label: string;
+  documentType: string;
+  templateName: string;
+  description: string;
+  targetFolderPath: string;
+};
+
+type DocumentTypeOption = {
+  value: string;
+  label: string;
+};
+
 const FIELD_TYPE_OPTIONS: TemplateFieldType[] = [
   "text",
   "textarea",
@@ -102,6 +116,102 @@ const AUTO_POPULATE_OPTIONS: Array<{ value: TemplateAutoPopulate; label: string 
   { value: "next_sequence_number", label: "Siguiente numero en la carpeta" },
   { value: "today", label: "Fecha de hoy" },
 ];
+
+function createEmptyDocumentTypeDraft(): NewDocumentTypeDraft {
+  return {
+    label: "",
+    documentType: "",
+    templateName: "",
+    description: "",
+    targetFolderPath: "",
+  };
+}
+
+function buildDocumentTypeOptions(
+  templates: DocumentTemplateSummary[],
+  folderConfigs: FolderConfig[],
+  currentType?: string | null,
+): DocumentTypeOption[] {
+  const values = new Set<string>(Object.keys(DOCUMENT_TYPE_LABELS));
+  for (const template of templates) values.add(template.documentType);
+  for (const folder of folderConfigs) {
+    for (const documentType of folder.allowedDocumentTypes) values.add(documentType);
+  }
+  if (currentType) values.add(currentType);
+
+  return Array.from(values)
+    .filter(Boolean)
+    .map((value) => ({ value, label: formatDocumentTypeLabel(value) || value }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function buildDefaultDocumentTypeFields(label: string): TemplateField[] {
+  return [
+    {
+      key: "titulo",
+      label: "Titulo",
+      type: "text",
+      required: true,
+      source: "extra",
+      defaultValue: label,
+    },
+    {
+      key: "numero",
+      label: "Numero",
+      type: "text",
+      required: true,
+      source: "extra",
+      autoPopulate: "next_sequence_number",
+    },
+    {
+      key: "fecha",
+      label: "Fecha",
+      type: "date",
+      required: true,
+      source: "extra",
+      autoPopulate: "today",
+    },
+    {
+      key: "detalle",
+      label: "Detalle",
+      type: "textarea",
+      required: false,
+      source: "extra",
+    },
+  ];
+}
+
+function escapeHtmlLiteral(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildDefaultDocumentTypeHtml(label: string) {
+  const escapedLabel = escapeHtmlLiteral(label);
+  return `<main style="font-family: Arial, sans-serif; color: #1f2937; padding: 32px;">
+  <header style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px;">
+    <div>
+      <p style="margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#6b7280;">Documento generado</p>
+      <h1 style="margin:8px 0 0;font-size:28px;">{{titulo}}</h1>
+    </div>
+    <div style="text-align:right;font-size:14px;">
+      <div><strong>Obra:</strong> {{workName}}</div>
+      <div><strong>Numero:</strong> {{numero}}</div>
+      <div><strong>Fecha:</strong> {{fecha}}</div>
+    </div>
+  </header>
+  <section style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;">
+    <p style="margin:0 0 8px;font-size:12px;color:#6b7280;text-transform:uppercase;">Tipo documental</p>
+    <p style="margin:0 0 20px;font-size:18px;font-weight:600;">${escapedLabel}</p>
+    <p style="margin:0 0 8px;font-size:12px;color:#6b7280;text-transform:uppercase;">Detalle</p>
+    <p style="margin:0;white-space:pre-wrap;">{{detalle}}</p>
+  </section>
+</main>`;
+}
 
 function createDefaultTableColumns(): TemplateField[] {
   return [
@@ -309,6 +419,7 @@ function buildDocumentFieldsReference(fields: TemplateField[]) {
           type: column.type,
           required: column.required,
           extractionFieldKey: column.extractionFieldKey ?? null,
+          formula: column.formula ?? null,
         })),
       };
     }
@@ -318,6 +429,7 @@ function buildDocumentFieldsReference(fields: TemplateField[]) {
       type: field.type,
       required: field.required,
       extractionFieldKey: field.extractionFieldKey ?? null,
+      formula: field.formula ?? null,
     };
   });
 }
@@ -464,6 +576,11 @@ function useDocumentTemplateConfig(workId: string) {
   const [rightPanelMode, setRightPanelMode] = useState<"preview" | "fields" | "html">("preview");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [creatingDocumentType, setCreatingDocumentType] = useState(false);
+  const [newDocumentTypeDraft, setNewDocumentTypeDraft] = useState<NewDocumentTypeDraft>(
+    createEmptyDocumentTypeDraft,
+  );
+  const [creatingDocumentTypeSaving, setCreatingDocumentTypeSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -484,6 +601,8 @@ function useDocumentTemplateConfig(workId: string) {
         setSelectedTemplateId("");
         setDraft(null);
         setExpandedField("");
+        setCreatingDocumentType(false);
+        setNewDocumentTypeDraft(createEmptyDocumentTypeDraft());
       } catch (error) {
         if (!cancelled) {
           toast.error(error instanceof Error ? error.message : "No se pudo cargar la configuracion");
@@ -504,10 +623,15 @@ function useDocumentTemplateConfig(workId: string) {
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates],
   );
+  const draftTargetFolderPath = draft?.targetFolderPath ?? "";
 
   const suggestedFields = useMemo(
-    () => (draft?.targetFolderPath ? folderFieldSuggestions[draft.targetFolderPath] ?? [] : []),
-    [draft?.targetFolderPath, folderFieldSuggestions],
+    () => (draftTargetFolderPath ? folderFieldSuggestions[draftTargetFolderPath] ?? [] : []),
+    [draftTargetFolderPath, folderFieldSuggestions],
+  );
+  const documentTypeOptions = useMemo(
+    () => buildDocumentTypeOptions(templates, folderConfigs, draft?.documentType),
+    [draft?.documentType, folderConfigs, templates],
   );
 
   const previewHtml = useMemo(() => {
@@ -531,6 +655,104 @@ function useDocumentTemplateConfig(workId: string) {
     const template = templates.find((entry) => entry.id === templateId) ?? null;
     setDraft(template ? cloneTemplate(template) : null);
     setExpandedField("");
+    setCreatingDocumentType(false);
+  };
+
+  const startDocumentTypeCreation = () => {
+    setSelectedTemplateId("");
+    setDraft(null);
+    setExpandedField("");
+    setCreatingDocumentType(true);
+    setNewDocumentTypeDraft(createEmptyDocumentTypeDraft());
+  };
+
+  const cancelDocumentTypeCreation = () => {
+    setCreatingDocumentType(false);
+    setNewDocumentTypeDraft(createEmptyDocumentTypeDraft());
+  };
+
+  const updateNewDocumentTypeLabel = (label: string) => {
+    setNewDocumentTypeDraft((current) => {
+      const previousAutoType = normalizeDocumentType(current.label) ?? "";
+      const nextDocumentType =
+        !current.documentType || current.documentType === previousAutoType
+          ? normalizeDocumentType(label) ?? ""
+          : current.documentType;
+      const nextTemplateName =
+        !current.templateName || current.templateName === current.label
+          ? label
+          : current.templateName;
+      return {
+        ...current,
+        label,
+        documentType: nextDocumentType,
+        templateName: nextTemplateName,
+      };
+    });
+  };
+
+  const updateNewDocumentTypeDraft = (patch: Partial<NewDocumentTypeDraft>) => {
+    setNewDocumentTypeDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const createDocumentType = async () => {
+    const label = newDocumentTypeDraft.label.trim();
+    const documentType = normalizeDocumentType(newDocumentTypeDraft.documentType || label);
+    const templateName = newDocumentTypeDraft.templateName.trim() || label;
+
+    if (!label || !documentType || !templateName) {
+      toast.error("Completa nombre, codigo y template inicial.");
+      return;
+    }
+    if (templates.some((template) => template.documentType === documentType)) {
+      toast.error("Ya existe un tipo documental con ese codigo.");
+      return;
+    }
+
+    setCreatingDocumentTypeSaving(true);
+    try {
+      const fields = buildDefaultDocumentTypeFields(label);
+      const response = await fetch("/api/document-generation/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName,
+          description: newDocumentTypeDraft.description.trim() || null,
+          documentType,
+          targetFolderPath: newDocumentTypeDraft.targetFolderPath || null,
+          status: "active",
+          contentHtml: buildDefaultDocumentTypeHtml(label),
+          schema: {
+            fields,
+            documentNumberFieldKey: "numero",
+            fileNamePattern: `${label} {{numero}} - {{workName}}`,
+          },
+        }),
+      });
+      const payload = (await response.json()) as {
+        template?: DocumentTemplateSummary | null;
+        templates?: DocumentTemplateSummary[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudo crear el tipo documental");
+      }
+
+      const nextTemplates = payload.templates ?? templates;
+      setTemplates(nextTemplates);
+      const createdTemplate = payload.template ?? nextTemplates.find((entry) => entry.documentType === documentType) ?? null;
+      if (createdTemplate) {
+        setSelectedTemplateId(createdTemplate.id);
+        setDraft(cloneTemplate(createdTemplate));
+      }
+      setCreatingDocumentType(false);
+      setNewDocumentTypeDraft(createEmptyDocumentTypeDraft());
+      toast.success("Tipo documental creado.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo crear el tipo documental");
+    } finally {
+      setCreatingDocumentTypeSaving(false);
+    }
   };
 
   const updateField = (index: number, patch: Partial<TemplateField>) => {
@@ -922,6 +1144,15 @@ function useDocumentTemplateConfig(workId: string) {
     setDraft,
     selectedTemplate,
     folderConfigs,
+    documentTypeOptions,
+    creatingDocumentType,
+    newDocumentTypeDraft,
+    creatingDocumentTypeSaving,
+    startDocumentTypeCreation,
+    cancelDocumentTypeCreation,
+    updateNewDocumentTypeLabel,
+    updateNewDocumentTypeDraft,
+    createDocumentType,
     suggestedFields,
     expandedField,
     setExpandedField,
@@ -988,7 +1219,14 @@ export function TemplateConfigProvider({ workId, children }: { workId: string; c
 }
 
 export function TemplatePickerCard() {
-  const { templates, loading, selectedTemplateId, handleTemplateSelect } = useTemplateConfig();
+  const {
+    templates,
+    loading,
+    selectedTemplateId,
+    creatingDocumentType,
+    handleTemplateSelect,
+    startDocumentTypeCreation,
+  } = useTemplateConfig();
 
   return (
     <Card className="overflow-hidden rounded-2xl border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
@@ -1005,7 +1243,10 @@ export function TemplatePickerCard() {
               Elige la plantilla base que vas a ajustar para este tenant. La idea es que la seleccion ya comunique alcance, version y destino.
             </CardDescription>
           </div>
-
+          <Button type="button" variant="outline" className="rounded-md" onClick={startDocumentTypeCreation}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nuevo tipo
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
@@ -1015,6 +1256,8 @@ export function TemplatePickerCard() {
             Cargando templates...
           </div>
         ) : null}
+
+        {creatingDocumentType ? <NewDocumentTypeCreator /> : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((template) => (
@@ -1033,7 +1276,7 @@ export function TemplatePickerCard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-stone-950">{template.name}</p>
                     <Badge variant="outline" className="rounded-full border-stone-200 bg-white text-[10px] text-stone-600">
-                      {DOCUMENT_TYPE_LABELS[template.documentType]}
+                      {formatDocumentTypeLabel(template.documentType)}
                     </Badge>
                   </div>
                   <p className="mt-2 text-xs leading-5 text-stone-500">
@@ -1065,12 +1308,134 @@ export function TemplatePickerCard() {
   );
 }
 
+function NewDocumentTypeCreator() {
+  const {
+    folderConfigs,
+    newDocumentTypeDraft,
+    creatingDocumentTypeSaving,
+    cancelDocumentTypeCreation,
+    updateNewDocumentTypeLabel,
+    updateNewDocumentTypeDraft,
+    createDocumentType,
+  } = useTemplateConfig();
+  const normalizedDocumentType =
+    normalizeDocumentType(newDocumentTypeDraft.documentType || newDocumentTypeDraft.label) ?? "";
+  const canCreate =
+    Boolean(newDocumentTypeDraft.label.trim()) &&
+    Boolean(normalizedDocumentType) &&
+    Boolean((newDocumentTypeDraft.templateName || newDocumentTypeDraft.label).trim());
+
+  return (
+    <form
+      className="rounded-xl border border-stroke-soft bg-surface p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void createDocumentType();
+      }}
+    >
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-content">Crear tipo documental</p>
+          <p className="mt-1 text-xs text-content-muted">Se crea una template base activa para este tenant.</p>
+        </div>
+        {normalizedDocumentType ? (
+          <Badge variant="secondary" className="rounded-full">
+            {normalizedDocumentType}
+          </Badge>
+        ) : null}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Nombre del tipo</Label>
+          <Input
+            value={newDocumentTypeDraft.label}
+            onChange={(event) => updateNewDocumentTypeLabel(event.target.value)}
+            className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none"
+            placeholder="Ej. Contrato marco"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Codigo</Label>
+          <Input
+            value={newDocumentTypeDraft.documentType}
+            onChange={(event) =>
+              updateNewDocumentTypeDraft({
+                documentType: normalizeDocumentType(event.target.value) ?? "",
+              })
+            }
+            className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none font-mono text-xs"
+            placeholder="CONTRATO_MARCO"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Template inicial</Label>
+          <Input
+            value={newDocumentTypeDraft.templateName}
+            onChange={(event) => updateNewDocumentTypeDraft({ templateName: event.target.value })}
+            className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none"
+            placeholder="Ej. Contrato marco"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Carpeta destino sugerida</Label>
+          <Select
+            value={newDocumentTypeDraft.targetFolderPath || "__none__"}
+            onValueChange={(value) =>
+              updateNewDocumentTypeDraft({
+                targetFolderPath: value === "__none__" ? "" : value,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none">
+              <SelectValue placeholder="Sin carpeta fija" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Sin carpeta fija</SelectItem>
+              {folderConfigs.map((folder) => (
+                <SelectItem key={folder.path} value={folder.path}>
+                  {folder.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2 md:col-span-2">
+          <Label>Descripcion</Label>
+          <Textarea
+            rows={3}
+            value={newDocumentTypeDraft.description}
+            onChange={(event) => updateNewDocumentTypeDraft({ description: event.target.value })}
+            className="rounded-lg border-stroke-soft bg-surface shadow-none"
+            placeholder="Uso interno de este tipo documental"
+          />
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-md"
+          onClick={cancelDocumentTypeCreation}
+          disabled={creatingDocumentTypeSaving}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" className="rounded-md" disabled={!canCreate || creatingDocumentTypeSaving}>
+          {creatingDocumentTypeSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+          Crear tipo
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function TemplateConfigEditorPanel() {
   const {
     draft,
     setDraft,
     selectedTemplate,
     folderConfigs,
+    documentTypeOptions,
     suggestedFields,
     expandedField,
     setExpandedField,
@@ -1207,9 +1572,9 @@ export function TemplateConfigEditorPanel() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(DOCUMENT_TYPE_LABELS).map(([key, label]) => (
-                            <SelectItem key={key} value={key}>
-                              {label}
+                          {documentTypeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
                             </SelectItem>
                           ))}
                         </SelectContent>

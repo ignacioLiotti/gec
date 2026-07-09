@@ -25,14 +25,24 @@ Use the project language in `CONTEXT.md` when discussing domain concepts. Avoid 
 5. Only inspect sibling folders when there is a concrete dependency, failing check, or unclear contract.
 6. Check related documentation referenced by local context.
 
+## Design System
+
+- Before changing product UI, read `docs/styleguide/design-system.md`.
+- App code should import UI primitives from `@/components/ui/*`; do not import directly from `@/design-system/*` unless editing the design-system layer itself.
+- Use the documented token classes for product UI colors, spacing, surfaces, borders, and text.
+- Preserve domain-specific visual systems for report/document output, charts, calendars, landing pages, and viewer canvases unless the task explicitly targets them.
+
 Common context locations:
 
 - Root domain vocabulary: `CONTEXT.md`
+- Documentation index: `docs/README.md`
 - Domain docs: `docs/domain`
 - ADRs: `docs/adr`
 - Architecture docs: `docs/architecture`
 - Styleguide docs: `docs/styleguide`
-- Local agent context examples: `app/**/AGENT_CONTEXT.md`, `components/**/AGENT_CONTEXT.md`, `lib/AGENT_CONTEXT.md`, `supabase/migrations/AGENT_CONTEXT.md`
+- Developer handbook: `docs/dev` (getting started, structure, testing, conventions)
+- Customer user guide (Spanish): `docs/guide`
+- Local agent context: every major top-level folder has an `AGENT_CONTEXT.md` (`app/`, `app/api/`, `components/`, `components/ui/`, `lib/`, `hooks/`, `utils/`, `supabase/`, `tests/`, `scripts/`, `workflows/`, `emails/`, plus deeper feature folders)
 
 ## Development Commands
 

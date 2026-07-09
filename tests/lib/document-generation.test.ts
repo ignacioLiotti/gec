@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyDocumentAiContextInputData,
+  applyTemplateFormulaInputData,
   applyTemplateAliasInputData,
   buildDocumentGenerationExtractionRows,
   buildInitialInputData,
+  formatDocumentTypeLabel,
   getTemplateNextSequenceNumber,
+  normalizeDocumentType,
   normalizeTemplateSchema,
   parseTemplateSequenceNumber,
   refreshTemplateSequenceInputData,
@@ -14,6 +17,34 @@ import {
 } from "@/lib/document-generation";
 
 describe("document-generation helpers", () => {
+  it("normalizes tenant document types and legacy labels", () => {
+    expect(normalizeDocumentType("contrato marco")).toBe("CONTRATO_MARCO");
+    expect(normalizeDocumentType("facturas")).toBe("INVOICE");
+    expect(normalizeDocumentType("remito")).toBe("DELIVERY_NOTE");
+    expect(formatDocumentTypeLabel("CONTRATO_MARCO")).toBe("Contrato Marco");
+  });
+
+  it("computes formula fields when all referenced values are present", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "amount", label: "Monto periodo", type: "money", required: true },
+        { key: "accumulatedAmount", label: "Monto acumulado", type: "money", required: true },
+        {
+          key: "monto_acumulado_anterior",
+          label: "Monto acumulado anterior",
+          type: "money",
+          required: false,
+          formula: "[accumulatedAmount] - [amount]",
+        },
+      ],
+    });
+
+    expect(applyTemplateFormulaInputData(schema, { amount: 250, accumulatedAmount: 1000 })).toMatchObject({
+      monto_acumulado_anterior: 750,
+    });
+    expect(applyTemplateFormulaInputData(schema, { amount: 250 })).not.toHaveProperty("monto_acumulado_anterior");
+  });
+
   it("hydrates default values from schema", () => {
     const schema = normalizeTemplateSchema({
       fields: [
@@ -36,6 +67,7 @@ describe("document-generation helpers", () => {
 
     expect(parseTemplateSequenceNumber("OC-009")).toBe(9);
     expect(getTemplateNextSequenceNumber(schema, [{ nro: "1" }, { nro: "OC-009" }], 2)).toBe(10);
+    expect(getTemplateNextSequenceNumber(schema, [{ nro: "2" }], 5)).toBe(6);
     expect(getTemplateNextSequenceNumber(schema, [{ otro: "sin nro" }], 3)).toBe(4);
   });
 
@@ -356,6 +388,35 @@ describe("document-generation helpers", () => {
         __docFileName: "f-1.pdf",
       },
     ]);
+  });
+
+  it("does not create metadata-only extraction rows when no table column has data", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        { key: "certificateNumber", label: "Numero", type: "text", required: true },
+        { key: "amount", label: "Monto", type: "money", required: true },
+      ],
+    });
+
+    const rows = buildDocumentGenerationExtractionRows({
+      schema,
+      inputData: {
+        certificateNumber: "1",
+        amount: "1000",
+      },
+      columns: [
+        { fieldKey: "periodo", dataType: "text" },
+        { fieldKey: "avance_mensual_pct", dataType: "number" },
+        { fieldKey: "avance_acumulado_pct", dataType: "number" },
+      ],
+      documentMeta: {
+        bucket: "obra-documents",
+        path: "obra-1/certificados/cert-1.pdf",
+        fileName: "cert-1.pdf",
+      },
+    });
+
+    expect(rows).toEqual([]);
   });
 
   it("hydrates missing document fields from extracted obra rows with source references", () => {

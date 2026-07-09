@@ -1,4 +1,14 @@
-// Macro Tables - Shared utilities and types
+/**
+ * Macro tables — cross-obra consolidation of same-shaped obra tables.
+ *
+ * A macro table joins source tables from many obras into one view; columns
+ * are `source` (mirrors a source field), `custom` (tenant-entered values),
+ * or `computed`. Custom values must bind to the stable row identity
+ * (`source_tabla_id + lineage_row_key`), not just `source_row_id`, so they
+ * survive document reimports; competing overrides for the same identity are
+ * a `conflict`, never a silent winner (ADR 0002, CONTEXT.md macrotable
+ * rules).
+ */
 
 export type MacroTableColumnType = 'source' | 'custom' | 'computed';
 
@@ -96,7 +106,7 @@ export type MacroTableOverrideSummary = {
 // Valid data types for macro table columns
 const VALID_DATA_TYPES = new Set<MacroTableDataType>([
   'text',
-  'number', 
+  'number',
   'currency',
   'boolean',
   'date',
@@ -165,7 +175,6 @@ export function normalizeFieldKey(key: string): string {
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
 }
-
 
 
 

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 import { isSuperAdminUser } from "@/lib/superadmin";
+import { resolveTenantSwitchRedirect } from "@/lib/tenant-switch-redirect";
 
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,6 +43,14 @@ function setTenantCookie(response: NextResponse, tenantId: string) {
 	return response;
 }
 
+function getSafeRedirectUrl(req: NextRequest) {
+	const requestUrl = new URL(req.url);
+	return resolveTenantSwitchRedirect(
+		req.url,
+		requestUrl.searchParams.get("next"),
+	);
+}
+
 type RouteParams = Promise<{ tenantId: string }>;
 
 export async function POST(
@@ -78,6 +87,7 @@ export async function GET(
 ) {
 	const tenantId = (await params).tenantId;
 	const origin = new URL("/", req.url);
+	const redirectUrl = getSafeRedirectUrl(req);
 
 	if (!tenantId || !UUID_PATTERN.test(tenantId)) {
 		return NextResponse.redirect(origin);
@@ -98,6 +108,6 @@ export async function GET(
 		return NextResponse.redirect(new URL("/onboarding", req.url));
 	}
 
-	const response = NextResponse.redirect(new URL("/excel", req.url));
+	const response = NextResponse.redirect(redirectUrl);
 	return setTenantCookie(response, tenantId);
 }

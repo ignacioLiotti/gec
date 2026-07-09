@@ -32,10 +32,7 @@ import {
 import FolderFront from "@/components/ui/FolderFront";
 import { Input } from "@/components/ui/input";
 import { sidebarMenuButtonVariants } from "@/components/ui/sidebar-menu-button-variants";
-import {
-  DOCUMENT_TYPE_LABELS,
-  type DocumentType,
-} from "@/lib/document-generation";
+import { formatDocumentTypeLabel } from "@/lib/document-generation";
 import { cn } from "@/lib/utils";
 
 type ApprovedDocumentItem = {
@@ -114,7 +111,7 @@ function formatDate(value: string) {
 }
 
 function formatDocumentType(value: string) {
-  return DOCUMENT_TYPE_LABELS[value as DocumentType] ?? value.replace(/_/g, " ").toLowerCase();
+  return formatDocumentTypeLabel(value) || value.replace(/_/g, " ").toLowerCase();
 }
 
 function getDocumentTitle(document: ApprovedDocumentItem) {

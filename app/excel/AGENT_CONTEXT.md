@@ -8,12 +8,19 @@ This is a broad UI folder. Treat this file as high-level routing and workflow co
 
 ## Main files
 
-- `page.tsx`: renders the Excel landing/list route and resolves load mode via `@/lib/excel/load-mode`.
-- `landing-page.tsx`: landing/list page composition entry.
+- `page.tsx`: renders the canonical Excel landing/list route and resolves load mode via `@/lib/excel/load-mode`.
+- `formtext/page.tsx` and `listtest/page.tsx`: explicit load-mode routes that reuse the same server renderer as `/excel`.
+- `excel-landing-server.tsx`: shared server renderer for Excel landing routes; reads headers for the initial mobile hint and loads initial obras data.
 - `desktop-excel-page-full.tsx`: main desktop obras table client; handles CSV import preview, table config, toolbar actions, guided tour wiring, and `FormTable` usage.
 - `desktop-excel-page-preview.tsx`: alternate/preview desktop table implementation.
 - `mobile-excel-page-client.tsx`: mobile obras list/client experience.
-- `excel-page-client.tsx` and `desktop-excel-page-client.tsx`: client wrappers/load-mode glue.
+- `excel-page-client.tsx`: responsive desktop/mobile and load-mode glue. It dynamically loads full or preview desktop routes directly.
+- `_components/excel-page-chrome.tsx`: local Excel page shell, header, toolbar frame, table surface, panel, inline status, progress, and skeleton primitives.
+- `_components/excel-import-preview-sheet.tsx`: CSV import preview sheet composition for the desktop full table.
+- `_components/excel-page-format.ts`: shared list/preview formatting helpers.
+- `_components/obra-csv-import.ts`: CSV parsing and normalization helpers for obra imports.
+- `_components/use-obra-csv-import.ts`: client hook for CSV preview state, bulk import mutation, cache invalidation, and import toasts.
+- `_components/use-partial-obras-hydration.ts`: shared client hook for routes that receive partial obra rows and hydrate full rows after paint.
 - `schema.ts`: `obraSchema`, `obrasFormSchema`, and `Obra` types shared with API routes.
 - `[obraId]/page.tsx`: large obra detail client page; loads obra data, certificates, materials, OCR links, macro table data, tabs, notes, completion messages, and guided flows.
 - `[obraId]/tabs/general-tab.tsx`: General tab layout and data-flow/result presentation.

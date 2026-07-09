@@ -63,4 +63,6 @@ tmpclaude-ffbb-cwd
 # generated local scratch artifacts
 supabase/.temp/
 .codex-temp/
+.codex-tmp/
+codex-next-dev*.log
 tmp-*.png

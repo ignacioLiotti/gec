@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { Columns3, Eye, EyeOff, MoveHorizontal, Pin } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+	ExpandableLightButton,
+	type LightButtonProps,
+} from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -26,7 +30,7 @@ export type ColumnVisibilityMenuProps = {
 	togglePin: (columnId: string) => void;
 	onBalanceColumns?: () => void;
 	disabled?: boolean;
-	triggerVariant?: React.ComponentProps<typeof Button>["variant"];
+	triggerVariant?: LightButtonProps["variant"];
 	triggerClassName?: string;
 };
 
@@ -38,7 +42,7 @@ export function ColumnVisibilityMenu({
 	togglePin,
 	onBalanceColumns,
 	disabled,
-	triggerVariant = "outline",
+	triggerVariant = "default",
 	triggerClassName,
 }: ColumnVisibilityMenuProps) {
 	if (disabled) return null;
@@ -46,13 +50,17 @@ export function ColumnVisibilityMenu({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant={triggerVariant} className={triggerClassName ?? "gap-2"} disabled={disabled}>
+				<ExpandableLightButton
+					label="Columnas"
+					variant={triggerVariant}
+					className={triggerClassName}
+					disabled={disabled}
+				>
 					<Columns3 className="size-4" />
-					Columnas
-				</Button>
+				</ExpandableLightButton>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-72">
-				<div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+			<DropdownMenuContent align="end" className="z-[10000001] w-72">
+				<div className="px-2 py-1.5 text-sm font-medium text-content-muted">
 					Configurar columnas
 				</div>
 				{onBalanceColumns && (
@@ -62,7 +70,7 @@ export function ColumnVisibilityMenu({
 					</DropdownMenuItem>
 				)}
 				<DropdownMenuSeparator />
-				<div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+				<div className="px-2 py-1.5 text-sm font-medium text-content-muted">
 					Visibilidad
 				</div>
 				<DropdownMenuItem
@@ -84,7 +92,7 @@ export function ColumnVisibilityMenu({
 					Ocultar todo
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
-				<div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
+				<div className="px-2 py-1.5 text-sm font-medium text-content-muted">
 					Columnas
 				</div>
 				<div className="space-y-1">
@@ -96,17 +104,15 @@ export function ColumnVisibilityMenu({
 						return (
 							<div
 								key={col.id}
-								className="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm"
+								className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-content transition-colors hover:bg-surface-recessed"
 							>
-								<input
-									type="checkbox"
-									className="size-4 rounded border-border"
+								<Checkbox
 									checked={!isHidden}
-									onChange={(event) => {
+									onCheckedChange={(checked) => {
 										if (hideDisabled) return;
 										setHiddenColumns((prev) => {
 											const set = new Set(prev);
-											if (event.target.checked) {
+											if (checked === true) {
 												set.delete(col.id);
 											} else {
 												set.add(col.id);
@@ -115,6 +121,7 @@ export function ColumnVisibilityMenu({
 										});
 									}}
 									disabled={hideDisabled}
+									className="size-4"
 								/>
 								<button
 									type="button"
@@ -122,9 +129,9 @@ export function ColumnVisibilityMenu({
 										if (pinDisabled) return;
 										togglePin(col.id);
 									}}
-									className={`rounded p-1 transition-colors ${isPinned ? "text-primary" : "text-muted-foreground"
+									className={`rounded p-1 transition-colors hover:bg-surface-recessed ${isPinned ? "text-orange-primary" : "text-content-muted"
 										}`}
-									title={isPinned ? "Desfijar" : "Fijar"}
+									aria-label={isPinned ? "Desfijar columna" : "Fijar columna"}
 									disabled={pinDisabled}
 								>
 									<Pin className="size-3" />

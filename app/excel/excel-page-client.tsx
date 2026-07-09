@@ -3,18 +3,15 @@
 import dynamic from "next/dynamic";
 import { useSyncExternalStore } from "react";
 import MobileExcelPageClient from "./mobile-excel-page-client";
+import { ExcelPageSkeleton } from "./_components/excel-page-chrome";
 import type { ExcelPageClientProps } from "@/lib/excel/types";
 
-const DesktopExcelPageClient = dynamic(() => import("./desktop-excel-page-client"), {
-	loading: () => (
-		<div className="min-h-full bg-[#fafafa] px-4 py-4 md:px-8 md:py-8">
-			<div className="animate-pulse space-y-4 rounded-xl border border-[#ece7df] bg-white p-6 shadow-card">
-				<div className="h-9 w-56 rounded bg-[#f3eee7]" />
-				<div className="h-11 w-full rounded-lg bg-[#f6f2eb]" />
-				<div className="h-[60vh] w-full rounded-xl bg-[#f6f2eb]" />
-			</div>
-		</div>
-	),
+const DesktopExcelPageFull = dynamic(() => import("./desktop-excel-page-full"), {
+	loading: () => <ExcelPageSkeleton />,
+});
+
+const DesktopExcelPagePreview = dynamic(() => import("./desktop-excel-page-preview"), {
+	loading: () => <ExcelPageSkeleton tableRows={5} />,
 });
 
 const MOBILE_BREAKPOINT = 768;
@@ -54,14 +51,23 @@ export default function ExcelPageClient({
 		return <MobileExcelPageClient initialObras={initialObras} />;
 	}
 
-	return (
-		<div className="relative">
-			<DesktopExcelPageClient
+	if (initialLoadMode === "after-list") {
+		return (
+			<DesktopExcelPagePreview
 				key={initialLoadMode}
 				initialMainTableColumnsConfig={initialMainTableColumnsConfig}
 				initialObras={initialObras}
 				initialLoadMode={initialLoadMode}
 			/>
-		</div>
+		);
+	}
+
+	return (
+		<DesktopExcelPageFull
+			key={initialLoadMode}
+			initialMainTableColumnsConfig={initialMainTableColumnsConfig}
+			initialObras={initialObras}
+			initialLoadMode={initialLoadMode}
+		/>
 	);
 }

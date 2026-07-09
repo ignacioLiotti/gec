@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "../design-system/tokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -36,10 +37,34 @@
 	--color-secondary: var(--secondary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary: var(--primary);
+	--color-destructive-foreground: hsl(var(--destructive-foreground));
+	--color-success: hsl(var(--success));
+	--color-success-foreground: hsl(var(--success-foreground));
+	--color-warning: hsl(var(--warning));
+	--color-warning-foreground: hsl(var(--warning-foreground));
+	--color-accent-soft: hsl(var(--accent-soft));
+	--color-accent-border: hsl(var(--accent-border));
 	--color-popover-foreground: var(--popover-foreground);
 	--color-popover: var(--popover);
 	--color-card-foreground: var(--card-foreground);
 	--color-card: var(--card);
+	--color-canvas: hsl(var(--canvas));
+	--color-canvas-muted: hsl(var(--canvas-muted));
+	--color-surface: hsl(var(--surface));
+	--color-surface-muted: hsl(var(--surface-muted));
+	--color-surface-raised: hsl(var(--surface-raised));
+	--color-surface-recessed: hsl(var(--surface-recessed));
+	--color-surface-warm: hsl(var(--surface-warm));
+	--color-surface-glass: hsl(var(--surface-glass));
+	--color-content: hsl(var(--content));
+	--color-content-secondary: hsl(var(--content-secondary));
+	--color-content-muted: hsl(var(--content-muted));
+	--color-content-disabled: hsl(var(--content-disabled));
+	--color-stroke: var(--border);
+	--color-stroke-soft: hsl(var(--border-soft));
+	--color-stroke-strong: hsl(var(--border-strong));
+	--color-table-row-alt: hsl(var(--table-row-alt));
+	--color-table-row-hover: hsl(var(--table-row-hover));
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
@@ -50,6 +75,20 @@
 	--text-sm: 0.8125rem; /* 13px — default UI text */
 
 	--color-orange-primary: #ff5800;
+
+	--z-dropdown: 40;
+	--z-sticky: 50;
+	--z-overlay: 80;
+	--z-modal: 100;
+	--z-tooltip: 110;
+	--z-toast: 120;
+
+	--duration-fast: 150ms;
+	--duration-normal: 200ms;
+	--duration-slow: 300ms;
+	--duration-press: 34ms;
+	--ease-standard: cubic-bezier(0.2, 0, 0, 1);
+	--ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
 
 	--shadow-card:
 		0 0 0 1px #ffffff14 inset, 0 0 0 1px #09090b1f,
@@ -190,6 +229,7 @@
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.145 0 0);
 	--primary: #ff5800;
+	--orange-primary: 21 100% 50%;
 	--primary-foreground: oklch(0.985 0 0);
 	--secondary: oklch(0.97 0.003 106);
 	--secondary-foreground: oklch(0.205 0 0);

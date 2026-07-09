@@ -1,14 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import type { PostgrestError } from "@supabase/supabase-js";
 
-import { createClient } from "@/utils/supabase/server";
-import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { auth } from "@/lib/auth";
-
-const UUID_PATTERN =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { STANDARD_TENANT_BLUEPRINT_KEY } from "@/lib/tenant-blueprints/constants";
+import { buildStandardConstructionBlueprint } from "@/lib/tenant-blueprints/standard-construction";
+import { createClient } from "@/utils/supabase/server";
 
 function redirectWithError(path: string, message: string): never {
 	const params = new URLSearchParams({ error: message });
@@ -29,111 +26,55 @@ async function resolveUser() {
 	return { supabase, user };
 }
 
-function normalizeErrorMessage(error?: PostgrestError | null) {
-	if (!error) return undefined;
-	if (error.code === "23505") {
-		return "Ya estás asociado a esa organización.";
-	}
-	if (error.code === "23503") {
-		return "La organización ya no existe.";
-	}
-	if (error.code === "42501") {
-		return "No tenés permisos para unirte a esa organización.";
-	}
-	return undefined;
-}
-
 export async function createTenantAction(
 	errorPath: string,
-	formData: FormData
+	formData: FormData,
 ) {
 	const session = await auth();
 	if (!session.data.user) redirect("/");
-	const { user } = await resolveUser();
+	const { supabase } = await resolveUser();
 	const name = String(formData.get("name") ?? "").trim();
+	const requestedBlueprint = String(
+		formData.get("blueprint") ?? STANDARD_TENANT_BLUEPRINT_KEY,
+	);
 
 	if (name.length < 3) {
 		redirectWithError(
 			errorPath,
-			"Elegí un nombre de al menos 3 caracteres."
+			"Elegí un nombre de al menos 3 caracteres.",
 		);
 	}
 
-	// Use admin client to bypass RLS for bootstrapping operations
-	const adminClient = createSupabaseAdminClient();
+	if (requestedBlueprint !== STANDARD_TENANT_BLUEPRINT_KEY) {
+		redirectWithError(
+			errorPath,
+			"El modelo de configuración elegido no está disponible.",
+		);
+	}
 
-	const { data, error } = await adminClient
-		.from("tenants")
-		.insert({ name })
-		.select("id")
-		.single();
+	const blueprint = buildStandardConstructionBlueprint();
+	const { data, error } = await supabase.rpc("create_tenant_from_blueprint", {
+		p_name: name,
+		p_blueprint: blueprint,
+	});
 
 	if (error || !data) {
-		let message = "No pudimos crear la organización, probá de nuevo.";
+		let message = "No pudimos crear la organización. Probá de nuevo.";
 		if (error?.code === "23505") {
 			message = "Ya existe una organización con ese nombre.";
+		} else if (
+			error?.code === "PGRST202" ||
+			error?.message?.includes("create_tenant_from_blueprint")
+		) {
+			message =
+				"La configuración inicial todavía no está habilitada. Pedile ayuda al administrador del sistema.";
 		}
-		console.error("[tenants:create] insert failed", error);
+		console.error("[tenants:create] blueprint provisioning failed", error);
 		redirectWithError(errorPath, message);
 	}
 
-	const { error: membershipError } = await adminClient
-		.from("memberships")
-		.insert({ tenant_id: data.id, user_id: user.id, role: "owner" });
-
-	if (membershipError) {
-		console.error(
-			"[tenants:create] failed to assign owner membership",
-			membershipError
-		);
-		redirectWithError(
-			errorPath,
-			"No pudimos asignarte como propietario. Escribinos para ayudarte."
-		);
-	}
-
-		redirect(`/api/tenants/${data.id}/switch`);
-}
-
-export async function joinTenantAction(
-	errorPath: string,
-	formData: FormData
-) {
-	const session = await auth();
-	if (!session.data.user) redirect("/");
-	const { supabase, user } = await resolveUser();
-	const tenantId = String(formData.get("tenant_id") ?? "").trim();
-
-	if (!tenantId || !UUID_PATTERN.test(tenantId)) {
-			redirectWithError(
-				errorPath,
-				"Ingresá una organización válida para continuar."
-			);
-	}
-
-	const { data: existingMembership } = await supabase
-		.from("memberships")
-		.select("tenant_id")
-		.eq("tenant_id", tenantId)
-		.eq("user_id", user.id)
-		.maybeSingle();
-
-	if (existingMembership) {
-		redirect(`/api/tenants/${tenantId}/switch`);
-	}
-
-	const { error } = await supabase
-		.from("memberships")
-		.insert({ tenant_id: tenantId, user_id: user.id, role: "member" });
-
-	const normalized = normalizeErrorMessage(error);
-	if (error || normalized) {
-		console.error("[tenants:join] insert failed", error);
-			redirectWithError(
-				errorPath,
-				normalized ?? "No pudimos sumarte a esa organización."
-			);
-	}
-
-		redirect(`/api/tenants/${tenantId}/switch`);
+	const tenantId = String(data);
+	redirect(
+		`/api/tenants/${tenantId}/switch?next=${encodeURIComponent("/setup")}`,
+	);
 }

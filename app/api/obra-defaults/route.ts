@@ -1,7 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { applyDefaultFolderToExistingObras } from "@/lib/obra-defaults/apply-default-folder";
-import { removeDefaultFolderFromExistingObras } from "@/lib/obra-defaults/remove-default-folder";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { normalizeFolderName, normalizeFolderPath, normalizeFieldKey, ensureTablaDataType } from "@/lib/tablas";
@@ -690,110 +689,6 @@ async function enqueueAndApplyDefaultFolderSync(params: {
 			.eq("id", queuedJob.id);
 		if (updateError) {
 			console.error(`[${logContext}] unable to update background job last_error:`, updateError);
-		}
-	}
-}
-
-async function enqueueAndApplyDefaultFolderRemoval(params: {
-	supabase: Awaited<ReturnType<typeof createClient>>;
-	tenantId: string;
-	folderPath: string;
-	defaultTablaIds?: string[];
-	logContext: string;
-}) {
-	const { supabase, tenantId, folderPath, defaultTablaIds, logContext } = params;
-	const payload = {
-		folderPath,
-		defaultTablaIds: Array.isArray(defaultTablaIds)
-			? defaultTablaIds.filter((id): id is string => typeof id === "string" && id.length > 0)
-			: [],
-	};
-
-	// TODO(domain-model): Removal is potentially destructive and should run through the same
-	// dedicated migration entity + preview/validation lifecycle before execution.
-	const { data: queuedJob, error: jobError } = await supabase
-		.from("background_jobs")
-		.insert({
-			tenant_id: tenantId,
-			type: "remove_default_folder",
-			payload,
-		})
-		.select("id")
-		.maybeSingle();
-
-	if (jobError) {
-		console.error(`[${logContext}] removal job enqueue error:`, jobError);
-	}
-
-	let immediateResult: Awaited<
-		ReturnType<typeof removeDefaultFolderFromExistingObras>
-	> | null = null;
-	let immediateError: unknown = null;
-
-	try {
-		const admin = createSupabaseAdminClient();
-		immediateResult = await removeDefaultFolderFromExistingObras(admin, {
-			tenantId,
-			folderPath,
-			defaultTablaIds: payload.defaultTablaIds,
-		});
-	} catch (error) {
-		immediateError = error;
-		console.error(`[${logContext}] immediate folder removal error (admin):`, error);
-		try {
-			immediateResult = await removeDefaultFolderFromExistingObras(supabase, {
-				tenantId,
-				folderPath,
-				defaultTablaIds: payload.defaultTablaIds,
-			});
-		} catch (fallbackError) {
-			immediateError = fallbackError;
-			console.error(
-				`[${logContext}] immediate folder removal error (request client fallback):`,
-				fallbackError,
-			);
-		}
-	}
-
-	if (!queuedJob?.id) return;
-
-	if (immediateResult?.ok) {
-		// TODO(domain-model): Store impact_real (tablas/files removed) in migration audit record,
-		// not only as an implicit successful background job transition.
-		const { error: doneError } = await supabase
-			.from("background_jobs")
-			.update({
-				status: "done",
-				attempts: 1,
-				last_error: null,
-			})
-			.eq("id", queuedJob.id);
-		if (doneError) {
-			console.error(
-				`[${logContext}] unable to mark removal background job as done:`,
-				doneError,
-			);
-		}
-		return;
-	}
-
-	if (immediateError) {
-		const message = immediateError instanceof Error ? immediateError.message : String(immediateError);
-		// TODO(domain-model): Persist failure in migration state machine (`failed`/`rolled_back`)
-		// including actor, justification and compensation reference when applicable.
-		const { error: failedError } = await supabase
-			.from("background_jobs")
-			.update({
-				status: "failed",
-				attempts: 1,
-				last_error: message,
-			})
-			.eq("id", queuedJob.id);
-		if (failedError) {
-			console.error(
-				`[${logContext}] unable to mark removal background job as failed:`,
-				failedError,
-			);
 		}
 	}
 }
@@ -1879,54 +1774,18 @@ export async function DELETE(request: Request) {
 			return NextResponse.json({ error: "ID required" }, { status: 400 });
 		}
 
-			if (type === "folder") {
-				// First get the folder to find its path
-				const { data: folder } = await supabase
-					.from("obra_default_folders")
-					.select("path")
-				.eq("id", id)
-				.eq("tenant_id", tenantId)
-				.single();
+		if (type === "folder") {
+			return NextResponse.json(
+				{
+					code: "DEFAULT_FOLDER_MIGRATION_REQUIRED",
+					error:
+						"La eliminación de carpetas requiere una migración con vista previa de impacto y aprobación auditable.",
+				},
+				{ status: 409 },
+			);
+		}
 
-				let linkedDefaultTablaIds: string[] = [];
-				if (folder) {
-					const { data: linkedTablas } = await supabase
-						.from("obra_default_tablas")
-						.select("id")
-						.eq("tenant_id", tenantId)
-						.eq("linked_folder_path", folder.path);
-					linkedDefaultTablaIds = (linkedTablas ?? []).flatMap((row) => {
-						const rowId = (row as { id?: string }).id;
-						return typeof rowId === "string" && rowId.length > 0 ? [rowId] : [];
-					});
-
-					// Delete any linked tabla (cascade will delete columns)
-					await supabase
-						.from("obra_default_tablas")
-						.delete()
-						.eq("tenant_id", tenantId)
-						.eq("linked_folder_path", folder.path);
-				}
-
-			// Delete the folder
-			const { error } = await supabase
-				.from("obra_default_folders")
-				.delete()
-				.eq("id", id)
-				.eq("tenant_id", tenantId);
-
-				if (error) throw error;
-
-				if (folder?.path) {
-					await enqueueAndApplyDefaultFolderRemoval({
-						supabase,
-						tenantId,
-						folderPath: folder.path,
-						defaultTablaIds: linkedDefaultTablaIds,
-						logContext: "obra-defaults:delete",
-					});
-				}
-				} else if (type === "quick-action") {
+		if (type === "quick-action") {
 				const { error } = await supabase
 					.from("obra_default_quick_actions")
 					.delete()
@@ -1942,7 +1801,7 @@ export async function DELETE(request: Request) {
 					}
 					throw error;
 				}
-			} else {
+		} else {
 			return NextResponse.json({ error: "Invalid type" }, { status: 400 });
 		}
 

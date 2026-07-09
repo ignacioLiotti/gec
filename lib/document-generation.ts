@@ -5,7 +5,7 @@ import {
 	type TablaColumnDataType,
 } from "@/lib/tablas";
 
-export const DOCUMENT_TYPES = [
+export const SYSTEM_DOCUMENT_TYPES = [
 	"PURCHASE_ORDER",
 	"INVOICE",
 	"CERTIFICATE",
@@ -15,7 +15,10 @@ export const DOCUMENT_TYPES = [
 	"CUSTOM",
 ] as const;
 
-export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+export const DOCUMENT_TYPES: readonly string[] = SYSTEM_DOCUMENT_TYPES;
+
+export type SystemDocumentType = (typeof SYSTEM_DOCUMENT_TYPES)[number];
+export type DocumentType = string;
 
 export const GENERATED_DOCUMENT_STATUSES = [
 	"DRAFT",
@@ -66,6 +69,7 @@ export type TemplateField = {
 	optionUnitTargetKey?: string | null;
 	extractionFieldKey?: string | null;
 	autoPopulate?: TemplateAutoPopulate;
+	formula?: string | null;
 	repeatableGroup?: string | null;
 	repeatableGroupLabel?: string | null;
 	columns?: TemplateField[];
@@ -183,7 +187,7 @@ export const GENERATED_DOCUMENT_STATUS_LABELS: Record<string, string> = {
 	CANCELLED: "Cancelado",
 };
 
-export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
 	PURCHASE_ORDER: "Orden de compra",
 	INVOICE: "Factura interna",
 	CERTIFICATE: "Certificado",
@@ -193,14 +197,56 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 	CUSTOM: "Documento custom",
 };
 
+const DOCUMENT_TYPE_ALIASES: Record<string, SystemDocumentType> = {
+	CERTIFICADO: "CERTIFICATE",
+	CERTIFICADOS: "CERTIFICATE",
+	CERTIFICADO_DE_OBRA: "CERTIFICATE",
+	ORDEN_DE_COMPRA: "PURCHASE_ORDER",
+	ORDENES_DE_COMPRA: "PURCHASE_ORDER",
+	FACTURA: "INVOICE",
+	FACTURAS: "INVOICE",
+	FACTURA_INTERNA: "INVOICE",
+	REMITO: "DELIVERY_NOTE",
+	REMITOS: "DELIVERY_NOTE",
+	SOLICITUD_DE_COTIZACION: "QUOTE_REQUEST",
+	SOLICITUDES_DE_COTIZACION: "QUOTE_REQUEST",
+	ACTA: "ACT",
+	ACTAS: "ACT",
+};
+
 export function isDocumentType(value: unknown): value is DocumentType {
-	return (
-		typeof value === "string" && DOCUMENT_TYPES.includes(value as DocumentType)
-	);
+	return normalizeDocumentType(value) != null;
 }
 
 export function normalizeDocumentType(value: unknown): DocumentType | null {
-	return isDocumentType(value) ? value : null;
+	if (typeof value !== "string") return null;
+	const normalized = normalizeDocumentTypeKey(value);
+	if (!normalized) return null;
+	return DOCUMENT_TYPE_ALIASES[normalized] ?? normalized;
+}
+
+export function normalizeDocumentTypeKey(value: string) {
+	return value
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toUpperCase()
+		.trim()
+		.replace(/[^A-Z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "")
+		.replace(/_+/g, "_");
+}
+
+export function formatDocumentTypeLabel(value: unknown) {
+	const documentType = normalizeDocumentType(value);
+	if (!documentType) return "";
+	return DOCUMENT_TYPE_LABELS[documentType] ?? humanizeDocumentType(documentType);
+}
+
+function humanizeDocumentType(value: string) {
+	return value
+		.replace(/_/g, " ")
+		.toLowerCase()
+		.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function normalizeTemplateSchema(value: unknown): TemplateSchema {
@@ -291,6 +337,10 @@ function normalizeTemplateField(
 				? normalizeTemplateVariableKey(field.extractionFieldKey)
 				: null,
 		autoPopulate: normalizeAutoPopulate(field.autoPopulate),
+		formula:
+			typeof field.formula === "string" && field.formula.trim().length > 0
+				? field.formula.trim()
+				: null,
 		repeatableGroup,
 		repeatableGroupLabel:
 			typeof field.repeatableGroupLabel === "string" &&
@@ -794,10 +844,10 @@ export function applyDocumentAiContextInputData(params: {
 	};
 
 	return {
-		inputData: applyTemplateAliasInputData(params.schema, {
+		inputData: applyTemplateFormulaInputData(params.schema, applyTemplateAliasInputData(params.schema, {
 			...next,
 			__documentAi: context,
-		}),
+		})),
 		context,
 		appliedFieldCount,
 	} satisfies DocumentAiHydrationResult;
@@ -853,6 +903,60 @@ export function applyTemplateAutoInputData(
 	return next;
 }
 
+function getTemplateFormulaReferences(formula: string) {
+	return Array.from(formula.matchAll(/\[([a-zA-Z_][a-zA-Z0-9_]*)\]/g)).map(
+		(match) => match[1],
+	);
+}
+
+function canEvaluateTemplateFormula(
+	formula: string,
+	inputData: Record<string, unknown>,
+) {
+	const references = getTemplateFormulaReferences(formula);
+	return (
+		references.length > 0 &&
+		references.every((key) => hasTemplateInputValue(inputData[key]))
+	);
+}
+
+function coerceTemplateFormulaValue(field: TemplateField, value: number) {
+	if (field.type === "text" || field.type === "textarea") return String(value);
+	return value;
+}
+
+export function applyTemplateFormulaInputData(
+	schema: TemplateSchema,
+	current: Record<string, unknown>,
+) {
+	let next: Record<string, unknown> = { ...current };
+	const formulaFields = schema.fields.filter(
+		(field) =>
+			field.type !== "table" &&
+			!field.repeatableGroup &&
+			typeof field.formula === "string" &&
+			field.formula.trim().length > 0,
+	);
+	if (formulaFields.length === 0) return next;
+
+	for (let pass = 0; pass < formulaFields.length; pass += 1) {
+		let changed = false;
+		for (const field of formulaFields) {
+			const formula = field.formula?.trim();
+			if (!formula || !canEvaluateTemplateFormula(formula, next)) continue;
+			const computed = evaluateTablaFormula(formula, next);
+			if (computed == null) continue;
+			const nextValue = coerceTemplateFormulaValue(field, computed);
+			if (next[field.key] === nextValue) continue;
+			next = { ...next, [field.key]: nextValue };
+			changed = true;
+		}
+		if (!changed) break;
+	}
+
+	return next;
+}
+
 export function getTemplateSequenceFieldKeys(schema: TemplateSchema) {
 	return schema.fields
 		.filter(
@@ -901,8 +1005,10 @@ export function getTemplateNextSequenceNumber(
 		}
 	}
 
-	if (maxSequenceNumber != null) return maxSequenceNumber + 1;
-	return Math.max(0, fallbackExistingCount) + 1;
+	const nextFromExistingRows =
+		maxSequenceNumber == null ? 1 : maxSequenceNumber + 1;
+	const nextFromFallbackCount = Math.max(0, fallbackExistingCount) + 1;
+	return Math.max(nextFromExistingRows, nextFromFallbackCount);
 }
 
 export function refreshTemplateSequenceInputData(
@@ -1146,17 +1252,20 @@ export function buildDocumentGenerationExtractionRows(params: {
 		? (bestCandidate?.rows ?? [])
 		: [null];
 
-	return rowSources.map((rowSource) => {
+	return rowSources.flatMap((rowSource) => {
 		const normalized = buildExtractionRow(
 			columns,
 			inputData,
 			rowSource,
 			extractionBindings,
 		);
+		if (!hasMeaningfulExtractionRowData(normalized, columns)) {
+			return [];
+		}
 		normalized.__docBucket = documentMeta.bucket;
 		normalized.__docPath = documentMeta.path;
 		normalized.__docFileName = documentMeta.fileName;
-		return applyFormulaColumns(normalized, columns);
+		return [applyFormulaColumns(normalized, columns)];
 	});
 }
 
@@ -1407,6 +1516,20 @@ function buildExtractionRow(
 	}
 
 	return rowData;
+}
+
+function hasMeaningfulExtractionRowData(
+	rowData: Record<string, unknown>,
+	columns: ExtractionTableColumn[],
+) {
+	return columns.some((column) => {
+		const value = rowData[column.fieldKey];
+		if (value == null) return false;
+		if (typeof value === "string") return value.trim().length > 0;
+		if (typeof value === "boolean") return value;
+		if (Array.isArray(value)) return value.length > 0;
+		return true;
+	});
 }
 
 function applyFormulaColumns(

@@ -537,20 +537,20 @@ function PeriodProgressField({ policy }: { policy: Policy }) {
 
 function EmptyPolicyListState({ onImportHint }: { onImportHint: () => void }) {
 	return (
-		<div className="flex min-h-[260px] items-center justify-center px-6 py-12 text-center">
-			<div className="max-w-[220px]">
-				<div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-300 shadow-sm">
+		<div className="flex min-h-[280px] items-center justify-center px-5 py-10 text-center">
+			<div className="max-w-[260px]">
+				<div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-stroke-soft bg-surface text-content-muted shadow-card">
 					<Inbox className="size-5" />
 				</div>
-				<h3 className="mt-4 text-sm font-semibold text-stone-800">No hay polizas cargadas</h3>
-				<p className="mt-1.5 text-xs font-medium leading-relaxed text-stone-500">
-					Agrega una poliza manualmente abajo, o importa un lote desde Excel.
+				<h3 className="mt-4 text-sm font-semibold text-content">No hay polizas cargadas</h3>
+				<p className="mt-1.5 text-xs font-medium leading-relaxed text-content-muted">
+					Carga una poliza manualmente o importa un lote desde Excel para iniciar el seguimiento.
 				</p>
 				<Button
 					type="button"
 					variant="outline"
 					size="sm"
-					className="mx-auto mt-4 flex h-8 w-[158px] justify-center gap-2 rounded-lg border-stone-200 bg-white px-3 text-xs font-semibold text-stone-700 shadow-sm hover:bg-stone-50"
+					className="mx-auto mt-4 flex h-9 w-[170px] justify-center gap-2 rounded-lg px-3 text-xs font-semibold"
 					onClick={onImportHint}
 				>
 					<FileSpreadsheet className="size-3.5 text-emerald-600" />
@@ -563,26 +563,26 @@ function EmptyPolicyListState({ onImportHint }: { onImportHint: () => void }) {
 
 function EmptyPolicyDetailState({ onImportHint }: { onImportHint: () => void }) {
 	return (
-		<div className="flex min-h-[560px] items-center justify-center px-8 py-16 text-center">
-			<div className="max-w-[360px]">
-				<div className="relative mx-auto flex size-16 items-center justify-center rounded-2xl border border-stone-200 bg-white text-stone-300 shadow-sm">
+		<div className="flex min-h-[560px] items-center justify-center bg-surface px-8 py-16 text-center">
+			<div className="max-w-[390px]">
+				<div className="relative mx-auto flex size-16 items-center justify-center rounded-2xl border border-stroke-soft bg-surface-raised text-content-muted shadow-card">
 					<Shield className="size-7" />
 					<span className="absolute -bottom-1.5 -right-1.5 flex size-7 items-center justify-center rounded-full border-2 border-white bg-orange-500 text-white shadow-sm">
 						<Plus className="size-4" />
 					</span>
 				</div>
-				<h2 className="mt-5 text-lg font-semibold tracking-tight text-stone-900">Ninguna poliza seleccionada</h2>
-				<p className="mx-auto mt-2 max-w-[310px] text-sm font-medium leading-relaxed text-stone-500">
-					Selecciona una poliza de la lista para ver su detalle, o carga la primera con el formulario de la izquierda.
+				<h2 className="mt-5 text-lg font-semibold tracking-tight text-content">Ninguna poliza seleccionada</h2>
+				<p className="mx-auto mt-2 max-w-[330px] text-sm font-medium leading-relaxed text-content-muted">
+					Selecciona una poliza para revisar fechas, montos, responsables y regla de baja.
 				</p>
-				<div className="mt-5 flex flex-wrap items-center justify-center gap-2.5 text-[11px] font-medium text-stone-500">
-					<span className="inline-flex items-center gap-1.5 rounded-full bg-stone-50 px-2.5 py-1">
-						<Plus className="size-3 rounded-full bg-stone-200 p-0.5 text-stone-500" />
-						Selecciona de la lista
+				<div className="mt-5 flex flex-wrap items-center justify-center gap-2.5 text-[11px] font-medium text-content-muted">
+					<span className="inline-flex items-center gap-1.5 rounded-full border border-stroke-soft bg-surface-recessed px-2.5 py-1">
+						<Plus className="size-3 rounded-full bg-surface text-content-muted" />
+						Elige una poliza
 					</span>
 					<button
 						type="button"
-						className="inline-flex items-center gap-1.5 rounded-full bg-stone-50 px-2.5 py-1 transition hover:bg-stone-100"
+						className="inline-flex items-center gap-1.5 rounded-full border border-stroke-soft bg-surface-recessed px-2.5 py-1 transition hover:bg-surface"
 						onClick={onImportHint}
 					>
 						<FileSpreadsheet className="size-3 text-emerald-600" />
@@ -978,19 +978,19 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 	}
 
 	return (
-		<div className="grid min-h-[560px] overflow-hidden gap-2 lg:grid-cols-[minmax(340px,31%)_minmax(0,1fr)]">
-			<aside className="">
-				<div className="space-y-3 p-3">
+		<div className="grid min-h-[560px] gap-4 overflow-hidden lg:grid-cols-[minmax(360px,32%)_minmax(0,1fr)]">
+			<aside className="min-w-0 space-y-3">
+				<div className="space-y-3 rounded-xl border border-stroke-soft bg-surface p-3 shadow-card">
 					<div className="relative">
-						<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+						<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-content-muted" />
 						<Input
 							value={searchTerm}
 							onChange={(event) => setSearchTerm(event.target.value)}
 							placeholder="Buscar poliza"
-							className="h-10 rounded-lg border-stone-200 bg-white pl-9 text-sm shadow-sm"
+							className="h-10 rounded-lg bg-surface pl-9 text-sm"
 						/>
 					</div>
-					<div className="flex flex-wrap gap-1">
+					<div className="grid grid-cols-3 gap-1.5">
 						{FILTERS.map((filter) => (
 							<Button
 								key={filter.value}
@@ -998,18 +998,18 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 								size="sm"
 								variant={statusFilter === filter.value ? "default" : "ghost"}
 								className={cn(
-									"h-7 rounded-lg px-2.5 text-[11px] font-bold",
+									"h-8 w-full justify-between gap-1 rounded-lg px-2.5 text-[11px] font-bold",
 									statusFilter === filter.value
 										? "bg-stone-900 text-white hover:bg-stone-800"
-										: "text-stone-600 hover:bg-white",
+										: "text-content-secondary hover:bg-surface-recessed",
 								)}
 								onClick={() => setStatusFilter(filter.value)}
 							>
-								{filter.label}
+								<span className="min-w-0 truncate">{filter.label}</span>
 								<span
 									className={cn(
-										"ml-1.5 rounded-full px-1.5 text-[10px] font-bold",
-										statusFilter === filter.value ? "bg-white/15 text-white" : "bg-stone-100 text-stone-500",
+										"shrink-0 rounded-full px-1.5 text-[10px] font-bold",
+										statusFilter === filter.value ? "bg-white/15 text-white" : "bg-surface-recessed text-content-muted",
 									)}
 								>
 									{counts[filter.value]}
@@ -1019,7 +1019,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 					</div>
 				</div>
 
-				<div className="max-h-[420px] overflow-y-auto bg-stone-50 lg:max-h-[calc(85vh-360px)] shadow-card m-4">
+				<div className="max-h-[420px] overflow-y-auto rounded-xl border border-stroke-soft bg-surface shadow-card lg:max-h-[calc(85vh-360px)]">
 					{isInitialPoliciesLoading ? (
 						<LoadingPolicyListState />
 					) : (
@@ -1032,7 +1032,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 										key={policy.id}
 										type="button"
 										className={cn(
-											"relative flex min-h-[72px] w-full items-center gap-3 px-5 py-3 text-left transition-all duration-300 ease-out hover:bg-stone-100 hover:outline",
+											"relative flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left transition-all duration-300 ease-out hover:bg-surface-recessed",
 											active && selectedPolicyRowClasses(status),
 										)}
 										onClick={() => setSelectedPolicyId(policy.id)}
@@ -1099,29 +1099,34 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 					)}
 				</div>
 
-				<div className="m-3 rounded-lg border border-stone-200 bg-white p-3 shadow-sm">
-					<p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">
-						Agregar poliza <span className="normal-case tracking-normal text-stone-400">- carga manual</span>
-					</p>
+				<div className="rounded-xl border border-stroke-soft bg-surface p-3 shadow-card">
+					<div className="mb-3 flex items-center justify-between gap-2">
+						<p className="text-[10px] font-bold uppercase tracking-[0.18em] text-content-muted">
+							Agregar poliza
+						</p>
+						<Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px] font-semibold">
+							Carga manual
+						</Badge>
+					</div>
 					<div className="grid gap-2">
 						<Input
 							value={form.policyNumber}
 							onChange={(event) => setForm((current) => ({ ...current, policyNumber: event.target.value }))}
 							placeholder="Numero de poliza"
-							className="h-9"
+							className="h-10"
 						/>
 						<div className="grid grid-cols-[1fr_96px] gap-2">
 							<Input
 								type="date"
 								value={form.endDate}
 								onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))}
-								className="h-9"
+								className="h-10"
 							/>
-							<div className="flex items-center justify-center rounded-md border border-stone-200 bg-stone-50 px-2 text-[10px] font-medium uppercase text-stone-500">
+							<div className="flex items-center justify-center rounded-md border border-stroke-soft bg-surface-recessed px-2 text-[10px] font-semibold uppercase text-content-muted">
 								Sin regla
 							</div>
 						</div>
-						<Button className="h-9 gap-2 bg-orange-500 text-white hover:bg-orange-600" onClick={() => void createPolicy()} disabled={isSaving || !form.policyNumber.trim()}>
+						<Button className="h-10 gap-2" onClick={() => void createPolicy()} disabled={isSaving || !form.policyNumber.trim()}>
 							<Plus className="size-4" />
 							Agregar poliza
 						</Button>
@@ -1129,7 +1134,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 				</div>
 			</aside>
 
-			<section className="min-w-0 overflow-hidden rounded-xl bg-white shadow-card m-0.5">
+			<section className="min-w-0 overflow-hidden rounded-xl border border-stroke-soft bg-surface shadow-card">
 				{isInitialPoliciesLoading ? (
 					<LoadingPolicyDetailState />
 				) : selectedPolicy && selectedDraft ? (

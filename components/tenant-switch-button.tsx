@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { Button, type ButtonProps } from "@/components/ui/button";
@@ -16,28 +15,16 @@ export function TenantSwitchButton({
 	children,
 	...buttonProps
 }: TenantSwitchButtonProps) {
-	const router = useRouter();
-  const { refresh } = router;
 	const [pending, setPending] = React.useState(false);
 
-	const handleClick = React.useCallback(async () => {
+	const handleClick = React.useCallback(() => {
 		if (pending) return;
 		setPending(true);
-		try {
-			const response = await fetch(`/api/tenants/${tenantId}/switch`, {
-				method: "POST",
-			});
-			if (!response.ok) {
-				console.error("[tenant-switch] failed", response.status);
-				return;
-			}
-			refresh();
-		} catch (error) {
-			console.error("[tenant-switch] error", error);
-		} finally {
-			setPending(false);
-		}
-	}, [router, tenantId, pending]);
+		const nextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+		window.location.assign(
+			`/api/tenants/${tenantId}/switch?next=${encodeURIComponent(nextPath)}`
+		);
+	}, [tenantId, pending]);
 
 	return (
 		<Button type="button" onClick={handleClick} disabled={pending} {...buttonProps}>

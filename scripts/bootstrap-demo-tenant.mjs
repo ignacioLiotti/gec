@@ -5,7 +5,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const DEFAULT_OWNER_EMAIL = "ignacioliotti@gmail.com";
 const DEFAULT_OWNER_NAME = "Ignacio Liotti";
-const DEFAULT_OWNER_PASSWORD = "IgnacioDemo123!";
 const DEFAULT_SOURCE_TENANT_NAME = "Codex Demo Tenant Smoke";
 const DOCUMENTS_BUCKET = "obra-documents";
 
@@ -781,6 +780,11 @@ async function ensureOwnerUser(adminClient, { email, password, fullName }) {
 		});
 		if (error) throw error;
 		return existing.id;
+	}
+	if (typeof password !== "string" || password.length < 12) {
+		throw new Error(
+			"Set DEMO_TENANT_OWNER_PASSWORD or pass --owner-password with at least 12 characters before creating a demo owner.",
+		);
 	}
 
 	const { data, error } = await adminClient.auth.admin.createUser({
@@ -1901,7 +1905,7 @@ async function main() {
 	const ownerPassword =
 		typeof args["owner-password"] === "string" && args["owner-password"].trim()
 			? args["owner-password"].trim()
-			: process.env.DEMO_TENANT_OWNER_PASSWORD?.trim() || DEFAULT_OWNER_PASSWORD;
+			: process.env.DEMO_TENANT_OWNER_PASSWORD?.trim() || "";
 	const sourceTenantName =
 		typeof args["source-tenant"] === "string" && args["source-tenant"].trim()
 			? args["source-tenant"].trim()

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
   applyTemplateAliasInputData,
+  applyTemplateFormulaInputData,
   buildInitialInputData,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
@@ -358,10 +359,10 @@ export async function POST(request: NextRequest) {
           documentType,
           schema,
         });
-    const hydratedInputData = applyTemplateAliasInputData(
+    const hydratedInputData = applyTemplateFormulaInputData(schema, applyTemplateAliasInputData(
       schema,
       refreshTemplateSequenceInputData(schema, baseInputData, nextSequenceNumber),
-    );
+    ));
     const validationErrors = validateTemplateInput(schema, hydratedInputData);
     if (validationErrors.length > 0) {
       return NextResponse.json(

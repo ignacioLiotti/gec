@@ -1,5 +1,17 @@
 "use server";
 
+/**
+ * Server-side route authorization: resolves the acting user (auth session,
+ * superadmin flag, tenant membership, permission-simulation cookie) against
+ * the declarative rules in `lib/route-access.ts`.
+ *
+ * This is the enforcement layer for page/route access — client hooks like
+ * `useTenantAdminStatus` only mirror it for UI visibility. Permission
+ * simulation (ADR 0024) can narrow but never widen effective permissions.
+ * Changes here affect authorization across the entire app; read
+ * `docs/obsidian-brain/31 - RLS & Security Policies.md` and the permission
+ * ADRs (0012, 0016, 0023, 0024, 0028, 0029) first.
+ */
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { auth } from "@/lib/auth";

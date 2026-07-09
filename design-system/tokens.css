@@ -157,7 +157,6 @@
 	}
 
 	html {
-		scrollbar-gutter: stable;
 		text-rendering: optimizeLegibility;
 	}
 
@@ -207,4 +206,8 @@
 
 @utility shadow-modal {
 	box-shadow: var(--shadow-modal);
+}
+
+@utility bg-surface {
+	background-color: hsl(var(--surface));
 }

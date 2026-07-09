@@ -1,0 +1,11 @@
+---
+alwaysApply: true
+---
+
+Before changing product UI, read `docs/styleguide/design-system.md`.
+
+Use `@/components/ui/*` for app UI primitives. Do not import directly from `@/design-system/*` unless you are editing the design-system layer itself.
+
+Use the documented token classes for product UI colors, spacing, surfaces, borders, and text.
+
+Preserve domain-specific visual systems for report/document output, charts, calendars, landing pages, and viewer canvases unless the task explicitly targets them.

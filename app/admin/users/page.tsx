@@ -3,10 +3,8 @@ import { isSuperAdminUser } from "@/lib/superadmin";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
-import { InviteUsersDialog } from "./_components/invite-users-dialog";
 import { PendingInvitationsList } from "./_components/pending-invitations-list";
 import { UsersPageClient } from "./users-page-client";
-import { Separator } from "@/components/ui/separator";
 
 export default async function AdminUsersPage() {
 	const supabase = await createClient();
@@ -172,38 +170,17 @@ export default async function AdminUsersPage() {
 	});
 
 	return (
-		<div className="min-h-screen bg-[#f0f1f3] px-4 py-6 text-stone-950 sm:px-6 lg:px-8">
-			<div className="mx-auto max-w-7xl space-y-6">
-				<div className="flex flex-col gap-5  sm:flex-row sm:items-end sm:justify-between">
-					<div className="space-y-2">
-						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
-							Administracion
-						</p>
-						<div>
-							<h1 className="text-3xl font-semibold tracking-tight">
-								Usuarios
-							</h1>
-							<p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-								Roles, permisos y perfiles de la organizacion en una sola
-								vista.
-							</p>
-						</div>
-					</div>
-					<div className="flex items-center gap-2">
-						{canManageUsers ? <InviteUsersDialog tenantId={tenantId} /> : null}
-					</div>
-				</div>
-
-				<Separator />
-
-				<PendingInvitationsList tenantId={tenantId} />
+		<div className="min-h-screen bg-canvas px-4 py-6 text-content sm:px-6 lg:px-8">
+			<div className="mx-auto max-w-[90rem] space-y-5">
 				<UsersPageClient
 					users={users}
 					tenantId={tenantId}
 					allRoles={roles ?? []}
 					allPermissions={permissions ?? []}
 					canImpersonate={impersonationAccess.allowed}
+					canManageUsers={canManageUsers}
 				/>
+				<PendingInvitationsList tenantId={tenantId} />
 			</div>
 		</div>
 	);

@@ -304,64 +304,17 @@ export async function acceptInvitation(token: string) {
 		};
 	}
 
-	// Check if user is already a member
-	const { data: existingMembership } = await supabase
-		.from("memberships")
-		.select("user_id")
-		.eq("tenant_id", invitation.tenant_id)
-		.eq("user_id", user.id)
-		.maybeSingle();
+	const { data: acceptedInvitations, error: acceptError } = await supabase.rpc(
+		"accept_tenant_invitation",
+		{ p_token: token },
+	);
+	const acceptedInvitation = Array.isArray(acceptedInvitations)
+		? acceptedInvitations[0]
+		: null;
 
-	if (existingMembership) {
-		// Mark invitation as accepted anyway
-		await supabase
-			.from("invitations")
-			.update({
-				status: "accepted",
-				accepted_at: new Date().toISOString(),
-				accepted_by: user.id,
-			})
-			.eq("id", invitation.id)
-			.eq("tenant_id", invitation.tenant_id)
-			.eq("email", userEmail)
-			.eq("token", token)
-			.eq("status", "pending");
-
-		return {
-			error: "You are already a member of this organization",
-			alreadyMember: true,
-			tenantId: invitation.tenant_id,
-		};
-	}
-
-	// Create membership
-	const { error: membershipError } = await supabase.from("memberships").insert({
-		tenant_id: invitation.tenant_id,
-		user_id: user.id,
-		role: invitation.invited_role,
-	});
-
-	if (membershipError) {
-		console.error("Error creating membership:", membershipError);
+	if (acceptError || !acceptedInvitation) {
+		console.error("Error accepting invitation:", acceptError);
 		return { error: "Failed to join organization" };
-	}
-
-	// Update invitation status
-	const { error: updateError } = await supabase
-		.from("invitations")
-		.update({
-			status: "accepted",
-			accepted_at: new Date().toISOString(),
-			accepted_by: user.id,
-		})
-		.eq("id", invitation.id)
-		.eq("tenant_id", invitation.tenant_id)
-		.eq("email", userEmail)
-		.eq("token", token)
-		.eq("status", "pending");
-
-	if (updateError) {
-		console.error("Error updating invitation:", updateError);
 	}
 
 	revalidatePath("/");
@@ -369,8 +322,8 @@ export async function acceptInvitation(token: string) {
 
 	return {
 		success: true,
-		tenantId: invitation.tenant_id,
-		tenantName: invitation.tenant_name,
+		tenantId: acceptedInvitation.tenant_id,
+		tenantName: acceptedInvitation.tenant_name,
 	};
 }
 

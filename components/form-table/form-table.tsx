@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useDeferredValue, useEffect, useMemo, useRef, useTransition, startTransition } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, useTransition, startTransition } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import {
@@ -10,7 +10,7 @@ import {
 	VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Button } from "@/components/ui/button";
+import { Button, ExpandableLightButton, LightButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
 	Sheet,
@@ -58,7 +58,11 @@ import {
 	Download,
 	Search,
 	MoreHorizontal,
+	Plus,
+	RotateCcw,
+	Save,
 	Check,
+	Undo2,
 	X,
 } from "lucide-react";
 import type {
@@ -90,11 +94,56 @@ import { MemoizedTableRow } from "./table-body";
 
 export const useFormTable = useFormTableContext;
 
+const DEFAULT_ROW_NUMBER_COLUMN_WIDTH = 42;
+const SEARCH_COMMIT_DEBOUNCE_MS = 220;
+
+function getSpreadsheetColumnLabel(index: number) {
+	let label = "";
+	let current = index + 1;
+	while (current > 0) {
+		const remainder = (current - 1) % 26;
+		label = String.fromCharCode(65 + remainder) + label;
+		current = Math.floor((current - 1) / 26);
+	}
+	return label;
+}
+
+function shouldUseSpreadsheetChrome<Row extends FormTableRow, Filters>(config: FormTableConfig<Row, Filters>) {
+	return (
+		config.showRowNumbers === true ||
+		(config.showRowNumbers !== false &&
+			(config.tableId.startsWith("ocr-orders-") ||
+				config.tableId.startsWith("ocr-doc-") ||
+				config.tableId.startsWith("documents-new-ocr-")))
+	);
+}
+
+const FORM_TABLE_FLOATING_INTERACTION_SELECTOR = [
+	'[data-slot="select-content"]',
+	'[data-slot="context-menu-content"]',
+	'[data-slot="context-menu-sub-content"]',
+	'[data-slot="dropdown-menu-content"]',
+	'[data-slot="dropdown-menu-sub-content"]',
+	'[data-slot="popover-content"]',
+	'[data-radix-popper-content-wrapper]',
+].join(", ");
+
+function getElementFromEventTarget(target: EventTarget | null) {
+	if (target instanceof Element) return target;
+	if (target instanceof Node) return target.parentElement;
+	return null;
+}
+
 export function FormTableToolbar() {
-	const { config, search, filters, columns, sorting, meta, actions } = useFormTable<FormTableRow, unknown>();
+	const { config, search, filters, columns, sorting, pagination, actions } = useFormTable<FormTableRow, unknown>();
 	const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 	const isExtrasToolbar = config.toolbarMode === "extras";
+	const isSpreadsheetChrome = shouldUseSpreadsheetChrome(config);
 	const canShowFilters = filters.enabled && typeof filters.value !== "undefined";
+	const rowCountText =
+		pagination.totalRowCount > 0 && pagination.visibleRowCount !== pagination.totalRowCount
+			? `${pagination.visibleRowCount}/${pagination.totalRowCount} filas`
+			: `${pagination.visibleRowCount} filas`;
 
 	const renderFiltersContent =
 		isFiltersOpen && typeof filters.draft !== "undefined" && config.renderFilters
@@ -103,7 +152,7 @@ export function FormTableToolbar() {
 				onChange: (updater) => filters.setDraft((prev) => updater(prev ?? filters.draft)),
 			})
 			: (
-				<p className="text-sm text-muted-foreground">
+				<p className="text-sm text-content-muted">
 					No hay filtros configurados para esta vista.
 				</p>
 			);
@@ -122,76 +171,91 @@ export function FormTableToolbar() {
 			togglePin={columns.togglePin}
 			onBalanceColumns={columns.handleBalance}
 			disabled={false}
-			triggerVariant={isExtrasToolbar ? "ghost" : "outline"}
+			triggerVariant={isExtrasToolbar ? "secondary" : "default"}
 			triggerClassName={
-				isExtrasToolbar
-					? "h-8 w-full justify-start rounded-sm px-2 py-1.5 text-sm font-normal"
-					: "gap-2"
+				cn(
+					"h-8 min-w-8 px-2",
+					isExtrasToolbar
+						? "h-8 w-full justify-start rounded-sm px-2 py-1.5 text-sm font-normal"
+						: isSpreadsheetChrome && "text-xs"
+				)
 			}
 		/>
 	);
 
 	return (
-		<div className="flex flex-wrap items-center justify-between gap-3">
+		<div className={cn("flex flex-wrap items-center justify-between gap-2 -mr-5 z-20", isSpreadsheetChrome && "gap-2")}>
 			<div className="flex flex-wrap items-center gap-2">
 				{search.showInline && (
-					<div className="relative ml-0.5 flex items-center gap-2 group">
+					<div className="group relative ml-0.5 flex items-center gap-2">
 						{search.isProcessing ? (
-							<Loader2 className="size-4 -mr-6 absolute left-2.5 top-2.5 z-10 animate-spin text-primary" />
+							<Loader2 className="absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 animate-spin text-content" />
 						) : (
-							<Search className="size-4 -mr-6 absolute left-2.5 top-2.5 z-10 text-muted-foreground" />
+							<Search className="absolute left-4 top-1/2 z-10 size-4 -translate-y-1/2 text-content" />
 						)}
 						<Input
 							type="search"
 							data-testid="form-table-search"
-							className="h-9 w-64 pointer-events-auto rounded-lg border-[#e8e8e8] pl-9 text-sm bg-white bg-[radial-gradient(100%_50%_at_50%_0%,#fff_0%,#fff0_100%),var(--background-85,#fafafad9)] shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset,0_8px_3px_0_#0b090c03,0_5px_3px_0_#0b090c08,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_-1px_0_0_#0000001f_inset] hover:bg-accent text-foreground"
+							className={cn(
+								"pointer-events-auto w-[360px] bg-surface pl-9 pr-[68px] text-sm font-medium text-content bg-[linear-gradient(to_bottom,rgb(255_255_255/0),rgb(255_255_255/0))]! border border-stroke-soft shadow-[0_1px_0_rgba(255,255,255,1),inset_0_1px_1px_rgba(15,23,22,0.08)] placeholder:text-content-muted focus-visible:ring-2 focus-visible:ring-orange-primary/20 [&::-webkit-search-cancel-button]:hidden",
+								isSpreadsheetChrome
+									? "sm:w-[360px]"
+									: "sm:w-64 md:w-[360px]"
+							)}
 							value={search.value}
 							onChange={(event) => search.onChange(event.target.value)}
 							placeholder={search.placeholder}
 						/>
+						{/* <LightButton
+							aria-hidden="true"
+							className="absolute right-3 top-1/2 h-6 -translate-y-1/2  px-2.5 text-sm font-medium leading-none text-content-muted"
+						>
+							Ctrl + D
+						</LightButton> */}
 					</div>
+				)}
+				{isSpreadsheetChrome && (
+					<span className="inline-flex h-8 items-center rounded-md border border-stroke-soft bg-surface-recessed px-2.5 text-[11px] font-semibold text-content-muted shadow-recessed">
+						{search.isProcessing ? "Buscando..." : rowCountText}
+					</span>
 				)}
 				{search.showInline && config.toolbarSearchEnd}
 				{canShowFilters && (
 					<Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
 						{!isExtrasToolbar && (
 							<SheetTrigger asChild>
-								<Button
+								<ExpandableLightButton
 									type="button"
-									variant={filters.activeCount > 0 ? "default" : "outline"}
-									className={cn(
-										"gap-2 transition-all",
-										filters.activeCount > 0 && "shadow-sm"
-									)}
+									label="Filtros"
+									variant={filters.activeCount > 0 ? "primary" : "default"}
+									className="h-8 min-w-8 px-2"
 								>
 									{filters.isProcessing ? (
 										<Loader2 className="size-4 animate-spin" />
 									) : (
 										<Filter className="size-4" />
 									)}
-									<span>Filtros</span>
 									{filters.activeCount > 0 && (
-										<span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-[10px] font-semibold">
+										<span className="ml-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-[10px] font-semibold">
 											{filters.activeCount}
 										</span>
 									)}
-								</Button>
+								</ExpandableLightButton>
 							</SheetTrigger>
 						)}
 						<SheetContent
 							side="right"
-							className="!max-w-[420px] p-0 flex flex-col border-l-0 shadow-2xl"
+							className="flex !max-w-[420px] flex-col border-l border-stroke-soft bg-surface p-0 shadow-dropdown"
 						>
-							{/* Header */}
-							<div className="shrink-0 border-b bg-gradient-to-br from-muted/50 to-background px-6 py-5">
+							<div className="shrink-0 border-b border-stroke-soft bg-surface px-6 py-5">
 								<SheetHeader className="space-y-1">
 									<div className="flex items-center gap-3">
-										<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
-											<Filter className="size-4 text-primary" />
+										<div className="flex size-9 items-center justify-center rounded-md border border-stroke-soft bg-surface-recessed text-content-muted">
+											<Filter className="size-4" />
 										</div>
 										<div>
 											<SheetTitle className="text-lg">Filtros avanzados</SheetTitle>
-											<p className="text-xs text-muted-foreground mt-0.5">
+											<p className="mt-0.5 text-xs text-content-secondary">
 												{filters.activeCount > 0
 													? `${filters.activeCount} filtro${filters.activeCount > 1 ? 's' : ''} activo${filters.activeCount > 1 ? 's' : ''}`
 													: "Refina los resultados de la tabla"
@@ -202,34 +266,33 @@ export function FormTableToolbar() {
 								</SheetHeader>
 							</div>
 
-							{/* Content */}
 							<div className="flex-1 overflow-y-auto px-6 py-5">
 								<div className="space-y-5">{renderFiltersContent}</div>
 							</div>
 
-							{/* Footer */}
-							<div className="shrink-0 border-t bg-muted/30 px-6 py-4">
+							<div className="shrink-0 border-t border-stroke-soft bg-surface-recessed px-6 py-4">
 								<div className="flex items-center justify-between gap-3">
-									<Button
+									<LightButton
 										type="button"
-										variant="ghost"
-
+										variant="default"
 										onClick={filters.reset}
-										className="text-muted-foreground hover:text-foreground"
+										className="gap-1.5 px-3 py-3"
 									>
+										<RotateCcw className="size-4" />
 										Reiniciar filtros
-									</Button>
-									<Button
+									</LightButton>
+									<LightButton
 										type="button"
+										variant="primarySolid"
 										onClick={() => {
 											filters.apply();
 											setIsFiltersOpen(false);
 										}}
-
-										className="px-6 shadow-sm"
+										className="gap-1.5 px-3 py-3"
 									>
+										<Check className="size-4" />
 										Aplicar
-									</Button>
+									</LightButton>
 								</div>
 							</div>
 						</SheetContent>
@@ -238,10 +301,14 @@ export function FormTableToolbar() {
 				{isExtrasToolbar ? (
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
-							<Button type="button" variant="outline" className="gap-2">
+							<ExpandableLightButton
+								type="button"
+								label="Extras"
+								variant="default"
+								className="h-8 min-w-8 px-2"
+							>
 								<MoreHorizontal className="size-4" />
-								Extras
-							</Button>
+							</ExpandableLightButton>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="start" className="w-[320px]">
 							{canShowFilters && (
@@ -260,7 +327,7 @@ export function FormTableToolbar() {
 										)}
 										<span>Filtros</span>
 										{filters.activeCount > 0 && (
-											<span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+											<span className="ml-auto rounded-full bg-orange-primary/10 px-2 py-0.5 text-[10px] font-semibold text-orange-primary">
 												{filters.activeCount}
 											</span>
 										)}
@@ -295,19 +362,28 @@ export function FormTableToolbar() {
 					</>
 				)}
 			</div>
-			<div className="flex flex-wrap items-center gap-2 mr-[1px]">
-
+			<div className="flex flex-wrap items-center gap-2 ">
 				{!isExtrasToolbar && (
-					<Button type="button" variant="outline" className="gap-2" onClick={() => void actions.exportCsv()}>
+					<ExpandableLightButton
+						type="button"
+						label={isSpreadsheetChrome ? "Exportar" : "Exportar tabla"}
+						variant="default"
+						className={cn("h-8 min-w-8 px-2", isSpreadsheetChrome && "text-xs")}
+						onClick={() => void actions.exportCsv()}
+					>
 						<Download className="size-4" />
-						Exportar tabla
-					</Button>
+					</ExpandableLightButton>
 				)}
 				{sorting.state.columnId && (
-					<Button type="button" variant="ghost" className="gap-1" onClick={sorting.clear}>
+					<ExpandableLightButton
+						type="button"
+						label="Limpiar orden"
+						variant="default"
+						className={cn("h-8 min-w-8 px-2", isSpreadsheetChrome && "text-xs")}
+						onClick={sorting.clear}
+					>
 						<Minus className="size-4" />
-						Limpiar orden
-					</Button>
+					</ExpandableLightButton>
 				)}
 			</div>
 		</div>
@@ -329,7 +405,7 @@ export function FormTableTabs({ className }: { className?: string }) {
 		<div
 			role="tablist"
 			aria-label="Filtros de tabla"
-			className={cn("flex gap-1 shadow-dark-wrapper", className)}
+			className={cn("flex gap-1 rounded-md border border-stroke-soft bg-surface-recessed p-0.5", className)}
 		>
 			{tabs.items.map((tab) => {
 				const isActive = tabs.activeTab === tab.id;
@@ -344,12 +420,12 @@ export function FormTableTabs({ className }: { className?: string }) {
 
 						className="gap-2"
 					>
-						<span className={isActive ? "text-white" : "text-black"}>{tab.label}</span>
+						<span>{tab.label}</span>
 						<span className={cn(
-							"rounded-full bg-muted px-2 py-0.5 text-xs",
+							"rounded-full px-2 py-0.5 text-xs",
 							isActive
 								? "bg-black/20 text-white"
-								: "hover:bg-black/20 hover:text-white"
+								: "bg-surface-recessed text-content-muted"
 						)}>
 							{tabs.counts[tab.id] ?? 0}
 						</span>
@@ -399,13 +475,13 @@ export function FormTableBulkEditBar() {
 	};
 
 	return (
-		<div className="flex flex-wrap items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-950 shadow-sm">
+		<div className="flex flex-wrap items-center gap-2 rounded-md border border-accent-border bg-accent-soft px-3 py-2 text-sm text-orange-primary shadow-card">
 			<span className="font-medium">
 				{bulkSelection.count} celdas seleccionadas en {selectedColumn.label}
 			</span>
 			{canUseSelect ? (
 				<Select value={value} onValueChange={setValue}>
-					<SelectTrigger className="h-8 w-[220px] border-orange-200 bg-white">
+					<SelectTrigger size="sm" className="w-[220px]">
 						<SelectValue placeholder="Elegir valor" />
 					</SelectTrigger>
 					<SelectContent>
@@ -418,7 +494,7 @@ export function FormTableBulkEditBar() {
 				</Select>
 			) : isBoolean ? (
 				<Select value={value} onValueChange={setValue}>
-					<SelectTrigger className="h-8 w-[160px] border-orange-200 bg-white">
+					<SelectTrigger size="sm" className="w-[160px]">
 						<SelectValue placeholder="Elegir valor" />
 					</SelectTrigger>
 					<SelectContent>
@@ -432,29 +508,30 @@ export function FormTableBulkEditBar() {
 					onChange={(event) => setValue(event.target.value)}
 					placeholder="Valor para aplicar"
 					type={cellType === "date" ? "date" : "text"}
-					className="h-8 w-[220px] border-orange-200 bg-white"
+					className="h-8 w-[220px]"
 				/>
 			)}
-			<Button
+			<LightButton
 				type="button"
 				size="sm"
+				variant="primarySolid"
 				onClick={apply}
 				disabled={value === ""}
-				className="h-8 gap-1"
+				className="h-8 gap-1 px-2"
 			>
 				<Check className="size-3.5" />
 				Aplicar
-			</Button>
-			<Button
+			</LightButton>
+			<LightButton
 				type="button"
-				size="icon"
-				variant="ghost"
+				size="sm"
+				variant="default"
 				onClick={bulkSelection.clear}
-				className="size-8 text-orange-900 hover:bg-orange-100"
+				className="h-8 min-w-8 px-2"
 				aria-label="Limpiar seleccion"
 			>
 				<X className="size-4" />
-			</Button>
+			</LightButton>
 		</div>
 	);
 }
@@ -522,13 +599,16 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	} = rows;
 	const accordionAlwaysOpen = Boolean(accordionRowConfig?.alwaysOpen);
 	const isReadOnly = config.readOnly === true;
+	const showRowNumbers = shouldUseSpreadsheetChrome(config);
+	const rowNumberColumnWidth = config.rowNumberColumnWidth ?? DEFAULT_ROW_NUMBER_COLUMN_WIDTH;
 	const showActionsColumn = config.showActionsColumn !== false;
 	const actionsColumnPosition = config.actionsColumnPosition ?? "end";
 	const actionsColumnWidth = config.actionsColumnWidth ?? 140;
 	const actionsColumnLabel = config.actionsColumnLabel === undefined ? "Acciones" : config.actionsColumnLabel;
 	const headerCellClassName = config.headerCellClassName;
 	const tableLayoutClassName = config.tableLayout === "auto" ? "table-auto" : "table-fixed";
-	const dataColumnIndexOffset = showActionsColumn && actionsColumnPosition === "start" ? 1 : 0;
+	const dataColumnIndexOffset = (showRowNumbers ? 1 : 0) + (showActionsColumn && actionsColumnPosition === "start" ? 1 : 0);
+	const visibleColumnDefs = showRowNumbers ? columnDefs.filter((column) => !isColumnHidden(column.id)) : [];
 	// Rows only consume sticky left offsets, so the key that busts row memoization
 	// tracks exactly those — resizing unpinned columns no longer re-renders rows
 	// (their widths are applied through <col> elements).
@@ -719,6 +799,30 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 	const handleClearHoveredCell = useCallback(() => {
 		setHoveredCell(null);
 	}, []);
+	useEffect(() => {
+		if (!activeCell) return;
+		if (typeof document === "undefined") return;
+
+		const shouldKeepActiveCell = (target: EventTarget | null) => {
+			const element = getElementFromEventTarget(target);
+			if (!element) return false;
+			if (element.closest(FORM_TABLE_FLOATING_INTERACTION_SELECTOR)) return true;
+
+			const cell = element.closest<HTMLElement>('td[data-form-table-cell="true"]');
+			return Boolean(cell && tableRef.current?.contains(cell));
+		};
+
+		const clearActiveCellIfOutside = (event: PointerEvent) => {
+			if (shouldKeepActiveCell(event.target)) return;
+			setActiveCell(null);
+		};
+
+		document.addEventListener("pointerdown", clearActiveCellIfOutside, true);
+
+		return () => {
+			document.removeEventListener("pointerdown", clearActiveCellIfOutside, true);
+		};
+	}, [activeCell, setActiveCell, tableRef]);
 	const pendingBulkSelectionRef = useRef<{
 		rowId: string;
 		column: ColumnDef<FormTableRow>;
@@ -798,11 +902,11 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 					{serverError}
 				</div>
 			)}
-			<div className={cn("relative rounded-none overflow-x-auto w-full bg-white flex-1", className)}>
+			<div className={cn("relative w-full flex-1 overflow-x-auto rounded-none bg-card", className)}>
 				{isServerPaging && isFetching && tableRows.length === 0 && (
-					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm">
+					<div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-surface/80 backdrop-blur-sm">
 						<Loader2 className="size-6 animate-spin text-primary" />
-						<p className="text-sm font-medium text-muted-foreground">Sincronizando con el servidor…</p>
+						<p className="text-sm font-medium text-content-muted">Sincronizando con el servidor...</p>
 					</div>
 				)}
 				{isBusy && activityKind && tableRows.length > 0 && (
@@ -814,7 +918,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 								"inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium shadow-sm",
 								isSlowOperation
 									? "border-amber-300 bg-amber-50 text-amber-800"
-									: "border-primary/20 bg-background/90 text-primary"
+									: "border-accent-border bg-surface/90 text-orange-primary"
 							)}
 						>
 							<Loader2 className="size-3.5 animate-spin" />
@@ -826,9 +930,18 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 					ref={scrollParentRef}
 					onPointerLeave={handleClearHoveredCell}
 					onKeyDownCapture={handleArrowNavigation}
-					className={cn("h-full overflow-y-auto bg-[repeating-linear-gradient(-60deg,transparent_0%,transparent_5px,var(--border)_5px,var(--border)_6px,transparent_6px)] bg-repeat scrollbar", bulkSelection.isDragging && "select-none cursor-crosshair", innerClassName)}>
-					<table ref={tableRef} data-table-id={tableId} className={cn("w-full text-sm max-w-full relative", tableLayoutClassName, tableHeight)}>
+					className={cn("h-full overflow-y-auto bg-card scrollbar", bulkSelection.isDragging && "select-none cursor-crosshair", innerClassName)}>
+					<table ref={tableRef} data-table-id={tableId} className={cn("w-full max-w-full border-separate border-spacing-0 text-[13px] relative", tableLayoutClassName, tableHeight)}>
 						<colgroup className="max-w-full overflow-hidden">
+							{showRowNumbers && (
+								<col
+									style={{
+										width: `${rowNumberColumnWidth}px`,
+										minWidth: `${rowNumberColumnWidth}px`,
+										maxWidth: `${rowNumberColumnWidth}px`,
+									}}
+								/>
+							)}
 							{showActionsColumn && actionsColumnPosition === "start" && (
 								<col
 									style={{
@@ -860,208 +973,360 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 								/>
 							)}
 						</colgroup>
-						<thead className="sticky top-0 z-[101] bg-back-darker">
-							<tr>
-								{(() => {
-									const emittedGroups = new Set<string>();
-									return (
-										<>
-											{showActionsColumn && actionsColumnPosition === "start" && (
-												<th
-													rowSpan={2}
-													className={cn("relative whitespace-nowrap p-0 text-center text-xs font-semibold uppercase outline outline-border bg-back-darker", headerCellClassName)}
-													style={{
-														width: actionsColumnWidth,
-														minWidth: actionsColumnWidth,
-														maxWidth: actionsColumnWidth,
-													}}
-												>
-													<div className="flex w-full h-full px-2 py-3 absolute top-0 left-0 items-center justify-center gap-2">
-														{actionsColumnLabel === null ? null : <span>{actionsColumnLabel}</span>}
-													</div>
-												</th>
-											)}
-											{columnDefs.map((column) => {
-												if (isColumnHidden(column.id)) return null;
-												const group = groupedColumnLookup.get(column.id);
-												if (!group) {
-													const isSortable = column.enableSort !== false;
-													return (
-														<th
-															key={`no-group-${column.id}`}
-															rowSpan={2}
-															{...getStickyProps(
-																column.id,
-																cn("relative p-4 text-left text-md font-semibold uppercase outline outline-border bg-back-darker h-[55px]", headerCellClassName)
-															)}
-														>
-															<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
-																{isSortable ? (
-																	<ContextMenu>
-																		<ContextMenuTrigger asChild>
-																			<button
-																				type="button"
-																				onClick={() => toggleSort(column.id)}
-																				className="flex w-full items-center justify-between gap-2 text-left"
-																			>
-																				<span>{column.label.toUpperCase()}</span>
-																				<span className="text-muted-foreground flex items-center gap-2">
-																					{isSortProcessing &&
-																						(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
-																							<Loader2 className="size-3.5 animate-spin text-primary" />
-																						)}
-																					{sortState.columnId === column.id ? (
-																						sortState.direction === "asc" ? (
-																							<ArrowUp className="size-3.5" />
-																						) : (
-																							<ArrowDown className="size-3.5" />
-																						)
-																					) : (
-																						<ArrowUpDown className="size-3.5" />
-																					)}
-																				</span>
-																			</button>
-																		</ContextMenuTrigger>
-																		<ContextMenuContent>
-																			<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
-																				Orden ascendente
-																			</ContextMenuItem>
-																			<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
-																				Orden descendente
-																			</ContextMenuItem>
-																			<ContextMenuItem onClick={clearSort}>
-																				Quitar orden
-																			</ContextMenuItem>
-																		</ContextMenuContent>
-																	</ContextMenu>
-																) : (
-																	<span className="flex w-full items-center justify-between gap-2 text-left text-muted-foreground">
-																		<span>{column.label}</span>
-																	</span>
-																)}
-															</div>
-															{enableResizing && column.enableResize !== false && (
-																<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id] + dataColumnIndexOffset} mode="fixed" />
-															)}
-														</th>
-													);
-												}
-
-												if (emittedGroups.has(group.id)) return null;
-												emittedGroups.add(group.id);
-												const visibleColumns = group.columns.filter((columnId) => !isColumnHidden(columnId));
-												if (visibleColumns.length === 0) return null;
-
-												return (
-													<th
-														key={`group-${group.id}`}
-														colSpan={visibleColumns.length}
-														className={cn(
-															"px-4 py-2 text-center text-xs font-semibold uppercase outline outline-border bg-back-darker",
-															headerCellClassName,
-															group.className
-														)}
-													>
-														{group.label}
-													</th>
-												);
-											})}
-											{showActionsColumn && actionsColumnPosition === "end" && (
-												<th
-													rowSpan={2}
-													className={cn("relative p-4 text-right text-xs font-semibold uppercase outline outline-border bg-back-darker", headerCellClassName)}
-													style={{
-														width: actionsColumnWidth,
-														minWidth: actionsColumnWidth,
-														maxWidth: actionsColumnWidth,
-													}}
-												>
-													<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-end gap-2">
-														<span className={actionsColumnLabel === null ? "sr-only" : undefined}>
-															{actionsColumnLabel ?? "Acciones"}
-														</span>
-													</div>
-													{enableResizing && (
-														<ColumnResizer tableId={tableId} colIndex={columnDefs.length + dataColumnIndexOffset} mode="fixed" />
-													)}
-												</th>
-											)}
-										</>
-									);
-								})()}
-							</tr>
-							<tr>
-								{columnDefs.map((column, colIndex) => {
-									if (isColumnHidden(column.id)) return null;
-									if (!groupedColumnLookup.has(column.id)) return null;
-
-									const baseClassName = cn(
-										"relative p-4 text-left text-xs font-semibold uppercase outline outline-border bg-back-darker",
-										headerCellClassName
-									);
-									const isSortable = column.enableSort !== false;
-
-									return (
-										<th key={column.id} {...getStickyProps(column.id, baseClassName)}>
-											<div className="flex w-full h-full px-4 py-3 absolute top-0 left-0 items-center justify-between gap-2">
-												{isSortable ? (
-													<ContextMenu>
-														<ContextMenuTrigger asChild>
-															<button
-																type="button"
-																onClick={() => toggleSort(column.id)}
-																className="flex w-full items-center justify-between gap-2 text-left"
-															>
-																<span>{column.label}</span>
-																<span className="text-muted-foreground">
-																	{isSortProcessing &&
-																		(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
-																			<Loader2 className="mr-1 inline size-3.5 animate-spin text-primary" />
-																		)}
-																	{sortState.columnId === column.id ? (
-																		sortState.direction === "asc" ? (
-																			<ArrowUp className="inline size-3.5" />
-																		) : (
-																			<ArrowDown className="inline size-3.5" />
-																		)
-																	) : (
-																		<ArrowUpDown className="size-3.5" />
-																	)}
-																</span>
-															</button>
-														</ContextMenuTrigger>
-														<ContextMenuContent>
-															<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
-																Orden ascendente
-															</ContextMenuItem>
-															<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
-																Orden descendente
-															</ContextMenuItem>
-															<ContextMenuItem onClick={clearSort}>
-																Quitar orden
-															</ContextMenuItem>
-														</ContextMenuContent>
-													</ContextMenu>
-												) : (
-													<span className="flex w-full items-center justify-between gap-2 text-left text-muted-foreground">
-														<span>{column.label}</span>
-													</span>
-												)}
+						<thead className="sticky top-0 z-[101] bg-surface-muted">
+							{showRowNumbers ? (
+								<tr>
+									<th
+										className="sticky left-0 z-[130] h-10 border-b border-r border-stroke-soft bg-surface-muted px-2 text-center text-[10px] font-bold uppercase tracking-wide text-content-disabled"
+										style={{
+											width: rowNumberColumnWidth,
+											minWidth: rowNumberColumnWidth,
+											maxWidth: rowNumberColumnWidth,
+										}}
+									>
+										#
+									</th>
+									{showActionsColumn && actionsColumnPosition === "start" && (
+										<th
+											className={cn("relative h-10 border-b border-r border-stroke-soft bg-surface-muted p-0 text-center text-[10px] font-bold uppercase tracking-[0.08em] text-content-secondary", headerCellClassName)}
+											style={{
+												width: actionsColumnWidth,
+												minWidth: actionsColumnWidth,
+												maxWidth: actionsColumnWidth,
+											}}
+										>
+											<div className="absolute inset-0 flex items-center justify-center gap-2 px-2 py-2">
+												{actionsColumnLabel === null ? null : <span>{actionsColumnLabel}</span>}
 											</div>
-											{enableResizing && column.enableResize !== false && (
-												<ColumnResizer tableId={tableId} colIndex={colIndex + dataColumnIndexOffset} mode="fixed" />
+										</th>
+									)}
+									{visibleColumnDefs.map((column) => {
+										const isSortable = column.enableSort !== false;
+										return (
+											<th
+												key={`sheet-label-${column.id}`}
+												{...getStickyProps(
+													column.id,
+													cn("relative h-10 border-b border-r border-stroke-soft bg-surface-muted px-3 py-0 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-content-secondary", headerCellClassName)
+												)}
+											>
+												<div className="absolute inset-0 flex items-center justify-between gap-2 px-3 py-2">
+													{isSortable ? (
+														<ContextMenu>
+															<ContextMenuTrigger asChild>
+																<button
+																	type="button"
+																	onClick={() => toggleSort(column.id)}
+																	className="flex w-full items-center justify-between gap-2 text-left"
+																>
+																	<span className="truncate">{column.label}</span>
+																	<span className="flex items-center gap-2 text-content-muted">
+																		{isSortProcessing &&
+																			(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
+																				<Loader2 className="size-3.5 animate-spin text-primary" />
+																			)}
+																		{sortState.columnId === column.id ? (
+																			sortState.direction === "asc" ? (
+																				<ArrowUp className="size-3.5" />
+																			) : (
+																				<ArrowDown className="size-3.5" />
+																			)
+																		) : (
+																			<ArrowUpDown className="size-3.5" />
+																		)}
+																	</span>
+																</button>
+															</ContextMenuTrigger>
+															<ContextMenuContent>
+																<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
+																	Orden ascendente
+																</ContextMenuItem>
+																<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
+																	Orden descendente
+																</ContextMenuItem>
+																<ContextMenuItem onClick={clearSort}>
+																	Quitar orden
+																</ContextMenuItem>
+															</ContextMenuContent>
+														</ContextMenu>
+													) : (
+														<span className="flex w-full items-center justify-between gap-2 text-left text-content-muted">
+															<span className="truncate">{column.label}</span>
+														</span>
+													)}
+												</div>
+												{enableResizing && column.enableResize !== false && (
+													<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id] + dataColumnIndexOffset} mode="fixed" />
+												)}
+											</th>
+										);
+									})}
+									{showActionsColumn && actionsColumnPosition === "end" && (
+										<th
+											className={cn("relative h-10 border-b border-stroke-soft bg-surface-muted p-0 text-right text-[10px] font-bold uppercase tracking-[0.08em] text-content-secondary", headerCellClassName)}
+											style={{
+												width: actionsColumnWidth,
+												minWidth: actionsColumnWidth,
+												maxWidth: actionsColumnWidth,
+											}}
+										>
+											<div className="absolute inset-0 flex items-center justify-end gap-2 px-3 py-2">
+												<span className={actionsColumnLabel === null ? "sr-only" : undefined}>
+													{actionsColumnLabel ?? "Acciones"}
+												</span>
+											</div>
+											{enableResizing && (
+												<ColumnResizer tableId={tableId} colIndex={columnDefs.length + dataColumnIndexOffset} mode="fixed" />
 											)}
 										</th>
-									);
-								})}
-							</tr>
+									)}
+								</tr>
+							) : (
+								<>
+									<tr>
+										{(() => {
+											const emittedGroups = new Set<string>();
+											return (
+												<>
+													{showRowNumbers && (
+														<th
+															rowSpan={2}
+															className="sticky left-0 z-[130] h-9 border-b border-r border-stroke-soft bg-surface-muted px-2 text-center text-[10px] font-bold uppercase tracking-wide text-content-disabled"
+															style={{
+																width: rowNumberColumnWidth,
+																minWidth: rowNumberColumnWidth,
+																maxWidth: rowNumberColumnWidth,
+															}}
+														>
+															#
+														</th>
+													)}
+													{showActionsColumn && actionsColumnPosition === "start" && (
+														<th
+															rowSpan={2}
+															className={cn("relative h-9 whitespace-nowrap border-b border-r border-stroke-soft bg-surface-muted p-0 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-content-secondary", headerCellClassName)}
+															style={{
+																width: actionsColumnWidth,
+																minWidth: actionsColumnWidth,
+																maxWidth: actionsColumnWidth,
+															}}
+														>
+															<div className="absolute left-0 top-0 flex h-full w-full items-center justify-center gap-2 px-2 py-2">
+																{actionsColumnLabel === null ? null : <span>{actionsColumnLabel}</span>}
+															</div>
+														</th>
+													)}
+													{columnDefs.map((column, visibleColumnIndex) => {
+														if (isColumnHidden(column.id)) return null;
+														const group = groupedColumnLookup.get(column.id);
+														if (!group) {
+															const isSortable = column.enableSort !== false;
+															return (
+																<th
+																	key={`no-group-${column.id}`}
+																	rowSpan={2}
+																	{...getStickyProps(
+																		column.id,
+																		cn("relative h-9 border-b border-r border-stroke-soft bg-surface-muted px-3 py-0 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-content-secondary", headerCellClassName)
+																	)}
+																>
+																	<div className="absolute left-0 top-0 flex h-full w-full items-center justify-between gap-2 px-3 py-2">
+																		{isSortable ? (
+																			<ContextMenu>
+																				<ContextMenuTrigger asChild>
+																					<button
+																						type="button"
+																						onClick={() => toggleSort(column.id)}
+																						className="flex w-full items-center justify-between gap-2 text-left"
+																					>
+																						<span className="flex min-w-0 items-center gap-2">
+																							{showRowNumbers && (
+																								<span className="grid size-4 shrink-0 place-items-center rounded border border-stroke-soft bg-card text-[9px] font-bold text-content-disabled shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+																									{getSpreadsheetColumnLabel(visibleColumnIndex)}
+																								</span>
+																							)}
+																							<span className="truncate">{column.label.toUpperCase()}</span>
+																						</span>
+																						<span className="flex items-center gap-2 text-content-muted">
+																							{isSortProcessing &&
+																								(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
+																									<Loader2 className="size-3.5 animate-spin text-primary" />
+																								)}
+																							{sortState.columnId === column.id ? (
+																								sortState.direction === "asc" ? (
+																									<ArrowUp className="size-3.5" />
+																								) : (
+																									<ArrowDown className="size-3.5" />
+																								)
+																							) : (
+																								<ArrowUpDown className="size-3.5" />
+																							)}
+																						</span>
+																					</button>
+																				</ContextMenuTrigger>
+																				<ContextMenuContent>
+																					<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
+																						Orden ascendente
+																					</ContextMenuItem>
+																					<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
+																						Orden descendente
+																					</ContextMenuItem>
+																					<ContextMenuItem onClick={clearSort}>
+																						Quitar orden
+																					</ContextMenuItem>
+																				</ContextMenuContent>
+																			</ContextMenu>
+																		) : (
+																			<span className="flex w-full items-center justify-between gap-2 text-left text-content-muted">
+																				<span className="flex min-w-0 items-center gap-2">
+																					{showRowNumbers && (
+																						<span className="grid size-4 shrink-0 place-items-center rounded border border-stroke-soft bg-card text-[9px] font-bold text-content-disabled shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+																							{getSpreadsheetColumnLabel(visibleColumnIndex)}
+																						</span>
+																					)}
+																					<span className="truncate">{column.label}</span>
+																				</span>
+																			</span>
+																		)}
+																	</div>
+																	{enableResizing && column.enableResize !== false && (
+																		<ColumnResizer tableId={tableId} colIndex={columnIndexMap[column.id] + dataColumnIndexOffset} mode="fixed" />
+																	)}
+																</th>
+															);
+														}
+
+														if (emittedGroups.has(group.id)) return null;
+														emittedGroups.add(group.id);
+														const visibleColumns = group.columns.filter((columnId) => !isColumnHidden(columnId));
+														if (visibleColumns.length === 0) return null;
+
+														return (
+															<th
+																key={`group-${group.id}`}
+																colSpan={visibleColumns.length}
+																className={cn(
+																	"border-b border-r border-stroke-soft bg-surface-muted px-4 py-2 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-content-secondary",
+																	headerCellClassName,
+																	group.className
+																)}
+															>
+																{group.label}
+															</th>
+														);
+													})}
+													{showActionsColumn && actionsColumnPosition === "end" && (
+														<th
+															rowSpan={2}
+															className={cn("relative h-9 border-b border-stroke-soft bg-surface-muted p-0 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-content-secondary", headerCellClassName)}
+															style={{
+																width: actionsColumnWidth,
+																minWidth: actionsColumnWidth,
+																maxWidth: actionsColumnWidth,
+															}}
+														>
+															<div className="absolute left-0 top-0 flex h-full w-full items-center justify-end gap-2 px-3 py-2">
+																<span className={actionsColumnLabel === null ? "sr-only" : undefined}>
+																	{actionsColumnLabel ?? "Acciones"}
+																</span>
+															</div>
+															{enableResizing && (
+																<ColumnResizer tableId={tableId} colIndex={columnDefs.length + dataColumnIndexOffset} mode="fixed" />
+															)}
+														</th>
+													)}
+												</>
+											);
+										})()}
+									</tr>
+									<tr>
+										{columnDefs.map((column, colIndex) => {
+											if (isColumnHidden(column.id)) return null;
+											if (!groupedColumnLookup.has(column.id)) return null;
+
+											const baseClassName = cn(
+												"relative h-9 border-b border-r border-stroke-soft bg-surface-muted px-3 py-0 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-content-secondary",
+												headerCellClassName
+											);
+											const isSortable = column.enableSort !== false;
+
+											return (
+												<th key={column.id} {...getStickyProps(column.id, baseClassName)}>
+													<div className="absolute left-0 top-0 flex h-full w-full items-center justify-between gap-2 px-3 py-2">
+														{isSortable ? (
+															<ContextMenu>
+																<ContextMenuTrigger asChild>
+																	<button
+																		type="button"
+																		onClick={() => toggleSort(column.id)}
+																		className="flex w-full items-center justify-between gap-2 text-left"
+																	>
+																		<span className="flex min-w-0 items-center gap-2">
+																			{showRowNumbers && (
+																				<span className="grid size-4 shrink-0 place-items-center rounded border border-stroke-soft bg-card text-[9px] font-bold text-content-disabled shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+																					{getSpreadsheetColumnLabel(colIndex)}
+																				</span>
+																			)}
+																			<span className="truncate">{column.label}</span>
+																		</span>
+																		<span className="text-content-muted">
+																			{isSortProcessing &&
+																				(sortState.columnId === column.id || pendingSortColumnId === column.id) && (
+																					<Loader2 className="mr-1 inline size-3.5 animate-spin text-primary" />
+																				)}
+																			{sortState.columnId === column.id ? (
+																				sortState.direction === "asc" ? (
+																					<ArrowUp className="inline size-3.5" />
+																				) : (
+																					<ArrowDown className="inline size-3.5" />
+																				)
+																			) : (
+																				<ArrowUpDown className="size-3.5" />
+																			)}
+																		</span>
+																	</button>
+																</ContextMenuTrigger>
+																<ContextMenuContent>
+																	<ContextMenuItem onClick={() => applyDirection(column.id, "asc")}>
+																		Orden ascendente
+																	</ContextMenuItem>
+																	<ContextMenuItem onClick={() => applyDirection(column.id, "desc")}>
+																		Orden descendente
+																	</ContextMenuItem>
+																	<ContextMenuItem onClick={clearSort}>
+																		Quitar orden
+																	</ContextMenuItem>
+																</ContextMenuContent>
+															</ContextMenu>
+														) : (
+															<span className="flex w-full items-center justify-between gap-2 text-left text-content-muted">
+																<span className="flex min-w-0 items-center gap-2">
+																	{showRowNumbers && (
+																		<span className="grid size-4 shrink-0 place-items-center rounded border border-stroke-soft bg-card text-[9px] font-bold text-content-disabled shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+																			{getSpreadsheetColumnLabel(colIndex)}
+																		</span>
+																	)}
+																	<span className="truncate">{column.label}</span>
+																</span>
+															</span>
+														)}
+													</div>
+													{enableResizing && column.enableResize !== false && (
+														<ColumnResizer tableId={tableId} colIndex={colIndex + dataColumnIndexOffset} mode="fixed" />
+													)}
+												</th>
+											);
+										})}
+									</tr>
+								</>
+							)}
 						</thead>
-						<tbody className="bg-white">
+						<tbody className="bg-card">
 							{tableRows.length === 0 ? (
 								<tr>
 									<td
-										colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
-										className="px-6 py-12 text-center text-sm text-muted-foreground"
+										colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0) + (showRowNumbers ? 1 : 0)}
+										className="px-6 py-12 text-center text-sm text-content-muted"
 									>
 										{config.emptyStateMessage ??
 											"No encontramos filas que coincidan con tu búsqueda o filtros. Ajusta los criterios o agrega una nueva fila vacía para comenzar."}
@@ -1072,7 +1337,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									{paddingTop > 0 && (
 										<tr>
 											<td
-												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
+												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0) + (showRowNumbers ? 1 : 0)}
 												style={{ height: `${paddingTop}px` }}
 											/>
 										</tr>
@@ -1110,6 +1375,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 												dirtyCellIds={dirtyCellIds}
 												hiddenColumnIdsKey={hiddenColumnIdsKey}
 												stickyStateKey={stickyStateKey}
+												showRowNumbers={showRowNumbers}
+												rowNumberColumnWidth={rowNumberColumnWidth}
 												showActionsColumn={showActionsColumn}
 												actionsColumnPosition={actionsColumnPosition}
 												actionsColumnWidth={actionsColumnWidth}
@@ -1138,7 +1405,7 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 									{paddingBottom > 0 && (
 										<tr>
 											<td
-												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0)}
+												colSpan={visibleDataColumnCount + (showActionsColumn ? 1 : 0) + (showRowNumbers ? 1 : 0)}
 												style={{ height: `${paddingBottom}px` }}
 											/>
 										</tr>
@@ -1178,6 +1445,8 @@ export function FormTableContent({ className, innerClassName, tableHeight }: { c
 											dirtyCellIds={dirtyCellIds}
 											hiddenColumnIdsKey={hiddenColumnIdsKey}
 											stickyStateKey={stickyStateKey}
+											showRowNumbers={showRowNumbers}
+											rowNumberColumnWidth={rowNumberColumnWidth}
 											showActionsColumn={showActionsColumn}
 											actionsColumnPosition={actionsColumnPosition}
 											actionsColumnWidth={actionsColumnWidth}
@@ -1238,65 +1507,76 @@ export function FormTablePagination() {
 	const paginationDisabled = config.disablePagination === true;
 
 	return (
-		<div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground px-3 pb-4">
+		<div className="flex flex-wrap items-center justify-between gap-3 px-3 pb-4 text-sm text-content-secondary">
 			{paginationDisabled ? (
 				(isLoading || filters.activeCount > 0) && (
-					<div className="flex items-center gap-4 text-foreground">
-						{isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+					<div className="flex items-center gap-4 text-content">
+						{isLoading && <Loader2 className="size-4 animate-spin text-content-muted" />}
 						{filters.activeCount > 0 && (
-							<p className="text-xs text-muted-foreground">
-								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+							<p className="text-xs text-content-muted">
+								Filtros activos: <span className="font-medium text-content">{filters.activeCount}</span>
 							</p>
 						)}
 					</div>
 				)
 			) : hideFooterPaginationSummary ? (
 				(isLoading || filters.activeCount > 0) && (
-					<div className="flex items-center gap-4 text-foreground">
-						{isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+					<div className="flex items-center gap-4 text-content">
+						{isLoading && <Loader2 className="size-4 animate-spin text-content-muted" />}
 						{filters.activeCount > 0 && (
-							<p className="text-xs text-muted-foreground">
-								Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+							<p className="text-xs text-content-muted">
+								Filtros activos: <span className="font-medium text-content">{filters.activeCount}</span>
 							</p>
 						)}
 					</div>
 				)
 			) : (
-				<div className="flex items-center gap-2 text-foreground">
-					<span>Filas por página</span>
-					{pageSizeLocked ? (
-						<span className="font-medium text-foreground">{pageSize}</span>
-					) : (
-						<Select
-							value={String(pageSize)}
-							onValueChange={(value) => {
-								setPageSize(Number(value));
-							}}
-							disabled={isLoading}
-						>
-							<SelectTrigger className={cn("h-9 w-[90px] rounded-lg border-[#e8e8e8] bg-white", isLoading && "opacity-50")}>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{options.map((size) => (
-									<SelectItem key={size} value={String(size)}>
-										{size}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					)}
-					{isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+				<div className="flex flex-wrap items-center gap-2 text-content">
+					<div className="inline-flex items-center gap-2 rounded-full border border-stroke-soft bg-card px-2 py-1 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_1px_2px_rgba(15,23,22,0.08)]">
+						<span className="pl-1 text-xs font-medium text-content-muted">
+							Filas por página
+						</span>
+						{pageSizeLocked ? (
+							<span className="rounded-full bg-surface-recessed px-3 py-1.5 text-xs font-semibold text-content shadow-recessed">
+								{pageSize}
+							</span>
+						) : (
+							<Select
+								value={String(pageSize)}
+								onValueChange={(value) => {
+									setPageSize(Number(value));
+								}}
+								disabled={isLoading}
+							>
+								<SelectTrigger
+									className={cn(
+										"h-8 w-[74px] rounded-full border-stroke-soft bg-surface px-3 text-xs font-semibold text-content shadow-recessed hover:bg-surface-muted focus-visible:ring-orange-primary/20 [&>svg]:size-3.5 [&>svg]:text-content-muted",
+										isLoading && "opacity-50"
+									)}
+								>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{options.map((size) => (
+										<SelectItem key={size} value={String(size)}>
+											{size}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						)}
+					</div>
+					{isLoading && <Loader2 className="size-4 animate-spin text-content-muted" />}
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						{totalRowCount > 0 && (
-							<div className="flex items-center text-sm text-muted-foreground gap-4">
-								<p>
-									Mostrando <span className="font-medium text-foreground">{visibleRowCount}</span> de{" "}
-									<span className="font-medium text-foreground">{totalRowCount}</span> filas
+							<div className="flex items-center gap-4 text-sm text-content-secondary">
+								<p className="rounded-full bg-surface-recessed px-3 py-1.5 text-xs text-content-muted shadow-recessed">
+									Mostrando <span className="font-medium text-content">{visibleRowCount}</span> de{" "}
+									<span className="font-medium text-content">{totalRowCount}</span> filas
 								</p>
 								{filters.activeCount > 0 && (
 									<p className="text-xs">
-										Filtros activos: <span className="font-medium text-foreground">{filters.activeCount}</span>
+										Filtros activos: <span className="font-medium text-content">{filters.activeCount}</span>
 									</p>
 								)}
 							</div>
@@ -1307,38 +1587,50 @@ export function FormTablePagination() {
 			<div className="flex items-center gap-2">
 				{config.footerActions}
 				{allowAddRows && (
-					<Button type="button" variant="dark" onClick={actions.addRow} data-testid="form-table-add-row">
-						Agregar fila vacía
-					</Button>
+					<LightButton
+						type="button"
+						variant="primary"
+						onClick={actions.addRow}
+						data-testid="form-table-add-row"
+						className="gap-1.5 px-3 py-4"
+					>
+						<Plus className="size-4" />
+						Agregar fila vacia
+					</LightButton>
 				)}
 				{canSave && meta.hasUnsavedChanges && (
-					<Button
+					<LightButton
 						type="button"
 						onClick={actions.discard}
 						disabled={!meta.hasUnsavedChanges || meta.isSaving}
-						variant="destructiveSecondary"
+						variant="destructive"
 						data-testid="form-table-discard"
-
+						className="gap-1.5 px-3 py-4"
 					>
+						<Undo2 className="size-4" />
 						Descartar cambios
-					</Button>
+					</LightButton>
 				)}
 				{canSave ? (
-					<Button
+					<LightButton
 						type="button"
 						onClick={actions.save}
 						disabled={!meta.hasUnsavedChanges || meta.isSaving}
 						data-testid="form-table-save"
-
-						className="gap-2"
+						variant="primarySolid"
+						className="gap-1.5 px-3 py-4"
 					>
-						{meta.isSaving && <Loader2 className="size-4 animate-spin" />}
+						{meta.isSaving ? (
+							<Loader2 className="size-4 animate-spin" />
+						) : (
+							<Save className="size-4" />
+						)}
 						{meta.isSaving ? "Guardando..." : "Guardar cambios"}
-					</Button>
+					</LightButton>
 				) : null}
 			</div>
 			{!paginationDisabled ? (
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-1">
 					{/* <Button
 					type="button"
 					variant="outline"
@@ -1349,31 +1641,29 @@ export function FormTablePagination() {
 					<ChevronsLeft className="size-4" />
 					Primera
 				</Button> */}
-					<Button
+					<LightButton
 						type="button"
-						variant="dark"
-
+						variant="default"
 						onClick={() => startTransition(() => setPage((prev) => Math.max(1, prev - 1)))}
 						disabled={!hasPreviousPage || isLoading}
-						className="gap-1"
+						aria-label="Anterior"
+						className="py-4"
 					>
 						<ChevronLeft className="size-4" />
-						Anterior
-					</Button>
-					<span className="min-w-[120px] text-center text-xs text-muted-foreground">
+					</LightButton>
+					<span className="min-w-[88px] text-center text-xs text-content-muted">
 						Página {page} de {totalPages}
 					</span>
-					<Button
+					<LightButton
 						type="button"
-						variant="dark"
-
+						variant="default"
 						onClick={() => startTransition(() => setPage((prev) => prev + 1))}
 						disabled={!hasNextPage || isLoading}
-						className="gap-1"
+						aria-label="Siguiente"
+						className="py-4"
 					>
-						Siguiente
 						<ChevronRight className="size-4" />
-					</Button>
+					</LightButton>
 					{/* <Button
 					type="button"
 					variant="outline"
@@ -1659,8 +1949,15 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const useServerDataMode = config.serverSideData === true && Boolean(fetchRowsFn);
 	const isEmbedded = variant === "embedded";
 	const isReadOnly = config.readOnly === true;
+	const showRowNumbers = shouldUseSpreadsheetChrome(config);
+	const rowNumberColumnWidth = config.rowNumberColumnWidth ?? DEFAULT_ROW_NUMBER_COLUMN_WIDTH;
+	const actionsColumnWidth = config.actionsColumnWidth ?? 140;
 	const dataColumnIndexOffset =
-		config.showActionsColumn !== false && config.actionsColumnPosition === "start" ? 1 : 0;
+		(showRowNumbers ? 1 : 0) +
+		(config.showActionsColumn !== false && config.actionsColumnPosition === "start" ? 1 : 0);
+	const stickyLeadingOffset =
+		(showRowNumbers ? rowNumberColumnWidth : 0) +
+		(config.showActionsColumn !== false && config.actionsColumnPosition === "start" ? actionsColumnWidth : 0);
 	const initialSnapshot = useMemo(
 		() => buildFormSnapshot(config.defaultRows),
 		[config.defaultRows]
@@ -1854,25 +2151,53 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const showInlineSearch = config.showInlineSearch !== false;
 	const hasFilters = typeof config.createFilters === "function";
 
-	const [internalSearchValue, setInternalSearchValue] = useState("");
-	const searchValue = typeof searchQuery === "string" ? searchQuery : internalSearchValue;
+	const controlledSearchValue = typeof searchQuery === "string" ? searchQuery : null;
+	const isSearchControlled = controlledSearchValue !== null;
+	const initialSearchValue = controlledSearchValue ?? "";
+	const [searchInputValue, setSearchInputValue] = useState(initialSearchValue);
+	const [searchValue, setSearchValue] = useState(initialSearchValue);
+	const previousControlledSearchValueRef = useRef<string | null>(controlledSearchValue);
+	useEffect(() => {
+		if (controlledSearchValue === null) {
+			previousControlledSearchValueRef.current = null;
+			return;
+		}
+		if (previousControlledSearchValueRef.current === controlledSearchValue) return;
+		previousControlledSearchValueRef.current = controlledSearchValue;
+		setSearchInputValue(controlledSearchValue);
+		setSearchValue(controlledSearchValue);
+	}, [controlledSearchValue]);
 	const handleSearchInputChange = useCallback(
 		(value: string) => {
-			if (value === searchValue) return;
+			if (value === searchInputValue) return;
+			setSearchInputValue(value);
+		},
+		[searchInputValue]
+	);
+	useEffect(() => {
+		if (searchInputValue === searchValue) return;
+		const timeoutId = window.setTimeout(() => {
 			markActivityStart("search");
 			startSearchTransition(() => {
-				if (typeof searchQuery === "string") {
-					onSearchQueryChange?.(value);
-				} else {
-					setInternalSearchValue(value);
+				setSearchValue(searchInputValue);
+				if (isSearchControlled) {
+					onSearchQueryChange?.(searchInputValue);
 				}
 			});
-		},
-		[markActivityStart, onSearchQueryChange, searchQuery, searchValue, startSearchTransition]
-	);
-	const deferredSearchValue = useDeferredValue(searchValue);
-	const searchRequestKey = deferredSearchValue.trim();
-	const isSearchInputLag = searchValue.trim() !== searchRequestKey;
+		}, SEARCH_COMMIT_DEBOUNCE_MS);
+		return () => {
+			window.clearTimeout(timeoutId);
+		};
+	}, [
+		isSearchControlled,
+		markActivityStart,
+		onSearchQueryChange,
+		searchInputValue,
+		searchValue,
+		startSearchTransition,
+	]);
+	const searchRequestKey = searchValue.trim();
+	const isSearchInputLag = searchInputValue.trim() !== searchRequestKey;
 	const searchRef = useRef(searchRequestKey);
 	useEffect(() => {
 		searchRef.current = searchRequestKey;
@@ -2329,7 +2654,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		[columns]
 	);
 
-	const normalizedSearch = deferredSearchValue.trim().toLowerCase();
+	const normalizedSearch = searchRequestKey.toLowerCase();
 	const highlightQuery = normalizedSearch;
 
 	const { baseFilteredRows, tabCounts } = useMemo(() => {
@@ -2572,14 +2897,14 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return {
 				className: cn(
 					baseClassName,
-					pinned && offset !== undefined ? "sticky z-20 outline outline-orange-primary/60" : ""
+					pinned && offset !== undefined ? "sticky z-20 shadow-[1px_0_0_0_hsl(var(--border))]" : ""
 				),
 				style: {
-					left: pinned && offset !== undefined ? `${offset}px` : undefined,
+					left: pinned && offset !== undefined ? `${stickyLeadingOffset + offset}px` : undefined,
 				},
 			};
 		},
-		[columnOffsets, isColumnPinned]
+		[columnOffsets, isColumnPinned, stickyLeadingOffset]
 	);
 
 	const hiddenIndices = useMemo(
@@ -3072,7 +3397,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			[newRow.id]: newRow,
 		}));
 		if (config.revealNewRowOnAdd) {
-			if (searchValue.trim().length > 0) {
+			if (searchInputValue.trim().length > 0) {
 				handleSearchInputChange("");
 			}
 			if (hasFilters) {
@@ -3101,7 +3426,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		hasTabFilters,
 		isReadOnly,
 		lockedSort,
-		searchValue,
+		searchInputValue,
 		setFormFieldValue,
 		tabFilters,
 	]);
@@ -3240,7 +3565,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		config,
 		tableId: TABLE_ID,
 		search: {
-			value: searchValue,
+			value: searchInputValue,
 			placeholder: searchPlaceholder,
 			showInline: showInlineSearch,
 			isProcessing: isSearchProcessing,
@@ -3444,7 +3769,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		setFiltersDraftValue,
 		showInlineSearch,
 		searchPlaceholder,
-		searchValue,
+		searchInputValue,
 		serverError,
 		table,
 		tableRef,
@@ -3468,26 +3793,48 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		clearSort,
 	]);
 
+	const tableSurface = showRowNumbers ? (
+		<div className="mx-[1px] flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card mt-[1px] shadow-[0_1px_0_0_#fff_inset,0_-1px_0_0_#0000001f_inset,0_0_0_1px_#00000024,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_5px_8px_-7px_#0b090c08]">
+			{(config.showToolbar ?? true) ? (
+				<div className="border-b border-stroke-soft bg-surface px-3 py-2.5">
+					<FormTableToolbar />
+				</div>
+			) : null}
+			<FormTableTabs className="mx-3 mt-3" />
+			<div className="flex min-h-0 flex-1">
+				<FormTableContent className={className} innerClassName={innerClassName} />
+			</div>
+		</div>
+	) : (
+		<>
+			{(config.showToolbar ?? true) ? <FormTableToolbar /> : null}
+			<FormTableTabs />
+			<div className="flex-1 shadow-card mx-[1px] flex">
+				<FormTableContent className={className} innerClassName={innerClassName} />
+			</div>
+		</>
+	);
+
 	const content = (
 		<div
 			className={cn(
 				"max-w-full overflow-hidden flex flex-col h-full",
-				isEmbedded ? "gap-3 px-3 py-3" : "space-y-4 gap-4 pt-6"
+				showRowNumbers
+					? "gap-3"
+					: isEmbedded
+						? "gap-3 px-3 py-3"
+						: "space-y-4 gap-4 pt-6"
 			)}
 		>
 			{(config.title || config.description) ? (
 				<div>
 					{config.title ? <h1 className="text-xl font-bold mt-2">{config.title}</h1> : null}
 					{config.description && (
-						<p className="text-muted-foreground">{config.description}</p>
+						<p className="text-content-secondary">{config.description}</p>
 					)}
 				</div>
 			) : null}
-			{(config.showToolbar ?? true) ? <FormTableToolbar /> : null}
-			<FormTableTabs />
-			<div className="flex-1 shadow-card mx-[1px] flex">
-				<FormTableContent className={className} innerClassName={innerClassName} />
-			</div>
+			{tableSurface}
 			<FormTablePagination />
 		</div>
 	);

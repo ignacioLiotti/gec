@@ -1,3 +1,15 @@
+/**
+ * Core helpers for dynamic tables (tablas de extraccion): column data types,
+ * folder/field-key normalization, es-AR date/number parsing, formula
+ * evaluation, and the materials OCR prompt.
+ *
+ * High-impact shared module — the obras spreadsheet, obra tables, macro
+ * tables, and the OCR import pipeline all consume these contracts. Field-key
+ * normalization in particular feeds lineage derivation and schema
+ * comparisons (Baseline/Effective Schema Version), so changing normalization
+ * semantics can silently re-identify existing columns. Check consumers with
+ * `rg` and run `tests/lib/tablas.test.ts` before changing return shapes.
+ */
 export const TABLA_DATA_TYPES = [
 	"text",
 	"number",

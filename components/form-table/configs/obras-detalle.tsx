@@ -381,8 +381,9 @@ type LegacyRowColorRule = {
 const ROW_COLOR_RULES_KEY = "obras-detalle:row-color-rules";
 const ROW_COLOR_EVENT = "form-table:refresh";
 const ROW_COLOR_TABLE_ID = "form-table-obras-detalle";
-const OBRAS_TABLE_QUERY_CACHE_PREFIX = "obras-detalle:query-cache:v1:";
-const OBRAS_TABLE_QUERY_CACHE_INDEX_KEY = "obras-detalle:query-cache:index:v1";
+const ACTIVE_TENANT_COOKIE_NAME = "active_tenant_id";
+const OBRAS_TABLE_QUERY_CACHE_PREFIX = "obras-detalle:query-cache:v2:";
+const OBRAS_TABLE_QUERY_CACHE_INDEX_KEY = "obras-detalle:query-cache:index:v2";
 
 type ObrasDetalleFetchRowsResult = Awaited<
 	ReturnType<NonNullable<FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>["fetchRows"]>>
@@ -401,6 +402,25 @@ let previewedRowColorRuleId: string | null = null;
 
 const getObrasTableQueryCacheStorageKey = (key: string) =>
 	`${OBRAS_TABLE_QUERY_CACHE_PREFIX}${key}`;
+
+const getActiveTenantQueryCacheScope = () => {
+	if (typeof document === "undefined") return null;
+	try {
+		const cookie = document.cookie
+			.split("; ")
+			.find((item) => item.startsWith(`${ACTIVE_TENANT_COOKIE_NAME}=`));
+		const rawValue = cookie?.slice(ACTIVE_TENANT_COOKIE_NAME.length + 1);
+		const tenantId = rawValue ? decodeURIComponent(rawValue).trim() : "";
+		return tenantId ? `tenant:${tenantId}` : null;
+	} catch {
+		return null;
+	}
+};
+
+const getScopedObrasTableQueryCacheKey = (queryKey: string) => {
+	const tenantScope = getActiveTenantQueryCacheScope();
+	return tenantScope ? `${tenantScope}::${queryKey}` : null;
+};
 
 const readObrasTableQueryCacheIndex = (): string[] => {
 	if (typeof window === "undefined") return [];
@@ -2747,7 +2767,10 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 		}
 
 		const queryCacheKey = params.toString();
-		const cachedPayload = getCachedObrasTableQueryPayload(queryCacheKey);
+		const scopedQueryCacheKey = getScopedObrasTableQueryCacheKey(queryCacheKey);
+		const cachedPayload = scopedQueryCacheKey
+			? getCachedObrasTableQueryPayload(scopedQueryCacheKey)
+			: null;
 		if (cachedPayload) {
 			const cachedRows = cachedPayload.detalleObras.map(mapObraToDetailRow);
 			updateSequentialSeedFromRows(cachedRows);
@@ -2768,12 +2791,14 @@ const fetchObrasDetalle: FormTableConfig<ObrasDetalleRow, DetailAdvancedFilters>
 		const detalle = Array.isArray(payload.detalleObras)
 			? (payload.detalleObras as ObrasDetalleApiRow[])
 			: [];
-		setCachedObrasTableQueryPayload(queryCacheKey, {
-			detalleObras: detalle,
-			pagination:
-				(payload.pagination as ObrasDetalleFetchRowsResult["pagination"]) ??
-				undefined,
-		});
+		if (scopedQueryCacheKey) {
+			setCachedObrasTableQueryPayload(scopedQueryCacheKey, {
+				detalleObras: detalle,
+				pagination:
+					(payload.pagination as ObrasDetalleFetchRowsResult["pagination"]) ??
+					undefined,
+			});
+		}
 		const rows = detalle.map(mapObraToDetailRow);
 		updateSequentialSeedFromRows(rows);
 		return {

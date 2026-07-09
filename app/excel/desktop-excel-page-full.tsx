@@ -1,7 +1,8 @@
 'use client';
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, RefObject } from "react";
 import Link from "next/link";
 import { FileText, Trash2, Upload } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -21,28 +22,24 @@ import {
 } from "@/components/form-table/column-filters";
 import {
 	createObrasDetalleConfig,
-	invalidateObrasTableSessionCache,
 	mapObraToDetailRow,
 	type MainTableColumnConfig,
 	type ObrasDetalleRow,
 } from "@/components/form-table/configs/obras-detalle";
 import type { FormTableConfig } from "@/components/form-table/types";
-import { Button } from "@/components/ui/button";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetFooter,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/ui/sheet";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { ExpandableLightButton } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { NotchTail } from "@/components/ui/notch-tail";
 import { useTenantAdminStatus } from "@/hooks/use-tenant-admin-status";
 import type { ExcelPageClientProps } from "@/lib/excel/types";
 import type { WizardFlow } from "@/components/ui/contextual-wizard";
+import {
+	ExcelPageHeader,
+	ExcelPageShell,
+	ExcelTableSurface,
+	ExcelToolbarFrame,
+} from "./_components/excel-page-chrome";
+import { ExcelImportPreviewSheet } from "./_components/excel-import-preview-sheet";
+import { useObraCsvImport } from "./_components/use-obra-csv-import";
 import {
 	GUIDED_EXCEL_STAGES,
 	getGuidedExcelStage,
@@ -50,6 +47,7 @@ import {
 } from "@/lib/demo-tours/excel-guided-flow";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import { presentacionCarteraTour } from "@/lib/demo-tours/screen-tour-flows";
+import { cn } from "@/lib/utils";
 
 const ContextualWizard = dynamic(
 	() =>
@@ -57,215 +55,201 @@ const ContextualWizard = dynamic(
 	{ loading: () => null },
 );
 
-type CsvObra = {
-	n?: number | string | null;
-	designacionYUbicacion?: string | null;
-	supDeObraM2?: number | string | null;
-	entidadContratante?: string | null;
-	mesBasicoDeContrato?: string | null;
-	iniciacion?: string | null;
-	contratoMasAmpliaciones?: number | string | null;
-	certificadoALaFecha?: number | string | null;
-	saldoACertificar?: number | string | null;
-	segunContrato?: number | string | null;
-	prorrogasAcordadas?: number | string | null;
-	plazoTotal?: number | string | null;
-	plazoTransc?: number | string | null;
-	porcentaje?: number | string | null;
+const excelTablePageStyles = {
+	root: "relative space-y-5",
+	headerStack: "flex flex-col gap-4",
+	headerRow: "flex w-full flex-col gap-4 xl:flex-row xl:items-start xl:justify-between",
+	tabsViewport: "min-w-0 overflow-x-auto",
+	tabs: "flex h-11 min-w-max justify-start rounded-lg p-1",
+	toolbarRow: "flex w-full flex-col gap-3 xl:-mb-0 xl:flex-row xl:items-center xl:justify-between",
+	tableContent:
+		"my-0 max-w-full overflow-hidden rounded-lg bg-surface shadow-[0_1px_0_0_#fff_inset,0_-1px_0_0_#0000001f_inset,0_0_0_1px_#00000024,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_5px_8px_-7px_#0b090c08] md:max-w-[calc(96vw-var(--sidebar-current-width))]",
+	tableInner: "max-h-[70svh] md:max-h-[calc(100vh-400px)]",
+	toolbarAction: "py-4",
 };
 
-type CsvRow = (string | null | undefined)[];
-type CsvPreviewRow = CsvObra & { _rowIndex: number };
-
-const toNumber = (value: unknown) => {
-	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-	if (typeof value === "string") {
-		const cleaned = value.replace(",", ".").replace(/[^0-9.-]/g, "");
-		const parsed = Number(cleaned);
-		return Number.isFinite(parsed) ? parsed : 0;
-	}
-	return 0;
+type ExcelTablePageViewProps = {
+	guidedExcelFlow: WizardFlow | null;
+	inputRef: RefObject<HTMLInputElement | null>;
+	isImporting: boolean;
+	isTenantAdmin: boolean;
+	onCloseGuidedExcelFlow: () => void;
+	onCsvInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
+	onImportClick: () => void;
 };
 
-const toText = (value: unknown) => (value ?? "").toString().trim();
+function ExcelTablePageView({
+	guidedExcelFlow,
+	inputRef,
+	isImporting,
+	isTenantAdmin,
+	onCloseGuidedExcelFlow,
+	onCsvInputChange,
+	onImportClick,
+}: ExcelTablePageViewProps) {
+	return (
+		<div className={excelTablePageStyles.root}>
+			<DemoPageTour flow={presentacionCarteraTour} />
 
-const clampPercentage = (value: unknown) => {
-	const pct = toNumber(value);
-	return Math.max(0, Math.min(100, pct));
-};
+			<div className={excelTablePageStyles.headerStack}>
+				<div className={excelTablePageStyles.headerRow}>
+					<ExcelPageHeader
+						targetId="excel-page-header"
+						title="Tus Obras"
+						description="Filtra, busca y actualiza tus obras desde una vista unificada."
+					/>
+					<div
+						data-wizard-target="excel-page-tabs"
+						className={excelTablePageStyles.tabsViewport}
+					>
+						<FormTableTabs className={excelTablePageStyles.tabs} />
+					</div>
+				</div>
+				<Separator className="h-full" />
+			</div>
 
-const CSV_IMPORT_DEFAULT_YEAR = 2025;
-const CSV_MONTH_MAP: Record<string, string> = {
-	ene: "01",
-	feb: "02",
-	mar: "03",
-	abr: "04",
-	may: "05",
-	jun: "06",
-	jul: "07",
-	ago: "08",
-	sep: "09",
-	set: "09",
-	oct: "10",
-	nov: "11",
-	dic: "12",
-};
+			<div className={excelTablePageStyles.toolbarRow}>
+				<ExcelToolbarFrame side="left" targetId="excel-page-toolbar">
+					<FormTableToolbar />
+				</ExcelToolbarFrame>
+				<ExcelToolbarFrame side="right">
+					<ExcelTablePageActions
+						inputRef={inputRef}
+						isImporting={isImporting}
+						showTrashAction={isTenantAdmin}
+						onCsvInputChange={onCsvInputChange}
+						onImportClick={onImportClick}
+					/>
+				</ExcelToolbarFrame>
+			</div>
 
-const normalizeHeader = (value: string) => {
-	const raw = value.trim();
-	if (raw.includes("%")) return "porcentaje";
-	let normalized = raw
-		.normalize("NFD")
-		.replace(/\p{Diacritic}/gu, "")
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "");
-	const prefixes = ["fechas", "importesenpesosavaloresbasicos", "plazosenmeses"];
-	for (const prefix of prefixes) {
-		if (normalized.startsWith(prefix)) {
-			normalized = normalized.slice(prefix.length);
-			break;
-		}
-	}
-	return normalized;
-};
+			<ExcelTableSurface data-wizard-target="excel-page-table">
+				<FormTableContent
+					className={excelTablePageStyles.tableContent}
+					innerClassName={excelTablePageStyles.tableInner}
+				/>
+				<Separator className="bg-stroke-soft" />
+				<FormTablePagination />
+			</ExcelTableSurface>
 
-const normalizeCsvDateValue = (value: unknown): string => {
-	const raw = toText(value);
-	if (!raw) return "";
-
-	const fullDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-	if (fullDate) {
-		const day = fullDate[1].padStart(2, "0");
-		const month = fullDate[2].padStart(2, "0");
-		return `${day}/${month}/${fullDate[3]}`;
-	}
-
-	const monthDay = raw
-		.toLowerCase()
-		.normalize("NFD")
-		.replace(/\p{Diacritic}/gu, "")
-		.match(/^([a-z]{3})\.?\s*-\s*(\d{1,2})$/);
-	if (monthDay) {
-		const month = CSV_MONTH_MAP[monthDay[1]];
-		if (month) {
-			const day = monthDay[2].padStart(2, "0");
-			return `${day}/${month}/${CSV_IMPORT_DEFAULT_YEAR}`;
-		}
-	}
-
-	return raw;
-};
-
-const combineHeaderCells = (rows: CsvRow[], colIndex: number) =>
-	rows
-		.map((row) => toText(row[colIndex]))
-		.filter((value) => value.length > 0)
-		.join(" ");
-
-const isMultiRowHeader = (rows: CsvRow[]) => {
-	if (rows.length < 3) return false;
-	const top = rows[0].map((cell) => normalizeHeader(toText(cell))).join(" ");
-	const second = rows[1].map((cell) => normalizeHeader(toText(cell))).join(" ");
-	return top.includes("designacionyubicacion") && second.includes("mesbasico");
-};
-
-const buildHeaders = (rows: CsvRow[], headerRows: number) => {
-	const maxCols = Math.max(...rows.slice(0, headerRows).map((row) => row.length));
-	const headers: string[] = [];
-	for (let i = 0; i < maxCols; i += 1) {
-		headers.push(combineHeaderCells(rows.slice(0, headerRows), i));
-	}
-	return headers;
-};
-
-type HeaderAliasMap = Readonly<Record<string, string>>;
-
-async function parseCsvFileToValidRows(
-	file: File,
-	headerAliases: HeaderAliasMap
-): Promise<{ validRows: CsvObra[]; skippedCount: number }> {
-	const decodeWithFallback = async () => {
-		const buffer = await file.arrayBuffer();
-		const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
-		const utf8ReplacementCount = (utf8.match(/\uFFFD/g) ?? []).length;
-		if (utf8ReplacementCount === 0) return utf8;
-		const win1252 = new TextDecoder("windows-1252", { fatal: false }).decode(buffer);
-		const winReplacementCount = (win1252.match(/\uFFFD/g) ?? []).length;
-		return winReplacementCount < utf8ReplacementCount ? win1252 : utf8;
-	};
-
-	const [{ default: Papa }, csvText] = await Promise.all([import("papaparse"), decodeWithFallback()]);
-	const results = Papa.parse<string[]>(csvText, {
-		header: false,
-		skipEmptyLines: true,
-		delimiter: ";",
-	});
-
-	if (results.errors.length) {
-		throw new Error(results.errors[0]?.message || "No se pudo leer el CSV");
-	}
-
-	const rows = results.data as CsvRow[];
-	if (!rows.length) {
-		throw new Error("El CSV esta vacio");
-	}
-
-	const headerRows = isMultiRowHeader(rows) ? 3 : 1;
-	const headers = buildHeaders(rows, headerRows);
-	const mappedRows = rows
-		.slice(headerRows)
-		.map((row) => {
-			const mapped: Record<string, string> = {};
-			headers.forEach((header, index) => {
-				if (!header) return;
-				const normalized = normalizeHeader(header);
-				const mappedKey = headerAliases[normalized] ?? normalized;
-				mapped[mappedKey] = toText(row[index]);
-			});
-			return mapped as CsvObra;
-		})
-		.filter((row) => Object.values(row).some((value) => String(value ?? "").trim().length > 0));
-
-	if (!mappedRows.length) {
-		throw new Error("El CSV no contiene filas validas");
-	}
-
-	const validRows = mappedRows.filter(
-		(row) =>
-			toText(row.designacionYUbicacion) &&
-			toText(row.entidadContratante) &&
-			toText(row.mesBasicoDeContrato) &&
-			toText(row.iniciacion)
+			{guidedExcelFlow ? (
+				<ContextualWizard
+					open
+					onOpenChange={(nextOpen) => {
+						if (!nextOpen) {
+							onCloseGuidedExcelFlow();
+						}
+					}}
+					flow={guidedExcelFlow}
+					showCloseButton={true}
+				/>
+			) : null}
+		</div>
 	);
-
-	if (!validRows.length) {
-		throw new Error("No hay filas validas con campos obligatorios");
-	}
-
-	const skippedCount = mappedRows.length - validRows.length;
-	return { validRows, skippedCount };
 }
 
-export default function DesktopExcelPageClient({
+type ExcelTablePageActionsProps = {
+	inputRef: RefObject<HTMLInputElement | null>;
+	isImporting: boolean;
+	showTrashAction: boolean;
+	onCsvInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
+	onImportClick: () => void;
+};
+
+function ExcelTablePageActions({
+	inputRef,
+	isImporting,
+	showTrashAction,
+	onCsvInputChange,
+	onImportClick,
+}: ExcelTablePageActionsProps) {
+	return (
+		<>
+			<input
+				ref={inputRef}
+				type="file"
+				accept=".csv,text/csv"
+				multiple
+				className="hidden"
+				onChange={onCsvInputChange}
+			/>
+			<ExpandableLightButton
+				type="button"
+				label={isImporting ? "Importando..." : "Importar CSV"}
+				variant="default"
+				onClick={onImportClick}
+				disabled={isImporting}
+				className={cn(excelTablePageStyles.toolbarAction, '-ml-5')}
+			>
+				<Upload className="size-4" />
+			</ExpandableLightButton>
+			<ExpandableLightButton
+				label="Generar Reporte"
+				variant="default"
+				className={excelTablePageStyles.toolbarAction}
+				asChild
+			>
+				<Link href="/excel/reporte" prefetch={false}>
+					<FileText className="size-4" />
+				</Link>
+			</ExpandableLightButton>
+			{showTrashAction ? (
+				<ExpandableLightButton
+					label="Papelera obras"
+					variant="default"
+					className={excelTablePageStyles.toolbarAction}
+					asChild
+				>
+					<Link href="/excel/papelera-obras" prefetch={false}>
+						<Trash2 className="size-4" />
+					</Link>
+				</ExpandableLightButton>
+			) : null}
+		</>
+	);
+}
+
+export default function DesktopExcelPageFull({
 	initialMainTableColumnsConfig,
 	initialObras,
-	initialLoadMode,
 }: ExcelPageClientProps) {
-	const { replace } = useRouter();
+	const { refresh, replace } = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
-	const [isImporting, setIsImporting] = useState(false);
 	const mainTableColumnsConfig =
 		initialMainTableColumnsConfig as MainTableColumnConfig[] | null;
 	const inputRef = useRef<HTMLInputElement>(null);
-	const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-	const [previewRows, setPreviewRows] = useState<CsvPreviewRow[]>([]);
-	const [pendingUpdates, setPendingUpdates] = useState<CsvObra[]>([]);
-	const [pendingFileName, setPendingFileName] = useState("");
-	const [hydratedRows, setHydratedRows] = useState<ObrasDetalleRow[] | null>(() =>
-		initialObras.map(mapObraToDetailRow)
+	const [hydratedRows, setHydratedRows] = useState<ObrasDetalleRow[]>(() =>
+		initialObras.map(mapObraToDetailRow),
 	);
+	const handleCsvImportConfirmed = useCallback(() => {
+		void (async () => {
+			try {
+				const response = await fetch("/api/obras", { cache: "no-store" });
+				if (!response.ok) {
+					throw new Error("No se pudieron actualizar las obras importadas");
+				}
+				const payload = await response.json();
+				const obras = Array.isArray(payload.detalleObras) ? payload.detalleObras : [];
+				setHydratedRows(obras.map(mapObraToDetailRow));
+			} catch (error) {
+				console.error("[excel:csv-import-refresh]", error);
+				refresh();
+			}
+		})();
+	}, [refresh]);
+	const {
+		confirmCsvImport,
+		isImporting,
+		isPreviewOpen,
+		pendingFileName,
+		pendingUpdates,
+		previewRows,
+		resetPreview,
+		startCsvImport,
+	} = useObraCsvImport({ onImportConfirmed: handleCsvImportConfirmed });
+
 	const guidedTourStage = getGuidedExcelStage(searchParams);
 	const guidedExcelFlow = useMemo<WizardFlow | null>(() => {
 		if (!isGuidedExcelTour(searchParams) || guidedTourStage !== GUIDED_EXCEL_STAGES.excelIntro) {
@@ -281,7 +265,7 @@ export default function DesktopExcelPageClient({
 					targetId: "excel-page-header",
 					title: "Tu cartera de obras",
 					content:
-						"Acá están todas las obras con sus datos actualizados. De un vistazo ya sabés cuántas tenés en ejecución, el avance y los importes más importantes.",
+						"Aca estan todas las obras con sus datos actualizados. De un vistazo ya sabes cuantas tenes en ejecucion, el avance y los importes mas importantes.",
 					placement: "bottom",
 					skippable: false,
 				},
@@ -297,9 +281,9 @@ export default function DesktopExcelPageClient({
 				{
 					id: "open-obra",
 					targetId: "excel-page-open-obra",
-					title: "Entrá a ver el detalle",
+					title: "Entra a ver el detalle",
 					content:
-						"Hacé clic en el nombre de la obra para ver todos sus datos: avance, importes, alertas y documentos.",
+						"Hace clic en el nombre de la obra para ver todos sus datos: avance, importes, alertas y documentos.",
 					placement: "right",
 					allowClickThrough: true,
 					requiredAction: "click_target",
@@ -318,24 +302,26 @@ export default function DesktopExcelPageClient({
 		replace(nextUrl, { scroll: false });
 	}, [pathname, replace, searchParams]);
 
-	useEffect(() => {
-		setHydratedRows(initialObras.map(mapObraToDetailRow));
-	}, [initialLoadMode, initialObras]);
-
 	const tableConfig = useMemo(() => {
 		const baseConfig = createObrasDetalleConfig(mainTableColumnsConfig, {
 			readOnly: false,
 			optimizationPreset: "legacy",
 		});
 		const {
-			createFilters: _createFilters,
-			renderFilters: _renderFilters,
-			applyFilters: _applyFilters,
-			countActiveFilters: _countActiveFilters,
-			fetchRows: _fetchRows,
-			csvExport: _csvExport,
+			createFilters,
+			renderFilters,
+			applyFilters,
+			countActiveFilters,
+			fetchRows,
+			csvExport,
 			...baseConfigWithoutFilters
 		} = baseConfig;
+		void createFilters;
+		void renderFilters;
+		void applyFilters;
+		void countActiveFilters;
+		void fetchRows;
+		void csvExport;
 		const generatedFilterColumns = baseConfig.columns;
 		const generatedFilterConfig: FormTableConfig<ObrasDetalleRow, AutoColumnFilters> = {
 			...baseConfigWithoutFilters,
@@ -352,391 +338,53 @@ export default function DesktopExcelPageClient({
 				matchesAutoColumnFilters(row, generatedFilterColumns, filters),
 			countActiveFilters: countActiveAutoColumnFilters,
 		};
-		return hydratedRows == null
-			? generatedFilterConfig
-			: {
-				...generatedFilterConfig,
-				defaultRows: hydratedRows,
-			};
+		return {
+			...generatedFilterConfig,
+			defaultRows: hydratedRows,
+		};
 	}, [hydratedRows, mainTableColumnsConfig]);
 
-	const headerAliases = useMemo(
-		() => ({
-			n: "n",
-			numero: "n",
-			nro: "n",
-			nobra: "n",
-			no: "n",
-			designacionyubicacion: "designacionYUbicacion",
-			designacionubicacion: "designacionYUbicacion",
-			designacion: "designacionYUbicacion",
-			ubicacion: "designacionYUbicacion",
-			supdeobram2: "supDeObraM2",
-			supdeobra: "supDeObraM2",
-			superficiedeobra: "supDeObraM2",
-			superficiedeobram2: "supDeObraM2",
-			entidadcontratante: "entidadContratante",
-			entidad: "entidadContratante",
-			mesbasicodecontrato: "mesBasicoDeContrato",
-			mesbasicocontrato: "mesBasicoDeContrato",
-			mesbasico: "mesBasicoDeContrato",
-			iniciacion: "iniciacion",
-			inicio: "iniciacion",
-			fechainiciacion: "iniciacion",
-			contratomas: "contratoMasAmpliaciones",
-			contratomasampliaciones: "contratoMasAmpliaciones",
-			contratoampliaciones: "contratoMasAmpliaciones",
-			certificadoalafecha: "certificadoALaFecha",
-			certificado: "certificadoALaFecha",
-			saldoacertificar: "saldoACertificar",
-			seguncontrato: "segunContrato",
-			prorrogasacordadas: "prorrogasAcordadas",
-			plazototal: "plazoTotal",
-			plazotransc: "plazoTransc",
-			porcentaje: "porcentaje",
-			porc: "porcentaje",
-		}),
-		[]
-	);
+	const handleCsvInputChange = useCallback(
+		(event: ChangeEvent<HTMLInputElement>) => {
+			const list = event.target.files;
+			if (!list?.length) return;
 
-	const handleCsvImport = useCallback(
-		(files: File[] | FileList) => {
-			const fileList = Array.from(files);
-			if (!fileList.length) return;
-
-			setIsImporting(true);
-
-			void (async () => {
-				try {
-					let currentMaxN = 0;
-					try {
-						const existingResponse = await fetch("/api/obras", { cache: "no-store" });
-						if (existingResponse.ok) {
-							const existingPayload = await existingResponse.json();
-							const existingObras = Array.isArray(existingPayload.detalleObras)
-								? (existingPayload.detalleObras as Array<{ n?: number | string | null }>)
-								: [];
-							currentMaxN = existingObras.reduce((max, obra) => {
-								const obraN = Math.trunc(toNumber(obra.n));
-								return Number.isFinite(obraN) && obraN > max ? obraN : max;
-							}, 0);
-						}
-					} catch (existingError) {
-						console.error(
-							"No se pudieron cargar las obras existentes para calcular el N°",
-							existingError
-						);
-					}
-
-					const allValid: CsvObra[] = [];
-					let totalSkipped = 0;
-					const importErrors: string[] = [];
-
-					for (const file of fileList) {
-						try {
-							const { validRows, skippedCount } = await parseCsvFileToValidRows(file, headerAliases);
-							allValid.push(...validRows);
-							totalSkipped += skippedCount;
-						} catch (err) {
-							const message = err instanceof Error ? err.message : "No se pudo leer el archivo";
-							importErrors.push(`${file.name}: ${message}`);
-						}
-					}
-
-					if (importErrors.length && allValid.length === 0) {
-						throw new Error(importErrors.join(" · "));
-					}
-					if (importErrors.length) {
-						toast.message(`Algunos archivos se omitieron: ${importErrors.join(" · ")}`);
-					}
-
-					if (!allValid.length) {
-						throw new Error(
-							"No hay filas validas con campos obligatorios en los archivos seleccionados"
-						);
-					}
-
-					if (totalSkipped > 0) {
-						toast.message(`Se omitieron ${totalSkipped} filas sin campos obligatorios en total`);
-					}
-
-					let nextAuto = currentMaxN + 1;
-					const updates = allValid.map((row) => {
-						const finalN = nextAuto;
-						nextAuto += 1;
-						return {
-							n: finalN,
-							designacionYUbicacion: toText(row.designacionYUbicacion),
-							supDeObraM2: toNumber(row.supDeObraM2),
-							entidadContratante: toText(row.entidadContratante),
-							mesBasicoDeContrato: normalizeCsvDateValue(row.mesBasicoDeContrato),
-							iniciacion: normalizeCsvDateValue(row.iniciacion),
-							contratoMasAmpliaciones: toNumber(row.contratoMasAmpliaciones),
-							certificadoALaFecha: toNumber(row.certificadoALaFecha),
-							saldoACertificar: toNumber(row.saldoACertificar),
-							segunContrato: toNumber(row.segunContrato),
-							prorrogasAcordadas: toNumber(row.prorrogasAcordadas),
-							plazoTotal: toNumber(row.plazoTotal),
-							plazoTransc: toNumber(row.plazoTransc),
-							porcentaje: clampPercentage(row.porcentaje),
-						};
-					});
-
-					toast.message(
-						`Se asignaron Nro consecutivos desde ${currentMaxN + 1} para agregar las obras al final`
-					);
-
-					setPendingUpdates(updates);
-					setPreviewRows(
-						updates.slice(0, 5).map((row, idx) => ({
-							...row,
-							_rowIndex: idx + 1,
-						}))
-					);
-					const namesJoined = fileList.map((f) => f.name).join(", ");
-					const namesLabel =
-						namesJoined.length > 120 ? `${namesJoined.slice(0, 117)}…` : namesJoined;
-					setPendingFileName(
-						fileList.length === 1 ? fileList[0].name : `${fileList.length} archivos (${namesLabel})`
-					);
-					setIsPreviewOpen(true);
-				} catch (error) {
-					const message = error instanceof Error ? error.message : "No se pudo importar el CSV";
-					toast.error(message);
-				} finally {
-					setIsImporting(false);
-					if (inputRef.current) {
-						inputRef.current.value = "";
-					}
+			startCsvImport(list, () => {
+				if (inputRef.current) {
+					inputRef.current.value = "";
 				}
-			})();
+			});
 		},
-		[headerAliases]
+		[startCsvImport],
 	);
 
 	const handleImportClick = useCallback(() => {
 		inputRef.current?.click();
 	}, []);
 
-	const handleConfirmImport = useCallback(async () => {
-		if (!pendingUpdates.length) {
-			setIsPreviewOpen(false);
-			return;
-		}
-		setIsImporting(true);
-		try {
-			const response = await fetch("/api/obras/bulk", {
-				method: "PATCH",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ updates: pendingUpdates }),
-			});
-
-			if (!response.ok) {
-				const errorPayload = await response.json().catch(() => ({}));
-				const message = errorPayload?.error || "No se pudieron importar las obras";
-				throw new Error(message);
-			}
-
-			toast.success(`Importadas ${pendingUpdates.length} obras`);
-			setHydratedRows(null);
-			invalidateObrasTableSessionCache({ refreshTable: true });
-			setIsPreviewOpen(false);
-			setPendingUpdates([]);
-			setPreviewRows([]);
-			setPendingFileName("");
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "No se pudo importar el CSV";
-			toast.error(message);
-		} finally {
-			setIsImporting(false);
-		}
-	}, [pendingUpdates]);
-
-	const handleCancelPreview = useCallback(() => {
-		setIsPreviewOpen(false);
-		setPendingUpdates([]);
-		setPreviewRows([]);
-		setPendingFileName("");
-	}, []);
-
 	return (
-		<div className="relative min-h-full w-full overflow-hidden bg-[#f9f9f9] px-3 py-4 sm:px-4 md:max-w-[calc(100vw-var(--sidebar-current-width))] md:pl-8 md:py-8">
-			{isPreviewOpen ? (
-				<Sheet open onOpenChange={(open) => !open && handleCancelPreview()}>
-					<SheetContent side="right" className="border-l-[#ece7df] bg-[#f6f2eb] p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:max-w-lg">
-						<div className="flex h-full flex-col rounded-[24px] border border-[#f3eee7] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(250,250,250,0.96)_100%)]">
-							<SheetHeader>
-								<SheetTitle className="text-[#1a1a1a]">Previsualizacion de importacion</SheetTitle>
-								<SheetDescription className="text-[#999]">
-									{pendingFileName ? `Archivo: ${pendingFileName}` : "Revisa las primeras filas antes de importar."}
-								</SheetDescription>
-							</SheetHeader>
-							<div className="px-4 pb-4">
-								<div className="mb-2 rounded-xl border border-[#ece7df] bg-[#fcfaf7] px-3 py-2 text-xs text-[#777]">
-									Se importaran {pendingUpdates.length} obras. Mostrando las primeras {previewRows.length}.
-								</div>
-								<div className="overflow-hidden rounded-xl border border-[#ece7df]">
-									<table className="w-full text-xs">
-										<thead className="bg-[#fcfaf7] text-[#777]">
-											<tr>
-												<th className="px-3 py-2 text-left">#</th>
-												<th className="px-3 py-2 text-left">Designacion</th>
-												<th className="px-3 py-2 text-left">Entidad</th>
-												<th className="px-3 py-2 text-left">Mes basico</th>
-												<th className="px-3 py-2 text-left">Inicio</th>
-												<th className="px-3 py-2 text-right">%</th>
-											</tr>
-										</thead>
-										<tbody>
-											{previewRows.map((row) => (
-												<tr key={row._rowIndex} className="border-t border-[#f0ebe5] hover:bg-[#fffaf5]">
-													<td className="px-3 py-2 text-[#999]">{row._rowIndex}</td>
-													<td className="px-3 py-2">{toText(row.designacionYUbicacion)}</td>
-													<td className="px-3 py-2">{toText(row.entidadContratante)}</td>
-													<td className="px-3 py-2">{toText(row.mesBasicoDeContrato)}</td>
-													<td className="px-3 py-2">{toText(row.iniciacion)}</td>
-													<td className="px-3 py-2 text-right tabular-nums">
-														{clampPercentage(row.porcentaje).toFixed(1)}
-													</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-							</div>
-							<SheetFooter>
-								<div className="flex w-full items-center justify-end gap-2">
-									<Button
-										type="button"
-										variant="outline"
-										onClick={handleCancelPreview}
-										disabled={isImporting}
-										className="gap-2 rounded-lg border-[#e8e1d8] bg-white px-3.5 text-[#5a5248] hover:bg-[#fcfaf7] hover:text-[#1f1a17]"
-									>
-										Cancelar
-									</Button>
-									<Button
-										type="button"
-										onClick={handleConfirmImport}
-										disabled={isImporting}
-										className="rounded-lg bg-[#1f1a17] text-white hover:bg-[#2b241f]"
-									>
-										{isImporting ? "Importando..." : "Confirmar importacion"}
-									</Button>
-								</div>
-							</SheetFooter>
-						</div>
-					</SheetContent>
-				</Sheet>
-			) : null}
+		<ExcelPageShell>
+			<ExcelImportPreviewSheet
+				open={isPreviewOpen}
+				pendingFileName={pendingFileName}
+				pendingCount={pendingUpdates.length}
+				previewRows={previewRows}
+				isImporting={isImporting}
+				onCancel={resetPreview}
+				onConfirm={confirmCsvImport}
+			/>
 
 			<FormTable config={tableConfig}>
-				<div className="relative space-y-5">
-					<DemoPageTour flow={presentacionCarteraTour} />
-					<div className="flex flex-col gap-4">
-						<div className="flex w-full flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-							<div data-wizard-target="excel-page-header">
-								<h1 className="text-3xl font-semibold tracking-tight text-[#1a1a1a] sm:text-4xl">
-									Tus Obras
-								</h1>
-								<p className="mt-1 text-sm text-[#999]">
-									Filtra, busca y actualiza tus obras desde una vista unificada.
-								</p>
-							</div>
-							<div data-wizard-target="excel-page-tabs" className="min-w-0 overflow-x-auto">
-								<FormTableTabs className={cn("flex h-11 min-w-max justify-start rounded-lg p-1")} />
-							</div>
-						</div>
-					</div>
-
-					<div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:-mb-0">
-						<div
-							data-wizard-target="excel-page-toolbar"
-							className="relative flex min-w-0 items-center gap-2 overflow-x-auto rounded-xl border border-[#09090b1f] bg-card p-2 pb-0 xl:-ml-[1px] xl:overflow-visible xl:rounded-r-none xl:rounded-b-none xl:border-r-0 xl:border-b-0"
-							style={
-								{
-									"--notch-bg": "white",
-									"--notch-stroke": "rgb(231 229 228)",
-								} as React.CSSProperties
-							}
-						>
-							<FormTableToolbar />
-							<NotchTail side="right" className="z-100 mb-[1px] h-[45px] !hidden xl:!block" />
-						</div>
-						<div
-							className="relative flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[#09090b1f] bg-card p-2 xl:-mr-[1px] xl:justify-end xl:rounded-l-none xl:rounded-b-none xl:border-l-0 xl:border-b-0 xl:pb-0"
-							style={
-								{
-									"--notch-bg": "white",
-									"--notch-stroke": "rgb(231 229 228)",
-								} as React.CSSProperties
-							}
-						>
-							<NotchTail side="left" className="mb-[1px] h-[45px] !hidden xl:!block" />
-							<>
-								<input
-									ref={inputRef}
-									type="file"
-									accept=".csv,text/csv"
-									multiple
-									className="hidden"
-									onChange={(event) => {
-										const list = event.target.files;
-										if (list?.length) {
-											handleCsvImport(list);
-										}
-									}}
-								/>
-								<Button
-									type="button"
-									variant="outline"
-									onClick={handleImportClick}
-									disabled={isImporting}
-								>
-									<Upload className="size-4" />
-									{isImporting ? "Importando..." : "Importar CSV"}
-								</Button>
-							</>
-							<Button variant="outline" asChild>
-								<Link href="/excel/reporte" prefetch={false} className="gap-2">
-									<FileText className="size-4" />
-									Generar Reporte
-								</Link>
-							</Button>
-							{isTenantAdmin && (
-								<Button variant="outline" asChild>
-									<Link href="/excel/papelera-obras" prefetch={false} className="gap-2">
-										<Trash2 className="size-4" />
-										Papelera obras
-									</Link>
-								</Button>
-							)}
-						</div>
-					</div>
-					<div
-						data-wizard-target="excel-page-table"
-						className="flex min-w-0 flex-col gap-4 rounded-xl bg-card p-2 pt-3 shadow-card sm:p-2.5 sm:pt-3.5 xl:rounded-t-none"
-					>
-						<FormTableContent className="my-0 max-w-full overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[70svh] md:max-h-[calc(100vh-400px)]" />
-						<Separator className="bg-border" />
-						<FormTablePagination />
-					</div>
-					{guidedExcelFlow ? (
-						<ContextualWizard
-							open
-							onOpenChange={(nextOpen) => {
-								if (!nextOpen) {
-									closeGuidedExcelFlow();
-								}
-							}}
-							flow={guidedExcelFlow}
-							showCloseButton={true}
-						/>
-					) : null}
-				</div>
+				<ExcelTablePageView
+					guidedExcelFlow={guidedExcelFlow}
+					inputRef={inputRef}
+					isImporting={isImporting}
+					isTenantAdmin={isTenantAdmin}
+					onCloseGuidedExcelFlow={closeGuidedExcelFlow}
+					onCsvInputChange={handleCsvInputChange}
+					onImportClick={handleImportClick}
+				/>
 			</FormTable>
-		</div>
+		</ExcelPageShell>
 	);
 }

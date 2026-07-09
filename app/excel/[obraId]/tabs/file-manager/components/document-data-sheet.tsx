@@ -69,15 +69,13 @@ export function DocumentDataSheet<Row extends FormTableRow, Filters>({
 						</SheetTitle>
 						{dataTableSelector}
 					</div>
-					<SheetDescription className="text-xs uppercase tracking-wide text-stone-400">
-						{document.name}
-					</SheetDescription>
 				</SheetHeader>
-				<div className="flex-1 overflow-auto bg-white px-3 sm:px-5">
+				<div className="flex-1 overflow-auto bg-none">
 					<FormTable
 						config={tableConfig}
 						variant="embedded"
-						className="max-h-[62dvh] sm:max-h-[56dvh] xl:max-h-[52dvh]"
+						className="max-h-[62dvh] sm:max-h-[56dvh] xl:max-h-[52dvh] rounded-none"
+						innerClassName="rounded-none"
 					/>
 				</div>
 			</SheetContent>

@@ -8,6 +8,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -212,20 +213,20 @@ function FilterFieldShell({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-2 rounded-md border bg-background p-3">
+    <div className="space-y-3 rounded-md border border-stroke-soft bg-card p-3 shadow-card">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <Label className="text-xs font-semibold text-foreground">{label}</Label>
-          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+          <Label className="text-xs font-semibold text-content">{label}</Label>
+          <p className="mt-0.5 text-[11px] leading-4 text-content-secondary">
             {description}
           </p>
         </div>
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
+          variant="outline"
+          size="icon-sm"
           onClick={onClear}
-          className="size-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+          className="size-7 shrink-0"
           aria-label={`Limpiar filtro ${label}`}
         >
           <X className="size-3.5" />
@@ -251,9 +252,9 @@ function ConditionSelect<TValue extends string>({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] text-muted-foreground">{label}</Label>
+      <Label className="text-[11px] font-medium text-content-muted">{label}</Label>
       <Select value={value} onValueChange={(next) => onChange(next as TValue)}>
-        <SelectTrigger className="h-8 text-sm">
+        <SelectTrigger size="sm" className="text-sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -361,7 +362,7 @@ export function NumberConditionFilter({
               placeholder="Minimo"
               className="h-8 text-sm"
             />
-            <span className="text-xs text-muted-foreground">a</span>
+            <span className="text-xs text-content-muted">a</span>
             <Input
               inputMode="decimal"
               value={value.max}
@@ -421,7 +422,7 @@ export function DateConditionFilter({
               onChange={(event) => onChange({ ...value, start: event.target.value })}
               className="h-8 text-sm"
             />
-            <span className="text-xs text-muted-foreground">a</span>
+            <span className="text-xs text-content-muted">a</span>
             <Input
               type="date"
               value={value.end}
@@ -513,24 +514,23 @@ export function EnumConditionFilter({
           labels={{ include: "Es uno de", exclude: "No es uno de" }}
           onChange={(mode) => onChange({ ...value, mode })}
         />
-        <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2">
+        <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-stroke-soft bg-surface-recessed p-2 shadow-recessed">
           {options.length > 0 ? (
             options.map((option) => (
               <label
                 key={option.value}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-background"
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-sm text-content transition-colors hover:bg-surface"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={value.values.includes(option.value)}
-                  onChange={() => toggleValue(option.value)}
-                  className="size-3.5 rounded border-border"
+                  onCheckedChange={() => toggleValue(option.value)}
+                  className="size-4"
                 />
                 <span className="min-w-0 truncate">{option.label}</span>
               </label>
             ))
           ) : (
-            <p className="px-2 py-1 text-xs text-muted-foreground">
+            <p className="px-2 py-1 text-xs text-content-muted">
               No hay valores configurados.
             </p>
           )}
@@ -557,24 +557,24 @@ export function FilterSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 data-[state=open]:rounded-b-none data-[state=open]:border-b-0">
+      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border border-stroke-soft bg-surface px-3 py-2.5 text-sm font-medium text-content shadow-card transition-colors hover:bg-surface-raised data-[state=open]:rounded-b-none data-[state=open]:border-b-0">
         <div className="flex items-center gap-2.5">
-          <Icon className="size-4 text-muted-foreground" />
+          <Icon className="size-4 text-content-muted" />
           <span>{title}</span>
           {activeCount > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
               {activeCount}
             </span>
           )}
         </div>
         <ChevronDown
           className={cn(
-            "size-4 text-muted-foreground transition-transform duration-200",
+            "size-4 text-content-muted transition-transform duration-200",
             isOpen && "rotate-180"
           )}
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="rounded-b-lg border border-t-0 bg-background p-3 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+      <CollapsibleContent className="rounded-b-md border border-t-0 border-stroke-soft bg-surface p-3 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -600,7 +600,7 @@ export function RangeInputGroup({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Label className="text-xs text-content-muted">{label}</Label>
       <div className="flex items-center gap-2">
         <Input
           value={minValue}
@@ -608,7 +608,7 @@ export function RangeInputGroup({
           placeholder={minPlaceholder}
           className="h-8 text-sm"
         />
-        <span className="text-xs text-muted-foreground">a</span>
+        <span className="text-xs text-content-muted">a</span>
         <Input
           value={maxValue}
           onChange={(e) => onMaxChange(e.target.value)}
@@ -633,7 +633,7 @@ export function TextFilterInput({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Label className="text-xs text-content-muted">{label}</Label>
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}

@@ -29,6 +29,16 @@ function readCookieValue(name: string) {
 	return null;
 }
 
+/**
+ * Client-side view of the current user's admin standing for the active tenant
+ * (superadmin flag from `profiles`, owner/admin role from `memberships`,
+ * active tenant resolved via the `active_tenant_id` cookie with the oldest
+ * membership as fallback).
+ *
+ * UI convenience ONLY — gate visibility with it, never authorization. The
+ * server (route guards + RLS) is the enforcement layer. Resolved once on
+ * mount; it does not react to tenant switches without a remount.
+ */
 export function useTenantAdminStatus(): TenantAdminStatus {
 	const [status, setStatus] = useState<TenantAdminStatus>({
 		isAdmin: false,

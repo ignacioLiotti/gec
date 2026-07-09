@@ -26,6 +26,9 @@ import {
   X,
   Zap,
   Sparkles,
+  Code2,
+  Copy,
+  ClipboardPaste,
 } from "lucide-react";
 
 import {
@@ -33,12 +36,21 @@ import {
   type OcrTemplate,
 } from "./_components/OcrTemplateConfigurator";
 
-import { Button } from "@/components/ui/button";
+import { Button, LightButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +82,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { ensureTablaDataType, normalizeFieldKey, normalizeFolderName } from "@/lib/tablas";
+import { cn } from "@/lib/utils";
+
+const adminPageMaxWidthClass = "mx-auto w-full max-w-[1800px]";
+const adminSurfaceClass = "rounded-lg border border-stroke-soft bg-surface shadow-card";
+const adminCardClass = "rounded-lg border border-stroke-soft bg-card shadow-card";
 
 type DataInputMethod = 'ocr' | 'manual' | 'both';
 type ExtractionRowMode = "single" | "multiple";
@@ -201,6 +218,42 @@ type ImportedDefinition = {
   excel_mapping_hints?: ImportedExcelHint[];
   global_extraction_instructions?: string[];
   review_warnings?: string[];
+};
+
+type PortableDevFolderColumn = {
+  label: string;
+  fieldKey: string;
+  dataType: string;
+  required: boolean;
+  scope: "parent" | "item";
+  description?: string | null;
+  aliases?: string[];
+  examples?: string[];
+  excelKeywords?: string[];
+};
+
+type PortableDevFolderTable = {
+  name: string;
+  rowMode: ExtractionRowMode;
+  maxRows: number | null;
+  dataInputMethod: DataInputMethod;
+  spreadsheetTemplate?: "auto" | "certificado" | null;
+  ocrTemplateId?: string | null;
+  ocrTemplateName?: string | null;
+  manualEntryEnabled?: boolean;
+  hasNestedData?: boolean;
+  documentTypes?: string[];
+  extractionInstructions?: string | null;
+  columns: PortableDevFolderColumn[];
+};
+
+type PortableDevFolderConfig = {
+  kind: "obra-defaults.dev-folder-config";
+  version: 1;
+  folderName: string;
+  sourcePath?: string;
+  copiedAt: string;
+  extractedTables: PortableDevFolderTable[];
 };
 
 const CERTIFICADO_XLSX_DEFAULT_COLUMNS: Array<{
@@ -387,20 +440,457 @@ function deriveDataInputMethod(params: {
   return "manual";
 }
 
-function getAcceptedInputLabels(params: {
-  acceptsPdfImage: boolean;
-  acceptsSpreadsheet: boolean;
-  allowsManualEntry: boolean;
-}) {
-  const labels: string[] = [];
-  if (params.acceptsPdfImage) labels.push("PDF / image");
-  if (params.acceptsSpreadsheet) labels.push("XLSX / CSV");
-  if (params.allowsManualEntry) labels.push("Carga manual");
-  return labels;
-}
-
 function getEffectiveTableMaxRows(table: Pick<ExtractedTableConfig, "rowMode" | "maxRows">) {
   return table.rowMode === "single" ? 1 : sanitizeMaxRows(table.maxRows);
+}
+
+function canRunLlmExtraction(table: ExtractedTableConfig) {
+  return table.dataInputMethod === "ocr" || table.dataInputMethod === "both";
+}
+
+function canRunSpreadsheetExtraction(table: ExtractedTableConfig) {
+  return Boolean(table.spreadsheetTemplate);
+}
+
+function canRunManualEntry(table: ExtractedTableConfig) {
+  return typeof table.manualEntryEnabled === "boolean"
+    ? table.manualEntryEnabled
+    : table.dataInputMethod !== "ocr";
+}
+
+function describeDevColumn(column: OcrColumn) {
+  const details = [
+    `field=${column.fieldKey || normalizeFieldKey(column.label || "campo")}`,
+    `type=${column.dataType || "text"}`,
+  ];
+  if (column.required) details.push("required");
+  if (column.scope) details.push(`scope=${column.scope}`);
+  if (column.description?.trim()) details.push(column.description.trim());
+  if (column.aliases && column.aliases.length > 0) {
+    details.push(`aliases=${column.aliases.join(", ")}`);
+  }
+  if (column.examples && column.examples.length > 0) {
+    details.push(`examples=${column.examples.join(", ")}`);
+  }
+  if (column.excelKeywords && column.excelKeywords.length > 0) {
+    details.push(`keywords=${column.excelKeywords.join(", ")}`);
+  }
+  return `- ${column.label || column.fieldKey || "Campo"} (${details.join(" | ")})`;
+}
+
+function getPromptColumns(table: ExtractedTableConfig) {
+  const parentColumns = table.columns.filter((column) => column.scope === "parent");
+  const itemColumns = table.columns.filter((column) => column.scope !== "parent");
+  return { parentColumns, itemColumns };
+}
+
+function buildDevJsonTemplate(table: ExtractedTableConfig) {
+  const { parentColumns, itemColumns } = getPromptColumns(table);
+  const topLevelLines = parentColumns.map(
+    (column) => `  "${column.fieldKey || normalizeFieldKey(column.label)}": ""`,
+  );
+  if (itemColumns.length > 0) {
+    topLevelLines.push(
+      `  "items": [\n    {\n${itemColumns
+        .map((column) => `      "${column.fieldKey || normalizeFieldKey(column.label)}": ""`)
+        .join(",\n")}\n    }\n  ]`,
+    );
+  }
+  if (topLevelLines.length === 0) {
+    topLevelLines.push('  "items": []');
+  }
+  return `{\n${topLevelLines.join(",\n")}\n}`;
+}
+
+function buildDevLlmPrompt(table: ExtractedTableConfig, folderPath: string) {
+  const { parentColumns, itemColumns } = getPromptColumns(table);
+  const docTypes = table.documentTypes ?? [];
+  const docLabel = docTypes.length > 0 ? docTypes.join(" / ") : "documento";
+  const lines = [
+    `Analiza el ${docLabel} subido a ${folderPath} y devuelve JSON valido.`,
+    `Dataset destino: ${table.name || "tabla_extraida"}.`,
+    `Modo de filas: ${table.rowMode === "single" ? "una fila por documento" : "multiples filas"}.`,
+  ];
+
+  if (docTypes.length > 0) {
+    lines.push(`Tipos esperados: ${docTypes.join(", ")}.`);
+  }
+  if (table.ocrTemplateName || table.ocrTemplateId) {
+    lines.push(`Plantilla OCR: ${table.ocrTemplateName ?? table.ocrTemplateId}.`);
+  }
+  if (parentColumns.length > 0) {
+    lines.push("Campos nivel documento:");
+    parentColumns.forEach((column) => lines.push(describeDevColumn(column)));
+  }
+  if (itemColumns.length > 0) {
+    lines.push("Campos por item (items[]):");
+    itemColumns.forEach((column) => lines.push(describeDevColumn(column)));
+    lines.push('Inclui "items" si ves filas claras; si no, devolve una lista vacia.');
+  } else {
+    lines.push("Esta tabla no define items repetidos.");
+  }
+  lines.push("No inventes valores; deja campos vacios si no se pueden leer.");
+  if (table.extractionInstructions?.trim()) {
+    lines.push("Instrucciones adicionales:");
+    lines.push(table.extractionInstructions.trim());
+  }
+  lines.push("JSON esperado:");
+  lines.push(buildDevJsonTemplate(table));
+  lines.push("Responde SOLO con JSON valido, sin explicaciones ni markdown.");
+  return lines.join("\n");
+}
+
+function buildDevSpreadsheetScript(table: ExtractedTableConfig, folderPath: string) {
+  const template = table.spreadsheetTemplate ?? "auto";
+  const maxRows = getEffectiveTableMaxRows(table);
+  const lines = [
+    `when file.ext in ["csv", "xlsx", "xls"] and file.folder == "${folderPath}"`,
+    `dataset "${table.name || "tabla_extraida"}"`,
+    `extractor "${template}" {`,
+    `  rowMode = "${table.rowMode}"`,
+    `  maxRows = ${maxRows ?? "unlimited"}`,
+    `  sheet = best_matching_sheet(file, columns)`,
+    "  mapHeaders = {",
+    ...table.columns.map((column) => {
+      const hints = uniqueStrings([
+        column.label,
+        column.fieldKey,
+        ...(column.aliases ?? []),
+        ...(column.excelKeywords ?? []),
+      ]);
+      return `    ${column.fieldKey || normalizeFieldKey(column.label)} <- [${hints
+        .map((hint) => `"${hint}"`)
+        .join(", ")}]`;
+    }),
+    "  }",
+    "  coerce = {",
+    ...table.columns.map(
+      (column) => `    ${column.fieldKey || normalizeFieldKey(column.label)}: ${column.dataType || "text"}`,
+    ),
+    "  }",
+    "  output rows with __docPath, extraction_id, lineage_row_key",
+    "}",
+  ];
+  return lines.join("\n");
+}
+
+function buildPortableDevFolderConfig(params: {
+  folderName: string;
+  folderPath?: string;
+  extractedTables: ExtractedTableConfig[];
+}): PortableDevFolderConfig {
+  return {
+    kind: "obra-defaults.dev-folder-config",
+    version: 1,
+    folderName: params.folderName.trim() || "Carpeta de datos",
+    sourcePath: params.folderPath,
+    copiedAt: new Date().toISOString(),
+    extractedTables: params.extractedTables.map((table) => ({
+      name: table.name?.trim() || "Tabla extraida",
+      rowMode: table.rowMode,
+      maxRows: getEffectiveTableMaxRows(table),
+      dataInputMethod: table.dataInputMethod,
+      spreadsheetTemplate: table.spreadsheetTemplate ?? null,
+      ocrTemplateId: table.ocrTemplateId ?? null,
+      ocrTemplateName: table.ocrTemplateName ?? null,
+      manualEntryEnabled: table.manualEntryEnabled,
+      hasNestedData: table.hasNestedData,
+      documentTypes: table.documentTypes ?? [],
+      extractionInstructions: table.extractionInstructions ?? null,
+      columns: table.columns.map((column) => ({
+        label: column.label,
+        fieldKey: column.fieldKey || normalizeFieldKey(column.label),
+        dataType: column.dataType || "text",
+        required: column.required,
+        scope: column.scope,
+        description: column.description ?? null,
+        aliases: column.aliases ?? [],
+        examples: column.examples ?? [],
+        excelKeywords: column.excelKeywords ?? [],
+      })),
+    })),
+  };
+}
+
+async function writeClipboardText(text: string) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+function isDataInputMethod(value: unknown): value is DataInputMethod {
+  return value === "ocr" || value === "manual" || value === "both";
+}
+
+function readPortableSpreadsheetTemplate(value: unknown): "auto" | "certificado" | null {
+  return value === "auto" || value === "certificado" ? value : null;
+}
+
+function findPortableOcrTemplate(
+  rawTemplateId: unknown,
+  rawTemplateName: unknown,
+  ocrTemplates: OcrTemplate[],
+) {
+  const templateId = typeof rawTemplateId === "string" ? rawTemplateId.trim() : "";
+  const templateName = typeof rawTemplateName === "string" ? rawTemplateName.trim() : "";
+  if (templateId) {
+    const byId = ocrTemplates.find((template) => template.id === templateId);
+    if (byId) return byId;
+  }
+  if (templateName) {
+    const normalizedName = templateName.toLowerCase();
+    return ocrTemplates.find((template) => template.name.trim().toLowerCase() === normalizedName) ?? null;
+  }
+  return null;
+}
+
+function importPortableDevFolderConfig(
+  rawJson: string,
+  ocrTemplates: OcrTemplate[],
+): { folderName: string; extractedTables: ExtractedTableConfig[] } | null {
+  const parsed = JSON.parse(rawJson) as unknown;
+  if (!isRecord(parsed) || parsed.kind !== "obra-defaults.dev-folder-config") {
+    return null;
+  }
+  if (parsed.version !== 1) {
+    throw new Error("La config dev usa una versión no soportada");
+  }
+
+  const rawTables = Array.isArray(parsed.extractedTables)
+    ? parsed.extractedTables.filter((table): table is Record<string, unknown> => isRecord(table))
+    : [];
+  if (rawTables.length === 0) {
+    throw new Error("La config dev no trae datasets para importar");
+  }
+
+  const folderName =
+    typeof parsed.folderName === "string" && parsed.folderName.trim()
+      ? parsed.folderName.trim()
+      : "Carpeta de datos";
+
+  const extractedTables = rawTables.map((table, tableIndex) => {
+    const rawColumns = Array.isArray(table.columns)
+      ? table.columns.filter((column): column is Record<string, unknown> => isRecord(column))
+      : [];
+    const columns = rawColumns.map((column, columnIndex): OcrColumn => {
+      const label =
+        typeof column.label === "string" && column.label.trim()
+          ? column.label.trim()
+          : typeof column.fieldKey === "string" && column.fieldKey.trim()
+            ? column.fieldKey.trim()
+            : `Campo ${columnIndex + 1}`;
+      const fieldKey =
+        typeof column.fieldKey === "string" && column.fieldKey.trim()
+          ? normalizeFieldKey(column.fieldKey)
+          : normalizeFieldKey(label);
+      return {
+        id: crypto.randomUUID(),
+        label,
+        fieldKey,
+        dataType: ensureTablaDataType(typeof column.dataType === "string" ? column.dataType : "text"),
+        required: Boolean(column.required),
+        scope: column.scope === "parent" ? "parent" : "item",
+        description: typeof column.description === "string" ? column.description : "",
+        aliases: readStringArray(column.aliases),
+        examples: readStringArray(column.examples),
+        excelKeywords: readStringArray(column.excelKeywords),
+      };
+    });
+
+    if (columns.length === 0) {
+      throw new Error(`El dataset ${tableIndex + 1} no trae columnas`);
+    }
+
+    const matchedTemplate = findPortableOcrTemplate(table.ocrTemplateId, table.ocrTemplateName, ocrTemplates);
+    const dataInputMethod = isDataInputMethod(table.dataInputMethod) ? table.dataInputMethod : "both";
+    const rowMode: ExtractionRowMode = table.rowMode === "multiple" ? "multiple" : "single";
+    const hasNestedData =
+      typeof table.hasNestedData === "boolean"
+        ? table.hasNestedData
+        : columns.some((column) => column.scope === "parent") && columns.some((column) => column.scope === "item");
+
+    return {
+      id: crypto.randomUUID(),
+      name:
+        typeof table.name === "string" && table.name.trim()
+          ? table.name.trim()
+          : tableIndex === 0
+            ? folderName
+            : `Tabla ${tableIndex + 1}`,
+      rowMode,
+      maxRows: rowMode === "multiple" ? sanitizeMaxRows(Number(table.maxRows)) : 1,
+      dataInputMethod,
+      spreadsheetTemplate: readPortableSpreadsheetTemplate(table.spreadsheetTemplate),
+      ocrTemplateId: matchedTemplate?.id ?? null,
+      ocrTemplateName:
+        matchedTemplate?.name ?? (typeof table.ocrTemplateName === "string" ? table.ocrTemplateName : null),
+      manualEntryEnabled:
+        typeof table.manualEntryEnabled === "boolean" ? table.manualEntryEnabled : dataInputMethod !== "ocr",
+      hasNestedData,
+      documentTypes: readStringArray(table.documentTypes),
+      extractionInstructions:
+        typeof table.extractionInstructions === "string" ? table.extractionInstructions : "",
+      columns,
+    };
+  });
+
+  return { folderName, extractedTables };
+}
+
+function ExtractionDevConfigView({
+  folderPath,
+  extractedTables,
+}: {
+  folderPath: string;
+  extractedTables: ExtractedTableConfig[];
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg border border-stroke bg-surface p-4 text-left">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-surface-recessed text-content-secondary">
+              <Code2 className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-content">Dev view</p>
+              <p className="mt-1 break-all font-mono text-xs text-content-muted">{folderPath}</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="shrink-0">
+            {extractedTables.length} datasets
+          </Badge>
+        </div>
+        <div className="mt-4 grid gap-2 text-xs md:grid-cols-3">
+          <div className="rounded-md border border-stroke-soft bg-surface-recessed px-3 py-2">
+            <p className="font-medium text-content">PDF / image</p>
+            <p className="mt-1 text-content-muted">
+              {extractedTables.some(canRunLlmExtraction) ? "LLM prompt" : "off"}
+            </p>
+          </div>
+          <div className="rounded-md border border-stroke-soft bg-surface-recessed px-3 py-2">
+            <p className="font-medium text-content">CSV / XLSX</p>
+            <p className="mt-1 text-content-muted">
+              {extractedTables.some(canRunSpreadsheetExtraction) ? "script" : "off"}
+            </p>
+          </div>
+          <div className="rounded-md border border-stroke-soft bg-surface-recessed px-3 py-2">
+            <p className="font-medium text-content">Manual</p>
+            <p className="mt-1 text-content-muted">
+              {extractedTables.some(canRunManualEntry) ? "enabled" : "off"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3 text-left">
+        {extractedTables.map((table, index) => {
+          const llmEnabled = canRunLlmExtraction(table);
+          const spreadsheetEnabled = canRunSpreadsheetExtraction(table);
+          const manualEnabled = canRunManualEntry(table);
+          const docTypeCondition =
+            table.documentTypes && table.documentTypes.length > 0
+              ? `documentType in [${table.documentTypes.map((type) => `"${type}"`).join(", ")}]`
+              : "any document type";
+
+          return (
+            <div key={table.id} className="rounded-lg border border-stroke bg-surface">
+              <div className="flex flex-col gap-2 border-b border-stroke-soft px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-content">
+                    {table.name || `Dataset ${index + 1}`}
+                  </p>
+                  <p className="mt-1 text-xs text-content-muted">
+                    {table.rowMode === "single" ? "una fila" : "multiples filas"} - {table.columns.length} fields
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {llmEnabled ? <Badge variant="secondary">LLM</Badge> : null}
+                  {spreadsheetEnabled ? <Badge variant="secondary">CSV/XLSX</Badge> : null}
+                  {manualEnabled ? <Badge variant="outline">manual</Badge> : null}
+                </div>
+              </div>
+
+              <div className="grid gap-3 p-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-content-muted">
+                    Conditions
+                  </p>
+                  <div className="space-y-2 text-xs">
+                    <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
+                      <p className="font-medium text-content">PDF / image</p>
+                      <p className="mt-1 text-content-muted">
+                        {llmEnabled
+                          ? `ext in ["pdf", "png", "jpg", "jpeg", "webp", "tif", "tiff"] && ${docTypeCondition}`
+                          : "disabled"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
+                      <p className="font-medium text-content">CSV / XLSX</p>
+                      <p className="mt-1 text-content-muted">
+                        {spreadsheetEnabled
+                          ? `ext in ["csv", "xlsx", "xls"] && extractor == "${table.spreadsheetTemplate}"`
+                          : "disabled"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
+                      <p className="font-medium text-content">Manual</p>
+                      <p className="mt-1 text-content-muted">
+                        {manualEnabled ? "direct row entry allowed" : "disabled"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {llmEnabled ? (
+                    <div>
+                      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-content-muted">
+                        <FileText className="size-3.5" />
+                        Prompt final LLM
+                      </div>
+                      <pre className="max-h-[320px] overflow-auto rounded-md border border-stroke-soft bg-surface-recessed p-3 text-left font-mono text-xs leading-5 text-content">
+                        {buildDevLlmPrompt(table, folderPath)}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {spreadsheetEnabled ? (
+                    <div>
+                      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-content-muted">
+                        <Table2 className="size-3.5" />
+                        Script CSV / XLSX
+                      </div>
+                      <pre className="max-h-[260px] overflow-auto rounded-md border border-stroke-soft bg-surface-recessed p-3 text-left font-mono text-xs leading-5 text-content">
+                        {buildDevSpreadsheetScript(table, folderPath)}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {!llmEnabled && !spreadsheetEnabled ? (
+                    <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3 text-sm text-content-muted">
+                      Este dataset no tiene extractor de archivo activo; solo queda disponible para carga manual.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function parseCommaSeparatedList(value: string): string[] {
@@ -865,12 +1355,14 @@ function FolderRow({
   onDelete,
   onEdit,
   onMove,
+  onViewDev,
   index,
 }: {
   folder: DefaultFolder;
   onDelete: () => void;
   onEdit: () => void;
   onMove: () => void;
+  onViewDev?: () => void;
   index: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -889,7 +1381,7 @@ function FolderRow({
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 20 }}
         transition={{ delay: index * 0.03 }}
-        className="group flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+        className={cn(adminCardClass, "group flex items-center gap-3 p-3 transition-colors hover:bg-surface-muted/70")}
       >
         <div className="flex items-center justify-center size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
           <Folder className="size-5 text-amber-600 dark:text-amber-400" />
@@ -900,7 +1392,8 @@ function FolderRow({
           <p className="text-xs text-muted-foreground font-mono">/{folder.path}</p>
         </div>
 
-        <Button
+        <LightButton
+          type="button"
           variant="ghost"
           size="icon"
           onClick={onMove}
@@ -908,8 +1401,9 @@ function FolderRow({
           aria-label="Mover carpeta"
         >
           <FolderInput className="h-4 w-4" />
-        </Button>
-        <Button
+        </LightButton>
+        <LightButton
+          type="button"
           variant="ghost"
           size="icon"
           onClick={onEdit}
@@ -917,15 +1411,16 @@ function FolderRow({
           aria-label="Editar carpeta"
         >
           <Pencil className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
+        </LightButton>
+        <LightButton
+          type="button"
+          variant="destructive"
           size="icon"
           onClick={onDelete}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
         >
           <Trash2 className="size-4" />
-        </Button>
+        </LightButton>
       </m.div>
     );
   }
@@ -939,9 +1434,9 @@ function FolderRow({
       transition={{ delay: index * 0.03 }}
     >
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="rounded-lg border bg-card overflow-hidden border-amber-200 dark:border-amber-800">
+        <div className={cn(adminCardClass, "overflow-hidden border-amber-200/80 dark:border-amber-800")}>
           <CollapsibleTrigger asChild>
-            <div className="group flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/50 transition-colors">
+            <div className="group flex cursor-pointer items-center gap-3 p-3 transition-colors hover:bg-surface-muted/70">
               <div className="flex items-center justify-center size-10 rounded-lg bg-amber-100 dark:bg-amber-900/30">
                 <Table2 className="size-5 text-amber-600 dark:text-amber-400" />
               </div>
@@ -961,7 +1456,24 @@ function FolderRow({
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
+                {onViewDev ? (
+                  <LightButton
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewDev();
+                    }}
+                    className="h-8 gap-1.5 px-2 text-xs"
+                    aria-label="Ver configuracion dev"
+                  >
+                    <Code2 className="size-3.5" />
+                    Dev
+                  </LightButton>
+                ) : null}
+                <LightButton
+                  type="button"
                   variant="ghost"
                   size="icon"
                   onClick={(e) => {
@@ -972,8 +1484,9 @@ function FolderRow({
                   aria-label="Mover carpeta"
                 >
                   <FolderInput className="h-4 w-4" />
-                </Button>
-                <Button
+                </LightButton>
+                <LightButton
+                  type="button"
                   variant="ghost"
                   size="icon"
                   onClick={(e) => {
@@ -984,18 +1497,19 @@ function FolderRow({
                   aria-label="Editar carpeta"
                 >
                   <Pencil className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
+                </LightButton>
+                <LightButton
+                  type="button"
+                  variant="destructive"
                   size="icon"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete();
                   }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <Trash2 className="size-4" />
-                </Button>
+                </LightButton>
                 {isOpen ? (
                   <ChevronUp className="size-4 text-muted-foreground" />
                 ) : (
@@ -1006,7 +1520,7 @@ function FolderRow({
           </CollapsibleTrigger>
 
           <CollapsibleContent>
-            <div className="border-t p-4 space-y-4 bg-muted/30">
+            <div className="space-y-4 border-t border-stroke-soft bg-surface-recessed p-4">
               {folder.ocrTemplateName && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Plantilla de extracción</p>
@@ -1051,7 +1565,7 @@ function FolderRow({
                         table.spreadsheetTemplate ? `Excel / CSV: ${table.spreadsheetTemplate}` : null,
                       ].filter(Boolean);
                       return (
-                        <div key={table.id} className="rounded-lg border bg-background p-3">
+                        <div key={table.id} className="rounded-md border border-stroke-soft bg-surface p-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-medium">{table.name}</p>
                             <Badge variant="outline" className="text-[10px]">
@@ -1109,7 +1623,7 @@ function FolderRow({
                         {parentColumns.map((col) => (
                           <div
                             key={col.fieldKey}
-                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                            className="flex items-center gap-2 rounded-md border border-stroke-soft bg-surface p-2 text-xs"
                           >
                             {getDataTypeIcon(col.dataType)}
                             <span className="flex-1 truncate">{col.label}</span>
@@ -1131,7 +1645,7 @@ function FolderRow({
                         {itemColumns.map((col) => (
                           <div
                             key={col.fieldKey}
-                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                            className="flex items-center gap-2 rounded-md border border-stroke-soft bg-surface p-2 text-xs"
                           >
                             {getDataTypeIcon(col.dataType)}
                             <span className="flex-1 truncate">{col.label}</span>
@@ -1179,9 +1693,9 @@ function OcrTemplateCard({
       transition={{ delay: index * 0.03 }}
     >
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <div className="rounded-lg border bg-card overflow-hidden">
+        <div className={cn(adminCardClass, "overflow-hidden")}>
           <CollapsibleTrigger asChild>
-            <div className="flex items-center gap-3 p-4 cursor-pointer hover:bg-accent/50 transition-colors">
+            <div className="flex cursor-pointer items-center gap-3 p-4 transition-colors hover:bg-surface-muted/70">
               <div className="flex items-center justify-center size-10 rounded-lg bg-purple-100 dark:bg-purple-900/30">
                 <ScanLine className="size-5 text-purple-600 dark:text-purple-400" />
               </div>
@@ -1200,7 +1714,8 @@ function OcrTemplateCard({
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
+                <LightButton
+                  type="button"
                   variant="ghost"
                   size="icon"
                   onClick={(e) => {
@@ -1209,18 +1724,18 @@ function OcrTemplateCard({
                   }}
                 >
                   <Pencil className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
+                </LightButton>
+                <LightButton
+                  type="button"
+                  variant="destructive"
                   size="icon"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete();
                   }}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
                   <Trash2 className="size-4" />
-                </Button>
+                </LightButton>
                 {isOpen ? (
                   <ChevronUp className="size-4 text-muted-foreground" />
                 ) : (
@@ -1231,7 +1746,7 @@ function OcrTemplateCard({
           </CollapsibleTrigger>
 
           <CollapsibleContent>
-            <div className="border-t p-4 space-y-4 bg-muted/30">
+            <div className="space-y-4 border-t border-stroke-soft bg-surface-recessed p-4">
               {template.description && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">Descripción</p>
@@ -1256,7 +1771,7 @@ function OcrTemplateCard({
                     {template.regions.map((region) => (
                       <div
                         key={region.id}
-                        className="flex items-start gap-2 p-2 rounded bg-background border text-sm"
+                        className="flex items-start gap-2 rounded-md border border-stroke-soft bg-surface p-2 text-sm"
                       >
                         {region.type === "table" ? (
                           <TableProperties className="size-4 text-blue-500 mt-0.5" />
@@ -1293,7 +1808,7 @@ function OcrTemplateCard({
                         {parentColumns.map((col) => (
                           <div
                             key={col.fieldKey}
-                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                            className="flex items-center gap-2 rounded-md border border-stroke-soft bg-surface p-2 text-xs"
                           >
                             {getDataTypeIcon(col.dataType)}
                             <span className="flex-1 truncate">{col.label}</span>
@@ -1315,7 +1830,7 @@ function OcrTemplateCard({
                         {itemColumns.map((col) => (
                           <div
                             key={col.fieldKey}
-                            className="flex items-center gap-2 p-2 rounded bg-background border text-xs"
+                            className="flex items-center gap-2 rounded-md border border-stroke-soft bg-surface p-2 text-xs"
                           >
                             {getDataTypeIcon(col.dataType)}
                             <span className="flex-1 truncate">{col.label}</span>
@@ -1367,6 +1882,8 @@ export default function ObraDefaultsPage() {
   const [movingFolder, setMovingFolder] = useState<DefaultFolder | null>(null);
   const [moveFolderParentPath, setMoveFolderParentPath] = useState("");
   const [isSubmittingMoveFolder, setIsSubmittingMoveFolder] = useState(false);
+  const [devViewFolder, setDevViewFolder] = useState<DefaultFolder | null>(null);
+  const [deleteBlockedFolder, setDeleteBlockedFolder] = useState<DefaultFolder | null>(null);
 
   // Data folder state
   const [newFolderDataInputMethod, setNewFolderDataInputMethod] = useState<DataInputMethod>("both");
@@ -1442,7 +1959,6 @@ export default function ObraDefaultsPage() {
 
   const fetchDefaults = useCallback(async () => {
     try {
-      setIsLoading(true);
       const res = await fetch("/api/obra-defaults");
       if (!res.ok) throw new Error("Failed to load defaults");
       const data = await res.json();
@@ -1457,13 +1973,18 @@ export default function ObraDefaultsPage() {
   }, []);
 
   useEffect(() => {
-    void fetchDefaults();
-    void fetchOcrTemplates();
+    queueMicrotask(() => {
+      void fetchDefaults();
+      void fetchOcrTemplates();
+    });
   }, [fetchDefaults, fetchOcrTemplates]);
 
   useEffect(() => {
     if (!activeExtractedTableId && newFolderExtractedTables.length > 0) {
-      setActiveExtractedTableId(newFolderExtractedTables[0].id);
+      const nextActiveTableId = newFolderExtractedTables[0].id;
+      queueMicrotask(() => {
+        setActiveExtractedTableId((current) => current ?? nextActiveTableId);
+      });
     }
   }, [activeExtractedTableId, newFolderExtractedTables]);
 
@@ -1579,7 +2100,17 @@ export default function ObraDefaultsPage() {
   // Sync columns scope when hasNested changes
   useEffect(() => {
     if (!newFolderHasNested) {
-      setNewFolderColumns(prev => prev.map(col => ({ ...col, scope: "item" as const })));
+      queueMicrotask(() => {
+        setNewFolderColumns((prev) => {
+          let changed = false;
+          const next = prev.map((col) => {
+            if (col.scope === "item") return col;
+            changed = true;
+            return { ...col, scope: "item" as const };
+          });
+          return changed ? next : prev;
+        });
+      });
     }
   }, [newFolderHasNested]);
 
@@ -1879,24 +2410,6 @@ export default function ObraDefaultsPage() {
     }
   };
 
-  const handleDeleteFolder = async (id: string) => {
-    try {
-      const res = await fetch("/api/obra-defaults", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "folder", id }),
-      });
-
-      if (!res.ok) throw new Error("Error deleting folder");
-
-      setFolders((prev) => prev.filter((folder) => folder.id !== id));
-      toast.success("Carpeta eliminada");
-    } catch (error) {
-      console.error(error);
-      toast.error("Error eliminando carpeta");
-    }
-  };
-
   const toggleQuickActionFolder = useCallback((path: string) => {
     setNewQuickActionFolders((prev) => {
       if (prev.includes(path)) {
@@ -1984,14 +2497,29 @@ export default function ObraDefaultsPage() {
     ]);
   };
 
-  const handleImportDefinitionJson = useCallback(() => {
-    if (!definitionImportText.trim()) {
+  const applyImportedJsonText = useCallback((rawText: string) => {
+    if (!rawText.trim()) {
       toast.error("Pegá una definición JSON primero");
       return;
     }
 
     try {
-      const imported = importDefinitionToFolderConfig(definitionImportText);
+      const portableConfig = importPortableDevFolderConfig(rawText, ocrTemplates);
+      if (portableConfig) {
+        const firstTable = portableConfig.extractedTables[0];
+        setFolderMode("data");
+        setNewFolderName((prev) => prev.trim() || portableConfig.folderName);
+        setNewFolderExtractedTables(portableConfig.extractedTables);
+        setActiveExtractedTableId(firstTable.id);
+        loadEditorFromExtractedTable(firstTable);
+        setIsDefinitionImportOpen(false);
+        setHasImportedDefinition(true);
+        setDefinitionImportText("");
+        toast.success(`Config dev importada: ${portableConfig.extractedTables.length} dataset(s)`);
+        return;
+      }
+
+      const imported = importDefinitionToFolderConfig(rawText);
       setFolderMode("data");
       setNewFolderName((prev) => prev.trim() || imported.folderName);
       setNewFolderDataInputMethod(imported.suggestedDataInputMethod);
@@ -2034,7 +2562,50 @@ export default function ObraDefaultsPage() {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "No se pudo importar la definición");
     }
-  }, [activeExtractedTableId, definitionImportText]);
+  }, [activeExtractedTableId, loadEditorFromExtractedTable, ocrTemplates]);
+
+  const handleImportDefinitionJson = useCallback(() => {
+    applyImportedJsonText(definitionImportText);
+  }, [applyImportedJsonText, definitionImportText]);
+
+  const handlePasteDefinitionFromClipboard = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
+      toast.error("Este navegador no permite leer el clipboard automáticamente");
+      setIsDefinitionImportOpen(true);
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        toast.error("El clipboard está vacío");
+        return;
+      }
+      setDefinitionImportText(text);
+      setIsDefinitionImportOpen(true);
+      applyImportedJsonText(text);
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudo leer el clipboard");
+      setIsDefinitionImportOpen(true);
+    }
+  }, [applyImportedJsonText]);
+
+  const handleCopyDevFolderConfig = useCallback(async (folder: DefaultFolder) => {
+    try {
+      const folderPath = `/${folder.path.replace(/^\/+/, "")}`;
+      const config = buildPortableDevFolderConfig({
+        folderName: folder.name,
+        folderPath,
+        extractedTables: mapFolderToExtractedTables(folder),
+      });
+      await writeClipboardText(JSON.stringify(config, null, 2));
+      toast.success("Config dev copiada");
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudo copiar la config dev");
+    }
+  }, []);
 
   const handleSelectExtractedTable = useCallback((tableId: string) => {
     syncActiveTableFromEditor();
@@ -2116,21 +2687,11 @@ export default function ObraDefaultsPage() {
     );
   };
 
-  const acceptedInputDataMethod = deriveDataInputMethod({
-    acceptsPdfImage: newFolderAcceptsPdfImage,
-    acceptsSpreadsheet: newFolderAcceptsSpreadsheet,
-    allowsManualEntry: newFolderAllowsManualEntry,
-  });
   const needsOcrTemplate = newFolderAcceptsPdfImage;
   const hasAnyTemplateSelected = Boolean(
     (newFolderAcceptsPdfImage && newFolderOcrTemplateId) ||
     (newFolderAcceptsSpreadsheet && newFolderSpreadsheetTemplate),
   );
-  const acceptedInputLabels = getAcceptedInputLabels({
-    acceptsPdfImage: newFolderAcceptsPdfImage,
-    acceptsSpreadsheet: newFolderAcceptsSpreadsheet,
-    allowsManualEntry: newFolderAllowsManualEntry,
-  });
   const extractedTableCount = newFolderExtractedTables.length;
   const isCreateFolderDisabled =
     !newFolderName.trim() ||
@@ -2162,6 +2723,11 @@ export default function ObraDefaultsPage() {
       ).length,
     [dataFolders]
   );
+  const devViewExtractedTables = useMemo(
+    () => (devViewFolder ? mapFolderToExtractedTables(devViewFolder) : []),
+    [devViewFolder],
+  );
+  const devViewFolderPath = devViewFolder ? `/${devViewFolder.path.replace(/^\/+/, "")}` : "/";
   const folderEditorStepMeta = useMemo(
     () =>
       folderMode === "data"
@@ -2244,10 +2810,6 @@ export default function ObraDefaultsPage() {
       null,
     [activeExtractedTableId, newFolderExtractedTables]
   );
-  const selectedOcrTemplate = useMemo(
-    () => ocrTemplates.find((template) => template.id === newFolderOcrTemplateId) ?? null,
-    [newFolderOcrTemplateId, ocrTemplates]
-  );
   const currentFolderStepMeta =
     folderEditorStepMeta[folderEditorStep] ?? folderEditorStepMeta[0];
   const folderProgressValue = ((folderEditorStep + 1) / folderEditorSteps.length) * 100;
@@ -2300,33 +2862,33 @@ export default function ObraDefaultsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      <div className="flex min-h-screen items-center justify-center bg-canvas p-12">
+        <Loader2 className="size-8 animate-spin text-content-muted" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-full mx-auto space-y-8">
+    <div className="relative h-full min-h-screen w-full overflow-y-auto overflow-x-hidden bg-canvas px-3 py-4 text-content sm:px-4 md:max-w-[calc(100vw-var(--sidebar-current-width))] md:px-16 md:py-8">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className={cn(adminPageMaxWidthClass, "flex flex-wrap items-start justify-between gap-3")}>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight text-content sm:text-4xl">
             Configuración de Obras
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="mt-1 text-sm text-content-muted">
             Definí la estructura predeterminada para cada nueva obra
           </p>
         </div>
-        <Button asChild variant="outline" className="shrink-0">
+        <LightButton asChild variant="secondary" size="lg" className="shrink-0">
           <Link href="/admin/obra-defaults/reporting">
             Hub de defaults de reporting
           </Link>
-        </Button>
+        </LightButton>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border bg-card p-4">
+      <div className={cn(adminPageMaxWidthClass, "mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4")}>
+        <div className={cn(adminCardClass, "p-4")}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm text-muted-foreground">Estructura base</p>
@@ -2340,7 +2902,7 @@ export default function ObraDefaultsPage() {
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
+        <div className={cn(adminCardClass, "p-4")}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm text-muted-foreground">Extracción lista</p>
@@ -2354,7 +2916,7 @@ export default function ObraDefaultsPage() {
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
+        <div className={cn(adminCardClass, "p-4")}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm text-muted-foreground">Plantillas OCR</p>
@@ -2368,7 +2930,7 @@ export default function ObraDefaultsPage() {
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
+        <div className={cn(adminCardClass, "p-4")}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm text-muted-foreground">Flujos guiados</p>
@@ -2384,8 +2946,8 @@ export default function ObraDefaultsPage() {
         </div>
       </div>
 
-      <Tabs value={activeSection} onValueChange={setActiveSection} className="space-y-4">
-        <div className="rounded-2xl border bg-card p-4">
+      <Tabs value={activeSection} onValueChange={setActiveSection} className={cn(adminPageMaxWidthClass, "mt-5 space-y-4")}>
+        <div className={cn(adminSurfaceClass, "p-3")}>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold">Centro de configuración</h2>
@@ -2393,7 +2955,7 @@ export default function ObraDefaultsPage() {
                 Organizá esta pantalla por intención: estructura, extracción, plantillas y flujos.
               </p>
             </div>
-            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40 p-1 lg:w-auto">
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-surface-recessed p-1 lg:w-auto">
               <TabsTrigger value="structure" className="gap-2">
                 <Folder className="size-4" />
                 Estructura
@@ -2424,18 +2986,20 @@ export default function ObraDefaultsPage() {
                     Estas carpetas se crean automáticamente en cada nueva obra.
                   </p>
                 </div>
-                <Button
+                <LightButton
+                  type="button"
+                  variant="primary"
+                  size="lg"
                   onClick={() => openCreateFolder("normal")}
-                  className="bg-amber-500 hover:bg-amber-600 text-white"
                 >
                   <Plus className="size-4 mr-2" />
                   Nueva carpeta
-                </Button>
+                </LightButton>
               </div>
 
               <div className="space-y-2">
                 {folders.length === 0 ? (
-                  <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+                  <div className="rounded-lg border border-dashed border-stroke-soft bg-surface p-8 text-center text-content-muted">
                     <FolderPlus className="size-12 mx-auto opacity-20 mb-2" />
                     <p className="text-sm font-medium">Sin estructura configurada</p>
                     <p className="text-xs">Agregá carpetas para definir el esqueleto base de cada obra.</p>
@@ -2449,7 +3013,8 @@ export default function ObraDefaultsPage() {
                         index={index}
                         onEdit={() => handleEditFolder(folder)}
                         onMove={() => handleOpenMoveFolder(folder)}
-                        onDelete={() => handleDeleteFolder(folder.id)}
+                        onViewDev={folder.isOcr ? () => setDevViewFolder(folder) : undefined}
+                        onDelete={() => setDeleteBlockedFolder(folder)}
                       />
                     ))}
                   </AnimatePresence>
@@ -2458,7 +3023,7 @@ export default function ObraDefaultsPage() {
             </section>
 
             <section className="space-y-4">
-              <div className="rounded-2xl border bg-muted/20 p-5 space-y-4">
+              <div className={cn(adminSurfaceClass, "space-y-4 p-5")}>
                 <div>
                   <h3 className="text-lg font-semibold">Modelos de carpeta</h3>
                   <p className="text-sm text-muted-foreground">
@@ -2466,23 +3031,23 @@ export default function ObraDefaultsPage() {
                   </p>
                 </div>
                 <div className="space-y-3">
-                  <div className="rounded-xl border bg-background p-3">
+                  <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
                     <p className="text-sm font-medium">Carpeta normal</p>
                     <p className="text-xs text-muted-foreground">
                       Solo guarda documentos. Ideal para documentación, oferta, pliego o anexos.
                     </p>
                   </div>
-                  <div className="rounded-xl border bg-background p-3">
+                  <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
                     <p className="text-sm font-medium">Carpeta de datos</p>
                     <p className="text-xs text-muted-foreground">
                       Crea una tabla asociada para datos manuales o extraídos desde OCR y planillas.
                     </p>
                   </div>
                 </div>
-                <Button variant="outline" onClick={() => openCreateFolder("data")} className="w-full">
+                <LightButton type="button" variant="secondary" size="lg" onClick={() => openCreateFolder("data")} className="w-full">
                   <Table2 className="size-4 mr-2" />
                   Crear carpeta de datos
-                </Button>
+                </LightButton>
               </div>
             </section>
           </div>
@@ -2499,27 +3064,31 @@ export default function ObraDefaultsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
+                  <LightButton
+                    type="button"
+                    variant="primary"
+                    size="lg"
                     onClick={() => openCreateFolder("data")}
-                    className="bg-amber-500 hover:bg-amber-600 text-white"
                     data-testid="open-data-folder-dialog"
                   >
                     <Plus className="size-4 mr-2" />
                     Nueva carpeta de datos
-                  </Button>
-                  <Button
-                    variant="outline"
+                  </LightButton>
+                  <LightButton
+                    type="button"
+                    variant="secondary"
+                    size="lg"
                     onClick={openCreateFolderFromDefinition}
                   >
-                    <FileText className="size-4 mr-2" />
-                    Importar JSON
-                  </Button>
+                    <ClipboardPaste className="size-4 mr-2" />
+                    Pegar config
+                  </LightButton>
                 </div>
               </div>
 
               <div className="space-y-2">
                 {dataFolders.length === 0 ? (
-                  <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+                  <div className="rounded-lg border border-dashed border-stroke-soft bg-surface p-8 text-center text-content-muted">
                     <Table2 className="size-12 mx-auto opacity-20 mb-2" />
                     <p className="text-sm font-medium">Sin configuración de extracción</p>
                     <p className="text-xs">Creá una carpeta de datos para empezar a definir tablas por defecto.</p>
@@ -2533,7 +3102,8 @@ export default function ObraDefaultsPage() {
                         index={index}
                         onEdit={() => handleEditFolder(folder)}
                         onMove={() => handleOpenMoveFolder(folder)}
-                        onDelete={() => handleDeleteFolder(folder.id)}
+                        onViewDev={() => setDevViewFolder(folder)}
+                        onDelete={() => setDeleteBlockedFolder(folder)}
                       />
                     ))}
                   </AnimatePresence>
@@ -2542,7 +3112,7 @@ export default function ObraDefaultsPage() {
             </section>
 
             <section className="space-y-4">
-              <div className="rounded-2xl border bg-muted/20 p-5 space-y-4">
+              <div className={cn(adminSurfaceClass, "space-y-4 p-5")}>
                 <div>
                   <h3 className="text-lg font-semibold">Flujo recomendado</h3>
                   <p className="text-sm text-muted-foreground">
@@ -2550,15 +3120,15 @@ export default function ObraDefaultsPage() {
                   </p>
                 </div>
                 <div className="space-y-3">
-                  <div className="rounded-xl border bg-background p-3">
+                  <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
                     <p className="text-sm font-medium">1. Definí qué llega a esta carpeta</p>
                     <p className="text-xs text-muted-foreground">Tipos de documento, variantes y si entra por OCR, planilla o manual.</p>
                   </div>
-                  <div className="rounded-xl border bg-background p-3">
+                  <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
                     <p className="text-sm font-medium">2. Enseñá el significado de cada campo</p>
                     <p className="text-xs text-muted-foreground">Descripción, aliases, ejemplos de valores y posibles encabezados Excel.</p>
                   </div>
-                  <div className="rounded-xl border bg-background p-3">
+                  <div className="rounded-md border border-stroke-soft bg-surface-recessed p-3">
                     <p className="text-sm font-medium">3. Definí el resultado esperado</p>
                     <p className="text-xs text-muted-foreground">Las columnas finales son el contrato común para obras nuevas y existentes.</p>
                   </div>
@@ -2576,21 +3146,23 @@ export default function ObraDefaultsPage() {
                 Definen qué datos extraer de cada tipo de documento visual.
               </p>
             </div>
-            <Button
+            <LightButton
+              type="button"
+              variant="primary"
+              size="lg"
               onClick={() => {
                 setEditingOcrTemplate(null);
                 setIsOcrConfigOpen(true);
               }}
-              className="bg-purple-500 hover:bg-purple-600 text-white"
             >
               <Plus className="size-4 mr-2" />
               Nueva plantilla
-            </Button>
+            </LightButton>
           </div>
 
           <div className="space-y-3">
             {ocrTemplates.length === 0 ? (
-              <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-stroke-soft bg-surface p-8 text-center text-content-muted">
                 <ScanLine className="size-12 mx-auto opacity-20 mb-2" />
                 <p className="text-sm font-medium">Sin plantillas configuradas</p>
                 <p className="text-xs">Creá una plantilla para empezar a extraer datos de tus documentos.</p>
@@ -2619,18 +3191,20 @@ export default function ObraDefaultsPage() {
                 Flujos de carga rápida con pasos por carpeta para tareas frecuentes.
               </p>
             </div>
-            <Button
+            <LightButton
+              type="button"
+              variant="primary"
+              size="lg"
               onClick={() => setIsAddQuickActionOpen(true)}
-              className="bg-orange-500 hover:bg-orange-600 text-white"
             >
               <Plus className="size-4 mr-2" />
               Nueva acción
-            </Button>
+            </LightButton>
           </div>
 
           <div className="space-y-2">
             {quickActions.length === 0 ? (
-              <div className="rounded-lg border-2 border-dashed p-8 text-center text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-stroke-soft bg-surface p-8 text-center text-content-muted">
                 <Zap className="size-12 mx-auto opacity-20 mb-2" />
                 <p className="text-sm font-medium">Sin flujos configurados</p>
                 <p className="text-xs">Agregá acciones para acelerar cargas frecuentes.</p>
@@ -2644,7 +3218,7 @@ export default function ObraDefaultsPage() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ delay: index * 0.03 }}
-                    className="group rounded-lg border bg-card p-4 space-y-3"
+                    className={cn(adminCardClass, "group space-y-3 p-4")}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -2653,14 +3227,15 @@ export default function ObraDefaultsPage() {
                           {action.description || `${action.folderPaths.length} pasos`}
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
+                      <LightButton
+                        type="button"
+                        variant="destructive"
                         size="icon"
                         onClick={() => handleDeleteQuickAction(action.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="opacity-0 transition-opacity group-hover:opacity-100"
                       >
                         <Trash2 className="size-4" />
-                      </Button>
+                      </LightButton>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {action.folderPaths.map((path, pathIndex) => (
@@ -2738,8 +3313,10 @@ export default function ObraDefaultsPage() {
           ) : null}
 
           <DialogFooter>
-            <Button
-              variant="outline"
+            <LightButton
+              type="button"
+              variant="secondary"
+              size="lg"
               onClick={() => {
                 setMovingFolder(null);
                 setMoveFolderParentPath("");
@@ -2747,11 +3324,13 @@ export default function ObraDefaultsPage() {
               disabled={isSubmittingMoveFolder}
             >
               Cancelar
-            </Button>
-            <Button
+            </LightButton>
+            <LightButton
+              type="button"
+              variant="primary"
+              size="lg"
               onClick={() => void handleSaveFolderMove()}
               disabled={isSubmittingMoveFolder || !movingFolder}
-              className="bg-orange-500 hover:bg-orange-600"
             >
               {isSubmittingMoveFolder ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -2759,8 +3338,53 @@ export default function ObraDefaultsPage() {
                 <FolderInput className="mr-2 h-4 w-4" />
               )}
               Mover carpeta
-            </Button>
+            </LightButton>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(devViewFolder)}
+        onOpenChange={(open) => {
+          if (!open) setDevViewFolder(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] w-[92vw] max-w-[1000px] overflow-y-auto px-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Code2 className="size-5 text-content-secondary" />
+              Dev view de carpeta
+            </DialogTitle>
+            <DialogDescription>
+              Configuracion final de extraccion para la carpeta ya creada.
+            </DialogDescription>
+          </DialogHeader>
+
+          {devViewFolder ? (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleCopyDevFolderConfig(devViewFolder)}
+                >
+                  <Copy className="mr-2 size-4" />
+                  Copiar config
+                </Button>
+              </div>
+              <div className="rounded-lg border border-stroke bg-surface p-3">
+                <p className="text-sm font-semibold text-content">{devViewFolder.name}</p>
+                <p className="mt-1 break-all font-mono text-xs text-content-muted">
+                  {devViewFolderPath}
+                </p>
+              </div>
+              <ExtractionDevConfigView
+                folderPath={devViewFolderPath}
+                extractedTables={devViewExtractedTables}
+              />
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -2808,7 +3432,7 @@ export default function ObraDefaultsPage() {
                     index={index}
                     onEdit={() => handleEditFolder(folder)}
                     onMove={() => handleOpenMoveFolder(folder)}
-                    onDelete={() => handleDeleteFolder(folder.id)}
+                    onDelete={() => setDeleteBlockedFolder(folder)}
                   />
                 ))}
               </AnimatePresence>
@@ -3664,16 +4288,18 @@ export default function ObraDefaultsPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
+            <LightButton type="button" variant="secondary" size="lg" onClick={() => {
               setIsAddQuickActionOpen(false);
               resetQuickActionForm();
             }}>
               Cancelar
-            </Button>
-            <Button
+            </LightButton>
+            <LightButton
+              type="button"
+              variant="primary"
+              size="lg"
               onClick={() => void handleAddQuickAction()}
               disabled={isSubmittingQuickAction || isCreateQuickActionDisabled}
-              className="bg-orange-500 hover:bg-orange-600"
             >
               {isSubmittingQuickAction ? (
                 <Loader2 className="size-4 animate-spin mr-2" />
@@ -3681,7 +4307,7 @@ export default function ObraDefaultsPage() {
                 <Zap className="size-4 mr-2" />
               )}
               Crear acción
-            </Button>
+            </LightButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3869,7 +4495,7 @@ export default function ObraDefaultsPage() {
             {folderMode === "data" && folderEditorStep === 1 && (
               <div className="space-y-6">
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-                  <div className="rounded-3xl border bg-muted/20 p-5">
+                  <div className="rounded-lg border border-stroke-soft bg-surface p-5 shadow-card">
                     <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Receta de carpeta</p>
                     <h4 className="mt-2 text-lg font-semibold">Define los datasets que salen de esta carpeta</h4>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -3882,22 +4508,76 @@ export default function ObraDefaultsPage() {
                       Para XLSX / CSV elegi el script de planilla que debe correr.
                     </p>
                   </div>
-                  <div className="rounded-3xl border bg-background p-5">
+                  <div className="rounded-lg border border-stroke-soft bg-surface p-5 shadow-card">
                     <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Arranque rapido</p>
                     <h4 className="mt-2 text-base font-semibold">Preset Certificados</h4>
                     <p className="mt-2 text-sm text-muted-foreground">
                       Crea dos datasets editables: <span className="font-medium text-foreground">resumen</span> e <span className="font-medium text-foreground">items</span>.
                     </p>
-                    <Button
+                    <LightButton
                       type="button"
-                      variant="outline"
+                      variant="secondary"
+                      size="lg"
                       className="mt-4 w-full"
                       data-testid="folder-recipe-certificados"
                       onClick={handleApplyFolderRecipe}
                     >
                       Aplicar receta certificados
-                    </Button>
+                    </LightButton>
                   </div>
+                </div>
+
+                <div className="rounded-lg border border-stroke-soft bg-surface p-5 shadow-card">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm uppercase tracking-[0.18em] text-content-muted">Copiar / pegar config dev</p>
+                      <h4 className="mt-2 text-base font-semibold text-content">Importar desde otra carpeta o tenant</h4>
+                      <p className="mt-2 text-sm text-content-muted">
+                        Acepta la config copiada desde el botón Dev y también definiciones JSON de extracción.
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <LightButton
+                        type="button"
+                        variant="secondary"
+                        size="lg"
+                        onClick={() => void handlePasteDefinitionFromClipboard()}
+                      >
+                        <ClipboardPaste className="mr-2 size-4" />
+                        Pegar clipboard
+                      </LightButton>
+                      <LightButton
+                        type="button"
+                        variant="secondary"
+                        size="lg"
+                        onClick={() => setIsDefinitionImportOpen((prev) => !prev)}
+                      >
+                        {isDefinitionImportOpen ? "Ocultar JSON" : "Pegar JSON"}
+                      </LightButton>
+                    </div>
+                  </div>
+
+                  {isDefinitionImportOpen ? (
+                    <div className="mt-4 space-y-3">
+                      <Textarea
+                        value={definitionImportText}
+                        onChange={(event) => setDefinitionImportText(event.target.value)}
+                        placeholder="Pegá acá la config dev copiada o una definición JSON de extracción"
+                        className="min-h-[160px] font-mono text-xs"
+                      />
+                      <div className="flex justify-end">
+                        <LightButton
+                          type="button"
+                          variant="primary"
+                          size="lg"
+                          onClick={handleImportDefinitionJson}
+                        >
+                          <Sparkles className="mr-2 size-4" />
+                          Importar JSON
+                        </LightButton>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -4219,48 +4899,23 @@ export default function ObraDefaultsPage() {
 
             {isFolderReviewStep && (
               <div className="space-y-5">
-                <div className="overflow-hidden rounded-3xl border bg-background">
-                  <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
-                    <span className="uppercase tracking-[0.16em] text-muted-foreground">Tipo de carpeta</span>
-                    <span className="font-medium">{folderMode === "data" ? "Carpeta de datos" : "Carpeta normal"}</span>
+                {folderMode === "data" ? (
+                  <ExtractionDevConfigView
+                    folderPath={folderPathPreview}
+                    extractedTables={newFolderExtractedTables}
+                  />
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-stroke bg-surface text-left">
+                    <div className="grid grid-cols-[180px_1fr] border-b border-stroke-soft px-5 py-4 text-sm">
+                      <span className="uppercase tracking-[0.16em] text-content-muted">Tipo de carpeta</span>
+                      <span className="font-medium text-content">Carpeta normal</span>
+                    </div>
+                    <div className="grid grid-cols-[180px_1fr] px-5 py-4 text-sm">
+                      <span className="uppercase tracking-[0.16em] text-content-muted">Path</span>
+                      <span className="font-mono text-content">{folderPathPreview}</span>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
-                    <span className="uppercase tracking-[0.16em] text-muted-foreground">Path</span>
-                    <span className="font-mono">{folderPathPreview}</span>
-                  </div>
-                  {folderMode === "data" ? (
-                    <>
-                      <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
-                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Entradas aceptadas</span>
-                        <span className="font-medium">{acceptedInputLabels.join(", ")}</span>
-                      </div>
-                      <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
-                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Datasets</span>
-                        <span className="font-medium">{newFolderExtractedTables.length} datasets</span>
-                      </div>
-                      <div className="grid grid-cols-[180px_1fr] border-b px-5 py-4 text-sm">
-                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Fields</span>
-                        <div className="space-y-2">
-                          <p className="font-medium">{newFolderColumns.length} campos</p>
-                          <p className="text-muted-foreground">{newFolderColumns.map((column) => column.label).join(" · ")}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-[180px_1fr] px-5 py-4 text-sm">
-                        <span className="uppercase tracking-[0.16em] text-muted-foreground">Detalle por dataset</span>
-                        <div className="space-y-3">
-                          {newFolderExtractedTables.map((table, index) => (
-                            <div key={table.id} className="flex items-center justify-between gap-3">
-                              <span className="font-medium">{table.name || `Tabla ${index + 1}`}</span>
-                              <Badge variant="outline">
-                                {table.rowMode === "single" ? "una fila" : "múltiples filas"}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
+                )}
               </div>
             )}
 
@@ -4279,13 +4934,14 @@ export default function ObraDefaultsPage() {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-1">
                   {folderEditorStep > 0 ? (
-                    <Button variant="ghost" size="sm" onClick={() => goToFolderEditorStep(folderEditorStep - 1)}>
+                    <LightButton type="button" variant="ghost" size="lg" onClick={() => goToFolderEditorStep(folderEditorStep - 1)}>
                       ← Volver
-                    </Button>
+                    </LightButton>
                   ) : null}
-                  <Button
+                  <LightButton
+                    type="button"
                     variant="ghost"
-                    size="sm"
+                    size="lg"
                     className="text-muted-foreground"
                     onClick={() => {
                       setIsAddFolderOpen(false);
@@ -4293,29 +4949,33 @@ export default function ObraDefaultsPage() {
                     }}
                   >
                     Cancelar
-                  </Button>
+                  </LightButton>
                 </div>
                 {!isFolderReviewStep ? (
-                  <Button
+                  <LightButton
+                    type="button"
+                    variant="primary"
+                    size="lg"
                     onClick={() => goToFolderEditorStep(folderEditorStep + 1)}
                     disabled={!canAdvanceFolderStep}
-                    className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
                     data-testid="folder-wizard-continue"
                   >
                     Continuar
-                  </Button>
+                  </LightButton>
                 ) : (
-                  <Button
+                  <LightButton
+                    type="button"
+                    variant="primary"
+                    size="lg"
                     onClick={() => void handleSaveFolder()}
                     disabled={isSubmittingFolder || isCreateFolderDisabled}
-                    className="bg-orange-500 hover:bg-orange-600 active:scale-[0.97] transition-transform"
                     data-testid="folder-wizard-save"
                   >
                     {isSubmittingFolder ? (
                       <Loader2 className="mr-2 size-4 animate-spin" />
                     ) : null}
                     {editingFolderId ? "Guardar cambios" : folderMode === "data" ? "Crear carpeta de datos" : "Crear carpeta"}
-                  </Button>
+                  </LightButton>
                 )}
               </div>
             </div>
@@ -4821,6 +5481,34 @@ export default function ObraDefaultsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={deleteBlockedFolder !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteBlockedFolder(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Esta carpeta no se puede eliminar todavía</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 text-left">
+              <span className="block">
+                <strong className="text-content">{deleteBlockedFolder?.name}</strong> puede estar vinculada a tablas,
+                documentos y datos de obras existentes.
+              </span>
+              <span className="block rounded-md border border-warning/35 bg-warning/15 p-3 text-warning-foreground">
+                Para proteger la información, la eliminación quedará disponible cuando incluya una vista previa del impacto
+                y una confirmación auditable. No se realizó ningún cambio.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setDeleteBlockedFolder(null)}>
+              Entendido
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* OCR Template Configurator */}
       <OcrTemplateConfigurator

@@ -61,6 +61,8 @@ function getMobileRouteTitle(pathname: string | null) {
 	if (pathname.startsWith("/notifications")) return "Notificaciones";
 	if (pathname.startsWith("/macro")) return "Macrotablas";
 	if (pathname.startsWith("/billing")) return "Facturacion";
+	if (pathname.startsWith("/setup")) return "Puesta en marcha";
+	if (pathname.startsWith("/help")) return "Ayuda";
 	if (pathname.startsWith("/admin/tenants")) return "Organizaciones";
 	if (pathname.startsWith("/admin/tenant-secrets")) return "Secretos API";
 	if (pathname.startsWith("/admin/users")) return "Usuarios";
@@ -120,6 +122,10 @@ export function PathnameLayoutShell({
 	const isLandingRoute = pathname?.startsWith("/landings") ?? false;
 	const isStandaloneDemoRoute = pathname?.startsWith("/demo/") ?? false;
 	const isDemoMode = userRoles?.actorType === "demo";
+	const isExcelLandingRoute =
+		pathname === "/excel" ||
+		pathname === "/excel/formtext" ||
+		pathname === "/excel/listtest";
 	const normalizedUser = user
 		? { ...user, email: user.email ?? undefined }
 		: null;
@@ -155,9 +161,15 @@ export function PathnameLayoutShell({
 	}
 
 	return (
-		<div className="notranslate" translate="no">
+		<div
+			className={isExcelLandingRoute ? "notranslate h-svh overflow-hidden" : "notranslate"}
+			translate="no"
+		>
 			<NavigationProgress />
-			<SidebarProvider defaultOpen={false}>
+			<SidebarProvider
+				defaultOpen={false}
+				className={isExcelLandingRoute ? "h-full min-h-0 overflow-hidden" : undefined}
+			>
 				<DeferredAppSidebar
 					user={normalizedUser}
 					userRoles={userRoles}
@@ -169,13 +181,19 @@ export function PathnameLayoutShell({
 					demoLabel={demoSession?.label ?? demoSession?.tenantName ?? null}
 					demoCapabilities={demoCapabilities}
 				/>
-				<SidebarInset>
+				<SidebarInset className={isExcelLandingRoute ? "h-full min-h-0" : undefined}>
 					<MobileAppHeader
 						pathname={pathname}
 						activeTenantName={activeTenantName}
 					/>
 					<ImpersonateBanner />
-					<main className="flex min-h-[calc(100svh-3.5rem)] flex-1 flex-col gap-4 bg-[#f0f1f3] md:min-h-0">
+					<main
+						className={
+							isExcelLandingRoute
+								? "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden bg-[#f0f1f3]"
+								: "flex min-h-[calc(100svh-3.5rem)] min-w-0 flex-1 flex-col gap-4 overflow-x-clip bg-canvas md:min-h-0"
+						}
+					>
 						{children}
 					</main>
 				</SidebarInset>

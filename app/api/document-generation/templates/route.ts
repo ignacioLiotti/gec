@@ -27,6 +27,8 @@ type UpdateTemplateBody = {
   contentHtml?: string;
 };
 
+type CreateTemplateBody = Omit<UpdateTemplateBody, "templateId">;
+
 const TEMPLATE_STATUSES = new Set(["draft", "active", "inactive", "archived"]);
 
 export async function GET(request: NextRequest) {
@@ -67,6 +69,112 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("[document-generation/templates:get]", error);
     const message = error instanceof Error ? error.message : "Error al cargar templates";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const access = await resolveRequestAccessContext();
+    const { supabase, user, tenantId, actorType } = access;
+
+    if (!user && actorType !== "demo") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!tenantId) {
+      return NextResponse.json({ error: "No tenant" }, { status: 400 });
+    }
+
+    const accessContext = {
+      supabase,
+      tenantId,
+      userId: user?.id ?? null,
+      permissionSimulation: access.permissionSimulation,
+    };
+    const permissions = await loadDocumentGenerationPermissions(accessContext);
+    if (!permissions.canManageTemplates) {
+      return NextResponse.json({ error: "Sin permisos para crear plantillas." }, { status: 403 });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as CreateTemplateBody;
+    const name = typeof body.name === "string" && body.name.trim().length > 0 ? body.name.trim() : null;
+    const documentType = normalizeDocumentType(body.documentType);
+    const status =
+      typeof body.status === "string" && TEMPLATE_STATUSES.has(body.status)
+        ? body.status
+        : "active";
+    const contentHtml =
+      typeof body.contentHtml === "string" && body.contentHtml.trim().length > 0
+        ? body.contentHtml
+        : null;
+
+    if (!name) {
+      return NextResponse.json({ error: "El nombre de la template es obligatorio." }, { status: 400 });
+    }
+    if (!documentType) {
+      return NextResponse.json({ error: "El tipo documental es obligatorio." }, { status: 400 });
+    }
+    if (!contentHtml) {
+      return NextResponse.json({ error: "El HTML visual de la template es obligatorio." }, { status: 400 });
+    }
+
+    const { data: existingTypeRows, error: existingTypeError } = await supabase
+      .from("document_generation_templates")
+      .select("id, name")
+      .eq("document_type", documentType)
+      .or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)
+      .limit(1);
+    if (existingTypeError) throw existingTypeError;
+    const existingType = existingTypeRows?.[0];
+    if (existingType) {
+      return NextResponse.json(
+        { error: `Ya existe una plantilla para este tipo documental: ${existingType.name}.` },
+        { status: 409 },
+      );
+    }
+
+    const schema = normalizeTemplateSchema(body.schema);
+    const normalizedFields = schema.fields.map((field, index) => normalizeTemplateField(field, index));
+    const uniqueKeys = new Set(normalizedFields.map((field) => field.key));
+    if (uniqueKeys.size !== normalizedFields.length) {
+      return NextResponse.json({ error: "Los campos deben tener key unica." }, { status: 400 });
+    }
+
+    const targetFolderPath = normalizeFolderGenerationPath(body.targetFolderPath);
+    const schemaPayload = {
+      fields: normalizedFields,
+      documentNumberFieldKey: schema.documentNumberFieldKey ?? null,
+      fileNamePattern: schema.fileNamePattern ?? null,
+    };
+    const templateKey = buildTenantTemplateKey(documentType);
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("document_generation_templates")
+      .insert({
+        tenant_id: tenantId,
+        key: templateKey,
+        name,
+        description:
+          typeof body.description === "string" && body.description.trim().length > 0
+            ? body.description.trim()
+            : null,
+        document_type: documentType,
+        target_folder_path: targetFolderPath || null,
+        version: 1,
+        status,
+        is_system: false,
+        created_by: actorType === "user" ? user?.id ?? null : null,
+        schema: schemaPayload,
+        content_html: contentHtml,
+      })
+      .select("id")
+      .maybeSingle();
+    if (insertError) throw insertError;
+
+    return await respondWithTemplate(supabase, tenantId, inserted?.id ?? "");
+  } catch (error) {
+    console.error("[document-generation/templates:post]", error);
+    const message = error instanceof Error ? error.message : "Error al crear template";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -236,6 +344,10 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+function buildTenantTemplateKey(documentType: string) {
+  return `tenant-${documentType.toLowerCase().replace(/_/g, "-")}-default`;
+}
+
 function normalizeTemplateField(field: TemplateField, index: number): TemplateField {
   const key = normalizeFieldKey(field.key || field.label || `campo_${index + 1}`);
   const type = field.type;
@@ -277,6 +389,10 @@ function normalizeTemplateField(field: TemplateField, index: number): TemplateFi
         ? normalizeFieldKey(field.extractionFieldKey)
         : null,
     autoPopulate: normalizeAutoPopulate(field.autoPopulate),
+    formula:
+      typeof field.formula === "string" && field.formula.trim().length > 0
+        ? field.formula.trim()
+        : null,
     repeatableGroup:
       typeof field.repeatableGroup === "string" && field.repeatableGroup.trim().length > 0
         ? normalizeFieldKey(field.repeatableGroup)

@@ -25,7 +25,7 @@ export function ExcelPageTabs({
 	if (!isExcelDetailPage) return null;
 
 	return (
-		<TabsList className="w-full sm:w-auto justify-start bg-transparent border-none p-0 gap-1 h-auto">
+		<TabsList className="w-full sm:w-auto justify-start bg-transparent border-none p-0 gap-1 h-auto py-1">
 			{tabs.map((tab) => {
 				const Icon = tab.icon;
 				return (

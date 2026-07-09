@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
   applyTemplateAliasInputData,
+  applyTemplateFormulaInputData,
   buildInitialInputData,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
@@ -96,7 +97,10 @@ export async function POST(request: NextRequest) {
     }
 
     const schema = normalizeTemplateSchema(template.schema);
-    const currentInputData = applyTemplateAliasInputData(schema, buildInitialInputData(schema, inputData));
+    const currentInputData = applyTemplateFormulaInputData(
+      schema,
+      applyTemplateAliasInputData(schema, buildInitialInputData(schema, inputData)),
+    );
     const result = await buildDocumentAiInputFromExtractionContext({
       access: accessContext,
       workId,
@@ -107,7 +111,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      inputData: result.inputData,
+      inputData: applyTemplateFormulaInputData(schema, result.inputData),
       context: result.context,
       appliedFieldCount: result.appliedFieldCount,
     });
