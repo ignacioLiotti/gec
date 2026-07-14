@@ -155,6 +155,7 @@ If product/legal requirements demand complete erasure of all obra child data, th
 ## Tables Without Soft Delete
 
 Not all tables use soft delete. These use hard deletes:
+- `generated_documents` — creator-only deletion from generated history permanently removes the PDF and generated extraction rows; source drafts remain
 - `notifications` — ephemeral, no recovery needed
 - `memberships` — membership removal is permanent
 - `invitations` — status field handles lifecycle

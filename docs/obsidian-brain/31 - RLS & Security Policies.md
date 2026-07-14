@@ -132,6 +132,22 @@ CREATE POLICY "obra-documents read" ON storage.objects
 
 ---
 
+## Generated Document Delete RLS (migration 0126)
+
+`generated_documents` is tenant-visible, but deletion is owner-scoped:
+
+```sql
+CREATE POLICY "generated_documents_delete" ON public.generated_documents
+  FOR DELETE USING (
+    generated_by = auth.uid()
+    AND public.is_member_of(tenant_id)
+  );
+```
+
+The API verifies the same tenant and owner boundary before using service-role access to remove the associated Storage object, upload/OCR tracking, generated extraction rows, and any recoverable state for the same file path. The final generated-document row delete still runs through the authenticated client and this RLS policy.
+
+---
+
 ## Notifications Realtime (migration 0018)
 
 ```sql

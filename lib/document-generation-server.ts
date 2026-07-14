@@ -95,6 +95,13 @@ export function canEditGeneratedDocument(params: {
   );
 }
 
+export function canDeleteGeneratedDocument(params: {
+  userId: string | null;
+  generatedBy: string | null;
+}) {
+  return Boolean(params.userId) && params.generatedBy === params.userId;
+}
+
 function normalizeDocumentTypeList(value: unknown): DocumentType[] {
   if (!Array.isArray(value)) return [];
   return value

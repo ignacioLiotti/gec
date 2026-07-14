@@ -76,6 +76,14 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 - Stores evidence in `input_data.__documentAi` with source row, tabla, lineage key, extraction id and source document metadata when available
 - Keeps final PDF generation deterministic through the existing document-generation renderer
 
+## Generated Document Deletion
+
+`DELETE /api/document-generation/generated/[id]`
+- Permanently deletes a generated document only when the authenticated user is its creator
+- Removes the generated PDF, upload/OCR tracking, and extraction rows linked through `data.__docPath`; any matching trash entry is marked purged
+- Retains the reusable source draft
+- Is separate from the recoverable obra document-trash flow
+
 ## Document AI Report Workspace
 
 `/document-ai`

@@ -2,10 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Copy, FilePenLine, Loader2, RefreshCcw } from "lucide-react";
+import { ArrowRight, Copy, FilePenLine, Loader2, RefreshCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { GENERATED_DOCUMENT_STATUS_LABELS } from "@/lib/document-generation";
 import type { DocumentGenerationPermissionMap } from "@/lib/document-generation-server";
 import { cn } from "@/lib/utils";
@@ -27,6 +38,7 @@ type HistoryListItem = {
   updatedAt: string;
   createdBy: { id: string; fullName: string | null; email: string | null; label: string } | null;
   canEdit: boolean;
+  canDelete: boolean;
 };
 
 type HistoryResponse = {
@@ -71,6 +83,7 @@ export function DocumentDraftsPageClient({ permissions }: Props) {
   const [creators, setCreators] = useState<Array<{ id: string; label: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     status: "ALL",
     workId: "",
@@ -136,6 +149,35 @@ export function DocumentDraftsPageClient({ permissions }: Props) {
       toast.success("Link de revision copiado.");
     } catch {
       toast.error("No se pudo copiar el link.");
+    }
+  };
+
+  const deleteSelectedDocument = async () => {
+    if (!selectedDocument?.canDelete || deletingId) return;
+
+    const documentId = selectedDocument.id;
+    setDeletingId(documentId);
+    try {
+      const response = await fetch(
+        `/api/document-generation/generated/${encodeURIComponent(documentId)}`,
+        { method: "DELETE" },
+      );
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudo eliminar el documento");
+      }
+
+      const deletedIndex = documents.findIndex((document) => document.id === documentId);
+      const nextDocuments = documents.filter((document) => document.id !== documentId);
+      const nextSelectedDocument = nextDocuments[Math.min(deletedIndex, nextDocuments.length - 1)] ?? null;
+      setDocuments((current) => current.filter((document) => document.id !== documentId));
+      setSelectedId((current) => current === documentId ? nextSelectedDocument?.id ?? "" : current);
+      toast.success("Documento eliminado.");
+    } catch (error) {
+      console.error("[document-history] delete failed", error);
+      toast.error(error instanceof Error ? error.message : "No se pudo eliminar el documento");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -312,6 +354,43 @@ export function DocumentDraftsPageClient({ permissions }: Props) {
                   <Copy className="mr-2 size-4" />
                   Copiar link de revision
                 </Button>
+                {selectedDocument.canDelete ? (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="destructiveSecondary"
+                        className="rounded-md"
+                        disabled={deletingId === selectedDocument.id}
+                      >
+                        {deletingId === selectedDocument.id ? (
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-2 size-4" />
+                        )}
+                        Eliminar
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar este documento?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Se eliminaran de forma permanente el PDF y los datos extraidos asociados. El
+                          borrador de origen se conserva. Esta accion no se puede deshacer.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className={buttonVariants({ variant: "destructive" })}
+                          onClick={() => void deleteSelectedDocument()}
+                        >
+                          Eliminar documento
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                ) : null}
               </div>
             </>
           ) : (

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import { appendApprovalSignatureHtml, renderDocumentHtml } from "@/lib/document-generation";
 import {
+  canDeleteGeneratedDocument,
   canEditGeneratedDocument,
   formatWorkLabel,
   loadActorsByIds,
@@ -458,6 +459,121 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   } catch (error) {
     console.error("[document-generation/generated-status]", error);
     const message = error instanceof Error ? error.message : "Error al actualizar estado";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(_request: NextRequest, context: RouteContext) {
+  try {
+    const { id } = await context.params;
+    const access = await resolveRequestAccessContext();
+    const { supabase, user, tenantId, actorType } = access;
+
+    if (!user && actorType !== "demo") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!tenantId || !user?.id) {
+      return NextResponse.json({ error: "No tenant" }, { status: 400 });
+    }
+
+    const { data: document, error: documentError } = await supabase
+      .from("generated_documents")
+      .select("id, obra_id, storage_bucket, storage_path, generated_by")
+      .eq("id", id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (documentError) throw documentError;
+    if (!document) {
+      return NextResponse.json({ error: "Documento generado no encontrado" }, { status: 404 });
+    }
+    if (!canDeleteGeneratedDocument({
+      userId: user.id,
+      generatedBy: typeof document.generated_by === "string" ? document.generated_by : null,
+    })) {
+      return NextResponse.json(
+        { error: "Solo podes eliminar documentos que generaste vos." },
+        { status: 403 },
+      );
+    }
+
+    const obraId = String(document.obra_id ?? "");
+    const storageBucket = String(document.storage_bucket ?? "obra-documents");
+    const storagePath = String(document.storage_path ?? "");
+    const admin = createSupabaseAdminClient();
+
+    if (storagePath) {
+      const { error: storageError } = await admin.storage
+        .from(storageBucket)
+        .remove([storagePath]);
+      if (storageError) throw storageError;
+
+      const { data: tablas, error: tablasError } = await admin
+        .from("obra_tablas")
+        .select("id")
+        .eq("obra_id", obraId);
+      if (tablasError) throw tablasError;
+
+      const tablaIds = (tablas ?? [])
+        .map((tabla) => (typeof tabla.id === "string" ? tabla.id : null))
+        .filter((tablaId): tablaId is string => Boolean(tablaId));
+      if (tablaIds.length > 0) {
+        const { error: rowsError } = await admin
+          .from("obra_tabla_rows")
+          .delete()
+          .in("tabla_id", tablaIds)
+          .contains("data", { __docPath: storagePath });
+        if (rowsError) throw rowsError;
+      }
+
+      const { error: trackingError } = await admin
+        .from("obra_document_uploads")
+        .delete()
+        .eq("obra_id", obraId)
+        .eq("storage_path", storagePath);
+      if (trackingError) throw trackingError;
+
+      const { error: ocrError } = await admin
+        .from("ocr_document_processing")
+        .delete()
+        .eq("obra_id", obraId)
+        .eq("source_path", storagePath);
+      if (ocrError) throw ocrError;
+
+      const purgedAt = new Date().toISOString();
+      const { error: trashHistoryError } = await admin
+        .from("obra_document_deletes")
+        .update({
+          purged_at: purgedAt,
+          purged_by: user.id,
+          purged_by_email: user.email ?? null,
+          purge_job_id: `generated-document-owner-delete-${id}-${purgedAt}`,
+          purge_reason: "generated_document_owner_delete",
+        })
+        .eq("tenant_id", tenantId)
+        .eq("obra_id", obraId)
+        .eq("item_type", "file")
+        .eq("storage_path", storagePath)
+        .is("purged_at", null);
+      if (trashHistoryError) throw trashHistoryError;
+    }
+
+    const { data: deletedDocument, error: deleteError } = await supabase
+      .from("generated_documents")
+      .delete()
+      .eq("id", id)
+      .eq("tenant_id", tenantId)
+      .eq("generated_by", user.id)
+      .select("id")
+      .maybeSingle();
+    if (deleteError) throw deleteError;
+    if (!deletedDocument) {
+      throw new Error("No se pudo eliminar el registro del documento generado.");
+    }
+
+    return NextResponse.json({ deletedId: id });
+  } catch (error) {
+    console.error("[document-generation/generated:delete]", error);
+    const message = error instanceof Error ? error.message : "Error al eliminar documento generado";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
