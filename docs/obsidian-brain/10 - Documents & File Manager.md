@@ -84,6 +84,12 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 - Retains the reusable source draft
 - Is separate from the recoverable obra document-trash flow
 
+## Generated Purchase-Order Filenames
+
+- New purchase-order PDFs default to the configured document/order number as the complete filename (for example, `52.pdf`)
+- An explicit filename supplied by the request or rendered from a template `fileNamePattern` still takes precedence
+- Storage collisions retain the existing numeric suffix behavior (for example, `52 (2).pdf`)
+
 ## Document AI Report Workspace
 
 `/document-ai`

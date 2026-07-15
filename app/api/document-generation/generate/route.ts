@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
   applyTemplateAliasInputData,
+  buildGeneratedDocumentFileName,
   buildInitialInputData,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
@@ -10,7 +11,6 @@ import {
   refreshTemplateSequenceInputData,
   renderDocumentHtml,
   renderTemplateFileNamePattern,
-  sanitizeGeneratedFileName,
   validateTemplateInput,
   withNumericSuffix,
 } from "@/lib/document-generation";
@@ -81,37 +81,6 @@ async function rollbackGeneratedDocumentArtifacts(params: {
   if (storageDeleteError) {
     console.error("[document-generation/generate] rollback storage cleanup failed", storageDeleteError);
   }
-}
-
-function buildDocumentFileName(params: {
-  documentType: string;
-  workName: string;
-  folderPath: string;
-  fileName?: string | null;
-  inputData: Record<string, unknown>;
-}) {
-  const requestedFileName = typeof params.fileName === "string" ? params.fileName.trim() : "";
-  if (requestedFileName) {
-    const withExtension = /\.pdf$/i.test(requestedFileName) ? requestedFileName : `${requestedFileName}.pdf`;
-    return sanitizeGeneratedFileName(withExtension);
-  }
-
-  const numberLike =
-    typeof params.inputData.certificateNumber === "string"
-      ? params.inputData.certificateNumber
-      : typeof params.inputData.orderNumber === "string"
-        ? params.inputData.orderNumber
-        : typeof params.inputData.invoiceNumber === "string"
-          ? params.inputData.invoiceNumber
-          : "";
-  const stem = [
-    params.documentType.toLowerCase(),
-    params.workName.toLowerCase().replace(/\s+/g, "-"),
-    numberLike ? String(numberLike).toLowerCase() : "",
-  ]
-    .filter(Boolean)
-    .join("-");
-  return sanitizeGeneratedFileName(`${stem || params.folderPath}.pdf`);
 }
 
 function isAlreadyExistsError(error: unknown) {
@@ -404,7 +373,7 @@ export async function POST(request: NextRequest) {
     }
 
     const pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());
-    const baseFileName = buildDocumentFileName({
+    const baseFileName = buildGeneratedDocumentFileName({
       documentType,
       workName: workName || workId,
       folderPath,
@@ -419,6 +388,7 @@ export async function POST(request: NextRequest) {
               documentNumberFieldKey: schema.documentNumberFieldKey,
             }),
       inputData: hydratedInputData,
+      schema,
     });
 
     let storagePath = "";

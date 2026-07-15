@@ -967,6 +967,72 @@ export function renderTemplateFileNamePattern(
 		.trim();
 }
 
+function readDocumentNumberValue(value: unknown) {
+	if (typeof value === "string") return value.trim();
+	if (typeof value === "number" && Number.isFinite(value)) return String(value);
+	return "";
+}
+
+function resolveTemplateDocumentNumber(
+	schema: TemplateSchema,
+	inputData: Record<string, unknown>,
+) {
+	const candidateKeys = [
+		schema.documentNumberFieldKey,
+		...schema.fields
+			.filter((field) => field.autoPopulate === "next_sequence_number")
+			.map((field) => field.key),
+		...TEMPLATE_FIELD_ALIAS_GROUPS[0],
+	];
+
+	for (const key of candidateKeys) {
+		if (!key) continue;
+		const value = readDocumentNumberValue(inputData[key]);
+		if (value) return value;
+	}
+	return "";
+}
+
+export function buildGeneratedDocumentFileName(params: {
+	documentType: string;
+	workName: string;
+	folderPath: string;
+	fileName?: string | null;
+	inputData: Record<string, unknown>;
+	schema: TemplateSchema;
+}) {
+	const requestedFileName =
+		typeof params.fileName === "string" ? params.fileName.trim() : "";
+	if (requestedFileName) {
+		const withExtension = /\.pdf$/i.test(requestedFileName)
+			? requestedFileName
+			: `${requestedFileName}.pdf`;
+		return sanitizeGeneratedFileName(withExtension);
+	}
+
+	const normalizedDocumentType = normalizeDocumentType(params.documentType);
+	const documentNumber = resolveTemplateDocumentNumber(
+		params.schema,
+		params.inputData,
+	);
+	if (normalizedDocumentType === "PURCHASE_ORDER" && documentNumber) {
+		return sanitizeGeneratedFileName(`${documentNumber}.pdf`);
+	}
+
+	const legacyNumber =
+		readDocumentNumberValue(params.inputData.certificateNumber) ||
+		readDocumentNumberValue(params.inputData.orderNumber) ||
+		readDocumentNumberValue(params.inputData.invoiceNumber);
+	const stem = [
+		params.documentType.toLowerCase(),
+		params.workName.toLowerCase().replace(/\s+/g, "-"),
+		legacyNumber ? legacyNumber.toLowerCase() : "",
+	]
+		.filter(Boolean)
+		.join("-");
+	return sanitizeGeneratedFileName(`${stem || params.folderPath}.pdf`);
+}
+
 export function escapeHtml(value: unknown): string {
 	return String(value ?? "")
 		.replace(/&/g, "&amp;")

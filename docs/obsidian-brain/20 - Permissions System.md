@@ -200,7 +200,8 @@ Document generation now gives tenant members baseline creation access and keeps 
 - generated documents in `GENERATED`, `UNDER_REVIEW`, or `REJECTED` can be edited by authenticated tenant members, regardless of who generated them
 - approved generated documents remain non-editable
 - generated documents expose permanent deletion only to the user who generated them, regardless of status
-- `/document-generation/review` -> `documents:review`
+- `/document-generation/review?id={generatedDocumentId}` -> authenticated tenant member in read-only mode for a same-tenant document
+- the review queue and approve/reject controls on `/document-generation/review` -> `documents:review`
 - `/document-generation/templates` -> `documents:templates`
 - `/document-generation/config` -> `documents:templates`
 

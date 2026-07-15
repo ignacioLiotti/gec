@@ -6,7 +6,7 @@ export default async function DocumentGenerationReviewPage() {
   const access = await resolveDocumentAccess();
 
   if (!access.user) {
-    return <div className="p-6 text-sm">Inicia sesion para revisar documentos.</div>;
+    return <div className="p-6 text-sm">Inicia sesion para ver documentos.</div>;
   }
 
   if (!access.tenantId) {
@@ -15,15 +15,7 @@ export default async function DocumentGenerationReviewPage() {
 
   return (
     <DocumentGenerationShell permissions={access.permissions}>
-      {access.permissions.canReview ? (
-        <DocumentReviewPageClient />
-      ) : (
-        <div className="p-6">
-          <div className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-600">
-            No tienes permisos para revisar documentos.
-          </div>
-        </div>
-      )}
+      <DocumentReviewPageClient canReview={access.permissions.canReview} />
     </DocumentGenerationShell>
   );
 }
