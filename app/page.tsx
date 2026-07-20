@@ -307,7 +307,7 @@ function MarketingLanding() {
         <div className="max-w-7xl mx-auto px-5 md:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold tracking-tight text-stone-900">
             <span className="w-6 h-6 md:w-7 md:h-7 bg-orange-primary rounded-full" />
-            <span className="uppercase tracking-widest text-xs md:text-sm">Sintesis</span>
+            <span className="uppercase tracking-widest text-xs md:text-sm">Síntesis</span>
           </div>
           <div className="flex items-center gap-3 md:gap-6">
             {(authEmail) ? (
@@ -321,17 +321,26 @@ function MarketingLanding() {
                 <UserMenu email={authEmail} />
               </>
             ) : (
-              <Link
-                href="#agendar-demo"
-                onClick={(e) => {
-                  e.preventDefault();
-                  history.replaceState(null, "", "#agendar-demo");
-                  scrollToAnchorWithOffset("agendar-demo");
-                }}
-                className="inline-flex rounded-md border border-stone-900 bg-stone-900 px-3 md:px-6 py-1.5 text-white text-[10px] md:text-xs font-semibold uppercase tracking-widest shadow-[0_1px_0_rgba(0,0,0,0.03)] transition hover:bg-stone-800"
-              >
-                Agendar demo
-              </Link>
+              <>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new Event("open-auth"))}
+                  className="inline-flex rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-stone-800 shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-[transform,background-color] duration-150 hover:bg-stone-50 active:scale-[0.97] md:px-4 md:text-xs"
+                >
+                  Ingresar
+                </button>
+                <Link
+                  href="#agendar-demo"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    history.replaceState(null, "", "#agendar-demo");
+                    scrollToAnchorWithOffset("agendar-demo");
+                  }}
+                  className="inline-flex rounded-md border border-stone-900 bg-stone-900 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-white shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-[transform,background-color] duration-150 hover:bg-stone-800 active:scale-[0.97] md:px-6 md:text-xs"
+                >
+                  Agendar demo
+                </Link>
+              </>
             )}
           </div>
         </div>
@@ -927,7 +936,7 @@ function MarketingLanding() {
             onClick={() => openContactDialog("Agendá tu demo")}
             className="group relative rounded-full bg-stone-900 px-10 py-4 text-[14px] font-bold uppercase tracking-widest text-white transition-all hover:bg-stone-700 hover:shadow-xl hover:shadow-stone-400/25 active:scale-[0.98]"
           >
-            Empezá hoy
+            Agendá una demo
           </button>
 
           {/* Trust line */}
@@ -941,7 +950,7 @@ function MarketingLanding() {
 
       <footer className="py-16 border-t border-stone-200 flex flex-col items-center gap-6">
         <div className="flex items-center gap-2 font-bold text-stone-400">
-          <span className="uppercase tracking-widest text-[10px]">Sintesis Cloud Solutions</span>
+          <span className="uppercase tracking-widest text-[10px]">Síntesis Cloud Solutions</span>
         </div>
         <p className="text-stone-500 text-[10px] uppercase tracking-widest">© {new Date().getFullYear()} — Control de Ingeniería de Próxima Generación</p>
       </footer>
@@ -1853,26 +1862,27 @@ const Step4Visual = () => (
 function StatCounter({ target, from = 0, suffix, delay = 0, frames = 52 }: { target: number; from?: number; suffix: string; delay?: number; frames?: number }) {
   const [count, setCount] = useState(from);
   useEffect(() => {
-    setCount(from);
-    if (target === from) return;
-    const totalFrames = frames;
-    const range = target - from;
-    let frame = 0;
-    const run = () => {
-      const id = setInterval(() => {
-        frame++;
-        setCount(Math.round(from + (frame / totalFrames) * range));
-        if (frame >= totalFrames) { setCount(target); clearInterval(id); }
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const timeoutId = setTimeout(() => {
+      setCount(from);
+      if (target === from) return;
+      const range = target - from;
+      let frame = 0;
+      intervalId = setInterval(() => {
+        frame += 1;
+        setCount(Math.round(from + (frame / frames) * range));
+        if (frame >= frames) {
+          setCount(target);
+          if (intervalId) clearInterval(intervalId);
+        }
       }, 16);
-      return id;
+    }, Math.max(0, delay));
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
     };
-    if (delay > 0) {
-      const t = setTimeout(run, delay);
-      return () => clearTimeout(t);
-    }
-    const id = run();
-    return () => clearInterval(id);
-  }, [target, from, delay]);
+  }, [delay, frames, from, target]);
   return <>{count}{suffix}</>;
 }
 

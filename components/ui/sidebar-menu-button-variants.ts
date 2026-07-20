@@ -14,7 +14,7 @@ const sidebarMenuButtonVariants = cva(
 		"disabled:pointer-events-none disabled:opacity-50 " +
 		"aria-disabled:pointer-events-none aria-disabled:opacity-50 " +
 		"group-data-[collapsible=icon]:h-(--sidebar-menu-button-height)! group-data-[collapsible=icon]:w-8! group-data-[collapsible=icon]:gap-0! group-data-[collapsible=icon]:p-2! " +
-		"[&>span:last-child]:min-w-0 [&>span:last-child]:truncate [&>span:last-child]:transition-[opacity,transform] [&>span:last-child]:duration-200 [&>span:last-child]:ease-(--sidebar-motion-ease) group-data-[collapsible=icon]:[&>span:last-child]:-translate-x-1 group-data-[collapsible=icon]:[&>span:last-child]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
+		"[--sidebar-menu-label-duration:200ms] group-data-[collapsible=icon]:[--sidebar-menu-label-duration:300ms] motion-reduce:[--sidebar-menu-label-duration:0ms] [&>span:last-child]:min-w-0 [&>span:last-child]:truncate [&>span:last-child]:transition-[opacity,transform] [&>span:last-child]:duration-(--sidebar-menu-label-duration) [&>span:last-child]:ease-(--sidebar-motion-ease) group-data-[collapsible=icon]:[&>span:last-child]:-translate-x-1 group-data-[collapsible=icon]:[&>span:last-child]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
 	{
 		variants: {
 			variant: {

@@ -21,17 +21,17 @@ describe("getTenantSetupStatus", () => {
 		expect(status.workspaceReady).toBe(true);
 		expect(status.firstObraReady).toBe(false);
 		expect(status.teamReady).toBe(false);
-		expect(status.progress).toBe(50);
+		expect(status.progress).toBe(67);
 	});
 
-	it("completes when a first obra and another team member exist", () => {
+	it("completes the essential setup when a first obra exists", () => {
 		const status = getTenantSetupStatus({
 			...completeWorkspace,
 			obraCount: 1,
-			memberCount: 2,
 		});
 
-		expect(status.completedSteps).toBe(4);
+		expect(status.completedSteps).toBe(3);
+		expect(status.teamReady).toBe(false);
 		expect(status.progress).toBe(100);
 	});
 
@@ -42,6 +42,40 @@ describe("getTenantSetupStatus", () => {
 		});
 
 		expect(status.workspaceReady).toBe(false);
-		expect(status.progress).toBe(25);
+		expect(status.progress).toBe(33);
+	});
+
+	it("keeps a blueprint tenant incomplete while first-obra provisioning is partial", () => {
+		const status = getTenantSetupStatus({
+			...completeWorkspace,
+			obraCount: 1,
+			requiresProvisioningHealth: true,
+			firstObraProvisioningStatus: "partial",
+		});
+
+		expect(status.firstObraReady).toBe(false);
+		expect(status.progress).toBe(67);
+	});
+
+	it("requires a ready provisioning record for a blueprint tenant", () => {
+		const status = getTenantSetupStatus({
+			...completeWorkspace,
+			obraCount: 1,
+			requiresProvisioningHealth: true,
+			firstObraProvisioningStatus: "ready",
+		});
+
+		expect(status.firstObraReady).toBe(true);
+		expect(status.progress).toBe(100);
+	});
+
+	it("preserves the obra-count fallback for legacy tenants", () => {
+		const status = getTenantSetupStatus({
+			...completeWorkspace,
+			obraCount: 1,
+			firstObraProvisioningStatus: null,
+		});
+
+		expect(status.firstObraReady).toBe(true);
 	});
 });

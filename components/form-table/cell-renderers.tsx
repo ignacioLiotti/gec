@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button, LightButton } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -285,7 +285,7 @@ function DateCellEditor<Row extends FormTableRow>({
 		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
 
 	return (
-		<div className="w-full h-full absolute top-0 left-0 flex items-center gap-1 px-2 children-input-hidden relative">
+		<div className="children-input-hidden absolute inset-0 flex h-full w-full items-center gap-1 px-2">
 			<Input
 				type="text"
 				inputMode="numeric"
@@ -330,7 +330,7 @@ function DateCellEditor<Row extends FormTableRow>({
 					handleBlur();
 				}}
 				className={cn(
-					"w-full h-full rounded-none border-none focus-visible:ring-orange-primary/40 focus-visible:ring-offset-1 pl-1",
+					"h-full min-w-0 basis-0 flex-1 rounded-none border-0 bg-transparent pl-1 shadow-none focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none",
 					visibleSuggestion ? "pr-24" : "pr-0"
 				)}
 			/>
@@ -347,17 +347,20 @@ function DateCellEditor<Row extends FormTableRow>({
 			/>
 			<Popover open={open} onOpenChange={setOpen}>
 				<PopoverTrigger asChild>
-					<Button
+					<LightButton
 						type="button"
-						variant="ghost"
-						className={cn(
-							"h-full rounded-none border-none px-0 has-[>svg]:px-1 py-1 font-normal shrink-0"
-						)}
+						variant="default"
+						size="icon-sm"
+						aria-label="Abrir calendario"
+						className="shrink-0 bg-white text-content [--btn-shadow:var(--shadow-light-button)] hover:bg-accent-soft hover:text-orange-primary hover:[--btn-ring:hsl(var(--orange-primary)_/_0.32)] focus-visible:bg-accent-soft focus-visible:text-orange-primary focus-visible:ring-2 focus-visible:ring-orange-primary/35 focus-visible:ring-offset-0"
 					>
-						<CalendarDays className="size-4 shrink-0 opacity-70" />
-					</Button>
+						<CalendarDays className="size-4 shrink-0" />
+					</LightButton>
 				</PopoverTrigger>
-				<PopoverContent className="w-auto p-0" align="start">
+				<PopoverContent
+					className="w-auto overflow-hidden rounded-xl border-stroke-soft bg-surface p-0 shadow-dropdown"
+					align="start"
+				>
 					<Calendar
 						locale={es}
 						mode="single"
@@ -372,11 +375,10 @@ function DateCellEditor<Row extends FormTableRow>({
 						}}
 						captionLayout="dropdown"
 					/>
-					<div className="flex items-center justify-between border-t px-3 py-2">
-						<Button
+					<div className="flex items-center justify-between border-t border-stroke-soft bg-surface-muted/60 px-3 py-2">
+						<LightButton
 							type="button"
-							variant="ghost"
-							size="sm"
+							variant="default"
 							onClick={() => {
 								if (!required) {
 									setValue(null);
@@ -388,10 +390,14 @@ function DateCellEditor<Row extends FormTableRow>({
 							disabled={required}
 						>
 							Limpiar
-						</Button>
-						<Button type="button" size="sm" onClick={() => setOpen(false)}>
+						</LightButton>
+						<LightButton
+							type="button"
+							variant="primarySolid"
+							onClick={() => setOpen(false)}
+						>
 							Cerrar
-						</Button>
+						</LightButton>
 					</div>
 				</PopoverContent>
 			</Popover>
@@ -678,12 +684,12 @@ function formatCurrencyInputDisplay(value: EditableCellValue): string {
 }
 
 const SELECT_BADGE_CLASS_BY_COLOR: Record<string, string> = {
-	slate: "border-slate-300 bg-slate-100 text-slate-800",
-	blue: "border-blue-300 bg-blue-100 text-blue-800",
-	green: "border-emerald-300 bg-emerald-100 text-emerald-800",
-	amber: "border-amber-300 bg-amber-100 text-amber-800",
-	red: "border-red-300 bg-red-100 text-red-800",
-	violet: "border-violet-300 bg-violet-100 text-violet-800",
+	slate: "border-slate-300 bg-slate-100 text-slate-800 py-1",
+	blue: "border-blue-300 bg-blue-100 text-blue-800 py-1",
+	green: "border-emerald-300 bg-emerald-100 text-emerald-800 py-1",
+	amber: "border-amber-300 bg-amber-100 text-amber-800 py-1",
+	red: "border-red-300 bg-red-100 text-red-800 py-1",
+	violet: "border-violet-300 bg-violet-100 text-violet-800 py-1",
 };
 
 const SELECT_ICON_BY_NAME = {

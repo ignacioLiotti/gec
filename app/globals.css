@@ -187,6 +187,78 @@
 		box-shadow: var(--elev-recessed);
 	}
 
+	.admin-dashboard-reveal {
+		opacity: 0;
+		transform: translateY(8px);
+		animation: admin-dashboard-reveal 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+	}
+
+	.admin-dashboard-card-unfold {
+		transform-origin: top center;
+		animation: admin-dashboard-card-unfold 480ms cubic-bezier(0.32, 0.72, 0, 1) both;
+		animation-delay: calc(
+			var(--admin-dashboard-enter-delay, 0ms) +
+				var(--admin-dashboard-item-delay, 0ms)
+		);
+	}
+
+	.admin-dashboard-card-unfold > [data-slot="card-header"],
+	.admin-dashboard-card-unfold > [data-slot="card-content"] {
+		opacity: 0;
+		transform: translateY(8px);
+		animation: admin-dashboard-content-waterfall 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+		animation-delay: calc(
+			var(--admin-dashboard-enter-delay, 0ms) +
+				var(--admin-dashboard-item-delay, 0ms) + 360ms +
+				var(--admin-dashboard-content-delay, 0ms)
+		);
+	}
+
+	.admin-dashboard-card-unfold > [data-slot="card-content"] {
+		--admin-dashboard-content-delay: 55ms;
+	}
+
+	.admin-dashboard-reveal-step-1 {
+		--admin-dashboard-enter-delay: 140ms;
+	}
+
+	.admin-dashboard-reveal-step-2 {
+		--admin-dashboard-enter-delay: 340ms;
+	}
+
+	.admin-dashboard-reveal-step-3 {
+		--admin-dashboard-enter-delay: 520ms;
+	}
+
+	.admin-dashboard-reveal-step-4 {
+		--admin-dashboard-enter-delay: 680ms;
+	}
+
+	.admin-dashboard-reveal-step-5 {
+		--admin-dashboard-enter-delay: 840ms;
+	}
+
+	.admin-dashboard-reveal-step-6 {
+		--admin-dashboard-enter-delay: 980ms;
+	}
+
+	.admin-dashboard-reveal-grid > :nth-child(2) {
+		--admin-dashboard-item-delay: 45ms;
+	}
+
+	.admin-dashboard-reveal-grid > :nth-child(3) {
+		--admin-dashboard-item-delay: 90ms;
+	}
+
+	.admin-dashboard-reveal-grid > :nth-child(4) {
+		--admin-dashboard-item-delay: 135ms;
+	}
+
+	.admin-dashboard-progress-value {
+		transform-origin: left center;
+		animation: admin-dashboard-progress-reveal 520ms cubic-bezier(0.23, 1, 0.32, 1) 1120ms both;
+	}
+
 	.admin-dashboard-icon {
 		box-shadow: var(--ring-illum);
 	}
@@ -197,6 +269,42 @@
 
 	.admin-dashboard-icon-orange {
 		box-shadow: var(--ring-illum-orange);
+	}
+}
+
+@keyframes admin-dashboard-reveal {
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes admin-dashboard-card-unfold {
+	from {
+		opacity: 0;
+		transform: translateY(4px) scaleY(0.04);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0) scaleY(1);
+	}
+}
+
+@keyframes admin-dashboard-content-waterfall {
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes admin-dashboard-progress-reveal {
+	from {
+		transform: scaleX(0);
+	}
+
+	to {
+		transform: scaleX(1);
 	}
 }
 
@@ -1070,6 +1178,16 @@
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 		scroll-behavior: auto !important;
+	}
+
+	.admin-dashboard-reveal,
+	.admin-dashboard-card-unfold,
+	.admin-dashboard-card-unfold > [data-slot="card-header"],
+	.admin-dashboard-card-unfold > [data-slot="card-content"],
+	.admin-dashboard-progress-value {
+		opacity: 1;
+		transform: none;
+		animation: none !important;
 	}
 }
 @layer components {

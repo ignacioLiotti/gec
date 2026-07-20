@@ -583,10 +583,57 @@ export async function updateMembershipRole({
 	if (!authUser) throw new Error("Unauthorized");
 	await requireRolesAdmin(supabase, tenantId);
 	await requireUserInTenant(supabase, userId, tenantId);
-	await supabase
+
+	const { data: currentMembership, error: currentMembershipError } = await supabase
+		.from("memberships")
+		.select("role")
+		.eq("tenant_id", tenantId)
+		.eq("user_id", userId)
+		.single();
+	if (currentMembershipError || !currentMembership) {
+		throw new Error("No se pudo verificar el rol actual");
+	}
+
+	const roleRank = { member: 0, admin: 1, owner: 2 } as const;
+	const currentRole = currentMembership.role as keyof typeof roleRank;
+	const { data: actorMembership, error: actorMembershipError } = await supabase
+		.from("memberships")
+		.select("role")
+		.eq("tenant_id", tenantId)
+		.eq("user_id", authUser.id)
+		.single();
+	if (actorMembershipError || !actorMembership) {
+		throw new Error("No se pudo verificar tu nivel de acceso");
+	}
+	const actorRole = actorMembership.role as keyof typeof roleRank;
+	if ((role === "owner" || currentRole === "owner") && actorRole !== "owner") {
+		throw new Error("Solo un propietario puede asignar o modificar propietarios.");
+	}
+	if (userId === authUser.id && roleRank[role] < roleRank[currentRole]) {
+		throw new Error("No podés reducir tu propio acceso. Pedí a otro propietario que haga el cambio.");
+	}
+
+	if (currentRole === "owner" && role !== "owner") {
+		const { count: ownerCount, error: ownerCountError } = await supabase
+			.from("memberships")
+			.select("user_id", { count: "exact", head: true })
+			.eq("tenant_id", tenantId)
+			.eq("role", "owner");
+		if (ownerCountError) throw ownerCountError;
+		if ((ownerCount ?? 0) <= 1) {
+			throw new Error("La organización debe conservar al menos un propietario.");
+		}
+	}
+
+	const { data: updatedMembership, error: updateError } = await supabase
 		.from("memberships")
 		.update({ role })
 		.eq("tenant_id", tenantId)
-		.eq("user_id", userId);
+		.eq("user_id", userId)
+		.select("user_id")
+		.single();
+	if (updateError || !updatedMembership) {
+		throw new Error("No se pudo actualizar el rol de la organización");
+	}
 	revalidatePath("/admin/users");
 }

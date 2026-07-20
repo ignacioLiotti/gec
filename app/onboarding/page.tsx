@@ -3,19 +3,19 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
-import { createTenantAction } from "@/app/tenants/actions";
 import { getMyPendingInvitations, acceptInvitation } from "@/app/admin/users/invitation-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, UserPlus, Loader2, CheckCircle2, Clock, Mail, Plus } from "lucide-react";
+import { Building2, UserPlus, Loader2, CheckCircle2, Clock, Mail, Plus, HardHat } from "lucide-react";
 import { toast } from "sonner";
-import { STANDARD_TENANT_BLUEPRINT_KEY } from "@/lib/tenant-blueprints/constants";
 
 interface PendingInvitation {
 	id: string;
 	token: string;
 	tenant_id: string;
 	invited_role: string;
+	invited_operational_role_id: string | null;
+	invited_operational_role_name: string | null;
 	expires_at: string;
 	created_at: string;
 	tenant: {
@@ -30,107 +30,101 @@ type Mode = "join" | "create";
 
 function OnboardingPageContent() {
 	const router = useRouter();
-  const { push, refresh } = router;
+	const { push } = router;
 	const searchParams = useSearchParams();
 	const queryParams = new URLSearchParams(searchParams);
 	const [mode, setMode] = useState<Mode>("join");
 	const [loading, setLoading] = useState(true);
 	const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
 	const [acceptingId, setAcceptingId] = useState<string | null>(null);
-	const [creatingTenant, setCreatingTenant] = useState(false);
-	const [tenantName, setTenantName] = useState("");
+	const [loadError, setLoadError] = useState<string | null>(null);
+	const [invitationLoadWarning, setInvitationLoadWarning] = useState<string | null>(null);
+	const [reloadKey, setReloadKey] = useState(0);
 
 	const errorMessage = queryParams.get("error");
 	const previewMode = queryParams.get("preview") === "1" || queryParams.get("preview") === "true";
 
 	useEffect(() => {
 		async function init() {
-			const supabase = createSupabaseBrowserClient();
+			setLoading(true);
+			setLoadError(null);
+			setInvitationLoadWarning(null);
+			try {
+				const supabase = createSupabaseBrowserClient();
 
-			// Get current user
-			const { data: { user: currentUser } } = await supabase.auth.getUser();
+				const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
 
-			if (!currentUser) {
-				push("/");
-				return;
-			}
+				if (userError) throw userError;
+				if (!currentUser) {
+					push("/");
+					return;
+				}
 
-			// Check if user already has memberships (unless preview mode)
-			const { data: memberships } = await supabase
-				.from("memberships")
-				.select("tenant_id")
-				.eq("user_id", currentUser.id)
-				.order("created_at", { ascending: true });
+				const { data: memberships, error: membershipsError } = await supabase
+					.from("memberships")
+					.select("tenant_id")
+					.eq("user_id", currentUser.id)
+					.order("created_at", { ascending: true });
+				if (membershipsError) throw membershipsError;
 
-			if (memberships && memberships.length > 0 && !previewMode) {
-				// Redirect to first tenant
-				push(`/api/tenants/${memberships[0].tenant_id}/switch`);
-				return;
-			}
+				if (memberships && memberships.length > 0 && !previewMode) {
+					push(`/api/tenants/${memberships[0].tenant_id}/switch`);
+					return;
+				}
 
-			// Load pending invitations
-			const result = await getMyPendingInvitations();
-			if (result.invitations) {
-				setInvitations(result.invitations as unknown as PendingInvitation[]);
-				// If there are invitations, default to join mode
-				if (result.invitations.length > 0) {
-					setMode("join");
+				const result = await getMyPendingInvitations();
+				if (result.error) {
+					setInvitations([]);
+					setMode("create");
+					setInvitationLoadWarning(result.error);
+					return;
+				}
+				if (result.invitations) {
+					setInvitations(result.invitations as unknown as PendingInvitation[]);
+					if (result.invitations.length > 0) {
+						setMode("join");
+					} else {
+						setMode("create");
+					}
 				} else {
-					// No invitations, default to create mode
 					setMode("create");
 				}
-			} else {
-				setMode("create");
+			} catch (error) {
+				setLoadError(
+					error instanceof Error
+						? error.message
+						: "No pudimos revisar tu acceso. Volvé a intentarlo.",
+				);
+			} finally {
+				setLoading(false);
 			}
-
-			setLoading(false);
 		}
 
-		init();
-	}, [router, previewMode]);
+		void init();
+	}, [push, previewMode, reloadKey]);
 
 	const handleAcceptInvitation = async (invitation: PendingInvitation) => {
 		setAcceptingId(invitation.id);
-		const result = await acceptInvitation(invitation.token);
-
-		if (result.error) {
-			toast.error(result.error);
-			setAcceptingId(null);
-		} else if (result.success) {
-			toast.success(`¡Te uniste a ${result.tenantName}!`);
-			// Redirigir al tenant
-			push("/");
-			refresh();
-		}
-	};
-
-	const handleCreateTenant = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (tenantName.trim().length < 3) {
-			toast.error("El nombre de la organización debe tener al menos 3 caracteres");
-			return;
-		}
-
-		setCreatingTenant(true);
-
 		try {
-			const formData = new FormData();
-			formData.append("name", tenantName.trim());
-			formData.append("blueprint", STANDARD_TENANT_BLUEPRINT_KEY);
-
-			await createTenantAction("/onboarding", formData);
-
-			// createTenantAction redirigirá, pero si no lo hace, mostrar éxito
-			toast.success("¡Organización creada!");
-		} catch (error: unknown) {
-			toast.error(error instanceof Error ? error.message : "Error al crear la organización");
-			setCreatingTenant(false);
+			const result = await acceptInvitation(invitation.token);
+			if (result.error) {
+				toast.error(result.error);
+				return;
+			}
+			if (result.success) {
+				toast.success(`¡Te uniste a ${result.tenantName}!`);
+				push(`/api/tenants/${result.tenantId}/switch?next=${encodeURIComponent("/dashboard")}`);
+			}
+		} catch {
+			toast.error("No pudimos aceptar la invitación. Volvé a intentarlo.");
+		} finally {
+			setAcceptingId(null);
 		}
 	};
 
 	if (loading) {
 		return (
-			<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f0efea] to-[#e5e4df]">
+			<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
 				<Card className="w-full max-w-2xl">
 					<CardContent className="flex items-center justify-center py-12">
 						<Loader2 className="size-8 animate-spin text-[#444444]" />
@@ -140,22 +134,54 @@ function OnboardingPageContent() {
 		);
 	}
 
+	if (loadError) {
+		return (
+			<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
+				<Card className="w-full max-w-lg border-stroke-soft shadow-card">
+					<CardHeader>
+						<CardTitle>No pudimos revisar tu acceso</CardTitle>
+						<CardDescription>{loadError}</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<Button type="button" className="w-full" onClick={() => setReloadKey((value) => value + 1)}>
+							Volver a intentar
+						</Button>
+					</CardContent>
+				</Card>
+			</div>
+		);
+	}
+
 	return (
-		<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f0efea] via-white to-[#e8e7e2] p-4">
-			<Card className="w-full max-w-2xl shadow-lg">
+		<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
+			<Card className="w-full max-w-2xl border-stroke-soft shadow-card">
 				<CardHeader className="text-center">
 					<div className="flex justify-center mb-4">
-						<div className="p-4 bg-[#fff0e6] rounded-full">
-							<Building2 className="size-10 text-[#ff5800]" />
+						<div className="rounded-xl border border-orange-primary/25 bg-orange-primary/10 p-4 text-orange-primary shadow-sm">
+							<Building2 className="size-10" />
 						</div>
 					</div>
 					<CardTitle className="text-2xl">Bienvenido a Síntesis</CardTitle>
 					<CardDescription className="text-base">
-						Configura tu espacio de trabajo para comenzar
+						Configurá tu espacio de trabajo para empezar
 					</CardDescription>
 				</CardHeader>
 
 				<CardContent className="space-y-6">
+					{invitationLoadWarning ? (
+						<div className="rounded-lg border border-warning/35 bg-warning/15 p-3 text-sm text-warning-foreground">
+							<p>{invitationLoadWarning} Podés crear tu organización o volver a comprobar.</p>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="mt-3"
+								onClick={() => setReloadKey((value) => value + 1)}
+							>
+								Comprobar invitaciones
+							</Button>
+						</div>
+					) : null}
 					{/* Banner de Modo Vista Previa */}
 					{previewMode && (
 						<div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -173,29 +199,29 @@ function OnboardingPageContent() {
 					)}
 
 					{/* Pestañas de Selección */}
-					<div className="flex gap-2 p-1 bg-[#f0efea] rounded-lg">
+					<div className="flex gap-2 rounded-lg border border-stroke-soft bg-surface-recessed p-1 shadow-inner">
 						<button
 							onClick={() => setMode("create")}
 							className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-all ${mode === "create"
-									? "bg-white text-[#444444] shadow-sm"
-									: "text-[#666666] hover:text-[#444444]"
+									? "bg-card text-content shadow-sm"
+									: "text-content-secondary hover:text-content"
 								}`}
 						>
 							<div className="flex items-center justify-center gap-2">
 								<Plus className="size-4" />
-								Crear Organización
+								Crear organización
 							</div>
 						</button>
 						<button
 							onClick={() => setMode("join")}
 							className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-all ${mode === "join"
-									? "bg-white text-[#444444] shadow-sm"
-									: "text-[#666666] hover:text-[#444444]"
+									? "bg-card text-content shadow-sm"
+									: "text-content-secondary hover:text-content"
 								}`}
 						>
 							<div className="flex items-center justify-center gap-2">
 								<UserPlus className="size-4" />
-								Unirse a Organización
+								Unirme a una organización
 								{invitations.length > 0 && (
 									<span className="ml-1 px-1.5 py-0.5 text-xs font-bold bg-[#ff5800] text-white rounded-full">
 										{invitations.length}
@@ -210,9 +236,9 @@ function OnboardingPageContent() {
 					{mode === "join" ? (
 						<div className="space-y-4">
 							<div>
-								<h3 className="text-lg font-semibold mb-2 text-[#444444]">Invitaciones Pendientes</h3>
-								<p className="text-sm text-[#666666] mb-4">
-									Acepta una invitación para unirte a una organización existente
+								<h3 className="mb-2 text-lg font-semibold text-content">Invitaciones pendientes</h3>
+								<p className="mb-4 text-sm text-content-secondary">
+									Aceptá una invitación para sumarte a una organización existente
 								</p>
 							</div>
 
@@ -221,7 +247,7 @@ function OnboardingPageContent() {
 									<Mail className="size-12 text-[#888888] mx-auto mb-3" />
 									<p className="text-[#444444] font-medium mb-1">Sin invitaciones pendientes</p>
 									<p className="text-sm text-[#666666]">
-										Pide a un administrador que te invite, o crea tu propia organización.
+										Pedile a una persona administradora que te invite, o creá tu propia organización.
 									</p>
 								</div>
 							) : (
@@ -255,10 +281,16 @@ function OnboardingPageContent() {
 																</div>
 																<div className="flex items-center gap-2 text-[#666666]">
 																	<CheckCircle2 className="size-4" />
-																	<span className="capitalize">
-																		Rol: {invitation.invited_role}
-																	</span>
+																<span className="capitalize">
+																	Nivel: {invitation.invited_role === "admin" ? "Administrador" : "Miembro"}
+																</span>
+															</div>
+															{invitation.invited_operational_role_name ? (
+																<div className="flex items-center gap-2 text-[#666666]">
+																	<HardHat className="size-4" />
+																	<span>Trabajo: {invitation.invited_operational_role_name}</span>
 																</div>
+															) : null}
 																<div className="flex items-center gap-2 text-[#666666]">
 																	<Clock className="size-4" />
 																								<span>Vence el {expirationLabel}</span>
@@ -302,51 +334,21 @@ function OnboardingPageContent() {
 					) : (
 						<div className="space-y-4">
 							<div>
-								<h3 className="text-lg font-semibold mb-2 text-[#444444]">Crear Nueva Organización</h3>
+								<h3 className="mb-2 text-lg font-semibold text-content">Crear una organización</h3>
 								<p className="text-sm text-[#666666] mb-4">
 									Prepararemos carpetas, certificados, compras, roles y tableros. Después te guiaremos para crear tu primera obra.
 								</p>
 							</div>
 
-							<form onSubmit={handleCreateTenant} className="space-y-4">
-								<div className="space-y-2">
-									<label htmlFor="tenantName" className="text-sm font-medium text-[#444444]">
-										Nombre de la Organización
-									</label>
-									<input
-										id="tenantName"
-										type="text"
-										value={tenantName}
-										onChange={(e) => setTenantName(e.target.value)}
-										placeholder="Ej.: Constructora del Litoral"
-										className="w-full px-4 py-2 border border-[#d4d3ce] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ff5800] focus:border-transparent"
-										required
-										minLength={3}
-										disabled={creatingTenant}
-									/>
-									<p className="text-xs text-[#888888]">
-										Mínimo 3 caracteres
-									</p>
-								</div>
-
-								<Button
-									type="submit"
-									disabled={creatingTenant || tenantName.trim().length < 3}
-									className="w-full bg-[#ff5800] hover:bg-[#e64f00]"
-								>
-									{creatingTenant ? (
-										<>
-											<Loader2 className="mr-2 size-4 animate-spin" />
-											Creando Organización&hellip;
-										</>
-									) : (
-										<>
-											<Plus className="mr-2 size-4" />
-											Crear Organización
-										</>
-									)}
+							<div className="rounded-lg border border-[#d4d3ce] bg-white p-4 shadow-sm">
+								<p className="text-sm leading-6 text-[#666666]">
+									Solo te pediremos el nombre. El modelo recomendado se prepara automáticamente y después verás una lista corta para completar la primera obra.
+								</p>
+								<Button type="button" onClick={() => push("/tenants/new")} className="mt-4 w-full bg-[#ff5800] hover:bg-[#e64f00]">
+									<Plus className="mr-2 size-4" />
+									Crear mi organización
 								</Button>
-							</form>
+							</div>
 						</div>
 					)}
 				</CardContent>

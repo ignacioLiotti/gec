@@ -1,12 +1,8 @@
 import { redirect } from "next/navigation";
 import { Building2, Check, FolderTree, ShieldCheck, Sparkles } from "lucide-react";
 
-import { createTenantAction } from "@/app/tenants/actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { STANDARD_TENANT_BLUEPRINT_KEY } from "@/lib/tenant-blueprints/constants";
 import { createClient } from "@/utils/supabase/server";
+import { TenantCreateForm } from "./tenant-create-form";
 
 type NewTenantPageProps = {
 	searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -29,11 +25,13 @@ export default async function NewTenantPage({ searchParams }: NewTenantPageProps
 	const resolvedSearchParams = await searchParams;
 	const rawError = resolvedSearchParams?.error;
 	const errorMessage = Array.isArray(rawError) ? rawError[0] : rawError ?? null;
+	const rawName = resolvedSearchParams?.name;
+	const defaultName = Array.isArray(rawName) ? rawName[0] : rawName ?? "";
 
 	return (
-		<main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:py-12">
+		<div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:py-12">
 			<div className="grid overflow-hidden rounded-xl border border-stroke-soft bg-card shadow-card lg:grid-cols-[0.9fr_1.1fr]">
-				<section className="border-b border-stroke-soft bg-surface-recessed p-6 lg:border-b-0 lg:border-r lg:p-8">
+				<section className="order-2 border-t border-stroke-soft bg-surface-recessed p-6 lg:order-1 lg:border-r lg:border-t-0 lg:p-8">
 					<div className="grid size-12 place-items-center rounded-lg border border-orange-primary/25 bg-orange-primary/10 text-orange-primary shadow-sm">
 						<Building2 className="size-6" />
 					</div>
@@ -62,47 +60,18 @@ export default async function NewTenantPage({ searchParams }: NewTenantPageProps
 					</div>
 				</section>
 
-				<section className="p-6 lg:p-8">
+				<section className="order-1 p-6 lg:order-2 lg:p-8">
 					<div className="flex items-center gap-2 text-sm font-medium text-success">
 						<Check className="size-4" />
 						Modelo recomendado seleccionado
 					</div>
 					<h2 className="mt-2 text-xl font-semibold text-content">Construcción estándar</h2>
 					<p className="mt-1 text-sm leading-6 text-content-secondary">
-						Una base similar a la configuración operativa de GEC, sin copiar datos, archivos ni identificadores del cliente.
+						Un modelo operativo probado para empezar con carpetas, roles y controles coherentes desde el primer día.
 					</p>
-
-					{errorMessage ? (
-						<div role="alert" className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-							{errorMessage}
-						</div>
-					) : null}
-
-					<form action={createTenantAction.bind(null, "/tenants/new")} className="mt-7 space-y-5">
-						<input type="hidden" name="blueprint" value={STANDARD_TENANT_BLUEPRINT_KEY} />
-						<div className="space-y-2">
-							<Label htmlFor="tenant-name">Nombre de la empresa u organización</Label>
-							<Input
-								id="tenant-name"
-								name="name"
-								placeholder="Ej.: Constructora del Litoral"
-								autoComplete="organization"
-								required
-								minLength={3}
-								maxLength={120}
-								className="h-11"
-							/>
-							<p className="text-xs text-content-muted">Este nombre aparecerá en el selector de organizaciones.</p>
-						</div>
-						<Button type="submit" size="lg" className="w-full">
-							Crear y preparar mi espacio
-						</Button>
-						<p className="text-center text-xs leading-5 text-content-muted">
-							Al continuar no se crean obras de ejemplo ni se copia información de otros clientes.
-						</p>
-					</form>
+					<TenantCreateForm errorMessage={errorMessage} defaultName={defaultName} />
 				</section>
 			</div>
-		</main>
+		</div>
 	);
 }

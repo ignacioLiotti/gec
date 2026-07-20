@@ -177,10 +177,14 @@ type ExpandableLightButtonProps = LightButtonProps & {
   labelClassName?: string
 }
 
-const expandableLightButtonClassName = "group/expand-light gap-0 overflow-hidden"
+const expandableLightButtonClassName =
+  "group/expand-light gap-0 overflow-hidden [&>svg]:transition-transform [&>svg]:duration-180 [&>svg]:ease-[cubic-bezier(0.23,1,0.32,1)] hover:[&>svg]:scale-105 active:[&>svg]:scale-95 motion-reduce:[&>svg]:transition-none"
 
 const expandableLightButtonLabelClassName =
-  "pointer-events-none inline-block max-w-0 overflow-hidden whitespace-nowrap align-middle opacity-0 transition-[max-width,opacity,margin-left] delay-200 duration-700 ease-out group-hover/expand-light:ml-1.5 group-hover/expand-light:max-w-[12rem] group-hover/expand-light:opacity-100 group-hover/expand-light:delay-0 group-hover/expand-light:duration-200 group-focus-visible/expand-light:ml-1.5 group-focus-visible/expand-light:max-w-[12rem] group-focus-visible/expand-light:opacity-100 group-focus-visible/expand-light:delay-0 group-focus-visible/expand-light:duration-200 group-data-[state=open]/expand-light:ml-1.5 group-data-[state=open]/expand-light:max-w-[12rem] group-data-[state=open]/expand-light:opacity-100 group-data-[state=open]/expand-light:delay-0 group-data-[state=open]/expand-light:duration-200"
+  "pointer-events-none grid min-w-0 grid-cols-[0fr] opacity-0 transition-[grid-template-columns,opacity,margin-left] duration-180 ease-[cubic-bezier(0.4,0,0.2,1)] group-hover/expand-light:ml-1.5 group-hover/expand-light:grid-cols-[1fr] group-hover/expand-light:opacity-100 group-focus-visible/expand-light:ml-1.5 group-focus-visible/expand-light:grid-cols-[1fr] group-focus-visible/expand-light:opacity-100 group-data-[state=open]/expand-light:ml-1.5 group-data-[state=open]/expand-light:grid-cols-[1fr] group-data-[state=open]/expand-light:opacity-100 motion-reduce:transition-none"
+
+const expandableLightButtonLabelTextClassName =
+  "min-w-0 -translate-x-1 overflow-hidden whitespace-nowrap transition-transform duration-180 ease-[cubic-bezier(0.4,0,0.2,1)] group-hover/expand-light:translate-x-0 group-focus-visible/expand-light:translate-x-0 group-data-[state=open]/expand-light:translate-x-0 motion-reduce:transition-none"
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
@@ -223,7 +227,7 @@ const ExpandableLightButton = React.forwardRef<HTMLButtonElement, ExpandableLigh
           labelClassName
         )}
       >
-        {label}
+        <span className={expandableLightButtonLabelTextClassName}>{label}</span>
       </span>
     )
 

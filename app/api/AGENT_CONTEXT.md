@@ -12,7 +12,7 @@ All HTTP API routes (Next.js route handlers). Routes are thin: they authenticate
 - `data-flow-config/`, `data-flow-graph/` — tenant/obra data-flow configuration and traceability graph.
 - `certificados/` — certificate series and documents.
 - `insurance-policies/` — insurance policy import/matching/movements (see ADRs 0011, 0019, 0020, 0025).
-- `document-ai/`, `document-generation/` — Document AI runs and template-generated documents.
+- `document-ai/`, `document-generation/` — Document AI runs and template-generated documents. Generated-document deletion is permanent, creator-only, and cleans the scoped PDF/upload/extraction artifacts before the owner-RLS row delete (ADR 0031).
 - `ocr-templates/`, `ocr-playground/` — extraction template management and testing.
 - `company-files/` — company-global files (ADR 0018).
 - `notifications/`, `events/`, `calendar-events/`, `doc-reminders/` — notifications engine, domain events, calendar, document reminders.
@@ -26,6 +26,7 @@ All HTTP API routes (Next.js route handlers). Routes are thin: they authenticate
 - `health/` — health check.
 - `flujo-actions/` — workflow/flujo runtime actions.
 - `aps/`, `contact/`, `obra-recipients/`, `obra-defaults/`, `main-table-config/` — misc feature endpoints.
+- `obra-defaults/analyze-sample/` — Gemini structural analysis of a sample document to bootstrap data-folder config (see ADR-0032).
 
 ## Local rules
 

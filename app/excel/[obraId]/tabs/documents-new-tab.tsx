@@ -1811,7 +1811,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		</div>
 	) : ocrTableConfig ? (
 		<div data-wizard-target="documents-extracted-data-table" className="min-h-0 px-4 pt-3 max-w-[calc(96vw-var(--sidebar-current-width))]">
-			<FormTable key={ocrTableConfig.tableId} config={ocrTableConfig} innerClassName="max-h-[58vh] min-h-[58vh]" />
+			<FormTable key={ocrTableConfig.tableId} config={ocrTableConfig} innerClassName="max-h-[56vh] min-h-[56vh]" toolbarClassName="bg-white" />
 		</div>
 	) : null;
 
@@ -1991,7 +1991,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	);
 
 	return (
-		<TabsContent value="documentos-new" className="space-y-4 mb-16">
+		<TabsContent value="documentos-new" className="space-y-4 ">
 			<section className={cn("min-h-[640px] overflow-hidden rounded-xl ", !isOcrFolder && "rounded-xl ")}>
 				<div className="-mb-1 mx-[1px]">
 					{isOcrFolder ? ocrHeader : normalHeader}

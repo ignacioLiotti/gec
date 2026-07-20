@@ -209,7 +209,7 @@ function Sidebar({
 
   return (
     <div
-      className="group peer text-sidebar-foreground hidden md:block  [--sidebar-motion-duration:420ms] [--sidebar-motion-ease:cubic-bezier(0.16,1,0.3,1)] bg-inherit mr-[1px]"
+      className="group peer text-sidebar-foreground hidden md:block [--sidebar-motion-duration:220ms] [--sidebar-motion-ease:cubic-bezier(0.16,1,0.3,1)] bg-inherit mr-[1px] motion-reduce:[--sidebar-motion-duration:0ms]"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
@@ -285,7 +285,7 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className="sr-only">Abrir o cerrar navegación</span>
     </Button>
   )
 }
@@ -297,10 +297,10 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
     <button
       data-sidebar="rail"
       data-slot="sidebar-rail"
-      aria-label="Toggle Sidebar"
+      aria-label="Abrir o cerrar navegación"
       tabIndex={-1}
       onClick={toggleSidebar}
-      title="Toggle Sidebar"
+      title="Abrir o cerrar navegación"
       className={cn(
         "hover:after:bg-sidebar-border absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex",
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",

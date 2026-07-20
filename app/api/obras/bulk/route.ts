@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { obraSchema } from "@/app/excel/schema";
-import { applyObraDefaults } from "@/lib/obra-defaults";
+import { provisionObraDefaults } from "@/lib/obra-defaults/provision";
 import {
 	getAuthContext,
 	loadTenantMainTableCustomColumnIds,
@@ -171,7 +171,7 @@ export async function PATCH(request: Request) {
 		} else if (newObraRows && newObraRows.length > 0) {
 			for (const obraRow of newObraRows) {
 				try {
-					const result = await applyObraDefaults(
+					const result = await provisionObraDefaults(
 						supabase,
 						obraRow.id as string,
 						tenantId

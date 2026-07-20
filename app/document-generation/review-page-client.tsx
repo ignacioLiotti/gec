@@ -134,7 +134,7 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
   );
 });
 
-export function DocumentReviewPageClient() {
+export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) {
   const searchParams = useSearchParams();
   const requestedDocumentId = searchParams.get("id") ?? "";
   const [documents, setDocuments] = useState<GeneratedListItem[]>([]);
@@ -169,6 +169,14 @@ export function DocumentReviewPageClient() {
 
   const loadQueue = async (preferredId?: string) => {
     setLoadingQueue(true);
+    if (!canReview) {
+      setDocuments([]);
+      setCounts({ pending: 0, approved: 0, rejected: 0 });
+      setSelectedId(preferredId ?? requestedDocumentId);
+      setLoadingQueue(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/document-generation/generated?status=PENDING", {
         cache: "no-store",
@@ -196,7 +204,7 @@ export function DocumentReviewPageClient() {
 
   useEffect(() => {
     void loadQueue(requestedDocumentId || undefined);
-  }, [requestedDocumentId]);
+  }, [canReview, requestedDocumentId]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -249,7 +257,7 @@ export function DocumentReviewPageClient() {
   };
 
   const handleDecision = async (status: "APPROVED" | "REJECTED", comment: string) => {
-    if (!selectedId) return;
+    if (!canReview || !selectedId) return;
     setUpdating(true);
     try {
       const response = await fetch(`/api/document-generation/generated/${selectedId}`, {
@@ -280,7 +288,7 @@ export function DocumentReviewPageClient() {
     }
   };
 
-  const canDecide = currentDocument ? ["GENERATED", "UNDER_REVIEW"].includes(currentDocument.status) : false;
+  const canDecide = canReview && currentDocument ? ["GENERATED", "UNDER_REVIEW"].includes(currentDocument.status) : false;
 
   return (
     <div className="flex min-h-[calc(100dvh-24px)] max-w-full flex-col overflow-x-hidden bg-[#fafafa] px-3 py-3 sm:px-4 sm:py-4">
@@ -290,66 +298,79 @@ export function DocumentReviewPageClient() {
             {currentDocument?.fileName ?? "No hay documentos pendientes"}
           </h1>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        {canReview ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-600">
+              {counts.pending} pendientes
+            </span>
+            <Button type="button" variant="outline" className="h-9 rounded-md" onClick={() => void loadQueue()}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Actualizar
+            </Button>
+          </div>
+        ) : (
           <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-600">
-            {counts.pending} pendientes
+            Solo lectura
           </span>
-          <Button type="button" variant="outline" className="h-9 rounded-md" onClick={() => void loadQueue()}>
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Actualizar
-          </Button>
-        </div>
+        )}
       </header>
 
-      <main className="grid min-w-0 flex-1 gap-3 lg:min-h-0 lg:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <aside className="hidden min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-white lg:flex lg:flex-col">
-          <div className="border-b border-stone-200 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Siguientes</p>
-          </div>
-          <div className="flex-1 space-y-2 overflow-auto p-3">
-            {loadingQueue ? (
-              <div className="grid min-h-[220px] place-items-center">
-                <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
-              </div>
-            ) : documents.length === 0 ? (
-              <div className="grid min-h-[220px] place-items-center px-4 text-center text-sm text-stone-500">
-                La cola esta limpia.
-              </div>
-            ) : (
-              documents.map((document, index) => (
-                <button
-                  key={document.id}
-                  type="button"
-                  onClick={() => setSelectedId(document.id)}
-                  className={cn(
-                    "w-full rounded-lg border px-3 py-3 text-left transition-[border-color,background-color,box-shadow,transform] duration-150 active:scale-[0.99]",
-                    selectedId === document.id
-                      ? "border-stone-900 bg-stone-950 text-white shadow-sm"
-                      : "border-stone-200 bg-white text-stone-900 hover:bg-stone-50",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
-                        selectedId === document.id ? "bg-white text-stone-950" : "bg-stone-100 text-stone-500",
-                      )}
-                    >
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0 truncate text-sm font-semibold">{document.fileName}</span>
-                  </div>
-                  <p className={cn("mt-2 line-clamp-2 text-xs", selectedId === document.id ? "text-white/70" : "text-stone-500")}>
-                    {document.workLabel}
-                  </p>
-                  <p className={cn("mt-2 text-[11px]", selectedId === document.id ? "text-white/60" : "text-stone-400")}>
-                    {formatDate(document.generatedAt)}
-                  </p>
-                </button>
-              ))
-            )}
-          </div>
-        </aside>
+      <main
+        className={cn(
+          "grid min-w-0 flex-1 gap-3 lg:min-h-0",
+          canReview ? "lg:grid-cols-[280px_minmax(0,1fr)_320px]" : "lg:grid-cols-[minmax(0,1fr)_320px]",
+        )}
+      >
+        {canReview ? (
+          <aside className="hidden min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-white lg:flex lg:flex-col">
+            <div className="border-b border-stone-200 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Siguientes</p>
+            </div>
+            <div className="flex-1 space-y-2 overflow-auto p-3">
+              {loadingQueue ? (
+                <div className="grid min-h-[220px] place-items-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="grid min-h-[220px] place-items-center px-4 text-center text-sm text-stone-500">
+                  La cola esta limpia.
+                </div>
+              ) : (
+                documents.map((document, index) => (
+                  <button
+                    key={document.id}
+                    type="button"
+                    onClick={() => setSelectedId(document.id)}
+                    className={cn(
+                      "w-full rounded-lg border px-3 py-3 text-left transition-[border-color,background-color,box-shadow,transform] duration-150 active:scale-[0.99]",
+                      selectedId === document.id
+                        ? "border-stone-900 bg-stone-950 text-white shadow-sm"
+                        : "border-stone-200 bg-white text-stone-900 hover:bg-stone-50",
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
+                          selectedId === document.id ? "bg-white text-stone-950" : "bg-stone-100 text-stone-500",
+                        )}
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 truncate text-sm font-semibold">{document.fileName}</span>
+                    </div>
+                    <p className={cn("mt-2 line-clamp-2 text-xs", selectedId === document.id ? "text-white/70" : "text-stone-500")}>
+                      {document.workLabel}
+                    </p>
+                    <p className={cn("mt-2 text-[11px]", selectedId === document.id ? "text-white/60" : "text-stone-400")}>
+                      {formatDate(document.generatedAt)}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+          </aside>
+        ) : null}
 
         <section className="min-w-0 overflow-hidden rounded-xl border border-stone-200 bg-[#e9e7e1] lg:min-h-0">
           <div className="flex items-start justify-between gap-2 border-b border-stone-200 bg-white px-3 py-2">
@@ -405,7 +426,12 @@ export function DocumentReviewPageClient() {
                 <div>
                   <FileText className="mx-auto h-8 w-8 text-stone-400" />
                   <p className="mt-3 text-sm font-medium text-stone-800">
-                    {detailError || (documents.length === 0 ? "No quedan documentos para revisar." : "Selecciona un documento.")}
+                    {detailError ||
+                      (canReview
+                        ? documents.length === 0
+                          ? "No quedan documentos para revisar."
+                          : "Selecciona un documento."
+                        : "No se encontro el documento.")}
                   </p>
                 </div>
               </div>
@@ -416,7 +442,9 @@ export function DocumentReviewPageClient() {
         <aside className="min-h-0 rounded-xl border border-stone-200 bg-white p-4 lg:flex lg:flex-col">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Decision</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">
+                {canReview ? "Decision" : "Detalle"}
+              </p>
               <h2 className="mt-2 truncate text-lg font-semibold text-stone-950">
                 {currentDocument?.templateName ?? currentDocument?.documentType ?? "Revision"}
               </h2>
@@ -442,7 +470,11 @@ export function DocumentReviewPageClient() {
             ) : null}
           </div>
 
-          {canDecide ? (
+          {!canReview ? (
+            <p className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3 text-sm text-stone-600">
+              Vista de solo lectura. Solo los revisores pueden aprobar o rechazar documentos.
+            </p>
+          ) : canDecide ? (
             <ReviewCommentActions
               key={selectedId}
               updating={updating}
@@ -455,28 +487,30 @@ export function DocumentReviewPageClient() {
             </p>
           )}
 
-          <div className="mt-3 flex gap-2 lg:hidden">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 flex-1 rounded-lg"
-              disabled={documents.length < 2}
-              onClick={() => handleSelectRelative(-1)}
-            >
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Anterior
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 flex-1 rounded-lg"
-              disabled={documents.length < 2}
-              onClick={() => handleSelectRelative(1)}
-            >
-              Siguiente
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
+          {canReview ? (
+            <div className="mt-3 flex gap-2 lg:hidden">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 flex-1 rounded-lg"
+                disabled={documents.length < 2}
+                onClick={() => handleSelectRelative(-1)}
+              >
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 flex-1 rounded-lg"
+                disabled={documents.length < 2}
+                onClick={() => handleSelectRelative(1)}
+              >
+                Siguiente
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
 
           {/* <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3 lg:hidden">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">Proximo</p>

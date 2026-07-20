@@ -8,6 +8,7 @@ describe("standard construction tenant blueprint", () => {
 
 		expect(blueprint.key).toBe("standard-construction");
 		expect(blueprint.version).toBe(1);
+		expect(blueprint.obraDefaultsMaterializerVersion).toBe(1);
 		expect(blueprint.mainTableColumns).toHaveLength(15);
 		expect(blueprint.folders).toHaveLength(8);
 		expect(blueprint.tables).toHaveLength(2);

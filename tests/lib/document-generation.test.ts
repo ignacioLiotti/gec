@@ -4,6 +4,7 @@ import {
   applyDocumentAiContextInputData,
   applyTemplateFormulaInputData,
   applyTemplateAliasInputData,
+  buildGeneratedDocumentFileName,
   buildDocumentGenerationExtractionRows,
   buildInitialInputData,
   formatDocumentTypeLabel,
@@ -84,6 +85,39 @@ describe("document-generation helpers", () => {
       detalle: "manual",
     });
     expect(refreshTemplateSequenceInputData(schema, { nro: "5" }, 2)).toEqual({ nro: "5" });
+  });
+
+  it("uses only the configured order number for default purchase-order filenames", () => {
+    const schema = normalizeTemplateSchema({
+      documentNumberFieldKey: "nro",
+      fields: [
+        { key: "nro", label: "Nro", type: "text", required: true, autoPopulate: "next_sequence_number" },
+      ],
+    });
+
+    expect(buildGeneratedDocumentFileName({
+      documentType: "PURCHASE_ORDER",
+      workName: "52 Lic. Privada - Construccion de viviendas",
+      folderPath: "ordenes-de-compra",
+      inputData: { nro: "OC 52/2026" },
+      schema,
+    })).toBe("OC 52-2026.pdf");
+  });
+
+  it("keeps an explicit generated filename ahead of the purchase-order default", () => {
+    const schema = normalizeTemplateSchema({
+      documentNumberFieldKey: "nro",
+      fields: [{ key: "nro", label: "Nro", type: "text", required: true }],
+    });
+
+    expect(buildGeneratedDocumentFileName({
+      documentType: "PURCHASE_ORDER",
+      workName: "Obra 52",
+      folderPath: "ordenes-de-compra",
+      fileName: "orden especial",
+      inputData: { nro: "52" },
+      schema,
+    })).toBe("orden especial.pdf");
   });
 
   it("validates required fields", () => {

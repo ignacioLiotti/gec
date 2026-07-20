@@ -1,9 +1,7 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 
-import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
-import type { MouseEvent, ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { createSupabaseBrowserClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -16,9 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, m } from 'framer-motion';
 import {
@@ -32,9 +28,6 @@ import {
   FileArchive,
   Plus,
   Upload,
-  Search,
-  Grid3x3,
-  List,
   Download,
   Eye,
   EyeOff,
@@ -43,8 +36,6 @@ import {
   BarChart3,
   Trash2,
   X,
-  Filter,
-  ArrowLeft,
   Table2,
   XIcon,
   ClipboardList,
@@ -87,11 +78,9 @@ import { formatReadableBytes } from '@/lib/tenant-expenses';
 import type {
   FileSystemItem,
   FileManagerSelectionChange,
-  MaterialItem,
   MaterialOrder,
   OcrFolderLink,
   OcrTablaColumn,
-  OcrDocumentStatus,
   TablaDataRow,
   OcrDocumentTableRow,
   SelectionChangeOptions,
@@ -101,7 +90,6 @@ import type {
 import {
   getCachedFileTree,
   setCachedFileTree,
-  invalidateFileTreeCache,
   getCachedSignedUrl,
   setCachedSignedUrl,
   getOrCreateSignedUrlRequest,
@@ -109,18 +97,15 @@ import {
   setCachedBlobUrl,
   preloadAndCacheFile,
   clearCachesForObra,
-  getCachedApsModels,
-  setCachedApsModels,
   getCachedOcrLinks,
   setCachedOcrLinks,
 } from './cache';
-import { CellType, FormTableConfig, FormTableRow, ColumnDef, ColumnField } from '@/components/form-table/types';
+import { CellType, FormTableConfig, ColumnDef, ColumnField } from '@/components/form-table/types';
 import type { FormTable as FormTableComponent } from '@/components/form-table/form-table';
 import { createRowFromColumns } from '@/components/form-table/table-utils';
 import { FilterSection, RangeInputGroup, TextFilterInput } from '@/components/form-table/filter-components';
-import { FileText as FileTextIcon2, Hash, Type, DollarSign as DollarSignIcon, ToggleLeft } from 'lucide-react';
+import { FileText as FileTextIcon2, Type, DollarSign as DollarSignIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { HoverCardPortal } from '@radix-ui/react-hover-card';
 import { GlassyIcon } from '@/components/ui/glassy-icon';
 import { NotchTail } from "@/components/ui/notch-tail";
 import { resolveSpreadsheetSectionType } from '@/lib/spreadsheet-preview-summary';
@@ -132,6 +117,31 @@ import {
   isGuidedExcelTour,
 } from '@/lib/demo-tours/excel-guided-flow';
 import { downloadDemoCertificadoPdf } from '@/lib/demo-tours/demo-certificado-pdf';
+import { buildPdfPageNumbers, clonePdfBytes, loadPdfJs } from './pdf-thumbnails';
+import {
+  CERTIFICADO_SPREADSHEET_TABLE_PRESETS,
+  DATA_TYPE_LABELS,
+  PRESUPUESTO_ESTUDIO_TV_SPREADSHEET_TABLE_PRESETS,
+  type SpreadsheetTemplateId,
+} from './table-presets';
+import {
+  extractRequestError,
+  formatDateTimeLabel,
+  formatRecoveryTimeLeft,
+  getAutoSelectedCertificadoOcrTablaIds,
+  getConditionalClass,
+  getFolderSegmentKey,
+  getGuidedDocumentsFolderTargetId,
+  getLegacyOrderNumber,
+  getLegacyOrderString,
+  IMAGE_FILE_EXTENSIONS,
+  is3DModelFile,
+  sortTableLinksForSelector,
+  upsertFilesIntoFolderTree,
+} from './file-manager-utils';
+import { notifyOcrImportFailure, renderOcrStatusBadge } from './ocr-status';
+import { FileThumbnail } from './components/file-thumbnail';
+import { OcrDocumentSourceCell } from './components/ocr-document-source-cell';
 
 const DocumentSheet = dynamic(
   () => import('./components/document-sheet').then((mod) => mod.DocumentSheet),
@@ -198,236 +208,6 @@ async function fetchPermissionChecks(keys: string[]): Promise<Record<string, boo
   return payload.permissions ?? {};
 }
 
-function clonePdfBytes(pdfBytes: Uint8Array) {
-  return pdfBytes.slice();
-}
-
-type PdfViewport = {
-  width: number;
-  height: number;
-};
-
-type PdfPageProxy = {
-  getViewport(options: { scale: number }): PdfViewport;
-  render(params: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }): { promise: Promise<void> };
-};
-
-type PdfDocumentProxy = {
-  numPages: number;
-  getPage(pageNumber: number): Promise<PdfPageProxy>;
-  destroy?: () => void | Promise<void>;
-};
-
-type PdfJsModule = {
-  GlobalWorkerOptions?: { workerSrc: string };
-  getDocument(params: { data: Uint8Array; disableWorker?: boolean }): { promise: Promise<PdfDocumentProxy> };
-};
-
-let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
-
-function loadPdfJs() {
-  pdfJsModulePromise ??= import('pdfjs-dist/legacy/build/pdf.mjs').then((pdfjsModule) => {
-    const pdfjs = pdfjsModule as unknown as PdfJsModule;
-    if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url,
-      ).toString();
-    }
-    return pdfjs;
-  });
-  return pdfJsModulePromise;
-}
-
-const PDF_THUMBNAIL_MAX_SIZE = 220;
-const PDF_THUMBNAIL_IDLE_TIMEOUT_MS = 1_500;
-const PDF_THUMBNAIL_FALLBACK_DELAY_MS = 250;
-let activePdfThumbnailTasks = 0;
-const pendingPdfThumbnailTasks: Array<() => void> = [];
-
-function enqueuePdfThumbnailTask<T>(task: () => Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const run = () => {
-      activePdfThumbnailTasks += 1;
-      task()
-        .then(resolve, reject)
-        .finally(() => {
-          activePdfThumbnailTasks = Math.max(0, activePdfThumbnailTasks - 1);
-          const nextTask = pendingPdfThumbnailTasks.shift();
-          if (nextTask) nextTask();
-        });
-    };
-
-    if (activePdfThumbnailTasks < 1) {
-      run();
-    } else {
-      pendingPdfThumbnailTasks.push(run);
-    }
-  });
-}
-
-function scheduleIdleThumbnailTask(callback: () => void) {
-  if (typeof window === 'undefined') return () => {};
-  const idleWindow = window as typeof window & {
-    requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
-    cancelIdleCallback?: (handle: number) => void;
-  };
-
-  if (typeof idleWindow.requestIdleCallback === 'function') {
-    const handle = idleWindow.requestIdleCallback(callback, { timeout: PDF_THUMBNAIL_IDLE_TIMEOUT_MS });
-    return () => idleWindow.cancelIdleCallback?.(handle);
-  }
-
-  const timeout = window.setTimeout(callback, PDF_THUMBNAIL_FALLBACK_DELAY_MS);
-  return () => window.clearTimeout(timeout);
-}
-
-async function renderPdfFirstPageThumbnail(pdfBytes: Uint8Array) {
-  const pdfjs = await loadPdfJs();
-  const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes) });
-  const pdf = await loadingTask.promise;
-
-  try {
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 1 });
-    const scale = Math.min(
-      PDF_THUMBNAIL_MAX_SIZE / viewport.width,
-      PDF_THUMBNAIL_MAX_SIZE / viewport.height,
-      1
-    );
-    const scaledViewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    canvas.width = Math.max(1, Math.floor(scaledViewport.width));
-    canvas.height = Math.max(1, Math.floor(scaledViewport.height));
-    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-    return canvas.toDataURL('image/png');
-  } finally {
-    if (typeof pdf.destroy === 'function') {
-      await pdf.destroy();
-    }
-  }
-}
-
-const DATA_TYPE_LABELS: Record<TablaColumnDataType, string> = {
-  text: 'Texto',
-  number: 'Número',
-  currency: 'Moneda',
-  boolean: 'Booleano',
-  date: 'Fecha',
-};
-
-type DataFolderColumnPayload = {
-  label: string;
-  fieldKey: string;
-  dataType: TablaColumnDataType;
-  required: boolean;
-  position: number;
-  config?: Record<string, unknown>;
-};
-
-type DataFolderTablePreset = {
-  name: string;
-  description: string;
-  columns: DataFolderColumnPayload[];
-};
-
-type SpreadsheetTemplateId = 'auto' | 'certificado' | 'presupuesto_estudio_tv';
-
-const CERTIFICADO_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] = [
-  {
-    name: 'PMC Resumen',
-    description: 'Resumen mensual del certificado: período, monto, avance acumulado.',
-    columns: [
-      { label: 'Período', fieldKey: 'periodo', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['periodo', 'mes', 'month', 'correspondiente'] } },
-      { label: 'N° Certificado', fieldKey: 'nro_certificado', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['nro', 'numero', 'certificado', 'cert', 'n°'] } },
-      { label: 'Fecha Certificación', fieldKey: 'fecha_certificacion', dataType: 'text', required: false, position: 2, config: { excelKeywords: ['fecha', 'certificacion', 'date'] } },
-      { label: 'Monto Certificado', fieldKey: 'monto_certificado', dataType: 'currency', required: false, position: 3, config: { excelKeywords: ['monto', 'importe', 'certificado'] } },
-      { label: 'Avance Físico Acum. %', fieldKey: 'avance_fisico_acumulado_pct', dataType: 'number', required: false, position: 4, config: { excelKeywords: ['avance', 'fisico', 'acumulado', '%'] } },
-      { label: 'Monto Acumulado', fieldKey: 'monto_acumulado', dataType: 'currency', required: false, position: 5, config: { excelKeywords: ['monto', 'acumulado', 'total'] } },
-      { label: 'N° Expediente', fieldKey: 'n_expediente', dataType: 'text', required: false, position: 6, config: { excelKeywords: ['expediente', 'exp', 'nro', 'numero', 'n°'] } },
-    ],
-  },
-  {
-    name: 'PMC Items',
-    description: 'Desglose por rubro/item del certificado con avances e importes.',
-    columns: [
-      { label: 'Código Item', fieldKey: 'item_code', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['item', 'codigo', 'cod', 'rubro'] } },
-      { label: 'Descripción', fieldKey: 'descripcion', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['descripcion', 'rubro', 'concepto', 'detalle'] } },
-      { label: 'Incidencia %', fieldKey: 'incidencia_pct', dataType: 'number', required: false, position: 2, config: { excelKeywords: ['incidencia', '%'] } },
-      { label: 'Monto Rubro', fieldKey: 'monto_rubro', dataType: 'currency', required: false, position: 3, config: { excelKeywords: ['total', 'rubro', 'monto'] } },
-      { label: 'Avance Anterior %', fieldKey: 'avance_anterior_pct', dataType: 'number', required: false, position: 4, config: { excelKeywords: ['anterior', 'avance', '%'] } },
-      { label: 'Avance Período %', fieldKey: 'avance_periodo_pct', dataType: 'number', required: false, position: 5, config: { excelKeywords: ['presente', 'periodo', 'avance', '%'] } },
-      { label: 'Avance Acumulado %', fieldKey: 'avance_acumulado_pct', dataType: 'number', required: false, position: 6, config: { excelKeywords: ['acumulado', 'avance', '%'] } },
-      { label: 'Monto Anterior $', fieldKey: 'monto_anterior', dataType: 'currency', required: false, position: 7, config: { excelKeywords: ['anterior', 'cert', 'importe'] } },
-      { label: 'Monto Presente $', fieldKey: 'monto_presente', dataType: 'currency', required: false, position: 8, config: { excelKeywords: ['presente', 'cert', 'importe'] } },
-      { label: 'Monto Acumulado $', fieldKey: 'monto_acumulado', dataType: 'currency', required: false, position: 9, config: { excelKeywords: ['total', 'acumulado', 'cert', 'importe'] } },
-    ],
-  },
-  {
-    name: 'Curva Plan',
-    description: 'Curva de inversiones con avance mensual y acumulado.',
-    columns: [
-      { label: 'Período', fieldKey: 'periodo', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['mes', 'periodo', 'month'] } },
-      { label: 'Avance Mensual %', fieldKey: 'avance_mensual_pct', dataType: 'number', required: false, position: 1, config: { excelKeywords: ['avance', 'mensual', '%'] } },
-      { label: 'Avance Acumulado %', fieldKey: 'avance_acumulado_pct', dataType: 'number', required: false, position: 2, config: { excelKeywords: ['acumulado', 'financiero', '%'] } },
-    ],
-  },
-];
-
-const PRESUPUESTO_ESTUDIO_TV_SPREADSHEET_TABLE_PRESETS: DataFolderTablePreset[] = [
-  {
-    name: 'Materiales',
-    description: 'Detalle de materiales/mano de obra/equipos detectado en bloques desde columna P.',
-    columns: [
-      { label: 'Rubro', fieldKey: 'rubro', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['rubro'] } },
-      { label: 'Item', fieldKey: 'item', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['item', 'titulo'] } },
-      { label: 'Item Unidad', fieldKey: 'item_unidad', dataType: 'text', required: false, position: 2, config: { excelKeywords: ['item unidad', 'unidad item'] } },
-      { label: 'Item Cantidad', fieldKey: 'item_cantidad', dataType: 'number', required: false, position: 3, config: { excelKeywords: ['item cantidad', 'cantidad item'] } },
-      { label: 'Seccion', fieldKey: 'seccion', dataType: 'text', required: false, position: 4, config: { excelKeywords: ['seccion', 'materiales', 'mano de obra', 'equipos'] } },
-      { label: 'Descripcion', fieldKey: 'descripcion', dataType: 'text', required: false, position: 5, config: { excelKeywords: ['descripcion', 'detalle'] } },
-      { label: 'Unidad', fieldKey: 'unidad', dataType: 'text', required: false, position: 6, config: { excelKeywords: ['unidad', 'und', 'u'] } },
-      { label: 'Cantidad', fieldKey: 'cantidad', dataType: 'number', required: false, position: 7, config: { excelKeywords: ['cantidad', 'cant'] } },
-      { label: 'Precio', fieldKey: 'precio', dataType: 'currency', required: false, position: 8, config: { excelKeywords: ['precio', 'unitario'] } },
-      { label: 'Subtotal', fieldKey: 'subtotal', dataType: 'currency', required: false, position: 9, config: { excelKeywords: ['subtotal', 'total'] } },
-    ],
-  },
-  {
-    name: 'Presupuesto',
-    description: 'Tabla principal del presupuesto detectada desde columnas E:M.',
-    columns: [
-      { label: 'Rubro', fieldKey: 'rubro', dataType: 'text', required: false, position: 0, config: { excelKeywords: ['rubro'] } },
-      { label: 'Descripcion', fieldKey: 'descripcion', dataType: 'text', required: false, position: 1, config: { excelKeywords: ['descripcion', 'detalle'] } },
-      { label: 'Unidad', fieldKey: 'unidad', dataType: 'text', required: false, position: 2, config: { excelKeywords: ['unidad', 'und', 'u'] } },
-      { label: 'Cantidad', fieldKey: 'cantidad', dataType: 'number', required: false, position: 3, config: { excelKeywords: ['cantidad', 'cant'] } },
-      { label: 'Precio', fieldKey: 'precio', dataType: 'currency', required: false, position: 4, config: { excelKeywords: ['precio', 'unitario'] } },
-      { label: 'Subtotal', fieldKey: 'subtotal', dataType: 'currency', required: false, position: 5, config: { excelKeywords: ['subtotal', 'total'] } },
-    ],
-  },
-];
-
-const IMAGE_FILE_EXTENSIONS = new Set([
-  'png',
-  'jpg',
-  'jpeg',
-  'gif',
-  'webp',
-  'bmp',
-  'svg',
-  'avif',
-  'heic',
-  'heif',
-]);
-const MODEL_FILE_EXTENSIONS = new Set(['nwc', 'nwd', 'rvt', 'dwg', 'ifc', 'zip']);
-
-// Utility function to check if a file is a 3D model
-const is3DModelFile = (fileName: string): boolean => {
-  const ext = fileName.toLowerCase().split('.').pop();
-  return MODEL_FILE_EXTENSIONS.has(ext || '');
-};
-
-
 type OcrDocumentTableFilters = {
   docPath: string | null;
   /** Dynamic column filters keyed by fieldKey. For text columns, stores a search string.
@@ -447,33 +227,6 @@ type OcrOrderItemRow = OcrDocumentTableRow & {
   precioUnitario: number;
   total: number;
 };
-
-function getLegacyOrderString(
-  data: Record<string, unknown>,
-  keys: string[],
-): string {
-  for (const key of keys) {
-    const value = data[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  return '';
-}
-
-function getLegacyOrderNumber(
-  data: Record<string, unknown>,
-  keys: string[],
-): number {
-  for (const key of keys) {
-    const value = data[key];
-    const parsed = Number(value ?? 0);
-    if (Number.isFinite(parsed) && parsed !== 0) {
-      return parsed;
-    }
-  }
-  return 0;
-}
 
 type OcrOrderItemFilters = Record<string, never>;
 
@@ -521,67 +274,6 @@ type TableSelectionEntry = {
   tablaName: string;
 };
 
-const buildPdfPageNumbers = (pageCount: number) =>
-  Array.from({ length: Math.max(0, pageCount) }, (_, index) => index + 1);
-
-function formatDateTimeLabel(value: string | null | undefined) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
-}
-
-function formatRecoveryTimeLeft(value: string | null | undefined) {
-  if (!value) return 'Sin fecha';
-  const deadline = new Date(value).getTime();
-  if (!Number.isFinite(deadline)) return 'Sin fecha';
-  const diffMs = deadline - Date.now();
-  if (diffMs <= 0) return 'Expirada';
-  const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
-  if (diffHours < 24) return `${diffHours}h restantes`;
-  const diffDays = Math.ceil(diffHours / 24);
-  return `${diffDays}d restantes`;
-}
-
-function extractRequestError(error: unknown): { message: string; code: string | null } {
-  if (error && typeof error === 'object') {
-    const maybeError = error as { message?: unknown; code?: unknown };
-    return {
-      message:
-        typeof maybeError.message === 'string' && maybeError.message.trim().length > 0
-          ? maybeError.message
-          : 'Error desconocido',
-      code: typeof maybeError.code === 'string' ? maybeError.code : null,
-    };
-  }
-  if (error instanceof Error) {
-    return { message: error.message, code: null };
-  }
-  return { message: 'Error desconocido', code: null };
-}
-
-function getConditionalClass(
-  value: unknown,
-  config?: Record<string, unknown>
-): string | undefined {
-  const conditional =
-    config?.conditional && typeof config.conditional === 'object'
-      ? (config.conditional as Record<string, unknown>)
-      : null;
-  if (!conditional) return undefined;
-  const numeric = toNumericValue(value);
-  if (numeric == null) return undefined;
-  const criticalBelow = toNumericValue(conditional.criticalBelow);
-  const criticalAbove = toNumericValue(conditional.criticalAbove);
-  const warnBelow = toNumericValue(conditional.warnBelow);
-  const warnAbove = toNumericValue(conditional.warnAbove);
-  if (criticalBelow != null && numeric <= criticalBelow) return 'bg-red-100 text-red-800';
-  if (criticalAbove != null && numeric >= criticalAbove) return 'bg-red-100 text-red-800';
-  if (warnBelow != null && numeric <= warnBelow) return 'bg-amber-100 text-amber-800';
-  if (warnAbove != null && numeric >= warnAbove) return 'bg-amber-100 text-amber-800';
-  return undefined;
-}
-
 type FileManagerProps = {
   obraId: string;
   materialOrders?: MaterialOrder[];
@@ -613,550 +305,6 @@ type TenantUsageInfo = {
   };
 };
 
-type FileThumbnailProps = {
-  item: FileSystemItem;
-  getDocumentSignedUrl: (storagePath: string, expiresIn?: number) => Promise<string | null>;
-  downloadStoredDocumentBytes: (storagePath: string) => Promise<Uint8Array>;
-  getFileIcon: (mimetype?: string) => ReactNode;
-  renderOcrStatusBadge: (item: FileSystemItem, context?: OcrStatusBadgeContext) => ReactNode;
-  /** When true, omit the filename strip on image/PDF previews (e.g. when the parent already shows the name). */
-  hideCaption?: boolean;
-};
-
-type OcrStatusBadgeContext = "tree" | "thumbnail" | "sheet";
-
-type OcrStatusMeta = {
-  icon: typeof CheckCircle2;
-  label: string;
-  shortLabel: string;
-  tooltip: string;
-  toneClassName: string;
-};
-
-function getFolderSegmentKey(folder: FileSystemItem): string {
-  if (folder.type !== 'folder') return '';
-  if (typeof folder.relativePath === 'string' && folder.relativePath.trim().length > 0) {
-    return normalizeFolderPath(folder.relativePath).split('/').filter(Boolean).pop() ?? '';
-  }
-  return normalizeFolderName(folder.name);
-}
-
-function getGuidedDocumentsFolderTargetId(folderName: string): string | undefined {
-  const normalized = normalizeFolderName(folderName);
-  if (normalized === 'certificados') return 'documents-folder-certificados';
-  if (normalized === 'curva-de-avance') return 'documents-folder-curva-avance';
-  if (normalized === 'ordenes-de-compra') return 'documents-folder-ordenes-compra';
-  if (normalized === 'fotos-de-obra') return 'documents-folder-fotos-obra';
-  if (normalized === 'presupuesto-personalizado') return 'documents-folder-presupuesto-personalizado';
-  return undefined;
-}
-
-function getAutoSelectedCertificadoOcrTablaIds(links: OcrFolderLink[]): string[] {
-  const uniqueLinks = Array.from(new Map(links.map((link) => [link.tablaId, link])).values());
-  if (uniqueLinks.length === 0) return [];
-
-  const pmcResumenLink = uniqueLinks.find((link) => getCertificadoTableSelectorScore(link) === 0);
-  if (!pmcResumenLink) return [];
-
-  const hasCertificadoCompanionTable = uniqueLinks.some((link) => {
-    const score = getCertificadoTableSelectorScore(link);
-    return score === 1 || score === 2;
-  });
-
-  return hasCertificadoCompanionTable ? [pmcResumenLink.tablaId] : [];
-}
-
-function getCertificadoTableSelectorScore(link: OcrFolderLink): number | null {
-  const normalizedName = normalizeFolderName(link.tablaName ?? '');
-  if (normalizedName.includes('pmc-resumen')) return 0;
-  if (normalizedName.includes('pmc-items')) return 1;
-  if (normalizedName.includes('curva-plan')) return 2;
-
-  const fieldKeys = new Set(link.columns.map((column) => column.fieldKey));
-  const looksLikeResumen =
-    fieldKeys.has('monto_certificado') &&
-    (fieldKeys.has('monto_acumulado') || fieldKeys.has('avance_fisico_acumulado_pct'));
-  const looksLikeItems =
-    (fieldKeys.has('item_code') || fieldKeys.has('descripcion')) &&
-    (fieldKeys.has('avance_periodo_pct') || fieldKeys.has('monto_presente'));
-  const looksLikePlan =
-    fieldKeys.has('periodo') &&
-    fieldKeys.has('avance_mensual_pct') &&
-    fieldKeys.has('avance_acumulado_pct');
-
-  if (looksLikeResumen) return 0;
-  if (looksLikeItems) return 1;
-  if (looksLikePlan) return 2;
-  return null;
-}
-
-function sortTableLinksForSelector(links: OcrFolderLink[]): OcrFolderLink[] {
-  if (links.length <= 1) return links;
-
-  const certificadoScores = links.map((link, index) => ({
-    index,
-    link,
-    score: getCertificadoTableSelectorScore(link),
-  }));
-  if (certificadoScores.some((entry) => entry.score !== null)) {
-    return certificadoScores
-      .toSorted((left, right) => {
-        const leftScore = left.score ?? 99;
-        const rightScore = right.score ?? 99;
-        if (leftScore !== rightScore) return leftScore - rightScore;
-        return left.index - right.index;
-      })
-      .map((entry) => entry.link);
-  }
-
-  const hasPresupuesto = links.some((link) => normalizeFolderName(link.tablaName ?? '').includes('presupuesto'));
-  const hasMateriales = links.some((link) => normalizeFolderName(link.tablaName ?? '').includes('material'));
-
-  if (!hasPresupuesto || !hasMateriales) return links;
-
-  const score = (link: OcrFolderLink) => {
-    const normalized = normalizeFolderName(link.tablaName ?? '');
-    if (normalized.includes('presupuesto')) return 0;
-    if (normalized.includes('material')) return 1;
-    return 2;
-  };
-
-  return links.toSorted((left, right) => {
-    const scoreDiff = score(left) - score(right);
-    if (scoreDiff !== 0) return scoreDiff;
-    return (left.tablaName ?? '').localeCompare(right.tablaName ?? '', 'es', { sensitivity: 'base' });
-  });
-}
-
-function getOcrStatusMeta(item: FileSystemItem): OcrStatusMeta | null {
-  if (item.type !== 'file' || !item.ocrDocumentStatus) return null;
-
-  const rowsExtracted =
-    typeof item.ocrRowsExtracted === 'number' && Number.isFinite(item.ocrRowsExtracted)
-      ? item.ocrRowsExtracted
-      : null;
-
-  switch (item.ocrDocumentStatus) {
-    case 'completed':
-      if (rowsExtracted !== null && rowsExtracted <= 0) {
-        return {
-          icon: AlertCircle,
-          label: 'Sin datos extraidos',
-          shortLabel: 'Sin datos',
-          tooltip: 'La extraccion termino pero no se encontraron datos.',
-          toneClassName: 'border-rose-300 bg-rose-50 text-rose-800 shadow-[0_8px_18px_rgba(225,29,72,0.14)]',
-        };
-      }
-
-      return {
-        icon: CheckCircle2,
-        label: rowsExtracted && rowsExtracted > 0 ? `${rowsExtracted} dato${rowsExtracted === 1 ? '' : 's'} extraidos` : 'Datos extraidos',
-        shortLabel: 'Extraido',
-        tooltip:
-          rowsExtracted && rowsExtracted > 0
-            ? `Extraccion completada con ${rowsExtracted} dato${rowsExtracted === 1 ? '' : 's'} detectados.`
-            : 'Extraccion completada correctamente.',
-        toneClassName: 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-[0_8px_18px_rgba(5,150,105,0.14)]',
-      };
-    case 'failed':
-      if (item.ocrErrorCode === 'LINEAGE_RECONCILIATION_CONFLICT') {
-        return {
-          icon: AlertCircle,
-          label: 'Conflicto de lineage',
-          shortLabel: 'Conflicto',
-          tooltip:
-            item.ocrDocumentError?.trim() ||
-            'No se pudo reconciliar la identidad estable del documento. Revisá filas duplicadas o reprocesá con otra configuración.',
-          toneClassName: 'border-rose-300 bg-rose-50 text-rose-800 shadow-[0_8px_18px_rgba(225,29,72,0.14)]',
-        };
-      }
-      return {
-        icon: AlertCircle,
-        label: 'Error de OCR',
-        shortLabel: 'Error OCR',
-        tooltip: item.ocrDocumentError?.trim() || 'La extraccion fallo y no se pudieron obtener datos.',
-        toneClassName: 'border-rose-300 bg-rose-50 text-rose-800 shadow-[0_8px_18px_rgba(225,29,72,0.14)]',
-      };
-    case 'processing':
-      return {
-        icon: Loader2,
-        label: 'Extrayendo datos',
-        shortLabel: 'Procesando',
-        tooltip: 'La extraccion OCR esta en proceso.',
-        toneClassName: 'border-sky-300 bg-sky-50 text-sky-800 shadow-[0_8px_18px_rgba(14,165,233,0.14)]',
-      };
-    case 'pending':
-      return {
-        icon: Clock,
-        label: 'Pendiente de OCR',
-        shortLabel: 'Pendiente',
-        tooltip: 'El documento esta esperando procesamiento OCR.',
-        toneClassName: 'border-amber-300 bg-amber-50 text-amber-800 shadow-[0_8px_18px_rgba(245,158,11,0.14)]',
-      };
-    case 'unprocessed':
-      return {
-        icon: XIcon,
-        label: 'Sin extraer',
-        shortLabel: 'Sin OCR',
-        tooltip: 'Todavia no se ejecuto la extraccion de datos para este documento.',
-        toneClassName: 'border-stone-300 bg-white text-stone-700 shadow-[0_8px_18px_rgba(28,25,23,0.08)]',
-      };
-    default:
-      return null;
-  }
-}
-
-function notifyOcrImportFailure({
-  status,
-  code,
-  serverMessage,
-  fallbackMessage,
-}: {
-  status: number;
-  code?: string | null;
-  serverMessage?: string | null;
-  fallbackMessage: string;
-}) {
-  if (code === 'LINEAGE_RECONCILIATION_CONFLICT') {
-    toast.error(
-      serverMessage ??
-      'Hubo un conflicto de continuidad. El documento no se reconcilio automaticamente con la materializacion anterior. Revisá Lineage o corregí la identidad antes de reprocesar.'
-    );
-    return;
-  }
-
-  if (status === 413) {
-    toast.warning(
-      serverMessage ??
-      'El archivo o las paginas seleccionadas son demasiado grandes para OCR. Probá con menos paginas.'
-    );
-    return;
-  }
-
-  if (status === 402) {
-    toast.warning(serverMessage ?? 'Superaste el limite de tokens de IA de tu plan.');
-    return;
-  }
-
-  toast.error(serverMessage ?? fallbackMessage);
-}
-
-function renderOcrStatusBadge(item: FileSystemItem, context: OcrStatusBadgeContext = 'tree') {
-  const meta = getOcrStatusMeta(item);
-  if (!meta) return null;
-
-  const Icon = meta.icon;
-  const label = context === 'sheet' ? meta.label : meta.shortLabel;
-  const className = cn(
-    'inline-flex items-center rounded-full border font-semibold backdrop-blur-sm',
-    meta.toneClassName,
-    context === 'tree' && 'size-6 justify-center p-0 shadow-none',
-    context === 'thumbnail' && 'min-h-7 gap-1.5 px-2.5 py-1 text-[11px] uppercase tracking-[0.08em]',
-    context === 'sheet' && 'min-h-8 gap-2 px-3 py-1.5 text-xs tracking-[0.08em] uppercase'
-  );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className={className}>
-          <Icon className={cn('size-3.5 shrink-0', meta.icon === Loader2 && 'animate-spin')} />
-          {/* {context !== 'tree' && <span className="leading-none">{label}</span>} */}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{meta.tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-const pdfThumbnailCache = new Map<string, string>();
-
-function scheduleThumbnailRetry(callback: () => void) {
-  return setTimeout(callback, 800);
-}
-
-function sortFileManagerChildren(children: FileSystemItem[]) {
-  return [...children].sort((left, right) => {
-    if (left.type !== right.type) return left.type === 'folder' ? -1 : 1;
-    return left.name.localeCompare(right.name, 'es', { sensitivity: 'base' });
-  });
-}
-
-function upsertFilesIntoFolderTree(
-  tree: FileSystemItem,
-  folderId: string,
-  files: FileSystemItem[],
-  markFolderLoaded: boolean
-): FileSystemItem {
-  if (files.length === 0) return tree;
-
-  const upsertIntoFolder = (folder: FileSystemItem) => {
-    const currentChildren = folder.children ?? [];
-    const incomingPaths = new Set(files.map((file) => file.storagePath).filter(Boolean));
-    const incomingIds = new Set(files.map((file) => file.id));
-    const preservedChildren = currentChildren.filter((child) => {
-      if (child.type !== 'file') return true;
-      if (incomingIds.has(child.id)) return false;
-      return !child.storagePath || !incomingPaths.has(child.storagePath);
-    });
-    const nextChildren = sortFileManagerChildren([...preservedChildren, ...files]);
-    const fileCount = nextChildren.filter((child) => child.type === 'file').length;
-    return {
-      ...folder,
-      children: nextChildren,
-      childrenLoaded: markFolderLoaded || folder.childrenLoaded,
-      hasFiles: fileCount > 0 || Boolean(folder.hasFiles),
-      fileCount,
-    };
-  };
-
-  if (tree.id === folderId) {
-    return upsertIntoFolder(tree);
-  }
-
-  const walk = (node: FileSystemItem): FileSystemItem => {
-    if (node.type !== 'folder' || !node.children) return node;
-    let changed = false;
-    const nextChildren = node.children.map((child) => {
-      if (child.id === folderId && child.type === 'folder') {
-        changed = true;
-        return upsertIntoFolder(child);
-      }
-      const nextChild = walk(child);
-      if (nextChild !== child) changed = true;
-      return nextChild;
-    });
-    return changed ? { ...node, children: nextChildren } : node;
-  };
-
-  return walk(tree);
-}
-
-function useNearViewport<T extends HTMLElement>(rootMargin = '360px') {
-  const ref = useRef<T | null>(null);
-  const [isNearViewport, setIsNearViewport] = useState(false);
-
-  useEffect(() => {
-    if (isNearViewport) return;
-    const element = ref.current;
-    if (!element) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      const timeout = setTimeout(() => setIsNearViewport(true), 0);
-      return () => clearTimeout(timeout);
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setIsNearViewport(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin }
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [isNearViewport, rootMargin]);
-
-  return [ref, isNearViewport] as const;
-}
-
-const FileThumbnail = memo(function FileThumbnail({
-  item,
-  getDocumentSignedUrl,
-  downloadStoredDocumentBytes,
-  getFileIcon,
-  renderOcrStatusBadge,
-  hideCaption = false,
-}: FileThumbnailProps) {
-  const storagePath = item.storagePath;
-  const fileExt = item.name.toLowerCase().split('.').pop() ?? '';
-  const isImageFile =
-    Boolean(item.mimetype?.startsWith('image/')) ||
-    IMAGE_FILE_EXTENSIONS.has(fileExt);
-  const isPdfFile = item.mimetype === 'application/pdf' || fileExt === 'pdf';
-  const isPreviewableFile = isImageFile || isPdfFile;
-  // Check blob cache first, then signed URL cache
-  const initialUrl = storagePath
-    ? (isPdfFile
-      ? (pdfThumbnailCache.get(storagePath) ?? null)
-      : (getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath)))
-    : null;
-  const [thumbState, setThumbState] = useState<{
-    storagePath: string | null;
-    url: string | null;
-    retryCount: number;
-  }>({
-    storagePath: storagePath ?? null,
-    url: initialUrl,
-    retryCount: 0,
-  });
-  const activeThumbState = thumbState.storagePath === (storagePath ?? null) ? thumbState : null;
-  const thumbUrl = activeThumbState?.url ?? initialUrl;
-  const retryCount = activeThumbState?.retryCount ?? 0;
-  const [thumbnailRef, shouldLoadThumbnail] = useNearViewport<HTMLDivElement>();
-
-  useEffect(() => {
-    if (!storagePath || !isPreviewableFile || !shouldLoadThumbnail) {
-      return;
-    }
-
-    if (isPdfFile) {
-      const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
-      if (cachedPdfThumb) {
-        queueMicrotask(() => {
-          setThumbState({ storagePath, url: cachedPdfThumb, retryCount: 0 });
-        });
-        return;
-      }
-    }
-
-    // Check blob cache first (instant, no network)
-    const cachedBlob = getCachedBlobUrl(storagePath);
-    if (cachedBlob && isImageFile) {
-      return;
-    }
-
-    // Check signed URL cache
-    const cachedSignedUrl = getCachedSignedUrl(storagePath);
-    if (cachedSignedUrl && isImageFile) {
-      // Preload to blob cache in background
-      preloadAndCacheFile(cachedSignedUrl, storagePath).then((blobUrl) => {
-        setThumbState({ storagePath, url: blobUrl, retryCount: 0 });
-      });
-      return;
-    }
-
-    let isMounted = true;
-    const retryTimeouts: ReturnType<typeof setTimeout>[] = [];
-
-    const cancelIdleTask = scheduleIdleThumbnailTask(() => {
-      void (async () => {
-        const getSignedUrl = async () => {
-          let signedUrl: string | null = null;
-          try {
-            signedUrl = await getDocumentSignedUrl(storagePath, 3600);
-          } catch (error) {
-            console.warn('Document thumbnail access failed:', error);
-            return null;
-          }
-          if (!isMounted || !signedUrl) {
-            // Fresh uploads can take a short moment before signed URL is available.
-            if (isMounted && retryCount < 5) {
-              const retryTimeout = scheduleThumbnailRetry(() => {
-                if (isMounted) {
-                  setThumbState((prev) => ({
-                    storagePath,
-                    url: prev.storagePath === storagePath ? prev.url : null,
-                    retryCount: (prev.storagePath === storagePath ? prev.retryCount : 0) + 1,
-                  }));
-                }
-              });
-              retryTimeouts.push(retryTimeout);
-            }
-            return null;
-          }
-          return signedUrl;
-        };
-
-        const signedUrl = await getSignedUrl();
-        if (!isMounted || !signedUrl) return;
-
-        if (isPdfFile) {
-          try {
-            const dataUrl = await enqueuePdfThumbnailTask(async () => {
-              const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
-              if (cachedPdfThumb) return cachedPdfThumb;
-
-              let pdfBytes: Uint8Array | null = null;
-              try {
-                const response = await fetch(signedUrl, { cache: 'force-cache' });
-                if (response.ok) {
-                  pdfBytes = new Uint8Array(await response.arrayBuffer());
-                }
-              } catch {
-                // Fall back to direct storage download below.
-              }
-
-              if (!pdfBytes) {
-                pdfBytes = await downloadStoredDocumentBytes(storagePath).catch(() => null);
-              }
-              if (!pdfBytes) return null;
-
-              const thumbnail = await renderPdfFirstPageThumbnail(pdfBytes);
-              if (thumbnail) {
-                pdfThumbnailCache.set(storagePath, thumbnail);
-              }
-              return thumbnail;
-            });
-            if (isMounted && dataUrl) {
-              setThumbState({ storagePath, url: dataUrl, retryCount: 0 });
-            }
-          } catch (error) {
-            console.warn('PDF thumbnail generation failed:', error);
-          }
-          return;
-        }
-
-        // Set signed URL first for immediate display
-        setThumbState({ storagePath, url: signedUrl, retryCount: 0 });
-        // Then preload to blob cache
-        const blobUrl = await preloadAndCacheFile(signedUrl, storagePath);
-        if (isMounted) {
-          setThumbState({ storagePath, url: blobUrl, retryCount: 0 });
-        }
-      })();
-    });
-
-    return () => {
-      isMounted = false;
-      cancelIdleTask();
-      retryTimeouts.forEach(clearTimeout);
-    };
-  }, [
-    downloadStoredDocumentBytes,
-    getDocumentSignedUrl,
-    isImageFile,
-    isPdfFile,
-    isPreviewableFile,
-    retryCount,
-    shouldLoadThumbnail,
-    storagePath,
-  ]);
-
-  if (thumbUrl) {
-    return (
-      <div ref={thumbnailRef} className="relative w-full h-full">
-        <img
-          src={thumbUrl}
-          alt={item.name}
-          className="w-full h-full object-cover rounded-none"
-          loading="eager"
-          decoding="async"
-        />
-        <div className="absolute right-2 top-2 z-20">
-          {renderOcrStatusBadge(item, "thumbnail")}
-        </div>
-        {hideCaption ? null : (
-          <span
-            className="text-sm text-center truncate w-full text-stone-700 absolute bottom-0 left-0 right-0 px-2 py-1 bg-stone-200/50 backdrop-blur-sm"
-            title={item.name}
-          >
-            {item.name}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div ref={thumbnailRef} className="relative w-full h-full text-primary p-2">
-      {getFileIcon(item.mimetype)}
-      <div className="absolute left-2 top-2 z-20">
-        {renderOcrStatusBadge(item, "thumbnail")}
-      </div>
-    </div>
-  );
-});
 
 function FileManagerContent({
   obraId,
@@ -8613,233 +7761,6 @@ export function FileManager(props: FileManagerProps) {
   return <FileManagerContent {...props} />;
 }
 
-type OcrDocumentSourceCellProps = {
-  row: OcrDocumentTableRow;
-  obraId?: string;
-  documentsByStoragePath: Map<string, FileSystemItem>;
-  getDocumentSignedUrl: (storagePath: string, expiresIn?: number) => Promise<string | null>;
-  downloadStoredDocumentBytes: (storagePath: string) => Promise<Uint8Array>;
-};
-
-const OcrDocumentSourceCell = memo(function OcrDocumentSourceCell({
-  row,
-  obraId,
-  documentsByStoragePath,
-  getDocumentSignedUrl,
-  downloadStoredDocumentBytes,
-}: OcrDocumentSourceCellProps) {
-  const docPath: string | null =
-    typeof (row as Record<string, unknown>).__docPath === 'string'
-      ? (row as Record<string, unknown>).__docPath as string
-      : null;
-  const docName: string =
-    typeof (row as Record<string, unknown>).__docFileName === 'string'
-      ? (row as Record<string, unknown>).__docFileName as string
-      : docPath?.split('/').pop() ?? 'Documento sin nombre';
-  const relativePath: string =
-    docPath && obraId && docPath.startsWith(`${obraId}/`)
-      ? docPath.slice(obraId.length + 1)
-      : docPath ?? 'Sin ruta';
-  const docItem = docPath ? documentsByStoragePath.get(docPath) ?? null : null;
-  const storagePath: string | null = docItem?.storagePath ?? docPath ?? null;
-  const docNameLower = docName.toLowerCase();
-  const pathLower = (storagePath ?? '').toLowerCase();
-  const mimeLower = (docItem?.mimetype ?? '').toLowerCase();
-  const isImage =
-    mimeLower.startsWith('image/') ||
-    docNameLower.endsWith('.png') ||
-    docNameLower.endsWith('.jpg') ||
-    docNameLower.endsWith('.jpeg') ||
-    docNameLower.endsWith('.webp') ||
-    docNameLower.endsWith('.gif');
-  const isPdf =
-    mimeLower.includes('pdf') ||
-    docNameLower.endsWith('.pdf') ||
-    pathLower.endsWith('.pdf');
-  const isPreviewable = isImage || isPdf;
-
-  const [previewUrl, setPreviewUrl] = useState<string | null>(() => {
-    if (!storagePath || !isPreviewable) return null;
-    if (isPdf) {
-      return pdfThumbnailCache.get(storagePath) ?? null;
-    }
-    return getCachedBlobUrl(storagePath) ?? getCachedSignedUrl(storagePath) ?? null;
-  });
-  const [hasRequestedPreview, setHasRequestedPreview] = useState<boolean>(() => Boolean(previewUrl));
-  const [hoverOpen, setHoverOpen] = useState(false);
-
-  useEffect(() => {
-    if (!hasRequestedPreview || !storagePath || !isPreviewable) return;
-    let isMounted = true;
-    const applyPreview = (url: string | null) => {
-      if (isMounted) {
-        setPreviewUrl(url);
-      }
-    };
-
-    (async () => {
-      const getSignedUrl = async () => {
-        const signedUrl = await getDocumentSignedUrl(storagePath, 3600).catch(() => null);
-        if (!isMounted || !signedUrl) return null;
-        return signedUrl;
-      };
-
-      if (isPdf) {
-        const cachedPdfThumb = pdfThumbnailCache.get(storagePath);
-        if (cachedPdfThumb) {
-          applyPreview(cachedPdfThumb);
-          return;
-        }
-
-        const sourceUrl = getCachedSignedUrl(storagePath) ?? (await getSignedUrl());
-        if (!isMounted || !sourceUrl) return;
-
-        let pdfBytes: Uint8Array | null = null;
-        try {
-          const response = await fetch(sourceUrl, { cache: 'no-store' });
-          if (response.ok) {
-            pdfBytes = new Uint8Array(await response.arrayBuffer());
-          }
-        } catch {
-          // Fall back to direct storage download below.
-        }
-
-        if (!pdfBytes) {
-          pdfBytes = await downloadStoredDocumentBytes(storagePath).catch(() => null);
-        }
-
-        if (!isMounted || !pdfBytes) return;
-
-        try {
-          const dataUrl = await enqueuePdfThumbnailTask(() => renderPdfFirstPageThumbnail(pdfBytes));
-          if (!dataUrl) return;
-          pdfThumbnailCache.set(storagePath, dataUrl);
-          applyPreview(dataUrl);
-        } catch (error) {
-          console.error('OCR source PDF preview generation failed:', error);
-          applyPreview(null);
-        }
-        return;
-      }
-
-      const cachedBlob = getCachedBlobUrl(storagePath);
-      if (cachedBlob) {
-        applyPreview(cachedBlob);
-        return;
-      }
-
-      const cachedSigned = getCachedSignedUrl(storagePath);
-      if (cachedSigned) {
-        applyPreview(cachedSigned);
-        const blobUrl = await preloadAndCacheFile(cachedSigned, storagePath);
-        if (isMounted) {
-          setPreviewUrl(blobUrl);
-        }
-        return;
-      }
-
-      const signedUrl = await getSignedUrl();
-      if (!isMounted || !signedUrl) return;
-      setPreviewUrl(signedUrl);
-
-      if (isImage) {
-        const blobUrl = await preloadAndCacheFile(signedUrl, storagePath);
-        if (isMounted) {
-          setPreviewUrl(blobUrl);
-        }
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    downloadStoredDocumentBytes,
-    getDocumentSignedUrl,
-    hasRequestedPreview,
-    isImage,
-    isPdf,
-    isPreviewable,
-    storagePath,
-  ]);
-
-  if (!docPath) {
-    return (
-      <div className="flex items-center justify-start gap-3 text-xs text-stone-500 h-full w-full pl-2">
-        <div className="min-w-7 min-h-7 rounded-md border border-muted-foreground/40 bg-muted-foreground/10 flex items-center justify-center relative">
-          <FileText className="size-5 text-muted-foreground" aria-hidden="true" />
-          {/* a span that is a dash across the file icon */}
-          <XIcon className="size-9 text-muted-foreground opacity-60 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" aria-hidden="true" />
-        </div>
-        <p className="font-semibold text-stone-700 truncate">No hay archivo vinculado</p>
-      </div>
-    );
-  }
-
-  return (
-    <HoverCard
-      open={hoverOpen}
-      onOpenChange={(open) => {
-        setHoverOpen(open);
-        if (open && !hasRequestedPreview) {
-          setHasRequestedPreview(true);
-        }
-      }}
-      openDelay={150}
-      closeDelay={120}
-    >
-      <HoverCardTrigger asChild>
-        <div className="flex items-center justify-start gap-3 min-w-0 cursor-default h-full w-full pl-2">
-          <GlassyIcon size={7} primaryVar="var(--color-orange-primary)" className="w-7">
-            <FileText className="size-4.5 text-amber-500" aria-hidden="true" />
-          </GlassyIcon>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs font-semibold text-stone-800 truncate">{docName}</span>
-            <span className="text-[11px] text-stone-500 truncate">{relativePath}</span>
-          </div>
-        </div>
-      </HoverCardTrigger>
-      <HoverCardPortal>
-
-        <HoverCardContent align="start" side="right" className="w-[260px] p-0 rounded-none">
-          <div className="px-3 py-2 border-b border-stone-100">
-            <p className="text-xs font-semibold text-stone-800 truncate">{docName}</p>
-            <p className="text-[11px] text-stone-500 truncate">{relativePath}</p>
-          </div>
-          <div className="w-full h-[260px] bg-stone-50 flex items-center justify-center overflow-hidden">
-            {previewUrl ? (
-              <div className="relative w-full h-full bg-white">
-                <img
-                  src={previewUrl}
-                  alt={docName ?? 'Vista previa'}
-                  className={cn(
-                    'w-full h-full',
-                    isPdf ? 'object-contain p-2 bg-stone-100' : 'object-cover'
-                  )}
-                />
-                {isPdf ? (
-                  <span className="absolute top-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                    PDF
-                  </span>
-                ) : null}
-              </div>
-            ) : hasRequestedPreview && isPreviewable ? (
-              <div className="flex flex-col items-center justify-center gap-2 text-xs text-stone-500 p-4">
-                <Loader2 className="size-5 text-stone-400 animate-spin" />
-                <span className="text-center leading-tight">Cargando vista previa?</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-2 text-xs text-stone-500 p-4">
-                <FileText className="size-6 text-stone-400" />
-                <span className="text-center leading-tight">Vista previa no disponible para este documento.</span>
-              </div>
-            )}
-          </div>
-        </HoverCardContent>
-      </HoverCardPortal>
-    </HoverCard>
-  );
-});
 const IS_SENTRY_ENABLED =
   process.env.NODE_ENV === 'production' &&
   process.env.NEXT_PUBLIC_VERCEL_ENV === 'production';

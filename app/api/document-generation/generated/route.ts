@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import { renderDocumentHtml } from "@/lib/document-generation";
 import {
+  canDeleteGeneratedDocument,
   canEditGeneratedDocument,
   formatWorkLabel,
   loadActorsByIds,
@@ -144,6 +145,10 @@ export async function GET(request: NextRequest) {
           canCreate: permissions.canCreate,
           userId: user.id,
           status: typeof row.status === "string" ? row.status : null,
+        }),
+        canDelete: canDeleteGeneratedDocument({
+          userId: user.id,
+          generatedBy: typeof row.generated_by === "string" ? row.generated_by : null,
         }),
       };
     });

@@ -100,4 +100,110 @@ test.describe("Excel page microflows", () => {
 		await expect(page.getByRole("cell", { name: completedName })).toBeVisible();
 		await expect(page.getByRole("cell", { name: inProcessName })).toHaveCount(0);
 	});
+
+	test("expands Excel toolbar labels with fast shared easing", async ({ page }) => {
+		await page.goto("/excel");
+		await page.waitForLoadState("networkidle");
+
+		const controls = [
+			{ button: page.getByRole("button", { name: "Filtros", exact: true }), label: "Filtros" },
+			{ button: page.getByRole("button", { name: "Columnas", exact: true }), label: "Columnas" },
+			{ button: page.getByRole("button", { name: "Exportar tabla", exact: true }), label: "Exportar tabla" },
+		];
+		await Promise.all(controls.map(({ button }) => expect(button).toBeVisible()));
+
+		for (const { button, label } of controls) {
+			const collapsedBox = await button.boundingBox();
+			expect(collapsedBox).not.toBeNull();
+			expect(collapsedBox!.width).toBe(32);
+
+			await button.hover();
+			await expect.poll(async () => (await button.boundingBox())?.width ?? 0).toBeGreaterThan(32);
+
+			const labelMotion = await button.getByText(label, { exact: true }).evaluate((element) => {
+				const labelShell = element.parentElement;
+				if (!labelShell) throw new Error("Expandable label shell is missing");
+				const style = getComputedStyle(labelShell);
+				const textStyle = getComputedStyle(element);
+				return {
+					gridTemplateColumns: style.gridTemplateColumns,
+					transitionDelay: style.transitionDelay,
+					transitionDuration: style.transitionDuration,
+					transitionTimingFunction: style.transitionTimingFunction,
+					textTranslate: textStyle.translate,
+				};
+			});
+			expect(Number.parseFloat(labelMotion.gridTemplateColumns)).toBeGreaterThan(0);
+			expect(labelMotion.transitionDelay).toBe("0s");
+			expect(labelMotion.transitionDuration).toBe("0.18s");
+			expect(labelMotion.transitionTimingFunction).toBe("cubic-bezier(0.4, 0, 0.2, 1)");
+			expect(labelMotion.textTranslate).toBe("none");
+
+			await page.mouse.move(0, 0);
+			await expect.poll(async () => (await button.boundingBox())?.width ?? 0).toBe(32);
+		}
+
+		const filtersButton = controls[0].button;
+		await filtersButton.hover();
+		await page.waitForTimeout(200);
+		const expandedWidth = (await filtersButton.boundingBox())?.width ?? 0;
+		await page.mouse.move(0, 0);
+		await page.waitForTimeout(40);
+		const interruptedExitWidth = (await filtersButton.boundingBox())?.width ?? 0;
+		expect(interruptedExitWidth).toBeGreaterThan(32);
+		expect(interruptedExitWidth).toBeLessThan(expandedWidth);
+		await filtersButton.hover();
+		await expect.poll(async () => (await filtersButton.boundingBox())?.width ?? 0).toBeCloseTo(expandedWidth, 0);
+		await page.mouse.move(0, 0);
+		await expect.poll(async () => (await filtersButton.boundingBox())?.width ?? 0).toBe(32);
+
+		await controls[1].button.click();
+		await expect.poll(async () => (await controls[1].button.boundingBox())?.width ?? 0).toBeGreaterThan(32);
+		await expect(page.getByText("Configurar columnas", { exact: true })).toBeVisible();
+	});
+
+	test("uses the shared ease-out curve for the Columns menu", async ({ page }) => {
+		await page.goto("/excel");
+		await page.waitForLoadState("networkidle");
+
+		const columnsButton = page.getByRole("button", { name: "Columnas", exact: true });
+		await columnsButton.click();
+
+		const menu = page.locator('[data-slot="dropdown-menu-content"]:visible');
+		await expect(menu).toBeVisible();
+		const triggerBox = await columnsButton.boundingBox();
+		expect(triggerBox).not.toBeNull();
+
+		const motion = await menu.evaluate((element) => {
+			const style = getComputedStyle(element);
+			const rect = element.getBoundingClientRect();
+			return {
+				animationDuration: style.animationDuration,
+				animationTimingFunction: style.animationTimingFunction,
+				transformOrigin: style.transformOrigin,
+				rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+			};
+		});
+
+		expect(motion.animationDuration).toBe("0.15s");
+		expect(motion.animationTimingFunction).toBe("cubic-bezier(0.23, 1, 0.32, 1)");
+		const [originX, originY] = motion.transformOrigin.split(" ").map(Number.parseFloat);
+		const originPoint = { x: motion.rect.x + originX, y: motion.rect.y + originY };
+		const menuCenter = {
+			x: motion.rect.x + motion.rect.width / 2,
+			y: motion.rect.y + motion.rect.height / 2,
+		};
+		const triggerCenter = {
+			x: triggerBox!.x + triggerBox!.width / 2,
+			y: triggerBox!.y + triggerBox!.height / 2,
+		};
+		const distanceToTrigger = (point: { x: number; y: number }) =>
+			Math.hypot(point.x - triggerCenter.x, point.y - triggerCenter.y);
+		expect(Math.hypot(originX - motion.rect.width / 2, originY - motion.rect.height / 2)).toBeGreaterThan(1);
+		expect(distanceToTrigger(originPoint)).toBeLessThan(distanceToTrigger(menuCenter));
+
+		await page.keyboard.press("Escape");
+		await expect(menu).toBeHidden();
+		await expect(columnsButton).toBeFocused();
+	});
 });

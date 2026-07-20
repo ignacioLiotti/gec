@@ -15,8 +15,10 @@ import {
   FolderKanban,
   ImageIcon,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
+  Save,
   ShieldCheck,
   Sparkles,
   Activity,
@@ -32,9 +34,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AdvanceCurveChart } from "@/components/advance-curve-chart";
 import { FormTable } from "@/components/form-table/form-table";
@@ -42,6 +48,12 @@ import type { ColumnDef, FetchRowsArgs, FormTableConfig, FormTableCsvExport, For
 import { QuickFormDialog, type QuickFormField } from "@/components/forms/quick-form-dialog";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import { ObraDestinationCombobox } from "@/components/obra-destination-combobox";
+import { matchesInsurancePolicySearchValue } from "@/app/dashboard/insurance-policy-search";
+import {
+  HighlightedSearchText,
+  SearchHighlightProvider,
+  useFormTableSearch,
+} from "@/components/form-table/search-highlight";
 import { toast } from "sonner";
 import {
   dashboardOverviewTour,
@@ -230,6 +242,7 @@ type InsurancePolicyTableRow = FormTableRow & {
   cancellationConfirmedAt: string | null;
   cancellationNotes: string;
   isCancelled: boolean;
+  editAction: string;
   moveAction: string;
   deleteAction: string;
 };
@@ -659,9 +672,11 @@ function getPolicyObraProgress(policy: GlobalInsurancePolicy) {
 function DashboardObraLinkCell({
   row,
   selectedObra,
+  highlightQuery,
 }: {
   row: InsurancePolicyTableRow;
   selectedObra?: Obra | null;
+  highlightQuery?: string;
 }) {
   const obraId = selectedObra?.id ?? row.obraId;
   const obraLabel = selectedObra
@@ -670,7 +685,7 @@ function DashboardObraLinkCell({
   const obraProgress = selectedObra ? selectedObra.porcentaje : row.obraProgress;
 
   if (!obraId) {
-    return <span className="block truncate text-stone-500">{obraLabel || "-"}</span>;
+    return <span className="block truncate text-stone-500"><HighlightedSearchText value={obraLabel || "-"} query={highlightQuery} /></span>;
   }
 
   return (
@@ -678,7 +693,7 @@ function DashboardObraLinkCell({
       title={obraLabel}
       className="inline-flex min-h-8 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 font-semibold text-stone-900"
     >
-      <span className="block min-w-0 flex-1 truncate">{obraLabel}</span>
+      <span className="block min-w-0 flex-1 truncate"><HighlightedSearchText value={obraLabel} query={highlightQuery} /></span>
       {obraProgress !== null ? (
         <Badge
           variant="secondary"
@@ -820,10 +835,10 @@ function dateValueInRange(value: string | null, from: string, to: string) {
 }
 
 function parsePolicyFilterList(value: string) {
-	return value
+  return value
     .split(",")
     .map((item) => item.trim().toLowerCase())
-		.filter(Boolean);
+    .filter(Boolean);
 }
 
 function matchesInsurancePolicyFilters(row: InsurancePolicyTableRow, filters: InsurancePolicyFilters) {
@@ -890,6 +905,507 @@ function PolicyMetricTooltip({
   );
 }
 
+function buildInsurancePolicyPatchPayload(row: InsurancePolicyTableRow) {
+  return {
+    policyNumber: row.policyNumber,
+    obraId: row.obraId,
+    section: row.section || null,
+    coveragePeriod: row.coveragePeriod || null,
+    endDate: row.endDate || null,
+    insuredAmount: row.insuredAmount === "" ? null : row.insuredAmount,
+    currency: row.currency || null,
+    premium: row.premium === "" ? null : row.premium,
+    prize: row.prize === "" ? null : row.prize,
+    balance: row.balance === "" ? null : row.balance,
+    status: row.status || null,
+    risk: row.risk || null,
+    insuredObject: row.insuredObject || null,
+    cancellationRequestedAt: row.cancellationRequestedAt || null,
+    cancellationConfirmedAt: row.cancellationConfirmedAt || null,
+    cancellationNotes: row.cancellationNotes || null,
+    isCancelled: row.isCancelled,
+  };
+}
+
+type InsurancePolicyModalStatus = "active" | "dueSoon" | "expired" | "cancelled";
+type InsurancePolicyEditingSection = "identity" | "insuredAmount" | "endDate" | "premiumPrize" | "balanceStatus" | "cancellation" | null;
+
+function parseInsurancePolicyModalDate(value: string | null | undefined) {
+  if (!value) return null;
+  const text = value.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text.slice(0, 10));
+  if (iso) {
+    const date = new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const slash = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/.exec(text);
+  if (!slash) return null;
+  const day = Number(slash[1]);
+  const month = Number(slash[2]);
+  const rawYear = Number(slash[3]);
+  const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+    ? date
+    : null;
+}
+
+function formatInsurancePolicyModalDate(value: string | null | undefined) {
+  const date = parseInsurancePolicyModalDate(value);
+  if (!date) return "-";
+  return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}/${date.getUTCFullYear()}`;
+}
+
+function insurancePolicyModalDaysUntil(value: string | null | undefined) {
+  const date = parseInsurancePolicyModalDate(value);
+  if (!date) return null;
+  const today = new Date();
+  const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return Math.ceil((date.getTime() - start) / 86_400_000);
+}
+
+function getInsurancePolicyModalStatus(policy: InsurancePolicyTableRow): InsurancePolicyModalStatus {
+  if (policy.isCancelled) return "cancelled";
+  const days = insurancePolicyModalDaysUntil(policy.calculatedCancellationDate ?? policy.endDate);
+  if (days !== null && days < 0) return "expired";
+  if (days !== null && days <= 60) return "dueSoon";
+  return "active";
+}
+
+function insurancePolicyModalStatusLabel(status: InsurancePolicyModalStatus) {
+  if (status === "cancelled") return "Dada de baja";
+  if (status === "expired") return "Vencida";
+  if (status === "dueSoon") return "Por vencer";
+  return "Vigente";
+}
+
+function insurancePolicyModalStatusDescription(status: InsurancePolicyModalStatus) {
+  if (status === "cancelled") return "Baja confirmada";
+  if (status === "expired") return "Activa, pero pasada de fecha";
+  if (status === "dueSoon") return "Próxima a vencer";
+  return "Finalización activa";
+}
+
+function insurancePolicyModalStatusClasses(status: InsurancePolicyModalStatus) {
+  if (status === "cancelled") return "border-sky-200 bg-sky-50 text-sky-800";
+  if (status === "expired") return "border-orange-300 bg-orange-50 text-orange-700";
+  if (status === "dueSoon") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
+function insurancePolicyModalHeaderGradient(status: InsurancePolicyModalStatus) {
+  if (status === "cancelled") return "from-sky-50/95 via-white to-white";
+  if (status === "expired" || status === "dueSoon") return "from-orange-50/95 via-white to-white";
+  return "from-emerald-50/95 via-white to-white";
+}
+
+function insurancePolicyModalProgressClasses(status: InsurancePolicyModalStatus) {
+  if (status === "cancelled") return "bg-sky-500";
+  if (status === "expired") return "bg-orange-500";
+  if (status === "dueSoon") return "bg-amber-500";
+  return "bg-emerald-500";
+}
+
+function formatInsurancePolicyModalMoney(value: number | string | null, currency: string | null) {
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount) || amount === 0) return "-";
+  const normalizedCurrency = String(currency ?? "").trim().toUpperCase();
+  const currencyCode = normalizedCurrency === "$" || normalizedCurrency === "PESOS" || !normalizedCurrency
+    ? "ARS"
+    : normalizedCurrency;
+  try {
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: currencyCode,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `$ ${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(amount)}`;
+  }
+}
+
+function getInsurancePolicyModalPeriod(policy: InsurancePolicyTableRow) {
+  const parts = String(policy.coveragePeriod ?? "")
+    .split(/\s+-\s+|\s+–\s+|\s+—\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const startDate = parseInsurancePolicyModalDate(parts[0]);
+  const endDate = parseInsurancePolicyModalDate(policy.calculatedCancellationDate)
+    ?? parseInsurancePolicyModalDate(policy.endDate)
+    ?? parseInsurancePolicyModalDate(parts[1]);
+  if (!startDate || !endDate || endDate.getTime() <= startDate.getTime()) return null;
+  const today = new Date();
+  const todayStart = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const rawPercent = ((todayStart - startDate.getTime()) / (endDate.getTime() - startDate.getTime())) * 100;
+  return { startDate, endDate, percent: Math.max(0, Math.min(100, Math.round(rawPercent))) };
+}
+
+function InsurancePolicyModalField({
+  label,
+  tone = "editable",
+  onEdit,
+  className,
+  children,
+}: {
+  label: string;
+  tone?: "editable" | "system";
+  onEdit?: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "min-h-[108px] rounded-xl border p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+        tone === "system" ? "border-orange-200 bg-orange-50/45" : "border-stroke-soft bg-card",
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-content-muted">{label}</p>
+        {onEdit ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-full border border-stroke-soft bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-content-muted transition-colors hover:border-orange-200 hover:text-orange-700 active:scale-[0.98]"
+            onClick={onEdit}
+          >
+            <Pencil className="size-3" />
+            Editar
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-blue-700">
+            Sistema
+          </span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InsurancePolicyModalInputField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-content-muted">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function InsurancePolicyModalPeriod({ policy }: { policy: InsurancePolicyTableRow }) {
+  const period = getInsurancePolicyModalPeriod(policy);
+  const status = getInsurancePolicyModalStatus(policy);
+  const dueDays = insurancePolicyModalDaysUntil(policy.calculatedCancellationDate ?? policy.endDate);
+  const dueLabel = dueDays === null
+    ? null
+    : dueDays < 0
+      ? `${Math.abs(dueDays)}d tarde`
+      : `en ${dueDays} días`;
+  return (
+    <section className="rounded-xl border border-stroke-soft bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-content-muted">Sección / período</p>
+          <span className="text-content-disabled">•</span>
+          <p className="truncate text-xs font-bold text-content">{policy.section || "-"}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-content-muted">
+            <FileSpreadsheet className="size-3" />
+            Excel
+          </span>
+          {dueLabel ? (
+            <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold", insurancePolicyModalStatusClasses(status))}>
+              {dueLabel}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      {period ? (
+        <div className="mt-4 space-y-2">
+          <div className="relative h-5 overflow-hidden rounded-sm bg-surface-recessed">
+            <div className="absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent_0,transparent_8px,rgba(120,113,108,0.14)_8px,rgba(120,113,108,0.14)_14px)]" />
+            <div
+              className={cn("relative h-full transition-[width] duration-200 ease-out", insurancePolicyModalProgressClasses(status))}
+              style={{ width: `${period.percent}%` }}
+            />
+            <span className="absolute top-0 h-full w-0.5 bg-content/70" style={{ left: `calc(${period.percent}% - 1px)` }} />
+          </div>
+          <div className="flex items-start justify-between gap-3 text-[10px] font-semibold text-content-muted">
+            <span>{formatInsurancePolicyModalDate(period.startDate.toISOString().slice(0, 10))}</span>
+            <span className="text-center">Transcurrido <strong className="text-content">{period.percent}%</strong> del período de cobertura</span>
+            <span className="text-right">
+              <span className="block">{formatInsurancePolicyModalDate(period.endDate.toISOString().slice(0, 10))}</span>
+              <span className="mt-1 block">Baja calculada</span>
+            </span>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs font-medium text-content-muted">Período importado sin rango de fechas reconocible.</p>
+      )}
+    </section>
+  );
+}
+
+function InsurancePolicyEditorDialog({
+  policy,
+  obras,
+  isSaving,
+  onClose,
+  onSave,
+}: {
+  policy: InsurancePolicyTableRow;
+  obras: Obra[];
+  isSaving: boolean;
+  onClose: () => void;
+  onSave: (policy: InsurancePolicyTableRow) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<InsurancePolicyTableRow>(() => ({ ...policy }));
+  const [editingSection, setEditingSection] = useState<InsurancePolicyEditingSection>(null);
+  const status = getInsurancePolicyModalStatus(draft);
+  const selectedObra = obras.find((obra) => obra.id === draft.obraId);
+
+  function updateField<K extends keyof InsurancePolicyTableRow>(
+    field: K,
+    value: InsurancePolicyTableRow[K],
+  ) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => {
+      if (!open && !isSaving) onClose();
+    }}>
+      <DialogContent className="flex max-h-[94vh] max-w-6xl flex-col gap-0 overflow-hidden border-stroke p-0">
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!draft.policyNumber.trim() || isSaving) return;
+            void onSave({ ...draft, policyNumber: draft.policyNumber.trim() });
+          }}
+        >
+          <div className={cn("border-b border-stroke-soft bg-gradient-to-r px-5 py-5 sm:px-6", insurancePolicyModalHeaderGradient(status))}>
+            <DialogHeader className="pr-8 text-left">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl border bg-surface shadow-sm", insurancePolicyModalStatusClasses(status))}>
+                    {status === "cancelled" ? <Check className="size-5" /> : status === "expired" ? <AlertTriangle className="size-5" /> : <ShieldCheck className="size-5" />}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-content-muted">
+                      <span className={status === "active" ? "text-emerald-700" : status === "cancelled" ? "text-sky-700" : "text-orange-700"}>
+                        {draft.section || "Póliza"}
+                      </span>
+                      <span>•</span>
+                      <span>Póliza</span>
+                      <FileSpreadsheet className="size-3" />
+                      <span>Excel</span>
+                    </div>
+                    <DialogTitle className="mt-1 truncate text-2xl font-black tracking-tight text-content">
+                      {draft.policyNumber || "Sin número"}
+                    </DialogTitle>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                      <span className={cn("inline-flex items-center gap-1", status === "active" ? "text-emerald-700" : status === "cancelled" ? "text-sky-700" : "text-orange-700")}>
+                        <span className="size-1.5 rounded-full bg-current" />
+                        {insurancePolicyModalStatusLabel(status)}
+                      </span>
+                      <span className="text-content-muted">{insurancePolicyModalStatusDescription(status)}</span>
+                    </div>
+                    <DialogDescription className="mt-3 max-w-3xl text-[11px] font-medium uppercase leading-relaxed text-content-muted">
+                      {selectedObra
+                        ? `${selectedObra.n} - ${selectedObra.designacionYUbicacion}`
+                        : draft.obra || "Sin obra asignada"}
+                      {draft.insuredObject ? ` · ${draft.insuredObject}` : draft.risk ? ` · ${draft.risk}` : ""}
+                    </DialogDescription>
+                  </div>
+                </div>
+                <label
+                  className={cn(
+                    "flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold shadow-sm transition-colors active:scale-[0.98]",
+                    draft.isCancelled
+                      ? "border-sky-200 bg-sky-50 text-sky-900"
+                      : "border-stroke bg-surface text-content-secondary",
+                  )}
+                >
+                  <Checkbox
+                    checked={draft.isCancelled}
+                    onCheckedChange={(checked) => updateField("isCancelled", checked === true)}
+                  />
+                  Dar de baja
+                </label>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-canvas-muted p-4 sm:p-5">
+            <InsurancePolicyModalPeriod policy={draft} />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <InsurancePolicyModalField
+                label="Datos de la póliza"
+                className="md:col-span-2"
+                onEdit={() => setEditingSection("identity")}
+              >
+                {editingSection === "identity" ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <InsurancePolicyModalInputField label="Número de póliza">
+                      <Input
+                        required
+                        value={draft.policyNumber}
+                        onChange={(event) => updateField("policyNumber", event.target.value)}
+                      />
+                    </InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Obra">
+                      <Select
+                        value={draft.obraId ?? "unassigned"}
+                        onValueChange={(value) => updateField("obraId", value === "unassigned" ? null : value)}
+                      >
+                        <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar obra" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">Sin obra asignada</SelectItem>
+                          {obras.map((obra) => (
+                            <SelectItem key={obra.id} value={obra.id}>{obra.n} - {obra.designacionYUbicacion}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Sección">
+                      <Input value={draft.section} onChange={(event) => updateField("section", event.target.value)} />
+                    </InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Vigencia">
+                      <Input value={draft.coveragePeriod} onChange={(event) => updateField("coveragePeriod", event.target.value)} />
+                    </InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Moneda">
+                      <Input value={draft.currency} placeholder="ARS" onChange={(event) => updateField("currency", event.target.value)} />
+                    </InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Riesgo">
+                      <Input value={draft.risk} onChange={(event) => updateField("risk", event.target.value)} />
+                    </InsurancePolicyModalInputField>
+                    <div className="sm:col-span-2">
+                      <InsurancePolicyModalInputField label="Objeto asegurado">
+                        <Input value={draft.insuredObject} onChange={(event) => updateField("insuredObject", event.target.value)} />
+                      </InsurancePolicyModalInputField>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 grid gap-3 text-xs sm:grid-cols-3">
+                    <div><span className="block text-[10px] font-semibold uppercase tracking-wide text-content-muted">Obra</span><span className="mt-1 block truncate font-semibold text-content">{selectedObra ? `${selectedObra.n} - ${selectedObra.designacionYUbicacion}` : draft.obra || "-"}</span></div>
+                    <div><span className="block text-[10px] font-semibold uppercase tracking-wide text-content-muted">Vigencia</span><span className="mt-1 block font-semibold text-content">{draft.coveragePeriod || "-"}</span></div>
+                    <div><span className="block text-[10px] font-semibold uppercase tracking-wide text-content-muted">Riesgo / objeto</span><span className="mt-1 block truncate font-semibold text-content">{draft.risk || draft.insuredObject || "-"}</span></div>
+                  </div>
+                )}
+              </InsurancePolicyModalField>
+
+              <InsurancePolicyModalField label="Monto asegurado" onEdit={() => setEditingSection("insuredAmount")}>
+                {editingSection === "insuredAmount" ? (
+                  <Input
+                    className="mt-3"
+                    inputMode="decimal"
+                    value={draft.insuredAmount ?? ""}
+                    onChange={(event) => updateField("insuredAmount", event.target.value)}
+                  />
+                ) : (
+                  <p className="mt-3 text-xl font-black tracking-tight text-content">{formatInsurancePolicyModalMoney(draft.insuredAmount, draft.currency)}</p>
+                )}
+              </InsurancePolicyModalField>
+
+              <InsurancePolicyModalField label="Fecha de finalización" onEdit={() => setEditingSection("endDate")}>
+                {editingSection === "endDate" ? (
+                  <Input
+                    className="mt-3"
+                    type="date"
+                    value={draft.endDate ?? ""}
+                    onChange={(event) => updateField("endDate", event.target.value || null)}
+                  />
+                ) : (
+                  <div className="mt-3">
+                    <p className="text-xl font-black tracking-tight text-content">{formatInsurancePolicyModalDate(draft.endDate)}</p>
+                    <p className="mt-1 text-[11px] text-content-muted">Fecha importada de la póliza; no define la baja automática.</p>
+                  </div>
+                )}
+              </InsurancePolicyModalField>
+
+              <InsurancePolicyModalField label="Premio / prima" onEdit={() => setEditingSection("premiumPrize")}>
+                {editingSection === "premiumPrize" ? (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <InsurancePolicyModalInputField label="Premio"><Input inputMode="decimal" value={draft.prize ?? ""} onChange={(event) => updateField("prize", event.target.value)} /></InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Prima"><Input inputMode="decimal" value={draft.premium ?? ""} onChange={(event) => updateField("premium", event.target.value)} /></InsurancePolicyModalInputField>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <p className="text-xl font-black tracking-tight text-content">
+                      {formatInsurancePolicyModalMoney(draft.prize, draft.currency)}
+                      <span className="mx-2 text-content-disabled">/</span>
+                      <span className="text-content-muted">{formatInsurancePolicyModalMoney(draft.premium, draft.currency)}</span>
+                    </p>
+                    <p className="mt-1 text-[11px] text-content-muted">Premio total / prima neta</p>
+                  </div>
+                )}
+              </InsurancePolicyModalField>
+
+              <InsurancePolicyModalField label="Saldo / estado importado" onEdit={() => setEditingSection("balanceStatus")}>
+                {editingSection === "balanceStatus" ? (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <InsurancePolicyModalInputField label="Saldo"><Input inputMode="decimal" value={draft.balance ?? ""} onChange={(event) => updateField("balance", event.target.value)} /></InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Estado"><Input value={draft.status} onChange={(event) => updateField("status", event.target.value)} /></InsurancePolicyModalInputField>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <p className="text-xl font-black tracking-tight text-content">{formatInsurancePolicyModalMoney(draft.balance, draft.currency)}</p>
+                    {draft.status ? <Badge variant="outline" className={cn("rounded-full px-2.5 py-1 text-[10px] font-semibold", insurancePolicyModalStatusClasses(status))}>{draft.status}</Badge> : null}
+                  </div>
+                )}
+              </InsurancePolicyModalField>
+
+              <InsurancePolicyModalField label="Fecha calculada baja" tone="system">
+                <div className="mt-3 flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xl font-black tracking-tight text-content">{formatInsurancePolicyModalDate(draft.calculatedCancellationDate)}</p>
+                    {!draft.calculatedCancellationDate ? (
+                      <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-orange-700"><AlertTriangle className="size-3.5" /> Sin regla definida</p>
+                    ) : <p className="mt-1 text-[11px] text-content-muted">Fecha calculada por el sistema.</p>}
+                  </div>
+                </div>
+              </InsurancePolicyModalField>
+
+              <InsurancePolicyModalField
+                label="Gestión de baja"
+                className="md:col-span-2"
+                onEdit={() => setEditingSection("cancellation")}
+              >
+                {editingSection === "cancellation" ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <InsurancePolicyModalInputField label="Baja solicitada"><Input type="date" value={draft.cancellationRequestedAt ?? ""} onChange={(event) => updateField("cancellationRequestedAt", event.target.value || null)} /></InsurancePolicyModalInputField>
+                    <InsurancePolicyModalInputField label="Baja confirmada"><Input type="date" value={draft.cancellationConfirmedAt ?? ""} onChange={(event) => updateField("cancellationConfirmedAt", event.target.value || null)} /></InsurancePolicyModalInputField>
+                    <div className="sm:col-span-2"><InsurancePolicyModalInputField label="Notas de gestión"><Textarea rows={3} value={draft.cancellationNotes} onChange={(event) => updateField("cancellationNotes", event.target.value)} /></InsurancePolicyModalInputField></div>
+                  </div>
+                ) : (
+                  <div className="mt-4 grid gap-3 text-xs sm:grid-cols-3">
+                    <div><span className="block text-[10px] font-semibold uppercase tracking-wide text-content-muted">Baja solicitada</span><span className="mt-1 block font-bold text-content">{formatInsurancePolicyModalDate(draft.cancellationRequestedAt)}</span></div>
+                    <div><span className="block text-[10px] font-semibold uppercase tracking-wide text-content-muted">Baja confirmada</span><span className="mt-1 block font-bold text-content">{formatInsurancePolicyModalDate(draft.cancellationConfirmedAt)}</span></div>
+                    <div><span className="block text-[10px] font-semibold uppercase tracking-wide text-content-muted">Seguimiento</span><span className="mt-1 block line-clamp-2 font-medium text-content">{draft.cancellationNotes || "Sin notas de gestión"}</span></div>
+                  </div>
+                )}
+              </InsurancePolicyModalField>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-stroke-soft bg-surface px-5 py-3 sm:px-6">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
+              Cancelar
+            </Button>
+            <Button type="submit" className="gap-2" disabled={isSaving || !draft.policyNumber.trim()}>
+              {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              {isSaving ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function toInsurancePolicyTableRow(policy: GlobalInsurancePolicy): InsurancePolicyTableRow {
   const row: InsurancePolicyTableRow = {
     id: policy.id,
@@ -914,6 +1430,7 @@ function toInsurancePolicyTableRow(policy: GlobalInsurancePolicy): InsurancePoli
     cancellationConfirmedAt: policy.cancellation_confirmed_at?.slice(0, 10) ?? null,
     cancellationNotes: policy.cancellation_notes ?? "",
     isCancelled: policy.is_cancelled,
+    editAction: "",
     moveAction: "",
     deleteAction: "",
   };
@@ -926,6 +1443,30 @@ function getPolicyGroupLabel(row: InsurancePolicyTableRow, groupBy: InsurancePol
   if (groupBy === "endDate") return row.endDate ? formatShortDate(row.endDate) : "Sin fecha de finalizacion";
   if (groupBy === "calculatedDate") return row.calculatedCancellationDate ? formatShortDate(row.calculatedCancellationDate) : "Sin fecha calculada";
   return "Todas";
+}
+
+function getInsurancePolicyAccordionSearchValues(row: InsurancePolicyTableRow) {
+  const operationalStatus = getPolicyOperationalStatus(row);
+  return [
+    row.policyNumber,
+    row.obra,
+    row.section,
+    row.coveragePeriod,
+    formatShortDate(row.endDate),
+    formatPolicyMoney(parsePolicyAmount(row.insuredAmount)),
+    formatPolicyMoney(parsePolicyAmount(row.premium)),
+    formatPolicyMoney(parsePolicyAmount(row.prize)),
+    formatPolicyMoney(parsePolicyAmount(row.balance)),
+    row.status,
+    operationalStatus.label,
+    operationalStatus.description,
+    row.risk,
+    row.insuredObject,
+    formatShortDate(row.calculatedCancellationDate),
+    formatShortDate(row.cancellationRequestedAt),
+    formatShortDate(row.cancellationConfirmedAt),
+    row.isCancelled ? "Si" : "No",
+  ];
 }
 
 function buildPolicyGroupRows(rows: InsurancePolicyTableRow[], groupBy: InsurancePolicyGroupBy): InsurancePolicyGroupRow[] {
@@ -943,15 +1484,7 @@ function buildPolicyGroupRows(rows: InsurancePolicyTableRow[], groupBy: Insuranc
   return Array.from(groups.entries()).map(([label, policyRows]) => {
     const searchText = [
       label,
-      ...policyRows.flatMap((policy) => [
-        policy.policyNumber,
-        policy.obra,
-        policy.section,
-        policy.coveragePeriod,
-        policy.status,
-        policy.risk,
-        policy.insuredObject,
-      ]),
+      ...policyRows.flatMap(getInsurancePolicyAccordionSearchValues),
     ].join(" ").toLowerCase();
 
     return {
@@ -973,7 +1506,9 @@ function buildPolicyGroupRows(rows: InsurancePolicyTableRow[], groupBy: Insuranc
 function matchesInsurancePolicyGroupSearch(row: InsurancePolicyGroupRow, query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
-  return row.searchText.includes(normalized);
+  return row.searchText.includes(normalized) || row.policyRows.some((policy) =>
+    getInsurancePolicyAccordionSearchValues(policy).some((value) => matchesInsurancePolicySearchValue(value, query))
+  );
 }
 
 function getInsurancePolicyApiOrderBy(columnId: string | null | undefined, groupBy: InsurancePolicyGroupBy) {
@@ -1293,9 +1828,16 @@ function GlobalInsurancePoliciesPanel({
   obras: Obra[];
 }) {
   const queryClient = useQueryClient();
-  const [groupBy, setGroupBy] = useState<InsurancePolicyGroupBy>("obra");
+  const [groupBy, setGroupBy] = useState<InsurancePolicyGroupBy>("none");
   const [statusFilter, setStatusFilter] = useState<InsurancePolicyStatusFilter>("all");
   const [quickFilter, setQuickFilter] = useState<InsurancePolicyQuickFilter>("none");
+  const {
+    searchQuery: groupedSearchQuery,
+    highlightStore: groupedSearchHighlightStore,
+    searchProps: groupedSearchProps,
+  } = useFormTableSearch();
+  const [editingPolicy, setEditingPolicy] = useState<InsurancePolicyTableRow | null>(null);
+  const [savingPolicyId, setSavingPolicyId] = useState<string | null>(null);
   const [movePolicyDialog, setMovePolicyDialog] = useState<{ policy: InsurancePolicyTableRow; targetObraId: string } | null>(null);
   const [movingPolicyId, setMovingPolicyId] = useState<string | null>(null);
   const [deletingPolicyId, setDeletingPolicyId] = useState<string | null>(null);
@@ -1420,6 +1962,12 @@ function GlobalInsurancePoliciesPanel({
     [quickFilter, statusFilter]
   );
   const groupedRows = useMemo(() => buildPolicyGroupRows(policyRows, groupBy), [groupBy, policyRows]);
+  const groupedSearchMatchesAccordionCell = useMemo(() => {
+    const query = groupedSearchQuery.trim();
+    return Boolean(query) && groupedRows.some((row) => row.policyRows.some((policy) =>
+      getInsurancePolicyAccordionSearchValues(policy).some((value) => matchesInsurancePolicySearchValue(value, query))
+    ));
+  }, [groupedRows, groupedSearchQuery]);
   const handleRefresh = useCallback(async () => {
     await onRefresh();
     queryClient.invalidateQueries({ queryKey: ["insurance-policies"] });
@@ -1458,6 +2006,32 @@ function GlobalInsurancePoliciesPanel({
     }
   }, [handleRefresh, refetchPolicySummary]);
 
+  const openEditPolicyDialog = useCallback((policy: InsurancePolicyTableRow) => {
+    setEditingPolicy(policy);
+  }, []);
+
+  const handleSavePolicy = useCallback(async (policy: InsurancePolicyTableRow) => {
+    setSavingPolicyId(policy.id);
+    try {
+      const response = await fetch(`/api/insurance-policies/${policy.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildInsurancePolicyPatchPayload(policy)),
+      });
+      if (!response.ok) {
+        throw new Error(await getResponseErrorMessage(response, "No se pudo actualizar la poliza"));
+      }
+      await handleRefresh();
+      await refetchPolicySummary();
+      setEditingPolicy(null);
+      toast.success("Poliza actualizada");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo actualizar la poliza");
+    } finally {
+      setSavingPolicyId(null);
+    }
+  }, [handleRefresh, refetchPolicySummary]);
+
   const openMovePolicyDialog = useCallback((policy: InsurancePolicyTableRow) => {
     setMovePolicyDialog({ policy, targetObraId: policy.obraId ?? "" });
   }, []);
@@ -1488,6 +2062,31 @@ function GlobalInsurancePoliciesPanel({
   const policyTableColumns = useMemo<ColumnDef<InsurancePolicyTableRow>[]>(() => [
     { id: "policyNumber", label: "Poliza", field: "policyNumber", editable: true, width: 150 },
     {
+      id: "editPolicy",
+      label: "Editar",
+      field: "editAction",
+      editable: false,
+      enableSort: false,
+      width: 100,
+      cellConfig: {
+        renderReadOnly: ({ row }) => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 px-2 text-xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              openEditPolicyDialog(row);
+            }}
+          >
+            <Pencil className="size-3.5" />
+            Editar
+          </Button>
+        ),
+      },
+    },
+    {
       id: "obra",
       label: "Obra",
       field: "obraId",
@@ -1495,10 +2094,11 @@ function GlobalInsurancePoliciesPanel({
       width: 360,
       sortFn: (a, b) => a.obra.localeCompare(b.obra, "es", { sensitivity: "base", numeric: true }),
       cellConfig: {
-        renderReadOnly: ({ value, row }) => (
+        renderReadOnly: ({ value, row, highlightQuery }) => (
           <DashboardObraLinkCell
             row={row}
             selectedObra={obras.find((obra) => obra.id === String(value ?? ""))}
+            highlightQuery={highlightQuery}
           />
         ),
         renderEditable: ({ value, setValue, handleBlur }) => (
@@ -1629,7 +2229,7 @@ function GlobalInsurancePoliciesPanel({
         ),
       },
     },
-  ], [deletingPolicyId, handleDeletePolicy, obras, openMovePolicyDialog]);
+  ], [deletingPolicyId, handleDeletePolicy, obras, openEditPolicyDialog, openMovePolicyDialog]);
 
   const policyTableConfig = useMemo<FormTableConfig<InsurancePolicyTableRow, InsurancePolicyFilters>>(() => ({
     tableId: `dashboard-insurance-related-${statusFilter}-${quickFilter}`,
@@ -1758,25 +2358,7 @@ function GlobalInsurancePoliciesPanel({
         const response = await fetch(`/api/insurance-policies/${row.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            policyNumber: row.policyNumber,
-            obraId: row.obraId,
-            section: row.section || null,
-            coveragePeriod: row.coveragePeriod || null,
-            endDate: row.endDate || null,
-            insuredAmount: row.insuredAmount ?? null,
-            currency: row.currency || null,
-            premium: row.premium ?? null,
-            prize: row.prize ?? null,
-            balance: row.balance ?? null,
-            status: row.status || null,
-            risk: row.risk || null,
-            insuredObject: row.insuredObject || null,
-            cancellationRequestedAt: row.cancellationRequestedAt || null,
-            cancellationConfirmedAt: row.cancellationConfirmedAt || null,
-            cancellationNotes: row.cancellationNotes || null,
-            isCancelled: row.isCancelled,
-          }),
+          body: JSON.stringify(buildInsurancePolicyPatchPayload(row)),
         });
         if (!response.ok) throw new Error(await getResponseErrorMessage(response, "No se pudo guardar una poliza"));
       }));
@@ -1800,7 +2382,7 @@ function GlobalInsurancePoliciesPanel({
         ),
       },
       searchFn: (row, query) => {
-        return row.searchText.includes(query.trim().toLowerCase());
+        return matchesInsurancePolicyGroupSearch(row, query);
       },
     },
     { id: "policyCount", label: "Polizas", field: "policyCount", editable: false, width: 110 },
@@ -1829,6 +2411,7 @@ function GlobalInsurancePoliciesPanel({
     emptyStateMessage: "No hay polizas relacionadas para mostrar.",
     accordionRow: {
       triggerLabel: "polizas",
+      alwaysOpen: groupedSearchMatchesAccordionCell,
       contentClassName: "p-0",
       renderTrigger: ({ isOpen, toggle }) => (
         <Button
@@ -1849,6 +2432,7 @@ function GlobalInsurancePoliciesPanel({
             <TableHeader className="bg-stone-50">
               <TableRow>
                 <TableHead>Poliza</TableHead>
+                <TableHead>Editar</TableHead>
                 <TableHead>Obra</TableHead>
                 <TableHead>Seccion</TableHead>
                 <TableHead>Vigencia</TableHead>
@@ -1881,35 +2465,49 @@ function GlobalInsurancePoliciesPanel({
                     getPolicyOperationalStatus(policy).tone === "blue" && "bg-blue-50 hover:bg-blue-50",
                   )}
                 >
-                  <TableCell className="whitespace-nowrap px-3 py-2 font-medium">{policy.policyNumber}</TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2 font-medium">
+                    <HighlightedSearchText value={policy.policyNumber} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onClick={() => openEditPolicyDialog(policy)}
+                    >
+                      <Pencil className="size-3.5" />
+                      <HighlightedSearchText value="Editar" />
+                    </Button>
+                  </TableCell>
                   <TableCell className="min-w-[280px] max-w-[360px]">
                     <DashboardObraLinkCell row={policy} />
                   </TableCell>
-                  <TableCell className="px-3 py-2">{policy.section || "-"}</TableCell>
-                  <TableCell className="px-3 py-2">{policy.coveragePeriod || "-"}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.endDate)}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums">{formatPolicyMoney(parsePolicyAmount(policy.insuredAmount))}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums">{formatPolicyMoney(parsePolicyAmount(policy.premium))}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums">{formatPolicyMoney(parsePolicyAmount(policy.prize))}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums">{formatPolicyMoney(parsePolicyAmount(policy.balance))}</TableCell>
-                  <TableCell className="px-3 py-2">{policy.status || "-"}</TableCell>
+                  <TableCell className="px-3 py-2"><HighlightedSearchText value={policy.section || "-"} /></TableCell>
+                  <TableCell className="px-3 py-2"><HighlightedSearchText value={policy.coveragePeriod || "-"} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2"><HighlightedSearchText value={formatShortDate(policy.endDate)} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums"><HighlightedSearchText value={formatPolicyMoney(parsePolicyAmount(policy.insuredAmount))} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums"><HighlightedSearchText value={formatPolicyMoney(parsePolicyAmount(policy.premium))} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums"><HighlightedSearchText value={formatPolicyMoney(parsePolicyAmount(policy.prize))} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2 tabular-nums"><HighlightedSearchText value={formatPolicyMoney(parsePolicyAmount(policy.balance))} /></TableCell>
+                  <TableCell className="px-3 py-2"><HighlightedSearchText value={policy.status || "-"} /></TableCell>
                   <TableCell className="min-w-[220px] px-3 py-2">
                     {(() => {
                       const status = getPolicyOperationalStatus(policy);
                       return (
                         <div className="flex flex-col gap-1">
-                          <span className="font-semibold text-stone-900">{status.label}</span>
-                          <span className="text-[11px] text-stone-500">{status.description}</span>
+                          <span className="font-semibold text-stone-900"><HighlightedSearchText value={status.label} /></span>
+                          <span className="text-[11px] text-stone-500"><HighlightedSearchText value={status.description} /></span>
                         </div>
                       );
                     })()}
                   </TableCell>
-                  <TableCell className="max-w-[260px] truncate px-3 py-2">{policy.risk || "-"}</TableCell>
-                  <TableCell className="max-w-[320px] truncate px-3 py-2">{policy.insuredObject || "-"}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.calculatedCancellationDate)}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.cancellationRequestedAt)}</TableCell>
-                  <TableCell className="whitespace-nowrap px-3 py-2">{formatShortDate(policy.cancellationConfirmedAt)}</TableCell>
-                  <TableCell className="px-3 py-2">{policy.isCancelled ? "Si" : "No"}</TableCell>
+                  <TableCell className="max-w-[260px] truncate px-3 py-2"><HighlightedSearchText value={policy.risk || "-"} /></TableCell>
+                  <TableCell className="max-w-[320px] truncate px-3 py-2"><HighlightedSearchText value={policy.insuredObject || "-"} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2"><HighlightedSearchText value={formatShortDate(policy.calculatedCancellationDate)} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2"><HighlightedSearchText value={formatShortDate(policy.cancellationRequestedAt)} /></TableCell>
+                  <TableCell className="whitespace-nowrap px-3 py-2"><HighlightedSearchText value={formatShortDate(policy.cancellationConfirmedAt)} /></TableCell>
+                  <TableCell className="px-3 py-2"><HighlightedSearchText value={policy.isCancelled ? "Si" : "No"} /></TableCell>
                   <TableCell className="px-3 py-2">
                     <Button
                       type="button"
@@ -1919,7 +2517,7 @@ function GlobalInsurancePoliciesPanel({
                       onClick={() => openMovePolicyDialog(policy)}
                     >
                       <ArrowRight className="size-3.5" />
-                      Mover
+                      <HighlightedSearchText value="Mover" />
                     </Button>
                   </TableCell>
                   <TableCell className="px-3 py-2">
@@ -1932,7 +2530,7 @@ function GlobalInsurancePoliciesPanel({
                       onClick={() => void handleDeletePolicy(policy)}
                     >
                       {deletingPolicyId === policy.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                      Eliminar
+                      <HighlightedSearchText value="Eliminar" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -1954,7 +2552,7 @@ function GlobalInsurancePoliciesPanel({
         );
       },
     },
-  }), [deletingPolicyId, groupBy, groupTableColumns, groupedRows, handleDeletePolicy, openMovePolicyDialog, quickFilter, statusFilter]);
+  }), [deletingPolicyId, groupBy, groupedSearchMatchesAccordionCell, groupTableColumns, groupedRows, handleDeletePolicy, openEditPolicyDialog, openMovePolicyDialog, quickFilter, statusFilter]);
 
   return (
     <Card className="overflow-hidden rounded-xl border-0 bg-transparent pt-0 shadow-none gap-0">
@@ -1995,7 +2593,7 @@ function GlobalInsurancePoliciesPanel({
             }}
             className="h-8 rounded-lg border border-stone-200 bg-white px-3 text-xs text-stone-700 shadow-sm"
           >
-            <option value="none">Sin agrupar</option>
+            <option value="none">Vista editable</option>
             <option value="obra">Agrupar por obra</option>
             <option value="endDate">Agrupar por finalizacion</option>
             <option value="calculatedDate">Agrupar por baja calculada</option>
@@ -2183,7 +2781,7 @@ function GlobalInsurancePoliciesPanel({
             </Button>
           </div>
         ) : null}
-        <div className="max-w-full overflow-hidden rounded-lg border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] md:max-w-[calc(95vw-var(--sidebar-current-width))]">
+        <div className="max-w-full overflow-hidden max-h-[--fi] rounded-lg border border-stone-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)] md:max-w-[calc(95vw-var(--sidebar-current-width))]">
           {groupBy !== "none" && policiesQuery.isLoading ? (
             <div className="p-10 text-center text-sm text-stone-500">Cargando polizas...</div>
           ) : groupBy === "none" ? (
@@ -2191,17 +2789,32 @@ function GlobalInsurancePoliciesPanel({
               key={`related-flat-${statusFilter}-${quickFilter}`}
               config={policyTableConfig}
               variant="embedded"
-              innerClassName="max-h-[620px]"
+              innerClassName="max-h-[42vh]"
+              toolbarClassName="bg-white"
             />
           ) : (
-            <FormTable
-              key={`related-grouped-${groupBy}-${statusFilter}-${quickFilter}`}
-              config={groupedTableConfig}
-              variant="embedded"
-              innerClassName="max-h-[620px]"
-            />
+            <SearchHighlightProvider store={groupedSearchHighlightStore}>
+              <FormTable
+                key={`related-grouped-${groupBy}-${statusFilter}-${quickFilter}`}
+                config={groupedTableConfig}
+                {...groupedSearchProps}
+                variant="embedded"
+                innerClassName="max-h-[42vh]"
+                toolbarClassName="bg-white"
+              />
+            </SearchHighlightProvider>
           )}
         </div>
+        {editingPolicy ? (
+          <InsurancePolicyEditorDialog
+            key={editingPolicy.id}
+            policy={editingPolicy}
+            obras={obras}
+            isSaving={savingPolicyId === editingPolicy.id}
+            onClose={() => setEditingPolicy(null)}
+            onSave={handleSavePolicy}
+          />
+        ) : null}
         <Dialog open={Boolean(movePolicyDialog)} onOpenChange={(open) => {
           if (movingPolicyId) return;
           if (!open) setMovePolicyDialog(null);

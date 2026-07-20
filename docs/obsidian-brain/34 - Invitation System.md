@@ -6,6 +6,8 @@ tags: #auth #invitations #onboarding #email
 
 Users are invited to tenants via **email token links**. Invitations have a 72-hour expiry and enforce role assignment on acceptance. The system prevents duplicate pending invites and uses `SECURITY DEFINER` functions to allow unauthenticated token lookups.
 
+The invitation contract distinguishes the membership level (`member` or `admin`) from an optional tenant operational role. The role ID and its promised display-name snapshot travel with the invitation; acceptance creates the membership and `user_roles` assignment in one transaction.
+
 ---
 
 ## Database Schema (migration 0031, 0037)
@@ -58,6 +60,8 @@ pending
 ---
 
 ## Helper Functions (SECURITY DEFINER)
+
+Acceptance, rejection, and cancellation are atomic RPC transitions. Recipients cannot directly update invitation rows. If a promised operational role was deleted, acceptance stops with a recoverable error instead of silently granting plain-member access.
 
 These run elevated to bypass RLS, allowing unauthenticated token resolution:
 

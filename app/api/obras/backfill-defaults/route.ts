@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { applyObraDefaults } from "@/lib/obra-defaults";
+import { provisionObraDefaults } from "@/lib/obra-defaults/provision";
 import { getAuthContext } from "../route";
 
 const payloadSchema = z.object({
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
 		}
 
 		try {
-			const result = await applyObraDefaults(supabase, obraId, tenantId);
+			const result = await provisionObraDefaults(supabase, obraId, tenantId);
 			results.push({
 				obraId,
 				n: typeof obra.n === "number" ? obra.n : Number(obra.n) || null,

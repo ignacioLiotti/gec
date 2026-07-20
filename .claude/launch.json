@@ -6,6 +6,13 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["--yes", "serve", "public", "-l", "4173"],
       "port": 4173
+    },
+    {
+      "name": "dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

@@ -21,11 +21,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { sendInvitation } from "@/app/admin/users/invitation-actions";
-import { UserPlus, Mail, Loader2, CheckCircle2, Copy } from "lucide-react";
+import { UserPlus, Mail, Loader2, CheckCircle2, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface InviteUsersDialogProps {
   tenantId: string;
+  roles: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+  }>;
   triggerLabel?: string;
   triggerSize?: ButtonProps["size"];
   triggerVariant?: ButtonProps["variant"];
@@ -33,6 +38,7 @@ interface InviteUsersDialogProps {
 
 export function InviteUsersDialog({
   tenantId,
+  roles,
   triggerLabel = "Invitar Usuarios",
   triggerSize,
   triggerVariant,
@@ -40,8 +46,12 @@ export function InviteUsersDialog({
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
+  const [operationalRoleId, setOperationalRoleId] = useState(
+    () => roles[0]?.id ?? "",
+  );
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [emailDelivered, setEmailDelivered] = useState<boolean | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,22 +68,36 @@ export function InviteUsersDialog({
       return;
     }
 
+    if (role === "member" && roles.length > 0 && !operationalRoleId) {
+      toast.error("Elegí el trabajo principal que realizará la persona");
+      return;
+    }
+
     setLoading(true);
+    try {
+      const result = await sendInvitation({
+        tenantId,
+        email: email.trim(),
+        role,
+        operationalRoleId: role === "member" ? operationalRoleId || null : null,
+      });
 
-    const result = await sendInvitation({
-      tenantId,
-      email: email.trim(),
-      role,
-    });
-
-    setLoading(false);
-
-    if (result.error) {
-      toast.error(result.error);
-    } else if (result.success && result.inviteLink) {
-      toast.success(`Invitación enviada a ${email.trim()}`);
-      setInviteLink(result.inviteLink);
-      setEmail("");
+      if (result.error) {
+        toast.error(result.error);
+      } else if (result.success && result.inviteLink) {
+        setEmailDelivered(result.emailSent === true);
+        if (result.emailSent === true) {
+          toast.success(`Invitación enviada a ${email.trim()}`);
+        } else {
+          toast.warning("La invitación fue creada, pero el correo no pudo enviarse. Copiá el enlace para compartirlo.");
+        }
+        setInviteLink(result.inviteLink);
+        setEmail("");
+      }
+    } catch {
+      toast.error("No pudimos crear la invitación. Volvé a intentarlo.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -81,14 +105,19 @@ export function InviteUsersDialog({
     setOpen(false);
     setEmail("");
     setRole("member");
+    setOperationalRoleId(roles[0]?.id ?? "");
     setInviteLink(null);
+    setEmailDelivered(null);
   };
 
-  const copyInviteLink = () => {
+  const copyInviteLink = async () => {
     if (!inviteLink) return;
-
-    navigator.clipboard.writeText(inviteLink);
-    toast.success("Enlace de invitación copiado al portapapeles");
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      toast.success("Enlace de invitación copiado");
+    } catch {
+      toast.error("No pudimos copiar el enlace. Seleccionalo y copialo manualmente.");
+    }
   };
 
   return (
@@ -115,12 +144,22 @@ export function InviteUsersDialog({
           // Success state - show invite link
           <div className="space-y-4 py-4">
             <div className="flex items-center justify-center py-6">
-              <div className="rounded-full bg-green-100 p-3">
-                <CheckCircle2 className="size-10 text-green-600" />
+              <div className={emailDelivered === false ? "rounded-full bg-warning/15 p-3" : "rounded-full bg-success/10 p-3"}>
+                {emailDelivered === false ? (
+                  <AlertTriangle className="size-10 text-warning-foreground" />
+                ) : (
+                  <CheckCircle2 className="size-10 text-success" />
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
+              {emailDelivered === false && (
+                <div className="flex gap-3 rounded-lg border border-warning/35 bg-warning/15 p-3 text-sm text-warning-foreground">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <p>El correo no salió. El enlace sigue siendo válido y podés compartirlo por otro medio.</p>
+                </div>
+              )}
               <Label htmlFor="invite-link">Enlace de Invitación</Label>
               <div className="flex gap-2">
                 <Input
@@ -129,7 +168,7 @@ export function InviteUsersDialog({
                   readOnly
                   className="font-mono text-sm"
                 />
-                <Button type="button" variant="outline" size="icon" onClick={copyInviteLink}>
+                <Button type="button" variant="outline" size="icon" onClick={copyInviteLink} aria-label="Copiar enlace de invitación">
                   <Copy className="size-4" />
                 </Button>
               </div>
@@ -168,7 +207,7 @@ export function InviteUsersDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="role">Rol</Label>
+                <Label htmlFor="role">Nivel de acceso</Label>
                 <Select
                   value={role}
                   onValueChange={(value) => setRole(value as "member" | "admin")}
@@ -180,8 +219,8 @@ export function InviteUsersDialog({
                   <SelectContent>
                     <SelectItem value="member">
                       <div className="flex flex-col items-start">
-                        <span className="font-medium">Miembro</span>
-                        <span className="text-xs text-stone-500">Acceso regular a recursos de la organización</span>
+                        <span className="font-medium">Trabajo diario</span>
+                        <span className="text-xs text-content-muted">Usa las herramientas según su tarea asignada</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="admin">
@@ -193,6 +232,38 @@ export function InviteUsersDialog({
                   </SelectContent>
                 </Select>
               </div>
+
+              {role === "member" && roles.length > 0 ? (
+                <div className="space-y-2">
+                  <Label htmlFor="operational-role">Trabajo que realizará</Label>
+                  <Select
+                    value={operationalRoleId}
+                    onValueChange={setOperationalRoleId}
+                    disabled={loading}
+                  >
+                    <SelectTrigger id="operational-role">
+                      <SelectValue placeholder="Elegí una tarea principal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map((operationalRole) => (
+                        <SelectItem key={operationalRole.id} value={operationalRole.id}>
+                          <div className="flex flex-col items-start">
+                            <span className="font-medium">{operationalRole.name}</span>
+                            {operationalRole.description ? (
+                              <span className="text-xs text-content-muted">
+                                {operationalRole.description}
+                              </span>
+                            ) : null}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs leading-5 text-content-muted">
+                    Esto deja sus pantallas y permisos listos desde el primer ingreso.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <DialogFooter>

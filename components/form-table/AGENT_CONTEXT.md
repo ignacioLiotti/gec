@@ -17,6 +17,7 @@ This is a shared UI engine. Changes here can affect multiple product surfaces, e
 - `dirty-tracking.ts`: row/cell dirty comparison against initial snapshots.
 - `table-utils.ts`: row creation, search/sort helpers, CSV/copy helpers, shallow equality.
 - `filter-components.tsx`: reusable filter UI.
+- `search-highlight.tsx`: reusable controlled-search + match-highlight kit for any FormTable consumer: normalized (accent/spacing-insensitive) matching, `useFormTableSearch` (owns the committed query and returns `searchProps` to spread onto `FormTable`), `SearchHighlightProvider`/`HighlightedSearchText` (subscribe cells to the query via an external store so highlighting never rebuilds the table config). Highlights update with the debounced committed query by default; `liveHighlight` opts into per-keystroke updates at the cost of re-rendering every highlighted cell per keystroke.
 - `context.tsx`: table context and public `useFormTable`.
 - `persistence.ts`: persistence helpers.
 - `configs/obras-detalle.tsx`: obras main-table config and row mapping; high-impact consumer config.

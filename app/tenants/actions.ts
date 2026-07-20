@@ -7,8 +7,9 @@ import { STANDARD_TENANT_BLUEPRINT_KEY } from "@/lib/tenant-blueprints/constants
 import { buildStandardConstructionBlueprint } from "@/lib/tenant-blueprints/standard-construction";
 import { createClient } from "@/utils/supabase/server";
 
-function redirectWithError(path: string, message: string): never {
+function redirectWithError(path: string, message: string, name?: string): never {
 	const params = new URLSearchParams({ error: message });
+	if (name) params.set("name", name);
 	const separator = path.includes("?") ? "&" : "?";
 	redirect(`${path}${separator}${params.toString()}`);
 }
@@ -42,6 +43,7 @@ export async function createTenantAction(
 		redirectWithError(
 			errorPath,
 			"Elegí un nombre de al menos 3 caracteres.",
+			name,
 		);
 	}
 
@@ -49,6 +51,7 @@ export async function createTenantAction(
 		redirectWithError(
 			errorPath,
 			"El modelo de configuración elegido no está disponible.",
+			name,
 		);
 	}
 
@@ -70,7 +73,7 @@ export async function createTenantAction(
 				"La configuración inicial todavía no está habilitada. Pedile ayuda al administrador del sistema.";
 		}
 		console.error("[tenants:create] blueprint provisioning failed", error);
-		redirectWithError(errorPath, message);
+		redirectWithError(errorPath, message, name);
 	}
 
 	const tenantId = String(data);

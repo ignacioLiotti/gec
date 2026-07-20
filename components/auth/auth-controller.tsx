@@ -15,7 +15,6 @@ export default function AuthController() {
     function handler(event: Event) {
       const customEvent = event as CustomEvent;
       const forced = customEvent.detail?.forced ?? false;
-      console.log("[AUTH-CONTROLLER] Received open-auth event, forced:", forced);
       setOpen(true);
       setForcedOpen(forced);
     }
@@ -26,7 +25,6 @@ export default function AuthController() {
   const handleOpenChange = (newOpen: boolean) => {
     // If forcedOpen, don't allow closing
     if (forcedOpen && !newOpen) {
-      console.log("[AUTH-CONTROLLER] Blocked closing of forced modal");
       return;
     }
     setOpen(newOpen);

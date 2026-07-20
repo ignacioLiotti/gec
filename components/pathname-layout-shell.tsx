@@ -52,24 +52,28 @@ type UserRolesShape = {
 } | null;
 
 function getMobileRouteTitle(pathname: string | null) {
-	if (!pathname) return "Sintesis";
-	if (pathname === "/dashboard") return "Dashboard";
+	if (!pathname) return "Síntesis";
+	if (pathname === "/dashboard") return "Inicio";
 	if (pathname === "/excel") return "Obras";
+	if (pathname === "/excel/data-flow") return "Flujo de información";
+	if (pathname === "/excel/reporte") return "Reporte de obras";
+	if (pathname === "/excel/papelera-obras") return "Papelera de obras";
 	if (pathname.startsWith("/excel/")) return "Obra";
-	if (pathname.startsWith("/document-ai")) return "Document AI";
+	if (pathname.startsWith("/document-ai")) return "Consultar documentos";
 	if (pathname.startsWith("/document-generation")) return "Documentos";
 	if (pathname.startsWith("/notifications")) return "Notificaciones";
 	if (pathname.startsWith("/macro")) return "Macrotablas";
-	if (pathname.startsWith("/billing")) return "Facturacion";
+	if (pathname.startsWith("/billing")) return "Facturación";
 	if (pathname.startsWith("/setup")) return "Puesta en marcha";
 	if (pathname.startsWith("/help")) return "Ayuda";
+	if (pathname.startsWith("/tenants/new")) return "Nueva organización";
 	if (pathname.startsWith("/admin/tenants")) return "Organizaciones";
 	if (pathname.startsWith("/admin/tenant-secrets")) return "Secretos API";
-	if (pathname.startsWith("/admin/users")) return "Usuarios";
+	if (pathname.startsWith("/admin/users")) return "Personas y accesos";
 	if (pathname.startsWith("/admin/roles")) return "Roles";
-	if (pathname.startsWith("/admin")) return "Administracion";
+	if (pathname.startsWith("/admin")) return "Administración";
 	if (pathname.startsWith("/profile")) return "Perfil";
-	return "Sintesis";
+	return "Síntesis";
 }
 
 function MobileAppHeader({
@@ -80,14 +84,14 @@ function MobileAppHeader({
 	activeTenantName: string | null;
 }) {
 	return (
-		<header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-stone-200 bg-white/95 px-3 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur md:hidden">
-			<SidebarTrigger className="size-10 rounded-lg border border-stone-200 bg-stone-50 text-stone-800 shadow-none" />
+		<header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-stroke-soft bg-surface/95 px-3 shadow-[0_1px_0_rgba(0,0,0,0.03)] backdrop-blur md:hidden">
+			<SidebarTrigger className="size-10 rounded-lg border border-stroke bg-surface-recessed text-content shadow-none" />
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-semibold text-stone-950">
+				<p className="truncate text-sm font-semibold text-content">
 					{getMobileRouteTitle(pathname)}
 				</p>
-				<p className="truncate text-[11px] text-stone-500">
-					{activeTenantName ?? "Sintesis"}
+				<p className="truncate text-[11px] text-content-muted">
+					{activeTenantName ?? "Síntesis"}
 				</p>
 			</div>
 		</header>
@@ -121,6 +125,10 @@ export function PathnameLayoutShell({
 	const isMarketingRoot = pathname === "/";
 	const isLandingRoute = pathname?.startsWith("/landings") ?? false;
 	const isStandaloneDemoRoute = pathname?.startsWith("/demo/") ?? false;
+	const isStandaloneAccountRoute =
+		pathname === "/onboarding" ||
+		(pathname?.startsWith("/invitations/") ?? false) ||
+		(pathname?.startsWith("/tenants/new") ?? false);
 	const isDemoMode = userRoles?.actorType === "demo";
 	const isExcelLandingRoute =
 		pathname === "/excel" ||
@@ -156,7 +164,12 @@ export function PathnameLayoutShell({
 		replace(getDefaultDemoAppPath(demoCapabilities));
 	}, [demoCapabilities, isDemoMode, isStandaloneDemoRoute, pathname, replace]);
 
-	if (isMarketingRoot || isLandingRoute || isStandaloneDemoRoute) {
+	if (
+		isMarketingRoot ||
+		isLandingRoute ||
+		isStandaloneDemoRoute ||
+		isStandaloneAccountRoute
+	) {
 		return <main>{children}</main>;
 	}
 

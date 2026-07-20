@@ -70,6 +70,7 @@ import type {
 } from "@/lib/permission-simulation";
 import { usePrefetchObra } from "@/lib/use-prefetch-obra";
 import { cn } from "@/lib/utils";
+import { getTenantSwitchReturnPath } from "@/lib/tenant-switch-path";
 
 type NavItem = {
 	title: string;
@@ -86,25 +87,25 @@ type NavItem = {
 
 const navItems: NavItem[] = [
 	{
-		title: "Dashboard",
+		title: "Inicio",
 		href: "/dashboard",
 		icon: Home,
 		deniedByPermission: "nav:dashboard",
 	},
 	{
-		title: "Excel",
+		title: "Obras",
 		href: "/excel",
 		icon: Database,
 		deniedByPermission: "nav:excel",
 	},
 	{
-		title: "Data-flow general",
+		title: "Flujo de información",
 		href: "/excel/data-flow",
 		icon: Waypoints,
 		requiredPermissions: ["data-flow:read"],
 	},
 	{
-		title: "Document AI",
+		title: "Consultar documentos",
 		href: "/document-ai",
 		icon: Brain,
 		requiredPermissions: ["nav:document-ai"],
@@ -129,7 +130,7 @@ const navItems: NavItem[] = [
 
 const documentNavItems: NavItem[] = [
 	{
-		title: "Generar Documentos",
+		title: "Generar documentos",
 		href: "/document-generation",
 		icon: FileText,
 	},
@@ -139,12 +140,12 @@ const documentNavItems: NavItem[] = [
 		icon: FileText,
 	},
 	{
-		title: "Revision",
+		title: "Revisión",
 		href: "/document-generation/review",
 		icon: FileText,
 	},
 	{
-		title: "Configuracion",
+		title: "Configuración",
 		href: "/document-generation/config",
 		icon: FileText,
 	},
@@ -152,25 +153,25 @@ const documentNavItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
 	{
-		title: "Usuarios",
+		title: "Personas y accesos",
 		href: "/admin/users",
 		icon: Users,
 		requiredPermissions: ["admin:users"],
 	},
 	{
-		title: "Configuracion de Obras",
+		title: "Modelo de obras",
 		href: "/admin/obra-defaults",
 		icon: Settings2,
 		requiredPermissions: ["admin:obra-defaults"],
 	},
 	{
-		title: "Tabla Principal",
+		title: "Columnas de obras",
 		href: "/admin/main-table-config",
 		icon: Columns3Cog,
 		requiredPermissions: ["admin:main-table-config"],
 	},
 	{
-		title: "Macro Tablas",
+		title: "Vistas consolidadas",
 		href: "/macro",
 		icon: Layers,
 	},
@@ -422,6 +423,9 @@ export function AppSidebar({
 	} | null>(null);
 	const tenantOptions = tenants ?? [];
 	const canCreateTenant = Boolean(user && !demoMode);
+	const canManageSetup = Boolean(
+		userRoles?.isAdmin || userRoles?.isSuperAdmin,
+	);
 	const activeTenantId = userRoles?.tenantId ?? null;
 	const activeMacroTableId = getSearchParam("macroId");
 	const macroTables = React.useMemo(() => {
@@ -480,7 +484,11 @@ export function AppSidebar({
 			}
 			setTenantMenuOpen(false);
 			setSwitchingTenantId(tenantId);
-			const nextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+			const nextPath = getTenantSwitchReturnPath(
+				window.location.pathname,
+				window.location.search,
+				window.location.hash,
+			);
 			window.location.assign(
 				`/api/tenants/${tenantId}/switch?next=${encodeURIComponent(nextPath)}`
 			);
@@ -681,7 +689,7 @@ export function AppSidebar({
 									className={isCollapsed ? "" : "min-w-0 flex-1"}
 								>
 									<SidebarPrefetchLink
-										href="/"
+										href="/dashboard"
 										className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5"
 									>
 										<div
@@ -690,10 +698,10 @@ export function AppSidebar({
 										/>
 										<div className="grid flex-1 text-left text-sm leading-tight transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-data-[collapsible=icon]:-translate-x-1 group-data-[collapsible=icon]:opacity-0">
 											<span className="truncate font-mono text-lg font-semibold leading-[16px]">
-												Sintesis
+												Síntesis
 											</span>
 											<span className="truncate text-xs">
-												Plataforma de gestion
+												Plataforma de gestión
 											</span>
 										</div>
 									</SidebarPrefetchLink>
@@ -710,7 +718,7 @@ export function AppSidebar({
 													: "items-center justify-between px-3 py-2.5"
 											)}
 											type="button"
-											aria-label={activeTenant?.name ?? "Seleccionar organizacion"}
+											aria-label={activeTenant?.name ?? "Seleccionar organización"}
 										>
 											<Building2
 												className={cn(
@@ -727,7 +735,7 @@ export function AppSidebar({
 												)}
 											>
 												<p className="text-xs font-normal text-muted-foreground">
-													Organizacion
+												Organización
 												</p>
 												<p className="truncate">
 													{activeTenant?.name ?? "Seleccionar"}
@@ -779,25 +787,27 @@ export function AppSidebar({
 												</DropdownMenuItem>
 											);
 										})}
-										{canCreateTenant && (
+												{canCreateTenant && (
 											<>
 												<DropdownMenuSeparator />
-												<DropdownMenuItem asChild>
-													<SidebarPrefetchLink
-														href="/setup"
-														className="flex items-center gap-2"
-													>
-														<Settings2 className="size-4" />
-														<span>Puesta en marcha</span>
-													</SidebarPrefetchLink>
-												</DropdownMenuItem>
+													{canManageSetup ? (
+														<DropdownMenuItem asChild>
+															<SidebarPrefetchLink
+																href="/setup"
+																className="flex items-center gap-2"
+															>
+																<Settings2 className="size-4" />
+																<span>Puesta en marcha</span>
+															</SidebarPrefetchLink>
+														</DropdownMenuItem>
+													) : null}
 												<DropdownMenuItem asChild>
 													<SidebarPrefetchLink
 														href="/tenants/new"
 														className="flex items-center gap-2"
 													>
 														<PlusCircle className="size-4" />
-														<span>Crear organizacion</span>
+														<span>Crear organización</span>
 													</SidebarPrefetchLink>
 												</DropdownMenuItem>
 											</>
@@ -809,7 +819,7 @@ export function AppSidebar({
 									<SidebarPrefetchLink
 										href="/tenants/new"
 										className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
-										title="Crear organizacion"
+									title="Crear organización"
 									>
 										<PlusCircle className="size-5" />
 									</SidebarPrefetchLink>
@@ -818,7 +828,7 @@ export function AppSidebar({
 										href="/tenants/new"
 										className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
 									>
-										Crear organizacion
+									Crear organización
 									</SidebarPrefetchLink>
 								)
 							) : null}
@@ -834,7 +844,9 @@ export function AppSidebar({
 						<SidebarGroupContent>
 							<SidebarMenu>
 								{filteredNavItems.map((item) => {
-									const isActive = pathname === item.href;
+									const isActive =
+										pathname === item.href ||
+										(item.href !== "/dashboard" && pathname?.startsWith(`${item.href}/`));
 									const showTablasBeforeThis =
 										item.href === macroTablesInsertionHref;
 
@@ -1035,7 +1047,7 @@ export function AppSidebar({
 					<>
 						<Separator />
 						<SidebarGroup>
-							<SidebarGroupLabel>Administracion</SidebarGroupLabel>
+							<SidebarGroupLabel>Administración</SidebarGroupLabel>
 							<SidebarGroupContent>
 								<SidebarMenu>
 									{filteredAdminItems.map((item) => {

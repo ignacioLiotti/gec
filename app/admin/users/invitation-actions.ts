@@ -10,9 +10,16 @@ import { sendInvitationEmail } from "@/lib/email/invitations";
 import { isSuperAdminUser } from "@/lib/superadmin";
 
 const INVITATIONS_TABLE_MISSING_CODE = "PGRST205";
+const INVITATION_COLUMN_MISSING_CODES = new Set(["PGRST204", "42703"]);
 const DEFAULT_INVITATION_BASE_URL = "https://sintesis.dev";
 const isInvitationsTableMissing = (error?: PostgrestError | null) =>
 	error?.code === INVITATIONS_TABLE_MISSING_CODE;
+const isOperationalRoleSchemaMissing = (error?: PostgrestError | null) =>
+	Boolean(
+		error &&
+			(INVITATION_COLUMN_MISSING_CODES.has(error.code) ||
+				error.message.includes("invited_operational_role")),
+	);
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -23,6 +30,8 @@ type InvitationRow = {
 	token?: string;
 	invited_by: string;
 	invited_role: InvitedRole;
+	invited_operational_role_id?: string | null;
+	invited_operational_role_name?: string | null;
 	status: InvitationStatus;
 	expires_at: string;
 	created_at: string;
@@ -64,7 +73,7 @@ async function requireUsersAdmin(
 		profile?.is_superadmin,
 		user.email,
 	);
-	const { tenantId } = await resolveTenantMembership(
+	const { tenantId, activeMembership } = await resolveTenantMembership(
 		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
 		{ isSuperAdmin }
 	);
@@ -88,24 +97,13 @@ async function requireUsersAdmin(
 		}
 	}
 
-	return { user, profile, tenantId: effectiveTenantId, isSuperAdmin };
-}
-
-async function requireInvitationInTenant(
-	supabase: Supabase,
-	invitationId: string,
-	tenantId: string
-) {
-	const { data: invitation, error } = await supabase
-		.from("invitations")
-		.select("id")
-		.eq("id", invitationId)
-		.eq("tenant_id", tenantId)
-		.maybeSingle();
-	if (error) throw error;
-	if (!invitation) {
-		throw new Error("Invitation not found");
-	}
+	return {
+		user,
+		profile,
+		tenantId: effectiveTenantId,
+		isSuperAdmin,
+		membershipRole: activeMembership?.role ?? null,
+	};
 }
 
 function normalizeBaseUrl(value: string) {
@@ -149,6 +147,8 @@ export interface Invitation {
 	created_at: string;
 	accepted_at?: string;
 	accepted_by?: string;
+	invited_operational_role_id?: string | null;
+	invited_operational_role_name?: string | null;
 	tenant?: {
 		name: string;
 	};
@@ -164,22 +164,46 @@ export async function sendInvitation({
 	tenantId,
 	email,
 	role = "member",
+	operationalRoleId,
 }: {
 	tenantId: string;
 	email: string;
 	role?: InvitedRole;
+	operationalRoleId?: string | null;
 }) {
 	const session = await auth();
-	if (!session.data.user) return { error: "Unauthorized" };
+	if (!session.data.user) return { error: "Iniciá sesión para enviar invitaciones" };
 	const supabase = await createClient();
 	let authContext: Awaited<ReturnType<typeof requireUsersAdmin>>;
 	try {
 		authContext = await requireUsersAdmin(supabase, tenantId);
 	} catch (error) {
 		console.error("Unauthorized invitation send attempt:", error);
-		return { error: "Unauthorized" };
+		return { error: "No tenés permiso para invitar personas" };
 	}
-	const { user, profile } = authContext;
+	const { user, profile, membershipRole, isSuperAdmin } = authContext;
+	if (
+		role === "admin" &&
+		!isSuperAdmin &&
+		membershipRole !== "owner" &&
+		membershipRole !== "admin"
+	) {
+		return { error: "Solo una persona propietaria o administradora puede invitar administradores" };
+	}
+
+	let validatedOperationalRoleId: string | null = null;
+	if (role === "member" && operationalRoleId) {
+		const { data: operationalRole, error: operationalRoleError } = await supabase
+			.from("roles")
+			.select("id")
+			.eq("id", operationalRoleId)
+			.eq("tenant_id", tenantId)
+			.maybeSingle();
+		if (operationalRoleError || !operationalRole) {
+			return { error: "El rol de trabajo elegido ya no está disponible" };
+		}
+		validatedOperationalRoleId = operationalRole.id as string;
+	}
 
 	// Normalize email
 	const normalizedEmail = email.toLowerCase().trim();
@@ -193,10 +217,10 @@ export async function sendInvitation({
 	);
 	if (memberCheckError) {
 		console.error("Error checking invited email membership:", memberCheckError);
-		return { error: "Failed to validate invitation recipient" };
+		return { error: "No pudimos validar el correo de la invitación" };
 	}
 	if (isExistingMember) {
-		return { error: "This email is already a member of this organization" };
+		return { error: "Ese correo ya pertenece a la organización" };
 	}
 
 	// Check for existing pending invitation
@@ -209,7 +233,7 @@ export async function sendInvitation({
 		.maybeSingle();
 
 	if (existingInvitation) {
-		return { error: "An invitation has already been sent to this email" };
+		return { error: "Ya hay una invitación pendiente para ese correo" };
 	}
 
 	// Create invitation
@@ -220,6 +244,7 @@ export async function sendInvitation({
 			email: normalizedEmail,
 			invited_by: user.id,
 			invited_role: role,
+			invited_operational_role_id: validatedOperationalRoleId,
 			status: "pending",
 		})
 		.select("id, token")
@@ -227,7 +252,7 @@ export async function sendInvitation({
 
 	if (insertError) {
 		console.error("Error creating invitation:", insertError);
-		return { error: "Failed to create invitation" };
+		return { error: "No pudimos crear la invitación" };
 	}
 
 	const baseUrl = getInvitationBaseUrl();
@@ -238,6 +263,7 @@ export async function sendInvitation({
 		.eq("id", tenantId)
 		.maybeSingle();
 
+	let emailSent = true;
 	try {
 		await sendInvitationEmail({
 			to: normalizedEmail,
@@ -246,6 +272,7 @@ export async function sendInvitation({
 			inviterName: profile?.full_name ?? user.email ?? null,
 		});
 	} catch (emailError) {
+		emailSent = false;
 		console.error("Failed to send invitation email", emailError);
 	}
 
@@ -256,6 +283,7 @@ export async function sendInvitation({
 		invitationId: invitation.id,
 		token: invitation.token,
 		inviteLink,
+		emailSent,
 	};
 }
 
@@ -265,7 +293,7 @@ export async function sendInvitation({
 export async function acceptInvitation(token: string) {
 	const session = await auth();
 	if (!session.data.user) {
-		return { error: "You must be logged in to accept an invitation" };
+		return { error: "Iniciá sesión para aceptar la invitación" };
 	}
 	const supabase = await createClient();
 
@@ -276,13 +304,13 @@ export async function acceptInvitation(token: string) {
 	} = await supabase.auth.getUser();
 
 	if (authError || !user) {
-		return { error: "You must be logged in to accept an invitation" };
+		return { error: "Iniciá sesión para aceptar la invitación" };
 	}
 
 	// Get user email
 	const userEmail = user.email?.toLowerCase().trim();
 	if (!userEmail) {
-		return { error: "User email not found" };
+		return { error: "No encontramos un correo en tu cuenta" };
 	}
 
 	// Get invitation details using the helper function
@@ -292,7 +320,7 @@ export async function acceptInvitation(token: string) {
 	);
 
 	if (inviteError || !invitationDetails || invitationDetails.length === 0) {
-		return { error: "Invalid or expired invitation" };
+		return { error: "La invitación no es válida o ya venció" };
 	}
 
 	const invitation = invitationDetails[0];
@@ -300,7 +328,7 @@ export async function acceptInvitation(token: string) {
 	// Verify email matches
 	if (invitation.email.toLowerCase() !== userEmail) {
 		return {
-			error: `This invitation was sent to ${invitation.email}. Please log in with that email to accept.`,
+			error: `La invitación fue enviada a ${invitation.email}. Iniciá sesión con ese correo para aceptarla.`,
 		};
 	}
 
@@ -314,7 +342,7 @@ export async function acceptInvitation(token: string) {
 
 	if (acceptError || !acceptedInvitation) {
 		console.error("Error accepting invitation:", acceptError);
-		return { error: "Failed to join organization" };
+		return { error: "No pudimos incorporarte a la organización" };
 	}
 
 	revalidatePath("/");
@@ -333,56 +361,17 @@ export async function acceptInvitation(token: string) {
 export async function declineInvitation(token: string) {
 	const session = await auth();
 	if (!session.data.user) {
-		return { error: "You must be logged in to decline an invitation" };
+		return { error: "Iniciá sesión para rechazar la invitación" };
 	}
 	const supabase = await createClient();
+	const { data: declined, error } = await supabase.rpc(
+		"decline_tenant_invitation",
+		{ p_token: token },
+	);
 
-	// Get current user
-	const {
-		data: { user },
-		error: authError,
-	} = await supabase.auth.getUser();
-
-	if (authError || !user) {
-		return { error: "You must be logged in to decline an invitation" };
-	}
-
-	// Get user email
-	const userEmail = user.email?.toLowerCase().trim();
-	if (!userEmail) {
-		return { error: "User email not found" };
-	}
-
-	// Get invitation
-	const { data: invitation, error: inviteError } = await supabase
-		.from("invitations")
-		.select("id, tenant_id, email, status")
-		.eq("token", token)
-		.eq("status", "pending")
-		.maybeSingle();
-
-	if (inviteError || !invitation) {
-		return { error: "Invalid or expired invitation" };
-	}
-
-	// Verify email matches
-	if (invitation.email.toLowerCase() !== userEmail) {
-		return { error: "This invitation was not sent to your email" };
-	}
-
-	// Update invitation status
-	const { error: updateError } = await supabase
-		.from("invitations")
-		.update({ status: "declined" })
-		.eq("id", invitation.id)
-		.eq("tenant_id", invitation.tenant_id)
-		.eq("email", userEmail)
-		.eq("token", token)
-		.eq("status", "pending");
-
-	if (updateError) {
-		console.error("Error declining invitation:", updateError);
-		return { error: "Failed to decline invitation" };
+	if (error || declined !== true) {
+		console.error("Error declining invitation:", error);
+		return { error: "No pudimos rechazar la invitación. Puede haber vencido." };
 	}
 
 	return { success: true };
@@ -397,23 +386,19 @@ export async function cancelInvitation(invitationId: string, tenantId: string) {
 	const supabase = await createClient();
 	try {
 		await requireUsersAdmin(supabase, tenantId);
-		await requireInvitationInTenant(supabase, invitationId, tenantId);
 	} catch (error) {
 		console.error("Unauthorized invitation cancellation attempt:", error);
 		return { error: "Unauthorized" };
 	}
 
-	// Update invitation status
-	const { error: updateError } = await supabase
-		.from("invitations")
-		.update({ status: "cancelled" })
-		.eq("id", invitationId)
-		.eq("tenant_id", tenantId)
-		.eq("status", "pending");
+	const { data: cancelledInvitation, error: updateError } = await supabase.rpc(
+		"cancel_tenant_invitation",
+		{ p_invitation_id: invitationId },
+	);
 
-	if (updateError) {
+	if (updateError || cancelledInvitation !== true) {
 		console.error("Error cancelling invitation:", updateError);
-		return { error: "Failed to cancel invitation" };
+		return { error: "No pudimos cancelar la invitación. Puede haber vencido." };
 	}
 
 	revalidatePath("/admin/users");
@@ -442,13 +427,16 @@ export async function listPendingInvitations(tenantId: string) {
 	}
 
 	// Get pending invitations with manual profile join
-	const { data: invitations, error } = await supabase
+	const invitationResult = await supabase
 		.from("invitations")
 		.select(
 			`
       id,
       email,
+      token,
       invited_role,
+	  invited_operational_role_id,
+	  invited_operational_role_name,
       status,
       expires_at,
       created_at,
@@ -459,10 +447,25 @@ export async function listPendingInvitations(tenantId: string) {
 		.eq("status", "pending")
 		.order("created_at", { ascending: false });
 
+	let invitations = invitationResult.data;
+	let invitationError = invitationResult.error;
+	if (isOperationalRoleSchemaMissing(invitationError)) {
+		const legacyResult = await supabase
+			.from("invitations")
+			.select(
+				"id, email, token, invited_role, status, expires_at, created_at, invited_by",
+			)
+			.eq("tenant_id", tenantId)
+			.eq("status", "pending")
+			.order("created_at", { ascending: false });
+		invitations = legacyResult.data as typeof invitations;
+		invitationError = legacyResult.error;
+	}
+
 	let invitationRows: InvitationWithDetails[] = (invitations ?? []) as InvitationRow[];
 
 	// Manually fetch inviter profiles if we have invitations
-	if (!error && invitations && invitations.length > 0) {
+	if (!invitationError && invitations && invitations.length > 0) {
 		const inviterIds = invitations.map((inv) => inv.invited_by);
 		const { data: profiles } = await supabase
 			.from("profiles")
@@ -477,17 +480,18 @@ export async function listPendingInvitations(tenantId: string) {
 		invitationRows = invitationRows.map((inv) => ({
 			...inv,
 			inviter: { full_name: profileMap.get(inv.invited_by) || null },
+			inviteLink: inv.token ? `${getInvitationBaseUrl()}/invitations/${inv.token}` : null,
 		}));
 	}
 
-	if (error) {
-		if (isInvitationsTableMissing(error)) {
+	if (invitationError) {
+		if (isInvitationsTableMissing(invitationError)) {
 			console.warn(
 				"Invitations table not found; skipping pending invitation list."
 			);
 			return { invitations: [] };
 		}
-		console.error("Error fetching invitations:", error);
+		console.error("Error fetching invitations:", invitationError);
 		return { error: "Failed to fetch invitations" };
 	}
 
@@ -500,7 +504,7 @@ export async function listPendingInvitations(tenantId: string) {
 export async function getMyPendingInvitations() {
 	const session = await auth();
 	if (!session.data.user) {
-		return { invitations: [] };
+		return { error: "Iniciá sesión para revisar tus invitaciones" };
 	}
 	const supabase = await createClient();
 
@@ -511,7 +515,7 @@ export async function getMyPendingInvitations() {
 	} = await supabase.auth.getUser();
 
 	if (authError || !user || !user.email) {
-		return { invitations: [] };
+		return { error: "No pudimos verificar el correo de tu cuenta" };
 	}
 
 	// Expire old invitations first
@@ -524,7 +528,7 @@ export async function getMyPendingInvitations() {
 
 	// Get pending invitations for user's email with manual joins.
 	// Use case-insensitive match to avoid missing invites due to casing.
-	const { data: invitations, error } = await supabase
+	const invitationResult = await supabase
 		.from("invitations")
 		.select(
 			`
@@ -532,6 +536,8 @@ export async function getMyPendingInvitations() {
       token,
       tenant_id,
       invited_role,
+	  invited_operational_role_id,
+	  invited_operational_role_name,
       expires_at,
       created_at,
       invited_by
@@ -542,15 +548,28 @@ export async function getMyPendingInvitations() {
 		.gt("expires_at", new Date().toISOString())
 		.order("created_at", { ascending: false });
 
-	let invitationRows: InvitationWithDetails[] = (invitations ?? []) as InvitationRow[];
-	let invitationError = error;
+	let invitationRows: InvitationWithDetails[] = (invitationResult.data ?? []) as InvitationRow[];
+	let invitationError = invitationResult.error;
+	if (isOperationalRoleSchemaMissing(invitationError)) {
+		const legacyResult = await supabase
+			.from("invitations")
+			.select(
+				"id, token, tenant_id, invited_role, expires_at, created_at, invited_by",
+			)
+			.ilike("email", normalizedEmail)
+			.eq("status", "pending")
+			.gt("expires_at", new Date().toISOString())
+			.order("created_at", { ascending: false });
+		invitationRows = (legacyResult.data ?? []) as InvitationRow[];
+		invitationError = legacyResult.error;
+	}
 
 	// Fallback for stricter RLS setups: query with admin client after authenticating
 	// current user and filter by normalized email server-side.
 	if (invitationError || invitationRows.length === 0) {
 		try {
 			const admin = createSupabaseAdminClient();
-			const { data: adminInvitations, error: adminError } = await admin
+			const adminResult = await admin
 				.from("invitations")
 				.select(
 					`
@@ -558,21 +577,35 @@ export async function getMyPendingInvitations() {
           token,
           tenant_id,
           invited_role,
+		  invited_operational_role_id,
+		  invited_operational_role_name,
           expires_at,
           created_at,
           invited_by,
           email
         `
 				)
+				.ilike("email", normalizedEmail)
 				.eq("status", "pending")
 				.gt("expires_at", new Date().toISOString())
 				.order("created_at", { ascending: false });
+			let adminInvitations = adminResult.data;
+			let adminError = adminResult.error;
+			if (isOperationalRoleSchemaMissing(adminError)) {
+				const legacyAdminResult = await admin
+					.from("invitations")
+					.select(
+						"id, token, tenant_id, invited_role, expires_at, created_at, invited_by, email",
+					)
+					.ilike("email", normalizedEmail)
+					.eq("status", "pending")
+					.gt("expires_at", new Date().toISOString())
+					.order("created_at", { ascending: false });
+				adminInvitations = legacyAdminResult.data as typeof adminInvitations;
+				adminError = legacyAdminResult.error;
+			}
 			if (!adminError && adminInvitations) {
-				invitationRows = (adminInvitations as InvitationRow[]).filter(
-					(inv) =>
-						typeof inv.email === "string" &&
-						inv.email.toLowerCase().trim() === normalizedEmail
-				);
+				invitationRows = adminInvitations as InvitationRow[];
 				invitationError = null;
 			}
 		} catch (fallbackError) {
@@ -617,7 +650,7 @@ export async function getMyPendingInvitations() {
 			return { invitations: [] };
 		}
 		console.error("Error fetching user invitations:", invitationError);
-		return { invitations: [] };
+		return { error: "No pudimos cargar tus invitaciones. Volvé a intentarlo." };
 	}
 
 	return { invitations: invitationRows };

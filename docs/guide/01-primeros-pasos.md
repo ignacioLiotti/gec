@@ -5,6 +5,12 @@
 1. Si te invitaron por email, abrí el enlace de invitación y creá tu contraseña. Quedás asociado automáticamente a la empresa que te invitó, con el rol que te asignaron.
 2. Si sos el primero de tu empresa, registrate y seguí la puesta en marcha: nombre de la empresa, revisión del modelo recomendado, primera obra y equipo. Podés salir y retomar estos pasos desde el selector de organizaciones.
 
+Al crear la primera obra, el sistema asigna el número disponible y prepara sus carpetas y tablas. Si alguna parte no puede completarse, vas a ver un aviso y una acción para reintentar; la pantalla no te va a indicar que está lista antes de tiempo. Invitar al equipo es opcional y no impide terminar la puesta en marcha.
+
+En organizaciones creadas con el modelo recomendado, el estado de preparación queda guardado. Si cerrás o recargás la pantalla, la puesta en marcha seguirá mostrando el reintento hasta verificar que la estructura quedó lista.
+
+Al invitar a una persona de trabajo diario, elegí también su tarea principal. Ese rol deja preparadas sus pantallas y permisos desde el primer ingreso. El nivel **Administrador** se reserva para quienes realmente deben gestionar personas y configuración.
+
 ## Ingresar
 
 Entrá con tu email y contraseña. Si pertenecés a más de una empresa, podés cambiar de empresa activa desde el selector de la barra lateral — todo lo que veas (obras, documentos, tablas) corresponde siempre a la empresa activa.

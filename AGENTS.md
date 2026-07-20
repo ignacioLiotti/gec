@@ -20,6 +20,12 @@ Help agents work with focused local context, small changes, and explicit validat
 - Use token classes from the design-system guide for product UI colors, spacing, surfaces, borders, and text.
 - Keep report/document output, charts, calendars, landing pages, and viewer canvases on their existing domain-specific visual rules unless the task explicitly targets them.
 
+## Visual product documentation
+
+- Any new or changed user-visible feature, flow, screen, state, permission outcome, or automation must follow the FigJam maintenance workflow in `app/AGENT_CONTEXT.md`.
+- When working on an existing user-visible capability that is missing from FigJam, add it as part of the same change even if the task did not explicitly request documentation.
+- Internal refactors with no observable product or flow change do not require a FigJam update.
+
 ## Editing rules
 
 - Keep changes small and focused.

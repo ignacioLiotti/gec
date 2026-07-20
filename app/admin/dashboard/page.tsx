@@ -2,10 +2,10 @@ import Link from "next/link";
 import {
 	AlertTriangle,
 	ArrowUpRight,
-	BadgeAlert,
+	Banknote,
+	Bell,
 	BriefcaseBusiness,
 	CheckCircle2,
-	Clock3,
 	FileText,
 	ShieldAlert,
 } from "lucide-react";
@@ -15,6 +15,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getUserRoles } from "@/lib/route-guard";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/server";
+
+import {
+	OperationalTrendChart,
+	type OperationalTrendPoint,
+} from "./_components/operational-trend-chart";
+import { Peek } from "./_components/peek";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -149,17 +155,62 @@ function formatMoney(value: number, currency = "ARS") {
 	}
 }
 
-function formatMoneyGroups(groups: Map<string, number>) {
+function formatCompactMoney(value: number, currency = "ARS") {
+	try {
+		return new Intl.NumberFormat("es-AR", {
+			style: "currency",
+			currency: normalizeCurrency(currency),
+			notation: "compact",
+			maximumFractionDigits: 1,
+		}).format(value);
+	} catch {
+		return `${normalizeCurrency(currency)} ${compactNumberFmt.format(value)}`;
+	}
+}
+
+function formatCompactMoneyGroups(groups: Map<string, number>) {
 	const entries = Array.from(groups.entries()).filter(([, amount]) => amount !== 0);
-	if (entries.length === 0) return formatMoney(0);
+	if (entries.length === 0) return "Sin saldo";
 	return entries
 		.sort(([left], [right]) => left.localeCompare(right))
-		.map(([currency, amount]) => formatMoney(amount, currency))
+		.map(([currency, amount]) => formatCompactMoney(amount, currency))
 		.join(" + ");
 }
 
 function addMoneyGroup(groups: Map<string, number>, currency: string, amount: number) {
 	groups.set(currency, (groups.get(currency) ?? 0) + amount);
+}
+
+function buildPolicyTrend(
+	policies: PolicyRow[],
+	riskPolicyIds: Set<string>,
+): OperationalTrendPoint[] {
+	const now = new Date();
+	const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+	const labelFormatter = new Intl.DateTimeFormat("es-AR", {
+		month: "short",
+		timeZone: "UTC",
+	});
+	const buckets = Array.from({ length: 12 }, (_, offset) => {
+		const date = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + offset, 1));
+		return {
+			key: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`,
+			label: labelFormatter.format(date).replace(".", ""),
+			expiring: 0,
+			atRisk: 0,
+		};
+	});
+	const byMonth = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+
+	for (const policy of policies) {
+		const key = dateIso(policy.end_date).slice(0, 7);
+		const bucket = byMonth.get(key);
+		if (!bucket) continue;
+		bucket.expiring += 1;
+		if (riskPolicyIds.has(policy.id)) bucket.atRisk += 1;
+	}
+
+	return buckets.map(({ label, expiring, atRisk }) => ({ label, expiring, atRisk }));
 }
 
 function dateIso(value: string | null | undefined) {
@@ -182,6 +233,25 @@ function addDaysIso(days: number) {
 	const date = new Date();
 	date.setDate(date.getDate() + days);
 	return date.toISOString().slice(0, 10);
+}
+
+function daysUntil(value: string | null | undefined) {
+	const iso = dateIso(value);
+	if (!iso) return null;
+	const [year, month, day] = iso.split("-").map(Number);
+	if (!year || !month || !day) return null;
+	const end = Date.UTC(year, month - 1, day);
+	const now = new Date();
+	const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+	return Math.round((end - today) / 86_400_000);
+}
+
+function deadlineLabel(value: string | null | undefined) {
+	const days = daysUntil(value);
+	if (days === null) return "Sin fecha";
+	if (days < 0) return `Vencida hace ${numberFmt.format(Math.abs(days))} d`;
+	if (days === 0) return "Vence hoy";
+	return `En ${numberFmt.format(days)} d`;
 }
 
 function getPolicyObra(policy: PolicyRow) {
@@ -324,75 +394,125 @@ async function loadUnreadNotifications(
 	};
 }
 
-function KpiCard({
-	title,
+function StatTile({
+	label,
 	value,
-	description,
+	sub,
 	icon: Icon,
-	tone = "stone",
+	tone,
+	progress,
 }: {
-	title: string;
+	label: string;
 	value: string;
-	description: string;
+	sub: string;
 	icon: React.ComponentType<{ className?: string }>;
-	tone?: "stone" | "amber" | "red" | "emerald" | "sky";
+	tone: "brand" | "success" | "warning" | "destructive" | "neutral";
+	progress?: number;
 }) {
 	const toneClass = {
-		stone: "admin-dashboard-icon bg-stone-950 text-white",
-		amber: "admin-dashboard-icon-orange bg-amber-500 text-white",
-		red: "admin-dashboard-icon-orange bg-rose-600 text-white",
-		emerald: "admin-dashboard-icon bg-emerald-600 text-white",
-		sky: "admin-dashboard-icon-violet bg-sky-600 text-white",
+		brand: "bg-orange-primary/10 text-orange-primary",
+		success: "bg-success/10 text-success",
+		warning: "bg-warning/15 text-warning-foreground",
+		destructive: "bg-destructive/10 text-destructive",
+		neutral: "bg-surface-recessed text-content-secondary",
 	}[tone];
 
 	return (
-		<Card className="admin-dashboard-card admin-dashboard-card-raised">
-			<CardHeader className="pb-2">
-				<div className="flex items-center justify-between gap-3">
-					<p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-						{title}
-					</p>
-					<span className={cn("grid size-8 place-items-center rounded-lg", toneClass)}>
-						<Icon className="size-4" />
-					</span>
-				</div>
-			</CardHeader>
-			<CardContent>
-				<p className="break-words text-2xl font-semibold tracking-tight text-stone-950">
-					{value}
+		<div className="min-w-0 px-4 py-3.5">
+			<div className="flex items-center gap-2">
+				<span className={cn("grid size-6 shrink-0 place-items-center rounded-md", toneClass)}>
+					<Icon className="size-3.5" />
+				</span>
+				<p className="truncate text-[11px] font-semibold uppercase tracking-[0.1em] text-content-muted">
+					{label}
 				</p>
-				<p className="mt-1 text-xs leading-5 text-stone-500">{description}</p>
-			</CardContent>
-		</Card>
+			</div>
+			<p className="mt-2.5 truncate text-[22px] font-semibold leading-none tracking-tight text-content tabular-nums">
+				{value}
+			</p>
+			{progress !== undefined ? (
+				<div className="admin-dashboard-progress-track mt-2 h-1 w-full rounded-full">
+					<div
+						className="admin-dashboard-progress-value h-1 rounded-full bg-orange-primary"
+						style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+					/>
+				</div>
+			) : null}
+			<p className="mt-1.5 truncate text-xs text-content-muted">{sub}</p>
+		</div>
 	);
 }
 
-function ProgressLine({
+function MeterBar({
 	value,
-	tone = "sky",
+	tone = "progress",
+	className,
 }: {
 	value: number;
-	tone?: "sky" | "amber" | "emerald" | "rose";
+	tone?: "progress" | "warning" | "success" | "danger";
+	className?: string;
 }) {
 	const toneClass = {
-		sky: "bg-sky-600",
-		amber: "bg-amber-500",
-		emerald: "bg-emerald-600",
-		rose: "bg-rose-600",
+		progress: "bg-orange-primary",
+		warning: "bg-warning",
+		success: "bg-success",
+		danger: "bg-destructive",
 	}[tone];
 	return (
-		<div className="admin-dashboard-progress-track h-2 w-full rounded-full">
+		<div className={cn("admin-dashboard-progress-track h-1.5 w-full rounded-full", className)}>
 			<div
-				className={cn("h-2 rounded-full", toneClass)}
+				className={cn("admin-dashboard-progress-value h-1.5 rounded-full", toneClass)}
 				style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
 			/>
 		</div>
 	);
 }
 
+function BulletMeter({
+	progress,
+	time,
+	className,
+}: {
+	progress: number;
+	time: number;
+	className?: string;
+}) {
+	return (
+		<span
+			className={cn(
+				"admin-dashboard-progress-track relative block h-2 w-28 shrink-0 rounded-full",
+				className,
+			)}
+		>
+			<span
+				className="admin-dashboard-progress-value absolute inset-y-0 left-0 rounded-full bg-orange-primary"
+				style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+			/>
+			<span
+				className="absolute inset-y-[-2px] w-0.5 -translate-x-1/2 rounded-full bg-content/60"
+				style={{ left: `${Math.max(1, Math.min(99, time))}%` }}
+			/>
+		</span>
+	);
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+	return (
+		<div className="flex items-baseline justify-between gap-3 text-xs">
+			<span className="shrink-0 text-content-muted">{label}</span>
+			<span className="min-w-0 truncate text-right font-medium text-content tabular-nums">
+				{children}
+			</span>
+		</div>
+	);
+}
+
+const GLANCE_ROW_CLASS =
+	"group -mx-2 flex h-9 min-w-0 items-center gap-2.5 rounded-md px-2 transition-colors hover:bg-surface-muted/60";
+
 function EmptyState({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="admin-dashboard-empty px-4 py-8 text-center text-sm text-stone-500">
+		<div className="admin-dashboard-empty px-4 py-7 text-center text-sm text-content-muted">
 			{children}
 		</div>
 	);
@@ -400,20 +520,31 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 
 function DataSection({
 	title,
+	subtitle,
 	action,
 	children,
+	className,
+	contentClassName,
 }: {
 	title: string;
+	subtitle?: string;
 	action?: React.ReactNode;
 	children: React.ReactNode;
+	className?: string;
+	contentClassName?: string;
 }) {
 	return (
-		<Card className="admin-dashboard-card">
-			<CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-				<CardTitle className="text-base font-semibold text-stone-950">{title}</CardTitle>
+		<Card className={cn("admin-dashboard-card admin-dashboard-card-unfold", className)}>
+			<CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+				<div className="min-w-0">
+					<CardTitle className="text-sm font-semibold tracking-tight text-content">
+						{title}
+					</CardTitle>
+					{subtitle ? <p className="mt-0.5 truncate text-xs text-content-muted">{subtitle}</p> : null}
+				</div>
 				{action}
 			</CardHeader>
-			<CardContent>{children}</CardContent>
+			<CardContent className={contentClassName}>{children}</CardContent>
 		</Card>
 	);
 }
@@ -428,11 +559,22 @@ function TextLink({
 	return (
 		<Link
 			href={href}
-			className="inline-flex items-center gap-1 rounded-md bg-white/60 px-2 py-1 text-xs font-semibold text-sky-700 transition hover:bg-white"
+			className="inline-flex shrink-0 items-center gap-1 rounded-md bg-surface-muted px-2 py-1 text-xs font-semibold text-content-secondary transition-colors hover:bg-surface-recessed hover:text-content"
 		>
 			{children}
 			<ArrowUpRight className="size-3" />
 		</Link>
+	);
+}
+
+function SectionDivider({ label, className }: { label: string; className?: string }) {
+	return (
+		<div className={cn("flex items-center gap-3 pt-1", className)}>
+			<p className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.16em] text-content-muted">
+				{label}
+			</p>
+			<span className="h-px flex-1 bg-stroke-soft" />
+		</div>
 	);
 }
 
@@ -475,6 +617,15 @@ export default async function AdminDashboardPage() {
 	);
 	const delayedWorks = activeWorks.filter((row) => row.delayPct >= 10);
 	const totalActiveSaldo = activeWorks.reduce((sum, row) => sum + row.saldo, 0);
+	const totalContract = workModels.reduce(
+		(sum, row) => sum + toNumber(row.obra.contrato_mas_ampliaciones),
+		0,
+	);
+	const totalCertified = workModels.reduce(
+		(sum, row) => sum + toNumber(row.obra.certificado_a_la_fecha),
+		0,
+	);
+	const certifiedPct = totalContract > 0 ? (totalCertified / totalContract) * 100 : 0;
 
 	const policiesWithReasons: PolicyWithReasons[] = policiesResult.rows
 		.map((policy) => {
@@ -507,6 +658,16 @@ export default async function AdminDashboardPage() {
 		addMoneyGroup(dueSoonBalanceGroups, row.currency, Math.max(0, row.balance));
 	}
 
+	const reasonCounts = new Map<string, number>();
+	for (const row of riskPolicies) {
+		for (const reason of row.reasons) {
+			reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
+		}
+	}
+	const reasonSummary = Array.from(reasonCounts.entries()).sort(
+		([, left], [, right]) => right - left,
+	);
+
 	const queryErrors = [
 		obrasResult.error ? `Obras: ${obrasResult.error}` : null,
 		policiesResult.error ? `Polizas: ${policiesResult.error}` : null,
@@ -518,358 +679,546 @@ export default async function AdminDashboardPage() {
 		{
 			label: "Polizas con riesgo",
 			value: riskPolicies.length,
-			detail: formatMoneyGroups(riskBalanceGroups),
+			detail: formatCompactMoneyGroups(riskBalanceGroups),
 			href: "/dashboard",
-			tone: riskPolicies.length > 0 ? "rose" : "emerald",
+			tone: riskPolicies.length > 0 ? "danger" : "success",
 		},
 		{
 			label: "Polizas por vencer",
 			value: dueSoonPolicies.length,
-			detail: formatMoneyGroups(dueSoonBalanceGroups),
+			detail: formatCompactMoneyGroups(dueSoonBalanceGroups),
 			href: "/dashboard",
-			tone: dueSoonPolicies.length > 0 ? "amber" : "emerald",
+			tone: dueSoonPolicies.length > 0 ? "warning" : "success",
 		},
 		{
 			label: "Obras atrasadas",
 			value: delayedWorks.length,
-			detail: `${numberFmt.format(activeWorks.length)} obras activas`,
+			detail: `de ${numberFmt.format(activeWorks.length)} obras activas`,
 			href: "/excel",
-			tone: delayedWorks.length > 0 ? "amber" : "emerald",
+			tone: delayedWorks.length > 0 ? "warning" : "success",
 		},
 		{
 			label: "Documentos pendientes",
 			value: pendingDocumentsResult.rows.length,
 			detail: "en cola de revision",
 			href: "/document-generation/review",
-			tone: pendingDocumentsResult.rows.length > 0 ? "sky" : "emerald",
+			tone: pendingDocumentsResult.rows.length > 0 ? "brand" : "success",
 		},
-	];
+		{
+			label: "Notificaciones sin leer",
+			value: notificationsResult.rows.length,
+			detail: "de tu bandeja personal",
+			href: "/notifications",
+			tone: notificationsResult.rows.length > 0 ? "brand" : "success",
+		},
+	] as const;
+	const policyTrend = buildPolicyTrend(
+		policiesResult.rows,
+		new Set(riskPolicies.map((row) => row.policy.id)),
+	);
+	const maxAlertValue = Math.max(1, ...alerts.map((alert) => alert.value));
 
 	return (
-		<div className="admin-dashboard-sheet space-y-6 p-4 md:p-6">
-			<header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+		<div className="admin-dashboard-sheet space-y-5 p-4 md:p-5">
+			<header className="admin-dashboard-reveal flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
 				<div>
-					<h1 className="text-2xl font-semibold tracking-tight text-stone-950">
+					<p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-content-muted">
+						Panorama operativo
+					</p>
+					<h1 className="text-xl font-semibold tracking-tight text-content">
 						Dashboard administrativo
 					</h1>
-					<p className="mt-1 text-sm text-stone-600">
-						Resumen de riesgo operativo, polizas, obras y documentos pendientes.
+					<p className="mt-0.5 text-sm text-content-muted">
+						Cartera, polizas y documentos al {formatDate(new Date().toISOString())}.
 					</p>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<Badge variant="secondary" className="border border-[color:var(--card-border)] bg-white text-stone-700 shadow-[var(--ring-illum)]">
+					<Badge variant="neutral" size="sm" className="shadow-card tabular-nums">
 						{numberFmt.format(obrasResult.rows.length)} obras
 					</Badge>
-					<Badge variant="secondary" className="border border-[color:var(--card-border)] bg-white text-stone-700 shadow-[var(--ring-illum-violet)]">
+					<Badge variant="neutral" size="sm" className="shadow-card tabular-nums">
 						{numberFmt.format(policiesResult.rows.length)} polizas
 					</Badge>
 				</div>
 			</header>
 
 			{queryErrors.length > 0 ? (
-				<div className="admin-dashboard-row border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-[var(--ring-illum-orange)]">
-					No se pudo cargar una parte del dashboard: {queryErrors.join(" | ")}
+				<div className="admin-dashboard-row flex items-start gap-2.5 border-warning/35 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
+					<AlertTriangle className="mt-0.5 size-4 shrink-0" />
+					<p>No se pudo cargar una parte del dashboard: {queryErrors.join(" | ")}</p>
 				</div>
 			) : null}
 
-			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-				<KpiCard
-					title="Saldo polizas con riesgo"
-					value={formatMoneyGroups(riskBalanceGroups)}
-					description={`${numberFmt.format(riskPolicies.length)} polizas con senales abiertas`}
-					icon={ShieldAlert}
-					tone={riskPolicies.length > 0 ? "red" : "emerald"}
-				/>
-				<KpiCard
-					title="Saldo por vencer"
-					value={formatMoneyGroups(dueSoonBalanceGroups)}
-					description={`Vencen dentro de 60 dias: ${numberFmt.format(dueSoonPolicies.length)}`}
-					icon={Clock3}
-					tone={dueSoonPolicies.length > 0 ? "amber" : "emerald"}
-				/>
-				<KpiCard
-					title="Obras activas"
-					value={numberFmt.format(activeWorks.length)}
-					description={`Saldo a certificar: ${formatMoney(totalActiveSaldo)}`}
-					icon={BriefcaseBusiness}
-					tone="sky"
-				/>
-				<KpiCard
-					title="Docs pendientes"
-					value={numberFmt.format(pendingDocumentsResult.rows.length)}
-					description="Documentos esperando revision"
-					icon={FileText}
-					tone={pendingDocumentsResult.rows.length > 0 ? "amber" : "emerald"}
-				/>
+			<Card className="admin-dashboard-card admin-dashboard-card-raised admin-dashboard-card-unfold admin-dashboard-reveal-step-1 overflow-hidden py-0">
+				<CardContent className="grid p-0 sm:grid-cols-2 xl:grid-cols-5 xl:divide-x xl:divide-stroke-soft">
+					<StatTile
+						label="Cartera total"
+						value={formatCompactMoney(totalContract)}
+						sub={`${numberFmt.format(workModels.length)} obras en cartera`}
+						icon={BriefcaseBusiness}
+						tone="brand"
+					/>
+					<StatTile
+						label="Certificado"
+						value={formatCompactMoney(totalCertified)}
+						sub={`${certifiedPct.toFixed(0)}% de la cartera`}
+						icon={CheckCircle2}
+						tone="success"
+						progress={certifiedPct}
+					/>
+					<StatTile
+						label="Saldo a certificar"
+						value={formatCompactMoney(totalActiveSaldo)}
+						sub={`${numberFmt.format(activeWorks.length)} obras activas`}
+						icon={Banknote}
+						tone="neutral"
+					/>
+					<StatTile
+						label="Riesgo en polizas"
+						value={numberFmt.format(riskPolicies.length)}
+						sub={formatCompactMoneyGroups(riskBalanceGroups)}
+						icon={ShieldAlert}
+						tone="destructive"
+					/>
+					<StatTile
+						label="Docs pendientes"
+						value={numberFmt.format(pendingDocumentsResult.rows.length)}
+						sub="en cola de revision"
+						icon={FileText}
+						tone="warning"
+					/>
+				</CardContent>
+			</Card>
+
+			<div className="admin-dashboard-reveal-grid admin-dashboard-reveal-step-2 grid gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+				<DataSection
+					title="Tendencia de vencimientos"
+					subtitle="Polizas que vencen por mes y cuantas mantienen senales de riesgo"
+					action={
+						<Badge variant="neutral" size="sm" className="shrink-0">
+							12 meses
+						</Badge>
+					}
+					contentClassName="pt-0"
+				>
+					<div className="flex flex-wrap items-center gap-4 pb-1 text-xs text-content-muted">
+						<span className="inline-flex items-center gap-1.5">
+							<span className="size-2 rounded-sm bg-orange-primary" /> Vencimientos
+						</span>
+						<span className="inline-flex items-center gap-1.5">
+							<span className="size-2 rounded-full bg-[var(--src-mixed)]" /> Con riesgo
+						</span>
+					</div>
+					<OperationalTrendChart data={policyTrend} />
+				</DataSection>
+
+				<DataSection
+					title="Salud operativa"
+					subtitle="Frentes que necesitan atencion hoy"
+				>
+					<div className="space-y-3.5">
+						{alerts.map((alert) => (
+							<Link key={alert.label} href={alert.href} className="group block">
+								<div className="mb-1 flex items-end justify-between gap-3">
+									<div className="min-w-0">
+										<p className="truncate text-sm font-medium text-content group-hover:text-orange-primary">
+											{alert.label}
+										</p>
+										<p className="truncate text-xs text-content-muted">{alert.detail}</p>
+									</div>
+									<p className="text-lg font-semibold leading-none tabular-nums text-content">
+										{numberFmt.format(alert.value)}
+									</p>
+								</div>
+								<div className="h-1.5 overflow-hidden rounded-full bg-surface-recessed">
+									<span
+										className={cn(
+											"admin-dashboard-progress-value block h-full rounded-full",
+											alert.tone === "danger" && "bg-destructive",
+											alert.tone === "warning" && "bg-warning",
+											alert.tone === "brand" && "bg-orange-primary",
+											alert.tone === "success" && "bg-success",
+										)}
+										style={{
+											width: `${alert.value === 0 ? 0 : Math.max(8, (alert.value / maxAlertValue) * 100)}%`,
+										}}
+									/>
+								</div>
+							</Link>
+						))}
+					</div>
+				</DataSection>
 			</div>
 
-			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
+			<SectionDivider
+				label="Obras"
+				className="admin-dashboard-reveal admin-dashboard-reveal-step-3"
+			/>
+
+			<DataSection
+				title="Obras activas por desvio"
+				subtitle={`${numberFmt.format(activeWorks.length)} activas · ${formatCompactMoney(totalActiveSaldo)} por certificar`}
+				action={<TextLink href="/excel">Ver obras</TextLink>}
+				className="admin-dashboard-reveal-step-3"
+			>
+				{activeWorks.length === 0 ? (
+					<EmptyState>No hay obras activas.</EmptyState>
+				) : (
+					<>
+						<div className="mb-1 flex items-center justify-end gap-4 text-[11px] text-content-muted">
+							<span className="inline-flex items-center gap-1.5">
+								<span className="h-1.5 w-4 rounded-full bg-orange-primary" /> Avance
+							</span>
+							<span className="inline-flex items-center gap-1.5">
+								<span className="h-2.5 w-0.5 rounded-full bg-content/60" /> Plazo
+							</span>
+						</div>
+						<div className="divide-y divide-stroke-soft">
+							{activeWorks.slice(0, 10).map((row) => (
+								<Peek
+									key={row.obra.id}
+									content={
+										<>
+											<p className="line-clamp-2 text-sm font-semibold text-content">
+												{row.obra.n ?? "-"} - {row.obra.designacion_y_ubicacion ?? "Sin nombre"}
+											</p>
+											<p className="mt-0.5 truncate text-xs text-content-muted">
+												{row.obra.entidad_contratante || "Sin contratante"}
+											</p>
+											<div className="mt-2.5 space-y-2 border-t border-stroke-soft pt-2.5">
+												<div>
+													<DetailRow label="Avance">{row.progressPct.toFixed(0)}%</DetailRow>
+													<MeterBar value={row.progressPct} className="mt-1 h-1" />
+												</div>
+												<div>
+													<DetailRow label="Plazo transcurrido">{row.timePct.toFixed(0)}%</DetailRow>
+													<MeterBar
+														value={row.timePct}
+														tone={row.delayPct >= 10 ? "warning" : "success"}
+														className="mt-1 h-1"
+													/>
+												</div>
+												<DetailRow label="Desvio">
+													{row.delayPct >= 1 ? `+${row.delayPct.toFixed(0)} pp` : "Al dia"}
+												</DetailRow>
+												<DetailRow label="Saldo a certificar">{formatMoney(row.saldo)}</DetailRow>
+												<DetailRow label="Actualizada">{formatDate(row.updatedAt)}</DetailRow>
+											</div>
+										</>
+									}
+								>
+									<Link href={`/excel/${row.obra.id}`} className={GLANCE_ROW_CLASS}>
+										<span
+											className={cn(
+												"size-1.5 shrink-0 rounded-full",
+												row.delayPct >= 10 ? "bg-warning" : "bg-success",
+											)}
+										/>
+										<span className="min-w-0 flex-1 truncate text-sm font-medium text-content group-hover:text-orange-primary">
+											{row.obra.n ?? "-"} - {row.obra.designacion_y_ubicacion ?? "Sin nombre"}
+										</span>
+										{row.delayPct >= 10 ? (
+											<Badge variant="warning" size="xs" className="hidden shrink-0 tabular-nums md:inline-flex">
+												+{row.delayPct.toFixed(0)} pp
+											</Badge>
+										) : null}
+										<BulletMeter
+											progress={row.progressPct}
+											time={row.timePct}
+											className="hidden sm:block"
+										/>
+										<span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums text-content">
+											{formatCompactMoney(row.saldo)}
+										</span>
+									</Link>
+								</Peek>
+							))}
+						</div>
+					</>
+				)}
+			</DataSection>
+
+			<SectionDivider
+				label="Polizas"
+				className="admin-dashboard-reveal admin-dashboard-reveal-step-4"
+			/>
+
+			<div className="admin-dashboard-reveal-grid admin-dashboard-reveal-step-4 grid gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
 				<DataSection
 					title="Polizas con riesgo"
+					subtitle={`${numberFmt.format(riskPolicies.length)} con senales · ${formatCompactMoneyGroups(riskBalanceGroups)}`}
 					action={<TextLink href="/dashboard">Panel de polizas</TextLink>}
 				>
 					{riskPolicies.length === 0 ? (
 						<EmptyState>Sin polizas con senales de riesgo.</EmptyState>
 					) : (
-						<div className="overflow-x-auto">
-							<table className="w-full min-w-[760px] text-sm">
-								<thead>
-									<tr className="border-b border-[color:var(--sep-fill)] text-left text-xs uppercase tracking-wide text-stone-500">
-										<th className="pb-2 pr-3">Poliza</th>
-										<th className="pb-2 pr-3">Obra</th>
-										<th className="pb-2 pr-3">Vence</th>
-										<th className="pb-2 pr-3">Saldo</th>
-										<th className="pb-2 pr-3">Senal</th>
-										<th className="pb-2 pr-3">Ver</th>
-									</tr>
-								</thead>
-								<tbody>
-									{riskPolicies.slice(0, 8).map((row) => (
-										<tr key={row.policy.id} className="border-b border-[color:rgba(40,36,28,.08)]">
-											<td className="py-3 pr-3">
-												<p className="font-medium text-stone-950">
+						<>
+							<div className="mb-2 flex flex-wrap gap-1.5">
+								{reasonSummary.map(([reason, count]) => (
+									<Badge key={reason} variant="warning" size="xs" count={count}>
+										{reason}
+									</Badge>
+								))}
+							</div>
+							<div className="divide-y divide-stroke-soft">
+								{riskPolicies.slice(0, 8).map((row) => (
+									<Peek
+										key={row.policy.id}
+										content={
+											<>
+												<p className="text-sm font-semibold text-content">
 													{row.policy.policy_number || "Sin numero"}
+													<span className="font-normal text-content-muted">
+														{row.policy.section ? ` · ${row.policy.section}` : ""}
+													</span>
 												</p>
-												<p className="text-xs text-stone-500">{row.policy.section || "-"}</p>
-											</td>
-											<td className="max-w-[260px] py-3 pr-3">
-												<p className="truncate text-stone-700">{getPolicyObraLabel(row.policy)}</p>
-											</td>
-											<td className="py-3 pr-3 text-stone-700">{formatDate(row.policy.end_date)}</td>
-											<td className="py-3 pr-3 font-semibold text-stone-950">
-												{formatMoney(row.balance, row.currency)}
-											</td>
-											<td className="py-3 pr-3">
-												<div className="flex flex-wrap gap-1">
-													{row.reasons.slice(0, 2).map((reason) => (
-														<Badge key={reason} variant="secondary" className="border border-amber-200 bg-amber-50 text-amber-800">
-															{reason}
-														</Badge>
-													))}
+												<p className="mt-0.5 line-clamp-2 text-xs text-content-muted">
+													{getPolicyObraLabel(row.policy)}
+												</p>
+												<div className="mt-2.5 space-y-2 border-t border-stroke-soft pt-2.5">
+													<DetailRow label="Vence">
+														{formatDate(row.policy.end_date)} · {deadlineLabel(row.policy.end_date)}
+													</DetailRow>
+													<DetailRow label="Saldo">
+														{formatMoney(row.balance, row.currency)}
+													</DetailRow>
+													<div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+														<span className="text-content-muted">Senales</span>
+														<span className="flex flex-wrap justify-end gap-1">
+															{row.reasons.map((reason) => (
+																<Badge key={reason} variant="warning" size="xs">
+																	{reason}
+																</Badge>
+															))}
+														</span>
+													</div>
 												</div>
-											</td>
-											<td className="py-3 pr-3">
-												<TextLink href={getPolicyHref(row.policy)}>Abrir</TextLink>
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
+											</>
+										}
+									>
+										<Link href={getPolicyHref(row.policy)} className={GLANCE_ROW_CLASS}>
+											<span className="min-w-0 flex-1 truncate text-sm font-medium text-content group-hover:text-orange-primary">
+												{row.policy.policy_number || "Sin numero"}
+												<span className="font-normal text-content-muted">
+													{row.policy.section ? ` · ${row.policy.section}` : ""}
+												</span>
+											</span>
+											<Badge variant="warning" size="xs" className="shrink-0">
+												{row.reasons[0]}
+											</Badge>
+											<span className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-content-muted md:block">
+												{deadlineLabel(row.policy.end_date)}
+											</span>
+											<span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums text-content">
+												{formatCompactMoney(row.balance, row.currency)}
+											</span>
+										</Link>
+									</Peek>
+								))}
+							</div>
+						</>
 					)}
 				</DataSection>
 
-				<DataSection title="Alertas">
-					<div className="space-y-2">
-						{alerts.map((alert) => (
-							<Link
-								key={alert.label}
-								href={alert.href}
-								className="admin-dashboard-row admin-dashboard-row-interactive flex items-center justify-between gap-3 px-3 py-3"
-							>
-								<div className="flex min-w-0 items-center gap-3">
-									<span
-										className={cn(
-											"grid size-8 shrink-0 place-items-center rounded-lg text-white",
-											alert.tone === "rose" && "admin-dashboard-icon-orange bg-rose-600",
-											alert.tone === "amber" && "admin-dashboard-icon-orange bg-amber-500",
-											alert.tone === "sky" && "admin-dashboard-icon-violet bg-sky-600",
-											alert.tone === "emerald" && "admin-dashboard-icon bg-emerald-600",
-										)}
-									>
-										{alert.tone === "emerald" ? (
-											<CheckCircle2 className="size-4" />
-										) : (
-											<BadgeAlert className="size-4" />
-										)}
-									</span>
-									<div className="min-w-0">
-										<p className="truncate text-sm font-semibold text-stone-950">{alert.label}</p>
-										<p className="truncate text-xs text-stone-500">{alert.detail}</p>
-									</div>
-								</div>
-								<span className="text-xl font-semibold tabular-nums text-stone-950">
-									{numberFmt.format(alert.value)}
-								</span>
-							</Link>
-						))}
-					</div>
-				</DataSection>
-			</div>
-
-			<div className="grid gap-4 xl:grid-cols-2">
-				<DataSection title="Polizas por vencer">
+				<DataSection
+					title="Proximos vencimientos"
+					subtitle="Polizas activas que vencen dentro de 60 dias"
+				>
 					{dueSoonPolicies.length === 0 ? (
 						<EmptyState>No hay polizas venciendo en los proximos 60 dias.</EmptyState>
 					) : (
-						<div className="space-y-3">
-							{dueSoonPolicies.slice(0, 6).map((row) => (
-								<div key={row.policy.id} className="admin-dashboard-row px-3 py-3">
-									<div className="flex flex-wrap items-start justify-between gap-2">
-										<div className="min-w-0">
-											<p className="truncate text-sm font-semibold text-stone-950">
+						<div className="divide-y divide-stroke-soft">
+							{dueSoonPolicies.slice(0, 8).map((row) => (
+								<Peek
+									key={row.policy.id}
+									content={
+										<>
+											<p className="text-sm font-semibold text-content">
 												{row.policy.policy_number || "Sin numero"}
+												<span className="font-normal text-content-muted">
+													{row.policy.section ? ` · ${row.policy.section}` : ""}
+												</span>
 											</p>
-											<p className="truncate text-xs text-stone-500">{getPolicyObraLabel(row.policy)}</p>
-										</div>
-										<Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-											{formatDate(row.policy.end_date)}
+											<p className="mt-0.5 line-clamp-2 text-xs text-content-muted">
+												{getPolicyObraLabel(row.policy)}
+											</p>
+											<div className="mt-2.5 space-y-2 border-t border-stroke-soft pt-2.5">
+												<DetailRow label="Vence">
+													{formatDate(row.policy.end_date)} · {deadlineLabel(row.policy.end_date)}
+												</DetailRow>
+												<DetailRow label="Saldo">
+													{formatMoney(row.balance, row.currency)}
+												</DetailRow>
+											</div>
+										</>
+									}
+								>
+									<Link href={getPolicyHref(row.policy)} className={GLANCE_ROW_CLASS}>
+										<Badge
+											variant="warning"
+											size="xs"
+											className="min-w-14 shrink-0 justify-center tabular-nums"
+										>
+											{deadlineLabel(row.policy.end_date)}
 										</Badge>
-									</div>
-									<div className="mt-3 flex items-center justify-between gap-3 text-xs text-stone-500">
-										<span>Saldo {formatMoney(row.balance, row.currency)}</span>
-										<TextLink href={getPolicyHref(row.policy)}>Ver poliza</TextLink>
-									</div>
-								</div>
+										<span className="min-w-0 flex-1 truncate text-sm font-medium text-content group-hover:text-orange-primary">
+											{row.policy.policy_number || "Sin numero"}
+										</span>
+										<span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums text-content">
+											{formatCompactMoney(row.balance, row.currency)}
+										</span>
+									</Link>
+								</Peek>
 							))}
 						</div>
 					)}
 				</DataSection>
+			</div>
 
-				<DataSection title="Documentos pendientes de revisar">
+			<SectionDivider
+				label="Documentos y actividad"
+				className="admin-dashboard-reveal admin-dashboard-reveal-step-5"
+			/>
+
+			<div className="admin-dashboard-reveal-grid admin-dashboard-reveal-step-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+				<DataSection
+					title="Documentos pendientes de revisar"
+					subtitle={`${numberFmt.format(pendingDocumentsResult.rows.length)} en cola`}
+					action={<TextLink href="/document-generation/review">Ir a revision</TextLink>}
+				>
 					{pendingDocumentsResult.rows.length === 0 ? (
 						<EmptyState>La cola de revision esta limpia.</EmptyState>
 					) : (
-						<div className="space-y-3">
-							{pendingDocumentsResult.rows.slice(0, 6).map((document) => {
+						<div className="divide-y divide-stroke-soft">
+							{pendingDocumentsResult.rows.slice(0, 8).map((document) => {
 								const obra = document.obras;
 								const workLabel = obra?.designacion_y_ubicacion
 									? `${obra.n ?? "-"} - ${obra.designacion_y_ubicacion}`
 									: document.obra_id ?? "Sin obra";
+								const underReview = document.status === "UNDER_REVIEW";
 								return (
-									<div key={document.id} className="admin-dashboard-row px-3 py-3">
-										<div className="flex flex-wrap items-start justify-between gap-2">
-											<div className="min-w-0">
-												<p className="truncate text-sm font-semibold text-stone-950">
+									<Peek
+										key={document.id}
+										content={
+											<>
+												<p className="line-clamp-2 break-all text-sm font-semibold text-content">
 													{document.file_name || document.document_type || "Documento"}
 												</p>
-												<p className="truncate text-xs text-stone-500">{workLabel}</p>
-											</div>
-											<Badge variant="secondary" className="border border-[color:var(--card-border)] bg-stone-50 text-stone-700">
-												{document.status === "UNDER_REVIEW" ? "En revision" : "Generado"}
-											</Badge>
-										</div>
-										<div className="mt-3 flex items-center justify-between gap-3 text-xs text-stone-500">
-											<span>{formatDate(document.generated_at)}</span>
-											<TextLink href={`/document-generation/review?id=${encodeURIComponent(document.id)}`}>
-												Revisar
-											</TextLink>
-										</div>
-									</div>
+												<p className="mt-0.5 line-clamp-2 text-xs text-content-muted">{workLabel}</p>
+												<div className="mt-2.5 space-y-2 border-t border-stroke-soft pt-2.5">
+													<div className="flex items-center justify-between gap-3 text-xs">
+														<span className="text-content-muted">Estado</span>
+														<Badge variant={underReview ? "info" : "neutral"} size="xs">
+															{underReview ? "En revision" : "Generado"}
+														</Badge>
+													</div>
+													{document.document_generation_templates?.name ? (
+														<DetailRow label="Plantilla">
+															{document.document_generation_templates.name}
+														</DetailRow>
+													) : null}
+													<DetailRow label="Generado">{formatDate(document.generated_at)}</DetailRow>
+												</div>
+											</>
+										}
+									>
+										<Link
+											href={`/document-generation/review?id=${encodeURIComponent(document.id)}`}
+											className={GLANCE_ROW_CLASS}
+										>
+											<span
+												className={cn(
+													"size-1.5 shrink-0 rounded-full",
+													underReview ? "bg-orange-primary" : "bg-stroke-strong",
+												)}
+											/>
+											<span className="min-w-0 flex-1 truncate text-sm font-medium text-content group-hover:text-orange-primary">
+												{document.file_name || document.document_type || "Documento"}
+											</span>
+											<span className="w-20 shrink-0 text-right text-xs tabular-nums text-content-muted">
+												{formatDate(document.generated_at)}
+											</span>
+										</Link>
+									</Peek>
 								);
 							})}
 						</div>
 					)}
 				</DataSection>
-			</div>
 
-			<div className="grid gap-4 xl:grid-cols-2">
-				<DataSection title="Obras activas">
-					{activeWorks.length === 0 ? (
-						<EmptyState>No hay obras activas.</EmptyState>
-					) : (
-						<div className="space-y-3">
-							{activeWorks.slice(0, 6).map((row) => (
-								<div key={row.obra.id} className="admin-dashboard-row px-3 py-3">
-									<div className="flex flex-wrap items-start justify-between gap-2">
-										<div className="min-w-0">
-											<p className="truncate text-sm font-semibold text-stone-950">
-												{row.obra.n ?? "-"} - {row.obra.designacion_y_ubicacion ?? "Sin nombre"}
-											</p>
-											<p className="truncate text-xs text-stone-500">
-												{row.obra.entidad_contratante || "Sin contratante"}
-											</p>
-										</div>
-										<TextLink href={`/excel/${row.obra.id}`}>Abrir</TextLink>
-									</div>
-									<div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
-										<div>
-											<div className="mb-1 flex justify-between text-[11px] text-stone-500">
-												<span>Avance</span>
-												<span>{row.progressPct.toFixed(0)}%</span>
-											</div>
-											<ProgressLine value={row.progressPct} tone="sky" />
-										</div>
-										<div>
-											<div className="mb-1 flex justify-between text-[11px] text-stone-500">
-												<span>Plazo</span>
-												<span>{row.timePct.toFixed(0)}%</span>
-											</div>
-											<ProgressLine value={row.timePct} tone={row.delayPct >= 10 ? "amber" : "emerald"} />
-										</div>
-										<p className="text-xs font-semibold text-stone-700">
-											Saldo {formatMoney(row.saldo)}
-										</p>
-									</div>
-								</div>
-							))}
-						</div>
-					)}
-				</DataSection>
-
-				<DataSection title="Obras terminadas recientemente">
-					{completedWorks.length === 0 ? (
-						<EmptyState>No hay obras terminadas.</EmptyState>
-					) : (
-						<div className="space-y-3">
-							{completedWorks.slice(0, 6).map((row) => (
-								<div
-									key={row.obra.id}
-									className="admin-dashboard-row flex items-center justify-between gap-3 px-3 py-3"
-								>
-									<div className="min-w-0">
-										<p className="truncate text-sm font-semibold text-stone-950">
+				<div className="flex min-w-0 flex-col gap-4">
+					<DataSection
+						title="Obras terminadas recientemente"
+						subtitle={`${numberFmt.format(completedWorks.length)} al 100%`}
+					>
+						{completedWorks.length === 0 ? (
+							<EmptyState>No hay obras terminadas.</EmptyState>
+						) : (
+							<div className="divide-y divide-stroke-soft">
+								{completedWorks.slice(0, 4).map((row) => (
+									<Link
+										key={row.obra.id}
+										href={`/excel/${row.obra.id}`}
+										className={GLANCE_ROW_CLASS}
+									>
+										<span className="size-1.5 shrink-0 rounded-full bg-success" />
+										<span className="min-w-0 flex-1 truncate text-sm font-medium text-content group-hover:text-orange-primary">
 											{row.obra.n ?? "-"} - {row.obra.designacion_y_ubicacion ?? "Sin nombre"}
-										</p>
-										<p className="text-xs text-stone-500">
-											Actualizada {formatDate(row.updatedAt)}
-										</p>
-									</div>
-									<div className="flex shrink-0 items-center gap-2">
-										<Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-											100%
-										</Badge>
-										<TextLink href={`/excel/${row.obra.id}`}>Abrir</TextLink>
-									</div>
-								</div>
-							))}
-						</div>
-					)}
-				</DataSection>
-			</div>
+										</span>
+										<span className="w-20 shrink-0 text-right text-xs tabular-nums text-content-muted">
+											{formatDate(row.updatedAt)}
+										</span>
+									</Link>
+								))}
+							</div>
+						)}
+					</DataSection>
 
-			<DataSection title="Notificaciones sin leer">
-				{notificationsResult.rows.length === 0 ? (
-					<EmptyState>No hay notificaciones sin leer.</EmptyState>
-				) : (
-					<div className="grid gap-3 md:grid-cols-2">
-						{notificationsResult.rows.map((notification) => (
-							<Link
-								key={notification.id}
-								href={notification.action_url || "/notifications"}
-								className="admin-dashboard-row admin-dashboard-row-interactive px-3 py-3"
-							>
-								<div className="flex items-start gap-3">
-									<span className="admin-dashboard-icon-orange mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-rose-600 text-white">
-										<AlertTriangle className="size-4" />
-									</span>
-									<div className="min-w-0">
-										<p className="truncate text-sm font-semibold text-stone-950">
-											{notification.title || "Alerta"}
-										</p>
-										<p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-500">
-											{notification.body || notification.type || "Sin detalle"}
-										</p>
-										<p className="mt-2 text-[11px] text-stone-400">
-											{formatDate(notification.created_at)}
-										</p>
-									</div>
-								</div>
-							</Link>
-						))}
-					</div>
-				)}
-			</DataSection>
+					<DataSection
+						title="Notificaciones sin leer"
+						subtitle={`${numberFmt.format(notificationsResult.rows.length)} en tu bandeja`}
+						action={<TextLink href="/notifications">Ver todas</TextLink>}
+					>
+						{notificationsResult.rows.length === 0 ? (
+							<EmptyState>No hay notificaciones sin leer.</EmptyState>
+						) : (
+							<div className="divide-y divide-stroke-soft">
+								{notificationsResult.rows.slice(0, 4).map((notification) => (
+									<Peek
+										key={notification.id}
+										content={
+											<>
+												<p className="text-sm font-semibold text-content">
+													{notification.title || "Alerta"}
+												</p>
+												<p className="mt-1 text-xs leading-5 text-content-muted">
+													{notification.body || notification.type || "Sin detalle"}
+												</p>
+												<p className="mt-2 text-[11px] tabular-nums text-content-muted">
+													{formatDate(notification.created_at)}
+												</p>
+											</>
+										}
+									>
+										<Link
+											href={notification.action_url || "/notifications"}
+											className={GLANCE_ROW_CLASS}
+										>
+											<Bell className="size-3.5 shrink-0 text-orange-primary" />
+											<span className="min-w-0 flex-1 truncate text-sm font-medium text-content group-hover:text-orange-primary">
+												{notification.title || "Alerta"}
+											</span>
+											<span className="w-20 shrink-0 text-right text-xs tabular-nums text-content-muted">
+												{formatDate(notification.created_at)}
+											</span>
+										</Link>
+									</Peek>
+								))}
+							</div>
+						)}
+					</DataSection>
+				</div>
+			</div>
 		</div>
 	);
 }

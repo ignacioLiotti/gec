@@ -8,9 +8,16 @@ This is a high-risk UI folder because it is coupled to Supabase Storage, `/api/o
 
 ## Main files
 
-- `file-manager.tsx`: main client component; owns file tree state, upload flow, signed URL/download helpers, OCR folder mapping, table selection, spreadsheet preview flow, data-folder creation, document views, and many dialogs.
+- `file-manager.tsx`: main client component (`FileManagerContent`); owns file tree state, upload flow, signed URL/download helpers, OCR folder mapping, table selection, spreadsheet preview flow, data-folder creation, document views, and many dialogs. Still oversized (~7.7k lines) — keep extracting seams into the modules below instead of adding to it.
 - `types.ts`: shared file tree, OCR link, table row, document status, lineage, and selection types.
 - `cache.ts`: in-memory caches for file tree, signed URLs, blob URLs, OCR links, and APS models.
+- `pdf-thumbnails.ts`: PDF.js loading, first-page thumbnail rendering, the one-at-a-time thumbnail queue, and the module-level thumbnail cache.
+- `table-presets.ts`: spreadsheet-import table presets (`fieldKey`s are frozen contract — they feed schema/lineage identity) and data-type labels.
+- `ocr-status.tsx`: OCR status → badge/toast presentation, including the `LINEAGE_RECONCILIATION_CONFLICT` special case.
+- `file-manager-utils.ts`: pure helpers — file-type detection, formatting, folder-tree upsert/sort, guided-tour target ids, OCR table-link selection heuristics.
+- `hooks/use-near-viewport.ts`: one-shot IntersectionObserver hook for lazy thumbnails.
+- `components/file-thumbnail.tsx`: lazy image/PDF thumbnail tile.
+- `components/ocr-document-source-cell.tsx`: source-document cell with hover preview for extracted-data tables.
 - `hooks/useDocumentsStore.ts`: global-ish document store and prefetch logic for file tree, OCR links, and APS models.
 - `hooks/useSelectionStore.ts`: selection state helpers.
 - `components/file-tree-sidebar.tsx`: folder/file tree navigation.

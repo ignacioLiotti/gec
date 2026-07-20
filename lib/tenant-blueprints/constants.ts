@@ -1,2 +1,3 @@
 export const STANDARD_TENANT_BLUEPRINT_KEY = "standard-construction";
 export const STANDARD_TENANT_BLUEPRINT_VERSION = 1;
+export const STANDARD_OBRA_DEFAULTS_MATERIALIZER_VERSION = 1;

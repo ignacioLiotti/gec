@@ -7,6 +7,8 @@ export type TenantSetupSignals = {
 	macroCount: number;
 	obraCount: number;
 	memberCount: number;
+	requiresProvisioningHealth?: boolean;
+	firstObraProvisioningStatus?: "running" | "partial" | "ready" | null;
 };
 
 export function getTenantSetupStatus(signals: TenantSetupSignals) {
@@ -17,15 +19,17 @@ export function getTenantSetupStatus(signals: TenantSetupSignals) {
 		signals.tableCount >= 2 &&
 		signals.roleCount >= 3 &&
 		signals.macroCount >= 3;
-	const firstObraReady = signals.obraCount > 0;
+	const firstObraReady =
+		signals.obraCount > 0 &&
+		(!signals.requiresProvisioningHealth ||
+			signals.firstObraProvisioningStatus === "ready");
 	const teamReady = signals.memberCount > 1;
-	const readiness = [
+	const requiredReadiness = [
 		companyReady,
 		workspaceReady,
 		firstObraReady,
-		teamReady,
 	];
-	const completedSteps = readiness.filter(Boolean).length;
+	const completedSteps = requiredReadiness.filter(Boolean).length;
 
 	return {
 		companyReady,
@@ -33,7 +37,7 @@ export function getTenantSetupStatus(signals: TenantSetupSignals) {
 		firstObraReady,
 		teamReady,
 		completedSteps,
-		totalSteps: readiness.length,
-		progress: Math.round((completedSteps / readiness.length) * 100),
+		totalSteps: requiredReadiness.length,
+		progress: Math.round((completedSteps / requiredReadiness.length) * 100),
 	};
 }

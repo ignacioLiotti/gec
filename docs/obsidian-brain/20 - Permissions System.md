@@ -23,6 +23,8 @@ Built into `tenant_memberships.role`:
 
 **Rule:** `admin` and `owner` always bypass custom role restrictions.
 
+Invitations may carry one custom operational role for regular members. This is separate from the membership level and is inserted into `user_roles` in the same transaction that accepts the invitation.
+
 ---
 
 ## Layer 2: Route Access Config (`lib/route-access.ts`)
@@ -196,7 +198,9 @@ Document generation now gives tenant members baseline creation access and keeps 
 - `/document-generation/drafts` -> authenticated tenant member; generated-document history is tenant-wide, draft recovery remains own drafts only
 - generated documents in `GENERATED`, `UNDER_REVIEW`, or `REJECTED` can be edited by authenticated tenant members, regardless of who generated them
 - approved generated documents remain non-editable
-- `/document-generation/review` â†’ `documents:review`
+- generated documents expose permanent deletion only to the user who generated them, regardless of status
+- `/document-generation/review?id={generatedDocumentId}` -> authenticated tenant member in read-only mode for a same-tenant document
+- the review queue and approve/reject controls on `/document-generation/review` -> `documents:review`
 - `/document-generation/templates` â†’ `documents:templates`
 - `/document-generation/config` â†’ `documents:templates`
 
@@ -206,6 +210,7 @@ Document generation now gives tenant members baseline creation access and keeps 
 - `drafts GET` -> authenticated tenant member, own drafts only
 - generated list/detail -> authenticated tenant member for all generated documents in the tenant
 - generated regeneration -> authenticated tenant member when the generated document is `GENERATED`, `UNDER_REVIEW`, or `REJECTED`
+- generated delete -> creator only; permanently removes the PDF and generated extraction rows while retaining the source draft
 - generated approve/reject PATCH -> `documents:review`
 - `documents/access` refuses signed URLs and direct PDF downloads for generated documents whose status is `REJECTED`
 - `templates GET/PUT` â†’ `documents:templates`

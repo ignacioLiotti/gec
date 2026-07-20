@@ -134,7 +134,7 @@ function getElementFromEventTarget(target: EventTarget | null) {
 	return null;
 }
 
-export function FormTableToolbar() {
+export function FormTableToolbar({ className }: { className?: string }) {
 	const { config, search, filters, columns, sorting, pagination, actions } = useFormTable<FormTableRow, unknown>();
 	const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 	const isExtrasToolbar = config.toolbarMode === "extras";
@@ -184,7 +184,7 @@ export function FormTableToolbar() {
 	);
 
 	return (
-		<div className={cn("flex flex-wrap items-center justify-between gap-2 -mr-5 z-20", isSpreadsheetChrome && "gap-2")}>
+		<div className={cn("flex flex-wrap items-center justify-between gap-2 z-20", isSpreadsheetChrome && "gap-2", className)}>
 			<div className="flex flex-wrap items-center gap-2">
 				{search.showInline && (
 					<div className="group relative ml-0.5 flex items-center gap-2">
@@ -1532,7 +1532,7 @@ export function FormTablePagination() {
 				)
 			) : (
 				<div className="flex flex-wrap items-center gap-2 text-content">
-					<div className="inline-flex items-center gap-2 rounded-full border border-stroke-soft bg-card px-2 py-1 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_1px_2px_rgba(15,23,22,0.08)]">
+					<div className="inline-flex items-center gap-2  px-2 py-1">
 						<span className="pl-1 text-xs font-medium text-content-muted">
 							Filas por página
 						</span>
@@ -1550,7 +1550,7 @@ export function FormTablePagination() {
 							>
 								<SelectTrigger
 									className={cn(
-										"h-8 w-[74px] rounded-full border-stroke-soft bg-surface px-3 text-xs font-semibold text-content shadow-recessed hover:bg-surface-muted focus-visible:ring-orange-primary/20 [&>svg]:size-3.5 [&>svg]:text-content-muted",
+										"h-6 w-[74px] rounded-md  px-3 text-xs font-semibold text-content shadow-recessed hover:bg-surface-muted  [&>svg]:size-3.5 [&>svg]:text-content-muted",
 										isLoading && "opacity-50"
 									)}
 								>
@@ -1567,7 +1567,7 @@ export function FormTablePagination() {
 						)}
 					</div>
 					{isLoading && <Loader2 className="size-4 animate-spin text-content-muted" />}
-					<div className="flex flex-wrap items-center justify-between gap-3">
+					{/* <div className="flex flex-wrap items-center justify-between gap-3">
 						{totalRowCount > 0 && (
 							<div className="flex items-center gap-4 text-sm text-content-secondary">
 								<p className="rounded-full bg-surface-recessed px-3 py-1.5 text-xs text-content-muted shadow-recessed">
@@ -1581,7 +1581,7 @@ export function FormTablePagination() {
 								)}
 							</div>
 						)}
-					</div>
+					</div> */}
 				</div>
 			)}
 			<div className="flex items-center gap-2">
@@ -1925,8 +1925,10 @@ type FormTableProps<Row extends FormTableRow, Filters> = {
 	config: FormTableConfig<Row, Filters>;
 	className?: string;
 	innerClassName?: string;
+	toolbarClassName?: string;
 	searchQuery?: string;
 	onSearchQueryChange?: (value: string) => void;
+	onSearchInputChange?: (value: string) => void;
 	variant?: "page" | "embedded";
 	children?: ReactNode;
 };
@@ -1935,8 +1937,10 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	config,
 	className,
 	innerClassName,
+	toolbarClassName,
 	searchQuery,
 	onSearchQueryChange,
+	onSearchInputChange,
 	variant = "page",
 	children,
 }: FormTableProps<Row, Filters>) {
@@ -2157,13 +2161,23 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const [searchInputValue, setSearchInputValue] = useState(initialSearchValue);
 	const [searchValue, setSearchValue] = useState(initialSearchValue);
 	const previousControlledSearchValueRef = useRef<string | null>(controlledSearchValue);
+	const pendingEmittedSearchQueriesRef = useRef<Set<string>>(new Set());
 	useEffect(() => {
 		if (controlledSearchValue === null) {
 			previousControlledSearchValueRef.current = null;
+			pendingEmittedSearchQueriesRef.current.clear();
 			return;
 		}
 		if (previousControlledSearchValueRef.current === controlledSearchValue) return;
 		previousControlledSearchValueRef.current = controlledSearchValue;
+		// A prop change that matches a value this table just emitted is the
+		// parent echoing our own commit back. Adopting it would clobber
+		// keystrokes typed while the parent was still re-rendering.
+		if (pendingEmittedSearchQueriesRef.current.has(controlledSearchValue)) {
+			pendingEmittedSearchQueriesRef.current.delete(controlledSearchValue);
+			return;
+		}
+		pendingEmittedSearchQueriesRef.current.clear();
 		setSearchInputValue(controlledSearchValue);
 		setSearchValue(controlledSearchValue);
 	}, [controlledSearchValue]);
@@ -2171,8 +2185,9 @@ export function FormTable<Row extends FormTableRow, Filters>({
 		(value: string) => {
 			if (value === searchInputValue) return;
 			setSearchInputValue(value);
+			onSearchInputChange?.(value);
 		},
-		[searchInputValue]
+		[onSearchInputChange, searchInputValue]
 	);
 	useEffect(() => {
 		if (searchInputValue === searchValue) return;
@@ -2181,6 +2196,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			startSearchTransition(() => {
 				setSearchValue(searchInputValue);
 				if (isSearchControlled) {
+					pendingEmittedSearchQueriesRef.current.add(searchInputValue);
 					onSearchQueryChange?.(searchInputValue);
 				}
 			});
@@ -3796,7 +3812,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 	const tableSurface = showRowNumbers ? (
 		<div className="mx-[1px] flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card mt-[1px] shadow-[0_1px_0_0_#fff_inset,0_-1px_0_0_#0000001f_inset,0_0_0_1px_#00000024,0_2px_2px_0_#0b090c0d,0_1px_1px_0_#0b090c0f,0_5px_8px_-7px_#0b090c08]">
 			{(config.showToolbar ?? true) ? (
-				<div className="border-b border-stroke-soft bg-surface px-3 py-2.5">
+				<div className={cn("border-b border-stroke-soft bg-surface px-3 py-2.5", toolbarClassName)}>
 					<FormTableToolbar />
 				</div>
 			) : null}

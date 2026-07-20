@@ -56,6 +56,9 @@ export function usePartialObrasHydration<Row>({
 			setIsHydrating(true);
 			try {
 				const response = await fetch("/api/obras", { cache: "no-store" });
+				if (response.status === 401) {
+					return;
+				}
 				if (!response.ok) {
 					throw new Error("No se pudieron obtener las obras");
 				}

@@ -5,8 +5,19 @@ import { useRouter, useParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { acceptInvitation, declineInvitation } from "@/app/admin/users/invitation-actions";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, UserPlus, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Building2, UserPlus, Clock, CheckCircle2, XCircle, Loader2, HardHat } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
 interface InvitationDetails {
@@ -15,6 +26,8 @@ interface InvitationDetails {
   tenant_name: string;
   email: string;
   invited_role: string;
+  invited_operational_role_id: string | null;
+  invited_operational_role_name: string | null;
   status: string;
   expires_at: string;
   inviter_name: string;
@@ -47,7 +60,7 @@ export default function InvitationPage() {
         });
 
         if (error || !data || data.length === 0) {
-          setError("This invitation is invalid or has expired.");
+          setError("La invitación no es válida o ya venció.");
           setLoading(false);
           return;
         }
@@ -58,14 +71,14 @@ export default function InvitationPage() {
         // Check if user email matches
         if (currentUser?.email && currentUser.email.toLowerCase() !== inviteData.email.toLowerCase()) {
           setError(
-            `This invitation was sent to ${inviteData.email}. Please log in with that email to accept.`
+            `Esta invitación fue enviada a ${inviteData.email}. Iniciá sesión con ese correo para aceptarla.`
           );
         }
 
         setLoading(false);
       } catch (err) {
         console.error("Error loading invitation:", err);
-        setError("Failed to load invitation details.");
+        setError("No pudimos cargar los datos de la invitación.");
         setLoading(false);
       }
     }
@@ -84,49 +97,51 @@ export default function InvitationPage() {
 
     setProcessing(true);
     setError(null);
-
-    const result = await acceptInvitation(token);
-
-    if (result.error) {
-      if ("alreadyMember" in result && result.alreadyMember) {
-        // Redirect to app if already a member
-        push("/");
+    try {
+      const result = await acceptInvitation(token);
+      if (result.error) {
+        if ("alreadyMember" in result && result.alreadyMember) {
+          push("/");
+        } else {
+          setError(result.error);
+        }
+      } else if (result.success) {
+        push(`/api/tenants/${result.tenantId}/switch?next=${encodeURIComponent("/dashboard")}`);
       } else {
-        setError(result.error);
-        setProcessing(false);
+        setError("Ocurrió un problema inesperado.");
       }
-    } else if (result.success) {
-      // Success - redirect to app
-      push("/");
-    } else {
-      setError("An unexpected error occurred.");
+    } catch {
+      setError("No pudimos aceptar la invitación. Volvé a intentarlo.");
+    } finally {
       setProcessing(false);
     }
   };
 
   const handleDecline = async () => {
     if (!user) {
-      push("/");
+      push(`/?returnTo=/invitations/${token}`);
       return;
     }
-
     setProcessing(true);
     setError(null);
-
-    const result = await declineInvitation(token);
-
-    if (result.error) {
-      setError(result.error);
+    try {
+      const result = await declineInvitation(token);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      push("/onboarding");
+    } catch {
+      setError("No pudimos rechazar la invitación. Volvé a intentarlo.");
+    } finally {
       setProcessing(false);
-    } else if (result.success) {
-      push("/");
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 to-stone-100">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center bg-canvas p-4">
+        <Card className="w-full max-w-md border-stroke-soft shadow-card">
           <CardContent className="flex items-center justify-center py-12">
             <Loader2 className="size-8 animate-spin text-stone-400" />
           </CardContent>
@@ -137,18 +152,18 @@ export default function InvitationPage() {
 
   if (error && !invitation) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 to-stone-100 p-4">
-        <Card className="w-full max-w-md border-red-200">
+      <div className="min-h-screen flex items-center justify-center bg-canvas p-4">
+        <Card className="w-full max-w-md border-destructive/30 shadow-card">
           <CardHeader>
             <div className="flex items-center gap-2">
               <XCircle className="size-6 text-red-500" />
-              <CardTitle className="text-red-700">Invalid Invitation</CardTitle>
+            <CardTitle className="text-red-700">Invitación no válida</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <p className="text-stone-600 mb-4">{error}</p>
             <Button onClick={() => push("/")} className="w-full">
-              Go to Home
+              Volver al inicio
             </Button>
           </CardContent>
         </Card>
@@ -166,23 +181,23 @@ export default function InvitationPage() {
   const timeRemaining = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60)));
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
-      <Card className="w-full max-w-lg shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-canvas p-4">
+      <Card className="w-full max-w-lg border-stroke-soft shadow-card">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-4 bg-blue-100 rounded-full">
-              <Building2 className="size-10 text-blue-600" />
+            <div className="rounded-xl border border-orange-primary/25 bg-orange-primary/10 p-4 text-orange-primary shadow-sm">
+              <Building2 className="size-10" />
             </div>
           </div>
-          <CardTitle className="text-2xl">¡Estás invitado!</CardTitle>
+          <CardTitle className="text-2xl">Te invitaron a trabajar en Síntesis</CardTitle>
           <CardDescription className="text-base">
-            Únete a la organización <strong>{invitation.tenant_name}</strong>
+            Sumate a <strong>{invitation.tenant_name}</strong>
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
           {/* Invitation Details */}
-          <div className="bg-stone-50 rounded-lg p-4 space-y-3">
+          <div className="space-y-3 rounded-lg border border-stroke-soft bg-surface-recessed p-4 shadow-inner">
             <div className="flex items-start gap-3">
               <UserPlus className="size-5 text-stone-400 mt-0.5" />
               <div className="flex-1">
@@ -191,11 +206,25 @@ export default function InvitationPage() {
               </div>
             </div>
 
+            {invitation.invited_operational_role_name ? (
+              <div className="flex items-start gap-3">
+                <HardHat className="mt-0.5 size-5 text-content-muted" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-content">Trabajo principal</p>
+                  <p className="text-sm text-content-secondary">
+                    {invitation.invited_operational_role_name}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex items-start gap-3">
               <CheckCircle2 className="size-5 text-stone-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-stone-700">Rol</p>
-                <p className="text-sm text-stone-600 capitalize">{invitation.invited_role}</p>
+                <p className="text-sm font-medium text-content">Nivel de acceso</p>
+                <p className="text-sm text-content-secondary">
+                  {invitation.invited_role === "admin" ? "Administrador" : "Miembro"}
+                </p>
               </div>
             </div>
 
@@ -207,7 +236,9 @@ export default function InvitationPage() {
                   {isExpired ? (
                     <span className="text-red-600">Vencida</span>
                   ) : timeRemaining < 24 ? (
-                    <span className="text-orange-600">En {timeRemaining} horas</span>
+                    <span className="text-warning-foreground">
+                      {timeRemaining === 0 ? "Menos de una hora" : `En ${timeRemaining} horas`}
+                    </span>
                   ) : (
                     <span>En {Math.floor(timeRemaining / 24)} días</span>
                   )}
@@ -227,7 +258,7 @@ export default function InvitationPage() {
           {!user && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-sm text-blue-700">
-                Please log in with <strong>{invitation.email}</strong> to accept this invitation.
+                Iniciá sesión con <strong>{invitation.email}</strong> para aceptar esta invitación.
               </p>
             </div>
           )}
@@ -235,41 +266,65 @@ export default function InvitationPage() {
           {/* Action Buttons */}
           <div className="flex gap-3">
             <Button
-              onClick={handleDecline}
+              onClick={() => push("/")}
               variant="outline"
               className="flex-1"
-              disabled={processing || isExpired}
+              disabled={processing}
             >
               {processing ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Processing&hellip;
+                  Procesando&hellip;
                 </>
               ) : (
-                "Decline"
+                "Ahora no"
               )}
             </Button>
             <Button
               onClick={handleAccept}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              className="flex-1"
               disabled={processing || isExpired || (Boolean(user) && error !== null)}
             >
               {processing ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Processing&hellip;
+                  Procesando&hellip;
                 </>
               ) : !user ? (
-                "Log In to Accept"
+                "Iniciar sesión para aceptar"
               ) : (
-                "Accept Invitation"
+                "Aceptar invitación"
               )}
             </Button>
           </div>
 
+          {user && !isExpired && !error ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="ghost" className="w-full text-destructive" disabled={processing}>
+                  Rechazar invitación
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Rechazar esta invitación?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    El enlace dejará de funcionar. Para sumarte después, una persona administradora deberá invitarte nuevamente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Volver</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDecline}>
+                    Rechazar invitación
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
+
           {isExpired && (
             <p className="text-center text-sm text-stone-500">
-              This invitation has expired. Please contact the organization admin for a new invitation.
+              Esta invitación venció. Pedile a la persona administradora que envíe una nueva.
             </p>
           )}
         </CardContent>

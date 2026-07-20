@@ -9,7 +9,7 @@ import {
 import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { LightButton, lightButtonVariants } from "@/components/ui/button"
 
 function Calendar({
   className,
@@ -21,7 +21,7 @@ function Calendar({
   components,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
-  buttonVariant?: React.ComponentProps<typeof Button>["variant"]
+  buttonVariant?: React.ComponentProps<typeof LightButton>["variant"]
 }) {
   const defaultClassNames = getDefaultClassNames()
   const resolvedLocaleCode =
@@ -33,7 +33,7 @@ function Calendar({
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
-        "bg-background group/calendar p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
+        "group/calendar bg-surface p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
@@ -41,7 +41,7 @@ function Calendar({
       captionLayout={captionLayout}
       formatters={{
         formatMonthDropdown: (date) =>
-          date.toLocaleString(resolvedLocaleCode, { month: "short" }),
+          date.toLocaleString(resolvedLocaleCode, { month: "long" }),
         ...formatters,
       }}
       classNames={{
@@ -52,17 +52,17 @@ function Calendar({
         ),
         month: cn("flex flex-col w-full gap-4", defaultClassNames.month),
         nav: cn(
-          "flex items-center gap-1 w-full absolute top-0 inset-x-0 justify-between",
+          "absolute inset-x-0 top-0 flex w-full items-center justify-between",
           defaultClassNames.nav
         ),
         button_previous: cn(
-          buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none",
+          lightButtonVariants({ variant: buttonVariant, size: "icon" }),
+          "size-(--cell-size) select-none rounded-full p-0 aria-disabled:opacity-40",
           defaultClassNames.button_previous
         ),
         button_next: cn(
-          buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none",
+          lightButtonVariants({ variant: buttonVariant, size: "icon" }),
+          "size-(--cell-size) select-none rounded-full p-0 aria-disabled:opacity-40",
           defaultClassNames.button_next
         ),
         month_caption: cn(
@@ -70,31 +70,31 @@ function Calendar({
           defaultClassNames.month_caption
         ),
         dropdowns: cn(
-          "w-full flex items-center text-sm font-medium justify-center h-(--cell-size) gap-1.5",
+          "flex h-(--cell-size) items-center justify-center gap-1 rounded-lg border border-stroke-soft bg-surface-muted p-0.5 text-sm font-medium shadow-recessed",
           defaultClassNames.dropdowns
         ),
         dropdown_root: cn(
-          "relative has-focus:border-ring border border-input shadow-xs has-focus:ring-ring/50 has-focus:ring-[3px] rounded-md",
+          "relative rounded-md border border-transparent bg-card shadow-sm transition-[background-color,border-color,box-shadow] hover:bg-surface has-focus:border-orange-primary/40 has-focus:ring-2 has-focus:ring-orange-primary/20",
           defaultClassNames.dropdown_root
         ),
         dropdown: cn(
-          "absolute bg-popover inset-0 opacity-0",
+          "absolute inset-0 cursor-pointer bg-popover opacity-0",
           defaultClassNames.dropdown
         ),
         caption_label: cn(
           "select-none font-medium",
           captionLayout === "label"
             ? "text-sm"
-            : "rounded-md pl-2 pr-1 flex items-center gap-1 text-sm h-8 [&>svg]:text-muted-foreground [&>svg]:size-3.5",
+            : "flex h-6 items-center gap-1 rounded-md px-2 text-xs font-semibold capitalize text-content [&>svg]:size-3.5 [&>svg]:text-content-muted",
           defaultClassNames.caption_label
         ),
         table: "w-full border-collapse",
         weekdays: cn("flex", defaultClassNames.weekdays),
         weekday: cn(
-          "text-muted-foreground rounded-md flex-1 font-normal text-[0.8rem] select-none",
+          "flex-1 select-none rounded-md text-[11px] font-semibold text-content-muted",
           defaultClassNames.weekday
         ),
-        week: cn("flex w-full mt-2", defaultClassNames.week),
+        week: cn("mt-1 flex w-full", defaultClassNames.week),
         week_number_header: cn(
           "select-none w-(--cell-size)",
           defaultClassNames.week_number_header
@@ -117,11 +117,11 @@ function Calendar({
         range_middle: cn("rounded-none", defaultClassNames.range_middle),
         range_end: cn("rounded-r-md bg-accent", defaultClassNames.range_end),
         today: cn(
-          "bg-accent text-accent-foreground rounded-md data-[selected=true]:rounded-none",
+          "rounded-md data-[selected=true]:rounded-none",
           defaultClassNames.today
         ),
         outside: cn(
-          "text-muted-foreground aria-selected:text-muted-foreground",
+          "text-content-muted/45 aria-selected:text-content-muted",
           defaultClassNames.outside
         ),
         disabled: cn(
@@ -193,11 +193,12 @@ function CalendarDayButton({
   }, [modifiers.focused])
 
   return (
-    <Button
+    <LightButton
       ref={ref}
       variant="ghost"
       size="icon"
       data-day={day.date.toLocaleDateString()}
+      data-today={modifiers.today}
       data-selected-single={
         modifiers.selected &&
         !modifiers.range_start &&
@@ -208,7 +209,7 @@ function CalendarDayButton({
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
       className={cn(
-        "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 dark:hover:text-accent-foreground flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] data-[range-end=true]:rounded-md data-[range-end=true]:rounded-r-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md data-[range-start=true]:rounded-l-md [&>span]:text-xs [&>span]:opacity-70",
+        "flex aspect-square size-(--cell-size) min-w-0 flex-col gap-1 rounded-md p-0 text-xs font-medium leading-none text-content-secondary shadow-none hover:bg-surface-muted hover:text-content focus-visible:ring-2 focus-visible:ring-orange-primary/30 data-[today=true]:font-bold data-[today=true]:text-orange-primary data-[today=true]:shadow-[inset_0_0_0_1px_hsl(var(--orange-primary)_/_0.35)] data-[selected-single=true]:bg-orange-primary data-[selected-single=true]:text-primary-foreground data-[selected-single=true]:shadow-sm data-[selected-single=true]:hover:bg-orange-primary/90 data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-accent-soft data-[range-middle=true]:text-content data-[range-start=true]:rounded-l-md data-[range-start=true]:bg-orange-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:rounded-r-md data-[range-end=true]:bg-orange-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 [&>span]:text-xs [&>span]:opacity-70",
         defaultClassNames.day,
         className
       )}

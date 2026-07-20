@@ -25,6 +25,17 @@ import {
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -144,6 +155,8 @@ type UsersPageClientProps = {
 	allPermissions: PermissionOption[];
 	canImpersonate: boolean;
 	canManageUsers: boolean;
+	canManageRoles: boolean;
+	canAssignOwner: boolean;
 };
 
 const MEMBERSHIP_LABELS: Record<MembershipRole, string> = {
@@ -154,11 +167,11 @@ const MEMBERSHIP_LABELS: Record<MembershipRole, string> = {
 
 const USER_STATUS_LABELS = {
 	active: "Activo",
-	pending: "Pendiente",
+	pending: "Todavía no ingresó",
 } as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
-	admin: "Administracion",
+	admin: "Administración",
 	certificados: "Certificados",
 	"data-flow": "Data-flow",
 	documents: "Documentos",
@@ -348,6 +361,8 @@ export function UsersPageClient({
 	allPermissions,
 	canImpersonate,
 	canManageUsers,
+	canManageRoles,
+	canAssignOwner,
 }: UsersPageClientProps) {
 	const [usersState, setUsersState] = React.useState<UserCardData[]>(users);
 	const [query, setQuery] = React.useState("");
@@ -366,9 +381,12 @@ export function UsersPageClient({
 		role: MembershipRole;
 	} | null>(null);
 	const [loadingAccess, setLoadingAccess] = React.useState(false);
+	const [accessError, setAccessError] = React.useState<string | null>(null);
+	const [accessReloadKey, setAccessReloadKey] = React.useState(0);
 	const [savingKey, setSavingKey] = React.useState<string | null>(null);
 	const [batchRoleId, setBatchRoleId] = React.useState("");
 	const [batchPermissionId, setBatchPermissionId] = React.useState("");
+	const detailPanelRef = React.useRef<HTMLDivElement>(null);
 
 	const rolesById = React.useMemo(
 		() => new Map(allRoles.map((role) => [role.id, role])),
@@ -413,22 +431,40 @@ export function UsersPageClient({
 		},
 		[activeUser],
 	);
+	const handleActiveUserChange = React.useCallback(
+		(userId: string) => {
+			if (userId === activeUserId) return;
+			setActiveAccess(null);
+			setLoadingAccess(true);
+			setAccessError(null);
+			setSelectedOrgRoleDraft(null);
+			setActiveUserId(userId);
+			if (window.matchMedia("(max-width: 1279px)").matches) {
+				window.requestAnimationFrame(() => {
+					detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+				});
+			}
+		},
+		[activeUserId],
+	);
 
 	React.useEffect(() => {
-		if (!activeUserId) {
+		if (!activeUserId || !canManageRoles) {
 			return;
 		}
 		const userId = activeUserId;
 
 		let cancelled = false;
 		async function loadActiveAccess() {
+			setActiveAccess(null);
 			setLoadingAccess(true);
+			setAccessError(null);
 			try {
 				const access = await loadUserAccess(tenantId, userId);
 				if (!cancelled) setActiveAccess(access);
 			} catch (error) {
 				if (!cancelled) {
-					toast.error(getErrorMessage(error, "No se pudo cargar el usuario"));
+					setAccessError(getErrorMessage(error, "No se pudo cargar el usuario"));
 				}
 			} finally {
 				if (!cancelled) setLoadingAccess(false);
@@ -440,7 +476,7 @@ export function UsersPageClient({
 		return () => {
 			cancelled = true;
 		};
-	}, [activeUserId, tenantId]);
+	}, [accessReloadKey, activeUserId, canManageRoles, tenantId]);
 
 	const filteredUsers = React.useMemo(() => {
 		const normalizedQuery = query.trim().toLowerCase();
@@ -660,10 +696,10 @@ export function UsersPageClient({
 			);
 			setSelectedOrgRoleDraft(null);
 			await refreshAccessForUsers([activeUser.user_id]);
-			toast.success("Rol de organizacion actualizado");
+			toast.success("Rol de organización actualizado");
 		} catch (error) {
 			toast.error(
-				getErrorMessage(error, "No se pudo actualizar el rol de organizacion"),
+				getErrorMessage(error, "No se pudo actualizar el rol de organización"),
 			);
 		} finally {
 			setSavingKey(null);
@@ -759,6 +795,7 @@ export function UsersPageClient({
 						{canManageUsers ? (
 							<InviteUsersDialog
 								tenantId={tenantId}
+								roles={allRoles}
 								triggerLabel="Invitar persona"
 								triggerSize="sm"
 								triggerVariant="dark"
@@ -799,6 +836,7 @@ export function UsersPageClient({
 				</div>
 			</header>
 
+			{selectedUsers.length > 0 && (
 			<section className="rounded-lg border border-stroke-soft bg-surface px-4 py-3 shadow-card">
 				<div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
 					<div className="min-w-0">
@@ -906,6 +944,7 @@ export function UsersPageClient({
 					</div>
 				</div>
 			</section>
+			)}
 
 			<div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
 				<section className="space-y-3">
@@ -951,30 +990,41 @@ export function UsersPageClient({
 									selected={selectedIds.has(user.user_id)}
 									active={activeUserId === user.user_id}
 									onSelect={() => toggleSelected(user.user_id)}
-									onOpen={() => setActiveUserId(user.user_id)}
+									onOpen={() => handleActiveUserChange(user.user_id)}
 								/>
 							))}
 						</div>
 					)}
 				</section>
 
-				<UserDetailPanel
+				<div ref={detailPanelRef} className="scroll-mt-16">
+				{canManageRoles ? (
+					<UserDetailPanel
 					user={activeUser}
 					allRoles={allRoles}
 					allPermissions={allPermissions}
 					permissionsByCategory={permissionsByCategory}
 					activeAccess={activeAccess}
 					loadingAccess={loadingAccess}
+					accessError={accessError}
 					selectedOrgRole={selectedOrgRole}
 					savingKey={savingKey}
 					canImpersonate={canImpersonate}
+					canAssignOwner={canAssignOwner}
+					onRetryAccess={() => setAccessReloadKey((value) => value + 1)}
 					onSelectedOrgRoleChange={handleSelectedOrgRoleChange}
 					onUpdateMembershipRole={updateMembershipRole}
 					onSetUserRole={setUserRole}
 					onSetPermissionOverride={setPermissionOverride}
 					onSetAllOverrides={setAllOverrides}
 					onStartImpersonation={startImpersonation}
-				/>
+					/>
+				) : (
+					<aside className="rounded-lg border border-stroke-soft bg-surface p-5 text-sm text-content-secondary shadow-card">
+						Podés invitar personas y revisar el equipo. Para cambiar roles o permisos, pedile ayuda a una persona propietaria.
+					</aside>
+				)}
+				</div>
 			</div>
 		</div>
 	);
@@ -1124,9 +1174,12 @@ function UserDetailPanel({
 	permissionsByCategory,
 	activeAccess,
 	loadingAccess,
+	accessError,
 	selectedOrgRole,
 	savingKey,
 	canImpersonate,
+	canAssignOwner,
+	onRetryAccess,
 	onSelectedOrgRoleChange,
 	onUpdateMembershipRole,
 	onSetUserRole,
@@ -1140,9 +1193,12 @@ function UserDetailPanel({
 	permissionsByCategory: { category: string; permissions: PermissionOption[] }[];
 	activeAccess: UserAccessState | null;
 	loadingAccess: boolean;
+	accessError: string | null;
 	selectedOrgRole: MembershipRole;
 	savingKey: string | null;
 	canImpersonate: boolean;
+	canAssignOwner: boolean;
+	onRetryAccess: () => void;
 	onSelectedOrgRoleChange: (role: MembershipRole) => void;
 	onUpdateMembershipRole: () => void;
 	onSetUserRole: (
@@ -1185,7 +1241,7 @@ function UserDetailPanel({
 		? allPermissions.filter((permission) =>
 				isPermissionEffective(permission.id, activeAccess.sources),
 			).length
-		: user.override_count;
+		: null;
 
 	return (
 		<aside className="sticky top-4 h-fit max-h-[calc(100vh-2rem)] overflow-hidden rounded-lg border border-stroke-soft bg-surface shadow-card">
@@ -1217,6 +1273,20 @@ function UserDetailPanel({
 			</div>
 
 			<div className="max-h-[calc(100vh-9rem)] overflow-y-auto px-5 py-4">
+				{accessError ? (
+					<div className="mb-4 rounded-lg border border-warning/35 bg-warning/15 p-3 text-sm text-warning-foreground">
+						<p>{accessError}</p>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="mt-3"
+							onClick={onRetryAccess}
+						>
+							Volver a intentar
+						</Button>
+					</div>
+				) : null}
 				<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
 					<ProfileDatum
 					label="Roles"
@@ -1230,7 +1300,11 @@ function UserDetailPanel({
 					/>
 					<ProfileDatum
 					label="Permisos"
-					value={`${permissionCount} habilitados`}
+					value={
+						permissionCount === null
+							? "Calculando…"
+							: `${permissionCount} habilitados`
+					}
 						icon={<KeyRound className="size-4" />}
 					/>
 					<ProfileDatum
@@ -1249,8 +1323,9 @@ function UserDetailPanel({
 						) : null}
 					</div>
 					<div className="flex gap-2">
-						<Select
+					<Select
 							value={selectedOrgRole}
+							disabled={loadingAccess || !activeAccess || Boolean(savingKey)}
 							onValueChange={(value) =>
 								onSelectedOrgRoleChange(toMembershipRole(value))
 							}
@@ -1259,24 +1334,50 @@ function UserDetailPanel({
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent align="end">
-							<SelectItem value="owner">Propietario</SelectItem>
+							{canAssignOwner || membershipRole === "owner" ? (
+								<SelectItem value="owner">Propietario</SelectItem>
+							) : null}
 							<SelectItem value="admin">Administrador</SelectItem>
 							<SelectItem value="member">Miembro</SelectItem>
 							</SelectContent>
 						</Select>
-						<Button
-							type="button"
-							size="sm"
-							disabled={savingKey === "membership"}
-							onClick={onUpdateMembershipRole}
-						>
-							{savingKey === "membership" ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<Check className="size-4" />
-							)}
-						Guardar
-						</Button>
+						<AlertDialog>
+							<AlertDialogTrigger asChild>
+								<Button
+									type="button"
+									size="sm"
+									disabled={
+										loadingAccess ||
+										!activeAccess ||
+										Boolean(savingKey) ||
+										selectedOrgRole === toMembershipRole(user.membership_role)
+									}
+								>
+									{savingKey === "membership" ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<Check className="size-4" />
+									)}
+									Guardar
+								</Button>
+							</AlertDialogTrigger>
+							<AlertDialogContent>
+								<AlertDialogHeader>
+									<AlertDialogTitle>Confirmar cambio de acceso</AlertDialogTitle>
+									<AlertDialogDescription>
+										{selectedOrgRole === "owner"
+											? "Esta persona podrá administrar toda la organización, incluido el acceso de otras personas."
+											: selectedOrgRole === "admin"
+												? "Esta persona tendrá acceso administrativo a la organización."
+												: "Esta persona dejará de tener acceso administrativo y conservará solo sus responsabilidades asignadas."}
+									</AlertDialogDescription>
+								</AlertDialogHeader>
+								<AlertDialogFooter>
+									<AlertDialogCancel>Cancelar</AlertDialogCancel>
+									<AlertDialogAction onClick={onUpdateMembershipRole}>Confirmar cambio</AlertDialogAction>
+								</AlertDialogFooter>
+							</AlertDialogContent>
+						</AlertDialog>
 					</div>
 				</section>
 
@@ -1294,16 +1395,18 @@ function UserDetailPanel({
 					) : (
 						<div className="grid gap-2">
 							{allRoles.map((role) => {
-								const assigned = activeAccess
-									? activeAccess.roleIds.includes(role.id)
-									: user.assigned_role_ids.includes(role.id);
+								const assigned = activeAccess?.roleIds.includes(role.id) ?? false;
 								const isSaving =
 									savingKey === `role:${user.user_id}:${role.id}`;
 								return (
 									<button
 										key={role.id}
 										type="button"
-										disabled={Boolean(savingKey) && !isSaving}
+										disabled={
+											loadingAccess ||
+											!activeAccess ||
+											(Boolean(savingKey) && !isSaving)
+										}
 										onClick={() =>
 											onSetUserRole(user.user_id, role.id, !assigned)
 										}
@@ -1345,16 +1448,20 @@ function UserDetailPanel({
 				</section>
 
 				<section className="mt-5 space-y-3">
-					<div className="flex flex-wrap items-start justify-between gap-3">
-						<div>
+					<details className="group rounded-lg border border-stroke-soft bg-surface-recessed p-3">
+						<summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-orange-primary/30">
+							<div>
 							<h3 className="text-sm font-semibold text-content">
 								Permisos avanzados
 							</h3>
 							<p className="mt-1 text-xs text-content-secondary">
 								{permissionCount} habilitados
 							</p>
-						</div>
-						<div className="flex flex-wrap gap-2">
+							</div>
+							<ChevronRight className="size-4 text-content-muted transition-transform duration-150 group-open:rotate-90" />
+						</summary>
+						<div className="mt-3 space-y-3">
+						<div className="flex flex-wrap justify-end gap-2">
 							<Button
 								type="button"
 								variant="successSecondary"
@@ -1398,7 +1505,6 @@ function UserDetailPanel({
 								Usar roles
 							</Button>
 						</div>
-					</div>
 
 					{activeAccess?.sources.isAdmin ? (
 						<div className="rounded-lg border border-warning/35 bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
@@ -1426,7 +1532,11 @@ function UserDetailPanel({
 												key={permission.id}
 												permission={permission}
 												sources={activeAccess?.sources ?? null}
-												disabled={Boolean(savingKey)}
+												disabled={
+													loadingAccess ||
+													!activeAccess ||
+													Boolean(savingKey)
+												}
 												saving={
 													savingKey ===
 													`permission:${user.user_id}:${permission.id}`
@@ -1445,6 +1555,8 @@ function UserDetailPanel({
 							))}
 						</div>
 					)}
+						</div>
+					</details>
 				</section>
 
 				{canImpersonate ? (

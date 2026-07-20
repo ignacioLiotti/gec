@@ -1,10 +1,18 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AsciiScene } from "@/components/ascii-scene";
 import { AnimatePresence, m } from "framer-motion";
+import { resolveTenantSwitchRedirect } from "@/lib/tenant-switch-redirect";
+
+const DesktopAsciiScene = dynamic(
+  () => import("@/components/ascii-scene").then((module) => module.AsciiScene),
+  { ssr: false },
+);
+
+const DESKTOP_VISUAL_MEDIA_QUERY = "(min-width: 1280px)";
 
 type AuthModalProps = {
   open: boolean;
@@ -31,7 +39,46 @@ function getAuthRedirectOrigin() {
 }
 
 function getAuthErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Algo salio mal";
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+  if (message.includes("invalid login credentials")) {
+    return "El correo o la contraseña no son correctos.";
+  }
+  if (message.includes("email not confirmed")) {
+    return "Primero confirmá tu correo desde el mensaje que te enviamos.";
+  }
+  if (message.includes("user already registered")) {
+    return "Ese correo ya tiene una cuenta. Probá iniciar sesión.";
+  }
+  if (message.includes("password should be")) {
+    return "La contraseña debe tener al menos 8 caracteres.";
+  }
+  if (message.includes("rate limit") || message.includes("too many requests")) {
+    return "Hubo demasiados intentos. Esperá un momento y volvé a probar.";
+  }
+
+  return "No pudimos completar el acceso. Revisá los datos e intentá nuevamente.";
+}
+
+function normalizeReturnPath(value: string | null) {
+  if (!value) return null;
+  const url = resolveTenantSwitchRedirect("http://localhost", value, "/");
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function useDesktopVisual() {
+  const [shouldShow, setShouldShow] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(DESKTOP_VISUAL_MEDIA_QUERY);
+    const updateVisibility = () => setShouldShow(mediaQuery.matches);
+
+    updateVisibility();
+    mediaQuery.addEventListener("change", updateVisibility);
+    return () => mediaQuery.removeEventListener("change", updateVisibility);
+  }, []);
+
+  return shouldShow;
 }
 
 function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
@@ -46,10 +93,11 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showOtherMethods, setShowOtherMethods] = useState(false);
 
-  const returnToParam = getSearchParam("returnTo");
-  const returnTo = returnToParam?.startsWith("/") ? returnToParam : null;
+  const returnTo = normalizeReturnPath(getSearchParam("returnTo"));
+  const showDesktopVisual = useDesktopVisual();
 
   const currentPathWithQuery = (() => {
     const current = `${pathname ?? "/"}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
@@ -60,68 +108,50 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setNotice(null);
     const supabase = createSupabaseBrowserClient();
-    console.log("[AUTH-MODAL] handleSubmit started, mode:", mode);
     try {
       if (mode === "sign_in") {
-        console.log("[AUTH-MODAL] Calling signInWithPassword...");
-        const { error: signInError, data: signInData } = await supabase.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        console.log("[AUTH-MODAL] signInWithPassword result:", { error: signInError, user: signInData?.user?.email, session: !!signInData?.session });
         if (signInError) throw signInError;
 
-        // Wait for session to be fully established
-        console.log("[AUTH-MODAL] Calling getSession...");
-        const { data: sessionData } = await supabase.auth.getSession();
-        console.log("[AUTH-MODAL] getSession result:", { hasSession: !!sessionData?.session, user: sessionData?.session?.user?.email });
-
-        // Check cookies before delay
-        console.log("[AUTH-MODAL] Cookies before delay:", document.cookie);
-
-        // Give the session time to persist to cookies
-        console.log("[AUTH-MODAL] Waiting 300ms for cookies to persist...");
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        // Check cookies after delay
-        console.log("[AUTH-MODAL] Cookies after delay:", document.cookie);
-
-        // Refresh server state to pick up new session
-        console.log("[AUTH-MODAL] Calling refresh()...");
+        await supabase.auth.getSession();
         refresh();
-        console.log("[AUTH-MODAL] refresh() called");
-
-        // Close modal after session is synced
         onOpenChange(false);
         setEmail("");
         setPassword("");
         if (returnTo) {
           push(returnTo);
         }
-        console.log("[AUTH-MODAL] Modal closed, login flow complete");
       } else {
-        console.log("[AUTH-MODAL] Calling signUp...");
         const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
           email,
           password,
         });
-        console.log("[AUTH-MODAL] signUp result:", { error: signUpError, user: signUpData?.user?.email });
         if (signUpError) throw signUpError;
 
-        // Wait for session
-        const { data: sessionData } = await supabase.auth.getSession();
-        console.log("[AUTH-MODAL] getSession after signUp:", { hasSession: !!sessionData?.session });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        if (!signUpData.session) {
+          setMode("sign_in");
+          setPassword("");
+          setShowOtherMethods(true);
+          setNotice("Te enviamos un correo de confirmación. Abrilo y después iniciá sesión para continuar.");
+          return;
+        }
 
-        // After sign-up route to onboarding to pick a tenant
-        push("/onboarding");
+        const signUpDestination =
+          returnTo ??
+          (currentPathWithQuery.startsWith("/invitations/")
+            ? currentPathWithQuery
+            : "/onboarding");
+        push(signUpDestination);
         onOpenChange(false);
         setEmail("");
         setPassword("");
       }
     } catch (err: unknown) {
-      console.error("[AUTH-MODAL] Error:", err);
       setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
@@ -131,12 +161,11 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
   async function handleGoogleSignIn() {
     setLoading(true);
     setError(null);
+    setNotice(null);
     const supabase = createSupabaseBrowserClient();
-    console.log("[AUTH-MODAL] handleGoogleSignIn started");
     try {
       const next = encodeURIComponent(returnTo ?? currentPathWithQuery);
       const redirectTo = `${getAuthRedirectOrigin()}/auth/callback?next=${next}`;
-      console.log("[AUTH-MODAL] Calling signInWithOAuth, redirectTo:", redirectTo);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -144,9 +173,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         },
       });
       if (error) throw error;
-      console.log("[AUTH-MODAL] signInWithOAuth initiated, redirecting to Google...");
     } catch (err: unknown) {
-      console.error("[AUTH-MODAL] Google sign in error:", err);
       setError(getAuthErrorMessage(err));
       setLoading(false);
     }
@@ -156,50 +183,62 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
 
   return (
     <div
-      className="fixed inset-0 z-50"
+      className="fixed inset-0 z-[10000001] bg-canvas"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="auth-modal-title"
+      aria-describedby="auth-modal-description"
     >
-      <button
-        type="button"
-        aria-label="Cerrar modal"
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={() => {
-          if (!forcedOpen) {
-            onOpenChange(false);
-          }
-        }}
-      />
-      <div className="relative z-10 grid h-full grid-cols-2">
-        <div className="h-full w-full p-4">
-          <AsciiScene />
+      {forcedOpen ? (
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
+      ) : (
+        <button
+          type="button"
+          aria-label="Cerrar modal"
+          className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          onClick={() => onOpenChange(false)}
+        />
+      )}
+      <div className="relative z-10 grid h-dvh grid-cols-1 xl:grid-cols-[minmax(0,1.05fr)_minmax(28rem,0.95fr)]">
+        <div className="hidden h-full min-h-0 w-full p-4 xl:block" aria-hidden="true">
+          {showDesktopVisual && <DesktopAsciiScene />}
         </div>
-        <div className="flex h-full w-full flex-col bg-background px-4 py-6 text-foreground sm:px-10 sm:py-8">
+        <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-surface px-5 py-6 text-content sm:px-10 sm:py-8">
         <div className="flex items-center justify-end gap-4">
           {!forcedOpen && (
             <button
+              type="button"
               onClick={() => onOpenChange(false)}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-foreground/10"
+              className="rounded-md border border-stroke px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-surface-recessed active:scale-[0.97]"
             >
               Cerrar
             </button>
           )}
         </div>
 
-        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-8 py-6">
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 py-6 sm:gap-8">
           <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="flex flex-col gap-2 items-center justify-center mb-10">
-              <h2 className="text-3xl font-normal font-mono ">
-                Bienvenido a Sintesis
+            <div className="mb-8 flex flex-col items-center justify-center gap-2 text-center sm:mb-10">
+              <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-stroke bg-surface-raised shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_2px_8px_rgba(0,0,0,0.06)]">
+                <span className="size-4 rounded-full bg-orange-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.65)]" />
+              </div>
+              <h2 id="auth-modal-title" className="font-mono text-2xl font-normal sm:text-3xl">
+                Bienvenido a Síntesis
               </h2>
-              <p className="text-sm uppercase tracking-wide text-muted-foreground">
-                {mode === "sign_in" ? "Iniciar sesión" : "Crear una cuenta"}
+              <p id="auth-modal-description" className="text-sm uppercase tracking-wide text-content-muted">
+                {mode === "sign_in" ? "Iniciar sesión" : "Crear tu espacio"}
+              </p>
+              <p className="max-w-sm text-sm leading-6 text-content-secondary">
+                {mode === "sign_in"
+                  ? "Entrá a tus obras, documentos y tareas pendientes."
+                  : "Usá tu correo habitual. Después te guiaremos para preparar la organización."}
               </p>
             </div>
             <button
+              type="button"
               onClick={handleGoogleSignIn}
               disabled={loading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-none border border-input bg-black px-4 py-2 text-sm font-medium shadow-sm text-white hover:bg-black/90 disabled:opacity-50"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-stroke-strong bg-stone-950 px-4 py-2 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_2px_5px_rgba(0,0,0,0.18)] transition-[transform,background-color] duration-150 hover:bg-stone-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <svg className="size-5" viewBox="0 0 24 24">
                 <path
@@ -219,16 +258,20 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                   fill="#EA4335"
                 />
               </svg>
-              Continuar con Google
+              {mode === "sign_in" ? "Ingresar con Google" : "Continuar con Google"}
             </button>
             <div className="my-4 flex items-center gap-3">
               <div className="h-px flex-1 bg-border" />
               <button
                 type="button"
                 onClick={() => setShowOtherMethods(!showOtherMethods)}
-                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                className="cursor-pointer text-xs font-medium text-content-muted transition-colors duration-150 hover:text-content"
               >
-                otros metodos
+                {showOtherMethods
+                  ? "Ocultar acceso con correo"
+                  : mode === "sign_in"
+                    ? "Ingresar con correo"
+                    : "Registrarme con correo"}
               </button>
               <div className="h-px flex-1 bg-border" />
             </div>
@@ -250,8 +293,10 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      placeholder="nombre@empresa.com"
                       required
-                      className="w-full rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                      className="min-h-11 w-full rounded-md border border-stroke bg-surface px-3 py-2 text-base shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-content-disabled focus:border-stroke-strong focus:ring-2 focus:ring-orange-primary/20 sm:text-sm"
                     />
                   </div>
                   <div className="space-y-1">
@@ -263,28 +308,44 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
+                      minLength={mode === "sign_up" ? 8 : undefined}
+                      placeholder={mode === "sign_up" ? "Mínimo 8 caracteres" : "Tu contraseña"}
                       required
-                      className="w-full rounded-md border bg-background px-3 py-2 focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                      className="min-h-11 w-full rounded-md border border-stroke bg-surface px-3 py-2 text-base shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-content-disabled focus:border-stroke-strong focus:ring-2 focus:ring-orange-primary/20 sm:text-sm"
                     />
+                    {mode === "sign_up" && (
+                      <p className="text-xs text-content-muted">Usá 8 caracteres o más.</p>
+                    )}
                   </div>
                   {error && (
-                    <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+                    <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700">
                       {error}
+                    </div>
+                  )}
+                  {notice && (
+                    <div role="status" className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800">
+                      {notice}
                     </div>
                   )}
                   <button
                     type="submit"
                     disabled={loading}
-                    className="inline-flex w-full items-center justify-center rounded-none bg-black px-4 py-2 text-sm font-medium text-white shadow hover:bg-black/90 disabled:opacity-50"
+                    className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-orange-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.32),0_2px_5px_rgba(126,45,0,0.22)] transition-[transform,filter] duration-150 hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {loading ? "Cargando..." : mode === "sign_in" ? "Iniciar sesión" : "Registrarse"}
+                    {loading ? "Cargando..." : mode === "sign_in" ? "Iniciar sesión" : "Crear mi espacio"}
                   </button>
                 </m.div>
               )}
             </AnimatePresence>
             {!showOtherMethods && error && (
-              <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+              <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700">
                 {error}
+              </div>
+            )}
+            {!showOtherMethods && notice && (
+              <div role="status" className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800">
+                {notice}
               </div>
             )}
           </form>
@@ -292,17 +353,29 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
           <div className="text-center text-sm">
             {mode === "sign_in" ? (
               <button
-                onClick={() => setMode("sign_up")}
-                className="text-foreground/80 hover:underline"
+                type="button"
+                onClick={() => {
+                  setMode("sign_up");
+                  setError(null);
+                  setNotice(null);
+                  setPassword("");
+                }}
+                className="font-medium text-content-secondary underline-offset-4 transition-colors duration-150 hover:text-content hover:underline"
               >
-                ¿Necesitás una cuenta? Registrate
+                ¿Primera vez? Crear mi espacio
               </button>
             ) : (
               <button
-                onClick={() => setMode("sign_in")}
-                className="text-foreground/80 hover:underline"
+                type="button"
+                onClick={() => {
+                  setMode("sign_in");
+                  setError(null);
+                  setNotice(null);
+                  setPassword("");
+                }}
+                className="font-medium text-content-secondary underline-offset-4 transition-colors duration-150 hover:text-content hover:underline"
               >
-                ¿Ya tenés una cuenta? Iniciá sesión
+                ¿Ya tenés una cuenta? Iniciar sesión
               </button>
             )}
           </div>

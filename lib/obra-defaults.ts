@@ -247,6 +247,47 @@ export async function applyObraDefaults(
 	tenantId: string
 ): Promise<ApplyDefaultsResult> {
 	try {
+		const issues: string[] = [];
+		const ensureTablaColumns = async (
+			tablaId: string,
+			columns: Array<{
+				tabla_id: string;
+				field_key: string;
+				label: string;
+				data_type: string;
+				position: number;
+				required: boolean;
+				config: Record<string, unknown>;
+			}>,
+			tablaName: string,
+		) => {
+			if (columns.length === 0) return;
+			const { data: existingColumns, error: existingColumnsError } = await supabase
+				.from("obra_tabla_columns")
+				.select("field_key")
+				.eq("tabla_id", tablaId);
+			if (existingColumnsError) {
+				issues.push(`No se pudieron revisar las columnas de ${tablaName}`);
+				return;
+			}
+			const existingKeys = new Set(
+				(existingColumns ?? []).map((column) => column.field_key as string),
+			);
+			const missingColumns = columns.filter(
+				(column) => !existingKeys.has(column.field_key),
+			);
+			if (missingColumns.length === 0) return;
+			const { error: insertColumnsError } = await supabase
+				.from("obra_tabla_columns")
+				.insert(missingColumns);
+			if (insertColumnsError) {
+				console.error(
+					"[apply-obra-defaults] Error ensuring obra tabla columns:",
+					insertColumnsError,
+				);
+				issues.push(`No se pudieron crear las columnas de ${tablaName}`);
+			}
+		};
 		// Fetch default folders
 		const { data: defaultFolders, error: foldersError } = await supabase
 			.from("obra_default_folders")
@@ -255,6 +296,9 @@ export async function applyObraDefaults(
 			.order("position", { ascending: true });
 
 		if (foldersError) throw foldersError;
+		if (!defaultFolders || defaultFolders.length === 0) {
+			issues.push("No hay carpetas recomendadas configuradas para la organización");
+		}
 
 		const folderPaths = (defaultFolders as DefaultFolder[] | null)?.map((folder) => folder.path) ?? [];
 		console.info("[apply-obra-defaults] Found default folders:", {
@@ -276,6 +320,9 @@ export async function applyObraDefaults(
 
 		if (tablasError) {
 			console.error("[apply-obra-defaults] Error fetching default tablas:", tablasError);
+			issues.push("No se pudieron leer las tablas recomendadas");
+		} else if (!defaultTablas || defaultTablas.length === 0) {
+			issues.push("No hay tablas recomendadas configuradas para la organización");
 		}
 
 		// Fetch columns for OCR tablas
@@ -291,6 +338,7 @@ export async function applyObraDefaults(
 
 			if (columnsError) {
 				console.error("[apply-obra-defaults] Error fetching default columns:", columnsError);
+				issues.push("No se pudieron leer las columnas recomendadas");
 			} else {
 				(defaultColumns as DefaultColumn[] | null)?.forEach((column) => {
 					const existing = columnsByTabla.get(column.default_tabla_id) ?? [];
@@ -324,6 +372,7 @@ export async function applyObraDefaults(
 					});
 				if (uploadError) {
 					console.error("[apply-obra-defaults] Storage upload error for", keepPath, uploadError);
+					issues.push(`No se pudo preparar la carpeta ${rawPath}`);
 				} else {
 					foldersCreated++;
 					console.info("[apply-obra-defaults] Created folder placeholder:", keepPath);
@@ -334,6 +383,7 @@ export async function applyObraDefaults(
 					rawPath,
 					storageError
 				);
+				issues.push(`No se pudo preparar la carpeta ${rawPath}`);
 			}
 
 			// If folder has a linked OCR tabla, clone it for the obra
@@ -357,7 +407,25 @@ export async function applyObraDefaults(
 						.eq("name", presetName)
 						.maybeSingle();
 
-					if (existingPresetTabla) continue;
+					const buildPresetColumns = (tablaId: string) =>
+						preset.columns.map((column) => ({
+							tabla_id: tablaId,
+							field_key: column.field_key,
+							label: column.label,
+							data_type: column.data_type,
+							position: column.position,
+							required: column.required,
+							config: column.config ?? {},
+						}));
+
+					if (existingPresetTabla) {
+						await ensureTablaColumns(
+							existingPresetTabla.id as string,
+							buildPresetColumns(existingPresetTabla.id as string),
+							presetName,
+						);
+						continue;
+					}
 
 					const presetSettings: Record<string, unknown> = {
 						...defaultSettings,
@@ -387,28 +455,16 @@ export async function applyObraDefaults(
 							"[apply-obra-defaults] Error creating certificado preset tabla:",
 							presetTablaError,
 						);
+						issues.push(`No se pudo crear la tabla ${presetName}`);
 						continue;
 					}
 
 					tablasCreated++;
-					const columnsPayload = preset.columns.map((column) => ({
-						tabla_id: createdPresetTabla.id,
-						field_key: column.field_key,
-						label: column.label,
-						data_type: column.data_type,
-						position: column.position,
-						required: column.required,
-						config: column.config ?? {},
-					}));
-					const { error: presetColumnsError } = await supabase
-						.from("obra_tabla_columns")
-						.insert(columnsPayload);
-					if (presetColumnsError) {
-						console.error(
-							"[apply-obra-defaults] Error creating certificado preset columns:",
-							presetColumnsError,
-						);
-					}
+					await ensureTablaColumns(
+						createdPresetTabla.id as string,
+						buildPresetColumns(createdPresetTabla.id as string),
+						presetName,
+					);
 				}
 				continue;
 			}
@@ -421,7 +477,27 @@ export async function applyObraDefaults(
 				.eq("name", defaultTabla.name)
 				.maybeSingle();
 
+			const defaultColumns = columnsByTabla.get(defaultTabla.id) ?? [];
+			const buildDefaultColumns = (tablaId: string) =>
+				defaultColumns.map((column) => ({
+					tabla_id: tablaId,
+					field_key: column.field_key,
+					label: column.label,
+					data_type: column.data_type,
+					position: column.position,
+					required: column.required,
+					config: {
+						...(column.config ?? {}),
+						defaultColumnId: column.id,
+					},
+				}));
+
 			if (existingTabla) {
+				await ensureTablaColumns(
+					existingTabla.id as string,
+					buildDefaultColumns(existingTabla.id as string),
+					defaultTabla.name,
+				);
 				continue;
 			}
 
@@ -452,37 +528,17 @@ export async function applyObraDefaults(
 
 			if (tablaError || !createdTabla) {
 				console.error("[apply-obra-defaults] Error creating obra tabla:", tablaError);
+				issues.push(`No se pudo crear la tabla ${defaultTabla.name}`);
 				continue;
 			}
 
 			tablasCreated++;
 
-			const defaultColumns = columnsByTabla.get(defaultTabla.id) ?? [];
-			if (defaultColumns.length > 0) {
-				const columnsPayload = defaultColumns.map((column) => ({
-					tabla_id: createdTabla.id,
-					field_key: column.field_key,
-					label: column.label,
-					data_type: column.data_type,
-					position: column.position,
-					required: column.required,
-					config: {
-						...(column.config ?? {}),
-						defaultColumnId: column.id,
-					},
-				}));
-
-				const { error: insertColumnsError } = await supabase
-					.from("obra_tabla_columns")
-					.insert(columnsPayload);
-
-				if (insertColumnsError) {
-					console.error(
-						"[apply-obra-defaults] Error cloning default tabla columns:",
-						insertColumnsError
-					);
-				}
-			}
+			await ensureTablaColumns(
+				createdTabla.id as string,
+				buildDefaultColumns(createdTabla.id as string),
+				defaultTabla.name,
+			);
 		}
 
 		console.info("[apply-obra-defaults] Completed:", {
@@ -493,9 +549,10 @@ export async function applyObraDefaults(
 		});
 
 		return {
-			success: true,
+			success: issues.length === 0,
 			foldersApplied: foldersCreated,
 			tablasApplied: tablasCreated,
+			error: issues.length > 0 ? [...new Set(issues)].join(". ") : undefined,
 		};
 	} catch (error) {
 		console.error("[apply-obra-defaults] Error:", error);

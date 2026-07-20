@@ -55,8 +55,8 @@ const playfairDisplay = Playfair_Display({
 
 export const metadata: Metadata = {
 	title: {
-		default: "Sintesis | Digitalizacion y Control de Obras",
-		template: "%s | Sintesis",
+		default: "Síntesis | Digitalización y Control de Obras",
+		template: "%s | Síntesis",
 	},
 	description:
 		"Centraliza documentos, automatiza extraccion de datos y monitorea el avance de tus obras en una sola plataforma.",
@@ -316,7 +316,7 @@ export default async function RootLayout({
 	}
 
 	return (
-		<html lang="en">
+		<html lang="es">
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
 			>

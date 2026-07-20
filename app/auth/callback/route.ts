@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
+import { resolveTenantSwitchRedirect } from "@/lib/tenant-switch-redirect";
 
 const domainSplitEnabled =
 	process.env.ENABLE_DOMAIN_SPLIT === "true" &&
@@ -29,20 +30,16 @@ function applyDomainSplitHost(request: NextRequest, target: URL) {
 }
 
 export async function GET(request: NextRequest) {
-	console.log("[AUTH-CALLBACK] GET request received");
 	const requestUrl = new URL(request.url);
 	const code = requestUrl.searchParams.get("code");
 	const origin = requestUrl.origin;
 	const nextParam = requestUrl.searchParams.get("next");
-	const safeNextPath =
-		nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//")
-			? nextParam
-			: null;
-	console.log("[AUTH-CALLBACK] code present:", !!code, "origin:", origin);
+	const safeNextUrl = resolveTenantSwitchRedirect(request.url, nextParam, "/dashboard");
+	const safeNextPath = `${safeNextUrl.pathname}${safeNextUrl.search}${safeNextUrl.hash}`;
 
 	if (code) {
 		// Create the redirect response FIRST so we can attach cookies to it
-		let redirectUrl = safeNextPath ? `${origin}${safeNextPath}` : `${origin}/dashboard`;
+		let redirectUrl = `${origin}${safeNextPath}`;
 		const response = NextResponse.redirect(
 			applyDomainSplitHost(request, new URL(redirectUrl)),
 		);
@@ -63,10 +60,6 @@ export async function GET(request: NextRequest) {
 							options: CookieOptions;
 						}[],
 					) {
-						console.log(
-							"[AUTH-CALLBACK] Setting cookies on response:",
-							cookiesToSet.map((c) => c.name),
-						);
 						cookiesToSet.forEach(({ name, value, options }) => {
 							// Set cookies directly on the response object
 							response.cookies.set(name, value, options);
@@ -76,24 +69,16 @@ export async function GET(request: NextRequest) {
 			},
 		);
 
-		console.log("[AUTH-CALLBACK] Calling exchangeCodeForSession...");
 		const { error } = await supabase.auth.exchangeCodeForSession(code);
 
 		if (error) {
 			console.error("[AUTH-CALLBACK] exchangeCodeForSession error:", error);
 			return NextResponse.redirect(`${origin}/?error=auth_failed`);
 		}
-		console.log("[AUTH-CALLBACK] exchangeCodeForSession successful");
-
 		// Check if user has completed onboarding (has tenant membership)
-		console.log("[AUTH-CALLBACK] Calling getUser...");
 		const {
 			data: { user },
 		} = await supabase.auth.getUser();
-		console.log("[AUTH-CALLBACK] getUser result:", {
-			hasUser: !!user,
-			email: user?.email,
-		});
 
 		if (user) {
 			const { data: memberships } = await supabase
@@ -102,16 +87,11 @@ export async function GET(request: NextRequest) {
 				.eq("user_id", user.id)
 				.order("created_at", { ascending: true })
 				.limit(1);
-			console.log("[AUTH-CALLBACK] memberships:", memberships);
-
 			// If no memberships, redirect to onboarding unless auth flow requested
 			// a safe internal return path (e.g. invitation acceptance page).
 			if (!memberships || memberships.length === 0) {
-				console.log(
-					"[AUTH-CALLBACK] No memberships, redirecting to onboarding",
-				);
 				const target =
-					safeNextPath && safeNextPath.startsWith("/invitations/")
+					safeNextUrl.pathname.startsWith("/invitations/")
 						? `${origin}${safeNextPath}`
 						: `${origin}/onboarding`;
 				response.headers.set(
@@ -132,20 +112,13 @@ export async function GET(request: NextRequest) {
 			}
 		}
 
-		// Log cookies on the response
-		console.log(
-			"[AUTH-CALLBACK] Response cookies:",
-			response.cookies.getAll().map((c) => c.name),
-		);
 		response.headers.set(
 			"Location",
 			applyDomainSplitHost(request, new URL(redirectUrl)).toString(),
 		);
-		console.log("[AUTH-CALLBACK] Redirecting to:", redirectUrl);
 		return response;
 	}
 
 	// No code, just redirect to home
-	console.log("[AUTH-CALLBACK] No code, redirecting to origin:", origin);
 	return NextResponse.redirect(origin);
 }

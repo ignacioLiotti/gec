@@ -3,6 +3,7 @@ import { getTenantDataFlowBuilderConfig } from "@/lib/data-flow-builder";
 import {
 	STANDARD_TENANT_BLUEPRINT_KEY,
 	STANDARD_TENANT_BLUEPRINT_VERSION,
+	STANDARD_OBRA_DEFAULTS_MATERIALIZER_VERSION,
 } from "./constants";
 
 type BlueprintColumn = {
@@ -151,6 +152,8 @@ export function buildStandardConstructionBlueprint() {
 	return {
 		key: STANDARD_TENANT_BLUEPRINT_KEY,
 		version: STANDARD_TENANT_BLUEPRINT_VERSION,
+		obraDefaultsMaterializerVersion:
+			STANDARD_OBRA_DEFAULTS_MATERIALIZER_VERSION,
 		label: "Construcción estándar",
 		description: "Una base lista para administrar obras, documentos, certificados y compras.",
 		mainTableColumns: BASE_MAIN_TABLE_COLUMNS,

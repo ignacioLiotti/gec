@@ -10,7 +10,7 @@ This is a routing/map context. `app/admin` is too broad for one operational cont
 
 - `users/**`: tenant member list, invitations, membership roles, impersonation banner.
 - `roles/**`: custom roles, permission matrix, role assignments, user overrides, macro table permissions.
-- `obra-defaults/**`: tenant default folder/table/OCR template/data-folder configuration and reporting defaults.
+- `obra-defaults/**`: tenant default folder/table/OCR template/data-folder configuration and reporting defaults. Data-folder setup can bootstrap from a sample document via `_components/SampleAnalysisCard.tsx` + `/api/obra-defaults/analyze-sample` (ADR-0032).
 - Legacy `document-flows/**` and `document-flows-2/**` admin routes were removed; use `/excel/data-flow` for the canonical general data-flow surface.
 - `macro-tables/**`: macro table creation/editing, sources, columns, previews.
 - `main-table-config/page.tsx`: tenant configuration for main obras table columns and select/badge options.

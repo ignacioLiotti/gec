@@ -4,7 +4,7 @@ import { obrasFormSchema } from "@/app/excel/schema";
 import { NextResponse } from "next/server";
 import { emitEvent } from "@/lib/notifications/engine";
 import "@/lib/notifications/rules"; // register rules
-import { applyObraDefaults } from "@/lib/obra-defaults";
+import { provisionObraDefaults } from "@/lib/obra-defaults/provision";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import {
 	hasAnyDemoCapability,
@@ -13,6 +13,7 @@ import {
 import { softDeleteObraWithDocuments } from "@/lib/obras/delete-lifecycle";
 import { updateInsurancePoliciesForObraCompletion } from "@/lib/insurance-policies";
 import { syncInsurancePoliciesToMacroTable } from "@/lib/insurance-policies-macro";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const BASE_COLUMNS =
 	"id, n, designacion_y_ubicacion, sup_de_obra_m2, entidad_contratante, mes_basico_de_contrato, iniciacion, contrato_mas_ampliaciones, certificado_a_la_fecha, saldo_a_certificar, segun_contrato, prorrogas_acordadas, plazo_total, plazo_transc, porcentaje, updated_at, custom_data";
@@ -80,7 +81,7 @@ function toPlainObject(value: unknown): Record<string, unknown> {
 }
 
 export async function loadTenantMainTableCustomColumnIds(
-	supabase: any,
+	supabase: SupabaseClient,
 	tenantId: string,
 ): Promise<Set<string> | null> {
 	try {
@@ -145,7 +146,7 @@ export async function getAuthContext() {
  * Execute flujo actions when an obra completes
  */
 export async function executeFlujoActions(
-	supabase: any,
+	supabase: SupabaseClient,
 	obraId: string,
 	currentUserId: string,
 	tenantId: string | null,
@@ -552,9 +553,9 @@ export async function GET(request: Request) {
 			const min = rawMin != null ? Number(rawMin) : null;
 			const max = rawMax != null ? Number(rawMax) : null;
 			if (min != null && Number.isFinite(min))
-				query.gte(String(column), min as any);
+				query.gte(String(column), min);
 			if (max != null && Number.isFinite(max))
-				query.lte(String(column), max as any);
+				query.lte(String(column), max);
 		};
 
 		numRange("supMin", "supMax", "sup_de_obra_m2");
@@ -659,8 +660,9 @@ export async function GET(request: Request) {
 		return query;
 	};
 
-	let { data, error, count: initialCount } = await buildSelect(CONFIG_COLUMNS);
-	count = initialCount;
+	const initialResult = await buildSelect(CONFIG_COLUMNS);
+	let { data, error } = initialResult;
+	count = initialResult.count;
 
 	if (error && error.code === "42703") {
 		console.warn("Obras GET: modern columns missing, falling back");
@@ -810,7 +812,7 @@ export async function PUT(request: Request) {
 			.select("id, n, porcentaje, designacion_y_ubicacion")
 			.eq("tenant_id", tenantId)
 			.is("deleted_at", null);
-		existingRows = fallback.data as any;
+		existingRows = fallback.data as unknown as typeof existingRows;
 		fetchExistingError = fallback.error;
 	}
 
@@ -986,7 +988,7 @@ export async function PUT(request: Request) {
 			// Apply defaults to each new obra
 			for (const obraRow of newObraRows) {
 				try {
-					const result = await applyObraDefaults(
+					const result = await provisionObraDefaults(
 						supabase,
 						obraRow.id,
 						tenantId,
@@ -1110,7 +1112,7 @@ export async function PUT(request: Request) {
 					fetchCompletedError,
 				);
 			} else {
-				const baseRows = (fetchedCompleted ?? []) as any[];
+				const baseRows = (fetchedCompleted ?? []) as unknown as DbObraRow[];
 				completedRows = completedRows.concat(
 					baseRows.map((row) => ({
 						id: row.id,
@@ -1239,10 +1241,10 @@ export async function PUT(request: Request) {
 					}> = [];
 
 					for (const row of pendRows ?? []) {
-						const pendienteId = (row as any).id;
+						const pendienteId = row.id;
 						if (!pendienteId) continue;
 
-						const offsetDays = Number((row as any).offset_days ?? 0);
+						const offsetDays = Number(row.offset_days ?? 0);
 						const dueDate = new Date(
 							Date.now() + Math.max(0, offsetDays) * 24 * 60 * 60 * 1000,
 						);

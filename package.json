@@ -17,6 +17,8 @@
 		"test:e2e:ui": "playwright test --ui",
 		"video:studio": "remotion studio remotion/index.ts",
 		"video:render:sintesis": "remotion render remotion/index.ts SintesisCommercial out/sintesis-commercial.mp4 --codec=h264 --crf=18",
+		"video:render:saas-showcase": "remotion render remotion/index.ts SintesisSaasShowcase out/sintesis-saas-showcase.mp4 --codec=h264 --crf=18",
+		"video:render:usecases": "remotion render remotion/index.ts SintesisUseCases out/sintesis-usecases.mp4 --codec=h264 --crf=18",
 		"supabase:install": "npm pkg set scripts._tmp= && npm run _tmp || true && del /q /f NUL 2> NUL",
 		"supabase:version": "supabase --version",
 		"supabase:start": "supabase start",

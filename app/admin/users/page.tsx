@@ -1,6 +1,7 @@
 import { canStartImpersonation } from "@/lib/impersonation-access";
 import { isSuperAdminUser } from "@/lib/superadmin";
 import { resolveTenantMembership } from "@/lib/tenant-selection";
+import { hasPermission } from "@/lib/route-guard";
 import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { PendingInvitationsList } from "./_components/pending-invitations-list";
@@ -31,34 +32,25 @@ export default async function AdminUsersPage() {
 		user.email,
 	);
 
-	const { tenantId } = await resolveTenantMembership(
+	const { tenantId, activeMembership } = await resolveTenantMembership(
 		(memberships ?? []) as { tenant_id: string | null; role: string | null }[],
 		{ isSuperAdmin },
 	);
 	if (!tenantId) {
 		return (
 			<div className="p-6 text-sm">
-				No se encontro membresia de organizacion.
+				No se encontró una membresía de organización.
 			</div>
 		);
 	}
 
-	const [rolesPermission, usersPermission] = isSuperAdmin
-		? [{ data: true }, { data: true }]
+	const [canManageRoles, canManageUsers] = isSuperAdmin
+		? [true, true]
 		: await Promise.all([
-			supabase.rpc("has_permission", {
-				tenant: tenantId,
-				perm_key: "admin:roles",
-			}),
-			supabase.rpc("has_permission", {
-				tenant: tenantId,
-				perm_key: "admin:users",
-			}),
+			hasPermission("admin:roles"),
+			hasPermission("admin:users"),
 		]);
-
-	const canManageRoles = Boolean(rolesPermission.data ?? isSuperAdmin);
-	const canManageUsers = Boolean(usersPermission.data ?? isSuperAdmin);
-	if (!canManageRoles) {
+	if (!canManageUsers) {
 		return <div className="p-6 text-sm">Sin permisos de administrador.</div>;
 	}
 
@@ -179,6 +171,10 @@ export default async function AdminUsersPage() {
 					allPermissions={permissions ?? []}
 					canImpersonate={impersonationAccess.allowed}
 					canManageUsers={canManageUsers}
+					canManageRoles={canManageRoles}
+					canAssignOwner={
+						isSuperAdmin || activeMembership?.role === "owner"
+					}
 				/>
 				<PendingInvitationsList tenantId={tenantId} />
 			</div>

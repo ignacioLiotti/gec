@@ -34,6 +34,14 @@ If a change in these areas has tradeoffs, write an ADR (`docs/adr/TEMPLATE.md`).
 - Read `docs/styleguide/design-system.md` before visual changes; `docs/sintesis-ds.md` documents the migration patterns (lifted buttons, tray+chip tabs, notch details).
 - Report/document output, charts, calendars, landing pages, and viewer canvases keep their own visual systems.
 
+## React structure
+
+- **Route entries are server components.** `page.tsx` never carries `"use client"`; it handles auth, initial data, metadata, and `<Suspense>`, and renders a sibling `page-client.tsx` / `*-client.tsx` with the interactive tree. Reference: `app/excel/page.tsx`, `app/macro/page.tsx`. Legacy client pages (`app/dashboard`, `app/admin/obra-defaults`) are pending migration — don't copy them.
+- **Size budget:** a route component approaching ~400 lines extracts state to `_hooks/` and subtrees to `_components/` (both `_`-prefixed so Next.js skips them as routes). Dialogs and modals are the first extraction seam — they're near-isolated subtrees.
+- **Complex tabs get folders.** A tab that outgrows one file becomes `tabs/<name>/` with an entry file plus local pieces, as `tabs/file-manager/` does.
+- **Promotion rule:** a component moves from route-local to `components/` only when a second feature consumes it; shared hooks move to `hooks/` only when generic and dependency-light.
+- **Suffixes are temporary.** Names like `-new`, `-full`, `-preview`, `dashboard2` must either describe a permanent role (documented where they're wired) or be renamed once the transition ends. Verify consumers with `rg` before deleting anything suffixed.
+
 ## Code style
 
 - TypeScript throughout; `cn()` from `@/lib/utils` for class merging.

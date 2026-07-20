@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
+import { isPreTenantRoute } from "@/lib/pre-tenant-routes";
 
 /**
  * AuthGate - Automatic authentication and tenant checking component
@@ -18,25 +19,16 @@ export default function AuthGate({
 }: {
 	allowAnonymous?: boolean;
 }) {
-	const router = useRouter();
-  const { push } = router;
+	const { push } = useRouter();
 	const pathname = usePathname();
-	const [isChecking, setIsChecking] = useState(true);
 
 	useEffect(() => {
 		if (allowAnonymous) {
-			setIsChecking(false);
 			return;
 		}
 
 		// Public/auth routes should not force-open auth modal.
-		if (
-			pathname === "/" ||
-			pathname === "/onboarding" ||
-			pathname.startsWith("/auth/") ||
-			pathname.startsWith("/demo/")
-		) {
-			setIsChecking(false);
+		if (isPreTenantRoute(pathname)) {
 			return;
 		}
 
@@ -49,13 +41,11 @@ export default function AuthGate({
 
 				// No session - trigger forced auth modal
 				if (!session) {
-					console.log("[AUTH-GATE] No session detected, opening forced auth modal");
 					window.dispatchEvent(
 						new CustomEvent("open-auth", {
 							detail: { forced: true },
 						}),
 					);
-					setIsChecking(false);
 					return;
 				}
 
@@ -68,26 +58,20 @@ export default function AuthGate({
 
 				if (error) {
 					console.error("[AUTH-GATE] Error checking memberships:", error);
-					setIsChecking(false);
 					return;
 				}
 
 				if (!memberships || memberships.length === 0) {
-					console.log(
-						"[AUTH-GATE] Session exists but no tenant, redirecting to onboarding",
-					);
 					push("/onboarding");
 				}
 
-				setIsChecking(false);
 			} catch (error) {
 				console.error("[AUTH-GATE] Unexpected error:", error);
-				setIsChecking(false);
 			}
 		}
 
 		checkAuthAndTenant();
-	}, [allowAnonymous, pathname, router]);
+	}, [allowAnonymous, pathname, push]);
 
 	// This is a logic-only component - no UI
 	return null;

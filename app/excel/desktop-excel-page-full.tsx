@@ -110,7 +110,7 @@ function ExcelTablePageView({
 
 			<div className={excelTablePageStyles.toolbarRow}>
 				<ExcelToolbarFrame side="left" targetId="excel-page-toolbar">
-					<FormTableToolbar />
+					<FormTableToolbar className="-mr-5" />
 				</ExcelToolbarFrame>
 				<ExcelToolbarFrame side="right">
 					<ExcelTablePageActions
