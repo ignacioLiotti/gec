@@ -1882,7 +1882,6 @@ function hasSameRowIdentity<Row extends FormTableRow>(
 	return nextRows.every((row, index) => row.id === currentOrder[index]);
 }
 
-
 function resolveActiveTabId<Row extends FormTableRow>(
 	tabFilters: TabFilterOption<Row>[],
 	...preferredTabIds: Array<string | null | undefined>

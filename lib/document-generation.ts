@@ -956,7 +956,6 @@ export function applyTemplateFormulaInputData(
 
 	return next;
 }
-
 export function getTemplateSequenceFieldKeys(schema: TemplateSchema) {
 	return schema.fields
 		.filter(

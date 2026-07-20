@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
@@ -12,16 +12,19 @@ type DocumentSheetProps = {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
 	document: FileSystemItem | null;
+	breadcrumb?: string;
 	previewUrl: string | null;
 	onDownload: (doc: FileSystemItem) => void;
 	onRetryOcr?: (doc: FileSystemItem | null) => void;
 	retryingOcr?: boolean;
+	ocrStatusBadge?: ReactNode;
 	onToggleDataSheet?: () => void;
 	showDataToggle?: boolean;
 	isDataSheetOpen?: boolean;
 	highlightRetryAction?: boolean;
 	onPreviousDocument?: (() => void) | null;
 	onNextDocument?: (() => void) | null;
+	documentPositionLabel?: string | null;
 	previewActivity?: { phase: "uploading" | "extracting"; label?: string } | null;
 };
 
@@ -29,16 +32,19 @@ export const DocumentSheet = memo(function DocumentSheet({
 	isOpen,
 	onOpenChange,
 	document,
+	breadcrumb,
 	previewUrl,
 	onDownload,
 	onRetryOcr,
 	retryingOcr = false,
+	ocrStatusBadge = null,
 	onToggleDataSheet,
 	showDataToggle = false,
 	isDataSheetOpen = false,
 	highlightRetryAction = false,
 	onPreviousDocument = null,
 	onNextDocument = null,
+	documentPositionLabel = null,
 	previewActivity = null,
 }: DocumentSheetProps) {
 	if (!isOpen || !document) {
@@ -154,8 +160,14 @@ export const DocumentSheet = memo(function DocumentSheet({
 						<div className="min-w-0 flex-1">
 							<div className="flex flex-wrap items-center gap-2">
 								<SheetTitle className="truncate text-lg text-stone-900">{document.name}</SheetTitle>
+								{ocrStatusBadge}
 							</div>
 							<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 pt-2">
+								{breadcrumb ? (
+									<p className="truncate text-xs uppercase tracking-wide text-stone-400">
+										{breadcrumb}
+									</p>
+								) : null}
 								{(uploadedAtLabel || uploadedByLabel) && (
 									<div className="mt-1 text-xs text-stone-500 break-words">
 										{uploadedByLabel && <span>Subido por: {uploadedByLabel}</span>}
@@ -165,6 +177,11 @@ export const DocumentSheet = memo(function DocumentSheet({
 								)}
 							</div>
 						</div>
+						{documentPositionLabel ? (
+							<div className="mr-10 shrink-0 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+								Documento {documentPositionLabel}
+							</div>
+						) : null}
 					</div>
 					{ocrConflictMessage ? (
 						<div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">

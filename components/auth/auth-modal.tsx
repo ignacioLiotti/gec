@@ -27,11 +27,7 @@ function getAuthRedirectOrigin() {
   if (typeof window === "undefined") return "";
 
   const { hostname, origin } = window.location;
-  if (
-    hostname === "gec-git-mobile-navigation-ignacioliottis-projects.vercel.app" ||
-    (hostname.startsWith("gec-") &&
-      hostname.endsWith("-ignacioliottis-projects.vercel.app"))
-  ) {
+  if (hostname === "gec-git-mobile-navigation-ignacioliottis-projects.vercel.app") {
     return MOBILE_NAVIGATION_PREVIEW_ORIGIN;
   }
 

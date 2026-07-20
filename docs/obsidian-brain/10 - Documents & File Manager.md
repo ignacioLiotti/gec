@@ -43,6 +43,20 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 - Includes OCR metadata per document
 - Includes linked tabla rows per document
 
+## Document Trash and Purge
+
+`POST /api/obras/[id]/documents/deletes`
+- Sends a file or folder to the document trash for a 30-day recovery window
+- Files remain in Storage while recoverable and are hidden by active `obra_document_deletes` rows
+
+`DELETE /api/obras/[id]/documents/deletes`
+- Permanently purges a trash-history entry for users with `documents:purge`
+- Removes the physical Storage object(s) from `obra-documents`
+- Cleans known document-derived records: upload tracking, OCR processing rows, and extracted rows linked by `data.__docPath`
+- Purging a restored history item also removes it from the live obra folder and decrements storage usage when the file still exists
+
+---
+
 ---
 
 ## Document Trash and Purge

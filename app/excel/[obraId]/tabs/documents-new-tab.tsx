@@ -1681,7 +1681,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		obraId,
 		queryClient,
 		resolveDeleteStoragePath,
-		selectedDocument,
+		selectedDocument?.id,
 		tablaRowsQuery,
 	]);
 
@@ -1694,6 +1694,8 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		selectedDocumentIndex >= 0 && selectedDocumentIndex < files.length - 1
 			? files[selectedDocumentIndex + 1]
 			: null;
+	const documentPositionLabel =
+		selectedDocumentIndex >= 0 ? `${selectedDocumentIndex + 1}/${files.length}` : null;
 	const canReprocessSelectedDocument = Boolean(selectedDocument?.storagePath);
 	const canShowSelectedDocumentData = Boolean(selectedDocument?.storagePath && documentDataTableConfig);
 	const isUploadPreviewSelected = Boolean(
@@ -2029,10 +2031,12 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				isOpen={isDocumentSheetOpen && Boolean(selectedDocument)}
 				onOpenChange={handleDocumentSheetOpenChange}
 				document={selectedDocument}
+				breadcrumb={selectedFolderLabel}
 				previewUrl={previewUrl}
 				onDownload={(document) => void handleDownloadDocument(document)}
 				onRetryOcr={canReprocessSelectedDocument ? handleReprocessDocument : undefined}
 				retryingOcr={Boolean(selectedDocument && retryingDocumentId === selectedDocument.id)}
+				ocrStatusBadge={selectedDocument ? renderOcrStatusBadge(selectedDocument) : null}
 				highlightRetryAction={Boolean(
 					selectedDocument &&
 					(selectedDocument.ocrDocumentStatus === "failed" ||
@@ -2047,6 +2051,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				previewActivity={documentPreviewActivity}
 				onPreviousDocument={previousDocument ? () => void handleOpenDocumentPreview(previousDocument) : null}
 				onNextDocument={nextDocument ? () => void handleOpenDocumentPreview(nextDocument) : null}
+				documentPositionLabel={documentPositionLabel}
 			/>
 
 			{contextMenu ? (

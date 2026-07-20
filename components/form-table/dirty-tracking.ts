@@ -39,7 +39,6 @@ export function computeRowDirty<Row extends FormTableRow>(
 	if (!initialRow) {
 		return { dirty: true, cells: dirtyCells };
 	}
-
 	const columnFields = new Set<ColumnField<Row>>();
 	for (const column of columns) {
 		if (String(column.field) === "id") continue;

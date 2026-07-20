@@ -28,6 +28,7 @@ import {
 } from "@/components/form-table/configs/obras-detalle";
 import type { FormTableConfig } from "@/components/form-table/types";
 import { ExpandableLightButton } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { useTenantAdminStatus } from "@/hooks/use-tenant-admin-status";
 import type { ExcelPageClientProps } from "@/lib/excel/types";
@@ -47,7 +48,6 @@ import {
 } from "@/lib/demo-tours/excel-guided-flow";
 import { DemoPageTour } from "@/components/demo-tours/demo-page-tour";
 import { presentacionCarteraTour } from "@/lib/demo-tours/screen-tour-flows";
-import { cn } from "@/lib/utils";
 
 const ContextualWizard = dynamic(
 	() =>
@@ -338,10 +338,12 @@ export default function DesktopExcelPageFull({
 				matchesAutoColumnFilters(row, generatedFilterColumns, filters),
 			countActiveFilters: countActiveAutoColumnFilters,
 		};
-		return {
-			...generatedFilterConfig,
-			defaultRows: hydratedRows,
-		};
+		return hydratedRows == null
+			? generatedFilterConfig
+			: {
+				...generatedFilterConfig,
+				defaultRows: hydratedRows,
+			};
 	}, [hydratedRows, mainTableColumnsConfig]);
 
 	const handleCsvInputChange = useCallback(

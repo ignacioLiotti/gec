@@ -87,8 +87,9 @@ Data-flow now uses explicit capability permissions:
 | `data-flow:auto-write` | Allow data-flow results to automatically overwrite obra fields |
 
 Dashboard route access is available to all authenticated users and appears in the sidebar for regular members.
-| `document_reviewer` | documents:review |
-| `document_manager` | documents:review, documents:templates |
+| `document_creator` | nav:document-generation, documents:create |
+| `document_reviewer` | nav:document-generation, documents:review |
+| `document_manager` | nav:document-generation, documents:create, documents:review, documents:templates, documents:drafts:all |
 | `document_ai_operator` | nav:document-ai, document-ai:run |
 | `document_ai_manager` | nav:document-ai, document-ai:run, document-ai:admin |
 
@@ -170,9 +171,11 @@ For baseline navigation, explicit user or role denies can hide otherwise availab
 
 For document generation there is an additional feature-level filter on top of route access:
 
-- `Generar` and `Historial` are available to authenticated tenant members
+- `nav:document-generation` enables the document surfaces in the sidebar
+- `documents:create` shows `Generar` and allows editing own drafts
 - `documents:review` shows `Revision`
 - `documents:templates` shows `Plantillas` and `Configuracion`
+- `documents:drafts:all` allows seeing drafts created by other users
 
 This means `/document-generation` is no longer one flat screen from an authorization perspective. The app resolves document review/config capabilities server-side and the sidebar only renders privileged screens when allowed.
 
@@ -201,8 +204,8 @@ Document generation now gives tenant members baseline creation access and keeps 
 - generated documents expose permanent deletion only to the user who generated them, regardless of status
 - `/document-generation/review?id={generatedDocumentId}` -> authenticated tenant member in read-only mode for a same-tenant document
 - the review queue and approve/reject controls on `/document-generation/review` -> `documents:review`
-- `/document-generation/templates` â†’ `documents:templates`
-- `/document-generation/config` â†’ `documents:templates`
+- `/document-generation/templates` -> `documents:templates`
+- `/document-generation/config` -> `documents:templates`
 
 **API access model:**
 
@@ -213,10 +216,9 @@ Document generation now gives tenant members baseline creation access and keeps 
 - generated delete -> creator only; permanently removes the PDF and generated extraction rows while retaining the source draft
 - generated approve/reject PATCH -> `documents:review`
 - `documents/access` refuses signed URLs and direct PDF downloads for generated documents whose status is `REJECTED`
-- `templates GET/PUT` â†’ `documents:templates`
+- `templates GET/PUT` -> `documents:templates`
 
 ---
-
 ## Route Guard (`lib/route-guard.ts`)
 
 Server-side auth and authorization utilities:
