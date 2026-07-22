@@ -35,10 +35,17 @@ const SUGGESTIONS = [
 	"Generá un PDF con la evolución mensual de lo certificado",
 ];
 
-type ChatSummary = {
+export type ChatSummary = {
 	id: string;
 	title: string;
 	updated_at: string;
+};
+
+export type DocumentAiDemoState = {
+	chatId: string;
+	messages: Message[];
+	chats: ChatSummary[];
+	scope?: ChatScope;
 };
 
 function formatRelativeDate(value: string) {
@@ -60,10 +67,10 @@ function ThinkingIndicator() {
 	);
 }
 
-export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
-	const [chatId, setChatId] = useState<string | null>(null);
-	const [scope, setScope] = useState<ChatScope>({ obraIds: [], folders: [] });
-	const [chats, setChats] = useState<ChatSummary[]>([]);
+export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; demo?: DocumentAiDemoState }) {
+	const [chatId, setChatId] = useState<string | null>(demo?.chatId ?? null);
+	const [scope, setScope] = useState<ChatScope>(demo?.scope ?? { obraIds: [], folders: [] });
+	const [chats, setChats] = useState<ChatSummary[]>(demo?.chats ?? []);
 	const [loadingChatId, setLoadingChatId] = useState<string | null>(null);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [isAtBottom, setIsAtBottom] = useState(true);
@@ -87,6 +94,8 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 		reload,
 	} = useChat({
 		api: "/api/document-ai/chat",
+		id: demo ? "portfolio-document-ai-demo" : undefined,
+		initialMessages: demo?.messages,
 		onResponse: (response) => {
 			const id = response.headers.get(CHAT_ID_HEADER);
 			if (id && id !== chatIdRef.current) setChatId(id);
@@ -100,6 +109,10 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 	});
 
 	const refreshChats = useCallback(async () => {
+		if (demo) {
+			setChats(demo.chats);
+			return;
+		}
 		try {
 			const response = await fetch("/api/document-ai/chats", { cache: "no-store" });
 			const payload = (await response.json().catch(() => ({}))) as { chats?: ChatSummary[] };
@@ -107,7 +120,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 		} catch {
 			// History is best-effort; the chat keeps working without it.
 		}
-	}, []);
+	}, [demo]);
 
 	useEffect(() => {
 		void refreshChats();
@@ -137,6 +150,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 
 	const submit = (event?: { preventDefault?: () => void }) => {
 		event?.preventDefault?.();
+		if (demo) return;
 		if (!input.trim() || isLoading) return;
 		handleSubmit(undefined, { body: { chatId, scope } });
 		requestAnimationFrame(() => {
@@ -146,6 +160,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 	};
 
 	const sendSuggestion = (suggestion: string) => {
+		if (demo) return;
 		if (isLoading) return;
 		setInput(suggestion);
 		requestAnimationFrame(() => {
@@ -163,6 +178,12 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 	};
 
 	const openChat = async (chat: ChatSummary) => {
+		if (demo) {
+			setMessages(demo.messages);
+			setChatId(chat.id);
+			setHistoryOpen(false);
+			return;
+		}
 		if (isLoading) stop();
 		setLoadingChatId(chat.id);
 		try {
@@ -184,6 +205,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 	};
 
 	const deleteChat = async (chat: ChatSummary) => {
+		if (demo) return;
 		try {
 			const response = await fetch(`/api/document-ai/chats/${chat.id}`, { method: "DELETE" });
 			if (!response.ok) throw new Error("No se pudo borrar");
@@ -399,6 +421,7 @@ export function DocumentAiPageClient({ works }: { works: WorkOption[] }) {
 								}
 							}}
 							rows={1}
+							readOnly={Boolean(demo)}
 							placeholder="Preguntale a tus documentos de obra…"
 							className="block max-h-[200px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 text-stone-900 outline-none placeholder:text-stone-400"
 						/>

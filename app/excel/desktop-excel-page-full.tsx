@@ -212,11 +212,12 @@ function ExcelTablePageActions({
 export default function DesktopExcelPageFull({
 	initialMainTableColumnsConfig,
 	initialObras,
-}: ExcelPageClientProps) {
+	demoMode = false,
+}: ExcelPageClientProps & { demoMode?: boolean }) {
 	const { refresh, replace } = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
-	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
+	const { isAdmin: isTenantAdmin } = useTenantAdminStatus({ enabled: !demoMode });
 	const mainTableColumnsConfig =
 		initialMainTableColumnsConfig as MainTableColumnConfig[] | null;
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -322,10 +323,33 @@ export default function DesktopExcelPageFull({
 		void countActiveFilters;
 		void fetchRows;
 		void csvExport;
-		const generatedFilterColumns = baseConfig.columns;
+		const generatedFilterColumns = demoMode
+			? baseConfig.columns.map((column) => {
+					if (column.id !== "designacionYUbicacion") return column;
+					return {
+						...column,
+						editable: false,
+						cellMenuItems: [],
+						cellConfig: {
+							...column.cellConfig,
+							renderReadOnly: ({ value }: { value: unknown }) => {
+								const text = String(value || "");
+								return text ? <span className="font-semibold">{text}</span> : <span className="text-content-muted">-</span>;
+							},
+						},
+					};
+				})
+			: baseConfig.columns;
+		const headerGroups = demoMode
+			? baseConfig.headerGroups?.map((group) =>
+					group.id === "importes" ? { ...group, label: "IMPORTES" } : group,
+				)
+			: baseConfig.headerGroups;
 		const generatedFilterConfig: FormTableConfig<ObrasDetalleRow, AutoColumnFilters> = {
 			...baseConfigWithoutFilters,
 			columns: generatedFilterColumns,
+			headerGroups,
+			showFooterTotalOnly: demoMode,
 			serverSideData: false,
 			createFilters: () => createAutoColumnFilters(generatedFilterColumns),
 			renderFilters: ({ filters, onChange }) =>
@@ -344,7 +368,7 @@ export default function DesktopExcelPageFull({
 				...generatedFilterConfig,
 				defaultRows: hydratedRows,
 			};
-	}, [hydratedRows, mainTableColumnsConfig]);
+	}, [demoMode, hydratedRows, mainTableColumnsConfig]);
 
 	const handleCsvInputChange = useCallback(
 		(event: ChangeEvent<HTMLInputElement>) => {

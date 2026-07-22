@@ -317,6 +317,9 @@ export function SemanticFlowView({
   canWrite,
   error,
   onApplyConfig,
+  initialSemanticScope = "result",
+  initialAdvanced = false,
+  initialExpanded = false,
 }: {
   payload: DataFlowConfigPayload | null;
   config: BuilderConfig;
@@ -324,6 +327,9 @@ export function SemanticFlowView({
   canWrite: boolean;
   error: string | null;
   onApplyConfig: (updater: (baseConfig: BuilderConfig) => BuilderConfig) => Promise<void>;
+  initialSemanticScope?: "result" | "all";
+  initialAdvanced?: boolean;
+  initialExpanded?: boolean;
 }) {
   const [actionType, setActionType] = useState("aggregate");
   const [actionLabel, setActionLabel] = useState("");
@@ -331,9 +337,11 @@ export function SemanticFlowView({
   const [fieldKey] = useState("");
   const [aggregation, setAggregation] = useState<BuilderAggregation>("latest");
   const [formulaExpression, setFormulaExpression] = useState("");
-  const [semanticScope, setSemanticScope] = useState<"result" | "all">("result");
+  const [semanticScope, setSemanticScope] = useState<"result" | "all">(initialSemanticScope);
   const [focusResultId, setFocusResultId] = useState("");
-  const [expandedSemanticResultIds, setExpandedSemanticResultIds] = useState<Set<string>>(new Set());
+  const [expandedSemanticResultIds, setExpandedSemanticResultIds] = useState<Set<string>>(
+    () => new Set(initialExpanded ? config.results.filter((result) => !result.deleted).map((result) => result.id) : []),
+  );
   const [editingCalculationId, setEditingCalculationId] = useState<string | null>(null);
   const [editingInputId, setEditingInputId] = useState<string | null>(null);
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
@@ -342,7 +350,7 @@ export function SemanticFlowView({
   const [hasSemanticDraftChanges, setHasSemanticDraftChanges] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [jsonStatus, setJsonStatus] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(initialAdvanced);
 
   useEffect(() => {
     if (!hasSemanticDraftChanges) {

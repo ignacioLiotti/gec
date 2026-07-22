@@ -1,0 +1,16 @@
+.portfolio-live-preview {
+	min-height: 100svh;
+	background: #faf9f5;
+}
+
+nextjs-portal {
+	display: none !important;
+}
+
+/* The host app's motion provider does not run entrance animations inside the
+   scaled, non-interactive iframe. Keep the real components in their final state. */
+.portfolio-live-preview [style*="opacity: 0"],
+.portfolio-live-preview [style*="opacity:0"] {
+	opacity: 1 !important;
+	transform: none !important;
+}

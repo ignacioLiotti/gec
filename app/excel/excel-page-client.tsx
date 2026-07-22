@@ -19,6 +19,7 @@ const MOBILE_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
 
 type ResponsiveExcelPageClientProps = ExcelPageClientProps & {
 	initialIsMobile: boolean;
+	demoMode?: boolean;
 };
 
 function subscribeToViewportChange(onStoreChange: () => void) {
@@ -44,11 +45,12 @@ export default function ExcelPageClient({
 	initialObras,
 	initialIsMobile,
 	initialLoadMode,
+	demoMode = false,
 }: ResponsiveExcelPageClientProps) {
 	const isMobile = useIsMobileViewport(initialIsMobile);
 
 	if (isMobile) {
-		return <MobileExcelPageClient initialObras={initialObras} />;
+		return <MobileExcelPageClient initialObras={initialObras} demoMode={demoMode} />;
 	}
 
 	if (initialLoadMode === "after-list") {
@@ -68,6 +70,7 @@ export default function ExcelPageClient({
 			initialMainTableColumnsConfig={initialMainTableColumnsConfig}
 			initialObras={initialObras}
 			initialLoadMode={initialLoadMode}
+			demoMode={demoMode}
 		/>
 	);
 }

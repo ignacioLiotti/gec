@@ -1332,6 +1332,8 @@ type ObraDetailPageClientProps = {
 	initialTab?: string;
 	initialObra?: Obra | null;
 	initialMainTableColumnsConfig?: MainTableColumnConfig[] | null;
+	demoMode?: boolean;
+	demoGeneralReportsData?: GeneralTabReportsData;
 };
 
 function ObraDetailPageContent({
@@ -1339,6 +1341,8 @@ function ObraDetailPageContent({
 	initialTab = "general",
 	initialObra = null,
 	initialMainTableColumnsConfig = null,
+	demoMode = false,
+	demoGeneralReportsData,
 }: ObraDetailPageClientProps) {
 	const params = useParams();
 	const queryClient = useQueryClient();
@@ -1374,7 +1378,7 @@ function ObraDetailPageContent({
 	const deletePermissionsQuery = useQuery({
 		queryKey: ["permissions-check", "obra-delete", activeTenantId],
 		queryFn: () => fetchPermissionChecks(["obras:delete"]),
-		enabled: !isTenantAdminStatusLoading,
+		enabled: !demoMode && !isTenantAdminStatusLoading,
 		staleTime: 5 * 60 * 1000,
 		refetchOnWindowFocus: false,
 	});
@@ -1386,7 +1390,7 @@ function ObraDetailPageContent({
 	const obraQuery = useQuery({
 		queryKey: ['obra', obraId],
 		queryFn: () => fetchObraDetail(obraId!),
-		enabled: !!obraId && obraId !== "undefined",
+		enabled: !demoMode && !!obraId && obraId !== "undefined",
 		staleTime: 5 * 60 * 1000,
 		refetchOnWindowFocus: false,
 		initialData:
@@ -1399,6 +1403,7 @@ function ObraDetailPageContent({
 		isObraLoaded: obraQuery.isSuccess,
 	});
 	const shouldLoadGeneralExtras =
+		!demoMode &&
 		isValidObraId &&
 		isGeneralTabActive &&
 		obraQuery.isSuccess &&
@@ -1410,7 +1415,7 @@ function ObraDetailPageContent({
 	const memoriaQuery = useQuery({
 		queryKey: ['obra', obraId, 'memoria'],
 		queryFn: () => fetchMemoriaNotes(obraId!),
-		enabled: isValidObraId && isMemoriaOpen,
+		enabled: !demoMode && isValidObraId && isMemoriaOpen,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1418,7 +1423,7 @@ function ObraDetailPageContent({
 	const materialsQuery = useQuery({
 		queryKey: ['obra', obraId, 'materials'],
 		queryFn: () => fetchMaterialOrders(obraId!),
-		enabled: isValidObraId && isDocumentsTabActive,
+		enabled: !demoMode && isValidObraId && isDocumentsTabActive,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1426,7 +1431,7 @@ function ObraDetailPageContent({
 	const certificatesQuery = useQuery({
 		queryKey: ['obra', obraId, 'certificates'],
 		queryFn: () => fetchCertificates(obraId!),
-		enabled: isValidObraId && isCertificatesTabActive,
+		enabled: !demoMode && isValidObraId && isCertificatesTabActive,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1434,7 +1439,7 @@ function ObraDetailPageContent({
 	const recipientsQuery = useQuery({
 		queryKey: ['obra', obraId, 'recipients'],
 		queryFn: () => fetchObraRecipients(obraId!),
-		enabled: isValidObraId && isFlujoTabActive,
+		enabled: !demoMode && isValidObraId && isFlujoTabActive,
 		staleTime: 10 * 60 * 1000, // Recipients change less often
 	});
 
@@ -1463,7 +1468,7 @@ function ObraDetailPageContent({
 	const flujoActionsQuery = useQuery({
 		queryKey: ['obra', obraId, 'flujo-actions'],
 		queryFn: () => fetchFlujoActions(obraId!),
-		enabled: isValidObraId && isFlujoTabActive,
+		enabled: !demoMode && isValidObraId && isFlujoTabActive,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -1608,6 +1613,7 @@ function ObraDetailPageContent({
 			certRecommendationsMapping.certTableId ?? "none",
 		],
 		enabled:
+			!demoMode &&
 			isValidObraId &&
 			isGeneralTabActive &&
 			Boolean(certRecommendationsMapping.certTableId),
@@ -1660,6 +1666,7 @@ function ObraDetailPageContent({
 			periodKeyFromValue(obraQuery.data?.iniciacion) ?? "no-start-period",
 		],
 		enabled: shouldLoadGeneralReports,
+		initialData: demoGeneralReportsData,
 		queryFn: async () => {
 			const rulesConfig = curveRulesConfigQuery.data;
 			const curvaTableId = selectedCurveTableRefs.curvaPlanId;
@@ -1729,7 +1736,7 @@ function ObraDetailPageContent({
 
 	const tenantMarkerQuery = useQuery({
 		queryKey: ["tenant-marker", activeTenantId ?? "none"],
-		enabled: !isTenantAdminStatusLoading,
+		enabled: !demoMode && !isTenantAdminStatusLoading,
 		queryFn: async () => {
 			const response = await fetch("/api/tenant-marker", { cache: "no-store" });
 			if (!response.ok) return false;
@@ -1749,7 +1756,7 @@ function ObraDetailPageContent({
 			const payload = (await response.json()) as { columns?: MainTableColumnConfig[] };
 			return Array.isArray(payload.columns) ? payload.columns : [];
 		},
-		enabled: !isTenantAdminStatusLoading,
+		enabled: !demoMode && !isTenantAdminStatusLoading,
 		staleTime: 5 * 60 * 1000,
 	});
 
@@ -2004,7 +2011,9 @@ function ObraDetailPageContent({
 	const [isSavingObra, setIsSavingObra] = useState(false);
 	const [isResolvingDataFlowSuggestion, setIsResolvingDataFlowSuggestion] = useState(false);
 	const [isDeletingObra, setIsDeletingObra] = useState(false);
-	const [initialFormValues, setInitialFormValues] = useState<Obra>(emptyObra);
+	const [initialFormValues, setInitialFormValues] = useState<Obra>(() =>
+		demoMode && initialObra ? { ...emptyObra, ...initialObra } : emptyObra,
+	);
 	const [derivedCertificadosNotice, setDerivedCertificadosNotice] =
 		useState<DerivedCertificadosNotice | null>(null);
 	const [pendingDerivedFieldValues, setPendingDerivedFieldValues] = useState<
@@ -2547,7 +2556,7 @@ function ObraDetailPageContent({
 	);
 
 	const form = useForm({
-		defaultValues: emptyObra,
+		defaultValues: initialFormValues,
 		validators: {
 			onChange: obraSchema,
 		},
@@ -3696,7 +3705,18 @@ function ObraDetailPageContent({
 				<div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
 					<div className="flex-1 min-w-0">
 						<div className="mb-3 flex min-w-0 flex-col gap-3 pb-3 xl:flex-row xl:items-center xl:justify-between">
-							<ExcelObraName />
+							<ExcelObraName
+								staticObra={
+									demoMode && initialObraId
+										? {
+												id: initialObraId,
+												n: initialObra?.n,
+												designacionYUbicacion:
+													initialObra?.designacionYUbicacion,
+											}
+										: null
+								}
+							/>
 							<div className="flex flex-wrap items-center gap-2 xl:justify-end">
 								{activeTab === "documentos" || activeTab === "documentos-new" ? (
 									<>

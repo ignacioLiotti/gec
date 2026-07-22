@@ -124,6 +124,7 @@ export function PathnameLayoutShell({
 	const { replace } = router;
 	const isMarketingRoot = pathname === "/";
 	const isLandingRoute = pathname?.startsWith("/landings") ?? false;
+	const isPortfolioRoute = pathname?.startsWith("/portfolio") ?? false;
 	const isStandaloneDemoRoute = pathname?.startsWith("/demo/") ?? false;
 	const isStandaloneAccountRoute =
 		pathname === "/onboarding" ||
@@ -150,12 +151,12 @@ export function PathnameLayoutShell({
 	}, [isMarketingRoot, replace, user?.email]);
 
 	useEffect(() => {
-		if (!pathname || pathname === "/") return;
+		if (!pathname || pathname === "/" || isLandingRoute || isPortfolioRoute) return;
 		track("app_page_view", {
 			path: pathname,
 			section: "app",
 		});
-	}, [pathname]);
+	}, [isLandingRoute, isPortfolioRoute, pathname]);
 
 	useEffect(() => {
 		if (!isDemoMode || !pathname) return;
@@ -167,6 +168,7 @@ export function PathnameLayoutShell({
 	if (
 		isMarketingRoot ||
 		isLandingRoute ||
+		isPortfolioRoute ||
 		isStandaloneDemoRoute ||
 		isStandaloneAccountRoute
 	) {

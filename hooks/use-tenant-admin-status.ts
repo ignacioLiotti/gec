@@ -36,10 +36,10 @@ function readCookieValue(name: string) {
  * membership as fallback).
  *
  * UI convenience ONLY — gate visibility with it, never authorization. The
- * server (route guards + RLS) is the enforcement layer. Resolved once on
- * mount; it does not react to tenant switches without a remount.
+ * server (route guards + RLS) is the enforcement layer. Resolved once when
+ * enabled; it does not react to tenant switches without a remount.
  */
-export function useTenantAdminStatus(): TenantAdminStatus {
+export function useTenantAdminStatus({ enabled = true }: { enabled?: boolean } = {}): TenantAdminStatus {
 	const [status, setStatus] = useState<TenantAdminStatus>({
 		isAdmin: false,
 		isSuperAdmin: false,
@@ -48,6 +48,8 @@ export function useTenantAdminStatus(): TenantAdminStatus {
 	});
 
 	useEffect(() => {
+		if (!enabled) return;
+
 		let cancelled = false;
 
 		const checkAdminStatus = async () => {
@@ -121,7 +123,14 @@ export function useTenantAdminStatus(): TenantAdminStatus {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [enabled]);
 
-	return status;
+	return enabled
+		? status
+		: {
+				isAdmin: false,
+				isSuperAdmin: false,
+				isLoading: false,
+				tenantId: null,
+			};
 }

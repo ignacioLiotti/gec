@@ -1494,7 +1494,6 @@ export function FormTablePagination() {
 		totalPages,
 		options,
 		totalRowCount,
-		visibleRowCount,
 		isFetching,
 		isTransitioning,
 	} = pagination;
@@ -1504,6 +1503,7 @@ export function FormTablePagination() {
 	const canSave = !isReadOnly && typeof config.onSave === "function";
 	const isLoading = isFetching || isTransitioning;
 	const hideFooterPaginationSummary = config.hideFooterPaginationSummary === true;
+	const showFooterTotalOnly = config.showFooterTotalOnly === true;
 	const paginationDisabled = config.disablePagination === true;
 
 	return (
@@ -1519,6 +1519,19 @@ export function FormTablePagination() {
 						)}
 					</div>
 				)
+			) : showFooterTotalOnly ? (
+				<div className="flex items-center gap-4 px-2 py-1 text-content">
+					<p className="text-xs font-medium text-content-muted">
+						<span className="font-semibold text-content">{totalRowCount}</span>{" "}
+						{totalRowCount === 1 ? "fila" : "filas"}
+					</p>
+					{isLoading && <Loader2 className="size-4 animate-spin text-content-muted" />}
+					{filters.activeCount > 0 && (
+						<p className="text-xs text-content-muted">
+							Filtros activos: <span className="font-medium text-content">{filters.activeCount}</span>
+						</p>
+					)}
+				</div>
 			) : hideFooterPaginationSummary ? (
 				(isLoading || filters.activeCount > 0) && (
 					<div className="flex items-center gap-4 text-content">

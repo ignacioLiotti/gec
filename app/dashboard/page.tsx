@@ -81,6 +81,16 @@ type Obra = {
   updatedAt?: string | null;
 };
 
+export type DashboardDemoData = {
+  obras: Obra[];
+  isAuthenticated: true;
+  previewCurve?: {
+    points: DashboardCurvePoint[];
+    hasCurvaRows: boolean;
+    hasResumenRows: boolean;
+  };
+};
+
 const EMPTY_OBRAS: Obra[] = [];
 
 type DashboardStats = {
@@ -3131,7 +3141,7 @@ function buildDashboardCurvePoints(
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-export default function Home() {
+export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}) {
   const queryClient = useQueryClient();
   const { prefetchObra } = usePrefetchObra();
   const isMobile = useIsMobile();
@@ -3158,8 +3168,10 @@ export default function Home() {
 
   // Use React Query for data fetching with caching
   const { data, isLoading: loading } = useQuery({
-    queryKey: ['obras-dashboard'],
-    queryFn: fetchObrasData,
+    queryKey: demoData ? ['obras-dashboard', 'portfolio-demo'] : ['obras-dashboard'],
+    queryFn: () => demoData ?? fetchObrasData(),
+    enabled: !demoData,
+    initialData: demoData,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -3168,7 +3180,7 @@ export default function Home() {
   const recentObras = useMemo(() => obras.slice(0, 6), [obras]);
   const companyFilesQuery = useQuery({
     queryKey: ["company-files"],
-    enabled: isAuthenticated && dashboardTab === "archivos",
+    enabled: !demoData && isAuthenticated && dashboardTab === "archivos",
     queryFn: async () => {
       const response = await fetch("/api/company-files");
       if (!response.ok) throw new Error("No se pudieron cargar los archivos globales");
@@ -3311,7 +3323,8 @@ export default function Home() {
 
   const selectedPreviewCurveQuery = useQuery({
     queryKey: ["dashboard", "obra-preview-curve", previewCurveObraId ?? "none"],
-    enabled: !isMobile && Boolean(previewCurveObraId),
+    enabled: !demoData && !isMobile && Boolean(previewCurveObraId),
+    initialData: demoData?.previewCurve,
     staleTime: 60 * 1000,
     queryFn: async () => {
       const obraId = previewCurveObraId!;
@@ -4046,7 +4059,10 @@ export default function Home() {
                                           <p className="text-[10px] uppercase tracking-wide text-stone-500">Saldo</p>
                                           <span className="text-[11px] font-semibold tabular-nums text-stone-700">{saldoProgressPct}%</span>
                                         </div>
-                                        <p className="mt-1 truncate text-sm font-semibold text-stone-900">
+										<p
+											suppressHydrationWarning
+											className="mt-1 truncate text-sm font-semibold text-stone-900"
+										>
                                           {formatCompactCurrency(selectedPreviewObra.saldoACertificar || 0)}
                                         </p>
                                         <div className="mt-2 h-2 w-full rounded-full bg-stone-100">

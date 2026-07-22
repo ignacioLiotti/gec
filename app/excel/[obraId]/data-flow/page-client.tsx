@@ -56,6 +56,10 @@ type DataFlowPageClientProps = {
   backHref: string;
   backLabel: string;
   breadcrumbRoot?: string;
+  demoPayload?: DataFlowConfigPayload;
+  initialSemanticScope?: "result" | "all";
+  initialAdvanced?: boolean;
+  initialExpanded?: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,10 +77,14 @@ export function DataFlowPageClient({
   backHref,
   backLabel,
   breadcrumbRoot = "Obras",
+  demoPayload,
+  initialSemanticScope,
+  initialAdvanced,
+  initialExpanded,
 }: DataFlowPageClientProps) {
   void _graphEndpoint;
-  const [configPayload, setConfigPayload] = useState<DataFlowConfigPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [configPayload, setConfigPayload] = useState<DataFlowConfigPayload | null>(demoPayload ?? null);
+  const [loading, setLoading] = useState(!demoPayload);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -88,6 +96,13 @@ export function DataFlowPageClient({
     : "Vista semántica";
 
   useEffect(() => {
+    if (demoPayload) {
+      setConfigPayload(demoPayload);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadConfig() {
@@ -115,7 +130,7 @@ export function DataFlowPageClient({
     return () => {
       cancelled = true;
     };
-  }, [configEndpoint, refreshToken]);
+  }, [configEndpoint, demoPayload, refreshToken]);
 
   const applyAndSaveBuilderConfig = useCallback(async (updater: (baseConfig: BuilderConfig) => BuilderConfig) => {
     if (!configPayload) return;
@@ -126,6 +141,11 @@ export function DataFlowPageClient({
       effectiveConfig: configPayload.effectiveConfig ? updater(configPayload.effectiveConfig) : nextConfig,
     };
     setConfigPayload(optimisticPayload);
+
+    if (demoPayload) {
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -149,7 +169,7 @@ export function DataFlowPageClient({
     } finally {
       setSaving(false);
     }
-  }, [configEndpoint, configPayload]);
+  }, [configEndpoint, configPayload, demoPayload]);
 
   const content = useMemo(() => {
     if (loading && !configPayload) {
@@ -179,9 +199,22 @@ export function DataFlowPageClient({
         canWrite={canWrite}
         error={error}
         onApplyConfig={applyAndSaveBuilderConfig}
+        initialSemanticScope={initialSemanticScope}
+        initialAdvanced={initialAdvanced}
+        initialExpanded={initialExpanded}
       />
     );
-  }, [applyAndSaveBuilderConfig, canWrite, configPayload, error, loading, saving]);
+  }, [
+    applyAndSaveBuilderConfig,
+    canWrite,
+    configPayload,
+    error,
+    initialAdvanced,
+    initialExpanded,
+    initialSemanticScope,
+    loading,
+    saving,
+  ]);
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">

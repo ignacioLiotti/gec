@@ -35,7 +35,8 @@ function mapObraToMobileObra(obra: ExcelPageObra): ObraListItem {
 
 export default function MobileExcelPageClient({
 	initialObras,
-}: Pick<ExcelPageClientProps, "initialObras">) {
+	demoMode = false,
+}: Pick<ExcelPageClientProps, "initialObras"> & { demoMode?: boolean }) {
 	const { isAdmin: isTenantAdmin } = useTenantAdminStatus();
 	const { isHydrating, rows: obras } = usePartialObrasHydration<ObraListItem>({
 		hydrateWhenEmpty: true,
@@ -62,7 +63,7 @@ export default function MobileExcelPageClient({
 									Reporte
 								</Link>
 							</Button>
-							{isTenantAdmin && (
+							{isTenantAdmin && !demoMode && (
 								<Button variant="outline" size="sm" asChild>
 									<Link href="/excel/papelera-obras" prefetch={false} className="gap-2">
 										<Trash2 className="size-4" />

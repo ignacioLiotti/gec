@@ -317,6 +317,8 @@ export type FormTableConfig<Row extends FormTableRow, Filters> = {
 	enableClientSort?: boolean;
 	/** When true, hides the footer page-size control and the "Mostrando X de Y filas" line. */
 	hideFooterPaginationSummary?: boolean;
+	/** When true, replaces the page-size control with a compact total-row count. */
+	showFooterTotalOnly?: boolean;
 	/** Custom actions rendered next to the footer buttons (save/discard). */
 	footerActions?: ReactNode;
 	/** Whether to show the actions column (delete button, accordion toggle). Defaults to true. */

@@ -77,7 +77,21 @@ const securityHeaders: Record<string, string> = {
 };
 
 function attachSecurityHeaders(res: NextResponse) {
+	const allowSameOriginFrame =
+		res.headers.get("x-sintesis-allow-same-origin-frame") === "1";
+	res.headers.delete("x-sintesis-allow-same-origin-frame");
 	for (const [key, value] of Object.entries(securityHeaders)) {
+		if (allowSameOriginFrame && key === "x-frame-options") {
+			res.headers.set(key, "SAMEORIGIN");
+			continue;
+		}
+		if (allowSameOriginFrame && key === "content-security-policy") {
+			res.headers.set(
+				key,
+				value.replace("frame-ancestors 'none'", "frame-ancestors 'self'"),
+			);
+			continue;
+		}
 		res.headers.set(key, value);
 	}
 	return res;
@@ -111,6 +125,7 @@ function isDomainSplitBypassPath(pathname: string) {
 		pathname.startsWith("/_next") ||
 		pathname.startsWith("/api") ||
 		pathname.startsWith("/auth/callback") ||
+		pathname.startsWith("/portfolio") ||
 		pathname === "/favicon.ico" ||
 		pathname.startsWith("/.well-known")
 	);
@@ -123,6 +138,7 @@ function isBillingPaywallBypassPath(pathname: string) {
 		pathname.startsWith("/api/tenants/") ||
 		pathname.startsWith("/auth/") ||
 		pathname.startsWith("/onboarding") ||
+		pathname.startsWith("/portfolio") ||
 		pathname.startsWith("/demo/") ||
 		pathname.startsWith("/_next") ||
 		pathname === "/" ||
@@ -200,6 +216,9 @@ export async function proxy(req: NextRequest) {
 	}
 
 	const res = NextResponse.next({ request: { headers: req.headers } });
+	if (pathname.startsWith("/portfolio/previews/")) {
+		res.headers.set("x-sintesis-allow-same-origin-frame", "1");
+	}
 	if (rateLimitResult) {
 		res.headers.set("x-ratelimit-limit", rateLimitResult.limit.toString());
 		res.headers.set(

@@ -23,6 +23,7 @@ Next.js App Router root. Every URL of the product lives here: product pages, adm
 - `whatsapp/` — WhatsApp integration surfaces.
 - `profile/` — user profile settings.
 - `landings/`, `page.tsx` — public landing pages (domain-specific visual rules; not the product design system).
+- `portfolio/` — public English-language engineering portfolio and Síntesis case study; standalone from the authenticated app shell, with fixture-backed previews that render the real product page components.
 - `privacy/` — legal pages.
 - `demo/`, `r/` — demo links / short-link redirect surfaces backed by `lib/demo-session.ts`.
 - `certexampleplayground/`, `permissions-demo/`, `system-design/` — internal playgrounds/labs; not customer-facing. Keep production-gated.

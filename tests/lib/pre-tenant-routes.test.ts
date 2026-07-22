@@ -7,6 +7,8 @@ describe("isPreTenantRoute", () => {
 		"/",
 		"/onboarding",
 		"/tenants/new",
+		"/portfolio",
+		"/portfolio/case-study",
 		"/invitations/invite-token",
 		"/auth/callback",
 		"/demo/example",

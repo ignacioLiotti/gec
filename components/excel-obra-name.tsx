@@ -142,7 +142,7 @@ function HeaderControlTooltip({
   );
 }
 
-export function ExcelObraName() {
+export function ExcelObraName({ staticObra = null }: { staticObra?: ObraSummary | null } = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const { prefetch, push } = router;
@@ -155,7 +155,7 @@ export function ExcelObraName() {
 
   const match = pathname.match(/^\/excel\/([^/]+)(?:\/.*)?$/);
   const candidateObraId = match?.[1];
-  const obraId = candidateObraId && UUID_PATTERN.test(candidateObraId) ? candidateObraId : null;
+  const obraId = staticObra?.id ?? (candidateObraId && UUID_PATTERN.test(candidateObraId) ? candidateObraId : null);
 
   const getPageName = () => {
     const segments = pathname.split("/").filter(Boolean);
@@ -193,7 +193,7 @@ export function ExcelObraName() {
 
   const currentObraQuery = useQuery({
     queryKey: ["obra", obraId],
-    enabled: Boolean(obraId),
+    enabled: Boolean(obraId) && !staticObra,
     queryFn: async () => {
       const response = await fetch(`/api/obras/${obraId}`);
       if (!response.ok) throw new Error("Failed to fetch obra");
@@ -201,11 +201,12 @@ export function ExcelObraName() {
       return data?.obra as ObraSummary;
     },
     staleTime: 5 * 60 * 1000,
+    initialData: staticObra ?? undefined,
   });
 
   const obrasQuery = useQuery({
     queryKey: ["obras", "nav", "n", "asc", activeListTab],
-    enabled: Boolean(obraId),
+    enabled: Boolean(obraId) && !staticObra,
     queryFn: async () => {
       const params = new URLSearchParams({ orderBy: "n", orderDir: "asc" });
       if (activeListStatus) params.set("status", activeListStatus);
@@ -218,6 +219,7 @@ export function ExcelObraName() {
         : [];
     },
     staleTime: 5 * 60 * 1000,
+    initialData: staticObra ? [staticObra] : undefined,
   });
 
   const obraState = useMemo<HeaderObraState>(() => {

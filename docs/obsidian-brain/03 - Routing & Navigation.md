@@ -6,6 +6,8 @@ tags: #routing #navigation #layout #sidebar
 
 ```
 /                           → Marketing root (redirects auth'd users to /dashboard)
+/portfolio                  → Public engineering portfolio (standalone, no auth or app shell)
+/portfolio/previews/[view]  → Same-origin, fixture-backed instances of real product pages for the portfolio
 /dashboard                  → Dashboard (Home) — main landing after login
 /excel                      → Obras list (spreadsheet view)
 /excel/[obraId]             → Obra workspace (tabbed view)
@@ -64,7 +66,7 @@ app/layout.tsx              Root layout (server component — fetches user, role
 
 ### `components/pathname-layout-shell.tsx`
 - Decides whether to show sidebar based on current pathname
-- Hides sidebar on: `/auth`, `/r/[token]` (shared reports), `/invitations`
+- Hides the app shell on standalone routes: `/portfolio`, `/auth`, `/r/[token]` (shared reports), `/invitations`
 - Wraps main content with proper padding/layout
 
 ---

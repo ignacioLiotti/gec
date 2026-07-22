@@ -3,6 +3,7 @@ export function isPreTenantRoute(pathname: string) {
 		pathname === "/" ||
 		pathname === "/onboarding" ||
 		pathname === "/tenants/new" ||
+		pathname.startsWith("/portfolio") ||
 		pathname.startsWith("/invitations/") ||
 		pathname.startsWith("/auth/") ||
 		pathname.startsWith("/demo/")
