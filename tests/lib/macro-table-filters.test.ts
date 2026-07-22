@@ -16,6 +16,9 @@ describe("macro table search", () => {
 	it("matches policy numbers in macro rows with compact formatting", () => {
 		const row = {
 			id: "row-1",
+			_sourceTablaId: "table-1",
+			_sourceTablaName: "Pólizas",
+			_obraId: "obra-1",
 			policyNumber: "1006726 / 0",
 			obraLabel: "Obra Central",
 			_obraName: "Obra Central",

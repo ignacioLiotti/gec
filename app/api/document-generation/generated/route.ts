@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
     const actorsById = await loadActorsByIds(rows.map((row) => String(row.generated_by ?? "")));
     const works = await loadWorks(accessContext);
 

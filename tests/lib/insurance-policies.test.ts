@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { parseInsurancePoliciesWorkbook } from "@/lib/insurance-policies";
 
-function workbookBuffer(rows: unknown[][]) {
+function workbookBuffer(rows: unknown[][]): ArrayBuffer {
 	const workbook = XLSX.utils.book_new();
 	const sheet = XLSX.utils.aoa_to_sheet(rows);
 	XLSX.utils.book_append_sheet(workbook, sheet, "PolizasVigentesProductor");
-	return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+	const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+	return Uint8Array.from(output).buffer;
 }
 
 describe("parseInsurancePoliciesWorkbook", () => {

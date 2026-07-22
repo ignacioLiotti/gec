@@ -514,7 +514,7 @@ function useLandingStepScroll({ rootSelector = "#root" } = {}) {
 	}, [rootSelector]);
 }
 
-function AnchoredFeatures({ eyebrow, title, lead, blocks, hideHeader }) {
+function AnchoredFeatures({ eyebrow, title, lead, blocks, hideHeader = false }) {
 	const visibleBlocks = blocks.filter((b) => !b.hidden);
 	const [active, setActive] = useState(0);
 	const sectionRef = useRef(null);
@@ -841,7 +841,7 @@ function DarkSteps({ eyebrow, title, steps, ctaLight, ctaGhost }) {
 // ============================================================
 // SPLIT / OPEN SOURCE STYLE — narrative left + 2x2 right
 // ============================================================
-function Split({ eyebrow, title, lead, ctaLabel, ctaIcon, items, stacked }) {
+function Split({ eyebrow, title, lead, ctaLabel, ctaIcon = null, items, stacked = false }) {
 	return (
 		<section
 			className={SECTION}

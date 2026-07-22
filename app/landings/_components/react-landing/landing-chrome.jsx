@@ -413,7 +413,7 @@ function Hero({
 	primaryCta,
 	secondaryCta,
 	trust,
-	visual,
+	visual = /** @type {React.ReactNode} */ (null),
 }) {
 	const isOperativo = variant === "operativo" && visual;
 	const titleEmMatch = title.match(/^(.*)<em>(.*)<\/em>(.*)$/);
