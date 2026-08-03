@@ -30,6 +30,19 @@ tags: #user-flow #ux #journey #walkthrough
       ↓ Sidebar rendered with role-filtered nav items
 ```
 
+### New email without a tenant
+
+```
+1. User signs in without an existing membership
+      ↓ redirected to /onboarding
+
+2. User can accept a pending invitation or create an organization
+
+3. User can choose "Cerrar sesión" from loading, error, or content states
+      ↓ Supabase session is closed
+      ↓ onboarding is replaced by / in browser history
+```
+
 ---
 
 ## Flow 2: Daily Obra Work

@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 import { getMyPendingInvitations, acceptInvitation } from "@/app/admin/users/invitation-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, UserPlus, Loader2, CheckCircle2, Clock, Mail, Plus, HardHat } from "lucide-react";
+import { Building2, UserPlus, Loader2, CheckCircle2, Clock, Mail, Plus, HardHat, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 interface PendingInvitation {
@@ -27,6 +27,45 @@ interface PendingInvitation {
 }
 
 type Mode = "join" | "create";
+
+function OnboardingSignOut() {
+	const router = useRouter();
+	const [signingOut, setSigningOut] = useState(false);
+
+	const handleSignOut = async () => {
+		if (signingOut) return;
+
+		setSigningOut(true);
+		try {
+			const supabase = createSupabaseBrowserClient();
+			const { error } = await supabase.auth.signOut();
+			if (error) throw error;
+
+			router.replace("/");
+			router.refresh();
+		} catch {
+			toast.error("No pudimos cerrar tu sesión. Volvé a intentarlo.");
+			setSigningOut(false);
+		}
+	};
+
+	return (
+		<Button
+			type="button"
+			variant="outline"
+			size="sm"
+			onClick={() => void handleSignOut()}
+			disabled={signingOut}
+		>
+			{signingOut ? (
+				<Loader2 className="size-4 animate-spin" />
+			) : (
+				<LogOut className="size-4" />
+			)}
+			{signingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+		</Button>
+	);
+}
 
 function OnboardingPageContent() {
 	const router = useRouter();
@@ -126,8 +165,13 @@ function OnboardingPageContent() {
 		return (
 			<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
 				<Card className="w-full max-w-2xl">
-					<CardContent className="flex items-center justify-center py-12">
-						<Loader2 className="size-8 animate-spin text-[#444444]" />
+					<CardContent className="space-y-3 py-6">
+						<div className="flex justify-end">
+							<OnboardingSignOut />
+						</div>
+						<div className="flex items-center justify-center py-6">
+							<Loader2 className="size-8 animate-spin text-content-secondary" />
+						</div>
 					</CardContent>
 				</Card>
 			</div>
@@ -139,6 +183,9 @@ function OnboardingPageContent() {
 			<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
 				<Card className="w-full max-w-lg border-stroke-soft shadow-card">
 					<CardHeader>
+						<div className="flex justify-end">
+							<OnboardingSignOut />
+						</div>
 						<CardTitle>No pudimos revisar tu acceso</CardTitle>
 						<CardDescription>{loadError}</CardDescription>
 					</CardHeader>
@@ -156,6 +203,9 @@ function OnboardingPageContent() {
 		<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
 			<Card className="w-full max-w-2xl border-stroke-soft shadow-card">
 				<CardHeader className="text-center">
+					<div className="flex justify-end">
+						<OnboardingSignOut />
+					</div>
 					<div className="flex justify-center mb-4">
 						<div className="rounded-xl border border-orange-primary/25 bg-orange-primary/10 p-4 text-orange-primary shadow-sm">
 							<Building2 className="size-10" />

@@ -24,6 +24,7 @@ The app is a **multi-tenant SaaS** where each organization is a "tenant." Users 
 9. layout.tsx re-runs: fetches user, roles, tenants
 10. resolveTenantMembership() resolves active tenant from cookie
 11. User lands on /dashboard (or /onboarding if no memberships)
+12. /onboarding always offers "Cerrar sesión", which signs out and returns to /
 ```
 
 ### Key Files
