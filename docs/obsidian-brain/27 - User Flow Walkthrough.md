@@ -28,6 +28,7 @@ tags: #user-flow #ux #journey #walkthrough
 4. Redirected to /excel (obras list)
       ↓ resolveTenantMembership() picks tenant from cookie
       ↓ Sidebar rendered with role-filtered nav items
+      ↓ Organization switcher remains visible for every authenticated role
 ```
 
 ### New email without a tenant

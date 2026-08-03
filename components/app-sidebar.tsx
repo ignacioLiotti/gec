@@ -423,6 +423,7 @@ export function AppSidebar({
 	} | null>(null);
 	const tenantOptions = tenants ?? [];
 	const canCreateTenant = Boolean(user && !demoMode);
+	const showTenantSwitcher = canCreateTenant || tenantOptions.length > 0;
 	const canManageSetup = Boolean(
 		userRoles?.isAdmin || userRoles?.isSuperAdmin,
 	);
@@ -707,7 +708,7 @@ export function AppSidebar({
 									</SidebarPrefetchLink>
 								</SidebarMenuButton>
 							</div>
-							{tenantOptions.length > 0 ? (
+							{showTenantSwitcher ? (
 								<DropdownMenu open={tenantMenuOpen} onOpenChange={setTenantMenuOpen}>
 									<DropdownMenuTrigger asChild>
 										<button
@@ -757,7 +758,11 @@ export function AppSidebar({
 									>
 										<DropdownMenuLabel>Organizaciones</DropdownMenuLabel>
 										<DropdownMenuSeparator />
-										{tenantOptions.map((tenant) => {
+										{tenantOptions.length === 0 ? (
+											<DropdownMenuItem disabled>
+												Sin organizaciones disponibles
+											</DropdownMenuItem>
+										) : tenantOptions.map((tenant) => {
 											const isActive = tenant.id === activeTenantId;
 											const isPending = switchingTenantId === tenant.id;
 											return (
@@ -814,23 +819,6 @@ export function AppSidebar({
 										)}
 									</DropdownMenuContent>
 								</DropdownMenu>
-							) : canCreateTenant ? (
-								isCollapsed ? (
-									<SidebarPrefetchLink
-										href="/tenants/new"
-										className="flex items-center justify-center rounded-md border border-dashed p-2 text-muted-foreground hover:bg-sidebar-accent/40"
-									title="Crear organización"
-									>
-										<PlusCircle className="size-5" />
-									</SidebarPrefetchLink>
-								) : (
-									<SidebarPrefetchLink
-										href="/tenants/new"
-										className="block rounded-md border border-dashed px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-sidebar-accent/40"
-									>
-									Crear organización
-									</SidebarPrefetchLink>
-								)
 							) : null}
 						</div>
 					</SidebarMenuItem>

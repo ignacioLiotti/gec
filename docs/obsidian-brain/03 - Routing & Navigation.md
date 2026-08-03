@@ -83,6 +83,11 @@ Defined in `components/app-sidebar.tsx`:
 | Certificados | `/certificados` | FileText |
 | Notificaciones | `/notifications` | Bell |
 
+### Organization Switcher
+- Lives in the sidebar header and is shown to every authenticated non-demo user, including members with regular roles and users whose organization list is temporarily empty.
+- Regular users can only switch among organizations returned by their memberships. Super-admins can switch across all tenants.
+- An empty list keeps the selector visible with an explicit empty state and the create-organization action.
+
 ### Macro Tables Section
 - Dynamically loaded from `/api/sidebar-macro-tables`
 - Each macro table tenant admins have enabled appears as nav item
@@ -103,7 +108,6 @@ Defined in `components/app-sidebar.tsx`:
 
 ### Footer
 - User menu (profile, logout)
-- Tenant switcher (if multi-tenant member)
 
 ---
 

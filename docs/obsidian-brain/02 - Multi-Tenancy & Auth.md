@@ -51,7 +51,9 @@ resolveTenantMembership(memberships, options)
 
 **Tenant Switching:**
 - `POST /api/tenants/[tenantId]/switch` — sets `active_tenant_id` cookie, redirects
-- UI: `components/tenant-switch-button.tsx`
+- Primary UI: the organization dropdown in `components/app-sidebar.tsx`
+- The dropdown is visible to every authenticated non-demo user, independent of role or current option count. Regular users only receive their own memberships; super-admins receive all tenants.
+- Reusable control for secondary surfaces: `components/tenant-switch-button.tsx`
 
 ---
 
@@ -163,7 +165,7 @@ Joining an existing tenant is invitation-only. Knowing a tenant UUID is never su
 - The production owner/founder identity should be configured in env and/or `profiles.is_superadmin`
 - They can access any tenant by switching to it
 - Falls back to `DEFAULT_TENANT_ID` if they have no memberships
-- In layout: admins/superadmins get ALL tenants via admin client (bypasses RLS)
+- In layout: superadmins get ALL tenants via admin client (bypasses RLS)
 - Regular users: only see their own memberships
 
 ---
