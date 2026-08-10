@@ -104,6 +104,19 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 - An explicit filename supplied by the request or rendered from a template `fileNamePattern` still takes precedence
 - Storage collisions retain the existing numeric suffix behavior (for example, `52 (2).pdf`)
 
+## Generated Purchase-Order Editing
+
+- Repeatable item formulas are evaluated in row context, so fields such as `precio_total = cantidad * precio_unitario` update before the order subtotal and percentage adjustments are calculated
+- Purchase-order totals recalculate in both the inline document editor and the structured form, and the server applies the same formula pass before persisting or generating the PDF
+- Purchase-order bonuses are optional: the percentage defaults to `0`, the payable total remains unchanged, and the bonus amount recalculates only when the user enters a percentage above zero
+- Once obra, folder, document type, and template are selected, user edits to a purchase order are saved as a server draft after a short debounce; the draft ID is kept in the URL so a refresh or later return can restore it
+- The manual **Guardar borrador** action remains available, and source drafts are retained when a generated document is deleted
+
+## Generated Document Download
+
+- `GET /api/obras/[id]/documents/access?download=1` returns authenticated document bytes with `Content-Disposition: attachment` and `Cache-Control: private, no-store`
+- The approved-document viewer fetches the file before creating the browser download, so access, missing-file, and storage errors remain visible instead of silently failing after preview
+
 ## Document AI Report Workspace
 
 `/document-ai`

@@ -46,6 +46,110 @@ describe("document-generation helpers", () => {
     expect(applyTemplateFormulaInputData(schema, { amount: 250 })).not.toHaveProperty("monto_acumulado_anterior");
   });
 
+  it("defaults the optional purchase-order bonus to zero", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        {
+          key: "items",
+          label: "Items",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "cantidad", label: "Cantidad", type: "number", required: true },
+            { key: "precio_unitario", label: "Precio unitario", type: "money", required: true },
+            { key: "precio_total", label: "Precio total", type: "money", required: true },
+          ],
+        },
+        { key: "subtotal", label: "Subtotal", type: "money", required: true },
+        { key: "recargo_porcentaje", label: "Recargo %", type: "number", required: true },
+        { key: "recargo", label: "Recargo", type: "money", required: true },
+        { key: "total_orden", label: "Total", type: "money", required: true },
+        { key: "bonificacion_porcentaje", label: "Bonificacion %", type: "number", required: true },
+        { key: "bonificacion", label: "Bonificacion", type: "money", required: true },
+        { key: "total_a_pagar", label: "Importe a pagar", type: "money", required: true },
+      ],
+    });
+
+    const result = applyTemplateFormulaInputData(schema, {
+      items: [
+        { precio_total: "1812359.45" },
+        { precio_total: "181235.95" },
+        { precio_total: "724943.78" },
+        { precio_total: "2920219.24" },
+        { precio_total: "584043.85" },
+        { precio_total: "584043.85" },
+        { precio_total: "2920219.24" },
+        { precio_total: "2770006.22" },
+        { precio_total: "369334.16" },
+        { precio_total: "1108002.49" },
+        { precio_total: "1108002.49" },
+        { precio_total: "738668.32" },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      subtotal: 15821079.04,
+      recargo_porcentaje: 21,
+      recargo: 3322426.6,
+      total_orden: 19143505.64,
+      bonificacion_porcentaje: 0,
+      bonificacion: 0,
+      total_a_pagar: 19143505.64,
+    });
+  });
+
+  it("recomputes purchase-order line totals before rolling them up", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        {
+          key: "items",
+          label: "Items",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "cantidad", label: "Cantidad", type: "number", required: true },
+            { key: "precio_unitario", label: "Precio unitario", type: "money", required: true },
+            {
+              key: "precio_total",
+              label: "Precio total",
+              type: "money",
+              required: true,
+              formula: "[cantidad] * [precio_unitario]",
+            },
+          ],
+        },
+        { key: "subtotal", label: "Subtotal", type: "money", required: true },
+        { key: "recargo_porcentaje", label: "Recargo %", type: "number", required: true },
+        { key: "recargo", label: "Recargo", type: "money", required: true },
+        { key: "total_orden", label: "Total", type: "money", required: true },
+        { key: "bonificacion_porcentaje", label: "Bonificacion %", type: "number", required: true },
+        { key: "bonificacion", label: "Bonificacion", type: "money", required: true },
+        { key: "total_a_pagar", label: "Importe a pagar", type: "money", required: true },
+      ],
+    });
+
+    const result = applyTemplateFormulaInputData(schema, {
+      items: [
+        { cantidad: "2", precio_unitario: "1.500,50", precio_total: "1" },
+        { cantidad: "3", precio_unitario: "200" },
+      ],
+      recargo_porcentaje: "10",
+      bonificacion_porcentaje: "5",
+    });
+
+    expect(result.items).toEqual([
+      { cantidad: "2", precio_unitario: "1.500,50", precio_total: 3001 },
+      { cantidad: "3", precio_unitario: "200", precio_total: 600 },
+    ]);
+    expect(result).toMatchObject({
+      subtotal: 3601,
+      recargo: 360.1,
+      total_orden: 3961.1,
+      bonificacion: 198.06,
+      total_a_pagar: 3763.04,
+    });
+  });
+
   it("hydrates default values from schema", () => {
     const schema = normalizeTemplateSchema({
       fields: [

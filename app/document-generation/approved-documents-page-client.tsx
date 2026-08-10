@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Download,
   FileCheck2,
   FileText,
   Loader2,
@@ -20,6 +21,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { DocumentApprovedSeal } from "@/components/document-approved-seal";
 import { Button } from "@/components/ui/button";
@@ -342,6 +344,7 @@ function DocumentPreviewer({
   onToggleResolved: (documentId: string, nextResolved: boolean) => void;
 }) {
   const [previewZoom, setPreviewZoom] = useState(1);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   if (!document) return null;
 
@@ -382,18 +385,36 @@ function DocumentPreviewer({
     onSelectDocument(navigationDocuments[selectedIndex + 1].id);
   };
 
-  const downloadDocument = () => {
-    if (!document.storagePath || !document.workId) return;
+  const downloadDocument = async () => {
+    if (!document.storagePath || !document.workId || isDownloading) return;
     const query = new URLSearchParams({
       path: document.storagePath,
       download: "1",
     });
-    const anchor = window.document.createElement("a");
-    anchor.href = `/api/obras/${encodeURIComponent(document.workId)}/documents/access?${query.toString()}`;
-    anchor.download = document.fileName || title;
-    window.document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    setIsDownloading(true);
+    try {
+      const response = await fetch(
+        `/api/obras/${encodeURIComponent(document.workId)}/documents/access?${query.toString()}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "No se pudo descargar el PDF.");
+      }
+
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const anchor = window.document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = document.fileName || title;
+      window.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo descargar el PDF.");
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const viewerZoomControls = (
@@ -469,8 +490,16 @@ function DocumentPreviewer({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {document.storagePath ? (
-              <Button variant="secondary" size="sm" onClick={downloadDocument} className="rounded-md ">
-                Descargar
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => void downloadDocument()}
+                disabled={isDownloading}
+                className="rounded-md"
+              >
+                {isDownloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                {isDownloading ? "Descargando..." : "Descargar"}
               </Button>
             ) : null}
             <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-slate-500">

@@ -139,12 +139,17 @@ export async function GET(request: Request, context: RouteContext) {
 			}
 
 			const fileName = storagePath.split("/").pop() ?? "documento";
+			const safeFileName = fileName.replace(/["\\\r\n]/g, "");
+			const fallbackFileName = safeFileName
+				.normalize("NFKD")
+				.replace(/[^\x20-\x7e]/g, "_");
+			const encodedFileName = encodeURIComponent(safeFileName);
 			const arrayBuffer = await data.arrayBuffer();
 			return new NextResponse(arrayBuffer, {
 				headers: {
 					"Content-Type": data.type || "application/octet-stream",
-					"Content-Disposition": `inline; filename="${fileName.replace(/"/g, "")}"`,
-					"Cache-Control": "private, max-age=60",
+					"Content-Disposition": `attachment; filename="${fallbackFileName}"; filename*=UTF-8''${encodedFileName}`,
+					"Cache-Control": "private, no-store",
 				},
 			});
 		}

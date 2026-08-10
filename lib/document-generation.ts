@@ -2,6 +2,7 @@ import {
 	coerceValueForType,
 	evaluateTablaFormula,
 	normalizeFolderPath,
+	toNumericValue,
 	type TablaColumnDataType,
 } from "@/lib/tablas";
 
@@ -925,6 +926,187 @@ function coerceTemplateFormulaValue(field: TemplateField, value: number) {
 	return value;
 }
 
+function applyRepeatableFormulaInputData(
+	schema: TemplateSchema,
+	current: Record<string, unknown>,
+) {
+	const groups = new Map<string, TemplateField[]>();
+	for (const field of schema.fields) {
+		if (field.type === "table") {
+			groups.set(field.key, field.columns ?? []);
+			continue;
+		}
+		if (!field.repeatableGroup) continue;
+		const fields = groups.get(field.repeatableGroup) ?? [];
+		groups.set(field.repeatableGroup, [...fields, field]);
+	}
+
+	let next = current;
+	for (const [groupKey, fields] of groups) {
+		const formulaFields = fields.filter((field) => field.formula?.trim());
+		const rows = next[groupKey];
+		if (formulaFields.length === 0 || !Array.isArray(rows)) continue;
+
+		let rowsChanged = false;
+		const nextRows = rows.map((row) => {
+			if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+			let nextRow = row as Record<string, unknown>;
+			for (let pass = 0; pass < formulaFields.length; pass += 1) {
+				let passChanged = false;
+				for (const field of formulaFields) {
+					const formula = field.formula?.trim();
+					if (!formula || !canEvaluateTemplateFormula(formula, nextRow)) continue;
+					const computed = evaluateTablaFormula(formula, nextRow);
+					if (computed == null) continue;
+					const nextValue = coerceTemplateFormulaValue(field, computed);
+					if (nextRow[field.key] === nextValue) continue;
+					nextRow = { ...nextRow, [field.key]: nextValue };
+					passChanged = true;
+					rowsChanged = true;
+				}
+				if (!passChanged) break;
+			}
+			return nextRow;
+		});
+
+		if (rowsChanged) next = { ...next, [groupKey]: nextRows };
+	}
+	return next;
+}
+
+function roundMoney(value: number) {
+	return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function getPurchaseOrderItemGroupKeys(schema: TemplateSchema) {
+	const groupKeys = new Set<string>(["items"]);
+	for (const field of schema.fields) {
+		if (
+			field.type === "table" &&
+			(field.columns ?? []).some((column) =>
+				["cantidad", "precio_unitario", "precio_total"].includes(column.key),
+			)
+		) {
+			groupKeys.add(field.key);
+		}
+		if (
+			field.repeatableGroup &&
+			["cantidad", "precio_unitario", "precio_total"].includes(field.key)
+		) {
+			groupKeys.add(field.repeatableGroup);
+		}
+	}
+	return Array.from(groupKeys);
+}
+
+function calculatePurchaseOrderSubtotal(
+	schema: TemplateSchema,
+	inputData: Record<string, unknown>,
+) {
+	for (const groupKey of getPurchaseOrderItemGroupKeys(schema)) {
+		const rows = inputData[groupKey];
+		if (!Array.isArray(rows) || rows.length === 0) continue;
+
+		let subtotal = 0;
+		let calculatedRows = 0;
+		for (const row of rows) {
+			if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+			const rowData = row as Record<string, unknown>;
+			const explicitTotal = toNumericValue(rowData.precio_total);
+			const quantity = toNumericValue(rowData.cantidad);
+			const unitPrice = toNumericValue(rowData.precio_unitario);
+			const rowTotal =
+				explicitTotal ??
+				(quantity != null && unitPrice != null
+					? roundMoney(quantity * unitPrice)
+					: null);
+			if (rowTotal == null) continue;
+			subtotal += rowTotal;
+			calculatedRows += 1;
+		}
+
+		if (calculatedRows > 0) return roundMoney(subtotal);
+	}
+	return null;
+}
+
+function applyPurchaseOrderCalculatedInputData(
+	schema: TemplateSchema,
+	current: Record<string, unknown>,
+) {
+	const fieldByKey = new Map(schema.fields.map((field) => [field.key, field]));
+	const hasExpectedTotals = [
+		"subtotal",
+		"recargo_porcentaje",
+		"recargo",
+		"total_orden",
+		"bonificacion_porcentaje",
+		"bonificacion",
+		"total_a_pagar",
+	].every((key) => fieldByKey.has(key));
+	const hasExpectedItems =
+		Array.isArray(current.items) ||
+		schema.fields.some(
+			(field) =>
+				(field.type === "table" &&
+					(field.columns ?? []).some((column) =>
+						["cantidad", "precio_unitario", "precio_total"].includes(
+							column.key,
+						),
+					)) ||
+				(Boolean(field.repeatableGroup) &&
+					["cantidad", "precio_unitario", "precio_total"].includes(field.key)),
+		);
+	if (!hasExpectedTotals || !hasExpectedItems) return current;
+
+	const exposesField = (key: string) =>
+		fieldByKey.has(key) || Object.prototype.hasOwnProperty.call(current, key);
+	const canAutomaticallySet = (key: string) => {
+		const field = fieldByKey.get(key);
+		return !field?.formula?.trim();
+	};
+	let next = current;
+	const setValue = (key: string, value: number) => {
+		if (!exposesField(key) || !canAutomaticallySet(key) || next[key] === value)
+			return;
+		next = { ...next, [key]: value };
+	};
+
+	const subtotalFromItems = calculatePurchaseOrderSubtotal(schema, next);
+	if (subtotalFromItems != null) {
+		setValue("subtotal", subtotalFromItems);
+	}
+
+	const subtotal = toNumericValue(next.subtotal);
+	if (subtotal == null) return next;
+
+	const recargoPorcentaje =
+		toNumericValue(next.recargo_porcentaje) ?? 21;
+	setValue("recargo_porcentaje", recargoPorcentaje);
+	setValue("recargo", roundMoney((subtotal * recargoPorcentaje) / 100));
+
+	const recargo = toNumericValue(next.recargo) ?? 0;
+	setValue("total_orden", roundMoney(subtotal + recargo));
+
+	const totalOrden = toNumericValue(next.total_orden);
+	const bonificacionPorcentaje =
+		toNumericValue(next.bonificacion_porcentaje) ?? 0;
+	setValue("bonificacion_porcentaje", bonificacionPorcentaje);
+	if (totalOrden != null) {
+		setValue(
+			"bonificacion",
+			roundMoney((totalOrden * bonificacionPorcentaje) / 100),
+		);
+	}
+
+	if (totalOrden != null) {
+		const bonificacion = toNumericValue(next.bonificacion) ?? 0;
+		setValue("total_a_pagar", roundMoney(totalOrden - bonificacion));
+	}
+
+	return next;
+}
+
 export function applyTemplateFormulaInputData(
 	schema: TemplateSchema,
 	current: Record<string, unknown>,
@@ -937,10 +1119,19 @@ export function applyTemplateFormulaInputData(
 			typeof field.formula === "string" &&
 			field.formula.trim().length > 0,
 	);
-	if (formulaFields.length === 0) return next;
 
-	for (let pass = 0; pass < formulaFields.length; pass += 1) {
+	for (let pass = 0; pass < formulaFields.length + 6; pass += 1) {
 		let changed = false;
+		const repeatableCalculated = applyRepeatableFormulaInputData(schema, next);
+		if (repeatableCalculated !== next) {
+			next = repeatableCalculated;
+			changed = true;
+		}
+		const calculated = applyPurchaseOrderCalculatedInputData(schema, next);
+		if (calculated !== next) {
+			next = calculated;
+			changed = true;
+		}
 		for (const field of formulaFields) {
 			const formula = field.formula?.trim();
 			if (!formula || !canEvaluateTemplateFormula(formula, next)) continue;

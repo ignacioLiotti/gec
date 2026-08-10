@@ -202,6 +202,8 @@ type OptionAddition = {
   option: TemplateSelectOption;
 };
 
+const PURCHASE_ORDER_AUTOSAVE_DELAY_MS = 1_500;
+
 function readDocumentAiContext(inputData: Record<string, unknown>) {
   const value = inputData.__documentAi;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -1152,6 +1154,8 @@ export function DocumentGenerationPageClient() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [autosavingDraft, setAutosavingDraft] = useState(false);
+  const [autosaveRevision, setAutosaveRevision] = useState(0);
   const [assisting, setAssisting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
@@ -1161,6 +1165,11 @@ export function DocumentGenerationPageClient() {
   const inlineDocumentRootRef = useRef<HTMLDivElement | null>(null);
   const inlineInputDataRef = useRef<Record<string, unknown>>({});
   const bootstrapRequestIdRef = useRef(0);
+  const draftIdRef = useRef(initialDraftId);
+  const draftContextVersionRef = useRef(0);
+  const purchaseOrderDraftDirtyRef = useRef(false);
+  const autosaveRequestRef = useRef<Promise<void> | null>(null);
+  const autosavePendingRef = useRef(false);
 
   const loadBootstrap = useCallback(
     async (
@@ -1371,6 +1380,10 @@ export function DocumentGenerationPageClient() {
     inlineInputDataRef.current = inputData;
   }, [inputData]);
 
+  useEffect(() => {
+    draftIdRef.current = draftId;
+  }, [draftId]);
+
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === templateId) ?? null,
     [templateId, templates],
@@ -1465,7 +1478,11 @@ export function DocumentGenerationPageClient() {
     () => readDocumentAiContext(deferredInputData),
     [deferredInputData],
   );
-  const draftStatusLabel = draftStatus ? humanizeStatus(draftStatus) : "sin guardar";
+  const draftStatusLabel = autosavingDraft
+    ? "guardando automaticamente"
+    : draftStatus
+      ? humanizeStatus(draftStatus)
+      : "sin guardar";
   const documentCode = getDocumentCode(deferredInputData);
   const isEditingGeneratedDocument = Boolean(editingGeneratedId);
   const validationIssues = useMemo(
@@ -1483,6 +1500,9 @@ export function DocumentGenerationPageClient() {
   );
 
   const handleWorkChange = async (value: string) => {
+    draftContextVersionRef.current += 1;
+    purchaseOrderDraftDirtyRef.current = false;
+    draftIdRef.current = "";
     setWorkId(value);
     setTemplateId("");
     inlineInputDataRef.current = {};
@@ -1499,6 +1519,9 @@ export function DocumentGenerationPageClient() {
   };
 
   const handleDocumentTypeChange = async (value: string) => {
+    draftContextVersionRef.current += 1;
+    purchaseOrderDraftDirtyRef.current = false;
+    draftIdRef.current = "";
     const nextType = normalizeDocumentType(value) ?? "";
     const nextFolderPath =
       nextType && folderPath
@@ -1527,6 +1550,9 @@ export function DocumentGenerationPageClient() {
   };
 
   const handleFolderChange = async (value: string) => {
+    draftContextVersionRef.current += 1;
+    purchaseOrderDraftDirtyRef.current = false;
+    draftIdRef.current = "";
     const nextFolderConfig = folderConfigs.find((config) => config.path === value) ?? null;
     const nextDocumentType =
       documentType &&
@@ -1563,11 +1589,13 @@ export function DocumentGenerationPageClient() {
       ? applyTemplateFormulaInputData(selectedTemplate.schema, nextData)
       : nextData;
     inlineInputDataRef.current = derivedData;
+    purchaseOrderDraftDirtyRef.current = true;
     setInputData(derivedData);
     return derivedData;
   }, [selectedTemplate]);
 
   const handleTemplateChange = (value: string) => {
+    draftContextVersionRef.current += 1;
     setTemplateId(value);
     setValidationErrors([]);
     const nextTemplate = templates.find((template) => template.id === value) ?? null;
@@ -1691,9 +1719,13 @@ export function DocumentGenerationPageClient() {
   const syncInlineDraftValue = useCallback((target: HTMLInputElement | HTMLSelectElement, nextValue: string) => {
     const next = buildInlineDraftData(target, nextValue);
     if (!next) return null;
-    inlineInputDataRef.current = next.data;
-    return next;
-  }, [buildInlineDraftData]);
+    const derivedData = selectedTemplate
+      ? applyTemplateFormulaInputData(selectedTemplate.schema, next.data)
+      : next.data;
+    inlineInputDataRef.current = derivedData;
+    purchaseOrderDraftDirtyRef.current = true;
+    return { ...next, data: derivedData };
+  }, [buildInlineDraftData, selectedTemplate]);
 
   const flushInlineDraftData = useCallback((changedErrorKeys: string[] = []) => {
     const nextData = inlineInputDataRef.current;
@@ -1708,7 +1740,8 @@ export function DocumentGenerationPageClient() {
   const handleInlineDocumentBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
-    syncInlineDraftValue(target, target.value);
+    const next = syncInlineDraftValue(target, target.value);
+    if (next) flushInlineDraftData(next.changedErrorKeys);
   };
 
   const handleInlineDocumentChange = (event: FormEvent<HTMLDivElement>) => {
@@ -1720,7 +1753,8 @@ export function DocumentGenerationPageClient() {
     ) {
       return;
     }
-    syncInlineDraftValue(target, target.value);
+    const next = syncInlineDraftValue(target, target.value);
+    if (next) flushInlineDraftData(next.changedErrorKeys);
   };
 
   const addRepeatableRow = (groupKey: string, fields: TemplateField[]) => {
@@ -1815,6 +1849,7 @@ export function DocumentGenerationPageClient() {
       }
 
       inlineInputDataRef.current = payload.inputData;
+      purchaseOrderDraftDirtyRef.current = true;
       setInputData(payload.inputData);
       setValidationErrors((current) =>
         selectedTemplate ? validateTemplateInput(selectedTemplate.schema, payload.inputData) : current,
@@ -1831,6 +1866,102 @@ export function DocumentGenerationPageClient() {
       setAssisting(false);
     }
   };
+
+  const persistDraft = useCallback(async (
+    currentInputData: Record<string, unknown>,
+    target: {
+      workId: string;
+      folderPath: string;
+      documentType: string;
+      templateId: string;
+    },
+  ) => {
+      const requestContextVersion = draftContextVersionRef.current;
+      const response = await fetch("/api/document-generation/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          id: draftIdRef.current || undefined,
+          workId: target.workId,
+          folderPath: target.folderPath,
+          documentType: target.documentType,
+          templateId: target.templateId,
+          inputData: currentInputData,
+        }),
+      });
+      const payload = (await response.json()) as DraftResponse & { error?: string };
+      if (!response.ok || !payload.draft?.id) {
+        throw new Error(payload.error || "No se pudo guardar el borrador");
+      }
+
+      const nextInputData = payload.draft.input_data ?? currentInputData;
+      if (requestContextVersion !== draftContextVersionRef.current) {
+        return { applied: false, inputData: nextInputData };
+      }
+
+      draftIdRef.current = payload.draft.id;
+      setDraftId(payload.draft.id);
+      setDraftStatus(payload.draft.status);
+      setValidationErrors(payload.draft.validation_errors ?? []);
+      commitInputData(nextInputData);
+      return { applied: true, inputData: nextInputData };
+  }, [commitInputData]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      editingGeneratedId ||
+      documentType !== "PURCHASE_ORDER" ||
+      !workId ||
+      !folderPath ||
+      !templateId ||
+      !purchaseOrderDraftDirtyRef.current
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (!purchaseOrderDraftDirtyRef.current) return;
+      if (autosaveRequestRef.current) {
+        autosavePendingRef.current = true;
+        return;
+      }
+
+      const dataToSave = inlineInputDataRef.current;
+      purchaseOrderDraftDirtyRef.current = false;
+      autosavePendingRef.current = false;
+      setAutosavingDraft(true);
+      let saveFailed = false;
+      const request = persistDraft(dataToSave, {
+        workId,
+        folderPath,
+        documentType,
+        templateId,
+      })
+        .then(() => undefined)
+        .catch((error) => {
+          saveFailed = true;
+          purchaseOrderDraftDirtyRef.current = true;
+          toast.error(
+            error instanceof Error
+              ? `No se pudo guardar automaticamente: ${error.message}`
+              : "No se pudo guardar automaticamente la orden de compra.",
+          );
+        })
+        .finally(() => {
+          autosaveRequestRef.current = null;
+          setAutosavingDraft(false);
+          if (autosavePendingRef.current || (!saveFailed && purchaseOrderDraftDirtyRef.current)) {
+            autosavePendingRef.current = false;
+            setAutosaveRevision((current) => current + 1);
+          }
+        });
+      autosaveRequestRef.current = request;
+    }, PURCHASE_ORDER_AUTOSAVE_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [autosaveRevision, documentType, editingGeneratedId, folderPath, loading, persistDraft, templateId, workId, inputData]);
 
   const handleSaveDraft = async () => {
     flushInlineDraftData();
@@ -1852,29 +1983,15 @@ export function DocumentGenerationPageClient() {
 
     setSavingDraft(true);
     try {
-      const response = await fetch("/api/document-generation/drafts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: draftId || undefined,
-          workId,
-          folderPath,
-          documentType,
-          templateId,
-          inputData: currentInputData,
-        }),
+      const persistedDraft = await persistDraft(currentInputData, {
+        workId,
+        folderPath,
+        documentType,
+        templateId,
       });
-      const payload = (await response.json()) as DraftResponse & { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "No se pudo guardar el borrador");
-      }
-
-      setDraftId(payload.draft.id);
-      setDraftStatus(payload.draft.status);
-      setValidationErrors(payload.draft.validation_errors ?? []);
-      const nextInputData = payload.draft.input_data ?? currentInputData;
-      commitInputData(nextInputData);
-      await persistCreatableOptions(nextInputData);
+      if (!persistedDraft.applied) return;
+      purchaseOrderDraftDirtyRef.current = false;
+      await persistCreatableOptions(persistedDraft.inputData);
       toast.success("Borrador guardado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo guardar el borrador");
@@ -2093,7 +2210,7 @@ export function DocumentGenerationPageClient() {
               type="button"
               variant="ghost"
               onClick={handleSaveDraft}
-              disabled={savingDraft || loading || Boolean(editingGeneratedId)}
+              disabled={savingDraft || autosavingDraft || loading || Boolean(editingGeneratedId)}
               className="h-9 w-full rounded-md px-4 text-stone-700 sm:w-auto"
               hidden={Boolean(editingGeneratedId)}
             >
@@ -2124,7 +2241,7 @@ export function DocumentGenerationPageClient() {
             <Button
               type="button"
               onClick={handleGenerate}
-              disabled={generating || loading || !selectedTemplate}
+              disabled={generating || autosavingDraft || loading || !selectedTemplate}
               className="h-9 w-full rounded-md bg-[linear-gradient(180deg,#201E25_0%,#323137_100%)] px-4 text-white shadow-[0_2px_4px_rgba(0,0,0,0.10),0_0_0_1px_#0D0D0D] sm:w-auto"
             >
               {generating ? (
