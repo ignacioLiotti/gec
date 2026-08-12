@@ -109,6 +109,8 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 - Repeatable item formulas are evaluated in row context, so fields such as `precio_total = cantidad * precio_unitario` update before the order subtotal and percentage adjustments are calculated
 - Purchase-order totals recalculate in both the inline document editor and the structured form, and the server applies the same formula pass before persisting or generating the PDF
 - Purchase-order bonuses are optional: the percentage defaults to `0`, the payable total remains unchanged, and the bonus amount recalculates only when the user enters a percentage above zero
+- Inline document controls keep their DOM identity while values and calculated totals update, so typing is not interrupted by preview or autosave renders; money inputs accept localized decimal entry
+- Background and manual draft saves do not reveal required-field errors while the order is still being completed; inline error emphasis appears only after an explicit generation attempt and uses a calm static state
 - Once obra, folder, document type, and template are selected, user edits to a purchase order are saved as a server draft after a short debounce; the draft ID is kept in the URL so a refresh or later return can restore it
 - The manual **Guardar borrador** action remains available, and source drafts are retained when a generated document is deleted
 

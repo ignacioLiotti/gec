@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type FormEvent } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type FormEvent, type MutableRefObject } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -552,6 +552,7 @@ function renderInlineFieldControl(
   );
   const dataAttrs = [
     `data-inline-field="${escapeHtml(field.key)}"`,
+    field.required ? `data-inline-required="true"` : "",
     scope?.token && scope.token !== field.key ? `data-inline-token="${escapeHtml(scope.token)}"` : "",
     scope?.groupKey ? `data-inline-group="${escapeHtml(scope.groupKey)}"` : "",
     typeof scope?.rowIndex === "number" ? `data-inline-row="${scope.rowIndex}"` : "",
@@ -584,8 +585,9 @@ function renderInlineFieldControl(
     return `<select class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}">${options}</select>`;
   }
 
-  const inputType = field.type === "date" ? "date" : field.type === "number" || field.type === "money" ? "number" : "text";
-  return `<input class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}" type="${inputType}" value="${currentValue}" />`;
+  const inputType = field.type === "date" ? "date" : field.type === "number" ? "number" : "text";
+  const inputMode = field.type === "money" ? `inputmode="decimal"` : "";
+  return `<input class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}" type="${inputType}" ${inputMode} value="${currentValue}" />`;
 }
 
 function renderEditableDocumentHtml(
@@ -646,6 +648,87 @@ function renderEditableDocumentHtml(
     }
     return extraScope[token] ?? escapeHtml(inputData[token] ?? "");
   });
+}
+
+function readInlineControlValue(
+  control: HTMLInputElement | HTMLSelectElement,
+  inputData: Record<string, unknown>,
+) {
+  const fieldKey = control.dataset.inlineField;
+  if (!fieldKey) return "";
+  const token = control.dataset.inlineToken;
+  const groupKey = control.dataset.inlineGroup;
+  const rowIndex = Number(control.dataset.inlineRow ?? "");
+
+  if (groupKey && Number.isInteger(rowIndex)) {
+    const row = readRepeatableRows(inputData, groupKey)[rowIndex];
+    const rowData = row && typeof row === "object" && !Array.isArray(row)
+      ? (row as Record<string, unknown>)
+      : {};
+    return String(rowData[fieldKey] ?? (token ? rowData[token] : undefined) ?? inputData[fieldKey] ?? (token ? inputData[token] : undefined) ?? "");
+  }
+
+  return String(inputData[fieldKey] ?? (token ? inputData[token] : undefined) ?? "");
+}
+
+function StableInlineDocumentEditor({
+  html,
+  inputData,
+  invalidKeys,
+  rootRef,
+  onBlur,
+  onChange,
+}: {
+  html: string;
+  inputData: Record<string, unknown>;
+  invalidKeys: Set<string>;
+  rootRef: MutableRefObject<HTMLDivElement | null>;
+  onBlur: (event: ReactFocusEvent<HTMLDivElement>) => void;
+  onChange: (event: FormEvent<HTMLDivElement>) => void;
+}) {
+  const [stableHtml] = useState(html);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const activeElement = document.activeElement;
+    const controls = root.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-inline-field]");
+
+    for (const control of controls) {
+      const nextValue = readInlineControlValue(control, inputData);
+      if (control !== activeElement && control.value !== nextValue) {
+        control.value = nextValue;
+      }
+
+      const fieldKey = control.dataset.inlineField;
+      const groupKey = control.dataset.inlineGroup;
+      const rowIndex = Number(control.dataset.inlineRow ?? "");
+      const errorKey = groupKey && Number.isInteger(rowIndex)
+        ? `${groupKey}.${rowIndex}.${fieldKey}`
+        : fieldKey ?? "";
+      const isInvalid = invalidKeys.has(errorKey) || Boolean(
+        groupKey && control.dataset.inlineRequired === "true" && invalidKeys.has(groupKey),
+      );
+      control.classList.toggle("inline-doc-field-filled", nextValue.trim().length > 0);
+      control.classList.toggle("inline-doc-field-invalid", isInvalid);
+      if (isInvalid) {
+        control.setAttribute("aria-invalid", "true");
+      } else {
+        control.removeAttribute("aria-invalid");
+      }
+    }
+  }, [inputData, invalidKeys, rootRef]);
+
+  return (
+    <div
+      ref={rootRef}
+      className="report-paper inline-document-editor bg-white"
+      style={{ "--oc-font-size": "13px" } as CSSProperties}
+      onBlur={onBlur}
+      onChange={onChange}
+      dangerouslySetInnerHTML={{ __html: stableHtml }}
+    />
+  );
 }
 
 function buildValidationIssues(args: {
@@ -1264,7 +1347,7 @@ export function DocumentGenerationPageClient() {
           setEditingGeneratedId("");
           setEditingGeneratedStatus("");
           setDraftStatus(payload.draft.status);
-          setValidationErrors(payload.draft.validationErrors ?? []);
+          setValidationErrors([]);
           setGeneratedDocument(null);
           setGeneratedDownloadTarget(null);
           await loadBootstrap(
@@ -1463,6 +1546,12 @@ export function DocumentGenerationPageClient() {
       invalidInlineFieldKeys,
     );
   }, [inputData, invalidInlineFieldKeys, selectedTemplate, selectedTemplateFields, workId, works]);
+  const inlineDocumentStructureKey = useMemo(() => {
+    const rowShape = repeatableGroups
+      .map((group) => `${group.key}:${readRepeatableRows(inputData, group.key).length}`)
+      .join("|");
+    return `${selectedTemplate?.id ?? "none"}:${selectedTemplate?.version ?? 0}:${workId}:${rowShape}`;
+  }, [inputData, repeatableGroups, selectedTemplate?.id, selectedTemplate?.version, workId]);
 
   const templateTokens = useMemo(
     () => collectRenderedFieldKeys(selectedTemplate?.contentHtml ?? "", selectedTemplateFields),
@@ -1875,6 +1964,7 @@ export function DocumentGenerationPageClient() {
       documentType: string;
       templateId: string;
     },
+    options?: { applyServerInput?: boolean },
   ) => {
       const requestContextVersion = draftContextVersionRef.current;
       const response = await fetch("/api/document-generation/drafts", {
@@ -1903,8 +1993,9 @@ export function DocumentGenerationPageClient() {
       draftIdRef.current = payload.draft.id;
       setDraftId(payload.draft.id);
       setDraftStatus(payload.draft.status);
-      setValidationErrors(payload.draft.validation_errors ?? []);
-      commitInputData(nextInputData);
+      if (options?.applyServerInput !== false) {
+        commitInputData(nextInputData);
+      }
       return { applied: true, inputData: nextInputData };
   }, [commitInputData]);
 
@@ -1938,7 +2029,7 @@ export function DocumentGenerationPageClient() {
         folderPath,
         documentType,
         templateId,
-      })
+      }, { applyServerInput: false })
         .then(() => undefined)
         .catch((error) => {
           saveFailed = true;
@@ -2379,13 +2470,14 @@ export function DocumentGenerationPageClient() {
                       className="origin-top rounded-sm bg-white shadow-[0_1px_0_rgba(0,0,0,0.04),0_18px_50px_-18px_rgba(0,0,0,0.28)]"
                       style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: "top center" }}
                     >
-                      <div
-                        ref={inlineDocumentRootRef}
-                        className="report-paper inline-document-editor bg-white"
-                        style={{ "--oc-font-size": "13px" } as CSSProperties}
+                      <StableInlineDocumentEditor
+                        key={inlineDocumentStructureKey}
+                        html={editableDocumentHtml}
+                        inputData={inputData}
+                        invalidKeys={invalidInlineFieldKeys}
+                        rootRef={inlineDocumentRootRef}
                         onBlur={handleInlineDocumentBlur}
                         onChange={handleInlineDocumentChange}
-                        dangerouslySetInnerHTML={{ __html: editableDocumentHtml }}
                       />
                     </div>
                   </div>

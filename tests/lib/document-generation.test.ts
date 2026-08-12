@@ -150,6 +150,47 @@ describe("document-generation helpers", () => {
     });
   });
 
+  it("computes purchase-order line totals when the template omits the formula", () => {
+    const schema = normalizeTemplateSchema({
+      fields: [
+        {
+          key: "items",
+          label: "Items",
+          type: "table",
+          required: true,
+          columns: [
+            { key: "cantidad", label: "Cantidad", type: "number", required: true },
+            { key: "precio_unitario", label: "Precio unitario", type: "money", required: true },
+            { key: "precio_total", label: "Precio total", type: "money", required: true },
+          ],
+        },
+        { key: "subtotal", label: "Subtotal", type: "money", required: true },
+        { key: "recargo_porcentaje", label: "Recargo %", type: "number", required: true },
+        { key: "recargo", label: "Recargo", type: "money", required: true },
+        { key: "total_orden", label: "Total", type: "money", required: true },
+        { key: "bonificacion_porcentaje", label: "Bonificacion %", type: "number", required: true },
+        { key: "bonificacion", label: "Bonificacion", type: "money", required: true },
+        { key: "total_a_pagar", label: "Importe a pagar", type: "money", required: true },
+      ],
+    });
+
+    const result = applyTemplateFormulaInputData(schema, {
+      items: [{ cantidad: "4", precio_unitario: "1,50" }],
+    });
+
+    expect(result.items).toEqual([
+      { cantidad: "4", precio_unitario: "1,50", precio_total: 6 },
+    ]);
+    expect(result).toMatchObject({
+      subtotal: 6,
+      recargo: 1.26,
+      total_orden: 7.26,
+      bonificacion_porcentaje: 0,
+      bonificacion: 0,
+      total_a_pagar: 7.26,
+    });
+  });
+
   it("hydrates default values from schema", () => {
     const schema = normalizeTemplateSchema({
       fields: [

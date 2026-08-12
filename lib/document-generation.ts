@@ -999,6 +999,34 @@ function getPurchaseOrderItemGroupKeys(schema: TemplateSchema) {
 	return Array.from(groupKeys);
 }
 
+function applyPurchaseOrderLineTotals(
+	schema: TemplateSchema,
+	current: Record<string, unknown>,
+) {
+	let next = current;
+	for (const groupKey of getPurchaseOrderItemGroupKeys(schema)) {
+		const rows = next[groupKey];
+		if (!Array.isArray(rows)) continue;
+
+		let rowsChanged = false;
+		const nextRows = rows.map((row) => {
+			if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+			const rowData = row as Record<string, unknown>;
+			const quantity = toNumericValue(rowData.cantidad);
+			const unitPrice = toNumericValue(rowData.precio_unitario);
+			if (quantity == null || unitPrice == null) return row;
+
+			const lineTotal = roundMoney(quantity * unitPrice);
+			if (toNumericValue(rowData.precio_total) === lineTotal) return row;
+			rowsChanged = true;
+			return { ...rowData, precio_total: lineTotal };
+		});
+
+		if (rowsChanged) next = { ...next, [groupKey]: nextRows };
+	}
+	return next;
+}
+
 function calculatePurchaseOrderSubtotal(
 	schema: TemplateSchema,
 	inputData: Record<string, unknown>,
@@ -1065,7 +1093,7 @@ function applyPurchaseOrderCalculatedInputData(
 		const field = fieldByKey.get(key);
 		return !field?.formula?.trim();
 	};
-	let next = current;
+	let next = applyPurchaseOrderLineTotals(schema, current);
 	const setValue = (key: string, value: number) => {
 		if (!exposesField(key) || !canAutomaticallySet(key) || next[key] === value)
 			return;
