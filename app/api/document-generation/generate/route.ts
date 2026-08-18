@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
         })
       ) {
         return NextResponse.json(
-          { error: "Solo se pueden editar documentos pendientes de revision o rechazados." },
+          { error: "Solo se pueden editar documentos pendientes de revision, aprobados o rechazados." },
           { status: 403 },
         );
       }

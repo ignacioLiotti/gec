@@ -95,7 +95,7 @@ export function canEditGeneratedDocument(params: {
   return (
     params.canCreate &&
     Boolean(params.userId) &&
-    ["GENERATED", "UNDER_REVIEW", "REJECTED"].includes(params.status ?? "")
+    ["GENERATED", "UNDER_REVIEW", "APPROVED", "REJECTED"].includes(params.status ?? "")
   );
 }
 

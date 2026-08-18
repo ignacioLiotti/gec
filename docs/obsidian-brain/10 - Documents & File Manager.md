@@ -118,6 +118,7 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 
 - `GET /api/obras/[id]/documents/access?download=1` returns authenticated document bytes with `Content-Disposition: attachment` and `Cache-Control: private, no-store`
 - The approved-document viewer fetches the file before creating the browser download, so access, missing-file, and storage errors remain visible instead of silently failing after preview
+- Approved generated documents can be reopened from Historial by members with document-generation access; saving a correction regenerates the PDF as `UNDER_REVIEW` so it must be approved again
 
 ## Document AI Report Workspace
 

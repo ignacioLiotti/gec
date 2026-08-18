@@ -2147,7 +2147,11 @@ export function DocumentGenerationPageClient() {
       setValidationErrors([]);
       setShowValidationReview(false);
       await persistCreatableOptions(serverInputData);
-      toast.success(editingGeneratedId ? "Documento actualizado." : "Documento generado y guardado en la carpeta.");
+      toast.success(
+        editingGeneratedId
+          ? "Documento actualizado y enviado nuevamente a revisión."
+          : "Documento generado y guardado en la carpeta.",
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo generar el documento");
     } finally {
