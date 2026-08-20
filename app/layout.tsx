@@ -317,6 +317,13 @@ export default async function RootLayout({
 
 	return (
 		<html lang="es">
+			<head>
+				{/* eslint-disable-next-line @next/next/no-sync-scripts */}
+				<script
+					src="https://cdn.visitors.now/v.js"
+					data-token="da42e150-7fc0-4c6a-bb2f-19519ea78470"
+				></script>
+			</head>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
 			>
