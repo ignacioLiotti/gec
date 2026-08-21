@@ -35,6 +35,8 @@ const sentrySources = [
 	"https://*.ingest.us.sentry.io",
 ];
 const vercelSources = ["https://va.vercel-scripts.com"];
+const visitorsScriptSources = ["https://cdn.visitors.now"];
+const visitorsConnectSources = ["https://e.visitors.now"];
 const autodeskSources = [
 	"https://developer.api.autodesk.com",
 	"https://*.autodesk.com",
@@ -61,12 +63,17 @@ const securityHeaders: Record<string, string> = {
 	"referrer-policy": "strict-origin-when-cross-origin",
 	"content-security-policy": [
 		`default-src ${trustedSources.join(" ")}`,
-		`script-src ${trustedSources.concat(autodeskSources).join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com ${vercelSources.join(" ")}`,
+		`script-src ${trustedSources.concat(autodeskSources, visitorsScriptSources).join(" ")} 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com ${vercelSources.join(" ")}`,
 		`style-src ${trustedSources.concat(autodeskSources).join(" ")} 'unsafe-inline'`,
 		`img-src ${trustedSources.concat(autodeskSources).join(" ")} data: blob:`,
 		`font-src ${trustedSources.concat(autodeskSources).join(" ")}`,
 		`connect-src ${trustedSources
-			.concat(sentrySources, autodeskSources, reactScanSources)
+			.concat(
+				sentrySources,
+				autodeskSources,
+				reactScanSources,
+				visitorsConnectSources,
+			)
 			.join(" ")} ${wsSources.join(" ")} blob:`,
 		`media-src ${trustedSources.concat(autodeskSources).join(" ")} data: blob:`,
 		`worker-src ${trustedSources.concat(autodeskSources).join(" ")} blob:`,
