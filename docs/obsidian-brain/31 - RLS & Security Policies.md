@@ -108,6 +108,8 @@ These functions run with elevated privileges (bypass RLS):
 | `cleanup_orphan_records()` | Maintenance cleanup | — |
 | `rotate_tenant_api_secret()` | Secret rotation | 0045 |
 
+Obra `INSERT` requires `has_permission(tenant_id, 'obras:edit')` or `admin:obra-defaults` for the first-obra setup flow (migration 0131). This keeps row creation aligned with the permissions accepted by `begin_obra_setup_provisioning()` and prevents tenant members from creating obras whose default folders and extraction tables cannot be materialized. Update RLS remains tenant-scoped because lifecycle mutations use dedicated permissions such as `obras:delete`; regular update APIs enforce `obras:edit` before mutation.
+
 ---
 
 ## Storage Bucket RLS (migrations 0014, 0101)

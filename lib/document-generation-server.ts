@@ -704,6 +704,21 @@ export async function validateGenerationTarget(
     };
   }
 
+  const extractionTargets = await loadExtractionTargetsForGeneration(
+    access,
+    args.workId,
+    normalizedFolderPath,
+    args.documentType,
+  );
+
+  if (extractionTargets.length === 0) {
+    return {
+      valid: false,
+      error:
+        "La carpeta existe, pero la obra no tiene preparada una tabla de extracción con columnas. Pedí a un administrador que complete la estructura de la obra.",
+    };
+  }
+
   return { valid: true, error: null };
 }
 

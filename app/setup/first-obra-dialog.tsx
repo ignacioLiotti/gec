@@ -101,17 +101,17 @@ export function FirstObraDialog({
 				}),
 			});
 			const payload = await response.json().catch(() => ({}));
+			if (payload.provisioning?.status === "partial" && payload.obra?.id) {
+				setPartialObra({ id: payload.obra.id, n: Number(payload.obra.n) });
+				toast.warning("La obra fue creada, pero falta completar parte de su estructura.");
+				return;
+			}
 			if (!response.ok) {
 				throw new Error(
 					typeof payload.error === "string"
 						? payload.error
 						: "No pudimos crear la obra.",
 				);
-			}
-			if (payload.provisioning?.status === "partial" && payload.obra?.id) {
-				setPartialObra({ id: payload.obra.id, n: Number(payload.obra.n) });
-				toast.warning("La obra fue creada, pero falta completar parte de su estructura.");
-				return;
 			}
 
 			toast.success("Primera obra creada. Ya podés empezar a trabajar.");

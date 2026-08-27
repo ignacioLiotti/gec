@@ -11,6 +11,7 @@ import {
 	resolveRequestAccessContext,
 } from "@/lib/demo-session";
 import { softDeleteObraWithDocuments } from "@/lib/obras/delete-lifecycle";
+import { canEditObras } from "@/lib/obras/permissions";
 import { updateInsurancePoliciesForObraCompletion } from "@/lib/insurance-policies";
 import { syncInsurancePoliciesToMacroTable } from "@/lib/insurance-policies-macro";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -749,6 +750,21 @@ export async function PUT(request: Request) {
 		);
 	}
 
+	try {
+		if (!(await canEditObras(supabase, tenantId))) {
+			return NextResponse.json(
+				{ error: "No tenés permiso para crear o editar obras." },
+				{ status: 403 },
+			);
+		}
+	} catch (permissionError) {
+		console.error("Obras PUT: failed to validate edit permission", permissionError);
+		return NextResponse.json(
+			{ error: "No se pudo validar el permiso para editar obras." },
+			{ status: 500 },
+		);
+	}
+
 	console.info("Obras PUT: start", {
 		tenantId,
 		userId: user.id,
@@ -968,6 +984,14 @@ export async function PUT(request: Request) {
 	const newlyCreatedNs = payload
 		.filter((obra) => !existingNs.has(obra.n))
 		.map((obra) => obra.n);
+	const provisioningResults: Array<{
+		obraId: string;
+		n: number;
+		ok: boolean;
+		foldersApplied: number;
+		tablasApplied: number;
+		error: string | null;
+	}> = [];
 
 	if (newlyCreatedNs.length > 0) {
 		console.info("Obras PUT: detected newly created obras", {
@@ -984,6 +1008,16 @@ export async function PUT(request: Request) {
 
 		if (fetchNewError) {
 			console.error("Obras PUT: error fetching new obra IDs", fetchNewError);
+			for (const n of newlyCreatedNs) {
+				provisioningResults.push({
+					obraId: "",
+					n,
+					ok: false,
+					foldersApplied: 0,
+					tablasApplied: 0,
+					error: "No se pudo recuperar la obra para completar su estructura.",
+				});
+			}
 		} else if (newObraRows && newObraRows.length > 0) {
 			// Apply defaults to each new obra
 			for (const obraRow of newObraRows) {
@@ -993,6 +1027,14 @@ export async function PUT(request: Request) {
 						obraRow.id,
 						tenantId,
 					);
+					provisioningResults.push({
+						obraId: String(obraRow.id),
+						n: Number(obraRow.n),
+						ok: result.success,
+						foldersApplied: result.foldersApplied,
+						tablasApplied: result.tablasApplied,
+						error: result.error ?? null,
+					});
 					if (result.success) {
 						console.info("Obras PUT: applied defaults to obra", {
 							obraId: obraRow.id,
@@ -1011,8 +1053,29 @@ export async function PUT(request: Request) {
 						obraId: obraRow.id,
 						error: defaultsError,
 					});
+					provisioningResults.push({
+						obraId: String(obraRow.id),
+						n: Number(obraRow.n),
+						ok: false,
+						foldersApplied: 0,
+						tablasApplied: 0,
+						error: "No se pudo completar la estructura de la obra.",
+					});
 				}
 			}
+		}
+
+		const handledNs = new Set(provisioningResults.map((result) => result.n));
+		for (const n of newlyCreatedNs) {
+			if (handledNs.has(n)) continue;
+			provisioningResults.push({
+				obraId: "",
+				n,
+				ok: false,
+				foldersApplied: 0,
+				tablasApplied: 0,
+				error: "La obra se guardó, pero no se pudo recuperar para completar su estructura.",
+			});
 		}
 	}
 
@@ -1329,7 +1392,27 @@ export async function PUT(request: Request) {
 		}
 	}
 
-	return NextResponse.json({ ok: true });
+	const provisioningFailed = provisioningResults.some((result) => !result.ok);
+	return NextResponse.json(
+		{
+			ok: !provisioningFailed,
+			...(provisioningResults.length > 0
+				? {
+						provisioning: {
+							status: provisioningFailed ? "partial" : "ready",
+							results: provisioningResults,
+						},
+					}
+				: {}),
+			...(provisioningFailed
+				? {
+						error:
+							"Las obras se guardaron, pero no se pudo completar su estructura. Reintentá la preparación antes de usarlas.",
+					}
+				: {}),
+		},
+		{ status: provisioningFailed ? 503 : 200 },
+	);
 }
 
 export async function POST(_request: Request) {

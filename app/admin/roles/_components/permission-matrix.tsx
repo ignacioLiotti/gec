@@ -155,7 +155,6 @@ const PERMISSION_LABEL_OVERRIDES: Record<string, string> = {
 const UNSUPPORTED_PERMISSION_KEYS = new Set([
   "admin:settings",
   "obras:read",
-  "obras:edit",
   "obras:admin",
   "certificados:read",
   "certificados:edit",

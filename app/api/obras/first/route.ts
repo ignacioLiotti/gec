@@ -169,18 +169,25 @@ export async function POST(request: Request) {
 	}
 
 	const defaults = await provisionObraDefaults(supabase, createdObra.id, tenantId);
+	const provisioningFailed = !defaults.success;
 
 	return NextResponse.json(
 		{
-			ok: true,
+			ok: !provisioningFailed,
 			obra: createdObra,
 			provisioning: {
-				status: defaults.success ? "ready" : "partial",
+				status: provisioningFailed ? "partial" : "ready",
 				foldersApplied: defaults.foldersApplied,
 				tablasApplied: defaults.tablasApplied,
 				error: defaults.error ?? null,
 			},
+			...(provisioningFailed
+				? {
+						error:
+							"La obra se guardó, pero no se pudo completar su estructura. Reintentá la configuración antes de usarla.",
+					}
+				: {}),
 		},
-		{ status: 201 },
+		{ status: provisioningFailed ? 503 : 201 },
 	);
 }

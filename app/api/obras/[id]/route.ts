@@ -14,6 +14,7 @@ import {
 	executeFlujoActions,
 } from "../route";
 import { softDeleteObraWithDocuments } from "@/lib/obras/delete-lifecycle";
+import { canEditObras } from "@/lib/obras/permissions";
 import {
 	hasAnyDemoCapability,
 	resolveRequestAccessContext,
@@ -367,6 +368,21 @@ export async function PUT(
 		return NextResponse.json({ error: "No tenant" }, { status: 400 });
 	}
 
+	try {
+		if (!(await canEditObras(supabase, tenantId))) {
+			return NextResponse.json(
+				{ error: "No tenés permiso para crear o editar obras." },
+				{ status: 403 },
+			);
+		}
+	} catch (permissionError) {
+		console.error("Obra [id] PUT: failed to validate edit permission", permissionError);
+		return NextResponse.json(
+			{ error: "No se pudo validar el permiso para editar obras." },
+			{ status: 500 },
+		);
+	}
+
 	// Fetch existing porcentaje atomically with update using single query
 	// Note: We still need to fetch first because Supabase's RETURNING only gives us NEW values
 	// To properly eliminate race conditions, consider using a database trigger
@@ -510,6 +526,21 @@ export async function PATCH(
 
 	if (!tenantId) {
 		return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	}
+
+	try {
+		if (!(await canEditObras(supabase, tenantId))) {
+			return NextResponse.json(
+				{ error: "No tenés permiso para crear o editar obras." },
+				{ status: 403 },
+			);
+		}
+	} catch (permissionError) {
+		console.error("Obra [id] PATCH: failed to validate edit permission", permissionError);
+		return NextResponse.json(
+			{ error: "No se pudo validar el permiso para editar obras." },
+			{ status: 500 },
+		);
 	}
 
 	const { data: existingRow, error: existingError } = await supabase

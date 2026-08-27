@@ -35,6 +35,7 @@ Use this file as a high-level map. Several subfolders deserve their own later co
 - Treat `tablas.ts`, `lineage.ts`, `data-flow-builder.ts`, `obra-defaults.ts`, `route-guard.ts`, and `tenant-usage.ts` as high-impact shared modules.
 - Changes to helper return shapes require checking all direct consumers with `rg`.
 - For server-only helpers, avoid accidental client imports from browser components.
+- Document generation may target an obra folder only when it resolves to a materialized obra extraction table with at least one column; tenant default folders alone are virtual configuration, not writable extraction destinations.
 
 ## Dependencies
 
