@@ -101,11 +101,11 @@ const stack = [
 ] as const;
 
 export const metadata: Metadata = {
-	title: "Hello, Profound — Ignacio Liotti",
+	title: "Selected work — Ignacio Liotti",
 	description:
 		"An inspectable cover letter for Profound: frontend depth, product judgment, and end-to-end ownership.",
 	openGraph: {
-		title: "Hello, Profound — Ignacio Liotti",
+		title: "Selected work — Ignacio Liotti",
 		description:
 			"Frontend depth and end-to-end ownership, demonstrated through interactive product cases.",
 		type: "website",
@@ -167,7 +167,7 @@ export default function PortfolioPage() {
 							A cover letter you can inspect
 						</p>
 						<h1 className="text-[clamp(3.25rem,7vw,5.5rem)] font-medium leading-[0.98] tracking-[-0.055em] text-white">
-							Hello, Profound.
+							Selected work.
 						</h1>
 						<p className="mx-auto mt-7 max-w-[850px] text-xl font-medium leading-tight tracking-[-0.025em] text-white/56 sm:text-2xl">
 							<RotatingSubtitle options={rotatingSubtitles} />
