@@ -309,3 +309,6 @@ Separate from main permission system:
 - [[19 - Admin Panel]]
 - [[31 - RLS & Security Policies]]
 - [[33 - Superadmin Implementation]]
+# Existing obra editing
+
+`PUT` and `PATCH /api/obras/[id]` allow every authenticated member of the active tenant to edit an existing obra. They verify `is_member_of(tenant)` and retain tenant-scoped queries and RLS. `obras:edit` remains required for creation and bulk upsert, which can provision folders and extraction tables. Deletion and restoration retain their dedicated permissions. See ADR-0033, amended 2026-09-08.

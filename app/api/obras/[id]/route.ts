@@ -14,7 +14,7 @@ import {
 	executeFlujoActions,
 } from "../route";
 import { softDeleteObraWithDocuments } from "@/lib/obras/delete-lifecycle";
-import { canEditObras } from "@/lib/obras/permissions";
+import { canUpdateObras } from "@/lib/obras/permissions";
 import {
 	hasAnyDemoCapability,
 	resolveRequestAccessContext,
@@ -369,9 +369,9 @@ export async function PUT(
 	}
 
 	try {
-		if (!(await canEditObras(supabase, tenantId))) {
+		if (!(await canUpdateObras(supabase, tenantId))) {
 			return NextResponse.json(
-				{ error: "No tenés permiso para crear o editar obras." },
+				{ error: "No tenés permiso para editar obras de esta organización." },
 				{ status: 403 },
 			);
 		}
@@ -529,9 +529,9 @@ export async function PATCH(
 	}
 
 	try {
-		if (!(await canEditObras(supabase, tenantId))) {
+		if (!(await canUpdateObras(supabase, tenantId))) {
 			return NextResponse.json(
-				{ error: "No tenés permiso para crear o editar obras." },
+				{ error: "No tenés permiso para editar obras de esta organización." },
 				{ status: 403 },
 			);
 		}
