@@ -8,9 +8,9 @@ This is a high-risk folder because most routes cross tenant boundaries, Supabase
 
 ## Main files
 
-- `route.ts`: top-level `/api/obras` list/create logic plus shared helpers for auth context, obra row mapping, custom-data sanitization, default application, completion workflow side effects, and soft delete integration. Ordinary creates and edits require `obras:edit`; lifecycle actions keep their dedicated permissions.
+- `route.ts`: top-level `/api/obras` list/create logic plus shared helpers for auth context, obra row mapping, custom-data sanitization, default application, completion workflow side effects, and soft delete integration. Creation through bulk/first and ordinary edits require tenant membership; full synchronization and lifecycle actions keep their dedicated permissions.
 - `bulk/route.ts`: bulk upsert of obras by `tenant_id,n`; requires `obras:edit`, sanitizes custom columns, applies defaults to newly created obras, and has legacy column fallbacks.
-- `[id]/route.ts`: read/update/delete for a single obra; PUT/PATCH allow any tenant member via `is_member_of`, without requiring `obras:edit`. Validates tenant ownership, handles percentage completion transitions, emits `obra.completed`, executes flujo actions, and cleans pending completion side effects when reverting completion. Creation/upsert and deletion keep their dedicated permissions.
+- `[id]/route.ts`: read/update/delete for a single obra; PUT/PATCH allow any tenant member via `is_member_of`, without requiring `obras:edit`. Validates tenant ownership, handles percentage completion transitions, emits `obra.completed`, executes flujo actions, and cleans pending completion side effects when reverting completion. Bulk creation/upsert also accepts members; deletion keeps its dedicated permissions.
 - `deletes/route.ts` and `deletes/restore/route.ts`: tenant-admin view and restore flow for deleted obras.
 - `backfill-defaults/route.ts`: applies tenant defaults to existing obras.
 - `[id]/tablas/route.ts`: list/create obra tablas and columns; supports manual, CSV, OCR, materials template, OCR folder settings, document types, and extraction instructions.
@@ -79,7 +79,7 @@ This is a high-risk folder because most routes cross tenant boundaries, Supabase
 - `docs/adr/0003-tenant-and-obra-data-flow-configs.md`: data-flow merges tenant-level config with obra-level overrides.
 - `docs/adr/0006-react-flow-for-data-flow-traceability.md`: relevant when API output feeds data-flow traceability views.
 - `docs/adr/0007-document-flows-as-tenant-extraction-contract.md`: folders are extraction contracts, not just storage paths.
-- `docs/adr/0033-obras-writes-require-operational-permission.md`: obra writes require operational permission and incomplete default materialization cannot be reported as ready.
+- `docs/adr/0033-obras-writes-require-operational-permission.md`: member creation includes additive setup; incomplete materialization cannot be reported as ready.
 - `docs/adr/0009-destructive-default-sync-needs-domain-migration-contract.md`: destructive default sync or force-sync behavior needs a migration contract.
 - `docs/adr/0010-layered-traceability-canvas-separates-real-and-projected-nodes.md`: lineage/data-flow graph routes must distinguish persisted facts from projected nodes.
 

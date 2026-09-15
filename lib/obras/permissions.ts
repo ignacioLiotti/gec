@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Existing obra edits are baseline tenant-member access. Creation still needs
-// obras:edit because it also materializes default folders and extraction tables.
+// Creation, additive default setup, and ordinary edits are tenant-member access.
+// Full synchronization retains obras:edit because it can delete omitted obras.
 export async function canUpdateObras(
 	supabase: SupabaseClient,
 	tenantId: string,

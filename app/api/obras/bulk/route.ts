@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { obraSchema } from "@/app/excel/schema";
 import { provisionObraDefaults } from "@/lib/obra-defaults/provision";
-import { canEditObras } from "@/lib/obras/permissions";
+import { canUpdateObras } from "@/lib/obras/permissions";
 import {
 	getAuthContext,
 	loadTenantMainTableCustomColumnIds,
@@ -36,7 +36,7 @@ export async function PATCH(request: Request) {
 	}
 
 	try {
-		if (!(await canEditObras(supabase, tenantId))) {
+		if (!(await canUpdateObras(supabase, tenantId))) {
 			return NextResponse.json(
 				{ error: "No tenés permiso para crear o editar obras." },
 				{ status: 403 },

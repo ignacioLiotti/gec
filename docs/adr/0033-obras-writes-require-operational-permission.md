@@ -1,65 +1,36 @@
-# ADR-0033: Obra creation requires the materialization permission
+# ADR-0033: Tenant members may create and prepare obras
 
 ## Status
 
-Accepted
-
-Amended 2026-09-08: editing an existing obra through `PUT` or `PATCH /api/obras/[id]` is baseline tenant-member access. The original creation and provisioning decision remains in force.
-
-## Date
-
-2026-08-27
+Accepted. Amended 2026-09-15 at the product owner's request.
 
 ## Context
 
-Obra rows could be inserted or updated by any tenant member, while the setup RPC that materializes default folders and extraction tables required `obras:edit` or `admin:obra-defaults`. The API logged setup failures but still returned success. This allowed a new obra to appear with virtual tenant folders even though its obra-scoped OCR tables did not exist, and document generation only discovered the missing destination after the user had completed the form.
+Commit e5ce172 (2026-08-27, fix(obras): prevent incomplete default provisioning) required obras:edit for creation so every creator could also prepare folders and extraction tables. Commit 3c3432d (2026-09-08, fix(obras): allow tenant members to edit existing obras) made existing-obra edits baseline member access. Creation remained blocked for ordinary members, returning HTTP 403 from the dashboard. The product rule now permits every authenticated member to create obras in their own organization.
 
 ## Decision
 
-- Require `obras:edit` in create/upsert API handlers. Existing-obra `PUT` and `PATCH /api/obras/[id]` require membership through `is_member_of(tenant)` and retain tenant-scoped queries and RLS. The first-obra setup route may insert with `admin:obra-defaults`, which is also sufficient to materialize defaults.
-- Restrict `obras` inserts in RLS to `obras:edit` or `admin:obra-defaults`, so every identity that creates an obra can also materialize its defaults.
-- Keep update RLS tenant-scoped and enforce operation-specific permissions at the API boundary. A single update policy cannot distinguish ordinary edits from the recoverable-delete lifecycle governed by `obras:delete`.
-- Expose `obras:edit` in the role permission matrix so tenant administrators can grant the capability to non-admin members.
-- Return a non-success response with per-obra setup results when a newly saved obra cannot finish default materialization.
-- Validate that the selected generation folder resolves to a materialized extraction table with columns before accepting the generation target.
-- Keep tenant default folders visible as configuration, but do not treat them as writable OCR destinations until materialization succeeds.
+- Bulk creation/upsert and first-obra creation verify is_member_of for the active tenant. Ignore tenant identifiers supplied in request bodies.
+- Migration 0132 replaces the insert policy with tenant membership and updates begin/finish_obra_setup_provisioning to require authentication and membership in the active obra's tenant.
+- Keep the setup RPCs SECURITY DEFINER to write provisioning health; preserve active-obra checks, payload validation, and the current attempt token. Superadmins without membership do not gain cross-tenant setup access through these RPCs.
+- Materialize defaults with the requesting user's Supabase client and existing tenant-scoped table/storage policies. Do not grant configuration permissions or use a service-role bypass.
+- Return HTTP 503 when setup is partial. A saved row alone is not a successfully prepared obra. Document generation still requires a materialized extraction table with columns.
+- Full synchronization retains obras:edit because it deletes omitted obras. Delete/restore, tenant default editing, and administrative setup controls retain their existing checks.
 
-## Consequences
+## Consequences and rollout
 
-- Tenant membership permits editing existing obras through the single-obra endpoint, even without `obras:edit`. Creation and bulk upsert still require the operational permission because they can materialize defaults. A setup operator with `admin:obra-defaults` may still create the tenant's first obra.
-- A failed setup may leave the obra row persisted, but callers receive `503` and a `partial` setup status instead of a false success. Retrying the dedicated setup action remains safe because materialization is idempotent.
-- Document generation fails before rendering or upload when the destination is only a virtual default folder.
-- Existing incomplete obras require a one-time setup retry after deploying this change.
+Read-only production inspection on 2026-09-15 confirmed both insert policies still use is_member_of, while begin/finish setup retain the operational permission gate. Migration 0131 is therefore not reflected in the inspected insert policies. Apply migration 0132 before deploying the API change. Deploying only the API would turn the current 403 into an insert/setup failure. This migration changes authorization only; it does not change stored business data, grant roles, or alter table schemas. Configuration access stays restricted. Existing incomplete obras still require an additive setup retry.
 
-## Alternatives considered
+## Alternatives
 
-- Allow every tenant member to run setup. Rejected because it bypasses the operational permission model for obra configuration.
-- Hide every unmaterialized default folder. Rejected because the virtual tree is also used to explain the configured tenant structure; the generation boundary is the safer place to prevent writes.
-- Make obra creation and setup one database transaction. Deferred because materialization spans existing application orchestration and setup-health RPCs; surfacing partial state is the smallest compatible correction.
+Grant obras:edit to every role: rejected because creation is baseline membership and should not grant full synchronization access. Bypass RLS using a service client: rejected because membership and tenant isolation can be enforced in both the API and database.
 
-## Related files
+## Verification
 
-- `app/api/obras/route.ts`
-- `app/api/obras/bulk/route.ts`
-- `app/api/obras/[id]/route.ts`
-- `app/api/obras/first/route.ts`
-- `app/setup/first-obra-dialog.tsx`
-- `app/admin/roles/_components/permission-matrix.tsx`
-- `lib/obras/permissions.ts`
-- `lib/document-generation-server.ts`
-- `supabase/migrations/0131_require_obra_setup_permission_for_insert.sql`
+34 focused Vitest tests cover creation, existing edits, permission checks, anonymous/non-member denial, membership lookup failures, active tenant selection, and partial setup responses. The actual provisioning orchestrator and default materializer are exercised with mocked Supabase responses for successful folder/table/column creation and failed storage, columns, begin, or finish; document-generation tests retain rejection of virtual folders without materialized columns. A disposable PostgreSQL 18 database executes the actual migration with minimal auth/schema fixtures and checks member insert/setup, cross-tenant insert/begin/finish denial, deleted/anonymous denial, and stale attempt-token rejection. This is not a production Supabase integration test.
 
-## Related domain docs
+## Visual documentation
 
-- `docs/obsidian-brain/20 - Permissions System.md`
-- `docs/obsidian-brain/31 - RLS & Security Policies.md`
+Product OS (NDzN30GN3koTteiTdkgV3P), node 48:173, records the change as locally verified with migration and deployment pending. Figma MCP Starter quota blocked the remaining writes. Journeys 01 / Inicio y Obras (W6SZcSjlbhn1XdFLSktU03), creation/default-materialization flow near node 1:166, and Journeys 04 / Plataforma y Acceso (ySjUIomuoMG00LNK0sKajF), tenant permission flow, still need the same member-create, non-member denial, partial-setup, and pending-deployment annotation. No screenshot change is needed because the form layout is unchanged.
 
-## Agent notes
-
-Existing-obra edits must verify tenant membership before mutation; creation/upsert and lifecycle actions retain their dedicated permissions. A caller must not report a newly created obra as ready until default materialization has completed, and a document-generation destination is valid only when an obra-scoped extraction table with columns exists.
-
-## Amendment evidence and visual documentation
-
-The provisioning fix `e5ce172` also blocked ordinary edits when `has_permission('obras:edit')` returned false. Provisioning is not needed to update an existing obra. Route regression tests reproduce the former 403 and cover successful PUT/PATCH for a member without the operational permission, rejection of non-members and unauthenticated users, and membership lookup failures. No database migration is required.
-
-FigJam update pending because the MCP Starter quota was exhausted on 2026-09-08. Update Product OS (`NDzN30GN3koTteiTdkgV3P`), Journeys 01 / Inicio y Obras (`W6SZcSjlbhn1XdFLSktU03`), and Journeys 04 / Plataforma y Acceso (`ySjUIomuoMG00LNK0sKajF`): existing-obra save accepts any member of the active tenant; non-members remain denied; creation/provisioning remains permission-gated. Status: locally verified, not deployed. No screenshot change is required because the form layout is unchanged.
+Lint: changed TypeScript files pass ESLint. Repository-wide lint reports 272 errors in unchanged files, including moment-cell.tsx, public assets, and vitest.setup.ts. The repository requires npm, so pnpm refused execution and the equivalent npm scripts were used.

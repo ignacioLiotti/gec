@@ -36,10 +36,9 @@ export async function POST(request: Request) {
 	}
 
 	const { data: canCreateFirstObra, error: permissionError } = await supabase.rpc(
-		"has_permission",
+		"is_member_of",
 		{
 			tenant: tenantId,
-			perm_key: "admin:obra-defaults",
 		},
 	);
 	if (permissionError) {
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
 	}
 	if (canCreateFirstObra !== true) {
 		return NextResponse.json(
-			{ error: "Necesitás ayuda de una persona administradora para crear la primera obra" },
+			{ error: "No pertenecés a esta organización" },
 			{ status: 403 },
 		);
 	}
