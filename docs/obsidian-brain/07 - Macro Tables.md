@@ -103,6 +103,8 @@ matchesMacroTemplateName(tableName, templateName)
 | `custom` | Custom value per-row (overrides), stored in `macro_table_custom_values` |
 | `computed` | Formula-derived (planned) |
 
+Manual-value conflicts follow ADR 0002: when several overrides match the same row identity and column, no candidate is applied automatically. The macro page shows a "Valores manuales en conflicto" warning for the currently loaded page, naming the affected business row, obra and column. This is a page count, not the API's global summary before filters and pagination. Switching to a healthy macro removes the warning and displays its stable manual values.
+
 ---
 
 ## API Routes

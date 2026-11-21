@@ -61,6 +61,11 @@ const acmePreset = {
           DEFAULT: tokens.color.warning,
           foreground: tokens.color.warningForeground
         },
+        info: {
+          DEFAULT: tokens.color.info,
+          foreground: tokens.color.infoForeground
+        },
+        category: tokens.color.category,
         muted: {
           DEFAULT: tokens.color.muted,
           foreground: tokens.color.mutedForeground

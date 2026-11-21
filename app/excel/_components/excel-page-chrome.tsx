@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 type DivProps = ComponentProps<"div">;
 
 const notchStyle = {
-	"--notch-bg": "hsl(var(--card))",
+	"--notch-bg": "var(--card)",
 	"--notch-stroke": "hsl(var(--border-soft))",
 } as CSSProperties;
 

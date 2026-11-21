@@ -1,0 +1,133 @@
+/* Screen composition belongs to the approved PaperFrame, including its material. */
+.paper-demo {
+  --background: var(--p-sheet);
+  --foreground: var(--p-ink);
+  --card: var(--p-sheet);
+  --card-foreground: var(--p-ink);
+  --muted-foreground: var(--p-muted);
+  --secondary: var(--p-tray);
+  --secondary-foreground: var(--p-ink);
+  --border: var(--p-line);
+  --input: var(--p-line);
+  --accent: var(--p-soft);
+  --accent-foreground: var(--p-ink);
+  --paper-sheet-shadow: var(--p-shadow);
+  --shadow-card: var(--p-shadow);
+  --primary: var(--p-orange);
+  --orange-primary: 21 87% 53%;
+}
+.paper-screen-body {
+  container: paper-screen screens / inline-size;
+  padding-top: 30px;
+}
+.paper-screen-body .screen-content {
+  padding: 0;
+}
+.paper-screen-body
+  :is(h1, .screen-obra-heading h1, .redesign-screen-heading h1) {
+  font-family: inherit;
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1.3;
+}
+.paper-screen-body :is(.screen-obra-heading, .redesign-screen-heading) {
+  margin: 16px 0 26px;
+}
+.paper-screen-body :is(.screen-panel h2, [data-slot="card-title"]) {
+  font-size: 13px;
+  font-weight: 500;
+}
+.paper-screen-body
+  :is(.screen-panel header p, .screen-eyebrow, [data-slot="card-description"]) {
+  font-size: 10px;
+  color: var(--p-muted);
+}
+.paper-screen-body :is(.screen-panel, [data-slot="card"]) {
+  border-radius: 16px;
+  border-color: var(--p-line);
+  box-shadow: var(--p-shadow);
+  background: var(--p-sheet);
+}
+.paper-screen-body .screen-panel {
+  padding: 22px;
+}
+.paper-screen-body .screen-panel > header {
+  margin: -22px -22px 22px;
+  padding: 22px;
+  border-bottom: 1px solid var(--p-line);
+  border-radius: 16px 16px 0 0;
+  background: var(--p-tray);
+}
+.paper-screen-body :is(.screen-metrics, .redesign-metrics) {
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--p-line);
+  border-radius: 17px;
+  background: var(--p-tray);
+  margin-bottom: 24px;
+}
+.paper-screen-body .screen-metrics > div {
+  padding: 20px;
+  border-color: transparent;
+}
+.paper-screen-body .screen-metrics strong {
+  font-size: 23px;
+  font-weight: 500;
+}
+.paper-screen-body [data-slot="table-container"] {
+  border-radius: 14px;
+}
+.paper-screen-body :is(table, input, [data-slot="button"], [role="tab"]) {
+  font-size: 11px;
+}
+.paper-screen-body table :is(th, td) {
+  padding: 16px 12px;
+}
+.paper-screen-body :is([data-slot="input"], [data-slot="native-select"]) {
+  min-height: 38px;
+}
+html[data-design="paper"] .paper-screen-body [data-slot="button"][class~="bg-orange-primary"] {
+  background: linear-gradient(#ff914a, #f36a20);
+  color: white;
+  border: 1px solid #ec6c24;
+  box-shadow:
+    0 1px 0 #ffffff65 inset,
+    0 2px 3px #8e360b18;
+}
+.paper-screen-body .redesign-data-screen {
+  padding: 0;
+  min-height: 0;
+  background: transparent;
+}
+.paper-screen-body .redesign-data-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.paper-screen-body .redesign-data-layout > aside {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.paper-screen-body .screen-obra-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.paper-screen-body .screen-activity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.paper-screen-body .screen-obra-layout .screen-general {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container paper-screen (max-width: 650px) {
+  .paper-screen-body
+    :is(
+      .screen-general,
+      .screen-obra-layout .screen-general,
+      .screen-activity,
+      .redesign-data-layout > aside
+    ) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .paper-screen-body .screen-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

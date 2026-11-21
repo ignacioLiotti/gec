@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createSupabaseBrowserClient } from "@/utils/supabase/client";
-import { toast } from "sonner";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
+import { createSupabaseBrowserClient } from "@/utils/supabase/client";
 
 type NotificationRow = {
   id: string;
+  tenant_id: string | null;
+  user_id: string;
   title: string;
   body: string | null;
   type: string;
@@ -16,6 +19,11 @@ type NotificationRow = {
 };
 
 const DISMISSED_KEY = "notifications:dismissed";
+
+type NotificationsListenerProps = {
+  activeTenantId: string | null;
+  userId: string | null;
+};
 
 function loadDismissed(): Set<string> {
   try {
@@ -34,11 +42,23 @@ function saveDismissed(set: Set<string>) {
   }
 }
 
-export default function NotificationsListener() {
-  const router = useRouter();
-  const { push } = router;
-  const [userId, setUserId] = useState<string | null>(null);
+function belongsToScope(
+  row: NotificationRow,
+  { activeTenantId, userId }: NotificationsListenerProps,
+) {
+  return (
+    row.user_id === userId &&
+    (row.tenant_id === null || row.tenant_id === activeTenantId)
+  );
+}
+
+export default function NotificationsListener({
+  activeTenantId,
+  userId,
+}: NotificationsListenerProps) {
+  const { push } = useRouter();
   const dismissedRef = useRef<Set<string>>(new Set());
+  const shownToastIdsRef = useRef<Set<string>>(new Set());
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -47,43 +67,46 @@ export default function NotificationsListener() {
   }, []);
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!cancelled) setUserId(data.user?.id ?? null);
-    })();
+    const shownToastIds = shownToastIdsRef.current;
     return () => {
-      cancelled = true;
+      for (const toastId of shownToastIds) {
+        toast.dismiss(toastId);
+      }
+      shownToastIds.clear();
     };
-  }, []);
+  }, [activeTenantId, userId]);
 
-  const showToast = useMemo(() => {
-    return async (row: NotificationRow) => {
-      if (!ready) return;
+  const showToast = useCallback(
+    (row: NotificationRow) => {
+      if (!ready || !belongsToScope(row, { activeTenantId, userId })) return;
       if (dismissedRef.current.has(row.id)) return;
 
       const supabase = createSupabaseBrowserClient();
       const markRead = async () => {
-        try {
-          await supabase
-            .from("notifications")
-            .update({ read_at: new Date().toISOString() })
-            .eq("id", row.id);
-        } catch {}
+        const { error } = await supabase
+          .from("notifications")
+          .update({ read_at: new Date().toISOString() })
+          .eq("id", row.id)
+          .eq("user_id", userId)
+          .or(`tenant_id.is.null,tenant_id.eq.${activeTenantId}`);
+        if (error) return false;
+
         dismissedRef.current.add(row.id);
         saveDismissed(dismissedRef.current);
+        return true;
       };
+      const actionUrl = row.action_url;
 
       toast(row.title, {
+        id: row.id,
         description: row.body ?? undefined,
         duration: Infinity,
-        action: row.action_url
+        action: actionUrl
           ? {
               label: "Ver",
               onClick: async () => {
                 await markRead();
-                push(row.action_url as string);
+                push(actionUrl);
               },
             }
           : undefined,
@@ -94,57 +117,61 @@ export default function NotificationsListener() {
           },
         },
       });
-    };
-  }, [router, ready]);
+      shownToastIdsRef.current.add(row.id);
+    },
+    [activeTenantId, push, ready, userId],
+  );
 
   // Initial fetch: show all unread notifications (even old ones)
   useEffect(() => {
-    if (!userId) return;
+    if (!ready || !userId || !activeTenantId) return;
     const supabase = createSupabaseBrowserClient();
-    let aborted = false;
+    let cancelled = false;
     (async () => {
       try {
         const { data, error } = await supabase
           .from("notifications")
-          .select("id,title,body,type,action_url,created_at,read_at")
+          .select("id,tenant_id,user_id,title,body,type,action_url,created_at,read_at")
           .eq("user_id", userId)
+          .or(`tenant_id.is.null,tenant_id.eq.${activeTenantId}`)
           .is("read_at", null)
           .order("created_at", { ascending: true })
           .limit(50);
         if (error) throw error;
-        if (!aborted) {
-          for (const n of (data ?? []) as NotificationRow[]) {
-            await showToast(n);
-          }
+        if (cancelled) return;
+        for (const row of (data ?? []) as NotificationRow[]) {
+          showToast(row);
         }
       } catch {
         // ignore
       }
     })();
     return () => {
-      aborted = true;
+      cancelled = true;
     };
-  }, [userId, showToast]);
+  }, [activeTenantId, ready, showToast, userId]);
 
   // Realtime: show toast for new notifications
   useEffect(() => {
-    if (!userId) return;
+    if (!ready || !userId || !activeTenantId) return;
     const supabase = createSupabaseBrowserClient();
+    let cancelled = false;
     const channel = supabase
       .channel("realtime:notifications")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-        async (payload) => {
-          const row = payload.new as NotificationRow & { user_id: string };
-          await showToast(row);
+        (payload) => {
+          if (cancelled) return;
+          showToast(payload.new as NotificationRow);
         }
       )
       .subscribe();
     return () => {
+      cancelled = true;
       void channel.unsubscribe();
     };
-  }, [userId, showToast]);
+  }, [activeTenantId, ready, showToast, userId]);
 
   return null;
 }

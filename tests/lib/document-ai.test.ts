@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
 
 import { composeReportLayoutPlan } from "@/lib/document-ai/composer/compose-layout-plan";
 import { composeReportFromContext } from "@/lib/document-ai/composer/compose-report";
@@ -113,8 +114,34 @@ describe("document-ai engine", () => {
     expect(composition.executiveSummary).toContain("2 filas");
     expect(composition.charts[0].data).toHaveLength(2);
     expect(composition.sections.some((section) => section.title === "Continuidad documental")).toBe(true);
-    expect(await renderReportPptx(composition)).toBeInstanceOf(Uint8Array);
-    expect(await renderReportDocx(composition)).toBeInstanceOf(Uint8Array);
+
+    const pptx = await JSZip.loadAsync(await renderReportPptx(composition));
+    expect(Object.keys(pptx.files)).toEqual(expect.arrayContaining([
+      "[Content_Types].xml",
+      "_rels/.rels",
+      "ppt/presentation.xml",
+      "ppt/_rels/presentation.xml.rels",
+    ]));
+    const slides = Object.values(pptx.files).filter((file) => /^ppt\/slides\/slide\d+\.xml$/.test(file.name));
+    expect(slides.length).toBeGreaterThan(0);
+    const slideContent = (await Promise.all(slides.map((slide) => slide.async("string")))).join("\n");
+    expect(slideContent).toContain(
+      "Conciliacion mensual - Certificados vs ordenes de compra",
+    );
+    expect(slideContent).toContain("row-1.pdf");
+
+    const docx = await JSZip.loadAsync(await renderReportDocx(composition));
+    expect(Object.keys(docx.files)).toEqual(expect.arrayContaining([
+      "[Content_Types].xml",
+      "_rels/.rels",
+      "word/document.xml",
+    ]));
+    await expect(docx.file("word/document.xml")?.async("string")).resolves.toContain(
+      "Continuidad documental",
+    );
+    await expect(docx.file("word/document.xml")?.async("string")).resolves.toContain(
+      "row-1.pdf",
+    );
   });
 
   it("composes monthly income vs expense reports from certificates and purchase orders", async () => {

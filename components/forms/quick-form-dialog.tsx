@@ -32,6 +32,7 @@ type RenderFooterProps = {
 type QuickFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
   title: string;
   description?: string;
   variant?: "default" | "dashboard";
@@ -48,6 +49,7 @@ type QuickFormDialogProps = {
 export function QuickFormDialog({
   open,
   onOpenChange,
+  onCloseAutoFocus,
   title,
   description,
   variant = "default",
@@ -75,11 +77,8 @@ export function QuickFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={cn(
-          "sm:max-w-[500px]",
-          variant === "dashboard" && "sm:max-w-[550px]",
-          "rounded-2xl"
-        )}
+        onCloseAutoFocus={onCloseAutoFocus}
+        className={cn("sm:max-w-[500px]", variant === "dashboard" && "sm:max-w-[550px]")}
       >
         <form onSubmit={handleSubmit}>
           <DialogHeader >

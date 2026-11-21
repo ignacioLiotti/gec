@@ -60,11 +60,11 @@ export function DemoPageTour({
 	return (
 		<>
 			{showButton ? (
-				<Button
+				<Button variant={"defaultSecondary"}
 					type="button"
 					size="sm"
 					className={cn(
-						"gap-1.5 border border-orange-200/80 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:border-orange-300 active:scale-[0.97] transition-all duration-150",
+						"gap-1.5 active:scale-[0.97] transition-all duration-150",
 						buttonClassName,
 					)}
 					onClick={() => setOpen(true)}

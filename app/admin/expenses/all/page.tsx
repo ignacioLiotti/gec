@@ -1,3 +1,6 @@
+
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { TenantExpenseTable } from "@/components/expenses/tenant-expense-table";
 import { UsageEventLog } from "@/components/expenses/usage-event-log";
 import {
@@ -114,6 +117,7 @@ export default async function GlobalTenantExpensesPage() {
 	const { data: eventsData } = await adminClient
 		.from("tenant_usage_events")
 		.select("id, tenant_id, kind, amount, context, metadata, created_at")
+		.or("context.is.null,context.not.in.(ocr_operation_started,ocr_operation_completed,ocr_operation_failed)")
 		.order("created_at", { ascending: false })
 		.limit(50);
 	const usageEvents = (eventsData ?? []) as UsageEvent[];
@@ -276,7 +280,7 @@ export default async function GlobalTenantExpensesPage() {
 								<div className="grid gap-3 md:grid-cols-3">
 									<label className="space-y-1 text-sm">
 										<span className="text-xs text-muted-foreground block">Límite Storage (GB)</span>
-										<input
+										<Input
 											type="number"
 											step="1"
 											name="storageLimitGb"
@@ -286,43 +290,43 @@ export default async function GlobalTenantExpensesPage() {
 													? (overrides.storage / (1024 * 1024 * 1024)).toString()
 													: ""
 											}
-											className="w-full rounded-md border px-2 py-1 text-sm"
+											className="w-full px-2 py-1 text-sm"
 										/>
 										<span className="text-xs text-muted-foreground block">Actual: {currentStorage}</span>
 									</label>
 									<label className="space-y-1 text-sm">
 										<span className="text-xs text-muted-foreground block">Límite Tokens IA</span>
-										<input
+										<Input
 											type="number"
 											step="1000"
 											name="aiTokenLimit"
 											disabled={!canManageLimits}
 											defaultValue={overrides?.aiTokens ?? ""}
-											className="w-full rounded-md border px-2 py-1 text-sm"
+											className="w-full px-2 py-1 text-sm"
 										/>
 										<span className="text-xs text-muted-foreground block">Actual: {currentAi}</span>
 									</label>
 									<label className="space-y-1 text-sm">
 										<span className="text-xs text-muted-foreground block">Límite WhatsApp</span>
-										<input
+										<Input
 											type="number"
 											step="100"
 											name="whatsappLimit"
 											disabled={!canManageLimits}
 											defaultValue={overrides?.whatsapp ?? ""}
-											className="w-full rounded-md border px-2 py-1 text-sm"
+											className="w-full px-2 py-1 text-sm"
 										/>
 										<span className="text-xs text-muted-foreground block">Actual: {currentWhatsapp}</span>
 									</label>
 								</div>
 								<div className="flex items-center gap-2">
-									<button
+									<Button variant={"dark"}
 										type="submit"
 										disabled={!canManageLimits}
-										className="rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-stone-800"
+										className="px-3 py-1.5 text-sm font-medium transition"
 									>
 										Guardar
-									</button>
+									</Button>
 									<span className="text-xs text-muted-foreground">
 										Dejá el campo vacío para quitar el límite.
 									</span>

@@ -54,7 +54,7 @@ export function RoleCard({ role, onEdit, onViewUsers }: RoleCardProps) {
 
   return (
     <>
-      <Card className="relative overflow-hidden group hover:shadow-md transition-shadow">
+      <Card className="relative overflow-hidden group transition-shadow">
         {/* Color bar */}
         <div
           className="absolute top-0 left-0 w-1 h-full"

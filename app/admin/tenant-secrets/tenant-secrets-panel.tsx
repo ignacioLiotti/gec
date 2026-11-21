@@ -1,4 +1,7 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
 
 import { useMemo, useState } from "react";
 
@@ -192,33 +195,33 @@ export default function TenantSecretsPanel({
 					<div className="grid gap-4 sm:grid-cols-[200px_auto]">
 						<label className="text-sm font-medium">
 							Período de gracia (días)
-							<input
+							<Input
 								type="number"
 								min={1}
 								max={30}
 								value={graceDays}
 								onChange={(event) => setGraceDays(event.target.value)}
-								className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+								className="mt-1 w-full px-3 py-2 text-sm"
 								placeholder="7"
 							/>
 						</label>
 						<div className="flex flex-wrap gap-2">
-							<button
+							<Button variant="outline"
 								type="button"
 								onClick={rotateSecret}
 								disabled={rotateLoading}
-								className="rounded-md bg-foreground px-4 py-2 text-sm font-semibold text-background disabled:opacity-50"
+								className="px-4 py-2 text-sm font-semibold disabled:opacity-50"
 							>
 								{rotateLoading ? "Rotando..." : "Rotar secreto"}
-							</button>
-							<button
+							</Button>
+							<Button variant="outline"
 								type="button"
 								onClick={refreshSecrets}
 								disabled={refreshing}
-								className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+								className="px-4 py-2 text-sm disabled:opacity-50"
 							>
 								{refreshing ? "Actualizando..." : "Actualizar historial"}
-							</button>
+							</Button>
 						</div>
 					</div>
 					{rotateError && (
@@ -233,13 +236,13 @@ export default function TenantSecretsPanel({
 								{lastSecret.value}
 							</p>
 							<div className="mt-2 flex flex-wrap gap-2 text-xs">
-								<button
+								<Button variant="outline"
 									type="button"
 									onClick={copySecret}
-									className="rounded-md border px-3 py-1"
+									className="px-3 py-1"
 								>
 									{copyLabel}
-								</button>
+								</Button>
 								<span className="text-foreground/70">
 									Copialo y distribuilo a los sistemas externos. Se muestra solo una vez.
 								</span>

@@ -75,6 +75,7 @@ function parseResponseValues(formData: FormData) {
 	for (const [key, value] of formData.entries()) {
 		if (key === "runId" || key === "token") continue;
 		if (key.startsWith("_")) continue;
+		if (key.startsWith("$ACTION_")) continue;
 		if (typeof value !== "string") continue;
 		if (key.endsWith("__boolean")) {
 			values[key.replace(/__boolean$/, "")] = value === "true";

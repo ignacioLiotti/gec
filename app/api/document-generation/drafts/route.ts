@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
@@ -24,12 +25,15 @@ import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type DraftRequestBody = {
   id?: string;
+  expectedUpdatedAt?: string;
   workId?: string;
   folderPath?: string;
   documentType?: string;
   templateId?: string;
   inputData?: Record<string, unknown>;
 };
+
+const draftVersionSchema = z.string().datetime({ offset: true });
 
 async function loadDraftRejectionContexts(tenantId: string, draftIds: string[]) {
   const ids = Array.from(new Set(draftIds.filter(Boolean)));
@@ -311,13 +315,49 @@ export async function POST(request: NextRequest) {
 
     const query = supabase.from("generated_document_drafts");
     if (typeof body.id === "string" && body.id.trim()) {
+      const draftId = body.id.trim();
+      const expectedUpdatedAt =
+        typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : "";
+      if (!expectedUpdatedAt) {
+        return NextResponse.json(
+          { error: "Falta la versión del borrador que intentas guardar." },
+          { status: 428 },
+        );
+      }
+      if (!draftVersionSchema.safeParse(expectedUpdatedAt).success) {
+        return NextResponse.json(
+          { error: "La versión del borrador no es válida." },
+          { status: 400 },
+        );
+      }
+
+      const { data: knownDraft, error: knownDraftError } = await query
+        .select("id")
+        .eq("id", draftId)
+        .eq("created_by", user.id)
+        .maybeSingle();
+      if (knownDraftError) throw knownDraftError;
+      if (!knownDraft) {
+        return NextResponse.json({ error: "Borrador no encontrado." }, { status: 404 });
+      }
+
       const { data, error } = await query
         .update(payload)
-        .eq("id", body.id.trim())
+        .eq("id", draftId)
         .eq("created_by", user.id)
+        .eq("updated_at", expectedUpdatedAt)
         .select("*")
         .maybeSingle();
       if (error) throw error;
+      if (!data) {
+        return NextResponse.json(
+          {
+            error:
+              "Este borrador cambió en otra pestaña. Conservamos tus cambios; recargá para revisar la última versión.",
+          },
+          { status: 409 },
+        );
+      }
       return NextResponse.json({ draft: data });
     }
 

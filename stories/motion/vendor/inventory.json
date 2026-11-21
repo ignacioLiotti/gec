@@ -1,0 +1,48 @@
+{
+  "interior": [
+    "loading-button",
+    "copy-button",
+    "hold-to-confirm",
+    "press-depth",
+    "icon-morph",
+    "ripple",
+    "accordion",
+    "tabs",
+    "segmented-control",
+    "dropdown",
+    "modal",
+    "drawer",
+    "popover",
+    "tooltip-group",
+    "tag-input",
+    "inline-validation",
+    "expanding-search",
+    "progress-bar",
+    "skeleton-swap",
+    "task-steps",
+    "sortable-table",
+    "filter-grid",
+    "tree-view",
+    "reorder-list",
+    "value-flash",
+    "collapsible-banner"
+  ],
+  "beautiful": [
+    "LoadingState",
+    "ThinkingState",
+    "ToolChips",
+    "TaskRows",
+    "FilterTable",
+    "RecordsTable",
+    "DiffTable",
+    "SearchList",
+    "SelectionActions",
+    "StreamingText"
+  ],
+  "atoms": [
+    "Button",
+    "Switch",
+    "SegmentedControl",
+    "ProgressRing"
+  ]
+}

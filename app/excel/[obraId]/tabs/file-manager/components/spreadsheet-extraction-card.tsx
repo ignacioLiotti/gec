@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "@/components/ui/input";
+
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { AlertCircle, ChevronDown, ChevronUp, FileSpreadsheet, Settings2 } from "lucide-react";
@@ -114,16 +116,11 @@ function renderSummaryGrid(
                 </span>
               ) : null}
             </div>
-            <input
+            <Input
               type="text"
               value={currentValue}
               disabled={disabled}
-              className={cn(
-                "mt-2 w-full rounded-md border bg-transparent px-2 py-1.5 text-sm font-medium text-foreground outline-none transition-colors",
-                isInvalid
-                  ? "border-rose-300 focus:border-rose-400"
-                  : "border-transparent focus:border-border"
-              )}
+              className={"mt-2 w-full px-2 py-1.5 text-sm font-medium transition-colors"}
               onChange={(event) =>
                 setDraftValues((current) => ({ ...current, [column]: event.target.value }))
               }
@@ -233,11 +230,8 @@ export function SpreadsheetExtractionCard({
   }, [excluded, table.status]);
 
   return (
-    <Card
-      className={cn(
-        "gap-0 overflow-hidden rounded-2xl border border-border/70 bg-white py-0 shadow-sm transition-colors",
-        excluded && "border-amber-400 bg-amber-50/20 ring-2 ring-amber-200"
-      )}
+    <Card variant={(excluded) ? ("warning") : ("default")}
+      className={"gap-0 overflow-hidden py-0 transition-colors"}
     >
       <CardHeader className={cn("border-b bg-muted/20 px-5 py-4", excluded && "border-amber-200 bg-amber-50/80")}>
         <div className="flex items-start justify-between gap-4">
@@ -248,11 +242,11 @@ export function SpreadsheetExtractionCard({
                 <CardTitle className="text-base">{sectionDescription}</CardTitle>
               </div>
               {excluded ? (
-                <Badge variant="outline" className="border-amber-400 bg-amber-100 font-medium text-amber-900">
+                <Badge variant={"warning"} className="font-medium">
                   No se importara
                 </Badge>
               ) : null}
-              <Badge variant="outline" className="max-w-full border-border bg-white text-muted-foreground">
+              <Badge variant={"neutral"} className="max-w-full">
                 {sourceLabel}
               </Badge>
             </div>

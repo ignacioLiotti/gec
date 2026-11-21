@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -51,32 +50,40 @@ describe("mercadopago signature helpers", () => {
 		expect(parseMercadoPagoSignatureHeader("invalid")).toBeNull();
 	});
 
-	it("validates webhook signatures", () => {
-		const manifest = buildMercadoPagoSignatureManifest({
+	it("verifies an independently signed provider notification", () => {
+		expect(buildMercadoPagoSignatureManifest({
 			dataId: "pre_123",
 			requestId: "req-1",
 			ts: "1710000000",
-		});
-		const secret = "webhook-secret";
-		const signature = createHmac("sha256", secret)
-			.update(manifest)
-			.digest("hex");
+		})).toBe("id:pre_123;request-id:req-1;ts:1710000000;");
 
 		expect(
 			verifyMercadoPagoWebhookSignature({
-				secret,
-				signatureHeader: `ts=1710000000,v1=${signature}`,
+				secret: "webhook-secret",
+				signatureHeader: "ts=1710000000,v1=7f3e0cfafba6fc14f4d6e7615b03037064132ba97e6edf87dfd70ce6dbff21fc",
 				requestIdHeader: "req-1",
 				dataId: "pre_123",
 			}),
 		).toBe(true);
+	});
 
+	it.each([
+		{ changed: "event id", patch: { dataId: "pre_456" } },
+		{ changed: "request id", patch: { requestIdHeader: "req-2" } },
+		{ changed: "secret", patch: { secret: "different-secret" } },
+		{ changed: "timestamp", patch: { signatureHeader: "ts=1710000001,v1=7f3e0cfafba6fc14f4d6e7615b03037064132ba97e6edf87dfd70ce6dbff21fc" } },
+		{ changed: "signature", patch: { signatureHeader: "ts=1710000000,v1=wrong" } },
+		{ changed: "missing signature", patch: { signatureHeader: null } },
+		{ changed: "missing request id", patch: { requestIdHeader: null } },
+		{ changed: "missing event id", patch: { dataId: null } },
+	])("rejects a notification with $changed", ({ patch }) => {
 		expect(
 			verifyMercadoPagoWebhookSignature({
-				secret,
-				signatureHeader: "ts=1710000000,v1=wrong",
+				secret: "webhook-secret",
+				signatureHeader: "ts=1710000000,v1=7f3e0cfafba6fc14f4d6e7615b03037064132ba97e6edf87dfd70ce6dbff21fc",
 				requestIdHeader: "req-1",
 				dataId: "pre_123",
+				...patch,
 			}),
 		).toBe(false);
 	});
@@ -134,13 +141,14 @@ describe("mercadopago runtime debug helpers", () => {
 		);
 	});
 
-	it("builds masked runtime debug payload", () => {
+	it("does not expose the access token in runtime debug data", () => {
 		process.env.MERCADOPAGO_ACCESS_TOKEN = "TEST-1234567890";
 		process.env.MERCADOPAGO_TEST_PAYER_EMAIL = "buyer-ar@testuser.com";
 		const runtimeDebug = getMercadoPagoRuntimeDebug("owner@example.com");
 		expect(runtimeDebug.mode).toBe("test");
 		expect(runtimeDebug.payerEmail).toBe("buyer-ar@testuser.com");
-		expect(runtimeDebug.sellerAccessTokenPreview).toContain("...");
+		expect(runtimeDebug.sellerAccessTokenPreview).toBeTypeOf("string");
+		expect(JSON.stringify(runtimeDebug)).not.toContain("TEST-1234567890");
 	});
 });
 
@@ -253,8 +261,9 @@ describe("mercadopago API wrappers", () => {
 	it("creates preapproval through API", async () => {
 		process.env.MERCADOPAGO_ACCESS_TOKEN = "token-1";
 		process.env.MERCADOPAGO_API_BASE_URL = "https://api.example.com";
-		let capturedUrl = "";
-		let capturedAuth = "";
+		let capturedRequest:
+			| { url: string; init: RequestInit | undefined }
+			| undefined;
 
 		const preapproval = await createMercadoPagoPreapproval({
 			planKey: "growth",
@@ -270,10 +279,7 @@ describe("mercadopago API wrappers", () => {
 				currencyId: "ARS",
 			},
 			fetchImpl: async (url, init) => {
-				capturedUrl = String(url);
-				capturedAuth = String(
-					(init?.headers as Record<string, string>)?.Authorization,
-				);
+				capturedRequest = { url: String(url), init };
 				return new Response(
 					JSON.stringify({
 						id: "pre_123",
@@ -285,36 +291,70 @@ describe("mercadopago API wrappers", () => {
 			},
 		});
 
-		expect(capturedUrl).toBe("https://api.example.com/preapproval");
-		expect(capturedAuth).toBe("Bearer token-1");
+		expect(capturedRequest?.url).toBe("https://api.example.com/preapproval");
+		expect(capturedRequest?.init?.method).toBe("POST");
+		const headers = new Headers(capturedRequest?.init?.headers);
+		expect(headers.get("authorization")).toBe("Bearer token-1");
+		expect(headers.get("content-type")).toBe("application/json");
+		expect(
+			JSON.parse(String(capturedRequest?.init?.body)) as unknown,
+		).toEqual({
+			reason: "Suscripcion Growth (growth)",
+			external_reference: "tenant:tenant-1|plan:growth",
+			payer_email: "foo@example.com",
+			back_url: "https://app.test/billing",
+			notification_url:
+				"https://app.test/api/billing/mercadopago/webhook",
+			status: "pending",
+			auto_recurring: {
+				frequency: 1,
+				frequency_type: "months",
+				transaction_amount: 42000,
+				currency_id: "ARS",
+			},
+		});
 		expect(preapproval.id).toBe("pre_123");
 	});
 
 	it("fetches preapproval details", async () => {
 		process.env.MERCADOPAGO_ACCESS_TOKEN = "token-1";
 		process.env.MERCADOPAGO_API_BASE_URL = "https://api.example.com";
+		const preapprovalId = "pre 999/with?query";
+		let capturedRequest:
+			| { url: string; init: RequestInit | undefined }
+			| undefined;
 
-		const preapproval = await fetchMercadoPagoPreapproval("pre_999", {
-			fetchImpl: async () =>
-				new Response(
+		const preapproval = await fetchMercadoPagoPreapproval(preapprovalId, {
+			fetchImpl: async (url, init) => {
+				capturedRequest = { url: String(url), init };
+				return new Response(
 					JSON.stringify({
-						id: "pre_999",
+						id: preapprovalId,
 						status: "authorized",
 					}),
 					{ status: 200, headers: { "content-type": "application/json" } },
-				),
+				);
+			},
 		});
 
-		expect(preapproval.id).toBe("pre_999");
+		expect(capturedRequest?.url).toBe(
+			"https://api.example.com/preapproval/pre%20999%2Fwith%3Fquery",
+		);
+		expect(capturedRequest?.init?.method).toBe("GET");
+		const headers = new Headers(capturedRequest?.init?.headers);
+		expect(headers.get("authorization")).toBe("Bearer token-1");
+		expect(headers.get("content-type")).toBe("application/json");
+		expect(capturedRequest?.init?.body).toBeUndefined();
+		expect(preapproval.id).toBe(preapprovalId);
 		expect(preapproval.status).toBe("authorized");
 	});
 
 	it("updates preapproval details", async () => {
 		process.env.MERCADOPAGO_ACCESS_TOKEN = "token-1";
 		process.env.MERCADOPAGO_API_BASE_URL = "https://api.example.com";
-		let capturedUrl = "";
-		let capturedMethod = "";
-		let capturedBody = "";
+		let capturedRequest:
+			| { url: string; init: RequestInit | undefined }
+			| undefined;
 
 		const updated = await updateMercadoPagoPreapproval(
 			"pre_123",
@@ -325,9 +365,7 @@ describe("mercadopago API wrappers", () => {
 			},
 			{
 				fetchImpl: async (url, init) => {
-					capturedUrl = String(url);
-					capturedMethod = String(init?.method ?? "");
-					capturedBody = String(init?.body ?? "");
+					capturedRequest = { url: String(url), init };
 					return new Response(
 						JSON.stringify({
 							id: "pre_123",
@@ -339,9 +377,20 @@ describe("mercadopago API wrappers", () => {
 			},
 		);
 
-		expect(capturedUrl).toBe("https://api.example.com/preapproval/pre_123");
-		expect(capturedMethod).toBe("PUT");
-		expect(capturedBody).toContain("end_date");
+		expect(capturedRequest?.url).toBe(
+			"https://api.example.com/preapproval/pre_123",
+		);
+		expect(capturedRequest?.init?.method).toBe("PUT");
+		const headers = new Headers(capturedRequest?.init?.headers);
+		expect(headers.get("authorization")).toBe("Bearer token-1");
+		expect(headers.get("content-type")).toBe("application/json");
+		expect(
+			JSON.parse(String(capturedRequest?.init?.body)) as unknown,
+		).toEqual({
+			auto_recurring: {
+				end_date: "2026-05-01T00:00:00.000Z",
+			},
+		});
 		expect(updated.id).toBe("pre_123");
 	});
 });

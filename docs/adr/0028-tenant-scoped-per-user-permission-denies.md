@@ -36,6 +36,12 @@ Baseline sidebar entries use their `nav:*` permission keys as deny switches. Den
 - Permission-sensitive code must check denies before role grants for regular members.
 - Owner/admin users cannot be restricted with these custom denies; downgrade the membership role to `member` before applying exceptions.
 
+## Migration history
+
+The fresh migration chain needs the nullable `user_permission_overrides.tenant_id` column before migration `0123` defines `has_permission`. The approved 2026-10-17 repair adds only that prerequisite to `0123`; migration `0125` still owns the legacy-row backfill, cleanup, constraint, index, and RLS changes that complete tenant scoping.
+
+Migration `0132` is the additive repair for databases that already applied `0125`. It restores the complete `has_permission` function so tenant-scoped user overrides and role-level denies use the precedence defined by ADR-0029. See the [migration repair record](../../plans/2026-10-17-isolated-integration/migration-repair.md) for the failure evidence and scope of the exception.
+
 ## Alternatives considered
 
 - Keep overrides as grant-only. Rejected because it cannot express the requested exception behavior.
@@ -44,7 +50,8 @@ Baseline sidebar entries use their `nav:*` permission keys as deny switches. Den
 
 ## Related files
 
-- `supabase/migrations/0122_tenant_scoped_permission_denies.sql`
+- `supabase/migrations/0125_tenant_scoped_permission_denies.sql`
+- `supabase/migrations/0132_restore_role_permission_denies.sql`
 - `lib/route-guard.ts`
 - `lib/route-access.ts`
 - `components/app-sidebar.tsx`

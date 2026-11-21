@@ -110,6 +110,7 @@ export default async function TenantExpensesPage() {
 		const { data: eventsData } = await supabase
 			.from("tenant_usage_events")
 			.select("id, tenant_id, kind, amount, context, metadata, created_at")
+			.or("context.is.null,context.not.in.(ocr_operation_started,ocr_operation_completed,ocr_operation_failed)")
 			.in("tenant_id", tenantIds)
 			.order("created_at", { ascending: false })
 			.limit(25);

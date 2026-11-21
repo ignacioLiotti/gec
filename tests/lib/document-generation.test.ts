@@ -396,7 +396,7 @@ describe("document-generation helpers", () => {
       schema,
       inputData: {
         proveedor: "Hierros del Plata",
-        fecha_entrega: "10/05/2026",
+        fecha_entrega: "2026-05-10",
         items: [
           { cantidad: "2", detalle: "Malla", precio_unitario: "$ 1.200,50" },
           { cantidad: "1", detalle: "Perfil", precio_unitario: "1000" },
@@ -419,7 +419,7 @@ describe("document-generation helpers", () => {
     expect(rows).toEqual([
       {
         proveedor: "Hierros del Plata",
-        fecha_entrega: "2026-10-05T03:00:00.000Z",
+        fecha_entrega: "2026-05-10T00:00:00.000Z",
         cantidad: 2,
         detalle: "Malla",
         precio_unitario: 1200.5,
@@ -429,7 +429,7 @@ describe("document-generation helpers", () => {
       },
       {
         proveedor: "Hierros del Plata",
-        fecha_entrega: "2026-10-05T03:00:00.000Z",
+        fecha_entrega: "2026-05-10T00:00:00.000Z",
         cantidad: 1,
         detalle: "Perfil",
         precio_unitario: 1000,

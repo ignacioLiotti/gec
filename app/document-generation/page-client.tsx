@@ -1,6 +1,8 @@
 "use client";
+import { Textarea } from "@/components/ui/textarea";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type FormEvent, type MutableRefObject } from "react";
+
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent as ReactFocusEvent, type FormEvent, type MutableRefObject } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -46,6 +48,8 @@ import {
   validateTemplateInput,
   type ValidationError,
 } from "@/lib/document-generation";
+import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -58,6 +62,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import {
+  createEditorSession,
+  EditorSessionRequestError,
+  type CreatableOptionAddition,
+  type EditorSessionTransport,
+  type EditorTarget,
+  type GeneratedDocumentResult,
+} from "./editor-session";
 
 type WorkOption = {
   id: string;
@@ -113,6 +125,7 @@ function refreshAutoSequenceInputData(
 type DraftResponse = {
   draft: {
     id: string;
+    updated_at: string;
     status: string;
     validation_errors: ValidationError[];
     input_data: Record<string, unknown>;
@@ -129,6 +142,7 @@ type DraftDetailResponse = {
     templateId: string;
     templateName: string | null;
     status: string;
+    updatedAt: string;
     inputData: Record<string, unknown>;
     validationErrors: ValidationError[];
     canEdit: boolean;
@@ -156,29 +170,12 @@ type GeneratedDetailResponse = {
   };
 };
 
-type GeneratedDocumentResponse = {
-  generatedDocument: {
-    id: string;
-    status: string;
-    file_name: string;
-    storage_path?: string;
-    input_data?: Record<string, unknown>;
-  };
-  relativeFolderPath: string;
-  relativeFilePath: string;
-  previewHtml: string;
-};
+type GeneratedDocumentResponse = GeneratedDocumentResult;
 
 type GeneratedDocumentDownloadTarget = {
   workId: string;
   storagePath: string;
   fileName: string;
-};
-
-type AssistResponse = {
-  inputData: Record<string, unknown>;
-  context: DocumentAiContext;
-  appliedFieldCount: number;
 };
 
 type RepeatableGroupDescriptor = {
@@ -195,14 +192,6 @@ type ValidationIssue = {
 type DynamicFieldOptions = {
   tenantUsers: TemplateSelectOption[];
 };
-
-type OptionAddition = {
-  fieldKey: string;
-  tableKey?: string;
-  option: TemplateSelectOption;
-};
-
-const PURCHASE_ORDER_AUTOSAVE_DELAY_MS = 1_500;
 
 function readDocumentAiContext(inputData: Record<string, unknown>) {
   const value = inputData.__documentAi;
@@ -298,7 +287,7 @@ function hasKnownSelectOption(field: TemplateField, value: string) {
 }
 
 function collectCreatableOptionAdditions(fields: TemplateField[], inputData: Record<string, unknown>) {
-  const additions: OptionAddition[] = [];
+  const additions: CreatableOptionAddition[] = [];
   const addFieldValue = (field: TemplateField, value: unknown, tableKey?: string) => {
     if (field.type !== "select" || field.selectMode !== "creatable") return;
     const rawValue = String(value ?? "").trim();
@@ -332,7 +321,7 @@ function collectCreatableOptionAdditions(fields: TemplateField[], inputData: Rec
   return additions;
 }
 
-function applyOptionAdditionsToFields(fields: TemplateField[], additions: OptionAddition[]) {
+function applyOptionAdditionsToFields(fields: TemplateField[], additions: CreatableOptionAddition[]) {
   const addToField = (field: TemplateField, tableKey?: string): TemplateField => {
     if (field.type !== "select") return field;
     const matching = additions.filter(
@@ -410,6 +399,126 @@ function buildDownloadTargetFromGeneratedDetail(
     fileName: document.fileName || "documento.pdf",
   };
 }
+
+function createEditorTarget({
+  workId,
+  folderPath,
+  documentType,
+  templateId,
+  generatedDocumentId,
+}: {
+  workId: string;
+  folderPath: string;
+  documentType: string;
+  templateId: string;
+  generatedDocumentId?: string;
+}): EditorTarget {
+  return {
+    workId,
+    folderPath,
+    documentType,
+    templateId,
+    generatedDocumentId: generatedDocumentId || undefined,
+    autosave: documentType === "PURCHASE_ORDER" && !generatedDocumentId,
+  };
+}
+
+const editorSessionTransport: EditorSessionTransport = {
+  async persistDraft({ draftId, expectedUpdatedAt, target, inputData }) {
+    const response = await fetch("/api/document-generation/drafts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        id: draftId,
+        expectedUpdatedAt,
+        workId: target.workId,
+        folderPath: target.folderPath,
+        documentType: target.documentType,
+        templateId: target.templateId,
+        inputData,
+      }),
+    });
+    const payload = (await response.json()) as DraftResponse & { error?: string };
+    if (!response.ok || !payload.draft?.id) {
+      throw new Error(payload.error || "No se pudo guardar el borrador");
+    }
+    return {
+      draftId: payload.draft.id,
+      updatedAt: payload.draft.updated_at,
+      status: payload.draft.status,
+      inputData: payload.draft.input_data ?? inputData,
+    };
+  },
+
+  async assist({ target, inputData }) {
+    const response = await fetch("/api/document-generation/assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workId: target.workId,
+        folderPath: target.folderPath,
+        documentType: target.documentType,
+        templateId: target.templateId,
+        inputData,
+      }),
+    });
+    const payload = (await response.json()) as {
+      inputData: Record<string, unknown>;
+      context: DocumentAiContext;
+      appliedFieldCount: number;
+      error?: string;
+    };
+    if (!response.ok) {
+      throw new Error(payload.error || "No se pudo completar con documentos");
+    }
+    return {
+      inputData: payload.inputData,
+      appliedFieldCount: payload.appliedFieldCount,
+      sourceCount: payload.context.sources.length,
+      warning: payload.context.warnings[0],
+    };
+  },
+
+  async generate({ draftId, draftUpdatedAt, target, inputData }) {
+    const response = await fetch("/api/document-generation/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        draftId,
+        draftUpdatedAt,
+        generatedDocumentId: target.generatedDocumentId,
+        workId: target.workId,
+        folderPath: target.folderPath,
+        documentType: target.documentType,
+        templateId: target.templateId,
+        inputData,
+      }),
+    });
+    const payload = (await response.json()) as GeneratedDocumentResponse & {
+      error?: string;
+      validationErrors?: ValidationError[];
+    };
+    if (!response.ok) {
+      throw new EditorSessionRequestError(payload.error || "No se pudo generar el documento", {
+        validationErrors: payload.validationErrors,
+      });
+    }
+    return payload;
+  },
+
+  async persistOptions({ target, additions }) {
+    const response = await fetch("/api/document-generation/templates/options", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId: target.templateId, additions }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) {
+      throw new Error(payload.error || "No se pudieron guardar las opciones nuevas");
+    }
+  },
+};
 
 function getDocumentCode(inputData: Record<string, unknown>) {
   const candidateKeys = ["numero", "document_number", "nro", "folio", "codigo"];
@@ -569,7 +678,7 @@ function renderInlineFieldControl(
       .map((option) => `<option value="${escapeHtml(option.value)}" label="${escapeHtml(option.label)}"></option>`)
       .join("");
     return [
-      `<input class="${escapeHtml(className)} inline-doc-combobox-input" ${dataAttrs} ${required} aria-label="${label}" type="text" list="${datalistId}" value="${currentValue}" />`,
+      `<Input class="${escapeHtml(className)} inline-doc-combobox-input" ${dataAttrs} ${required} aria-label="${label}" type="text" list="${datalistId}" value="${currentValue}" />`,
       `<datalist id="${datalistId}">${options}</datalist>`,
     ].join("");
   }
@@ -587,7 +696,7 @@ function renderInlineFieldControl(
 
   const inputType = field.type === "date" ? "date" : field.type === "number" ? "number" : "text";
   const inputMode = field.type === "money" ? `inputmode="decimal"` : "";
-  return `<input class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}" type="${inputType}" ${inputMode} value="${currentValue}" />`;
+  return `<Input class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}" type="${inputType}" ${inputMode} value="${currentValue}" />`;
 }
 
 function renderEditableDocumentHtml(
@@ -677,16 +786,17 @@ function StableInlineDocumentEditor({
   invalidKeys,
   rootRef,
   onBlur,
-  onChange,
+  onInput,
 }: {
   html: string;
   inputData: Record<string, unknown>;
   invalidKeys: Set<string>;
   rootRef: MutableRefObject<HTMLDivElement | null>;
   onBlur: (event: ReactFocusEvent<HTMLDivElement>) => void;
-  onChange: (event: FormEvent<HTMLDivElement>) => void;
+  onInput: (event: FormEvent<HTMLDivElement>) => void;
 }) {
   const [stableHtml] = useState(html);
+  const stableMarkup = useMemo(() => ({ __html: stableHtml }), [stableHtml]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -725,8 +835,8 @@ function StableInlineDocumentEditor({
       className="report-paper inline-document-editor bg-white"
       style={{ "--oc-font-size": "13px" } as CSSProperties}
       onBlur={onBlur}
-      onChange={onChange}
-      dangerouslySetInnerHTML={{ __html: stableHtml }}
+      onInput={onInput}
+      dangerouslySetInnerHTML={stableMarkup}
     />
   );
 }
@@ -778,90 +888,15 @@ function iconForContextField(kind: "work" | "type" | "folder" | "template") {
   }
 }
 
-function controlBaseClass(error?: boolean) {
-  return cn(
-    "h-11 w-full min-w-0 max-w-full rounded-md border bg-white px-3 text-sm text-stone-900 outline-none transition",
-    "placeholder:text-stone-400 focus:border-[#ff5800] focus:ring-4 focus:ring-[#ff5800]/10",
-    error ? "border-red-200" : "border-stone-200",
-  );
+
+
+function RepeatableRowMenu({ onDuplicate, onRemove }: { onDuplicate: () => void; onRemove: () => void }) {
+  return <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="Acciones de fila"><MoreHorizontal /></Button></DropdownMenuTrigger>
+    <DropdownMenuContent align="end"><DropdownMenuItem onSelect={onDuplicate}><Copy />Duplicar</DropdownMenuItem><DropdownMenuItem variant="destructive" onSelect={onRemove}><Trash2 />Eliminar</DropdownMenuItem></DropdownMenuContent>
+  </DropdownMenu>;
 }
 
-function RepeatableRowMenu({
-  onDuplicate,
-  onRemove,
-}: {
-  onDuplicate: () => void;
-  onRemove: () => void;
-}) {
-  const [open, setOpen] = useState(false);
 
-  return (
-    <div className="relative flex justify-center">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
-      >
-        <MoreHorizontal className="size-4" />
-      </button>
-      {open ? (
-        <>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-10 cursor-default"
-            aria-label="Cerrar menu"
-          />
-          <div className="absolute right-0 top-full z-20 mt-1 min-w-[144px] overflow-hidden rounded-md border border-stone-200 bg-white shadow-[0_10px_24px_rgba(0,0,0,0.08)]">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onDuplicate();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-stone-700 transition hover:bg-stone-50"
-            >
-              <Copy className="size-3.5" />
-              Duplicar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onRemove();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-700 transition hover:bg-red-50"
-            >
-              <Trash2 className="size-3.5" />
-              Eliminar
-            </button>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function PreviewToolButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex size-8 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {children}
-    </button>
-  );
-}
 
 function SectionCard({
   eyebrow,
@@ -953,10 +988,10 @@ function NativeSelect({
   return (
     <div className="min-w-0 max-w-full">
       <Select value={value || undefined} onValueChange={onChange} disabled={isDisabled}>
-        <SelectTrigger
+        <SelectTrigger aria-invalid={error}
           className={cn(
-            controlBaseClass(error),
-            "relative min-w-0 max-w-full justify-between disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500",
+            "h-11 w-full min-w-0 max-w-full",
+            "relative min-w-0 max-w-full justify-between disabled:cursor-not-allowed",
             icon ? "pl-9" : "pl-3",
           )}
         >
@@ -1011,15 +1046,15 @@ function WorkCombobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <Button aria-invalid={error}
           type="button"
-          variant="outline"
+          variant="field"
           role="combobox"
           aria-expanded={open}
           disabled={isDisabled}
           className={cn(
-            controlBaseClass(error),
-            "relative justify-between px-3 font-normal shadow-none disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500",
+            "h-11 w-full min-w-0 max-w-full",
+            "relative justify-between px-3 font-normal disabled:cursor-not-allowed",
             icon ? "pl-9" : "pl-3",
           )}
         >
@@ -1091,12 +1126,12 @@ function TextInput({
           {icon}
         </span>
       ) : null}
-      <input
+      <Input aria-invalid={error}
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={cn(controlBaseClass(error), icon ? "pl-9" : "pl-3", mono && "font-mono")}
+        className={cn("h-11 w-full min-w-0 max-w-full", icon ? "pl-9" : "pl-3", mono && "font-mono")}
       />
     </div>
   );
@@ -1127,7 +1162,7 @@ function CreatableCombobox({
 
   return (
     <div className="relative">
-      <input
+      <Input aria-invalid={error}
         value={value}
         onChange={(event) => {
           onChange(event.target.value);
@@ -1136,7 +1171,7 @@ function CreatableCombobox({
         onFocus={() => setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         placeholder={placeholder}
-        className={cn(controlBaseClass(error), "pr-10 pl-3")}
+        className={cn("h-11 w-full min-w-0 max-w-full", "pr-10 pl-3")}
       />
       <button
         type="button"
@@ -1181,15 +1216,12 @@ function TextAreaInput({
   placeholder?: string;
 }) {
   return (
-    <textarea
+    <Textarea
       rows={3}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
-      className={cn(
-        "w-full rounded-md border border-stone-200 bg-white px-3 py-3 text-sm text-stone-900 outline-none transition",
-        "placeholder:text-stone-400 focus:border-[#ff5800] focus:ring-4 focus:ring-[#ff5800]/10",
-      )}
+      className={"w-full px-3 py-3 text-sm transition"}
     />
   );
 }
@@ -1227,20 +1259,12 @@ export function DocumentGenerationPageClient() {
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);
   const [templateCatalog, setTemplateCatalog] = useState<DocumentTemplateSummary[]>([]);
   const [dynamicOptions, setDynamicOptions] = useState<DynamicFieldOptions>({ tenantUsers: [] });
-  const [inputData, setInputData] = useState<Record<string, unknown>>({});
-  const [draftId, setDraftId] = useState<string>(initialDraftId);
   const [editingGeneratedId, setEditingGeneratedId] = useState<string>(initialGeneratedId);
   const [editingGeneratedStatus, setEditingGeneratedStatus] = useState<string>("");
-  const [draftStatus, setDraftStatus] = useState<string>("");
   const [generatedDocument, setGeneratedDocument] = useState<GeneratedDocumentResponse | null>(null);
   const [generatedDownloadTarget, setGeneratedDownloadTarget] = useState<GeneratedDocumentDownloadTarget | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingDraft, setSavingDraft] = useState(false);
-  const [autosavingDraft, setAutosavingDraft] = useState(false);
-  const [autosaveRevision, setAutosaveRevision] = useState(0);
-  const [assisting, setAssisting] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(112);
   const [showValidationReview, setShowValidationReview] = useState(false);
@@ -1248,16 +1272,39 @@ export function DocumentGenerationPageClient() {
   const inlineDocumentRootRef = useRef<HTMLDivElement | null>(null);
   const inlineInputDataRef = useRef<Record<string, unknown>>({});
   const bootstrapRequestIdRef = useRef(0);
-  const draftIdRef = useRef(initialDraftId);
-  const draftContextVersionRef = useRef(0);
-  const purchaseOrderDraftDirtyRef = useRef(false);
-  const autosaveRequestRef = useRef<Promise<void> | null>(null);
-  const autosavePendingRef = useRef(false);
+  const [editorSession] = useState(() => createEditorSession({
+    transport: editorSessionTransport,
+    onAutosaveError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? `No se pudo guardar automaticamente: ${error.message}`
+          : "No se pudo guardar automaticamente la orden de compra.",
+      );
+    },
+  }));
+  const editorSnapshot = useSyncExternalStore(
+    editorSession.subscribe,
+    editorSession.getSnapshot,
+    editorSession.getSnapshot,
+  );
+  const { inputData, draftId, draftStatus, operation } = editorSnapshot;
+  const savingDraft = operation.kind === "saving" && operation.reason === "manual";
+  const autosavingDraft = operation.kind === "saving" && operation.reason === "auto";
+  const assisting = operation.kind === "assisting";
+  const generating = operation.kind === "generating";
+  const editorBusy = operation.kind === "saving" || operation.kind === "assisting" || operation.kind === "generating";
 
   const loadBootstrap = useCallback(
     async (
       params?: { workId?: string; folderPath?: string; documentType?: string },
-      options?: { templateId?: string; inputData?: Record<string, unknown>; replaceInputData?: boolean; refreshSequence?: boolean },
+      options?: {
+        templateId?: string;
+        inputData?: Record<string, unknown>;
+        replaceInputData?: boolean;
+        refreshSequence?: boolean;
+        draft?: { id: string; updatedAt: string; status: string } | null;
+        generatedDocumentId?: string;
+      },
     ) => {
       const requestId = bootstrapRequestIdRef.current + 1;
       bootstrapRequestIdRef.current = requestId;
@@ -1291,20 +1338,31 @@ export function DocumentGenerationPageClient() {
         setTemplates(payload.templates);
         setTemplateCatalog(nextTemplateCatalog);
         setDynamicOptions({ tenantUsers: payload.dynamicOptions?.tenantUsers ?? [] });
-        setFolderPath(payload.context.folderPath ?? (params?.folderPath ?? ""));
-        setDocumentType(payload.context.documentType ?? "");
+        const nextWorkId = payload.context.workId ?? params?.workId ?? "";
+        const nextFolderPath = payload.context.folderPath ?? params?.folderPath ?? "";
+        const nextDocumentType = payload.context.documentType ?? "";
+        setFolderPath(nextFolderPath);
+        setDocumentType(nextDocumentType);
         setTemplateId(nextTemplateId);
-        setInputData((current) => {
-          if (requestId !== bootstrapRequestIdRef.current) return current;
-          const shouldReplaceInputData = options?.replaceInputData ?? true;
-          const mergedInputData = shouldReplaceInputData
-            ? { ...payload.context.initialInputData, ...(options?.inputData ?? {}) }
-            : { ...payload.context.initialInputData, ...current, ...(options?.inputData ?? {}) };
-          const nextInputData = refreshAutoSequenceInputData(nextTemplate, mergedInputData, sequenceCount, {
-            refreshSequence: options?.refreshSequence,
-          });
-          inlineInputDataRef.current = nextInputData;
-          return nextInputData;
+        const shouldReplaceInputData = options?.replaceInputData ?? true;
+        const currentInputData = editorSession.getSnapshot().inputData;
+        const mergedInputData = shouldReplaceInputData
+          ? { ...payload.context.initialInputData, ...(options?.inputData ?? {}) }
+          : { ...payload.context.initialInputData, ...currentInputData, ...(options?.inputData ?? {}) };
+        const nextInputData = refreshAutoSequenceInputData(nextTemplate, mergedInputData, sequenceCount, {
+          refreshSequence: options?.refreshSequence,
+        });
+        inlineInputDataRef.current = nextInputData;
+        editorSession.hydrate({
+          target: createEditorTarget({
+            workId: nextWorkId,
+            folderPath: nextFolderPath,
+            documentType: nextDocumentType,
+            templateId: nextTemplateId,
+            generatedDocumentId: options?.generatedDocumentId,
+          }),
+          inputData: nextInputData,
+          draft: options?.draft ?? null,
         });
       } catch (error) {
         if (requestId === bootstrapRequestIdRef.current) {
@@ -1316,7 +1374,7 @@ export function DocumentGenerationPageClient() {
         }
       }
     },
-    [],
+    [editorSession],
   );
 
   useEffect(() => {
@@ -1343,13 +1401,20 @@ export function DocumentGenerationPageClient() {
           setWorkId(payload.draft.workId);
           setFolderPath(payload.draft.folderPath);
           setDocumentType(normalizeDocumentType(payload.draft.documentType) ?? "");
-          setDraftId(payload.draft.id);
           setEditingGeneratedId("");
           setEditingGeneratedStatus("");
-          setDraftStatus(payload.draft.status);
           setValidationErrors([]);
           setGeneratedDocument(null);
           setGeneratedDownloadTarget(null);
+          editorSession.selectDocumentContext({
+            target: createEditorTarget({
+              workId: payload.draft.workId,
+              folderPath: payload.draft.folderPath,
+              documentType: payload.draft.documentType,
+              templateId: payload.draft.templateId,
+            }),
+            inputData: {},
+          });
           await loadBootstrap(
             {
               workId: payload.draft.workId,
@@ -1360,6 +1425,11 @@ export function DocumentGenerationPageClient() {
               templateId: payload.draft.templateId,
               inputData: payload.draft.inputData,
               replaceInputData: true,
+              draft: {
+                id: payload.draft.id,
+                updatedAt: payload.draft.updatedAt,
+                status: payload.draft.status,
+              },
             },
           );
         } catch (error) {
@@ -1394,13 +1464,21 @@ export function DocumentGenerationPageClient() {
           setWorkId(payload.document.workId);
           setFolderPath(payload.document.folderPath);
           setDocumentType(normalizeDocumentType(payload.document.documentType) ?? "");
-          setDraftId("");
-          setDraftStatus("");
           setEditingGeneratedId(payload.document.id);
           setEditingGeneratedStatus(payload.document.status);
           setValidationErrors([]);
           setGeneratedDocument(null);
           setGeneratedDownloadTarget(buildDownloadTargetFromGeneratedDetail(payload.document));
+          editorSession.selectDocumentContext({
+            target: createEditorTarget({
+              workId: payload.document.workId,
+              folderPath: payload.document.folderPath,
+              documentType: payload.document.documentType,
+              templateId: payload.document.templateId,
+              generatedDocumentId: payload.document.id,
+            }),
+            inputData: {},
+          });
           await loadBootstrap(
             {
               workId: payload.document.workId,
@@ -1412,6 +1490,7 @@ export function DocumentGenerationPageClient() {
               inputData: payload.document.inputData,
               replaceInputData: true,
               refreshSequence: false,
+              generatedDocumentId: payload.document.id,
             },
           );
         } catch (error) {
@@ -1426,13 +1505,20 @@ export function DocumentGenerationPageClient() {
         return;
       }
 
-      setDraftId("");
       setEditingGeneratedId("");
       setEditingGeneratedStatus("");
-      setDraftStatus("");
       setGeneratedDocument(null);
       setGeneratedDownloadTarget(null);
       setValidationErrors([]);
+      editorSession.selectDocumentContext({
+        target: createEditorTarget({
+          workId: initialWorkId,
+          folderPath: initialFolderPath,
+          documentType: initialDocumentType ?? "",
+          templateId: "",
+        }),
+        inputData: {},
+      });
       await loadBootstrap({
         workId: initialWorkId,
         folderPath: initialFolderPath,
@@ -1443,8 +1529,9 @@ export function DocumentGenerationPageClient() {
     void load();
     return () => {
       cancelled = true;
+      bootstrapRequestIdRef.current += 1;
     };
-  }, [initialDocumentType, initialDraftId, initialFolderPath, initialGeneratedId, initialWorkId, loadBootstrap, replace]);
+  }, [editorSession, initialDocumentType, initialDraftId, initialFolderPath, initialGeneratedId, initialWorkId, loadBootstrap, replace]);
 
   useEffect(() => {
     if (pathname !== "/document-generation") return;
@@ -1462,10 +1549,6 @@ export function DocumentGenerationPageClient() {
   useEffect(() => {
     inlineInputDataRef.current = inputData;
   }, [inputData]);
-
-  useEffect(() => {
-    draftIdRef.current = draftId;
-  }, [draftId]);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === templateId) ?? null,
@@ -1589,15 +1672,17 @@ export function DocumentGenerationPageClient() {
   );
 
   const handleWorkChange = async (value: string) => {
-    draftContextVersionRef.current += 1;
-    purchaseOrderDraftDirtyRef.current = false;
-    draftIdRef.current = "";
+    const nextTarget = createEditorTarget({
+      workId: value,
+      folderPath,
+      documentType,
+      templateId: "",
+      generatedDocumentId: editingGeneratedId,
+    });
+    editorSession.selectDocumentContext({ target: nextTarget, inputData: {} });
     setWorkId(value);
     setTemplateId("");
     inlineInputDataRef.current = {};
-    setInputData({});
-    setDraftId("");
-    setDraftStatus("");
     setGeneratedDocument(null);
     setGeneratedDownloadTarget(null);
     setValidationErrors([]);
@@ -1608,9 +1693,6 @@ export function DocumentGenerationPageClient() {
   };
 
   const handleDocumentTypeChange = async (value: string) => {
-    draftContextVersionRef.current += 1;
-    purchaseOrderDraftDirtyRef.current = false;
-    draftIdRef.current = "";
     const nextType = normalizeDocumentType(value) ?? "";
     const nextFolderPath =
       nextType && folderPath
@@ -1622,13 +1704,20 @@ export function DocumentGenerationPageClient() {
       nextFolderPath.length === 0 ||
       nextFolderPath.includes(nextType);
     const resolvedFolderPath = shouldKeepFolder ? folderPath : "";
+    editorSession.selectDocumentContext({
+      target: createEditorTarget({
+        workId,
+        folderPath: resolvedFolderPath,
+        documentType: nextType,
+        templateId: "",
+        generatedDocumentId: editingGeneratedId,
+      }),
+      inputData: {},
+    });
     setDocumentType(nextType);
     setFolderPath(resolvedFolderPath);
     setTemplateId("");
     inlineInputDataRef.current = {};
-    setInputData({});
-    setDraftId("");
-    setDraftStatus("");
     setGeneratedDocument(null);
     setGeneratedDownloadTarget(null);
     setValidationErrors([]);
@@ -1639,22 +1728,26 @@ export function DocumentGenerationPageClient() {
   };
 
   const handleFolderChange = async (value: string) => {
-    draftContextVersionRef.current += 1;
-    purchaseOrderDraftDirtyRef.current = false;
-    draftIdRef.current = "";
     const nextFolderConfig = folderConfigs.find((config) => config.path === value) ?? null;
     const nextDocumentType =
       documentType &&
         (!nextFolderConfig?.allowedDocumentTypes.length || nextFolderConfig.allowedDocumentTypes.includes(documentType))
         ? documentType
         : "";
+    editorSession.selectDocumentContext({
+      target: createEditorTarget({
+        workId,
+        folderPath: value,
+        documentType: nextDocumentType,
+        templateId: "",
+        generatedDocumentId: editingGeneratedId,
+      }),
+      inputData: {},
+    });
     setFolderPath(value);
     setDocumentType(nextDocumentType);
     setTemplateId("");
     inlineInputDataRef.current = {};
-    setInputData({});
-    setDraftId("");
-    setDraftStatus("");
     setGeneratedDocument(null);
     setGeneratedDownloadTarget(null);
     setValidationErrors([]);
@@ -1669,8 +1762,8 @@ export function DocumentGenerationPageClient() {
       ? applyTemplateFormulaInputData(selectedTemplate.schema, nextData)
       : nextData;
     inlineInputDataRef.current = derivedData;
-    setInputData(derivedData);
-  }, [selectedTemplate]);
+    editorSession.edit(derivedData);
+  }, [editorSession, selectedTemplate]);
 
   const updateInputDataFromLatest = useCallback((updater: (current: Record<string, unknown>) => Record<string, unknown>) => {
     const nextData = updater(inlineInputDataRef.current);
@@ -1678,13 +1771,11 @@ export function DocumentGenerationPageClient() {
       ? applyTemplateFormulaInputData(selectedTemplate.schema, nextData)
       : nextData;
     inlineInputDataRef.current = derivedData;
-    purchaseOrderDraftDirtyRef.current = true;
-    setInputData(derivedData);
+    editorSession.edit(derivedData);
     return derivedData;
-  }, [selectedTemplate]);
+  }, [editorSession, selectedTemplate]);
 
   const handleTemplateChange = (value: string) => {
-    draftContextVersionRef.current += 1;
     setTemplateId(value);
     setValidationErrors([]);
     const nextTemplate = templates.find((template) => template.id === value) ?? null;
@@ -1699,11 +1790,20 @@ export function DocumentGenerationPageClient() {
         existingSequenceCount,
       },
     );
-    commitInputData(
-      refreshAutoSequenceInputData(nextTemplate, nextInputData, existingSequenceCount, {
-        refreshSequence: !isEditingGeneratedDocument,
+    const activatedInputData = refreshAutoSequenceInputData(nextTemplate, nextInputData, existingSequenceCount, {
+      refreshSequence: !isEditingGeneratedDocument,
+    });
+    inlineInputDataRef.current = activatedInputData;
+    editorSession.activateTemplate({
+      target: createEditorTarget({
+        workId,
+        folderPath,
+        documentType,
+        templateId: value,
+        generatedDocumentId: editingGeneratedId,
       }),
-    );
+      inputData: activatedInputData,
+    });
   };
 
   const handleFieldChange = (field: TemplateField, value: string) => {
@@ -1812,14 +1912,11 @@ export function DocumentGenerationPageClient() {
       ? applyTemplateFormulaInputData(selectedTemplate.schema, next.data)
       : next.data;
     inlineInputDataRef.current = derivedData;
-    purchaseOrderDraftDirtyRef.current = true;
+    editorSession.edit(derivedData);
     return { ...next, data: derivedData };
-  }, [buildInlineDraftData, selectedTemplate]);
+  }, [buildInlineDraftData, editorSession, selectedTemplate]);
 
-  const flushInlineDraftData = useCallback((changedErrorKeys: string[] = []) => {
-    const nextData = inlineInputDataRef.current;
-    setInputData((current) => (current === nextData ? current : nextData));
-    if (changedErrorKeys.length === 0) return;
+  const clearInlineValidationErrors = useCallback((changedErrorKeys: string[]) => {
     setValidationErrors((current) => {
       const next = current.filter((error) => !changedErrorKeys.includes(error.key));
       return next.length === current.length ? current : next;
@@ -1830,20 +1927,16 @@ export function DocumentGenerationPageClient() {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
     const next = syncInlineDraftValue(target, target.value);
-    if (next) flushInlineDraftData(next.changedErrorKeys);
+    if (next) clearInlineValidationErrors(next.changedErrorKeys);
   };
 
-  const handleInlineDocumentChange = (event: FormEvent<HTMLDivElement>) => {
+  const handleInlineDocumentInput = (event: FormEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
-    if (
-      target instanceof HTMLInputElement &&
-      !target.hasAttribute("list")
-    ) {
-      return;
-    }
     const next = syncInlineDraftValue(target, target.value);
-    if (next) flushInlineDraftData(next.changedErrorKeys);
+    if (next && (target instanceof HTMLSelectElement || target.hasAttribute("list"))) {
+      clearInlineValidationErrors(next.changedErrorKeys);
+    }
   };
 
   const addRepeatableRow = (groupKey: string, fields: TemplateField[]) => {
@@ -1877,185 +1970,48 @@ export function DocumentGenerationPageClient() {
     }));
   };
 
-  const persistCreatableOptions = async (data: Record<string, unknown>) => {
-    if (!templateId) return;
-    const additions = collectCreatableOptionAdditions(selectedTemplateFields, data);
+  const applyPersistedOptionAdditions = (additions: CreatableOptionAddition[]) => {
     if (additions.length === 0) return;
-
-    try {
-      const response = await fetch("/api/document-generation/templates/options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId, additions }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "No se pudieron guardar las opciones nuevas");
-      }
-
-      setTemplates((current) =>
-        current.map((template) =>
-          template.id === templateId
-            ? {
-              ...template,
-              schema: {
-                ...template.schema,
-                fields: applyOptionAdditionsToFields(template.schema.fields, additions),
-              },
-            }
-            : template,
-        ),
-      );
-    } catch (error) {
-      toast.warning(error instanceof Error ? error.message : "No se pudieron guardar las opciones nuevas");
-    }
+    setTemplates((current) =>
+      current.map((template) =>
+        template.id === templateId
+          ? {
+            ...template,
+            schema: {
+              ...template.schema,
+              fields: applyOptionAdditionsToFields(template.schema.fields, additions),
+            },
+          }
+          : template,
+      ),
+    );
   };
 
   const handleAssistFromDocuments = async () => {
-    const currentInputData = inlineInputDataRef.current;
-    flushInlineDraftData();
     if (!workId || !folderPath || !documentType || !templateId) {
       toast.error("Completa obra, carpeta, tipo documental y plantilla.");
       return;
     }
 
-    setAssisting(true);
-    try {
-      const response = await fetch("/api/document-generation/assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workId,
-          folderPath,
-          documentType,
-          templateId,
-          inputData: currentInputData,
-        }),
-      });
-      const payload = (await response.json()) as AssistResponse & { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "No se pudo completar con documentos");
-      }
+    const result = await editorSession.assist();
+    if (result.kind === "failure") {
+      toast.error(result.error instanceof Error ? result.error.message : "No se pudo completar con documentos");
+      return;
+    }
+    if (result.kind !== "success") return;
 
-      inlineInputDataRef.current = payload.inputData;
-      purchaseOrderDraftDirtyRef.current = true;
-      setInputData(payload.inputData);
-      setValidationErrors((current) =>
-        selectedTemplate ? validateTemplateInput(selectedTemplate.schema, payload.inputData) : current,
-      );
-      const sourceCount = payload.context.sources.length;
-      if (payload.appliedFieldCount > 0) {
-        toast.success(`Contexto aplicado: ${payload.appliedFieldCount} campos desde ${sourceCount} referencias.`);
-      } else {
-        toast.message(payload.context.warnings[0] ?? "No hubo campos nuevos para completar.");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo completar con documentos");
-    } finally {
-      setAssisting(false);
+    inlineInputDataRef.current = result.value.inputData;
+    setValidationErrors((current) =>
+      selectedTemplate ? validateTemplateInput(selectedTemplate.schema, result.value.inputData) : current,
+    );
+    if (result.value.appliedFieldCount > 0) {
+      toast.success(`Contexto aplicado: ${result.value.appliedFieldCount} campos desde ${result.value.sourceCount} referencias.`);
+    } else {
+      toast.message(result.value.warning ?? "No hubo campos nuevos para completar.");
     }
   };
 
-  const persistDraft = useCallback(async (
-    currentInputData: Record<string, unknown>,
-    target: {
-      workId: string;
-      folderPath: string;
-      documentType: string;
-      templateId: string;
-    },
-    options?: { applyServerInput?: boolean },
-  ) => {
-      const requestContextVersion = draftContextVersionRef.current;
-      const response = await fetch("/api/document-generation/drafts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          id: draftIdRef.current || undefined,
-          workId: target.workId,
-          folderPath: target.folderPath,
-          documentType: target.documentType,
-          templateId: target.templateId,
-          inputData: currentInputData,
-        }),
-      });
-      const payload = (await response.json()) as DraftResponse & { error?: string };
-      if (!response.ok || !payload.draft?.id) {
-        throw new Error(payload.error || "No se pudo guardar el borrador");
-      }
-
-      const nextInputData = payload.draft.input_data ?? currentInputData;
-      if (requestContextVersion !== draftContextVersionRef.current) {
-        return { applied: false, inputData: nextInputData };
-      }
-
-      draftIdRef.current = payload.draft.id;
-      setDraftId(payload.draft.id);
-      setDraftStatus(payload.draft.status);
-      if (options?.applyServerInput !== false) {
-        commitInputData(nextInputData);
-      }
-      return { applied: true, inputData: nextInputData };
-  }, [commitInputData]);
-
-  useEffect(() => {
-    if (
-      loading ||
-      editingGeneratedId ||
-      documentType !== "PURCHASE_ORDER" ||
-      !workId ||
-      !folderPath ||
-      !templateId ||
-      !purchaseOrderDraftDirtyRef.current
-    ) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      if (!purchaseOrderDraftDirtyRef.current) return;
-      if (autosaveRequestRef.current) {
-        autosavePendingRef.current = true;
-        return;
-      }
-
-      const dataToSave = inlineInputDataRef.current;
-      purchaseOrderDraftDirtyRef.current = false;
-      autosavePendingRef.current = false;
-      setAutosavingDraft(true);
-      let saveFailed = false;
-      const request = persistDraft(dataToSave, {
-        workId,
-        folderPath,
-        documentType,
-        templateId,
-      }, { applyServerInput: false })
-        .then(() => undefined)
-        .catch((error) => {
-          saveFailed = true;
-          purchaseOrderDraftDirtyRef.current = true;
-          toast.error(
-            error instanceof Error
-              ? `No se pudo guardar automaticamente: ${error.message}`
-              : "No se pudo guardar automaticamente la orden de compra.",
-          );
-        })
-        .finally(() => {
-          autosaveRequestRef.current = null;
-          setAutosavingDraft(false);
-          if (autosavePendingRef.current || (!saveFailed && purchaseOrderDraftDirtyRef.current)) {
-            autosavePendingRef.current = false;
-            setAutosaveRevision((current) => current + 1);
-          }
-        });
-      autosaveRequestRef.current = request;
-    }, PURCHASE_ORDER_AUTOSAVE_DELAY_MS);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [autosaveRevision, documentType, editingGeneratedId, folderPath, loading, persistDraft, templateId, workId, inputData]);
-
   const handleSaveDraft = async () => {
-    flushInlineDraftData();
     if (editingGeneratedId) {
       toast.error("Los documentos emitidos se actualizan directo al guardar cambios.");
       return;
@@ -2072,27 +2028,23 @@ export function DocumentGenerationPageClient() {
       commitInputData(currentInputData);
     }
 
-    setSavingDraft(true);
-    try {
-      const persistedDraft = await persistDraft(currentInputData, {
-        workId,
-        folderPath,
-        documentType,
-        templateId,
-      });
-      if (!persistedDraft.applied) return;
-      purchaseOrderDraftDirtyRef.current = false;
-      await persistCreatableOptions(persistedDraft.inputData);
-      toast.success("Borrador guardado.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo guardar el borrador");
-    } finally {
-      setSavingDraft(false);
+    const additions = collectCreatableOptionAdditions(selectedTemplateFields, currentInputData);
+    const result = await editorSession.save(additions);
+    if (result.kind === "failure") {
+      toast.error(result.error instanceof Error ? result.error.message : "No se pudo guardar el borrador");
+      return;
     }
+    if (result.kind !== "success") return;
+    inlineInputDataRef.current = editorSession.getSnapshot().inputData;
+    if (result.optionError) {
+      toast.warning(result.optionError instanceof Error ? result.optionError.message : "No se pudieron guardar las opciones nuevas");
+    } else {
+      applyPersistedOptionAdditions(additions);
+    }
+    toast.success("Borrador guardado.");
   };
 
   const handleGenerate = async () => {
-    flushInlineDraftData();
     const currentInputData = selectedTemplate
       ? refreshAutoSequenceInputData(selectedTemplate, inlineInputDataRef.current, existingSequenceCount, {
         refreshSequence: !isEditingGeneratedDocument,
@@ -2112,51 +2064,37 @@ export function DocumentGenerationPageClient() {
       return;
     }
 
-    setGenerating(true);
-    try {
-      const response = await fetch("/api/document-generation/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          draftId: draftId || undefined,
-          generatedDocumentId: editingGeneratedId || undefined,
-          workId,
-          folderPath,
-          documentType,
-          templateId,
-          inputData: currentInputData,
-        }),
-      });
-      const payload = (await response.json()) as GeneratedDocumentResponse & {
-        error?: string;
-        validationErrors?: ValidationError[];
-      };
-      if (!response.ok) {
-        setValidationErrors(payload.validationErrors ?? []);
+    const additions = collectCreatableOptionAdditions(selectedTemplateFields, currentInputData);
+    const result = await editorSession.generate(additions);
+    if (result.kind === "failure") {
+      if (result.error instanceof EditorSessionRequestError) {
+        setValidationErrors(result.error.details.validationErrors ?? []);
         setShowValidationReview(true);
-        throw new Error(payload.error || "No se pudo generar el documento");
       }
-
-      setGeneratedDocument(payload);
-      setGeneratedDownloadTarget(buildDownloadTargetFromGeneratedResponse(payload, workId));
-      const serverInputData = payload.generatedDocument.input_data ?? currentInputData;
-      commitInputData(serverInputData);
-      if (editingGeneratedId) {
-        setEditingGeneratedStatus(payload.generatedDocument.status);
-      }
-      setValidationErrors([]);
-      setShowValidationReview(false);
-      await persistCreatableOptions(serverInputData);
-      toast.success(
-        editingGeneratedId
-          ? "Documento actualizado y enviado nuevamente a revisión."
-          : "Documento generado y guardado en la carpeta.",
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo generar el documento");
-    } finally {
-      setGenerating(false);
+      toast.error(result.error instanceof Error ? result.error.message : "No se pudo generar el documento");
+      return;
     }
+    if (result.kind !== "success") return;
+
+    const payload = result.value;
+    setGeneratedDocument(payload);
+    setGeneratedDownloadTarget(buildDownloadTargetFromGeneratedResponse(payload, workId));
+    inlineInputDataRef.current = editorSession.getSnapshot().inputData;
+    if (editingGeneratedId) {
+      setEditingGeneratedStatus(payload.generatedDocument.status);
+    }
+    setValidationErrors([]);
+    setShowValidationReview(false);
+    if (result.optionError) {
+      toast.warning(result.optionError instanceof Error ? result.optionError.message : "No se pudieron guardar las opciones nuevas");
+    } else {
+      applyPersistedOptionAdditions(additions);
+    }
+    toast.success(
+      editingGeneratedId
+        ? "Documento actualizado y enviado nuevamente a revisión."
+        : "Documento generado y guardado en la carpeta.",
+    );
   };
 
   const openInWork = () => {
@@ -2293,10 +2231,10 @@ export function DocumentGenerationPageClient() {
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <Button
               type="button"
-              variant="outline"
+              variant={"secondary"}
               onClick={() => void handleAssistFromDocuments()}
-              disabled={assisting || loading || !selectedTemplate || !workId || !folderPath || !documentType}
-              className="h-9 rounded-md border-stone-200 bg-white px-4"
+              disabled={editorBusy || loading || !selectedTemplate || !workId || !folderPath || !documentType}
+              className="h-9 px-4"
             >
               {assisting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
               Completar con documentos
@@ -2305,8 +2243,8 @@ export function DocumentGenerationPageClient() {
               type="button"
               variant="ghost"
               onClick={handleSaveDraft}
-              disabled={savingDraft || autosavingDraft || loading || Boolean(editingGeneratedId)}
-              className="h-9 w-full rounded-md px-4 text-stone-700 sm:w-auto"
+              disabled={editorBusy || loading || Boolean(editingGeneratedId)}
+              className="h-9 w-full px-4 sm:w-auto"
               hidden={Boolean(editingGeneratedId)}
             >
               {savingDraft ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
@@ -2314,9 +2252,9 @@ export function DocumentGenerationPageClient() {
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant={"secondary"}
               onClick={() => setPreviewDialogOpen(true)}
-              className="h-9 rounded-md border-stone-200 bg-white px-4"
+              className="h-9 px-4"
             >
               <Eye className="mr-2 size-4" />
               Vista previa completa
@@ -2327,17 +2265,17 @@ export function DocumentGenerationPageClient() {
                 variant="outline"
                 onClick={downloadGeneratedDocument}
                 disabled={loading || !generatedDownloadTarget || !canDownloadGeneratedDocument}
-                className="h-9 w-full rounded-md px-4 sm:w-auto"
+                className="h-9 w-full px-4 sm:w-auto"
               >
                 <Download className="mr-2 size-4" />
                 Descargar
               </Button>
             ) : null}
-            <Button
+            <Button variant={"dark"}
               type="button"
               onClick={handleGenerate}
-              disabled={generating || autosavingDraft || loading || !selectedTemplate}
-              className="h-9 w-full rounded-md bg-[linear-gradient(180deg,#201E25_0%,#323137_100%)] px-4 text-white shadow-[0_2px_4px_rgba(0,0,0,0.10),0_0_0_1px_#0D0D0D] sm:w-auto"
+              disabled={editorBusy || loading || !selectedTemplate}
+              className="h-9 w-full px-4 sm:w-auto"
             >
               {generating ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -2403,6 +2341,7 @@ export function DocumentGenerationPageClient() {
                       label: template.name,
                     }))}
                     placeholder="Seleccionar plantilla"
+                    disabled={loading}
                   />
                 </FormField>
                 {documentAiContext ? (
@@ -2449,21 +2388,21 @@ export function DocumentGenerationPageClient() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <PreviewToolButton
+                  <Button type="button" variant="outline" size="icon-sm" aria-label="Alejar"
                     onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
                     disabled={!selectedTemplate}
                   >
                     <ZoomOut className="h-3.5 w-3.5" />
-                  </PreviewToolButton>
+                  </Button>
                   <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
                     {previewZoom}%
                   </span>
-                  <PreviewToolButton
+                  <Button type="button" variant="outline" size="icon-sm" aria-label="Alejar"
                     onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
                     disabled={!selectedTemplate}
                   >
                     <ZoomIn className="h-3.5 w-3.5" />
-                  </PreviewToolButton>
+                  </Button>
                 </div>
               </div>
 
@@ -2481,7 +2420,7 @@ export function DocumentGenerationPageClient() {
                         invalidKeys={invalidInlineFieldKeys}
                         rootRef={inlineDocumentRootRef}
                         onBlur={handleInlineDocumentBlur}
-                        onChange={handleInlineDocumentChange}
+                        onInput={handleInlineDocumentInput}
                       />
                     </div>
                   </div>
@@ -2509,7 +2448,7 @@ export function DocumentGenerationPageClient() {
                       key={group.key}
                       type="button"
                       variant="outline"
-                      className="rounded-md"
+
                       onClick={() => addRepeatableRow(group.key, group.fields)}
                     >
                       <Plus className="mr-2 h-4 w-4" />
@@ -2592,25 +2531,25 @@ export function DocumentGenerationPageClient() {
                   }
                 >
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="secondary" onClick={openInWork} className="rounded-md">
+                    <Button type="button" variant="secondary" onClick={openInWork} >
                       Ver en la obra
                     </Button>
-                    <Button asChild type="button" variant="outline" className="rounded-md">
+                    <Button asChild type="button" variant="outline" >
                       <Link
                         href={`/excel/${workId}?tab=documentos&folder=${encodeURIComponent(generatedDocument.relativeFolderPath)}&file=${encodeURIComponent(generatedDocument.relativeFilePath)}`}
                       >
                         Abrir documento
                       </Link>
                     </Button>
-                    <Button type="button" variant="outline" onClick={downloadGeneratedDocument} className="rounded-md">
+                    <Button type="button" variant="outline" onClick={downloadGeneratedDocument} >
                       <Download className="mr-2 h-4 w-4" />
                       Descargar
                     </Button>
-                    <Button type="button" variant="outline" onClick={copyGeneratedReviewLink} className="rounded-md">
+                    <Button type="button" variant="outline" onClick={copyGeneratedReviewLink} >
                       <Copy className="mr-2 h-4 w-4" />
                       Copiar link de revision
                     </Button>
-                    <Button asChild type="button" variant="outline" className="rounded-md">
+                    <Button asChild type="button" variant="outline" >
                       <Link href="/document-generation/review">Ir a revision</Link>
                     </Button>
                   </div>
@@ -2684,6 +2623,7 @@ export function DocumentGenerationPageClient() {
                           label: template.name,
                         }))}
                         placeholder="Seleccionar plantilla"
+                        disabled={loading}
                       />
                     </FormField>
                   </div>
@@ -2738,14 +2678,14 @@ export function DocumentGenerationPageClient() {
                       key={group.key}
                       title={group.label}
                       rightSlot={
-                        <button
+                        <Button variant="outline"
                           type="button"
                           onClick={() => addRepeatableRow(group.key, group.fields)}
-                          className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
+                          className="h-8 gap-2 px-3 text-xs"
                         >
                           <Plus className="size-3.5" />
                           Agregar fila
-                        </button>
+                        </Button>
                       }
                     >
                       <div className="space-y-4">
@@ -2858,10 +2798,10 @@ export function DocumentGenerationPageClient() {
                     }
                   >
                     <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="secondary" onClick={openInWork} className="rounded-md">
+                      <Button type="button" variant="secondary" onClick={openInWork} >
                         Ver en la obra
                       </Button>
-                      <Button asChild type="button" variant="outline" className="rounded-md">
+                      <Button asChild type="button" variant="outline" >
                         <Link
                           href={`/excel/${workId}?tab=documentos&folder=${encodeURIComponent(generatedDocument.relativeFolderPath)}&file=${encodeURIComponent(generatedDocument.relativeFilePath)}`}
                         >
@@ -2872,16 +2812,16 @@ export function DocumentGenerationPageClient() {
                         type="button"
                         variant="outline"
                         onClick={downloadGeneratedDocument}
-                        className="rounded-md"
+
                       >
                         <Download className="mr-2 size-4" />
                         Descargar
                       </Button>
-                      <Button type="button" variant="outline" onClick={copyGeneratedReviewLink} className="rounded-md">
+                      <Button type="button" variant="outline" onClick={copyGeneratedReviewLink} >
                         <Copy className="mr-2 size-4" />
                         Copiar link de revision
                       </Button>
-                      <Button asChild type="button" variant="outline" className="rounded-md">
+                      <Button asChild type="button" variant="outline" >
                         <Link href="/document-generation/review">
                           Ir a revision
                         </Link>
@@ -2906,25 +2846,25 @@ export function DocumentGenerationPageClient() {
               </div>
 
               <div className="flex items-center gap-2">
-                <PreviewToolButton
+                <Button type="button" variant="outline" size="icon-sm"
                   onClick={() => setPreviewZoom((current) => Math.max(50, current - 8))}
                   disabled={!selectedTemplate}
                 >
                   <ZoomOut className="size-3.5" />
-                </PreviewToolButton>
+                </Button>
                 <span className="min-w-[38px] text-center font-mono text-xs text-stone-600">
                   {previewZoom}%
                 </span>
-                <PreviewToolButton
+                <Button type="button" variant="outline" size="icon-sm"
                   onClick={() => setPreviewZoom((current) => Math.min(140, current + 8))}
                   disabled={!selectedTemplate}
                 >
                   <ZoomIn className="size-3.5" />
-                </PreviewToolButton>
+                </Button>
                 <div className="mx-1 h-5 w-px bg-stone-200" />
-                <PreviewToolButton onClick={() => setPreviewDialogOpen(true)} disabled={!selectedTemplate}>
+                <Button type="button" variant="outline" size="icon-sm" aria-label="Ampliar vista previa" onClick={() => setPreviewDialogOpen(true)} disabled={!selectedTemplate}>
                   <Eye className="size-3.5" />
-                </PreviewToolButton>
+                </Button>
               </div>
             </div>
 
@@ -2932,7 +2872,7 @@ export function DocumentGenerationPageClient() {
               {selectedTemplate ? (
                 <div className="relative max-h-full">
                   <div className="report-paper report-paper-fit-preview bg-white ">
-                    <div dangerouslySetInnerHTML={{ __html: previewHtml }} className="" />
+                    <div dangerouslySetInnerHTML={{ __html: previewHtml }}  />
                   </div>
                 </div>
               ) : (
@@ -2953,7 +2893,7 @@ export function DocumentGenerationPageClient() {
       )}
 
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden rounded-2xl p-0">
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
           <DialogHeader className="border-b border-stone-200 px-6 py-5">
             <DialogTitle>Vista previa completa</DialogTitle>
             <DialogDescription>

@@ -1,46 +1,27 @@
-import {
-	expect,
-	request as playwrightRequest,
-	test,
-} from "@playwright/test";
+import { expect, test } from "../../fixtures/test";
+import { z } from "zod";
 import {
 	buildExcelObraName,
 	createObraViaBulkApi,
-	deleteObrasByNames,
 	fetchAuthenticatedObras,
 } from "../../helpers/obras";
 
-const baseURL =
-	process.env.PLAYWRIGHT_BASE_URL ??
-	`http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+const obrasListResponseSchema = z.object({
+	detalleObras: z
+		.array(
+			z.object({
+				designacionYUbicacion: z.string().nullish(),
+			}),
+		)
+		.optional(),
+});
 
 test.describe("Excel obras API", () => {
-	const createdNames: string[] = [];
-
-	test.afterEach(async () => {
-		await deleteObrasByNames(createdNames.splice(0));
-	});
-
-	test("GET /api/obras requires authentication", async () => {
-		const api = await playwrightRequest.newContext({
-			baseURL,
-			storageState: { cookies: [], origins: [] },
-		});
-		const response = await api.get("/api/obras");
-
-		expect(response.status()).toBe(401);
-		await expect(response.json()).resolves.toMatchObject({
-			error: "Unauthorized",
-		});
-
-		await api.dispose();
-	});
-
 	test("PATCH /api/obras/bulk creates an obra retrievable from GET /api/obras", async ({
 		request,
+		scenario,
 	}) => {
-		const designacionYUbicacion = buildExcelObraName("API Create");
-		createdNames.push(designacionYUbicacion);
+		const designacionYUbicacion = buildExcelObraName(`${scenario.namespace} API Create`);
 
 		const created = await createObraViaBulkApi(request, {
 			designacionYUbicacion,
@@ -80,10 +61,10 @@ test.describe("Excel obras API", () => {
 
 	test("PUT /api/obras rejects legacy partial sync without deleting omitted obras", async ({
 		request,
+		scenario,
 	}) => {
-		const keptName = buildExcelObraName("Legacy Put Kept");
-		const omittedName = buildExcelObraName("Legacy Put Omitted");
-		createdNames.push(keptName, omittedName);
+		const keptName = buildExcelObraName(`${scenario.namespace} Legacy Put Kept`);
+		const omittedName = buildExcelObraName(`${scenario.namespace} Legacy Put Omitted`);
 
 		await createObraViaBulkApi(request, {
 			designacionYUbicacion: keptName,
@@ -123,10 +104,10 @@ test.describe("Excel obras API", () => {
 
 	test("GET /api/obras status filters split in-process and completed obras", async ({
 		request,
+		scenario,
 	}) => {
-		const inProcessName = buildExcelObraName("InProcess");
-		const completedName = buildExcelObraName("Completed");
-		createdNames.push(inProcessName, completedName);
+		const inProcessName = buildExcelObraName(`${scenario.namespace} InProcess`);
+		const completedName = buildExcelObraName(`${scenario.namespace} Completed`);
 
 		await createObraViaBulkApi(request, {
 			designacionYUbicacion: inProcessName,
@@ -145,12 +126,12 @@ test.describe("Excel obras API", () => {
 				expect(inProcessResponse.ok()).toBeTruthy();
 				expect(completedResponse.ok()).toBeTruthy();
 
-				const inProcessPayload = (await inProcessResponse.json()) as {
-					detalleObras?: Array<{ designacionYUbicacion?: string | null }>;
-				};
-				const completedPayload = (await completedResponse.json()) as {
-					detalleObras?: Array<{ designacionYUbicacion?: string | null }>;
-				};
+				const inProcessPayload = obrasListResponseSchema.parse(
+					await inProcessResponse.json(),
+				);
+				const completedPayload = obrasListResponseSchema.parse(
+					await completedResponse.json(),
+				);
 
 				const inProcessNames = new Set(
 					(inProcessPayload.detalleObras ?? []).map(

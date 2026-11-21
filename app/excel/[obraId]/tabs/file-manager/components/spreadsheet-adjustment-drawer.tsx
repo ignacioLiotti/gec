@@ -57,16 +57,9 @@ export function SpreadsheetAdjustmentDrawer({
                 <div className="flex flex-wrap items-center gap-2">
                   <SheetTitle>Ajustar extraccion</SheetTitle>
                   {table?.status ? (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "rounded-full",
-                        table.status === "ready"
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : table.status === "review"
-                            ? "border-amber-300 bg-amber-50 text-amber-700"
-                            : "border-stone-300 bg-stone-100 text-stone-700"
-                      )}
+                    <Badge shape="pill"
+                      variant={(table.status === "ready") ? ("success") : ((table.status === "review") ? ("warning") : ("neutral"))}
+
                     >
                       {table.status === "ready" ? "Listo" : table.status === "review" ? "Revisar" : "Sin datos"}
                     </Badge>
@@ -80,7 +73,7 @@ export function SpreadsheetAdjustmentDrawer({
                 </p>
               </div>
               {table?.sourceLabel ? (
-                <Badge variant="outline" className="max-w-56 truncate border-border bg-white text-muted-foreground">
+                <Badge variant={"neutral"} className="max-w-56 truncate">
                   {table.sourceLabel}
                 </Badge>
               ) : null}
@@ -108,7 +101,7 @@ export function SpreadsheetAdjustmentDrawer({
                     onValueChange={(value) => void onSheetChange(table.tablaId, value === "__none__" ? null : value)}
                     disabled={isLoading || isApplying}
                   >
-                    <SelectTrigger className="mt-1.5 h-9 w-full border-emerald-300 bg-background">
+                    <SelectTrigger className="mt-1.5 h-9 w-full">
                       <SelectValue placeholder="Seleccionar hoja" />
                     </SelectTrigger>
                     <SelectContent>

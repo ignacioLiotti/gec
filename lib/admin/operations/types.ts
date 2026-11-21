@@ -1,0 +1,125 @@
+export type OperationsSelection = { tenantId: string | null; days: 7 | 30 | 90 };
+export type ObservationWindow = {
+	start: string;
+	end: string;
+	liveEnd: string;
+	previousStart: string;
+	timeZone: "UTC";
+};
+export type SourceName = "tenants" | "memberships" | "profiles" | "audit" | "usage" | "ocr";
+export type SourceStatus = {
+	name: SourceName;
+	period: "inventory" | "current" | "previous";
+	status: "available" | "partial" | "unavailable";
+	rows: number;
+	truncated: boolean;
+	coverage: string;
+};
+export type AuditFieldChange = {
+	field: string;
+	before: string | number | boolean | null;
+	after: string | number | boolean | null;
+	redacted: boolean;
+};
+export type AuditChange = {
+	id: string;
+	tenantId: string;
+	actorId: string | null;
+	actorName: string;
+	table: string;
+	action: "INSERT" | "UPDATE" | "DELETE";
+	createdAt: string;
+	rowId: string | null;
+	extractionId: string | null;
+	fields: AuditFieldChange[];
+	hiddenFieldCount: number;
+};
+export type CostSummary = {
+	tenantId: string;
+	kind: "ai_tokens" | "storage_bytes" | "whatsapp_messages";
+	netAmount: number;
+	knownUsd: number | null;
+	pricedEvents: number;
+	unpricedEvents: number;
+	basis: "recorded_estimate";
+};
+export type ObservedOperation = {
+	id: string;
+	tenantId: string;
+	extractionId: string | null;
+	obraId: string;
+	tablaId: string | null;
+	tablaIds: string[];
+	preview: boolean;
+	basis: "ocr_phase" | "document_state";
+	status: "pending" | "processing" | "completed" | "failed";
+	observedAt: string;
+	rowsExtracted: number | null;
+	durationMs: number | null;
+	errorCode: string | null;
+	actorIds: string[];
+	initiatorIds: string[];
+	auditIds: string[];
+	usageEventIds: string[];
+	knownUsd: number | null;
+	unpricedEvents: number;
+};
+export type ActivityRow = {
+	tenantId: string;
+	actorId: string | null;
+	actorName: string;
+	feature: string;
+	metric: "ocr_requests" | "audit_changes";
+	current: number;
+	previous: number;
+	activeDays: number;
+	previousActiveDays: number;
+	comparable: boolean;
+	days: { date: string; count: number }[];
+};
+export type TenantSummary = {
+	id: string;
+	name: string;
+	createdAt: string;
+	members: number;
+	activeActors: number;
+	auditChanges: number;
+	previousAuditChanges: number;
+	observedJobs: number;
+	failedJobs: number;
+	knownUsd: number | null;
+	unpricedEvents: number;
+	hasFullWindow: boolean;
+};
+export type PersonSummary = {
+	tenantId: string;
+	id: string;
+	name: string;
+	role: string | null;
+	auditChanges: number;
+};
+export type OperationsSnapshot = {
+	generatedAt: string;
+	selection: OperationsSelection;
+	window: ObservationWindow;
+	measurement: "observed_sample";
+	sources: SourceStatus[];
+	tenants: TenantSummary[];
+	people: PersonSummary[];
+	activity: ActivityRow[];
+	daily: { date: string; auditChanges: number; observedJobs: number }[];
+	audit: AuditChange[];
+	operations: ObservedOperation[];
+	costs: CostSummary[];
+	health: {
+		observedJobs: number;
+		completed: number;
+		failed: number;
+		pending: number;
+		processing: number;
+		medianDurationMs: number | null;
+		durationSamples: number;
+	};
+	backup: OperationsRecoveryStatus;
+};
+import type { OperationsRecoveryStatus } from "@/lib/operations-recovery";

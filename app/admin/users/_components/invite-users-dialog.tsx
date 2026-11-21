@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +43,7 @@ export function InviteUsersDialog({
   triggerSize,
   triggerVariant,
 }: InviteUsersDialogProps) {
+  const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
@@ -52,6 +53,10 @@ export function InviteUsersDialog({
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [emailDelivered, setEmailDelivered] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setReady(true);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,6 +129,7 @@ export function InviteUsersDialog({
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogTrigger asChild>
         <Button
+          disabled={!ready}
           onClick={() => setOpen(true)}
           size={triggerSize}
           variant={triggerVariant}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { matchesMacroSearch, matchesMacroSearchValue } from "@/lib/macro-table-filters";
+import { matchesMacroSearch } from "@/lib/macro-table-filters";
 
 const policyColumns = [
 	{ id: "policyNumber", dataType: "text" as const },
@@ -8,12 +8,7 @@ const policyColumns = [
 ];
 
 describe("macro table search", () => {
-	it("matches policy numbers regardless of slash spacing", () => {
-		expect(matchesMacroSearchValue("1006726 / 0", "1006726/0")).toBe(true);
-		expect(matchesMacroSearchValue("1006726/0", "1006726 / 0")).toBe(true);
-	});
-
-	it("matches policy numbers in macro rows with compact formatting", () => {
+	it("matches policy numbers in macro rows regardless of slash spacing", () => {
 		const row = {
 			id: "row-1",
 			_sourceTablaId: "table-1",
@@ -25,5 +20,12 @@ describe("macro table search", () => {
 		};
 
 		expect(matchesMacroSearch(row, policyColumns, "1006726/0")).toBe(true);
+		expect(
+			matchesMacroSearch(
+				{ ...row, policyNumber: "1006726/0" },
+				policyColumns,
+				"1006726 / 0",
+			),
+		).toBe(true);
 	});
 });

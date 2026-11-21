@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { Building2, FolderClock, FolderOpen, ShieldCheck, Workflow } from "lucide-react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 
 const tabs = [
 	{ value: "general", label: "General", icon: Building2 },
@@ -24,9 +23,17 @@ export function ExcelPageTabs({
 	const isExcelDetailPage = /^\/excel\/[^/]+$/.test(pathname);
 	if (!isExcelDetailPage) return null;
 
+	return <ExcelPageTabList tabBadges={tabBadges} />;
+}
+
+// The same route navigation can be rendered with local state in isolated previews.
+export function ExcelPageTabList({ tabBadges, visibleTabs }: {
+  tabBadges?: Partial<Record<string, string>>;
+  visibleTabs?: readonly string[];
+}) {
 	return (
-		<TabsList className="w-full sm:w-auto justify-start bg-transparent border-none p-0 gap-1 h-auto py-1">
-			{tabs.map((tab) => {
+		<TabsList className="w-full sm:w-auto justify-start p-0 gap-1 h-auto py-1">
+			{tabs.filter(tab => !visibleTabs || visibleTabs.includes(tab.value)).map((tab) => {
 				const Icon = tab.icon;
 				return (
 					<TabsTrigger
@@ -39,11 +46,7 @@ export function ExcelPageTabs({
 									? "obra-page-general-tab"
 									: undefined
 						}
-						className={cn(
-							"h-9 gap-2 px-4 rounded-xl text-[13px] font-medium cursor-pointer",
-							"text-[#999] hover:bg-[#f5f5f5] hover:text-[#555]",
-							"data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white data-[state=active]:hover:bg-[#1a1a1a]",
-						)}
+						className={"h-9 gap-2 px-4 text-[13px] font-medium cursor-pointer"}
 					>
 						<Icon className="size-3.5 shrink-0" />
 						{tab.label}

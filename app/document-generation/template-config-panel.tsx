@@ -494,14 +494,14 @@ function ExtractionFieldKeySelect({
         <Input
           value={normalizedValue}
           onChange={(event) => onChange(normalizeFieldKey(event.target.value))}
-          className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+          className="h-10"
           placeholder={`Ej. ${fallbackKey}`}
         />
         {suggestions.length > 0 ? (
           <Button
             type="button"
             variant="outline"
-            className="h-10 rounded-lg"
+            className="h-10"
             onClick={() => setCustomMode(false)}
           >
             Lista
@@ -517,7 +517,7 @@ function ExtractionFieldKeySelect({
         value={normalizedValue || "__default__"}
         onValueChange={(nextValue) => onChange(nextValue === "__default__" ? null : nextValue)}
       >
-        <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+        <SelectTrigger className="h-10">
           <SelectValue placeholder="Usar variable HTML" />
         </SelectTrigger>
         <SelectContent>
@@ -532,7 +532,7 @@ function ExtractionFieldKeySelect({
       <Button
         type="button"
         variant="outline"
-        className="h-10 rounded-lg"
+        className="h-10"
         onClick={() => setCustomMode(true)}
       >
         Custom
@@ -1229,7 +1229,7 @@ export function TemplatePickerCard() {
   } = useTemplateConfig();
 
   return (
-    <Card className="overflow-hidden rounded-2xl border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
+    <Card className="overflow-hidden">
       <CardHeader className="border-b border-stone-200/80">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -1243,7 +1243,7 @@ export function TemplatePickerCard() {
               Elige la plantilla base que vas a ajustar para este tenant. La idea es que la seleccion ya comunique alcance, version y destino.
             </CardDescription>
           </div>
-          <Button type="button" variant="outline" className="rounded-md" onClick={startDocumentTypeCreation}>
+          <Button type="button" variant="outline" disabled={loading} onClick={startDocumentTypeCreation}>
             <Plus className="mr-2 h-4 w-4" />
             Nuevo tipo
           </Button>
@@ -1275,7 +1275,7 @@ export function TemplatePickerCard() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-stone-950">{template.name}</p>
-                    <Badge variant="outline" className="rounded-full border-stone-200 bg-white text-[10px] text-stone-600">
+                    <Badge shape="pill" size="xs" variant={"neutral"} className="text-[10px]">
                       {formatDocumentTypeLabel(template.documentType)}
                     </Badge>
                   </div>
@@ -1292,10 +1292,10 @@ export function TemplatePickerCard() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <Badge variant="outline" className="rounded-full">
+                  <Badge shape="pill" variant="outline" >
                     {template.tenantScoped ? "tenant" : "system"}
                   </Badge>
-                  <Badge variant="secondary" className="rounded-full">
+                  <Badge shape="pill" variant="secondary" >
                     v{template.version}
                   </Badge>
                 </div>
@@ -1339,7 +1339,7 @@ function NewDocumentTypeCreator() {
           <p className="mt-1 text-xs text-content-muted">Se crea una template base activa para este tenant.</p>
         </div>
         {normalizedDocumentType ? (
-          <Badge variant="secondary" className="rounded-full">
+          <Badge shape="pill" variant="secondary" >
             {normalizedDocumentType}
           </Badge>
         ) : null}
@@ -1350,7 +1350,7 @@ function NewDocumentTypeCreator() {
           <Input
             value={newDocumentTypeDraft.label}
             onChange={(event) => updateNewDocumentTypeLabel(event.target.value)}
-            className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none"
+            className="h-10"
             placeholder="Ej. Contrato marco"
           />
         </div>
@@ -1363,7 +1363,7 @@ function NewDocumentTypeCreator() {
                 documentType: normalizeDocumentType(event.target.value) ?? "",
               })
             }
-            className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none font-mono text-xs"
+            className="h-10 font-mono text-xs"
             placeholder="CONTRATO_MARCO"
           />
         </div>
@@ -1372,7 +1372,7 @@ function NewDocumentTypeCreator() {
           <Input
             value={newDocumentTypeDraft.templateName}
             onChange={(event) => updateNewDocumentTypeDraft({ templateName: event.target.value })}
-            className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none"
+            className="h-10"
             placeholder="Ej. Contrato marco"
           />
         </div>
@@ -1386,7 +1386,7 @@ function NewDocumentTypeCreator() {
               })
             }
           >
-            <SelectTrigger className="h-10 rounded-lg border-stroke-soft bg-surface shadow-none">
+            <SelectTrigger className="h-10">
               <SelectValue placeholder="Sin carpeta fija" />
             </SelectTrigger>
             <SelectContent>
@@ -1405,7 +1405,7 @@ function NewDocumentTypeCreator() {
             rows={3}
             value={newDocumentTypeDraft.description}
             onChange={(event) => updateNewDocumentTypeDraft({ description: event.target.value })}
-            className="rounded-lg border-stroke-soft bg-surface shadow-none"
+
             placeholder="Uso interno de este tipo documental"
           />
         </div>
@@ -1414,13 +1414,13 @@ function NewDocumentTypeCreator() {
         <Button
           type="button"
           variant="outline"
-          className="rounded-md"
+
           onClick={cancelDocumentTypeCreation}
           disabled={creatingDocumentTypeSaving}
         >
           Cancelar
         </Button>
-        <Button type="submit" className="rounded-md" disabled={!canCreate || creatingDocumentTypeSaving}>
+        <Button type="submit"  disabled={!canCreate || creatingDocumentTypeSaving}>
           {creatingDocumentTypeSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
           Crear tipo
         </Button>
@@ -1530,7 +1530,7 @@ export function TemplateConfigEditorPanel() {
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden rounded-2xl border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
+      <Card className="overflow-hidden">
         <CardContent className="space-y-6">
           {!draft || !selectedTemplate ? (
             <div className="rounded-[24px] border border-dashed border-stone-300 bg-stone-50 p-8 text-sm text-stone-500">
@@ -1553,7 +1553,7 @@ export function TemplateConfigEditorPanel() {
                       <Input
                         value={draft.name}
                         onChange={(event) => setDraft((current) => (current ? { ...current, name: event.target.value } : current))}
-                        className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                        className="h-11"
                       />
                     </div>
                     <div className="space-y-2">
@@ -1568,7 +1568,7 @@ export function TemplateConfigEditorPanel() {
                           )
                         }
                       >
-                        <SelectTrigger className="">
+                        <SelectTrigger >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1593,7 +1593,7 @@ export function TemplateConfigEditorPanel() {
                           )
                         }
                       >
-                        <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
+                        <SelectTrigger className="h-11">
                           <SelectValue placeholder="Sin carpeta fija" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1612,7 +1612,7 @@ export function TemplateConfigEditorPanel() {
                         value={draft.status}
                         onValueChange={(value) => setDraft((current) => (current ? { ...current, status: value } : current))}
                       >
-                        <SelectTrigger className="h-11 rounded-xl border-stone-200 bg-white shadow-none">
+                        <SelectTrigger className="h-11">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1631,7 +1631,7 @@ export function TemplateConfigEditorPanel() {
                       rows={2}
                       value={draft.description}
                       onChange={(event) => setDraft((current) => (current ? { ...current, description: event.target.value } : current))}
-                      className="rounded-xl border-stone-200 bg-white shadow-none"
+
                     />
                   </div>
 
@@ -1663,7 +1663,7 @@ export function TemplateConfigEditorPanel() {
                             )
                           }
                         >
-                          <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                          <SelectTrigger className="h-10">
                             <SelectValue placeholder="Sin numeracion" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1687,7 +1687,7 @@ export function TemplateConfigEditorPanel() {
                               current ? { ...current, fileNamePattern: event.target.value } : current,
                             )
                           }
-                          className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                          className="h-10"
                           placeholder="Ej. orden-de-compra-{{nro}}"
                         />
                         <p className="text-xs text-stone-500">
@@ -1715,7 +1715,7 @@ export function TemplateConfigEditorPanel() {
                             variant={fieldsMode === "visual" ? "secondary" : "ghost"}
                             size="sm"
                             onClick={() => setFieldsMode("visual")}
-                            className="h-8 rounded-full"
+                            className="h-8"
                           >
                             Editor
                           </Button>
@@ -1724,7 +1724,7 @@ export function TemplateConfigEditorPanel() {
                             variant={fieldsMode === "json" ? "secondary" : "ghost"}
                             size="sm"
                             onClick={showFieldsJson}
-                            className="h-8 rounded-full"
+                            className="h-8"
                           >
                             JSON
                           </Button>
@@ -1769,7 +1769,7 @@ export function TemplateConfigEditorPanel() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setFieldsJsonState({ templateId: draft.id, value: formatFieldsJson(draft.fields) })}
-                            className="rounded-md"
+
                           >
                             Restaurar
                           </Button>
@@ -1782,7 +1782,7 @@ export function TemplateConfigEditorPanel() {
                           }}
                           rows={24}
                           spellCheck={false}
-                          className="min-h-[520px] rounded-xl border-[#fb9b72] font-mono text-xs"
+                          className="min-h-[520px] font-mono text-xs"
                         />
                         {activeFieldsJsonError ? <p className="text-xs text-red-600">{activeFieldsJsonError}</p> : null}
                         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
@@ -1858,10 +1858,10 @@ export function TemplateConfigEditorPanel() {
                                             label: nextLabel,
                                           });
                                         }}
-                                        className="h-11 rounded-lg border-stone-200 bg-white text-sm shadow-none"
+                                        className="h-11 text-sm"
                                       />
                                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                                        <Badge variant="outline" className="rounded-full text-[10px]">
+                                        <Badge shape="pill" size="xs" variant="outline" className="text-[10px]">
                                           {field.source === "folder" ? "Detectado" : "Manual"}
                                         </Badge>
                                         {field.defaultValue ? (
@@ -1908,7 +1908,7 @@ export function TemplateConfigEditorPanel() {
                                           })
                                         }
                                       >
-                                        <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                        <SelectTrigger className="h-10">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1940,7 +1940,7 @@ export function TemplateConfigEditorPanel() {
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => removeField(index)}
-                                        className="h-10 w-10 rounded-lg text-stone-500 hover:bg-stone-100"
+                                        className="h-10 w-10"
                                       >
                                         <Trash2 className="h-4 w-4" />
                                       </Button>
@@ -1957,7 +1957,7 @@ export function TemplateConfigEditorPanel() {
                                           <Input
                                             value={String(field.defaultValue ?? "")}
                                             onChange={(event) => updateField(index, { defaultValue: event.target.value })}
-                                            className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                            className="h-10"
                                             placeholder="Opcional"
                                           />
                                         </div>
@@ -1969,10 +1969,7 @@ export function TemplateConfigEditorPanel() {
                                           onChange={(event) =>
                                             updateField(index, { key: normalizeFieldKey(event.target.value || field.label) })
                                           }
-                                          className={cn(
-                                            "h-10 rounded-lg border-stone-200 bg-white shadow-none",
-                                            field.source === "folder" && "bg-stone-100 text-stone-500",
-                                          )}
+                                          className={"h-10"}
                                           disabled={field.source === "folder"}
                                         />
                                         {field.source === "folder" ? (
@@ -1990,7 +1987,7 @@ export function TemplateConfigEditorPanel() {
                                         <Input
                                           value={field.description ?? ""}
                                           onChange={(event) => updateField(index, { description: event.target.value })}
-                                          className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                          className="h-10"
                                           placeholder="Opcional"
                                         />
                                       </div>
@@ -2028,7 +2025,7 @@ export function TemplateConfigEditorPanel() {
                                               })
                                             }
                                           >
-                                            <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                            <SelectTrigger className="h-10">
                                               <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -2057,7 +2054,7 @@ export function TemplateConfigEditorPanel() {
                                                   })
                                                 }
                                               >
-                                                <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                                <SelectTrigger className="h-10">
                                                   <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2080,7 +2077,7 @@ export function TemplateConfigEditorPanel() {
                                                   })
                                                 }
                                               >
-                                                <SelectTrigger className="h-10 rounded-lg border-stone-200 bg-white shadow-none">
+                                                <SelectTrigger className="h-10">
                                                   <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -2106,7 +2103,7 @@ export function TemplateConfigEditorPanel() {
                                                     optionUnitTargetKey: normalizeFieldKey(event.target.value),
                                                   })
                                                 }
-                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                className="h-10"
                                                 placeholder="Ej. unidad"
                                               />
                                             </div>
@@ -2124,7 +2121,7 @@ export function TemplateConfigEditorPanel() {
                                               variant="outline"
                                               size="sm"
                                               onClick={() => addSelectOption(index)}
-                                              className="rounded-md"
+
                                             >
                                               <Plus className="mr-2 h-4 w-4" />
                                               Agregar valor
@@ -2141,7 +2138,7 @@ export function TemplateConfigEditorPanel() {
                                                   onChange={(event) =>
                                                     updateSelectOption(index, optionIndex, { label: event.target.value })
                                                   }
-                                                  className="h-9 rounded-md border-stone-200"
+                                                  className="h-9"
                                                   placeholder="Texto visible"
                                                 />
                                                 <Input
@@ -2151,7 +2148,7 @@ export function TemplateConfigEditorPanel() {
                                                       value: normalizeFieldKey(event.target.value || option.label),
                                                     })
                                                   }
-                                                  className="h-9 rounded-md border-stone-200"
+                                                  className="h-9"
                                                   placeholder="valor_interno"
                                                 />
                                                 <Input
@@ -2161,7 +2158,7 @@ export function TemplateConfigEditorPanel() {
                                                       unit: event.target.value || null,
                                                     })
                                                   }
-                                                  className="h-9 rounded-md border-stone-200"
+                                                  className="h-9"
                                                   placeholder="Unidad"
                                                 />
                                                 <Button
@@ -2169,7 +2166,7 @@ export function TemplateConfigEditorPanel() {
                                                   variant="ghost"
                                                   size="icon"
                                                   onClick={() => removeSelectOption(index, optionIndex)}
-                                                  className="h-9 w-9 rounded-md text-stone-500"
+                                                  className="h-9 w-9"
                                                 >
                                                   <Trash2 className="h-4 w-4" />
                                                 </Button>
@@ -2192,7 +2189,7 @@ export function TemplateConfigEditorPanel() {
                                               variant="outline"
                                               size="sm"
                                               onClick={() => addTableColumn(index)}
-                                              className="rounded-md"
+
                                             >
                                               <Plus className="mr-2 h-4 w-4" />
                                               Agregar columna
@@ -2207,7 +2204,7 @@ export function TemplateConfigEditorPanel() {
                                                     <Input
                                                       value={column.label}
                                                       onChange={(event) => updateTableColumn(index, columnIndex, { label: event.target.value })}
-                                                      className="h-9 rounded-md border-stone-200 bg-white"
+                                                      className="h-9"
                                                     />
                                                   </div>
                                                   <div className="space-y-1">
@@ -2232,7 +2229,7 @@ export function TemplateConfigEditorPanel() {
                                                         })
                                                       }
                                                     >
-                                                      <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                      <SelectTrigger className="h-9">
                                                         <SelectValue />
                                                       </SelectTrigger>
                                                       <SelectContent>
@@ -2258,7 +2255,7 @@ export function TemplateConfigEditorPanel() {
                                                     variant="ghost"
                                                     size="icon"
                                                     onClick={() => removeTableColumn(index, columnIndex)}
-                                                    className="h-9 w-9 rounded-md text-stone-500"
+                                                    className="h-9 w-9"
                                                   >
                                                     <Trash2 className="h-4 w-4" />
                                                   </Button>
@@ -2273,7 +2270,7 @@ export function TemplateConfigEditorPanel() {
                                                           key: normalizeFieldKey(event.target.value || column.label),
                                                         })
                                                       }
-                                                      className="h-9 rounded-md border-stone-200 bg-white"
+                                                      className="h-9"
                                                     />
                                                   </div>
                                                   <div className="space-y-1">
@@ -2283,7 +2280,7 @@ export function TemplateConfigEditorPanel() {
                                                       onChange={(event) =>
                                                         updateTableColumn(index, columnIndex, { defaultValue: event.target.value })
                                                       }
-                                                      className="h-9 rounded-md border-stone-200 bg-white"
+                                                      className="h-9"
                                                       placeholder="Opcional"
                                                     />
                                                   </div>
@@ -2322,7 +2319,7 @@ export function TemplateConfigEditorPanel() {
                                                             })
                                                           }
                                                         >
-                                                          <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                          <SelectTrigger className="h-9">
                                                             <SelectValue />
                                                           </SelectTrigger>
                                                           <SelectContent>
@@ -2345,7 +2342,7 @@ export function TemplateConfigEditorPanel() {
                                                             })
                                                           }
                                                         >
-                                                          <SelectTrigger className="h-9 rounded-md border-stone-200 bg-white">
+                                                          <SelectTrigger className="h-9">
                                                             <SelectValue />
                                                           </SelectTrigger>
                                                           <SelectContent>
@@ -2371,7 +2368,7 @@ export function TemplateConfigEditorPanel() {
                                                               optionUnitTargetKey: normalizeFieldKey(event.target.value),
                                                             })
                                                           }
-                                                          className="h-9 rounded-md border-stone-200 bg-white"
+                                                          className="h-9"
                                                           placeholder="Ej. unidad"
                                                         />
                                                       </div>
@@ -2389,7 +2386,7 @@ export function TemplateConfigEditorPanel() {
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={() => addTableColumnOption(index, columnIndex)}
-                                                        className="h-8 rounded-md"
+                                                        className="h-8"
                                                       >
                                                         <Plus className="mr-2 h-3.5 w-3.5" />
                                                         Agregar
@@ -2408,7 +2405,7 @@ export function TemplateConfigEditorPanel() {
                                                                 label: event.target.value,
                                                               })
                                                             }
-                                                            className="h-8 rounded-md border-stone-200"
+                                                            className="h-8"
                                                             placeholder="Texto visible"
                                                           />
                                                           <Input
@@ -2418,7 +2415,7 @@ export function TemplateConfigEditorPanel() {
                                                                 value: normalizeFieldKey(event.target.value || option.label),
                                                               })
                                                             }
-                                                            className="h-8 rounded-md border-stone-200"
+                                                            className="h-8"
                                                             placeholder="valor_interno"
                                                           />
                                                           <Input
@@ -2428,7 +2425,7 @@ export function TemplateConfigEditorPanel() {
                                                                 unit: event.target.value || null,
                                                               })
                                                             }
-                                                            className="h-8 rounded-md border-stone-200"
+                                                            className="h-8"
                                                             placeholder="Unidad"
                                                           />
                                                           <Button
@@ -2436,7 +2433,7 @@ export function TemplateConfigEditorPanel() {
                                                             variant="ghost"
                                                             size="icon"
                                                             onClick={() => removeTableColumnOption(index, columnIndex, optionIndex)}
-                                                            className="h-8 w-8 rounded-md text-stone-500"
+                                                            className="h-8 w-8"
                                                           >
                                                             <Trash2 className="h-4 w-4" />
                                                           </Button>
@@ -2478,7 +2475,7 @@ export function TemplateConfigEditorPanel() {
                                                     ),
                                                   })
                                                 }
-                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                className="h-10"
                                                 placeholder="Ej. Materiales"
                                                 disabled={!field.repeatableGroup}
                                               />
@@ -2492,7 +2489,7 @@ export function TemplateConfigEditorPanel() {
                                                     repeatableGroup: normalizeFieldKey(event.target.value || "items"),
                                                   })
                                                 }
-                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                className="h-10"
                                                 placeholder="items"
                                                 disabled={!field.repeatableGroup}
                                               />
@@ -2516,10 +2513,7 @@ export function TemplateConfigEditorPanel() {
 
                 </div>
 
-                <div className={cn(
-                  "space-y-3",
-                  rightPanelMode === "fields" ? "" : "xl:sticky xl:top-4 xl:self-start",
-                )}>
+                <div className={cn("space-y-3", rightPanelMode === "fields" ? ("") : ("xl:sticky xl:top-4 xl:self-start"))}>
                   <div className="flex items-center justify-between gap-3">
                     <Label>
                       {rightPanelMode === "preview" ? "Preview" : rightPanelMode === "html" ? "HTML" : "Campos"}
@@ -2530,7 +2524,7 @@ export function TemplateConfigEditorPanel() {
                         variant={rightPanelMode === "preview" ? "secondary" : "ghost"}
                         size="sm"
                         onClick={() => setRightPanelMode("preview")}
-                        className="h-8 rounded-full"
+                        className="h-8"
                       >
                         Preview
                       </Button>
@@ -2539,7 +2533,7 @@ export function TemplateConfigEditorPanel() {
                         variant={rightPanelMode === "fields" ? "secondary" : "ghost"}
                         size="sm"
                         onClick={() => setRightPanelMode("fields")}
-                        className="h-8 rounded-full"
+                        className="h-8"
                       >
                         Campos
                       </Button>
@@ -2548,7 +2542,7 @@ export function TemplateConfigEditorPanel() {
                         variant={rightPanelMode === "html" ? "secondary" : "ghost"}
                         size="sm"
                         onClick={() => setRightPanelMode("html")}
-                        className="h-8 rounded-full"
+                        className="h-8"
                       >
                         HTML
                       </Button>
@@ -2557,7 +2551,7 @@ export function TemplateConfigEditorPanel() {
                   {rightPanelMode === "preview" ? (
                     <div className="overflow-hidden rounded-xl border border-stone-200 bg-[#eceae6] p-4 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
                       <div className="max-h-[calc(100vh-252px)] min-h-[640px] overflow-auto rounded-xl border border-stone-300 bg-white p-4">
-                        <div className="" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                        <div  dangerouslySetInnerHTML={{ __html: previewHtml }} />
                       </div>
                     </div>
                   ) : rightPanelMode === "html" ? (
@@ -2568,7 +2562,7 @@ export function TemplateConfigEditorPanel() {
                         onChange={(event) =>
                           setDraft((current) => (current ? { ...current, contentHtml: event.target.value } : current))
                         }
-                        className="min-h-[640px] rounded-[22px] border-[#fb9b72] font-mono text-xs shadow-none"
+                        className="min-h-[640px] font-mono text-xs"
                       />
                       <p className="text-xs text-stone-500">
                         Variables simples: `{"{{campo}}"}`. Tablas repetibles: `{"{{#items}}"}...{"{{/items}}"}`.
@@ -2586,7 +2580,7 @@ export function TemplateConfigEditorPanel() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="rounded-md"
+
                             onClick={() => void navigator.clipboard.writeText(documentFieldsJson).then(
                               () => toast.success("Campos del documento copiados."),
                               () => toast.error("No se pudieron copiar los campos."),
@@ -2599,7 +2593,7 @@ export function TemplateConfigEditorPanel() {
                         <Textarea
                           readOnly
                           value={documentFieldsJson}
-                          className="min-h-[640px] rounded-xl border-stone-200 bg-stone-50 font-mono text-xs shadow-none"
+                          className="min-h-[640px] font-mono text-xs"
                         />
                       </div>
                       <div className="min-w-0 space-y-3">
@@ -2616,7 +2610,7 @@ export function TemplateConfigEditorPanel() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="rounded-md"
+
                             onClick={() => void navigator.clipboard.writeText(extractedFieldsJson).then(
                               () => toast.success("Columnas extraidas copiadas."),
                               () => toast.error("No se pudieron copiar las columnas."),
@@ -2629,7 +2623,7 @@ export function TemplateConfigEditorPanel() {
                         <Textarea
                           readOnly
                           value={extractedFieldsJson}
-                          className="min-h-[640px] rounded-xl border-stone-200 bg-stone-50 font-mono text-xs shadow-none"
+                          className="min-h-[640px] font-mono text-xs"
                         />
                       </div>
                     </div>
@@ -2645,7 +2639,7 @@ export function TemplateConfigEditorPanel() {
                     ? "Estas editando la version propia del tenant."
                     : "Al guardar se crea o actualiza un override propio del tenant sobre la template sistema."}
                 </p>
-                <Button type="button" onClick={() => void saveConfiguration()} disabled={saving} className="rounded-full">
+                <Button type="button" onClick={() => void saveConfiguration()} disabled={saving} >
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Guardar configuracion
                 </Button>
@@ -2692,7 +2686,7 @@ function TemplateConfigSteps() {
         <Button
           type="button"
           variant="outline"
-          className="rounded-md"
+
           onClick={() => handleTemplateSelect("")}
         >
           Cambiar template

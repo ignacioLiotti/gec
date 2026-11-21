@@ -782,10 +782,10 @@ export function OcrTemplateConfigurator({
 									<>
 										<div className="h-6 w-px bg-border" />
 										<Button
-											variant={isDrawModeEnabled ? "default" : "outline"}
+											variant={(isDrawModeEnabled) ? ("default") : (isDrawModeEnabled ? "default" : "outline")}
 											size="sm"
 											onClick={() => setIsDrawModeEnabled((prev) => !prev)}
-											className={isDrawModeEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+
 										>
 											{isDrawModeEnabled ? (
 												<>
@@ -1237,7 +1237,7 @@ export function OcrTemplateConfigurator({
 						<Button
 							onClick={() => setCurrentStep((prev) => Math.min(steps.length - 1, prev + 1))}
 							disabled={!canGoNext}
-							className="bg-purple-600 hover:bg-purple-700"
+
 						>
 							Continuar
 						</Button>
@@ -1245,7 +1245,7 @@ export function OcrTemplateConfigurator({
 						<Button
 							onClick={handleSave}
 							disabled={isSaving || regions.length === 0 || !templateName.trim()}
-							className="bg-purple-600 hover:bg-purple-700"
+
 						>
 							{isSaving ? (
 								<Loader2 className="size-4 animate-spin" />
@@ -1347,13 +1347,13 @@ function RegionItem({
 				</div>
 
 				<Button
-					variant="ghost"
+					variant={"destructiveSecondary"}
 					size="icon"
 					onClick={(e) => {
 						e.stopPropagation();
 						onDelete();
 					}}
-					className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+					className="size-8"
 				>
 					<X className="size-4" />
 				</Button>

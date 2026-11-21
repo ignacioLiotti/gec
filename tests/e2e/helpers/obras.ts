@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
-import { createClient } from "@supabase/supabase-js";
 import { expect, type APIRequestContext } from "@playwright/test";
+import { z } from "zod";
 
 type ObraUpsertPayload = {
 	n: number;
@@ -31,27 +31,19 @@ export type ObraListItem = {
 	porcentaje?: number | null;
 };
 
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+const obraListItemSchema = z.object({
+	id: z.string(),
+	n: z.number().nullable().optional(),
+	designacionYUbicacion: z.string().nullable().optional(),
+	entidadContratante: z.string().nullable().optional(),
+	porcentaje: z.number().nullable().optional(),
+});
+
+const obrasResponseSchema = z.object({
+	detalleObras: z.array(obraListItemSchema).optional(),
+});
+
 export const E2E_EXCEL_PREFIX = "[E2E][Excel]";
-const NAVIGATION_OBRA_NAME = `${E2E_EXCEL_PREFIX} Navigation`;
-
-function getAdminClient() {
-	const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-	if (!url || !serviceRoleKey) {
-		throw new Error(
-			"Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for E2E obra helpers.",
-		);
-	}
-
-	return createClient(url, serviceRoleKey, {
-		auth: {
-			autoRefreshToken: false,
-			persistSession: false,
-		},
-	});
-}
 
 export function buildExcelObraName(label: string) {
 	return `${E2E_EXCEL_PREFIX} ${label} ${crypto.randomUUID().slice(0, 8)}`;
@@ -61,11 +53,8 @@ async function fetchObras(request: APIRequestContext): Promise<ObraListItem[]> {
 	const response = await request.get("/api/obras");
 	expect(response.ok()).toBeTruthy();
 
-	const payload = (await response.json()) as {
-		detalleObras?: ObraListItem[];
-	};
-
-	return Array.isArray(payload.detalleObras) ? payload.detalleObras : [];
+	const payload = obrasResponseSchema.parse(await response.json());
+	return payload.detalleObras ?? [];
 }
 
 function buildObraPayload(
@@ -134,38 +123,6 @@ export async function createObraViaBulkApi(
 	}
 
 	return created;
-}
-
-export async function deleteObrasByNames(names: string[]) {
-	if (names.length === 0) return;
-
-	const admin = getAdminClient();
-	const { error } = await admin
-		.from("obras")
-		.delete()
-		.eq("tenant_id", DEFAULT_TENANT_ID)
-		.in("designacion_y_ubicacion", names);
-
-	if (error) {
-		throw new Error(`Failed to cleanup E2E obras: ${error.message}`);
-	}
-}
-
-export async function ensureNavigationObra(
-	request: APIRequestContext,
-): Promise<ObraListItem> {
-	const obras = await fetchObras(request);
-	const existing = obras.find(
-		(obra) => obra.designacionYUbicacion === NAVIGATION_OBRA_NAME,
-	);
-
-	if (existing) {
-		return existing;
-	}
-
-	return createObraViaBulkApi(request, {
-		designacionYUbicacion: NAVIGATION_OBRA_NAME,
-	});
 }
 
 export async function fetchAuthenticatedObras(request: APIRequestContext) {

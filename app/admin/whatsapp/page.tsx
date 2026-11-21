@@ -1,3 +1,7 @@
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Input } from "@/components/ui/input";
 import {
 	applySubmissionAction,
 	createBusinessAccountAction,
@@ -602,9 +606,9 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps) {
 							/>
 						</div>
 						<div className="grid gap-2 rounded-md border bg-foreground/[0.02] p-3 sm:grid-cols-3">
-							<Checkbox name="canUploadDocuments" label="Subir archivos" defaultChecked />
-							<Checkbox name="canSubmitForms" label="Responder formularios" defaultChecked />
-							<Checkbox name="canQueryData" label="Consultar datos" />
+							<CheckboxField name="canUploadDocuments" label="Subir archivos" defaultChecked />
+							<CheckboxField name="canSubmitForms" label="Responder formularios" defaultChecked />
+							<CheckboxField name="canQueryData" label="Consultar datos" />
 						</div>
 						<Field name="notes" label="Notas internas" placeholder="Contexto operativo, obra habitual, restricciones." />
 						<div>
@@ -674,20 +678,20 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps) {
 							</div>
 							<label className="space-y-1 text-sm">
 								<span className="font-medium">Texto del mensaje</span>
-								<textarea
+								<Textarea
 									name="body"
 									rows={3}
 									placeholder="Hola {{1}}, carga el avance de facturas de {{2}}."
-									className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+									className="w-full px-3 py-2 text-sm"
 								/>
 							</label>
 							<label className="space-y-1 text-sm">
 								<span className="font-medium">Mapping de campos JSON</span>
-								<textarea
+								<Textarea
 									name="fieldMapping"
 									rows={3}
 									placeholder='{"fecha":"invoice_date","monto":"amount","tipo":"invoice_type"}'
-									className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+									className="w-full px-3 py-2 font-mono text-xs"
 								/>
 							</label>
 							<div>
@@ -710,13 +714,13 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps) {
 								<Field name="name" label="Nombre del formulario" placeholder="Factura semanal" />
 								<label className="space-y-1 text-sm">
 									<span className="font-medium">Tabla destino</span>
-									<select name="tablaId" className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+									<NativeSelect name="tablaId" className="h-9 w-full px-3 text-sm">
 										{tablas.map((tabla) => (
 											<option key={tabla.id} value={tabla.id}>
 												{tablaLabel(tabla)}
 											</option>
 										))}
-									</select>
+									</NativeSelect>
 								</label>
 								<Field name="folderPath" label="Carpeta asociada" placeholder="Opcional, se puede inferir" />
 								<Select
@@ -797,20 +801,20 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps) {
 							</div>
 							<label className="space-y-1 text-sm">
 								<span className="font-medium">Definicion JSON</span>
-								<textarea
+								<Textarea
 									name="definition"
 									rows={12}
 									defaultValue={defaultFlowDefinition()}
-									className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+									className="w-full px-3 py-2 font-mono text-xs"
 								/>
 							</label>
 							<label className="space-y-1 text-sm">
 								<span className="font-medium">Settings JSON</span>
-								<textarea
+								<Textarea
 									name="settings"
 									rows={4}
 									defaultValue={'{"showInTestMenu":true}'}
-									className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+									className="w-full px-3 py-2 font-mono text-xs"
 								/>
 							</label>
 							<div>
@@ -1194,11 +1198,11 @@ function Field({
 	return (
 		<label className="space-y-1 text-sm">
 			<span className="font-medium">{label}</span>
-			<input
+			<Input
 				name={name}
 				placeholder={placeholder}
 				defaultValue={defaultValue}
-				className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+				className="h-9 w-full px-3 text-sm"
 			/>
 		</label>
 	);
@@ -1218,13 +1222,13 @@ function Select({
 	return (
 		<label className="space-y-1 text-sm">
 			<span className="font-medium">{label}</span>
-			<select name={name} defaultValue={defaultValue} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+			<NativeSelect name={name} defaultValue={defaultValue} className="h-9 w-full px-3 text-sm">
 				{options.map(([value, labelText]) => (
 					<option key={value} value={value}>
 						{labelText}
 					</option>
 				))}
-			</select>
+			</NativeSelect>
 		</label>
 	);
 }
@@ -1241,14 +1245,14 @@ function OptionSelect({
 	return (
 		<label className="space-y-1 text-sm">
 			<span className="font-medium">{label}</span>
-			<select name={name} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+			<NativeSelect name={name} className="h-9 w-full px-3 text-sm">
 				<option value="">Seleccionar</option>
 				{options.map(([value, labelText]) => (
 					<option key={value} value={value}>
 						{labelText}
 					</option>
 				))}
-			</select>
+			</NativeSelect>
 		</label>
 	);
 }
@@ -1257,7 +1261,7 @@ function DocumentTemplateSelect({ documentTemplates }: { documentTemplates: Docu
 	return (
 		<label className="space-y-1 text-sm">
 			<span className="font-medium">Template documento</span>
-			<select name="documentGenerationTemplateId" className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+			<NativeSelect name="documentGenerationTemplateId" className="h-9 w-full px-3 text-sm">
 				<option value="">Sin documento</option>
 				{documentTemplates.map((template) => (
 					<option key={template.id} value={template.id}>
@@ -1265,12 +1269,12 @@ function DocumentTemplateSelect({ documentTemplates }: { documentTemplates: Docu
 						{template.target_folder_path ? ` · ${template.target_folder_path}` : ""}
 					</option>
 				))}
-			</select>
+			</NativeSelect>
 		</label>
 	);
 }
 
-function Checkbox({
+function CheckboxField({
 	name,
 	label,
 	defaultChecked,
@@ -1281,7 +1285,7 @@ function Checkbox({
 }) {
 	return (
 		<label className="inline-flex items-center gap-2 text-sm">
-			<input name={name} type="checkbox" defaultChecked={defaultChecked} className="size-4 rounded border" />
+			<Checkbox name={name} defaultChecked={defaultChecked} />
 			<span>{label}</span>
 		</label>
 	);
@@ -1859,15 +1863,8 @@ function StatusBadge({ status }: { status?: string | null }) {
 	const isWarning = value === "draft" || value === "pending" || value === "needs_review" || value === "paused" || value === "in_progress";
 	return (
 		<Badge
-			variant="outline"
-			className={cn(
-				"h-6 border-foreground/15 bg-background text-foreground/65",
-				isPositive && "border-green-200 bg-green-50 text-green-700",
-				isWarning && "border-amber-200 bg-amber-50 text-amber-800",
-				value === "blocked" || value === "disabled" || value === "failed" || value === "rejected"
-					? "border-red-200 bg-red-50 text-red-700"
-					: null,
-			)}
+			variant={(value === "blocked" || value === "disabled" || value === "failed" || value === "rejected") ? ("destructive") : ((isWarning) ? ("warning") : ((isPositive) ? ("success") : ("outline")))}
+			className={cn("h-6", value === "blocked" || value === "disabled" || value === "failed" || value === "rejected" ? ("") : (null))}
 		>
 			{statusLabel(value)}
 		</Badge>

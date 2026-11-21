@@ -377,11 +377,11 @@ const ConfigTableRow = memo(function ConfigTableRow({
 				<div className="flex items-center gap-1">
 					<GripVertical className="size-4 text-content-disabled transition-colors group-hover:text-content-muted" />
 					<div className="grid gap-1">
-						<Button type="button" variant="secondary" size="icon-sm" className="size-6 rounded-md" onClick={() => onMoveUp(index)}>
+						<Button type="button" variant="secondary" size="icon-sm" className="size-6" onClick={() => onMoveUp(index)}>
 							<span className="sr-only">Mover hacia arriba</span>
 							<ArrowUp className="size-3.5" />
 						</Button>
-						<Button type="button" variant="secondary" size="icon-sm" className="size-6 rounded-md" onClick={() => onMoveDown(index)}>
+						<Button type="button" variant="secondary" size="icon-sm" className="size-6" onClick={() => onMoveDown(index)}>
 							<span className="sr-only">Mover hacia abajo</span>
 							<ArrowDown className="size-3.5" />
 						</Button>
@@ -395,14 +395,9 @@ const ConfigTableRow = memo(function ConfigTableRow({
 					<code className="w-fit rounded-md border border-stroke-soft bg-surface-recessed px-2 py-1 text-[11px] font-mono text-content-secondary">
 						{column.id}
 					</code>
-					<Badge
-						variant="outline"
-						className={cn(
-							"h-5 w-fit border-stroke-soft px-2 text-[10px] capitalize leading-none text-content-muted",
-							column.kind === "formula" && "border-sky-200 bg-sky-50 text-sky-700",
-							column.kind === "custom" && "border-violet-200 bg-violet-50 text-violet-700",
-							column.kind === "base" && "border-stroke-soft bg-card text-content-muted"
-						)}
+					<Badge size="xs"
+						variant={(column.kind === "base") ? ("neutral") : ((column.kind === "custom") ? ("category") : ((column.kind === "formula") ? ("info") : ("neutral")))}
+						className={"h-5 w-fit px-2 text-[10px] capitalize leading-none"}
 					>
 						{column.kind === "formula" ? "calculada" : column.kind === "custom" ? "personalizada" : "base"}
 					</Badge>
@@ -416,7 +411,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 					autoComplete="off"
 					value={column.label}
 					onChange={(event) => onUpdateColumn(index, { label: event.target.value })}
-					className="h-9 min-w-[220px] rounded-lg border-stroke-soft bg-card"
+					className="h-9 min-w-[220px]"
 				/>
 			</td>
 
@@ -428,7 +423,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 						handleCellTypeChange(value as NonNullable<MainTableColumnConfig["cellType"]>)
 					}
 				>
-					<SelectTrigger className="h-9 min-w-[140px] bg-card">
+					<SelectTrigger className="h-9 min-w-[140px]">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -465,7 +460,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 										onChange={(event) =>
 											updateSelectOptionAt(optionIndex, { text: event.target.value })
 										}
-										className="h-8 bg-card"
+										className="h-8"
 										placeholder="Titulo de opcion"
 									/>
 									<Select
@@ -476,7 +471,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 											})
 										}
 									>
-										<SelectTrigger className="h-8 bg-card">
+										<SelectTrigger className="h-8">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -498,7 +493,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 											})
 										}
 									>
-										<SelectTrigger className="h-8 bg-card">
+										<SelectTrigger className="h-8">
 											{(() => {
 												const currentIconValue = option.icon ?? NO_ICON_VALUE;
 												if (currentIconValue === NO_ICON_VALUE) {
@@ -558,7 +553,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 										type="button"
 										variant="secondary"
 										size="icon-sm"
-										className="size-8 rounded-lg"
+										className="size-8"
 										onClick={() => removeSelectOptionAt(optionIndex)}
 									>
 										<span className="sr-only">Eliminar opción</span>
@@ -588,7 +583,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 							value={column.kind}
 							onValueChange={(value) => handleKindChange(value as MainTableColumnConfig["kind"])}
 						>
-							<SelectTrigger className="h-9 min-w-[130px] bg-card">
+							<SelectTrigger className="h-9 min-w-[130px]">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -611,7 +606,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 									width: event.target.value ? Number(event.target.value) : undefined,
 								})
 							}
-							className="h-9 w-24 rounded-lg border-stroke-soft bg-card"
+							className="h-9 w-24"
 						/>
 					</td>
 
@@ -631,7 +626,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 									placeholder="[campo_a] + [campo_b]"
 									value={column.formula ?? ""}
 									onChange={(event) => onUpdateColumn(index, { formula: event.target.value })}
-									className="h-9 rounded-lg border-stroke-soft bg-card font-mono text-xs"
+									className="h-9 font-mono text-xs"
 								/>
 							</div>
 						) : column.kind === "custom" ? (
@@ -645,7 +640,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 									value={column.baseColumnId ?? column.id}
 									onValueChange={(value) => onUpdateColumn(index, { baseColumnId: value })}
 								>
-									<SelectTrigger className="h-9 min-w-[220px] bg-card">
+									<SelectTrigger className="h-9 min-w-[220px]">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -689,7 +684,7 @@ const ConfigTableRow = memo(function ConfigTableRow({
 							type="button"
 							variant="destructiveSecondary"
 							size="icon-sm"
-							className="size-8 shrink-0 rounded-lg"
+							className="size-8 shrink-0"
 							onClick={() => {
 								const confirmed = window.confirm("¿Eliminar esta columna de la configuración?");
 								if (!confirmed) return;

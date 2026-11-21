@@ -122,6 +122,7 @@ const startOfCurrentWeek = (today: Date) => {
 const endOfCurrentWeek = (today: Date) => addDays(new Date(startOfCurrentWeek(today)), 6);
 
 const dateMatches = (value: string | null | undefined, filter: DateFilterValue) => {
+	if (!dateFilterIsActive(filter)) return true;
 	const cell = parseDateAtStartOfDay(value);
 	const todayDate = new Date();
 	todayDate.setHours(0, 0, 0, 0);

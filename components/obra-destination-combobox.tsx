@@ -98,11 +98,11 @@ export function ObraDestinationCombobox({
 			<PopoverTrigger asChild>
 				<Button
 					type="button"
-					variant="outline"
+					variant="field"
 					role="combobox"
 					aria-expanded={open}
 					disabled={isDisabled}
-					className="h-10 w-full min-w-0 justify-between rounded-lg border-stone-200 bg-white px-3 text-sm font-normal text-stone-800 shadow-xs hover:bg-white disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400"
+					className="h-10 w-full min-w-0 justify-between px-3 text-sm font-normal disabled:cursor-not-allowed"
 				>
 					<span className={cn("min-w-0 flex-1 truncate text-left", !selectedObra && "text-stone-400")}>
 						{disabled ? loadingPlaceholder : selectedObra ? getObraLabel(selectedObra) : placeholder}

@@ -21,6 +21,7 @@ type MercadoPagoWebhookPayload = {
 type TenantSubscriptionLookup = {
 	tenant_id: string;
 	plan_key: string;
+	external_subscription_id: string | null;
 	current_period_start: string | null;
 	current_period_end: string | null;
 	metadata: Record<string, unknown> | null;
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
 			await admin
 				.from("tenant_subscriptions")
 				.select(
-					"tenant_id, plan_key, current_period_start, current_period_end, metadata",
+					"tenant_id, plan_key, external_subscription_id, current_period_start, current_period_end, metadata",
 				)
 				.eq("external_subscription_id", preapproval.id)
 				.maybeSingle();
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
 
 		const { data: existingByTenant, error: existingByTenantError } = await admin
 			.from("tenant_subscriptions")
-			.select("current_period_start, current_period_end, metadata")
+			.select("tenant_id, plan_key, external_subscription_id, current_period_start, current_period_end, metadata")
 			.eq("tenant_id", tenantId)
 			.maybeSingle();
 		if (existingByTenantError) {
@@ -156,6 +157,12 @@ export async function POST(request: NextRequest) {
 		}
 
 		const byTenant = (existingByTenant as TenantSubscriptionLookup | null) ?? null;
+		if (byTenant?.external_subscription_id !== preapproval.id) {
+			return NextResponse.json(
+				{ ok: true, ignored: true, reason: "unassociated_preapproval" },
+				{ status: 202 },
+			);
+		}
 		const previousMetadata =
 			(byTenant?.metadata ?? byExternal?.metadata ?? {}) as Record<string, unknown>;
 		const previousMercadoPagoMetadata =
@@ -179,7 +186,7 @@ export async function POST(request: NextRequest) {
 			},
 		};
 
-		const { error: upsertError } = await admin.from("tenant_subscriptions").upsert(
+		const { data: updated, error: updateError } = await admin.from("tenant_subscriptions").update(
 			{
 				tenant_id: tenantId,
 				plan_key: planKey,
@@ -196,10 +203,19 @@ export async function POST(request: NextRequest) {
 				external_subscription_id: preapproval.id,
 				metadata,
 			},
-			{ onConflict: "tenant_id" },
-		);
-		if (upsertError) {
-			return NextResponse.json({ error: upsertError.message }, { status: 500 });
+		)
+			.eq("tenant_id", tenantId)
+			.eq("external_subscription_id", preapproval.id)
+			.select("tenant_id")
+			.maybeSingle();
+		if (updateError) {
+			return NextResponse.json({ error: updateError.message }, { status: 500 });
+		}
+		if (!updated) {
+			return NextResponse.json(
+				{ ok: true, ignored: true, reason: "unassociated_preapproval" },
+				{ status: 202 },
+			);
 		}
 
 		return NextResponse.json({

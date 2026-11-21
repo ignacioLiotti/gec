@@ -1,0 +1,499 @@
+/*
+ * The canonical DialogContent centers itself with Tailwind utilities (layered) and the preview
+ * theme styles [data-slot="dialog-content"] at (0,2,0). The extra attribute keeps this sheet
+ * placement ahead of both without touching the shared Dialog.
+ */
+.sheet[data-slot="dialog-content"][role="dialog"] {
+  --tw-enter-scale: 1;
+  --tw-exit-scale: 1;
+  --tw-enter-translate-x: 24px;
+  --tw-exit-translate-x: 12px;
+
+  top: 16px;
+  right: 16px;
+  bottom: auto;
+  left: auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(920px, calc(100vw - 32px));
+  max-width: none;
+  height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  transform: none;
+  translate: none;
+}
+
+@media (max-width: 720px) {
+  .sheet[data-slot="dialog-content"][role="dialog"] {
+    --tw-enter-translate-x: 0;
+    --tw-exit-translate-x: 0;
+    --tw-enter-translate-y: 16px;
+    --tw-exit-translate-y: 8px;
+
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 100dvh;
+    border-width: 0;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet[data-slot="dialog-content"][role="dialog"] {
+    --tw-enter-translate-x: 0;
+    --tw-exit-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-translate-y: 0;
+  }
+}
+
+.sheetHeader {
+  gap: 4px;
+  padding: 20px 56px 16px 24px;
+  border-color: var(--gp-line);
+}
+
+.sheetTitle {
+  margin: 0;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+/* Programmatic focus target only; it is not in the tab order. */
+.sheetTitle[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+.sheetBody {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-height: 0;
+  padding: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: color-mix(in srgb, var(--gp-strong) 42%, var(--gp-bg));
+}
+
+.issues,
+.result {
+  justify-self: center;
+  width: min(100%, 760px);
+  min-width: 0;
+  border: 1px solid var(--gp-strong);
+  border-radius: 14px;
+  background: var(--gp-panel);
+}
+
+.issues {
+  padding: 14px 16px 10px;
+}
+
+.issues h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: #775421;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.issues h3 svg {
+  width: 16px;
+  height: 16px;
+}
+
+.issues ul {
+  display: grid;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.issueLink {
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 6px 8px;
+  color: var(--gp-ink);
+  font-weight: 400;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--gp-strong);
+  text-underline-offset: 3px;
+  white-space: normal;
+}
+
+.issueLink:hover {
+  background: var(--gp-sunk);
+  text-decoration-color: currentColor;
+}
+
+.result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
+}
+
+.resultIcon {
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  color: var(--gp-secondary);
+}
+
+.resultText {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.resultText strong {
+  color: var(--gp-ink);
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.resultText > span:not(:global(.gp-status)) {
+  color: var(--gp-secondary);
+  font-size: 13px;
+}
+
+.resultText small {
+  color: var(--gp-muted);
+  font-size: 12px;
+  text-wrap: pretty;
+}
+
+.sheetFooter {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 24px;
+  border-color: var(--gp-line);
+  background: var(--gp-panel);
+}
+
+.footerNote {
+  margin: 0 auto 0 0;
+  color: var(--gp-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.footerNote[data-pending="true"] {
+  color: #775421;
+}
+
+@media (max-width: 520px) {
+  .sheetHeader {
+    padding-inline: 16px 52px;
+  }
+
+  .sheetBody {
+    padding: 12px;
+  }
+
+  .sheetFooter {
+    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .sheetFooter > [data-slot="button"] {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+
+  .footerNote {
+    flex-basis: 100%;
+  }
+}
+
+/* Document output keeps its own business typography instead of the app font. */
+.paperFrame {
+  container: document-paper / inline-size;
+  justify-self: center;
+  width: min(100%, 760px);
+  min-width: 0;
+}
+
+.paper {
+  display: grid;
+  gap: 32px;
+  padding: 56px 60px 48px;
+  background: #fffefb;
+  color: #201e1a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow:
+    0 0 0 1px rgb(26 24 20 / 8%),
+    0 24px 56px -28px rgb(26 24 20 / 32%);
+}
+
+.paper h3,
+.paper p,
+.paper dl,
+.paper dd {
+  margin: 0;
+}
+
+.paperKicker,
+.paper dt,
+.paper th {
+  color: #70695e;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.paperMissing {
+  color: #9a5a2c;
+  font-style: italic;
+}
+
+.paperHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 32px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid #d8d1c5;
+}
+
+.paperIdentity {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.paperIdentity h3 {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.paperIdentity p:last-child {
+  color: #585249;
+}
+
+.paperReference {
+  display: grid;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.paperReference div {
+  display: grid;
+  grid-template-columns: 52px auto;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.paperReference dd {
+  font-variant-numeric: tabular-nums;
+}
+
+.paperParties {
+  display: grid;
+  gap: 12px;
+}
+
+.paperParties dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 14px 28px;
+}
+
+.paperParties div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.paperParties dd {
+  overflow-wrap: anywhere;
+}
+
+.paperSupplier dd {
+  font-size: 16px;
+}
+
+.paperParties div:last-child {
+  grid-column: 1 / -1;
+}
+
+.paperItems {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.paperItems:focus-visible {
+  outline: 2px solid var(--gp-accent);
+  outline-offset: 4px;
+}
+
+.paperItems table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+}
+
+.paperItems th,
+.paperItems td {
+  padding: 9px 8px;
+  border-bottom: 1px solid #e3ddd2;
+  text-align: left;
+  vertical-align: top;
+}
+
+.paperItems th {
+  border-bottom-color: #3c3832;
+}
+
+.paperItems th:first-child,
+.paperItems td:first-child {
+  width: 28px;
+  padding-left: 0;
+  color: #8a8377;
+}
+
+.paperItems th:nth-child(n + 3),
+.paperItems td:nth-child(n + 3) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.paperItems th:nth-child(4),
+.paperItems td:nth-child(4) {
+  text-align: left;
+}
+
+.paperItems th:last-child,
+.paperItems td:last-child {
+  padding-right: 0;
+}
+
+.paperItems td {
+  font-variant-numeric: tabular-nums;
+}
+
+.paperEmptyRows {
+  padding-block: 24px;
+  color: #8a8377;
+  font-style: italic;
+  text-align: center;
+}
+
+.paperClosing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+  align-items: start;
+  gap: 32px;
+}
+
+.paperNotes {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.paperNotes p:last-child {
+  color: #3f3a33;
+  white-space: pre-line;
+  text-wrap: pretty;
+}
+
+.paperTotals {
+  display: grid;
+  gap: 8px;
+}
+
+.paperTotals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.paperTotals dt {
+  align-self: center;
+  color: #585249;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.paperTotals .paperTotal dt {
+  color: #201e1a;
+  font-weight: 600;
+}
+
+.paperTotals dd {
+  white-space: nowrap;
+}
+
+.paperTotals .paperTotal {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid #3c3832;
+}
+
+.paperTotal dd {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.paperSignature {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 48px;
+  padding-top: 40px;
+}
+
+.paperSignature span {
+  padding-top: 8px;
+  border-top: 1px solid #8a8377;
+  color: #70695e;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+@container document-paper (width < 620px) {
+  .paper {
+    gap: 24px;
+    padding: 28px 22px 28px;
+  }
+
+  .paperHeader,
+  .paperClosing {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .paperIdentity h3 {
+    font-size: 23px;
+  }
+
+  .paperParties dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .paperSignature {
+    gap: 24px;
+    padding-top: 24px;
+  }
+}

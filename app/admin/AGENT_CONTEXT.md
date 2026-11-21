@@ -15,6 +15,7 @@ This is a routing/map context. `app/admin` is too broad for one operational cont
 - `macro-tables/**`: macro table creation/editing, sources, columns, previews.
 - `main-table-config/page.tsx`: tenant configuration for main obras table columns and select/badge options.
 - `audit-log/**`: audit trail UI.
+- `operations/**`: effective-superadmin-only platform console. Read `operations/AGENT_CONTEXT.md`; its data is a bounded observed sample, with explicit source coverage.
 - `expenses/**`: tenant and all-tenant expense/usage views.
 - `tenant-secrets/**`: tenant API/webhook secrets management.
 - `demo-links/**`: public demo link/capability management.

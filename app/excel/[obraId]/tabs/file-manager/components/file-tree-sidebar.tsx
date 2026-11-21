@@ -61,7 +61,7 @@ export function FileTreeSidebar({
 							placeholder="Buscar..."
 							value={searchQuery}
 							onChange={(e) => onSearchQueryChange(e.target.value)}
-							className="pl-9  h-9 text-sm"
+							className="pl-9 h-9 text-sm"
 						/>
 					</div>
 

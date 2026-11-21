@@ -805,16 +805,8 @@ export async function GET(_request: Request, context: RouteContext) {
 			}
 		};
 
-		if (requestedPath) {
-			buildFallbackFiles();
-			if (fallbackPaths.size === 0) {
-				await listFolderContents(requestedPath);
-			} else {
-				ensureFolderPath(requestedPath).childrenLoaded = true;
-			}
-		} else {
-			root.childrenLoaded = true;
-		}
+		buildFallbackFiles();
+		await listFolderContents(requestedPath);
 
 		const sortTree = (node: FileSystemItem) => {
 			node.children?.sort((a, b) => {

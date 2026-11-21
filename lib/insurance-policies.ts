@@ -241,11 +241,27 @@ export async function updateInsurancePoliciesForObraCompletion({
 	supabase: Pick<SupabaseClient, "from">;
 	tenantId: string;
 	obraId: string;
-	finishedAt: string;
+	finishedAt: string | null;
 }) {
+	const { data: obra, error: obraError } = await supabase
+		.from("obras")
+		.select("id, porcentaje")
+		.eq("id", obraId)
+		.eq("tenant_id", tenantId)
+		.is("deleted_at", null)
+		.maybeSingle<{ id: string; porcentaje: number | string | null }>();
+	if (obraError) throw obraError;
+	if (!obra) throw new Error("Cannot update insurance policies for an inactive obra.");
+
+	const persistedCompleted = Number(obra.porcentaje ?? 0) >= 100;
+	const expectedCompleted = finishedAt !== null;
+	if (persistedCompleted !== expectedCompleted) {
+		throw new Error("Persisted obra completion state does not match the requested insurance-policy update.");
+	}
+
 	const { data: policies, error } = await supabase
 		.from("insurance_policies")
-		.select("id, cancellation_rule_type, cancellation_rule_offset, cancellation_rule_configured, definitive_reception_date")
+		.select("id, cancellation_rule_type, cancellation_rule_offset, cancellation_rule_configured, definitive_reception_date, obra_finished_at, calculated_cancellation_date, last_notified_at")
 		.eq("tenant_id", tenantId)
 		.eq("obra_id", obraId);
 	if (error) throw error;
@@ -254,17 +270,35 @@ export async function updateInsurancePoliciesForObraCompletion({
 		const ruleType = policy.cancellation_rule_type as InsurancePolicyRuleType;
 		const offset = Number(policy.cancellation_rule_offset ?? 0);
 		const ruleConfigured = policy.cancellation_rule_configured === true;
-		const { error: updateError } = await supabase
+		const effectiveFinishedAt = finishedAt === null
+			? null
+			: policy.obra_finished_at ?? finishedAt;
+		const calculatedCancellationDate = ruleConfigured
+			? calculateCancellationDate(effectiveFinishedAt, ruleType, offset, policy.definitive_reception_date)
+			: null;
+		if (
+			policy.obra_finished_at === effectiveFinishedAt &&
+			policy.calculated_cancellation_date === calculatedCancellationDate
+		) {
+			continue;
+		}
+		const { data: updatedPolicy, error: updateError } = await supabase
 			.from("insurance_policies")
 			.update({
-				obra_finished_at: finishedAt,
-				calculated_cancellation_date: ruleConfigured ? calculateCancellationDate(finishedAt, ruleType, offset, policy.definitive_reception_date) : null,
+				obra_finished_at: effectiveFinishedAt,
+				calculated_cancellation_date: calculatedCancellationDate,
 				last_notified_at: null,
 				updated_at: new Date().toISOString(),
 			})
 			.eq("id", policy.id)
-			.eq("tenant_id", tenantId);
+			.eq("tenant_id", tenantId)
+			.eq("obra_id", obraId)
+			.select("id")
+			.maybeSingle<{ id: string }>();
 		if (updateError) throw updateError;
+		if (updatedPolicy?.id !== policy.id) {
+			throw new Error(`Insurance policy ${policy.id} was not updated for obra ${obraId}.`);
+		}
 	}
 }
 

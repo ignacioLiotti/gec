@@ -97,6 +97,7 @@ function MarketingLanding() {
   const [activeBenefit, setActiveBenefit] = useState(0);
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
+  const contactTrigger = useRef<HTMLElement | null>(null);
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactReason, setContactReason] = useState("agendar una demo");
   const [contactForm, setContactForm] = useState({
@@ -138,12 +139,17 @@ function MarketingLanding() {
   }, []);
 
   const openContactDialog = (reason: string) => {
+    contactTrigger.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setContactReason(reason);
     setContactForm((prev) => ({
       ...prev,
       message:
         prev.message ||
-        `Hola, quiero agendar una demo para mi empresa constructora.`,
+        (reason === "Consultar precios y condiciones"
+          ? "Hola, quiero conocer los precios y las condiciones de contratación."
+          : "Hola, quiero agendar una demo para mi empresa constructora."),
     }));
     setContactOpen(true);
   };
@@ -302,44 +308,49 @@ function MarketingLanding() {
   ];
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900 selection:bg-sky-100">
-      <nav className="fixed top-0 z-50 w-full border-b border-stone-200/80 bg-stone-100/80 backdrop-blur-md z-[1000000]">
+    <div className="isolate min-h-screen bg-stone-50 text-stone-900 selection:bg-sky-100">
+      <nav className="fixed top-0 z-50 w-full border-b border-stone-200/80 bg-stone-100/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-5 md:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold tracking-tight text-stone-900">
             <span className="w-6 h-6 md:w-7 md:h-7 bg-orange-primary rounded-full" />
             <span className="uppercase tracking-widest text-xs md:text-sm">Síntesis</span>
           </div>
-          <div className="flex items-center gap-3 md:gap-6">
+          <div className="flex min-w-0 items-center gap-3 md:gap-6">
             {(authEmail) ? (
               <>
                 <Link
                   href="/excel"
-                  className="inline-flex rounded-md border border-stone-900 bg-stone-900 px-3 md:px-6 py-1.5 text-white text-[10px] md:text-xs font-semibold uppercase tracking-widest shadow-[0_1px_0_rgba(0,0,0,0.03)] transition hover:bg-stone-800"
+                  className="inline-flex min-h-11 shrink-0 items-center rounded-md border border-stone-900 bg-stone-900 px-3 md:px-6 py-1.5 text-white text-[10px] md:text-xs font-semibold uppercase tracking-widest shadow-[0_1px_0_rgba(0,0,0,0.03)] transition hover:bg-stone-800"
                 >
-                  Dashboard
+                  Mis obras
                 </Link>
-                <UserMenu email={authEmail} />
+                <div className="min-w-0 [&>button]:max-w-full [&>button>span]:min-w-0">
+                  <UserMenu email={authEmail} />
+                </div>
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new Event("open-auth"))}
-                  className="inline-flex rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-stone-800 shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-[transform,background-color] duration-150 hover:bg-stone-50 active:scale-[0.97] md:px-4 md:text-xs"
+                <Link
+                  href="/auth/sign-up"
+                  prefetch={false}
+                  className="inline-flex min-h-11 items-center rounded-md bg-stone-900 px-3 text-[10px] font-semibold uppercase tracking-widest text-white transition-colors hover:bg-stone-800 md:text-xs"
+                >
+                  Crear cuenta
+                </Link>
+                <Link
+                  href="/auth/sign-in"
+                  prefetch={false}
+                  className="inline-flex min-h-11 items-center rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-stone-800 shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-[transform,background-color] duration-150 hover:bg-stone-50 active:scale-[0.97] md:px-4 md:text-xs"
                 >
                   Ingresar
-                </button>
-                <Link
-                  href="#agendar-demo"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    history.replaceState(null, "", "#agendar-demo");
-                    scrollToAnchorWithOffset("agendar-demo");
-                  }}
-                  className="inline-flex rounded-md border border-stone-900 bg-stone-900 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-white shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-[transform,background-color] duration-150 hover:bg-stone-800 active:scale-[0.97] md:px-6 md:text-xs"
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => openContactDialog("Agendá tu demo")}
+                  className="hidden rounded-md border border-stone-900 bg-stone-900 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-white shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-[transform,background-color] duration-150 hover:bg-stone-800 active:scale-[0.97] md:inline-flex md:px-6 md:text-xs"
                 >
                   Agendar demo
-                </Link>
+                </button>
               </>
             )}
           </div>
@@ -348,7 +359,7 @@ function MarketingLanding() {
 
       <section className="relative pt-28 md:pt-48 pb-16 px-6 text-center max-w-5xl mx-auto z-10">
         <m.div
-          initial={{ opacity: 0, y: 15 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1 }}
         >
@@ -949,6 +960,12 @@ function MarketingLanding() {
 
 
       <footer className="py-16 border-t border-stone-200 flex flex-col items-center gap-6">
+        <nav aria-label="Información antes de registrarte" className="flex flex-wrap items-center justify-center gap-5 px-6 text-sm text-stone-700">
+          <Link href="/privacy" className="underline underline-offset-4">Política de privacidad</Link>
+          <button type="button" onClick={() => openContactDialog("Consultar precios y condiciones")} className="underline underline-offset-4">
+            Consultar precios y condiciones
+          </button>
+        </nav>
         <div className="flex items-center gap-2 font-bold text-stone-400">
           <span className="uppercase tracking-widest text-[10px]">Síntesis Cloud Solutions</span>
         </div>
@@ -958,6 +975,10 @@ function MarketingLanding() {
       <QuickFormDialog
         open={contactOpen}
         onOpenChange={setContactOpen}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          contactTrigger.current?.focus();
+        }}
         title={contactReason}
         variant="dashboard"
         fields={[

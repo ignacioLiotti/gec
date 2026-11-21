@@ -213,6 +213,7 @@ Document generation now gives tenant members baseline creation access and keeps 
 - `drafts GET` -> authenticated tenant member, own drafts only
 - generated list/detail -> authenticated tenant member for all generated documents in the tenant
 - generated regeneration -> authenticated tenant member when the generated document is `GENERATED`, `UNDER_REVIEW`, `APPROVED`, or `REJECTED`; regeneration always persists `UNDER_REVIEW`
+- generated update RLS -> tenant members may target approved rows only when the resulting status is no longer `APPROVED`; `documents:review` may keep or assign approval states
 - generated delete -> creator only; permanently removes the PDF and generated extraction rows while retaining the source draft
 - generated approve/reject PATCH -> `documents:review`
 - `documents/access` refuses signed URLs and direct PDF downloads for generated documents whose status is `REJECTED`

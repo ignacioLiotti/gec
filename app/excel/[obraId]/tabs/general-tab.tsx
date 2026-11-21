@@ -395,8 +395,8 @@ const DataFlowSuggestionNotice = memo(function DataFlowSuggestionNotice({
 					<Button
 						type="button"
 						size="sm"
-						variant="outline"
-						className="h-7 border-emerald-200 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+						variant={"successSecondary"}
+						className="h-7 px-2 text-[11px]"
 						disabled={isResolving}
 						onClick={() => void onDecision(suggestion.id, "accept")}
 					>
@@ -405,8 +405,8 @@ const DataFlowSuggestionNotice = memo(function DataFlowSuggestionNotice({
 					<Button
 						type="button"
 						size="sm"
-						variant="ghost"
-						className="h-7 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+						variant={"successSecondary"}
+						className="h-7 px-2 text-[11px]"
 						disabled={isResolving}
 						onClick={() => void onDecision(suggestion.id, "reject")}
 					>
@@ -561,8 +561,7 @@ function MiniField({
 	);
 }
 
-const SURFACE_INPUT_CLASS =
-	"h-10 rounded-lg border-[#e8e8e8] bg-white text-[#1a1a1a] shadow-[0_0_0_1px_#00000012,0_1px_0_0_#fff_inset] focus-visible:ring-2 focus-visible:ring-orange-200";
+const SURFACE_INPUT_CLASS = "h-10";
 
 const formatNumber = (value: unknown, suffix = "") => {
 	const num = Number(value ?? 0);
@@ -1259,7 +1258,7 @@ export function ObraGeneralTab({
 												{Number(field.state.value ?? 0) >= 100 && onFinishObra ? (
 													<Button
 														type="button"
-														className="w-full bg-[#f97316] text-white hover:bg-[#ea580c]"
+														className="w-full"
 														disabled={isSaving}
 														onClick={() => void onFinishObra()}
 													>
@@ -1282,12 +1281,7 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(
-															SURFACE_INPUT_CLASS,
-															"text-right",
-															(isDerivedFieldHighlighted("porcentaje") || isDerivedFieldBlocked("porcentaje")) &&
-															"border-[#f7b26a] bg-white"
-														)}
+														className={cn(SURFACE_INPUT_CLASS, "text-right")}
 													/>
 													{getErrorMessage(field.state.meta.errors) && (
 														<p className="mt-2 text-xs text-red-500">
@@ -1520,11 +1514,7 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(
-															SURFACE_INPUT_CLASS,
-															"text-right font-mono",
-															isContratoBlockingDerived && "border-[#f7b26a] bg-white"
-														)}
+														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
 														placeholder="0.00"
 													/>
 													<DataFlowSuggestionNotice
@@ -1556,12 +1546,7 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(
-															SURFACE_INPUT_CLASS,
-															"text-right font-mono",
-															isDerivedFieldHighlighted("certificadoALaFecha") &&
-															"border-[#f7b26a] bg-white"
-														)}
+														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
 														placeholder="0.00"
 													/>
 													{hasVisibleRecommendation("certificadoALaFecha", field.state.value) ? (
@@ -1611,12 +1596,7 @@ export function ObraGeneralTab({
 														value={field.state.value}
 														onChange={(e) => field.handleChange(Number(e.target.value))}
 														onBlur={field.handleBlur}
-														className={cn(
-															SURFACE_INPUT_CLASS,
-															"text-right font-mono",
-															(isDerivedFieldHighlighted("saldoACertificar") || isDerivedFieldBlocked("saldoACertificar")) &&
-															"border-[#f7b26a] bg-white"
-														)}
+														className={cn(SURFACE_INPUT_CLASS, "text-right font-mono")}
 														placeholder="0.00"
 													/>
 													{hasVisibleRecommendation("saldoACertificar", field.state.value) ? (
@@ -2014,7 +1994,7 @@ export function ObraGeneralTab({
 											{Number(form.state.values.porcentaje ?? 0) >= 100 && onFinishObra ? (
 												<Button
 													type="button"
-													className="w-full bg-[#f97316] text-white hover:bg-[#ea580c]"
+													className="w-full"
 													disabled={isSaving}
 													onClick={() => void onFinishObra()}
 												>
@@ -2122,8 +2102,8 @@ export function ObraGeneralTab({
 																<Button
 																	type="button"
 																	size="sm"
-																	variant="outline"
-																	className="shrink-0 gap-2 border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+																	variant={"secondary"}
+																	className="shrink-0 gap-2"
 																	onClick={() => void handleCreateBaseCurve()}
 																	disabled={isCreatingBaseCurve}
 																>

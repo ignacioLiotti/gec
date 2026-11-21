@@ -1,6 +1,9 @@
+"use client"
+
 import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
+import { fieldClassName } from "./field-styles"
 import { cn } from "../lib/utils"
 
 export const Select = SelectPrimitive.Root
@@ -9,12 +12,14 @@ export const SelectValue = SelectPrimitive.Value
 
 export const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & { size?: "sm" | "default" }
+>(({ className, children, size = "default", ...props }, ref) => (
   <SelectPrimitive.Trigger
+    data-slot="select-trigger"
+    data-size={size}
     ref={ref}
     className={cn(
-      "flex h-10 w-full items-center justify-between rounded-md border border-stroke bg-surface px-3 py-2 text-sm text-content shadow-recessed transition-[border-color,box-shadow,background-color,color] placeholder:text-content-disabled focus:outline-none focus:ring-2 focus:ring-content/10 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      fieldClassName, "flex max-w-full items-center justify-between gap-2 overflow-hidden whitespace-nowrap data-[size=default]:h-9 data-[size=sm]:h-8 [&>span]:min-w-0 [&>span]:truncate [&_svg]:shrink-0",
       className
     )}
     {...props}
@@ -61,15 +66,15 @@ export interface SelectContentProps extends React.ComponentPropsWithoutRef<typeo
 }
 
 export const SelectContent = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Content>, SelectContentProps>(
-  ({ className, children, heading = "Options", hideHeading = false, position = "popper", ...props }, ref) => {
-    const showHeading = !hideHeading && heading !== null && heading !== false
+  ({ className, children, heading, hideHeading = false, position = "popper", ...props }, ref) => {
+    const showHeading = !hideHeading && heading != null && heading !== false
 
     return (
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
           ref={ref}
           className={cn(
-            "relative z-dropdown max-h-96 min-w-32 overflow-hidden rounded-md border border-stroke bg-surface p-1 text-content shadow-dropdown data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "relative z-modal max-h-[var(--radix-select-content-available-height)] max-w-[min(44rem,calc(100vw-2rem))] min-w-32 overflow-hidden rounded-md border border-stroke bg-surface p-1 text-content shadow-dropdown data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
             position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
             className
@@ -87,7 +92,7 @@ export const SelectContent = React.forwardRef<React.ElementRef<typeof SelectPrim
           <SelectPrimitive.Viewport
             className={cn(
               position === "popper" &&
-              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+              "max-h-[min(var(--radix-select-content-available-height),18rem)] w-full min-w-[var(--radix-select-trigger-width)] overflow-y-auto"
             )}
           >
             {children}

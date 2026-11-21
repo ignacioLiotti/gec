@@ -773,19 +773,9 @@ export default function NewMacroTablePage() {
     >
       <div className="space-y-1 border-b border-border/60 px-4 py-3">
         <p className="font-semibold">{column.label.trim() || "Sin nombre"}</p>
-        <Badge
-          variant={
-            column.columnType === "custom"
-              ? "default"
-              : column.columnType === "computed"
-                ? "secondary"
-                : "outline"
-          }
-          className={cn(
-            "text-[10px]",
-            column.columnType === "custom" && "bg-purple-500",
-            column.columnType === "computed" && "bg-amber-500/80"
-          )}
+        <Badge size="xs"
+          variant={column.columnType === "computed" ? "warning" : column.columnType === "custom" ? "category" : "outline"}
+          className={"text-[10px]"}
         >
           {column.columnType === "custom"
             ? "Personalizada"
@@ -971,7 +961,7 @@ export default function NewMacroTablePage() {
       </div>
 
       {/* Step Content */}
-      <Card className="border-cyan-500/20 max-w-full">
+      <Card className="max-w-full">
         <CardContent className="p-6">
           <AnimatePresence mode="wait">
             {/* Step 1: Basic Info */}
@@ -1058,14 +1048,10 @@ export default function NewMacroTablePage() {
                         return (
                           <Button
                             key={template.id}
-                            variant={isSelected ? "default" : "outline"}
+                            variant={(!isSelected) ? ("default") : ((isSelected) ? ("default") : (isSelected ? "default" : "outline"))}
                             size="sm"
                             onClick={() => selectByTemplate(isSelected ? null : template.id)}
-                            className={cn(
-                              "gap-2",
-                              isSelected && "bg-amber-500 hover:bg-amber-600",
-                              !isSelected && "border-amber-500/30 hover:bg-amber-500/10"
-                            )}
+                            className={"gap-2"}
                             disabled={matchCount === 0}
                           >
                             <FileStack className="size-3.5" />
@@ -1183,7 +1169,7 @@ export default function NewMacroTablePage() {
                                 {obra.tablas.length} tablas
                               </Badge>
                               {selectedCount > 0 && (
-                                <Badge className="text-xs bg-cyan-500">
+                                <Badge variant={"info"} className="text-xs">
                                   {selectedCount} seleccionadas
                                 </Badge>
                               )}
@@ -1211,7 +1197,7 @@ export default function NewMacroTablePage() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              className="h-7 px-2 text-xs"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 clearTablesInObra(obra.id);
@@ -1393,19 +1379,9 @@ export default function NewMacroTablePage() {
                                                 <p className="truncate font-semibold leading-tight">
                                                   {col.label.trim() || "Sin nombre"}
                                                 </p>
-                                                <Badge
-                                                  variant={
-                                                    col.columnType === "custom"
-                                                      ? "default"
-                                                      : col.columnType === "computed"
-                                                        ? "secondary"
-                                                        : "outline"
-                                                  }
-                                                  className={cn(
-                                                    "text-[10px]",
-                                                    col.columnType === "custom" && "bg-purple-500",
-                                                    col.columnType === "computed" && "bg-amber-500/80"
-                                                  )}
+                                                <Badge size="xs"
+                                                  variant={col.columnType === "computed" ? "warning" : col.columnType === "custom" ? "category" : "outline"}
+                                                  className={"text-[10px]"}
                                                 >
                                                   {col.columnType === "custom"
                                                     ? "Personalizada"
@@ -1531,17 +1507,8 @@ export default function NewMacroTablePage() {
                           <div className="space-y-4">
                             <div className="flex items-center justify-between gap-3">
                               <Badge
-                                variant={
-                                  selectedColumn.columnType === "custom"
-                                    ? "default"
-                                    : selectedColumn.columnType === "computed"
-                                      ? "secondary"
-                                      : "outline"
-                                }
-                                className={cn(
-                                  selectedColumn.columnType === "custom" && "bg-purple-500",
-                                  selectedColumn.columnType === "computed" && "bg-amber-500/80"
-                                )}
+                                variant={selectedColumn.columnType === "computed" ? "warning" : selectedColumn.columnType === "custom" ? "category" : "outline"}
+
                               >
                                 {selectedColumn.columnType === "custom"
                                   ? "Columna personalizada"
@@ -1567,9 +1534,9 @@ export default function NewMacroTablePage() {
                                   <ArrowDown className="size-4" />
                                 </Button>
                                 <Button
-                                  variant="ghost"
+                                  variant={"destructiveSecondary"}
                                   size="icon"
-                                  className="text-destructive hover:bg-destructive/10"
+
                                   onClick={() => removeColumn(selectedColumn.id)}
                                   aria-label="Eliminar columna seleccionada"
                                 >
@@ -1982,7 +1949,7 @@ export default function NewMacroTablePage() {
           <Button
             onClick={() => setCurrentStep((prev) => prev + 1)}
             disabled={!canProceedFromStep(currentStep)}
-            className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
+            className="gap-2"
           >
             Siguiente
             <ArrowRight className="size-4" />
@@ -1991,7 +1958,7 @@ export default function NewMacroTablePage() {
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !canProceedFromStep(currentStep)}
-            className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
+            className="gap-2"
           >
             {isSubmitting ? (
               <Loader2 className="size-4 animate-spin" />

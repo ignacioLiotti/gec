@@ -1,0 +1,5 @@
+dist/
+artifacts/
+*.log
+lint.json
+*.tsbuildinfo

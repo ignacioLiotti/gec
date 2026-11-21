@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The shared UI primitive layer — shadcn/ui-style components adapted to the "Sintesis" design system (orange primary `#ff5800`, lifted button recipe, tray+chip tabs, notch details). This is the **only** layer app code should import UI primitives from (`@/components/ui/*`).
+The product import surface for Sintesis UI. Components shared with `design-system/components` are reexports; edit their canonical source there. The theme includes accessible orange controls, lifted buttons, tray+chip tabs, and notch details. App code imports primitives from `@/components/ui/*`.
 
 ## Main files
 
@@ -18,6 +18,7 @@ The shared UI primitive layer — shadcn/ui-style components adapted to the "Sin
 - Keep the shadcn conventions: `cn()` for class merging, `data-slot`/`data-state` attributes, forwarded refs, Radix composition.
 - New primitives should be promoted here only when used by 2+ features; otherwise keep them route-local.
 - This layer wraps `design-system/*`; app code must not bypass it.
+- Run `npm run check:ui`, `npm run typecheck:ui`, and the Storybook checks after changing shared appearance or behavior. Keep screen classes to layout and density; add semantic variants at the canonical source for reusable appearance.
 
 ## Related documentation
 

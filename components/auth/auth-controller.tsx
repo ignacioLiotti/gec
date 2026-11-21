@@ -10,11 +10,13 @@ const AuthModal = dynamic(() => import("@/components/auth/auth-modal"), {
 export default function AuthController() {
   const [open, setOpen] = useState(false);
   const [forcedOpen, setForcedOpen] = useState(false);
+  const [initialMode, setInitialMode] = useState<"sign_in" | "sign_up">("sign_in");
 
   useEffect(() => {
     function handler(event: Event) {
       const customEvent = event as CustomEvent;
       const forced = customEvent.detail?.forced ?? false;
+      setInitialMode(customEvent.detail?.mode === "sign_up" ? "sign_up" : "sign_in");
       setOpen(true);
       setForcedOpen(forced);
     }
@@ -35,7 +37,7 @@ export default function AuthController() {
 
   if (!open && !forcedOpen) return null;
 
-  return <AuthModal open={open} onOpenChange={handleOpenChange} forcedOpen={forcedOpen} />;
+  return <AuthModal open={open} onOpenChange={handleOpenChange} forcedOpen={forcedOpen} initialMode={initialMode} />;
 }
 
 

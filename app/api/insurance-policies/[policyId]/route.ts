@@ -61,6 +61,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ po
 	const { supabase, user, tenantId } = await getAuthContext();
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	if (!tenantId) return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	const permission = await supabase.rpc("has_permission", { tenant: tenantId, perm_key: "insurance-policies:manage" });
+	if (permission.error) return NextResponse.json({ error: "No se pudo verificar el permiso" }, { status: 500 });
+	if (permission.data !== true) return NextResponse.json({ error: "No tienes permiso para gestionar polizas" }, { status: 403 });
 
 	const rawBody = await request.json().catch(() => ({}));
 	const parsed = PatchSchema.safeParse(rawBody);
@@ -197,6 +200,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 	const { supabase, user, tenantId } = await getAuthContext();
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	if (!tenantId) return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	const permission = await supabase.rpc("has_permission", { tenant: tenantId, perm_key: "insurance-policies:manage" });
+	if (permission.error) return NextResponse.json({ error: "No se pudo verificar el permiso" }, { status: 500 });
+	if (permission.data !== true) return NextResponse.json({ error: "No tienes permiso para eliminar polizas" }, { status: 403 });
 
 	const { data: existing, error: existingError } = await supabase
 		.from("insurance_policies")

@@ -1,0 +1,497 @@
+{
+  "libraries": {
+    "interior": {
+      "commit": "52988dcc82c9ef2c21bc6b288207a2b850f9b318",
+      "repository": "https://github.com/ddoemonn/interior"
+    },
+    "beautiful": {
+      "commit": "06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4",
+      "repository": "https://github.com/slev12397/beautiful-ui"
+    }
+  },
+  "files": [
+    {
+      "library": "interior",
+      "file": "components/interior/loading-button.tsx",
+      "upstreamSha256": "204ea287294cb28de76c0a7fce5c83b5de9d798b9d8994439c075c662da5a22c",
+      "localSha256": "e6fe8961b7a363b31bc044847bbe442fe4db24c87ad3180964deea34fd789a55",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/loading-button.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/loading-button-demo.tsx",
+      "upstreamSha256": "2587aef21c8fc4be7f4781142bfa40201ea534e89510b935f90137fb9b1d37f9",
+      "localSha256": "ee01bb9dc033a67313deaafac18458f48a34d52a4306580bc14fcf4df27ccc54",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/loading-button-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/copy-button.tsx",
+      "upstreamSha256": "909f649e6c364000a4c2cfa0a602b049d02e5be004632b30847e554cef6cac13",
+      "localSha256": "72ab4582121c7059baef6bacea8dbfb3ba894141ae7e6c785b12892ea91a72a0",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/copy-button.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/copy-button-demo.tsx",
+      "upstreamSha256": "81a79fac691f838f32322167a5597d107f4256973ac2baaef76e944aa641c2f6",
+      "localSha256": "224849c473fd3d9b1461c458cf552743c0226bb0c8c14ac68d8cbcedaead2aa0",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/copy-button-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/hold-to-confirm.tsx",
+      "upstreamSha256": "f6f4472954fef985f16a11b9aaec4be59a71b203fd71c2fe4842d637c6ac147a",
+      "localSha256": "f6e85c40104a33651e153b759baa340304409479f32a43792637a986b7c8572c",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/hold-to-confirm.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/hold-to-confirm-demo.tsx",
+      "upstreamSha256": "d363f60448e75879a7c9f1e6a89c82fc519b4cb4d26cf080f8d69ce9f087d6a9",
+      "localSha256": "7b62842c85cc783033fc9081a14b5972c090f2d13e75e7618dac2d08061f7976",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/hold-to-confirm-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/press-depth.tsx",
+      "upstreamSha256": "c541742a65bed30f9ae6e085edcd87fa1baf73ff49770fd7fea527f3c999f49e",
+      "localSha256": "a2014259890a55df86d55ba3ab0849b803246472ab5bba214a8941a30b98a115",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/press-depth.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/press-depth-demo.tsx",
+      "upstreamSha256": "be5221dc1fba49406009dd318f7b72cd2a481bc7ca1930e05e88661cd7d37fd3",
+      "localSha256": "491a2164c7042d9c7dc3f35d41afe764ab602ae58a52a6b02cf5d7eaaff089bf",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/press-depth-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/icon-morph.tsx",
+      "upstreamSha256": "2debead252da7551a1773b2e42b1f583c4764aa6a0617806138995781550a2b1",
+      "localSha256": "bd08d3e0e3bd3bd174939299a2159714beba14712c76f85ef72966e16374c513",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/icon-morph.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/icon-morph-demo.tsx",
+      "upstreamSha256": "1597b6049f8ff625dde206a94422a54d97c94849b4e94bb6cc73a7b3c5f2f05b",
+      "localSha256": "f9bbf2ff3083601b4f0bdd21d94f9c17fa831cd20daa1008dc252b7033c58b7a",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/icon-morph-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/ripple.tsx",
+      "upstreamSha256": "474c6080703baf70115da11c18b27ea00cf1c6711e3c5be3bae977a7ee635692",
+      "localSha256": "1e582fafae42b590ad12d566e0d153dde41f7e55672484972fa75a0878591008",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/ripple.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/ripple-demo.tsx",
+      "upstreamSha256": "4b4b3fa71d461e7ce517dcd37fcd5015bb477450b16945b4cba4115affe3e1e1",
+      "localSha256": "1053c5435b7bff3edd8a698db3ec9cb2239278a2b02cd4e7968ee1b022f1a40c",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/ripple-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/accordion.tsx",
+      "upstreamSha256": "7e5e4c07ee772973bd4cce728a94e4eb1d1c628dd7e153ddfd2335b2e7e5b07e",
+      "localSha256": "3041734537db485f390cf7e310e1fb688b48b959e5bd28c11b76cd490659279e",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/accordion.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/accordion-demo.tsx",
+      "upstreamSha256": "a48f1a7b42d5c8bbf7ce9e75f3d89df87828e867e9f8cfec34ef07f5bd8375aa",
+      "localSha256": "3c5fb54ea4c0e2ffdf6039dc4074d63ab4f4be59d19282491cd0f19793492777",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/accordion-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/tabs.tsx",
+      "upstreamSha256": "53542b1779cab5f70cc74b7eb1e77835372f9465ae8ae54fd40d667c5f34f72e",
+      "localSha256": "13209996feae1d57935402fbb61f85df1d3efcae5a42846fa032b33c398af7e6",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/tabs.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/tabs-demo.tsx",
+      "upstreamSha256": "4377996ca6ac8e15d6b5e39915583c6ff00796f546a86118799c84551e4db27f",
+      "localSha256": "e7a05c846cb87fafac5de72d65f41b23541c3a24083fb0d23af210876c64b3ba",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/tabs-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/segmented-control.tsx",
+      "upstreamSha256": "b44fd3a988b76a30c7100faf98dbca58eaefc7781639ae268c11d7f54c2bf43f",
+      "localSha256": "e99eebbd79d2d36a35e90d32e4ba98e88974afdc82c2b759816f1fcfdb2c100d",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/segmented-control.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/segmented-control-demo.tsx",
+      "upstreamSha256": "ea0396971cc815c7393ac59bc44b8c4696214d679f981ef99a01515f0b3b73b1",
+      "localSha256": "8fe36a67b4710fee46bc3cdcabe1ab52683d61e91d0dfbfaca246add570c651e",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/segmented-control-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/dropdown.tsx",
+      "upstreamSha256": "f937fb38b4dc40b5c3d88165fc674e362f4c0b402feb4e462456a39764ca2b93",
+      "localSha256": "4a4330eba216be5f87168fc7947dca108d54ba19548126299dd3f03d71be6b1a",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/dropdown.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/dropdown-demo.tsx",
+      "upstreamSha256": "ba47472c90733e3f5d00a42fabbdd8665ac2a2773def10153fd027989f8b28ad",
+      "localSha256": "8ee97385fdbd0010a2f1d0de52f63a6abe8146e44257e7c20f93da950f1ce851",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/dropdown-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/modal.tsx",
+      "upstreamSha256": "4ea9cad96c2685dcc4e24c31b04753a2890cbeaca74779d39bd4744551e01c0e",
+      "localSha256": "780221ccd578e2999df52bcb5597e6d22a8071813b8a42c4acb1a2e46d7e9e49",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/modal.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/modal-demo.tsx",
+      "upstreamSha256": "d2c15c36ff1655537e357b9c5e70da59f490786f75dcc9d95fe8a92f8a676d72",
+      "localSha256": "64451c70d3f2de9b5b7b5ad38611b6adcad253e9bf9eacbcdd768ab9d69e946f",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/modal-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/drawer.tsx",
+      "upstreamSha256": "5edc07e72e4610ead30abc9b14fefaedf8019deba1bcdeba41e2673fc29dccf3",
+      "localSha256": "8edd3cef49a4dec4eaff72c8a426d8c6e67631881f78587d33f493f81ee5f277",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/drawer.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/drawer-demo.tsx",
+      "upstreamSha256": "8919f3f3983809da55431f35cb851fef671626be8af8a0ca6e10f050c45f8e36",
+      "localSha256": "b1c18b522898f766eba97db8c43813a724641803689d4352a004b4cd6bcff68c",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/drawer-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/popover.tsx",
+      "upstreamSha256": "440a8f42027bbbb53515c8bd4debff236db6a8c1886a7db836dec9050affcf3e",
+      "localSha256": "1011a7e04491a385b35104054d0537c3dd447de80871ec652aea89a8b291160c",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/popover.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/popover-demo.tsx",
+      "upstreamSha256": "1a8604a8ae588025689cb2aebc8d612e6372e763e311279f8bd5a15c2e2c1998",
+      "localSha256": "ef77a3a0605926c72fb1d78d3f1fbc1eb369c48372c34c502d35c14ddebd3b76",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/popover-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/tooltip-group.tsx",
+      "upstreamSha256": "92c6dea9ac216942529ad67992ecef7bd2794ca9b8aa865fbc1cdab052744f16",
+      "localSha256": "6421695f06a5317c334fbca2a1a86dfa7a561a71f2a678db1146832014f8150b",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/tooltip-group.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/tooltip-group-demo.tsx",
+      "upstreamSha256": "8304fd7e89eea8d3838354a27da706da9e5772d40e875c55401914fd2f2ddee7",
+      "localSha256": "1602cc2dd8b356a7f57e53bbf49c44adba7bfd5fc47dd6a26ebb4a53f626a83f",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/tooltip-group-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/tag-input.tsx",
+      "upstreamSha256": "8891f34b76bbc20bd615101872f3f040514bf889eb07434074b8e55d7ac8e08e",
+      "localSha256": "626b114e702eab4d48cc5875b97d9acd93314a5ee29afd4e773c2248aeafd996",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/tag-input.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/tag-input-demo.tsx",
+      "upstreamSha256": "b95b1e5d31ee9ae66f9923a939ac0ae5c4caccf5687925385496f8d7a237e298",
+      "localSha256": "6af0089cfe8db5ba646a5312b51575bacfb7cb60e58510772de0c148a3cbd043",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/tag-input-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/inline-validation.tsx",
+      "upstreamSha256": "7cfd26aa5cc2aef85f96fc3320de6b7575319bac86a40656c0d6b4bee5ab603b",
+      "localSha256": "af40eb27ddd7001c24f9f5412ae2582680af94b8dc23cef97a516fa09e44a72f",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/inline-validation.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/inline-validation-demo.tsx",
+      "upstreamSha256": "c09470ed406af0aa2c935e6427d9445d68a62022e0505631c0beb7a4a67eb13f",
+      "localSha256": "d26032c930d8bcca62f2d538842fe9b2183a6405be2879ba9b1d4eb75afa4050",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/inline-validation-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/expanding-search.tsx",
+      "upstreamSha256": "b611f91f566307bb15d12466e29a42945bb7d22fb78f1c4fe7d61e6cc90730a3",
+      "localSha256": "2e9c2a60a5625660c3b0d01d55f176ce614ff9868eeeb927eeb020f5a5cf2864",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/expanding-search.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/expanding-search-demo.tsx",
+      "upstreamSha256": "455f44f7dd0ed46fdcfe53f04df78feb88237b5c2cc90b2d060e350866a18cf0",
+      "localSha256": "5a2f77b27bf623dda5dd45882e48d80f91ebc71524301e7ae4f2a0aa8333f71c",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/expanding-search-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/progress-bar.tsx",
+      "upstreamSha256": "ef57be7f15465ea3d84644c65a13987ef82fae52849980ac5ecca77ff05899ea",
+      "localSha256": "0198a8967d27ea7799c1d8972112566567a522519cad5b6c74824418593d6248",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/progress-bar.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/progress-bar-demo.tsx",
+      "upstreamSha256": "40c8499c7cfd6529814bb5475cf6475067361d39f27b44b674766f07f31f7985",
+      "localSha256": "c3a50a9f9e802bff2637463ee93f182616827401ceb13b5bab97d688b03f092e",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/progress-bar-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/skeleton-swap.tsx",
+      "upstreamSha256": "5437a2fbec2aa5e7f3254a276577895269f83246977502a6a212a0826ebe7086",
+      "localSha256": "2ee14897b52c7eb2b514bc152985bc3eb9d46e95b17cfdb5090f5d61bf9bf611",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/skeleton-swap.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/skeleton-swap-demo.tsx",
+      "upstreamSha256": "0cee5853834b3d4fb8ee096da10c937994930fb25f0efd04d7620da2d9e20238",
+      "localSha256": "cce1bd575b0e56ef1df7654d4feebdc19936190128564796b50b76803cc7f2f7",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/skeleton-swap-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/task-steps.tsx",
+      "upstreamSha256": "6170cb7db78907dc8faff49bfd5443beb53c94f6e2849c8b7048e8e0ff89e567",
+      "localSha256": "1ecd750d57bf1f1b63aeec422f6ef3d84589b403aa87c1b8e42b1db1d4590ea8",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/task-steps.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/task-steps-demo.tsx",
+      "upstreamSha256": "6a28da16641b8af0102ca77ec5639c810bcc2460424254677b39ec3a0d0897b4",
+      "localSha256": "61be87866f045d98f10e3b9b5eb97e3d8be9e9c97f26ad1297857b8495142458",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/task-steps-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/sortable-table.tsx",
+      "upstreamSha256": "32f32ac9f0e586cee5dc1a681c87462a833ba51e755faca91b89c7b0947774ec",
+      "localSha256": "e630797a07cd2b6f86387bcae25cb1c316ddfd5aeec74c640cf943ae9bfc06a0",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/sortable-table.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/sortable-table-demo.tsx",
+      "upstreamSha256": "dff697e00329042c5293efa366267aa67164475576ff0b87ce6ac13dd867baaf",
+      "localSha256": "16c3f8e3260cd08b31d99cc591ebae1a35fb06b8a22da4fbada661dff26b9eef",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/sortable-table-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/filter-grid.tsx",
+      "upstreamSha256": "ee43cd5745df2367ddb9a2dab55f2ce94536a9b362d03d6762aa8e6d396b14c2",
+      "localSha256": "1151c412009b4e1019182fdfeebc5af8f967ec8c8f1003499d514598e648f2e8",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/filter-grid.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/filter-grid-demo.tsx",
+      "upstreamSha256": "259e85dff4a5e3760c806830aeeff6cc3deba721a9aab04bf457e97c57d1a64d",
+      "localSha256": "a89e129d0ecb9ff8ad1178bf7be3d656cedc2ba4247f31b60409fe87e5027ac1",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/filter-grid-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/tree-view.tsx",
+      "upstreamSha256": "91026b1b0c42c2067bb48144de8d7e47142c1149b94fb2399b4c53d58bbe1b31",
+      "localSha256": "f40333a68cb06f1037dd3a256eb9fd2564bbbd85eb890c6acc8178531535b4ee",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/tree-view.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/tree-view-demo.tsx",
+      "upstreamSha256": "099842c1d0b33df8f40f68d6ba3ad27b0d2fe7b45202b4142635814cdd5d5d18",
+      "localSha256": "fb3fa543ff94f2acd02181332328c7e689c2cc82e0829b43632ae388f8def7f8",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/tree-view-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/reorder-list.tsx",
+      "upstreamSha256": "56e1a353f6f05819ce08f651e3cbc2410c93ab8b281d638c38397462a9582f1e",
+      "localSha256": "fc4368170d3f440aef7cfa93c7127e1091926e3e58ecd5a78d79990b9e7cbfa6",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/reorder-list.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/reorder-list-demo.tsx",
+      "upstreamSha256": "2f0f424b0d8e5dd7d0a711213463e9485468cca4b1f4e0f8bc2a93dc1c05c999",
+      "localSha256": "cdebf7dab3717b237104df7f82d652b8d257d7185b1e4d7bc424d2d50f2f9d44",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/reorder-list-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/value-flash.tsx",
+      "upstreamSha256": "9758bfbacd2eb73c44b619044495988d0eff7cba071d74ae28f3ed1ac3029010",
+      "localSha256": "1ed48680ceff147faba13232da155f55b212ebb7de15586635d16e63db4b784d",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/value-flash.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/value-flash-demo.tsx",
+      "upstreamSha256": "dfe7e819ace45101d14aa174fee3642f478057ec1194b740f18a50acb4568380",
+      "localSha256": "360c7e1759ccadc8d654dd95b7ebcdc0564ca0d64fd8ddc7cd2604fe35129010",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/value-flash-demo.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "components/interior/collapsible-banner.tsx",
+      "upstreamSha256": "567283024afccf52542b76e3e564b137179cee49eb47c181eff83a91cc4307f7",
+      "localSha256": "bcd99016bd9ab8dcfc09d6f9d8d25c00004e391da48e78e408166ed3deae53d8",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/components/interior/collapsible-banner.tsx"
+    },
+    {
+      "library": "interior",
+      "file": "lib/demos/collapsible-banner-demo.tsx",
+      "upstreamSha256": "30e7ea30332646730a5cdcd934068392a34fe59cf5e93b3cdea4a7572ea241d9",
+      "localSha256": "26da0f424723bc24dc11ca94a7eb65b94bd32ba45e70a8f961818b01ee5484fb",
+      "source": "https://github.com/ddoemonn/interior/blob/52988dcc82c9ef2c21bc6b288207a2b850f9b318/lib/demos/collapsible-banner-demo.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/LoadingState.tsx",
+      "upstreamSha256": "8afb9ae4cdec87ddbdd05f55c12a5a6c8981728eef28a1aa5089d8a3e19015d2",
+      "localSha256": "c4b1587d97a2a730703b053d7276fa95cc8dbfbed20d21733134f2c106e53d5b",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/LoadingState.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/ThinkingState.tsx",
+      "upstreamSha256": "9aa314e89f1b520256205da1db6f6a960085eb85a28828b873a86ca06bd129e2",
+      "localSha256": "b6d7fe40e077ce8eaae9476307e1db2e22e3d3936bc55d02e1da0dc1f1b56187",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/ThinkingState.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/ToolChips.tsx",
+      "upstreamSha256": "36de9ee8a0ce5c09bf348fa2b272c0f19f4ca760ce4463520e12ff2889559ae3",
+      "localSha256": "4724e6a3b986a90fcc3850a5d6fc48e812e0005aa23a63fb98159ec1a8e32749",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/ToolChips.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/TaskRows.tsx",
+      "upstreamSha256": "c8ac5910df009d25e903398c182be4ca0535dcf99016a0d19978e0ce05f38eef",
+      "localSha256": "23f4f4e3c79a2dabd5bdc997eb505769f7f28f38af1fb081befe2dfeda547c17",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/TaskRows.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/FilterTable.tsx",
+      "upstreamSha256": "49a83142d5536c162ede5811155470af4d5ae2bb3c372ecc1f07a3d49c13a7d5",
+      "localSha256": "bb9129b91d5aff04359501ac545ca064dfd4e5c9db2487a2666b814cf6f6abe0",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/FilterTable.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/GlideMenu.tsx",
+      "upstreamSha256": "e026b8ef9424fb4ecd7b32d397c5a922c2cf4b1ad20bff891a369bdcd064056c",
+      "localSha256": "31cfb47b5b8ebf4294defda5db6ea41d72177f7be5182303b311b725c8153e42",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/GlideMenu.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/RecordsTable.tsx",
+      "upstreamSha256": "c8bde6ba432663b8bb0894241999122fa0fe9264ac57391ff04359db53792bbf",
+      "localSha256": "e75773e5a3cd8f8070604af0acccf39936d11f03887b55e975212b17acc5da4a",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/RecordsTable.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/atoms/Button.tsx",
+      "upstreamSha256": "b12b82614be4284d2e84569f418892d663e857e1e4b5058b41979ee9e9b9e7e5",
+      "localSha256": "745f41c51936ceb7c358ff2db445164d4623558fa2c6a4be406d03e188ae6159",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/atoms/Button.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/DiffTable.tsx",
+      "upstreamSha256": "f9b833e7c93efe630f5fd7a1d8cf092644402bb369d4703016377da5e69c5a01",
+      "localSha256": "c09eec132f8c3b0c7a014e82e43db89351aae7274dc965118d4e59a3a43de004",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/DiffTable.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/SearchList.tsx",
+      "upstreamSha256": "6607b55c752300cde284692e012f07d3d81392680e9b3c7b4c9fe27f4fb32021",
+      "localSha256": "1b15900a164e0e4978239017a84c80edafa094024a21e3112a58d789895769a3",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/SearchList.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/atoms/Shimmer.tsx",
+      "upstreamSha256": "12f629fb56e1d279b3a7ce2d4916e305e91e59935b954eaf301ac8d511e0eceb",
+      "localSha256": "7865124e5ae81dda66e0a2ca449afa7be8748533e01380278a746564a2db7fef",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/atoms/Shimmer.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/atoms/StreamText.tsx",
+      "upstreamSha256": "540aa190d23e2c3a15d74ead9d61b8d1890c6d5461fdd61111fb97adcbf406fe",
+      "localSha256": "7570921cf505fd2e8371468d0278e250ea678ebc702b4426ee092368fc4ace66",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/atoms/StreamText.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/SelectionActions.tsx",
+      "upstreamSha256": "b45fab927091c34c594ae9b70cc44b53cd9f599f904d72f39bfa87f0d160f4ac",
+      "localSha256": "aa5b77921b4e7da363d684665d43cb81b645d315e670b4f053cf08b1913fc0b9",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/SelectionActions.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/primitives/StreamingText.tsx",
+      "upstreamSha256": "199923b130af2da3b38f7f22ed075ee8259074c11ef4c23ab71e9a77e113a8fd",
+      "localSha256": "517498fcc4b14d26aa2b68f5db8dc5fc9049601ec41a34e07826d29fee902f20",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/StreamingText.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/atoms/Switch.tsx",
+      "upstreamSha256": "d4aca90a4dcb3e40020219fc0ecc72ced7067f5da130add598046bcb2cf70d70",
+      "localSha256": "062e5f1699d5a1cb4e67fd54e657717265c644b7270f403dfef61a8793d10b59",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/atoms/Switch.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/atoms/SegmentedControl.tsx",
+      "upstreamSha256": "0eac156ba1545f3e95330c118947caab15b3be457c750259b345d2df1708bdd2",
+      "localSha256": "3525347c0e8f24b9b148db9e7f2f529527d9c9cd6e7b26147744d907ae9a2a9c",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/atoms/SegmentedControl.tsx"
+    },
+    {
+      "library": "beautiful",
+      "file": "components/atoms/ProgressRing.tsx",
+      "upstreamSha256": "8c734103e042343fcbfd2d2b48a4cf1d884f73efb267e0c192ba1c22b44d6184",
+      "localSha256": "7a68127239405fbafc9f12a6265201b50314d640259ab55d13dc00b62c1f8689",
+      "source": "https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/atoms/ProgressRing.tsx"
+    }
+  ]
+}

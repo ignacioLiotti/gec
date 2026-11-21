@@ -87,7 +87,17 @@ La gestion operativa minima queda registrada en:
 
 Una poliza con `cancellation_requested_at` ya no debe contarse como riesgo recurrente sin gestionar; pasa a seguimiento de confirmacion. Una poliza con `cancellation_confirmed_at` debe revisarse solo por saldos viejos, notas de credito o compensaciones.
 
+## Autorizacion de escritura
+
+La lectura de polizas conserva el alcance por pertenencia al tenant. Las operaciones directas de alta, modificacion y baja requieren `insurance-policies:manage`. Si una poliza referencia una obra, esa obra debe estar activa y pertenecer al mismo tenant.
+
+Un editor con `obras:edit` puede completar o revertir una obra sin recibir permiso general para modificar polizas. Los flujos servidor validan la obra activa y su estado persistido. Luego actualizan solamente `obra_finished_at`, `calculated_cancellation_date`, `last_notified_at` y `updated_at` en las polizas de esa obra y tenant.
+
+Si las fechas derivadas no cambian al repetir la finalizacion, el sistema no escribe las polizas y conserva `last_notified_at`. Una finalizacion que cambia las fechas, o una reversion, reinicia ese marcador para que la notificacion corresponda al nuevo plazo.
+
 ## Regla de vencimiento
+
+El estado compacto de la UI se calcula en `lib/insurance-policy-status.ts`, tanto en Dashboard como en el detalle de Obra. Una baja confirmada tiene prioridad. Si la cobertura importada ya venció, se muestra `Vencida` aunque exista una fecha calculada de baja posterior. Una fecha calculada de baja configurada entra en `Por vencer` dentro de los próximos 60 días, inclusive. Sin esa fecha no se inventa una regla operativa a partir de la fecha de cobertura. Este estado visual no reemplaza los buckets de riesgo financiero anteriores.
 
 Cada poliza puede definir cuando corresponde darla de baja respecto de una fecha base:
 
@@ -101,6 +111,8 @@ Sobre esa fecha base se aplica la regla:
 - `months_after`: N meses despues.
 
 Cuando una obra pasa a 100% de avance, o cuando el usuario confirma **Terminar obra**, el sistema toma esa fecha como `obra_finished_at` de las polizas asociadas y recalcula `calculated_cancellation_date`. Si luego el usuario carga `definitive_reception_date`, la fecha calculada de baja se recalcula usando la recepcion definitiva como base.
+
+Repetir **Terminar obra** sobre una obra que ya esta al 100% conserva la fecha provisoria existente para no mover un plazo financiero. Si la obra vuelve a un porcentaje menor, `obra_finished_at` se limpia y la fecha calculada se vuelve a evaluar: conserva la base de recepcion definitiva cuando existe y queda en espera cuando no existe. Una finalizacion posterior registra una nueva fecha provisoria.
 
 Este comportamiento es una aproximacion operativa hasta que exista la recepcion definitiva. La UI debe indicar si el calculo usa base provisoria o base definitiva.
 

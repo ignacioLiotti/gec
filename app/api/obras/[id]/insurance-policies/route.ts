@@ -127,6 +127,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 	const { supabase, user, tenantId } = await getAuthContext();
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	if (!tenantId) return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	const permission = await supabase.rpc("has_permission", { tenant: tenantId, perm_key: "insurance-policies:manage" });
+	if (permission.error) return NextResponse.json({ error: "No se pudo verificar el permiso" }, { status: 500 });
+	if (permission.data !== true) return NextResponse.json({ error: "No tienes permiso para crear polizas" }, { status: 403 });
 
 	const rawBody = await request.json().catch(() => ({}));
 	const parsed = PolicyInputSchema.safeParse(rawBody);

@@ -247,7 +247,7 @@ export function AdvanceCurveChart({
 								ticks={xTicks}
 								tickLine={false}
 								axisLine={false}
-								tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+								tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
 								tickFormatter={(value: string | number) =>
 									labelByX.get(Number(value)) ?? ""
 								}
@@ -258,7 +258,7 @@ export function AdvanceCurveChart({
 								ticks={yTicks}
 								axisLine={false}
 								tickLine={false}
-								tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+								tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
 								tickFormatter={(value: string | number) => `${value}%`}
 							/>
 							<Tooltip content={renderTooltip} />

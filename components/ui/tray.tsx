@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Slot, Slottable } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils";
 
 // Sintesis DS — Tray + Chip
@@ -15,7 +16,7 @@ function Tray({ children, className, ...props }: TrayProps) {
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-xl border border-stone-200 bg-white p-1",
+        "inline-flex items-center gap-0.5 rounded-xl border border-stroke bg-card p-1",
         className,
       )}
       {...props}
@@ -37,15 +38,17 @@ const DOT_COLORS = {
   mixed:      "bg-[var(--src-mixed,#9333ea)]",
 };
 
-function Chip({ active, dot, children, className, ...props }: ChipProps) {
+function Chip({ active, asChild = false, dot, children, className, ...props }: ChipProps) {
+  const Comp = asChild ? Slot : "button";
   return (
-    <button
-      type="button"
+    <Comp
+      type={asChild ? undefined : "button"}
+      aria-pressed={active}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors",
+        "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
         active
-          ? "bg-stone-900 text-white"
-          : "text-stone-600 hover:bg-stone-100 hover:text-stone-900",
+          ? "bg-content text-card"
+          : "text-content-secondary hover:bg-surface-muted hover:text-content",
         className,
       )}
       {...props}
@@ -53,8 +56,8 @@ function Chip({ active, dot, children, className, ...props }: ChipProps) {
       {dot && (
         <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", DOT_COLORS[dot])} />
       )}
-      {children}
-    </button>
+      <Slottable>{children}</Slottable>
+    </Comp>
   );
 }
 

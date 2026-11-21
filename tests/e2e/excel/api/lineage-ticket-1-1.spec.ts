@@ -1,56 +1,49 @@
-import crypto from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../fixtures/test";
+import { z } from "zod";
 
 import {
-	cleanupLineageFixture,
-	createLineageFixture,
 	fetchMacroRows,
 	fetchTablaRows,
-	getLineageAdminClient,
 	importOcrStub,
 	saveMacroOverride,
-	type LineageFixture,
 } from "../../helpers/lineage";
 
+const extractionResponseSchema = z.object({ extractionId: z.string().optional() });
+const errorCodeResponseSchema = z.object({ code: z.string().optional() });
+const macroRowsResponseSchema = z.object({
+	rows: z.array(z.record(z.unknown())).optional(),
+	overrideSummary: z
+		.object({
+			appliedStable: z.number().optional(),
+			conflicts: z.number().optional(),
+		})
+		.optional(),
+});
+const conflictResponseSchema = z.object({
+	code: z.string().optional(),
+	conflicts: z
+		.array(z.object({ candidateOverrideIds: z.array(z.string()).optional() }))
+		.optional(),
+});
+
+function hasErrorCode(value: unknown, errorCode: string) {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value) &&
+		"errorCode" in value &&
+		value.errorCode === errorCode
+	);
+}
+
+// The application routes and persistence are real; OCR extraction and storage upload
+// are deterministic provider-boundary stubs supplied by the import helper.
 test.describe("Ticket 1.1 lineage evidence", () => {
-	const fixtures: LineageFixture[] = [];
-
-	test.afterEach(async () => {
-		while (fixtures.length > 0) {
-			const fixture = fixtures.pop();
-			if (!fixture) continue;
-			await cleanupLineageFixture(fixture);
-		}
-	});
-
-	test("import leaves rows with lineage_row_key", async ({ request }) => {
-		const fixture = await createLineageFixture(request, "Import");
-		fixtures.push(fixture);
-
-		const importResponse = await importOcrStub(request, fixture, {
-			docKey: "import-base",
-			extraction: {
-				items: [
-					{ item_code: "ITEM-001", description: "Certificado base", amount: 1200 },
-				],
-			},
-		});
-
-		expect(importResponse.ok()).toBeTruthy();
-
-		const rows = await fetchTablaRows(request, fixture);
-		expect(rows).toHaveLength(1);
-		expect(rows[0]).toMatchObject({
-			lineage_row_key: expect.any(String),
-			materialization_version: 1,
-		});
-	});
-
 	test("reimport preserves stable identity, increments version and avoids unexpected duplicates", async ({
 		request,
+		scenario,
 	}) => {
-		const fixture = await createLineageFixture(request, "Reimport");
-		fixtures.push(fixture);
+		const fixture = await scenario.lineage.createSingle("Reimport");
 
 		const firstImport = await importOcrStub(request, fixture, {
 			docKey: "reimport-doc",
@@ -61,12 +54,14 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 			},
 		});
 		expect(firstImport.ok()).toBeTruthy();
-		const firstPayload = (await firstImport.json()) as { extractionId?: string };
+		const firstPayload = extractionResponseSchema.parse(await firstImport.json());
 
 		const firstRows = await fetchTablaRows(request, fixture);
 		expect(firstRows).toHaveLength(1);
 		const firstLineageRowKey = String(firstRows[0].lineage_row_key ?? "");
 		const firstMaterializationVersion = Number(firstRows[0].materialization_version ?? 0);
+		expect(firstLineageRowKey).not.toBe("");
+		expect(firstMaterializationVersion).toBe(1);
 		const firstRowExtractionId = String(firstRows[0].extraction_id ?? "");
 
 		const secondImport = await importOcrStub(request, fixture, {
@@ -78,7 +73,7 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 			},
 		});
 		expect(secondImport.ok()).toBeTruthy();
-		const secondPayload = (await secondImport.json()) as { extractionId?: string };
+		const secondPayload = extractionResponseSchema.parse(await secondImport.json());
 
 		const rows = await fetchTablaRows(request, fixture);
 		expect(rows).toHaveLength(1);
@@ -97,9 +92,8 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 		expect(String(rows[0].extraction_id ?? "")).not.toBe(firstRowExtractionId);
 	});
 
-	test("manual override survives reimport with stable binding", async ({ request }) => {
-		const fixture = await createLineageFixture(request, "Override");
-		fixtures.push(fixture);
+	test("manual override survives reimport with stable binding", async ({ request, scenario }) => {
+		const fixture = await scenario.lineage.createSingle("Override");
 
 		const importResponse = await importOcrStub(request, fixture, {
 			docKey: "override-doc",
@@ -134,23 +128,22 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 		expect(reimportResponse.ok()).toBeTruthy();
 
 		const macroPayload = await fetchMacroRows(request, fixture);
-		const macroRows = Array.isArray(macroPayload.rows)
-			? (macroPayload.rows as Array<Record<string, unknown>>)
-			: [];
+		const parsedMacroPayload = macroRowsResponseSchema.parse(macroPayload);
+		const macroRows = parsedMacroPayload.rows ?? [];
 		expect(macroRows).toHaveLength(1);
 		expect(macroRows[0][fixture.macroCustomColumnId]).toBe("observacion manual");
-		expect(macroPayload.overrideSummary).toMatchObject({
+		expect(parsedMacroPayload.overrideSummary).toMatchObject({
 			appliedStable: expect.any(Number),
 			conflicts: 0,
 		});
-		expect(Number((macroPayload.overrideSummary as { appliedStable?: number }).appliedStable ?? 0)).toBeGreaterThan(0);
+		expect(parsedMacroPayload.overrideSummary?.appliedStable ?? 0).toBeGreaterThan(0);
 	});
 
 	test("OCR conflict returns LINEAGE_RECONCILIATION_CONFLICT and persists explicit error_code", async ({
 		request,
+		scenario,
 	}) => {
-		const fixture = await createLineageFixture(request, "OcrConflict");
-		fixtures.push(fixture);
+		const fixture = await scenario.lineage.createSingle("OcrConflict");
 
 		const response = await importOcrStub(request, fixture, {
 			docKey: "ocr-conflict",
@@ -164,11 +157,11 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 		});
 
 		expect(response.status()).toBe(409);
-		const payload = (await response.json()) as { code?: string };
+		const payload = errorCodeResponseSchema.parse(await response.json());
 		expect(payload.code).toBe("LINEAGE_RECONCILIATION_CONFLICT");
 
-		const admin = getLineageAdminClient();
-		const { data: processing, error: processingError } = await admin
+		const owner = await scenario.actor("owner");
+		const { data: processing, error: processingError } = await owner.db
 			.from("ocr_document_processing")
 			.select("status, error_code")
 			.eq("tabla_id", fixture.tablaId)
@@ -183,9 +176,9 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 
 	test("downstream conflict returns LINEAGE_OVERRIDE_REATTACH_CONFLICT and persists explicit errorCode backing", async ({
 		request,
+		scenario,
 	}) => {
-		const fixture = await createLineageFixture(request, "DownstreamConflict");
-		fixtures.push(fixture);
+		const fixture = await scenario.lineage.createSingle("DownstreamConflict");
 
 		const importResponse = await importOcrStub(request, fixture, {
 			docKey: "downstream-conflict",
@@ -205,20 +198,10 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 		const firstSave = await saveMacroOverride(request, fixture, rowId, "valor estable");
 		expect(firstSave.ok()).toBeTruthy();
 
-		const admin = getLineageAdminClient();
-		const { error: injectedConflictError } = await admin
-			.from("macro_table_custom_values")
-			.insert({
-				macro_table_id: fixture.macroTableId,
-				source_row_id: crypto.randomUUID(),
-				source_tabla_id: fixture.tablaId,
-				lineage_row_key: lineageRowKey,
-				column_id: fixture.macroCustomColumnId,
-				value: "legacy conflict",
-				binding_status: "legacy",
-				binding_error: null,
-			});
-		expect(injectedConflictError).toBeNull();
+		await scenario.lineage.injectLegacyConflict(fixture, {
+			lineageRowKey,
+			value: "legacy conflict",
+		});
 
 		const conflictResponse = await saveMacroOverride(
 			request,
@@ -227,10 +210,7 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 			"valor conflictivo",
 		);
 		expect(conflictResponse.status()).toBe(409);
-		const payload = (await conflictResponse.json()) as {
-			code?: string;
-			conflicts?: Array<{ candidateOverrideIds?: string[] }>;
-		};
+		const payload = conflictResponseSchema.parse(await conflictResponse.json());
 		expect(payload.code).toBe("LINEAGE_OVERRIDE_REATTACH_CONFLICT");
 		expect(Array.isArray(payload.conflicts)).toBeTruthy();
 
@@ -239,22 +219,17 @@ test.describe("Ticket 1.1 lineage evidence", () => {
 		);
 		expect(candidateIds.size).toBeGreaterThan(0);
 
-		const { data: persistedConflicts, error: persistedConflictsError } = await admin
+		const owner = await scenario.actor("owner");
+		const { data: persistedConflicts, error: persistedConflictsError } = await owner.db
 			.from("macro_table_custom_values")
 			.select("binding_status, binding_error")
 			.in("id", [...candidateIds]);
 		expect(persistedConflictsError).toBeNull();
 		expect((persistedConflicts ?? []).every((record) => record.binding_status === "conflict")).toBeTruthy();
 		expect(
-			(persistedConflicts ?? []).every((record) => {
-				const bindingError =
-					record.binding_error &&
-					typeof record.binding_error === "object" &&
-					!Array.isArray(record.binding_error)
-						? (record.binding_error as Record<string, unknown>)
-						: null;
-				return bindingError?.errorCode === "LINEAGE_OVERRIDE_REATTACH_CONFLICT";
-			}),
+			(persistedConflicts ?? []).every((record) =>
+				hasErrorCode(record.binding_error, "LINEAGE_OVERRIDE_REATTACH_CONFLICT"),
+			),
 		).toBeTruthy();
 	});
 });

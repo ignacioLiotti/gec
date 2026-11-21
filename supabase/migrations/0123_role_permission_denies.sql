@@ -12,6 +12,9 @@ CREATE INDEX IF NOT EXISTS role_permissions_permission_grant_idx
 COMMENT ON COLUMN public.role_permissions.is_granted IS
   'True grants the permission through the role; false explicitly denies it for regular members unless a per-user grant overrides it.';
 
+ALTER TABLE public.user_permission_overrides
+ADD COLUMN IF NOT EXISTS tenant_id UUID;
+
 CREATE OR REPLACE FUNCTION public.has_permission(tenant UUID, perm_key TEXT)
 RETURNS BOOLEAN
 LANGUAGE sql

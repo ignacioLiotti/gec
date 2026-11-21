@@ -1,4 +1,7 @@
 'use client';
+import { Textarea } from "@/components/ui/textarea";
+import { NativeSelect } from "@/components/ui/native-select";
+
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { m } from "framer-motion";
@@ -246,8 +249,8 @@ export function ObraFlujoTab({
 									<label className="text-sm font-medium text-foreground">
 										Mensaje
 									</label>
-									<textarea
-										className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 placeholder:text-muted-foreground resize-none"
+									<Textarea
+										className="w-full px-3 py-2 text-sm min-h-[80px] transition-colors resize-none"
 										placeholder="Mensaje detallado de la acción..."
 										value={newFlujoAction.message || ""}
 										onChange={(e) =>
@@ -347,8 +350,8 @@ export function ObraFlujoTab({
 										</div>
 										<div className="space-y-1.5">
 											<label className="text-sm font-medium text-foreground">Unidad</label>
-											<select
-												className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+											<NativeSelect
+												className="w-full h-9 px-3 text-sm transition-colors"
 												value={newFlujoAction.offset_unit || "days"}
 												onChange={(e) =>
 													setNewFlujoAction((prev) => ({
@@ -362,7 +365,7 @@ export function ObraFlujoTab({
 												<option value="days">Días</option>
 												<option value="weeks">Semanas</option>
 												<option value="months">Meses</option>
-											</select>
+											</NativeSelect>
 										</div>
 									</m.div>
 								)}
@@ -726,8 +729,8 @@ export function ObraFlujoTab({
 																					</div>
 																					<div className="space-y-2">
 																						<label className="text-xs font-medium text-foreground">Mensaje</label>
-																						<textarea
-																							className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 placeholder:text-muted-foreground resize-none"
+																						<Textarea
+																							className="w-full px-3 py-2 text-sm min-h-[80px] transition-colors resize-none"
 																							value={editingMessage}
 																							onChange={(e) => setEditingMessage(e.target.value)}
 																							placeholder="Mensaje de la acción"
@@ -791,8 +794,8 @@ export function ObraFlujoTab({
 																							</div>
 																							<div className="flex-1">
 																								<label className="text-xs font-medium text-foreground mb-1 block">Unidad</label>
-																								<select
-																									className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+																								<NativeSelect
+																									className="w-full px-3 py-2 text-sm"
 																									value={editingOffsetUnit}
 																									onChange={(e) => setEditingOffsetUnit(e.target.value as typeof editingOffsetUnit)}
 																								>
@@ -801,7 +804,7 @@ export function ObraFlujoTab({
 																									<option value="days">Días</option>
 																									<option value="weeks">Semanas</option>
 																									<option value="months">Meses</option>
-																								</select>
+																								</NativeSelect>
 																							</div>
 																						</div>
 																					)}
@@ -893,13 +896,13 @@ export function ObraFlujoTab({
 																				)}
 																				<Button
 																					type="button"
-																					variant="ghost"
+																					variant={"destructiveSecondary"}
 																					size="sm"
 																					onClick={(e) => {
 																						e.stopPropagation();
 																						deleteFlujoAction(action.id);
 																					}}
-																					className="text-destructive hover:text-destructive hover:bg-destructive/10"
+
 																				>
 																					<Trash2 className="size-4" />
 																				</Button>

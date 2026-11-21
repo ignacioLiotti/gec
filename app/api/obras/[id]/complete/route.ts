@@ -2,12 +2,22 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "../../route";
 import { updateInsurancePoliciesForObraCompletion } from "@/lib/insurance-policies";
 import { syncInsurancePoliciesToMacroTable } from "@/lib/insurance-policies-macro";
+import { canEditObras } from "@/lib/obras/permissions";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
 	const { id: obraId } = await params;
 	const { supabase, user, tenantId } = await getAuthContext();
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	if (!tenantId) return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	try {
+		if (!(await canEditObras(supabase, tenantId))) {
+			return NextResponse.json({ error: "No tenés permiso para editar obras." }, { status: 403 });
+		}
+	} catch (permissionError) {
+		console.error("Obra complete: failed to validate edit permission", permissionError);
+		return NextResponse.json({ error: "No se pudo validar el permiso para editar obras." }, { status: 500 });
+	}
 	if (!obraId || obraId === "undefined") {
 		return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
 	}
@@ -34,7 +44,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 	}
 
 	await updateInsurancePoliciesForObraCompletion({
-		supabase,
+		supabase: createSupabaseAdminClient(),
 		tenantId,
 		obraId,
 		finishedAt,

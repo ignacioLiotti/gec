@@ -1,0 +1,337 @@
+/* Review-only material layer. Imported by Storybook, never by the application.
+   The attribute lives on the document root so Radix/reference portals inherit it. */
+html[data-design="paper"],
+html[data-design="paper"] .motion-reference[data-product-theme="published"] {
+  --background: #f2f1ed;
+  --foreground: #292a27;
+  --card: #fff;
+  --card-foreground: #292a27;
+  --popover: #fff;
+  --popover-foreground: #292a27;
+  --canvas: 48 16% 94%;
+  --canvas-muted: 48 13% 92%;
+  --surface: 60 10% 99%;
+  --surface-muted: 60 9% 96%;
+  --surface-raised: 0 0% 100%;
+  --surface-recessed: 60 8% 94%;
+  --surface-glass: 60 9% 98%;
+  --content: 80 4% 16%;
+  --content-secondary: 80 3% 31%;
+  --content-muted: 80 3% 43%;
+  --content-disabled: 80 3% 65%;
+  --muted: #f1f1ee;
+  --muted-foreground: #72766b;
+  --secondary: #f5f5f1;
+  --secondary-foreground: #45483e;
+  --accent: #eeeee8;
+  --accent-foreground: #292a27;
+  --border: #e5e6df;
+  --border-soft: 70 10% 91%;
+  --border-strong: 70 7% 82%;
+  --input: #e5e6df;
+  --ring: #ad5b28;
+  --primary: #bd4e0c;
+  --orange-primary: 23 88% 40%;
+  --primary-foreground: #fff;
+  --success: 148 60% 29%;
+  --warning-foreground: 24 88% 10%;
+  --accent-soft: 30 80% 96%;
+  --accent-border: 26 70% 78%;
+  --sidebar: #f5f4f0;
+  --sidebar-foreground: #45483e;
+  --sidebar-accent: #eaeae4;
+  --sidebar-accent-foreground: #292a27;
+  --sidebar-border: #e5e6df;
+  --radius: 0.65rem;
+  --control-glint: #fff;
+  --paper-sheet-shadow: 0 1px 2px #2925140a, 0 4px 8px -6px #29251430;
+  --paper-tray-shadow: 0 1px 2px #2925140b;
+  --paper-field-shadow: 0 1px 3px #29251405 inset, 0 1px 2px #29251404;
+  --shadow-card: var(--paper-sheet-shadow);
+  --shadow-raised: 0 1px 0 #fff inset, 0 1px 2px #29251410;
+  --shadow-raised-hover: 0 1px 0 #fff inset, 0 3px 5px -2px #29251420;
+  --shadow-recessed: var(--paper-field-shadow);
+  --shadow-dropdown: 0 1px 0 #fff inset, 0 5px 16px -8px #29251430;
+  --shadow-modal: 0 18px 48px -22px #29251440;
+}
+html.dark[data-design="paper"],
+html.dark[data-design="paper"]
+  .motion-reference[data-product-theme="published"] {
+  --background: #181917;
+  --foreground: #eaeae4;
+  --card: #252623;
+  --card-foreground: #eaeae4;
+  --popover: #292b25;
+  --popover-foreground: #eaeae4;
+  --canvas: 90 4% 9%;
+  --canvas-muted: 90 4% 11%;
+  --surface: 80 4% 15%;
+  --surface-muted: 80 5% 18%;
+  --surface-raised: 80 4% 18%;
+  --surface-recessed: 80 5% 12%;
+  --surface-glass: 80 5% 18%;
+  --content: 60 12% 91%;
+  --content-secondary: 70 7% 78%;
+  --content-muted: 75 5% 67%;
+  --content-disabled: 75 4% 45%;
+  --muted: #30322c;
+  --muted-foreground: #a2a698;
+  --secondary: #30322c;
+  --secondary-foreground: #eaeae4;
+  --accent: #383b32;
+  --accent-foreground: #f1f2e8;
+  --border: #3b3e34;
+  --border-soft: 75 8% 23%;
+  --border-strong: 75 8% 33%;
+  --input: #41453a;
+  --ring: #eea572;
+  --primary: #f5a46e;
+  --orange-primary: 24 87% 70%;
+  --primary-foreground: #272820;
+  --success: 150 64% 67%;
+  --warning-foreground: 40 96% 78%;
+  --accent-soft: 25 25% 19%;
+  --accent-border: 26 35% 37%;
+  --sidebar: #20211e;
+  --sidebar-foreground: #e1e3d9;
+  --sidebar-accent: #30322c;
+  --sidebar-accent-foreground: #eaeae4;
+  --sidebar-border: #383a34;
+  --control-glint: #ffffff12;
+  --paper-sheet-shadow:
+    0 1px 0 #ffffff09 inset, 0 1px 2px #0007, 0 8px 16px -12px #0009;
+  --paper-tray-shadow: 0 2px 3px #0004;
+  --paper-field-shadow: 0 1px 3px #0003 inset;
+  --shadow-card: var(--paper-sheet-shadow);
+  --shadow-raised: 0 1px 0 #ffffff15 inset, 0 1px 2px #0005;
+  --shadow-raised-hover: 0 1px 0 #ffffff20 inset, 0 4px 6px -2px #0006;
+  --shadow-recessed: var(--paper-field-shadow);
+  --shadow-dropdown: 0 1px 0 #ffffff12 inset, 0 8px 20px -8px #0008;
+  --shadow-modal: 0 20px 50px -20px #000a;
+}
+html[data-design="paper"] body {
+  background: var(--background);
+}
+html[data-design="paper"] .sb-sample {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"] [data-slot="button"],
+html[data-design="paper"] [data-slot="light-button"] {
+  border-radius: 9px;
+  box-shadow: var(--shadow-raised);
+  background-image: none;
+}
+html[data-design="paper"] [data-slot="button"][class~="bg-orange-primary"] {
+  background-image: linear-gradient(#ffffff16, #00000008);
+  box-shadow:
+    0 1px 0 #ffffff45 inset,
+    0 -1px 0 #00000012 inset,
+    0 2px 3px #a34b1420;
+}
+html[data-design="paper"] [data-slot="button"][class*="bg-transparent"],
+html[data-design="paper"] [data-slot="button"][class*="shadow-none"] {
+  box-shadow: none;
+}
+html[data-design="paper"]
+  :is(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="select-trigger"],
+    [data-slot="native-select"],
+    [data-slot="command-input"]
+  ) {
+  border-radius: 9px;
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: var(--paper-field-shadow);
+}
+html[data-design="paper"] [data-slot="badge"] {
+  box-shadow: none;
+  border-radius: 6px;
+  font-weight: 500;
+}
+html[data-design="paper"]
+  :is(
+    [data-slot="card"]:not([class~="bg-destructive/5"]):not(
+        [class~="bg-warning/10"]
+      ):not([class~="bg-transparent"]),
+    .screen-panel
+  ) {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 15px;
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"]
+  [data-slot="card"]:has(> [data-slot="card-footer"]:last-child) {
+  padding-bottom: 0;
+}
+html[data-design="paper"] [data-slot="card-footer"] {
+  background: var(--secondary);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 14px 14px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+html[data-design="paper"]
+  :is(
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"],
+    [data-slot="sheet-content"],
+    [data-slot="popover-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="context-menu-content"],
+    [data-slot="hover-card-content"]
+  ) {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  box-shadow: var(--shadow-dropdown);
+}
+html[data-design="paper"]
+  :is(
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"],
+    [data-slot="sheet-content"]
+  ) {
+  box-shadow: var(--shadow-modal);
+}
+html[data-design="paper"]
+  :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"]) {
+  background: var(--secondary);
+  border-top: 1px solid var(--border);
+  padding: 16px;
+  border-radius: 0 0 12px 12px;
+}
+html[data-design="paper"] [data-slot="tooltip-content"] {
+  background: color-mix(in srgb, var(--foreground) 83%, transparent);
+  color: var(--background);
+  border: 1px solid color-mix(in srgb, var(--background) 20%, transparent);
+  box-shadow: var(--shadow-dropdown);
+  border-radius: 8px;
+  backdrop-filter: blur(16px);
+}
+html[data-design="paper"] [data-slot="sidebar"] {
+  background: var(--sidebar);
+}
+html[data-design="paper"] [data-slot="sidebar-menu-button"] {
+  background-image: none;
+  box-shadow: none;
+}
+html[data-design="paper"]
+  [data-slot="sidebar-menu-button"][data-active="true"] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+  box-shadow: none;
+}
+html[data-design="paper"] [role="tablist"] {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 4px;
+  box-shadow: var(--paper-field-shadow);
+}
+html[data-design="paper"] [role="tab"] {
+  border-radius: 8px;
+  box-shadow: none;
+}
+html[data-design="paper"] [role="tab"][data-state="active"],
+html[data-design="paper"] [role="tab"][aria-selected="true"] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"] .screen-route-tabs > [role="tablist"] {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+}
+html[data-design="paper"]
+  .screen-route-tabs
+  > [role="tablist"]
+  > [role="tab"][data-state="active"] {
+  background: var(--card);
+  color: var(--foreground);
+  border-radius: 8px;
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"] [data-slot="table-container"],
+html[data-design="paper"] .screen-table-scroll {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"] [data-slot="table-header"] {
+  background: var(--secondary);
+}
+html[data-design="paper"] [data-slot="table-row"] {
+  border-color: var(--border);
+  box-shadow: none;
+}
+html[data-design="paper"] [data-slot="table-row"][data-state="selected"] {
+  background: var(--accent);
+}
+html[data-design="paper"] [role="checkbox"],
+html[data-design="paper"] [role="radio"] {
+  box-shadow: var(--paper-field-shadow);
+}
+html[data-design="paper"] [data-slot="switch"] {
+  box-shadow: var(--paper-field-shadow);
+}
+html[data-design="paper"] [data-slot="switch-thumb"] {
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"]
+  :is(
+    [data-slot="accordion-item"],
+    [data-slot="collapsible"],
+    [data-slot="tray"],
+    [data-slot="command"]
+  ) {
+  border-color: var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"] [data-slot="skeleton"] {
+  box-shadow: none;
+  background: var(--muted);
+}
+html[data-design="paper"] [data-slot="separator"] {
+  background: var(--border);
+}
+html[data-design="paper"] .screen-app {
+  border-radius: 20px;
+  box-shadow: 0 18px 40px -32px #29251440;
+  background: var(--background);
+}
+html[data-design="paper"] .screen-topbar {
+  background: var(--card);
+}
+html[data-design="paper"] .screen-metrics > div {
+  border-radius: 13px;
+  background: var(--card);
+  box-shadow: var(--paper-sheet-shadow);
+}
+html[data-design="paper"]
+  .screen-folder-tree
+  [role="treeitem"][aria-selected="true"] {
+  background: var(--secondary);
+  box-shadow: none;
+}
+html[data-design="paper"] .screen-tab-panel {
+  padding: 20px 0 0;
+}
+html[data-design="paper"] .screen-activity .screen-panel {
+  background: var(--secondary);
+}
+html[data-design="paper"] .screen-notes article {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 12px;
+  box-shadow: var(--paper-sheet-shadow);
+}

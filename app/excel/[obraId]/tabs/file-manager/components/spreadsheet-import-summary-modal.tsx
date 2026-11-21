@@ -107,7 +107,7 @@ export function SpreadsheetImportSummaryModal({
             </DialogDescription>
           </div>
           {payload ? (
-            <Badge variant="outline" className="max-w-72 truncate border-border bg-white text-muted-foreground">
+            <Badge variant={"neutral"} className="max-w-72 truncate">
               <FileSpreadsheet className="size-3.5" />
               {payload.existingFileName} · {fileExtension}
             </Badge>

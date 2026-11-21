@@ -144,6 +144,10 @@ export const ROUTE_ACCESS_CONFIG: RouteAccessConfig[] = [
 		allowedRoles: ["admin"],
 	},
 	{
+		path: "/admin/operations",
+		allowedRoles: ["admin"],
+	},
+	{
 		path: "/admin/audit-log",
 		allowedRoles: ["admin"],
 	},

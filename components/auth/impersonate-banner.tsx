@@ -44,8 +44,8 @@ export function ImpersonateBanner() {
 				<Button
 					type="button"
 					size="sm"
-					variant="outline"
-					className="h-7 shrink-0 border-amber-300 bg-white px-2 text-xs text-amber-950 hover:bg-amber-100"
+					variant={"secondary"}
+					className="h-7 shrink-0 px-2 text-xs"
 					onClick={() => void stopImpersonation()}
 					disabled={isStopping}
 				>

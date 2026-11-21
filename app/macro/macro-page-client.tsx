@@ -12,6 +12,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowDown,
+  AlertTriangle,
   ArrowUpRight,
   ArrowUp,
   ArrowUpDown,
@@ -30,11 +31,13 @@ import {
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { z } from "zod";
 import {
   FormTable,
   FormTableContent,
   FormTablePagination,
   FormTableToolbar,
+  useFormTable,
 } from "@/components/form-table/form-table";
 import {
   BooleanConditionFilter,
@@ -60,7 +63,9 @@ import type {
   FormTableConfig,
   FormTableCsvExport,
 } from "@/components/form-table/types";
+import { NotchTail } from "@/components/ui/notch-tail";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -79,6 +84,7 @@ import type {
   MacroTable,
   MacroTableColumn,
   MacroTableDataType,
+  MacroTableOverrideConflict,
   MacroTableRow as MacroRow,
   MacroTableSource,
 } from "@/lib/macro-tables";
@@ -109,12 +115,18 @@ type MainTableColumnConfig = {
   selectOptions?: unknown;
 };
 
+type MacroConflictProjection = Pick<
+  MacroTableOverrideConflict,
+  "code" | "rowId" | "columnId"
+>;
+
 type MacroTableRowData = MacroRow & {
   _macroAccordionGroup?: boolean;
   _macroAccordionGroupColumnId?: string;
   _macroAccordionGroupValue?: string;
   _macroAccordionGroupCount?: number;
-  _macroAccordionRows?: MacroRow[];
+  _macroAccordionRows?: MacroTableRowData[];
+  _overrideConflicts?: MacroConflictProjection[];
   [key: string]: unknown;
 };
 
@@ -137,6 +149,14 @@ type MacroAccordionCellDraft = {
   columnId: string;
   value: unknown;
 };
+
+const macroConflictProjectionSchema: z.ZodType<MacroConflictProjection> = z.object({
+  code: z.literal("LINEAGE_OVERRIDE_REATTACH_CONFLICT"),
+  rowId: z.string(),
+  columnId: z.string(),
+});
+
+const macroConflictProjectionsSchema = z.array(macroConflictProjectionSchema);
 
 function getMacroAccordionCellDraftKey(rowId: string, columnId: string) {
   return `${rowId}::${columnId}`;
@@ -212,42 +232,9 @@ function buildMacroAccordionCsvExport({
   };
 }
 
-const toolButtonClass =
-  "gap-2 rounded-lg border-[#e8e1d8] bg-white px-3.5 text-[#5a5248] hover:bg-[#fcfaf7] hover:text-[#1f1a17]";
 
-function NotchTail({
-  side = "right",
-  className = "",
-}: {
-  side?: "left" | "right";
-  className?: string;
-}) {
-  return (
-    <svg
-      width="60"
-      height="42"
-      viewBox="0 0 60 42"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-      className={[
-        "pointer-events-none absolute bottom-[-1px] h-[42px] w-[60px]",
-        side === "right" ? "right-[-59px]" : "left-[-59px] scale-x-[-1]",
-        className,
-      ].join(" ")}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60H0V1Z"
-        className="fill-[var(--notch-bg)]"
-      />
-      <path
-        d="M0 1H7.0783C14.772 1 21.7836 5.41324 25.111 12.3501L33.8889 30.6498C37.2164 37.5868 44.228 42 51.9217 42H60"
-        className="fill-none stroke-[var(--notch-stroke)]"
-        strokeWidth="1"
-      />
-    </svg>
-  );
-}
+
+
 
 function mapDataTypeToCell(
   dataType: string
@@ -520,7 +507,7 @@ function MacroAccordionCell(props: {
       onBlur={() => {
         if (!onChangeValue) void commit();
       }}
-      className="h-8 min-w-36 bg-white"
+      className="h-8 min-w-36"
     />
   );
 }
@@ -891,6 +878,96 @@ function MacroFiltersContent({
   );
 }
 
+function MacroConflictNotice({
+  columns,
+}: {
+  columns: MacroDisplayColumn[];
+}) {
+  const { rows, pagination, meta } = useFormTable<
+    MacroTableRowData,
+    MacroTableFilters
+  >();
+  const visibleRows = rows.currentRows.flatMap((row) =>
+    row._macroAccordionGroup ? (row._macroAccordionRows ?? []) : [row],
+  );
+  const columnLabelById = new Map(
+    columns.map((column) => [column.id, column.label]),
+  );
+  const conflictItems = visibleRows.flatMap((row) => {
+    const sourceRowLabel = columns.reduce<string | null>((label, column) => {
+      if (
+        label ||
+        column.columnType !== "source" ||
+        column.sourceFieldKey?.startsWith("obra.")
+      ) {
+        return label;
+      }
+      const value = row[column.id];
+      if (typeof value === "string") return value.trim() || null;
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return String(value);
+      }
+      return null;
+    }, null);
+
+    return (row._overrideConflicts ?? []).map((conflict) => ({
+      conflict,
+      rowLabel:
+        row._businessIdentity?.trim() ||
+        sourceRowLabel ||
+        row._docFileName?.trim() ||
+        row._sourceTablaName?.trim() ||
+        "Fila sin nombre",
+      obraName: row._obraName?.trim() || "Obra sin nombre",
+      columnLabel:
+        columnLabelById.get(conflict.columnId) ?? "Campo sin nombre",
+    }));
+  });
+
+  if (pagination.isFetching || meta.serverError || conflictItems.length === 0) {
+    return null;
+  }
+
+  const cellCountLabel =
+    conflictItems.length === 1
+      ? "1 celda en conflicto"
+      : `${conflictItems.length} celdas en conflicto`;
+
+  return (
+    <Card
+      variant="warning"
+      role="status"
+      className="gap-3 px-4 py-4"
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle
+          className="mt-0.5 size-5 shrink-0 text-warning-foreground"
+          aria-hidden="true"
+        />
+        <div className="space-y-1">
+          <h3 className="font-semibold text-content">Valores manuales en conflicto</h3>
+          <p className="text-sm text-content-secondary">
+            Hay {cellCountLabel} en esta página. Los valores afectados no se
+            aplican automáticamente.
+          </p>
+        </div>
+      </div>
+      <ul className="grid gap-2 pl-8 sm:grid-cols-2">
+        {conflictItems.map(({ conflict, rowLabel, obraName, columnLabel }) => (
+          <li
+            key={`${conflict.rowId}:${conflict.columnId}`}
+            className="rounded-md border border-warning/25 bg-surface px-3 py-2 text-sm"
+          >
+            <span className="block font-medium text-content">{rowLabel}</span>
+            <span className="block text-content-secondary">{obraName}</span>
+            <span className="block text-content-secondary">{columnLabel}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function MacroTablePanel({
   macroTable,
   mainTableColumnById,
@@ -1035,38 +1112,54 @@ function MacroTablePanel({
         const message = data?.error ?? "Failed to fetch rows";
         throw new Error(message);
       }
-      const rows: MacroTableRowData[] = (data.rows ?? []).map((row: MacroRow) => ({
-        ...row,
-        id: row.id,
-        _sourceTablaId: row._sourceTablaId,
-        _sourceTablaName: row._sourceTablaName,
-        _obraId: row._obraId,
-        _obraName: row._obraName,
-        _businessIdentity: row._businessIdentity,
-        _lineageRowKey: row._lineageRowKey,
-        _extractionId: row._extractionId,
-        _materializationVersion: row._materializationVersion,
-        _docPath: row._docPath,
-        _docFileName: row._docFileName,
-        _overrideBindingStatus: row._overrideBindingStatus,
-        _overrideConflictCount: row._overrideConflictCount,
-        _macroAccordionGroup: row._macroAccordionGroup === true,
-        _macroAccordionGroupColumnId:
-          typeof row._macroAccordionGroupColumnId === "string"
-            ? row._macroAccordionGroupColumnId
+      const rawOverrideConflicts: unknown = data.overrideConflicts;
+      const overrideConflicts = macroConflictProjectionsSchema.parse(
+        rawOverrideConflicts,
+      );
+      const conflictsByRowId = new Map<string, MacroConflictProjection[]>();
+      for (const conflict of overrideConflicts) {
+        const rowConflicts = conflictsByRowId.get(conflict.rowId) ?? [];
+        rowConflicts.push(conflict);
+        conflictsByRowId.set(conflict.rowId, rowConflicts);
+      }
+
+      function mapRow(row: MacroRow): MacroTableRowData {
+        return {
+          ...row,
+          id: row.id,
+          _sourceTablaId: row._sourceTablaId,
+          _sourceTablaName: row._sourceTablaName,
+          _obraId: row._obraId,
+          _obraName: row._obraName,
+          _businessIdentity: row._businessIdentity,
+          _lineageRowKey: row._lineageRowKey,
+          _extractionId: row._extractionId,
+          _materializationVersion: row._materializationVersion,
+          _docPath: row._docPath,
+          _docFileName: row._docFileName,
+          _overrideBindingStatus: row._overrideBindingStatus,
+          _overrideConflictCount: row._overrideConflictCount,
+          _overrideConflicts: conflictsByRowId.get(row.id),
+          _macroAccordionGroup: row._macroAccordionGroup === true,
+          _macroAccordionGroupColumnId:
+            typeof row._macroAccordionGroupColumnId === "string"
+              ? row._macroAccordionGroupColumnId
+              : undefined,
+          _macroAccordionGroupValue:
+            typeof row._macroAccordionGroupValue === "string"
+              ? row._macroAccordionGroupValue
+              : undefined,
+          _macroAccordionGroupCount:
+            typeof row._macroAccordionGroupCount === "number"
+              ? row._macroAccordionGroupCount
+              : undefined,
+          _macroAccordionRows: Array.isArray(row._macroAccordionRows)
+            ? row._macroAccordionRows.map(mapRow)
             : undefined,
-        _macroAccordionGroupValue:
-          typeof row._macroAccordionGroupValue === "string"
-            ? row._macroAccordionGroupValue
-            : undefined,
-        _macroAccordionGroupCount:
-          typeof row._macroAccordionGroupCount === "number"
-            ? row._macroAccordionGroupCount
-            : undefined,
-        _macroAccordionRows: Array.isArray(row._macroAccordionRows)
-          ? (row._macroAccordionRows as MacroRow[])
-          : undefined,
-      }));
+        };
+      }
+
+      const rows: MacroTableRowData[] = (data.rows ?? []).map(mapRow);
 
       return {
         rows,
@@ -1380,7 +1473,7 @@ function MacroTablePanel({
                   aria-expanded={isOpen}
                   aria-label={isOpen ? "Cerrar detalle" : "Abrir detalle"}
                   onClick={toggle}
-                  className="size-5 rounded-md"
+                  className="size-5"
                 >
                   {isOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
                   {rowCount !== null ? <span className="sr-only">{rowCount} filas</span> : null}
@@ -1525,7 +1618,7 @@ function MacroTablePanel({
             <Button
               variant="outline"
               size="sm"
-              className={toolButtonClass}
+              className="gap-2 px-3.5"
               data-wizard-target="macro-generar-reporte"
               onClick={() => {
                 const activeTour = getSearchParam("tour");
@@ -1544,15 +1637,15 @@ function MacroTablePanel({
             <Button
               variant="outline"
               size="sm"
-              className={toolButtonClass}
+              className="gap-2 px-3.5"
               onClick={() => push(`/admin/macro-tables/${macroTable.id}`)}
             >
               <Settings className="size-4" />
               Configurar
             </Button>
-            <Button
+            <Button variant={"dark"}
               size="sm"
-              className="gap-2 rounded-lg bg-[#1f1a17] text-white hover:bg-[#2b241f]"
+              className="gap-2"
               onClick={() => push("/admin/macro-tables/new")}
             >
               <Plus className="size-4" />
@@ -1564,6 +1657,7 @@ function MacroTablePanel({
           data-wizard-target="macro-page-table"
           className="flex min-w-0 flex-col gap-4 rounded-xl bg-card p-2 pt-3 shadow-card sm:p-2.5 sm:pr-0 sm:pt-3.5 xl:rounded-t-none"
         >
+          <MacroConflictNotice columns={displayColumns} />
           <FormTableContent className="my-0 max-w-full overflow-hidden rounded-lg shadow-card md:max-w-[calc(96vw-var(--sidebar-current-width))]" innerClassName="max-h-[70svh] md:max-h-[calc(100vh-400px)]" />
           <Separator className="bg-border" />
           <FormTablePagination />
@@ -1830,7 +1924,7 @@ function MacroTablesPageContent() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className={toolButtonClass}
+                className="gap-2 px-3.5"
                 onClick={() => insuranceFileInputRef.current?.click()}
                 disabled={isInsuranceImporting}
               >
@@ -1839,7 +1933,7 @@ function MacroTablesPageContent() {
               </Button>
             </div>
             <div className="w-full min-w-0 overflow-x-auto sm:w-auto">
-              <TabsList className={cn("flex h-11 min-w-max justify-start rounded-lg p-1")}>
+              <TabsList className={"flex h-11 min-w-max justify-start p-1"}>
                 {macroTables.map((macroTable) => (
                   <TabsTrigger key={macroTable.id} value={macroTable.id} className="px-4">
                     {macroTable.name}
@@ -1856,7 +1950,7 @@ function MacroTablesPageContent() {
             className={cn("m-0!important", macroTable.id === selectedId ? "block" : "hidden")}
             forceMount
           >
-            <div className={macroTable.id === selectedId ? "" : "hidden"}>
+            <div className={macroTable.id === selectedId ? ("") : ("hidden")}>
               {mountedTabs.has(macroTable.id) ? (
                 <MacroTablePanel macroTable={macroTable} mainTableColumnById={mainTableColumnById} />
               ) : null}

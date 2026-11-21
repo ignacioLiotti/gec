@@ -35,7 +35,7 @@ export function DemoEntryClient({
 
 	if (hasActiveSession) {
 		return (
-			<Button asChild className="bg-stone-900 text-white hover:bg-stone-800">
+			<Button variant={"dark"} asChild >
 				<Link href={continuePath}>Continuar demo</Link>
 			</Button>
 		);

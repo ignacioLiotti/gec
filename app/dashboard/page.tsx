@@ -1,4 +1,9 @@
 'use client';
+import { NativeSelect } from "@/components/ui/native-select";
+
+
+import { getInsurancePolicyStatus, insurancePolicyStatusLabels } from "@/lib/insurance-policy-status";
+import { insurancePolicyStatusClasses as insurancePolicyModalStatusClasses, insurancePolicyProgressClasses as insurancePolicyModalProgressClasses } from "@/components/insurance-policy-status";
 
 import { type ChangeEvent, type ReactNode, useCallback, useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
@@ -580,7 +585,7 @@ function MobileActionDashboard({
               disabled={obras.length === 0}
             />
             {selectedObra ? (
-              <Button asChild className="h-11 w-full gap-2 bg-stone-900 text-white shadow-[0_8px_22px_rgba(15,23,42,0.16)] transition-[transform,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:bg-stone-800 hover:shadow-[0_14px_32px_rgba(15,23,42,0.22)] focus-visible:ring-4 focus-visible:ring-sky-500/25 active:translate-y-0 active:scale-[0.98]">
+              <Button variant={"dark"} asChild className="h-11 w-full gap-2 transition-[transform,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]">
                 <Link
                   href={`/excel/${selectedObra.id}`}
                   prefetch={false}
@@ -595,7 +600,7 @@ function MobileActionDashboard({
                 Selecciona una obra
               </Button>
             ) : (
-              <Button onClick={onCreateObra} className="h-11 w-full gap-2 bg-stone-900 text-white shadow-[0_8px_22px_rgba(15,23,42,0.16)] transition-[transform,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:bg-stone-800 hover:shadow-[0_14px_32px_rgba(15,23,42,0.22)] focus-visible:ring-4 focus-visible:ring-sky-500/25 active:translate-y-0 active:scale-[0.98]">
+              <Button variant={"dark"} onClick={onCreateObra} className="h-11 w-full gap-2 transition-[transform,box-shadow,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]">
                 <Plus className="size-4" />
                 Crear primera obra
               </Button>
@@ -705,14 +710,9 @@ function DashboardObraLinkCell({
     >
       <span className="block min-w-0 flex-1 truncate"><HighlightedSearchText value={obraLabel} query={highlightQuery} /></span>
       {obraProgress !== null ? (
-        <Badge
-          variant="secondary"
-          className={cn(
-            "ml-1 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-            obraProgress >= 100
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-amber-200 bg-amber-50 text-amber-700"
-          )}
+        <Badge shape="pill" size="xs"
+          variant={(obraProgress >= 100) ? ("success") : ("warning")}
+          className={"ml-1 shrink-0 px-2 py-0.5 text-[10px] font-semibold"}
         >
           {obraProgress >= 100 ? "Terminada" : "En curso"}
         </Badge>
@@ -741,14 +741,9 @@ function DashboardObraGroupLinkCell({ row }: { row: InsurancePolicyGroupRow }) {
       </span>
       <span className="block min-w-0 flex-1 truncate">{row.groupLabel}</span>
       {row.groupObraProgress !== null ? (
-        <Badge
-          variant="secondary"
-          className={cn(
-            "ml-1 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-            row.groupObraProgress >= 100
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-amber-200 bg-amber-50 text-amber-700"
-          )}
+        <Badge shape="pill" size="xs"
+          variant={(row.groupObraProgress >= 100) ? ("success") : ("warning")}
+          className={"ml-1 shrink-0 px-2 py-0.5 text-[10px] font-semibold"}
         >
           {row.groupObraProgress >= 100 ? "Terminada" : "En curso"}
         </Badge>
@@ -772,13 +767,13 @@ function DashboardObraSelectCell({
   return (
     <div className="children-input-hidden absolute inset-0 flex h-full w-full items-center px-2">
       <div className="relative w-full min-w-0">
-        <select
+        <NativeSelect
           value={currentValue}
           onChange={(event) => {
             setValue(event.target.value);
             handleBlur();
           }}
-          className="h-9 w-full min-w-0 appearance-none truncate rounded-md border border-orange-200 bg-white py-0 pl-2 pr-12 text-xs font-medium text-stone-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-200"
+          className="h-9 w-full min-w-0 appearance-none truncate py-0 pl-2 pr-12 text-xs font-medium"
         >
           <option value="" disabled>Seleccionar obra</option>
           {obras.map((obra) => (
@@ -786,7 +781,7 @@ function DashboardObraSelectCell({
               {obra.n} - {obra.designacionYUbicacion}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <span className="pointer-events-none absolute inset-y-px right-px flex w-12 items-center justify-end rounded-r-md bg-gradient-to-l from-white via-white to-white/80 pr-2 text-stone-500 shadow-[-10px_0_12px_rgba(255,255,255,0.95)] backdrop-blur-[1px]">
           <ChevronDown className="size-4" />
         </span>
@@ -974,20 +969,9 @@ function insurancePolicyModalDaysUntil(value: string | null | undefined) {
   return Math.ceil((date.getTime() - start) / 86_400_000);
 }
 
-function getInsurancePolicyModalStatus(policy: InsurancePolicyTableRow): InsurancePolicyModalStatus {
-  if (policy.isCancelled) return "cancelled";
-  const days = insurancePolicyModalDaysUntil(policy.calculatedCancellationDate ?? policy.endDate);
-  if (days !== null && days < 0) return "expired";
-  if (days !== null && days <= 60) return "dueSoon";
-  return "active";
-}
+function getInsurancePolicyModalStatus(policy: InsurancePolicyTableRow): InsurancePolicyModalStatus { return getInsurancePolicyStatus(policy); }
 
-function insurancePolicyModalStatusLabel(status: InsurancePolicyModalStatus) {
-  if (status === "cancelled") return "Dada de baja";
-  if (status === "expired") return "Vencida";
-  if (status === "dueSoon") return "Por vencer";
-  return "Vigente";
-}
+const insurancePolicyModalStatusLabel = (status: InsurancePolicyModalStatus) => insurancePolicyStatusLabels[status];
 
 function insurancePolicyModalStatusDescription(status: InsurancePolicyModalStatus) {
   if (status === "cancelled") return "Baja confirmada";
@@ -996,12 +980,7 @@ function insurancePolicyModalStatusDescription(status: InsurancePolicyModalStatu
   return "Finalización activa";
 }
 
-function insurancePolicyModalStatusClasses(status: InsurancePolicyModalStatus) {
-  if (status === "cancelled") return "border-sky-200 bg-sky-50 text-sky-800";
-  if (status === "expired") return "border-orange-300 bg-orange-50 text-orange-700";
-  if (status === "dueSoon") return "border-amber-200 bg-amber-50 text-amber-700";
-  return "border-emerald-200 bg-emerald-50 text-emerald-700";
-}
+
 
 function insurancePolicyModalHeaderGradient(status: InsurancePolicyModalStatus) {
   if (status === "cancelled") return "from-sky-50/95 via-white to-white";
@@ -1009,12 +988,7 @@ function insurancePolicyModalHeaderGradient(status: InsurancePolicyModalStatus) 
   return "from-emerald-50/95 via-white to-white";
 }
 
-function insurancePolicyModalProgressClasses(status: InsurancePolicyModalStatus) {
-  if (status === "cancelled") return "bg-sky-500";
-  if (status === "expired") return "bg-orange-500";
-  if (status === "dueSoon") return "bg-amber-500";
-  return "bg-emerald-500";
-}
+
 
 function formatInsurancePolicyModalMoney(value: number | string | null, currency: string | null) {
   const amount = Number(value ?? 0);
@@ -1074,14 +1048,14 @@ function InsurancePolicyModalField({
       <div className="flex items-start justify-between gap-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-content-muted">{label}</p>
         {onEdit ? (
-          <button
+          <Button variant={"defaultSecondary"}
             type="button"
-            className="inline-flex items-center gap-1 rounded-full border border-stroke-soft bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-content-muted transition-colors hover:border-orange-200 hover:text-orange-700 active:scale-[0.98]"
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors active:scale-[0.98]"
             onClick={onEdit}
           >
             <Pencil className="size-3" />
             Editar
-          </button>
+          </Button>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-blue-700">
             Sistema
@@ -1186,7 +1160,7 @@ function InsurancePolicyEditorDialog({
     <Dialog open onOpenChange={(open) => {
       if (!open && !isSaving) onClose();
     }}>
-      <DialogContent className="flex max-h-[94vh] max-w-6xl flex-col gap-0 overflow-hidden border-stroke p-0">
+      <DialogContent className="flex max-h-[94vh] max-w-6xl flex-col gap-0 overflow-hidden p-0">
         <form
           className="flex min-h-0 flex-1 flex-col"
           onSubmit={(event) => {
@@ -1363,7 +1337,7 @@ function InsurancePolicyEditorDialog({
                 ) : (
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <p className="text-xl font-black tracking-tight text-content">{formatInsurancePolicyModalMoney(draft.balance, draft.currency)}</p>
-                    {draft.status ? <Badge variant="outline" className={cn("rounded-full px-2.5 py-1 text-[10px] font-semibold", insurancePolicyModalStatusClasses(status))}>{draft.status}</Badge> : null}
+                    {draft.status ? <Badge shape="pill" size="xs" variant="outline" className={cn("px-2.5 py-1 text-[10px] font-semibold", insurancePolicyModalStatusClasses(status))}>{draft.status}</Badge> : null}
                   </div>
                 )}
               </InsurancePolicyModalField>
@@ -1755,7 +1729,7 @@ function CompanyFilesPanel({
 }) {
   return (
     <Framed>
-      <Card className="overflow-hidden rounded-xl border-0 bg-transparent pt-0 shadow-none gap-0">
+      <Card variant={"flush"} className="overflow-hidden border-0 pt-0 gap-0">
         <CardHeader className={cn(DS.cardHeader, "py-4 pt-5")}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -1769,7 +1743,7 @@ function CompanyFilesPanel({
                 <RefreshCw className="size-4" />
                 Actualizar
               </Button>
-              <Button type="button" size="sm" className="gap-2 bg-stone-900 text-white hover:bg-stone-800" onClick={onPickFile} disabled={isUploading}>
+              <Button variant={"dark"} type="button" size="sm" className="gap-2" onClick={onPickFile} disabled={isUploading}>
                 {isUploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
                 {isUploading ? "Subiendo..." : "Subir archivo"}
               </Button>
@@ -2137,15 +2111,9 @@ function GlobalInsurancePoliciesPanel({
           const status = getPolicyOperationalStatus(row);
           return (
             <div className="flex min-w-0 flex-col gap-1">
-              <Badge
-                variant="outline"
-                className={cn(
-                  "w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                  status.tone === "green" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-                  status.tone === "amber" && "border-amber-200 bg-amber-50 text-amber-800",
-                  status.tone === "red" && "border-orange-200 bg-orange-50 text-orange-800",
-                  status.tone === "blue" && "border-blue-200 bg-blue-50 text-blue-700",
-                )}
+              <Badge shape="pill"
+                variant={(status.tone === "blue") ? ("info") : ((status.tone === "red") ? ("default") : ((status.tone === "amber") ? ("warning") : ((status.tone === "green") ? ("success") : ("outline"))))}
+                className={"w-fit px-2 py-0.5 text-[11px] font-semibold"}
               >
                 {status.label}
               </Badge>
@@ -2224,10 +2192,10 @@ function GlobalInsurancePoliciesPanel({
         renderReadOnly: ({ row }) => (
           <Button
             type="button"
-            variant="ghost"
+            variant={"destructiveSecondary"}
             size="sm"
             disabled={deletingPolicyId === row.id}
-            className="h-8 gap-1.5 px-2 text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+            className="h-8 gap-1.5 px-2 text-xs"
             onClick={(event) => {
               event.stopPropagation();
               void handleDeletePolicy(row);
@@ -2276,70 +2244,70 @@ function GlobalInsurancePoliciesPanel({
       <div className="space-y-4">
         <label className="block space-y-1.5">
           <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Polizas</span>
-          <input
+          <Input
             value={filters.policies}
             onChange={(event) => onChange((current) => ({ ...current, policies: event.target.value }))}
             placeholder="1006726 / 0, 330260 / 14"
-            className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+            className="h-9 w-full px-3 text-sm"
           />
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Obra</span>
-          <input
+          <Input
             value={filters.obra}
             onChange={(event) => onChange((current) => ({ ...current, obra: event.target.value }))}
             placeholder="Nombre o numero de obra"
-            className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+            className="h-9 w-full px-3 text-sm"
           />
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Seccion</span>
-          <input
+          <Input
             value={filters.section}
             onChange={(event) => onChange((current) => ({ ...current, section: event.target.value }))}
             placeholder="Caucion, incendio..."
-            className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+            className="h-9 w-full px-3 text-sm"
           />
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Finalizacion desde</span>
-            <input
+            <Input
               type="date"
               value={filters.endDateFrom}
               onChange={(event) => onChange((current) => ({ ...current, endDateFrom: event.target.value }))}
-              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+              className="h-9 w-full px-3 text-sm"
             />
           </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Finalizacion hasta</span>
-            <input
+            <Input
               type="date"
               value={filters.endDateTo}
               onChange={(event) => onChange((current) => ({ ...current, endDateTo: event.target.value }))}
-              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+              className="h-9 w-full px-3 text-sm"
             />
           </label>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Suma asegurada minima</span>
-            <input
+            <Input
               type="number"
               min={0}
               value={filters.minInsuredAmount}
               onChange={(event) => onChange((current) => ({ ...current, minInsuredAmount: event.target.value }))}
-              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+              className="h-9 w-full px-3 text-sm"
             />
           </label>
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Prima minima</span>
-            <input
+            <Input
               type="number"
               min={0}
               value={filters.minPremium}
               onChange={(event) => onChange((current) => ({ ...current, minPremium: event.target.value }))}
-              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+              className="h-9 w-full px-3 text-sm"
             />
           </label>
         </div>
@@ -2431,7 +2399,7 @@ function GlobalInsurancePoliciesPanel({
           aria-label={isOpen ? "Ocultar polizas" : "Ver polizas"}
           aria-expanded={isOpen}
           onClick={toggle}
-          className="size-5 rounded-md"
+          className="size-5"
         >
           {isOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
         </Button>
@@ -2533,10 +2501,10 @@ function GlobalInsurancePoliciesPanel({
                   <TableCell className="px-3 py-2">
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant={"destructiveSecondary"}
                       size="sm"
                       disabled={deletingPolicyId === policy.id}
-                      className="h-7 gap-1.5 px-2 text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+                      className="h-7 gap-1.5 px-2 text-xs"
                       onClick={() => void handleDeletePolicy(policy)}
                     >
                       {deletingPolicyId === policy.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
@@ -2565,7 +2533,7 @@ function GlobalInsurancePoliciesPanel({
   }), [deletingPolicyId, groupBy, groupedSearchMatchesAccordionCell, groupTableColumns, groupedRows, handleDeletePolicy, openEditPolicyDialog, openMovePolicyDialog, quickFilter, statusFilter]);
 
   return (
-    <Card className="overflow-hidden rounded-xl border-0 bg-transparent pt-0 shadow-none gap-0">
+    <Card variant={"flush"} className="overflow-hidden border-0 pt-0 gap-0">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap items-center gap-2 w-full">
           <div className="flex flex-wrap items-center gap-1 rounded-lg border border-stone-200 bg-white p-0.5 shadow-sm">
@@ -2579,14 +2547,9 @@ function GlobalInsurancePoliciesPanel({
               <Button
                 key={value}
                 type="button"
-                variant={statusFilter === value ? "default" : "ghost"}
+                variant={(statusFilter === value) ? ("dark") : (statusFilter === value ? "default" : "ghost")}
                 size="sm"
-                className={cn(
-                  "h-8 rounded-md px-3 text-xs",
-                  statusFilter === value
-                    ? "bg-stone-900 text-white hover:bg-stone-800"
-                    : "text-stone-600 hover:bg-stone-50"
-                )}
+                className={"h-8 px-3 text-xs"}
                 onClick={() => {
                   setStatusFilter(value as InsurancePolicyStatusFilter);
                   setQuickFilter("none");
@@ -2596,36 +2559,36 @@ function GlobalInsurancePoliciesPanel({
               </Button>
             ))}
           </div>
-          <select
+          <NativeSelect
             value={groupBy}
             onChange={(event) => {
               setGroupBy(event.target.value as InsurancePolicyGroupBy);
             }}
-            className="h-8 rounded-lg border border-stone-200 bg-white px-3 text-xs text-stone-700 shadow-sm"
+            className="h-8 px-3 text-xs"
           >
             <option value="none">Vista editable</option>
             <option value="obra">Agrupar por obra</option>
             <option value="endDate">Agrupar por finalizacion</option>
             <option value="calculatedDate">Agrupar por baja calculada</option>
-          </select>
+          </NativeSelect>
           <div className="flex flex-wrap items-center gap-2 ml-auto">
             {canDeleteAllPolicies ? (
               <Button
                 type="button"
-                variant="outline"
+                variant={"destructiveSecondary"}
                 size="sm"
-                className="h-8 gap-2 rounded-lg border-red-200 text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+                className="h-8 gap-2 text-xs"
                 onClick={() => void handleDeleteAllPolicies()}
               >
                 <Trash2 className="size-4" />
                 Borrar polizas
               </Button>
             ) : null}
-            <Button type="button" variant="outline" size="sm" className="h-8 gap-2 rounded-lg text-xs" onClick={() => void handleRefresh()}>
+            <Button type="button" variant="outline" size="sm" className="h-8 gap-2 text-xs" onClick={() => void handleRefresh()}>
               <RefreshCw className="size-4" />
               Actualizar
             </Button>
-            <Button type="button" size="sm" className="h-8 gap-2 rounded-lg bg-stone-900 text-xs text-white hover:bg-stone-800" onClick={onPickFile} disabled={isImporting}>
+            <Button variant={"dark"} type="button" size="sm" className="h-8 gap-2 text-xs" onClick={onPickFile} disabled={isImporting}>
               {isImporting ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
               {isImporting ? "Leyendo..." : "Importar Excel"}
             </Button>
@@ -2784,7 +2747,7 @@ function GlobalInsurancePoliciesPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="ml-auto h-7 rounded-md px-2 text-xs text-stone-600 hover:bg-stone-100"
+              className="ml-auto h-7 px-2 text-xs"
               onClick={() => applyQuickFilter("none")}
             >
               Ver todas
@@ -3573,7 +3536,7 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
             <Framed className="rounded-3xl" innerClassName="rounded-3xl">
               <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
                 <div className="space-y-5">
-                  <Badge variant="secondary" className="inline-flex items-center gap-1 rounded-2xl border border-stone-200 bg-stone-50 px-3 py-1 text-stone-700 shadow-none">
+                  <Badge variant={"neutral"} className="inline-flex items-center gap-1 px-3 py-1">
                     <Sparkles className="size-3.5 text-stone-700" />
                     Bienvenido
                   </Badge>
@@ -3586,7 +3549,7 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                     </p>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <Button asChild size="lg" className="gap-2 rounded-xl bg-stone-900 text-white hover:bg-stone-800">
+                    <Button variant={"dark"} asChild size="lg" className="gap-2">
                       <Link href="/excel" prefetch={false}>
                         Entrar al panel
                         <ArrowRight className="size-4" />
@@ -3752,16 +3715,16 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
 
         <Tabs value={dashboardTab} onValueChange={setDashboardTab} className="hidden min-w-0 space-y-2 md:block">
           <div className="min-w-0 overflow-x-auto">
-            <TabsList className="h-auto min-w-max justify-start gap-1 rounded-xl border border-stone-200 bg-white p-1">
-              <TabsTrigger value="resumen" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
+            <TabsList className="h-auto min-w-max justify-start gap-1 p-1">
+              <TabsTrigger value="resumen" className="h-9 gap-2 px-4 text-xs font-medium">
                 <BarChart3 className="size-3.5" />
                 Resumen
               </TabsTrigger>
-              <TabsTrigger value="archivos" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
+              <TabsTrigger value="archivos" className="h-9 gap-2 px-4 text-xs font-medium">
                 <FolderKanban className="size-3.5" />
                 Archivos globales
               </TabsTrigger>
-              <TabsTrigger value="polizas" className="h-9 gap-2 rounded-lg px-4 text-xs font-medium">
+              <TabsTrigger value="polizas" className="h-9 gap-2 px-4 text-xs font-medium">
                 <ShieldCheck className="size-3.5" />
                 Polizas de seguro
               </TabsTrigger>
@@ -3779,7 +3742,7 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                 className="lg:col-span-2"
               >
                 <Framed>
-                  <Card className="overflow-hidden rounded-xl border-0 bg-transparent pt-0 shadow-none gap-0">
+                  <Card variant={"flush"} className="overflow-hidden border-0 pt-0 gap-0">
                     <CardHeader className={cn(DS.cardHeader, "py-4 pt-5 pb-3! border-none")}>
                       <div className="space-y-3">
                         <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
@@ -3791,7 +3754,7 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                           </div>
                           <div className="text-xs text-stone-500">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Button size="sm" className="gap-2 bg-stone-900 text-white hover:bg-stone-800" onClick={() => setDialogOpen(true)}>
+                              <Button variant={"dark"} size="sm" className="gap-2" onClick={() => setDialogOpen(true)}>
                                 <Plus className="size-4" />
                                 Nueva Obra
                               </Button>
@@ -3837,26 +3800,26 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                                 cancelLabel="Cancelar"
                                 renderFooter={({ onClose, onSubmit, isSubmitting }: { onClose: () => void; onSubmit: () => void; isSubmitting: boolean }) => (
                                   <div className="flex items-center justify-end gap-3">
-                                    <button
+                                    <Button variant="outline"
                                       type="button"
                                       onClick={onClose}
                                       disabled={isSubmitting}
-                                      className="rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                                      className="px-4 py-2 text-sm"
                                     >
                                       Cancelar
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button variant="dark"
                                       type="button"
                                       onClick={onSubmit}
                                       disabled={isSubmitting}
-                                      className="flex items-center gap-2 rounded-md px-5 py-2 text-sm font-medium transition-all duration-200 bg-stone-800 text-white hover:bg-stone-700 active:bg-stone-900 disabled:opacity-50 disabled:pointer-events-none"
+                                      className="gap-2 px-5 py-2 text-sm"
                                     >
                                       {isCreating ? "Creando..." : "Crear Obra"}
-                                    </button>
+                                    </Button>
                                   </div>
                                 )}
                               />
-                              <Button asChild variant="outline" size="sm" className="border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+                              <Button asChild variant={"secondary"} size="sm" >
                                 <Link href="/excel" prefetch={true}>
                                   Ver Todas
                                   <ArrowRight className="ml-1.5 size-3.5" />
@@ -3877,14 +3840,14 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                           <div className="space-y-2">
                             <p className="font-medium text-stone-700">No hay obras registradas</p>
                             <p className="max-w-sm mx-auto text-sm text-stone-500">
-                              Crea tu primera obra para comenzar a gestionar tus proyectos. Si acabas de registrarte,{" "}
-                              <Link href="/onboarding" className="text-stone-800 hover:underline">
-                                configura tu organizacion
+                              Creá tu primera obra para comenzar a gestionar tus proyectos. También podés{" "}
+                              <Link href="/setup" className="text-stone-800 hover:underline">
+                                revisar la configuración inicial
                               </Link>
-                              {" "}primero.
+                              .
                             </p>
                           </div>
-                          <Button onClick={() => setDialogOpen(true)} className="mt-4 gap-2 bg-stone-900 text-white hover:bg-stone-800">
+                          <Button variant={"dark"} onClick={() => setDialogOpen(true)} className="mt-4 gap-2">
                             <Plus className="size-4" />
                             Crear Primera Obra
                           </Button>
@@ -3942,15 +3905,9 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                                           type="button"
                                           onPointerDown={() => setSelectedPreviewObraId(obra.id)}
                                           onClick={() => setSelectedPreviewObraId(obra.id)}
-                                          className={cn(
-                                            "flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer p-3",
-                                            isSelected ? "pl-4" : ""
-                                          )}
+                                          className={cn("flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer p-3", isSelected ? ("pl-4") : (""))}
                                         >
-                                          <div className={cn(
-                                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-stone-100 font-mono text-xs font-semibold text-stone-600 transition-colors group-hover:bg-stone-200",
-                                            isSelected ? "bg-orange-100 text-orange-800 ring-1 ring-orange-200" : ""
-                                          )}>
+                                          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-stone-100 font-mono text-xs font-semibold text-stone-600 transition-colors group-hover:bg-stone-200", isSelected ? ("bg-orange-100 text-orange-800 ring-1 ring-orange-200") : (""))}>
                                             {obra.n}
                                           </div>
                                           <div className="min-w-0 flex-1">
@@ -3959,12 +3916,12 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                                                 {obra.designacionYUbicacion}
                                               </p>
                                               {obra.porcentaje >= 100 && (
-                                                <Badge variant="secondary" className="h-5 shrink-0 rounded-full border border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700 shadow-none">
+                                                <Badge shape="pill" size="xs" variant={"success"} className="h-5 shrink-0 text-[10px]">
                                                   Completada
                                                 </Badge>
                                               )}
                                               {isBehind && obra.porcentaje < 100 && (
-                                                <Badge variant="secondary" className="h-5 shrink-0 rounded-full border border-amber-200 bg-amber-50 text-[10px] text-amber-700 shadow-none">
+                                                <Badge shape="pill" size="xs" variant={"warning"} className="h-5 shrink-0 text-[10px]">
                                                   Atrasada
                                                 </Badge>
                                               )}
@@ -3976,12 +3933,9 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                                         </button>
                                         <Button
                                           asChild
-                                          variant="ghost"
+                                          variant={"defaultSecondary"}
                                           size="sm"
-                                          className={cn(
-                                            "mr-1 h-8 px-2 hover:text-orange-700",
-                                            isSelected ? "text-orange-700 hover:bg-orange-100/70" : "text-stone-600 hover:bg-stone-50"
-                                          )}
+                                          className={"mr-1 h-8 px-2"}
                                         >
                                           <Link href={`/excel/${obra.id}`} onMouseEnter={() => prefetchObra(obra.id)}>
                                             <ArrowRight className="size-4" />
@@ -4095,7 +4049,7 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                                       )}
                                     </div>
 
-                                    <Button asChild size="sm" className="w-full bg-stone-900 text-white hover:bg-stone-800">
+                                    <Button variant={"dark"} asChild size="sm" className="w-full">
                                       <Link href={`/excel/${selectedPreviewObra.id}`}>
                                         Abrir panel de la obra
                                         <ArrowRight className="ml-1.5 size-3.5" />
@@ -4131,7 +4085,7 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                     transition={{ duration: 0.4, delay: 0.2 }}
                   >
                     <Framed className="border-amber-200/70 bg-amber-50/40">
-                      <Card className="rounded-xl bg-white/90 pt-0 shadow-none gap-0">
+                      <Card className="pt-0 gap-0">
                         <CardHeader className="pb-2 pt-5">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className="size-4 text-amber-600" />
@@ -4182,7 +4136,7 @@ export default function Home({ demoData }: { demoData?: DashboardDemoData } = {}
                     transition={{ duration: 0.4, delay: 0.25 }}
                   >
                     <Framed>
-                      <Card className="rounded-2xl border-0 bg-transparent pt-0 shadow-none gap-2">
+                      <Card variant={"flush"} className="border-0 pt-0 gap-2">
                         <CardHeader className={cn(DS.cardHeader, "pb-2 pt-5")}>
                           <CardTitle className="text-sm font-semibold text-stone-900">Distribucion de Avance</CardTitle>
                           <CardDescription className="text-xs text-stone-500">Obras por rango de progreso</CardDescription>

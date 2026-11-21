@@ -154,7 +154,7 @@ export default function DesktopExcelPagePreview({
 								value={searchValue}
 								onChange={(event) => setSearchValue(event.target.value)}
 								placeholder="Buscar obra o entidad"
-								className="h-9 w-64 rounded-lg bg-surface pl-9 text-sm"
+								className="h-9 w-64 pl-9 text-sm"
 							/>
 						</div>
 						{isHydratingRows ? (

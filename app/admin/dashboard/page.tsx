@@ -15,6 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getUserRoles } from "@/lib/route-guard";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/server";
+import {
+	OperationalWorkspace,
+	type OperationalWorkspaceData,
+} from "@/app/dashboard/_components/operational-workspace";
 
 import {
 	OperationalTrendChart,
@@ -394,6 +398,19 @@ async function loadUnreadNotifications(
 	};
 }
 
+async function loadTenantName(supabase: Supabase, tenantId: string) {
+	const { data, error } = await supabase
+		.from("tenants")
+		.select("name")
+		.eq("id", tenantId)
+		.maybeSingle();
+
+	return {
+		name: data?.name?.trim() || "Organización activa",
+		error: error?.message ?? null,
+	};
+}
+
 function StatTile({
 	label,
 	value,
@@ -597,12 +614,13 @@ export default async function AdminDashboardPage() {
 		return <div className="p-6 text-sm">No hay una organizacion activa seleccionada.</div>;
 	}
 
-	const [obrasResult, policiesResult, pendingDocumentsResult, notificationsResult] =
+	const [obrasResult, policiesResult, pendingDocumentsResult, notificationsResult, tenantResult] =
 		await Promise.all([
 			loadObras(supabase, userRoles.tenantId),
 			loadPolicies(supabase, userRoles.tenantId),
 			loadPendingDocuments(supabase, userRoles.tenantId),
 			loadUnreadNotifications(supabase, userRoles.tenantId, user.id),
+			loadTenantName(supabase, userRoles.tenantId),
 		]);
 
 	const todayIso = new Date().toISOString().slice(0, 10);
@@ -616,6 +634,12 @@ export default async function AdminDashboardPage() {
 		(row) => row.updatedAt,
 	);
 	const delayedWorks = activeWorks.filter((row) => row.delayPct >= 10);
+	const averageProgress = activeWorks.length > 0
+		? activeWorks.reduce((sum, row) => sum + row.progressPct, 0) / activeWorks.length
+		: 0;
+	const averageElapsed = activeWorks.length > 0
+		? activeWorks.reduce((sum, row) => sum + row.timePct, 0) / activeWorks.length
+		: 0;
 	const totalActiveSaldo = activeWorks.reduce((sum, row) => sum + row.saldo, 0);
 	const totalContract = workModels.reduce(
 		(sum, row) => sum + toNumber(row.obra.contrato_mas_ampliaciones),
@@ -626,6 +650,7 @@ export default async function AdminDashboardPage() {
 		0,
 	);
 	const certifiedPct = totalContract > 0 ? (totalCertified / totalContract) * 100 : 0;
+	const balancePct = totalContract > 0 ? (totalActiveSaldo / totalContract) * 100 : 0;
 
 	const policiesWithReasons: PolicyWithReasons[] = policiesResult.rows
 		.map((policy) => {
@@ -642,6 +667,9 @@ export default async function AdminDashboardPage() {
 	const riskPolicies = [...policiesWithReasons].sort(
 		(left, right) => Math.max(0, right.balance) - Math.max(0, left.balance),
 	);
+	const expiredActivePolicies = riskPolicies.filter((row) => row.reasons.includes("Vencida activa"));
+	const cancelledWithBalancePolicies = riskPolicies.filter((row) => row.reasons.includes("Baja con saldo"));
+	const policiesWithoutEndDate = riskPolicies.filter((row) => row.reasons.includes("Sin vencimiento"));
 	const dueSoonPolicies = policiesWithReasons
 		.filter((row) => row.reasons.includes("Por vencer"))
 		.sort((left, right) =>
@@ -651,6 +679,14 @@ export default async function AdminDashboardPage() {
 	const riskBalanceGroups = new Map<string, number>();
 	for (const row of riskPolicies) {
 		addMoneyGroup(riskBalanceGroups, row.currency, Math.max(0, row.balance));
+	}
+	const expiredBalanceGroups = new Map<string, number>();
+	for (const row of expiredActivePolicies) {
+		addMoneyGroup(expiredBalanceGroups, row.currency, Math.max(0, row.balance));
+	}
+	const cancelledBalanceGroups = new Map<string, number>();
+	for (const row of cancelledWithBalancePolicies) {
+		addMoneyGroup(cancelledBalanceGroups, row.currency, Math.max(0, row.balance));
 	}
 
 	const dueSoonBalanceGroups = new Map<string, number>();
@@ -673,6 +709,7 @@ export default async function AdminDashboardPage() {
 		policiesResult.error ? `Polizas: ${policiesResult.error}` : null,
 		pendingDocumentsResult.error ? `Documentos: ${pendingDocumentsResult.error}` : null,
 		notificationsResult.error ? `Alertas: ${notificationsResult.error}` : null,
+		tenantResult.error ? `Organización: ${tenantResult.error}` : null,
 	].filter(Boolean);
 
 	const alerts = [
@@ -717,6 +754,185 @@ export default async function AdminDashboardPage() {
 		new Set(riskPolicies.map((row) => row.policy.id)),
 	);
 	const maxAlertValue = Math.max(1, ...alerts.map((alert) => alert.value));
+	const riskPolicyIds = new Set(riskPolicies.map((row) => row.policy.id));
+	const monthStart = new Date();
+	monthStart.setUTCDate(1);
+	const policyMonths = policyTrend.map((point, index) => {
+		const date = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + index, 1));
+		const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+		const balanceGroups = new Map<string, number>();
+		for (const policy of policiesResult.rows) {
+			if (!riskPolicyIds.has(policy.id) || dateIso(policy.end_date).slice(0, 7) !== key) continue;
+			addMoneyGroup(
+				balanceGroups,
+				normalizeCurrency(policy.currency),
+				Math.max(0, toNumber(policy.balance)),
+			);
+		}
+		return {
+			label: point.label.replace(".", "").toUpperCase(),
+			count: point.expiring,
+			risk: point.atRisk,
+			balance: formatCompactMoneyGroups(balanceGroups),
+		};
+	});
+	const oldestExpiredDays = expiredActivePolicies.reduce((oldest, row) => {
+		const days = daysUntil(row.policy.end_date);
+		return days !== null && days < 0 ? Math.max(oldest, Math.abs(days)) : oldest;
+	}, 0);
+	const largestActiveBalance = activeWorks.reduce<WorkModel | null>(
+		(largest, row) => (!largest || row.saldo > largest.saldo ? row : largest),
+		null,
+	);
+	const largestBalanceShare = totalActiveSaldo > 0 && largestActiveBalance
+		? (largestActiveBalance.saldo / totalActiveSaldo) * 100
+		: 0;
+	const riskPct = policiesResult.rows.length > 0
+		? (riskPolicies.length / policiesResult.rows.length) * 100
+		: 0;
+	const nowLabel = new Intl.DateTimeFormat("es-AR", {
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+	}).format(new Date());
+	const formattedNowLabel = nowLabel.charAt(0).toUpperCase() + nowLabel.slice(1);
+	const expiredBalanceLabel = formatCompactMoneyGroups(expiredBalanceGroups);
+	const exposedExpiredAmount = expiredBalanceLabel === "Sin saldo" ? "$ 0" : expiredBalanceLabel;
+	const layout5aData: OperationalWorkspaceData = {
+		company: tenantResult.name,
+		updatedAt: formattedNowLabel,
+		unreadNotifications: notificationsResult.rows.length,
+		expiredPolicies: expiredActivePolicies.length,
+		flaggedAmount: exposedExpiredAmount,
+		lateWorks: delayedWorks.length,
+		activeWorks: activeWorks.length,
+		policySummary: [
+			`${numberFmt.format(expiredActivePolicies.length)} vencidas sin baja`,
+			`${exposedExpiredAmount} retenidos`,
+			oldestExpiredDays > 0 ? `la más antigua hace ${numberFmt.format(oldestExpiredDays)} días` : null,
+		].filter(Boolean).join(" · "),
+		projectTotals: {
+			progress: `${averageProgress.toFixed(0)}%`,
+			elapsed: `${averageElapsed.toFixed(0)}%`,
+			balance: formatCompactMoney(totalActiveSaldo),
+		},
+		errors: queryErrors as string[],
+		links: {
+			policies: "/dashboard",
+			works: "/excel",
+			reviews: "/document-generation/review",
+			notifications: "/notifications",
+		},
+		kpis: [
+			{
+				id: "contract",
+				label: "Contrato total",
+				value: formatCompactMoney(totalContract),
+				note: `${numberFmt.format(workModels.length)} obras · ${numberFmt.format(activeWorks.length)} activas`,
+				detail: {
+					title: "Contrato total",
+					description: "Suma de contratos más ampliaciones de todas las obras no eliminadas de la organización.",
+					row: "certificado sobre contrato",
+					value: `${certifiedPct.toFixed(1)}%`,
+					percentage: certifiedPct,
+					tone: "dark",
+				},
+			},
+			{
+				id: "certified",
+				label: "Certificado a la fecha",
+				value: formatCompactMoney(totalCertified),
+				note: `${certifiedPct.toFixed(1)}% del contrato`,
+				detail: {
+					title: "Certificado a la fecha",
+					description: "Monto ya certificado y registrado sobre la cartera completa.",
+					row: "% del contrato total",
+					value: `${certifiedPct.toFixed(1)}%`,
+					percentage: certifiedPct,
+					tone: "dark",
+				},
+			},
+			{
+				id: "balance",
+				label: "Saldo a certificar",
+				value: formatCompactMoney(totalActiveSaldo),
+				note: "ingreso futuro · obras activas",
+				tone: "warning",
+				detail: {
+					title: "Saldo a certificar",
+					description: largestActiveBalance
+						? `Ingreso futuro pendiente. La obra ${largestActiveBalance.obra.n ?? "—"} concentra ${largestBalanceShare.toFixed(0)}%.`
+						: "No hay saldo pendiente en las obras activas.",
+					row: "% del contrato total",
+					value: `${balancePct.toFixed(1)}%`,
+					percentage: balancePct,
+					tone: "orange",
+				},
+			},
+			{
+				id: "policies",
+				label: "Expuesto en pólizas",
+				value: formatCompactMoneyGroups(riskBalanceGroups),
+				note: `${numberFmt.format(riskPolicies.length)} pólizas con señales`,
+				tone: "danger",
+				detail: {
+					title: "Expuesto en pólizas",
+					description: "Saldos en pólizas con señales de riesgo. Las monedas se mantienen separadas.",
+					row: "pólizas con riesgo",
+					value: numberFmt.format(riskPolicies.length),
+					percentage: riskPct,
+					tone: "danger",
+				},
+			},
+		],
+		policyMonths,
+		signals: [
+			{ value: numberFmt.format(expiredActivePolicies.length), label: "Vencidas sin baja", note: formatCompactMoneyGroups(expiredBalanceGroups), tone: "danger" },
+			{ value: numberFmt.format(dueSoonPolicies.length), label: "Por vencer (60 días)", note: formatCompactMoneyGroups(dueSoonBalanceGroups), tone: "warning" },
+			{ value: numberFmt.format(cancelledWithBalancePolicies.length), label: "Bajas con saldo", note: formatCompactMoneyGroups(cancelledBalanceGroups), tone: "neutral" },
+			{ value: numberFmt.format(policiesWithoutEndDate.length), label: "Sin vencimiento", note: "fecha no registrada", tone: "neutral" },
+		],
+		projects: activeWorks.slice(0, 9).map((row, index) => {
+			const totalDays = toNumber(row.obra.plazo_total);
+			const elapsedDays = toNumber(row.obra.plazo_transc);
+			return {
+				id: row.obra.n ?? index + 1,
+				name: row.obra.designacion_y_ubicacion || "Obra sin nombre",
+				title: row.obra.designacion_y_ubicacion || "Obra sin nombre",
+				entity: row.obra.entidad_contratante || "Entidad no informada",
+				updated: formatDate(row.updatedAt),
+				progress: Math.round(row.progressPct),
+				elapsed: Math.round(row.timePct),
+				balance: formatCompactMoney(row.saldo),
+				balanceShare: totalActiveSaldo > 0 ? (row.saldo / totalActiveSaldo) * 100 : 0,
+				contract: formatMoney(toNumber(row.obra.contrato_mas_ampliaciones)),
+				certified: formatMoney(toNumber(row.obra.certificado_a_la_fecha)),
+				timeframe: totalDays > 0 ? `${numberFmt.format(elapsedDays)} de ${numberFmt.format(totalDays)} días` : "Plazo no configurado",
+				href: `/excel/${row.obra.id}`,
+			};
+		}),
+		notifications: notificationsResult.rows.slice(0, 2).map((notification) => ({
+			title: notification.title || "Alerta",
+			detail: notification.body || notification.type || "Sin detalle",
+			when: formatDate(notification.created_at),
+			href: notification.action_url || "/notifications",
+		})),
+		reviews: pendingDocumentsResult.rows.slice(0, 10).map((document) => ({
+			name: document.document_generation_templates?.name || document.document_type || "Documento",
+			work: document.obras?.n ?? "—",
+			status: document.status === "UNDER_REVIEW" ? "En revisión" as const : "Generado" as const,
+			when: formatDate(document.generated_at),
+			file: document.file_name || document.document_type || "Documento",
+			href: `/document-generation/review?id=${encodeURIComponent(document.id)}`,
+		})),
+	};
+
+	if (process.env.ADMIN_DASHBOARD_LAYOUT !== "legacy") {
+		return <OperationalWorkspace data={layout5aData} embedded />;
+	}
 
 	return (
 		<div className="admin-dashboard-sheet space-y-5 p-4 md:p-5">
@@ -733,10 +949,10 @@ export default async function AdminDashboardPage() {
 					</p>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<Badge variant="neutral" size="sm" className="shadow-card tabular-nums">
+					<Badge variant="neutral" size="sm" className="tabular-nums">
 						{numberFmt.format(obrasResult.rows.length)} obras
 					</Badge>
-					<Badge variant="neutral" size="sm" className="shadow-card tabular-nums">
+					<Badge variant="neutral" size="sm" className="tabular-nums">
 						{numberFmt.format(policiesResult.rows.length)} polizas
 					</Badge>
 				</div>

@@ -1,10 +1,13 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import Link from "next/link";
+
 
 import { Suspense, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { createSupabaseBrowserClient } from "@/utils/supabase/client";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, m } from "framer-motion";
+import { usePathname, useSearchParams } from "next/navigation";
 import { resolveTenantSwitchRedirect } from "@/lib/tenant-switch-redirect";
 
 const DesktopAsciiScene = dynamic(
@@ -18,6 +21,8 @@ type AuthModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   forcedOpen?: boolean;
+  initialMode?: "sign_in" | "sign_up";
+  entryPage?: boolean;
 };
 
 const MOBILE_NAVIGATION_PREVIEW_ORIGIN =
@@ -77,23 +82,25 @@ function useDesktopVisual() {
   return shouldShow;
 }
 
-function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalProps) {
-  const router = useRouter();
-  const { push, refresh } = router;
+function AuthModalContent({ open, onOpenChange, forcedOpen = false, initialMode = "sign_in", entryPage = false }: AuthModalProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryParams = new URLSearchParams(searchParams);
   const getSearchParam = (key: string): string | null => queryParams.get(key);
-  const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
+  const [mode, setMode] = useState<"sign_in" | "sign_up">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showOtherMethods, setShowOtherMethods] = useState(false);
 
   const returnTo = normalizeReturnPath(getSearchParam("returnTo"));
   const showDesktopVisual = useDesktopVisual();
+
+  useEffect(() => {
+    setReady(true);
+  }, []);
 
   const currentPathWithQuery = (() => {
     const current = `${pathname ?? "/"}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
@@ -102,29 +109,25 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
     setNotice(null);
     const supabase = createSupabaseBrowserClient();
+    let navigating = false;
     try {
       if (mode === "sign_in") {
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim(),
           password,
         });
         if (signInError) throw signInError;
 
-        await supabase.auth.getSession();
-        refresh();
-        onOpenChange(false);
-        setEmail("");
-        setPassword("");
-        if (returnTo) {
-          push(returnTo);
-        }
+        navigating = true;
+        window.location.assign(returnTo ?? (entryPage ? "/onboarding" : currentPathWithQuery));
       } else {
         const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
         });
         if (signUpError) throw signUpError;
@@ -132,7 +135,6 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         if (!signUpData.session) {
           setMode("sign_in");
           setPassword("");
-          setShowOtherMethods(true);
           setNotice("Te enviamos un correo de confirmación. Abrilo y después iniciá sesión para continuar.");
           return;
         }
@@ -142,15 +144,13 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
           (currentPathWithQuery.startsWith("/invitations/")
             ? currentPathWithQuery
             : "/onboarding");
-        push(signUpDestination);
-        onOpenChange(false);
-        setEmail("");
-        setPassword("");
+        navigating = true;
+        window.location.assign(signUpDestination);
       }
     } catch (err: unknown) {
       setError(getAuthErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (!navigating) setLoading(false);
     }
   }
 
@@ -179,13 +179,13 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
 
   return (
     <div
-      className="fixed inset-0 z-[10000001] bg-canvas"
-      role="dialog"
-      aria-modal="true"
+      className={entryPage ? "min-h-dvh bg-canvas" : "fixed inset-0 z-[10000001] bg-canvas"}
+      role={entryPage ? undefined : "dialog"}
+      aria-modal={entryPage ? undefined : true}
       aria-labelledby="auth-modal-title"
       aria-describedby="auth-modal-description"
     >
-      {forcedOpen ? (
+      {entryPage ? null : forcedOpen ? (
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
       ) : (
         <button
@@ -201,14 +201,18 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
         </div>
         <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-surface px-5 py-6 text-content sm:px-10 sm:py-8">
         <div className="flex items-center justify-end gap-4">
-          {!forcedOpen && (
-            <button
+          {entryPage ? (
+            <Link href="/" className="text-sm text-content-secondary underline underline-offset-4">
+              Volver al inicio
+            </Link>
+          ) : !forcedOpen && (
+            <Button variant="outline"
               type="button"
               onClick={() => onOpenChange(false)}
-              className="rounded-md border border-stroke px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-surface-recessed active:scale-[0.97]"
+              className="px-3 py-1.5 text-sm font-medium transition-colors duration-150 active:scale-[0.97]"
             >
               Cerrar
-            </button>
+            </Button>
           )}
         </div>
 
@@ -222,7 +226,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                 Bienvenido a Síntesis
               </h2>
               <p id="auth-modal-description" className="text-sm uppercase tracking-wide text-content-muted">
-                {mode === "sign_in" ? "Iniciar sesión" : "Crear tu espacio"}
+                {mode === "sign_in" ? "Iniciar sesión" : "Crear tu cuenta"}
               </p>
               <p className="max-w-sm text-sm leading-6 text-content-secondary">
                 {mode === "sign_in"
@@ -230,11 +234,67 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                   : "Usá tu correo habitual. Después te guiaremos para preparar la organización."}
               </p>
             </div>
-            <button
+            <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-sm" htmlFor="email">
+                      Correo electrónico
+                    </label>
+                    <Input
+                      id="email"
+                      type="email"
+                      disabled={!ready || loading}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      placeholder="nombre@empresa.com"
+                      required
+                      className="min-h-11 w-full px-3 py-2 text-base transition-[border-color,box-shadow] duration-150 sm:text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm" htmlFor="password">
+                      Contraseña
+                    </label>
+                    <Input
+                      id="password"
+                      type="password"
+                      disabled={!ready || loading}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
+                      minLength={mode === "sign_up" ? 8 : undefined}
+                      placeholder={mode === "sign_up" ? "Mínimo 8 caracteres" : "Tu contraseña"}
+                      required
+                      className="min-h-11 w-full px-3 py-2 text-base transition-[border-color,box-shadow] duration-150 sm:text-sm"
+                    />
+                    {mode === "sign_up" && (
+                      <p className="text-xs text-content-muted">Usá 8 caracteres o más.</p>
+                    )}
+                  </div>
+                  {error && (
+                    <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
+                  {notice && (
+                    <div role="status" className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800">
+                      {notice}
+                    </div>
+                  )}
+                  <Button variant="outline"
+                    type="submit"
+                    disabled={!ready || loading}
+                    className="inline-flex min-h-11 w-full items-center justify-center px-4 py-2 text-sm font-semibold transition-[transform,filter] duration-150 hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {!ready ? "Preparando formulario…" : loading ? "Cargando..." : mode === "sign_in" ? "Iniciar sesión" : "Crear cuenta"}
+                  </Button>
+            </div>
+          </form>
+          <Button variant={"dark"}
               type="button"
               onClick={handleGoogleSignIn}
-              disabled={loading}
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-stroke-strong bg-stone-950 px-4 py-2 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_2px_5px_rgba(0,0,0,0.18)] transition-[transform,background-color] duration-150 hover:bg-stone-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!ready || loading}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-semibold transition-[transform,background-color] duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <svg className="size-5" viewBox="0 0 24 24">
                 <path
@@ -255,96 +315,12 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                 />
               </svg>
               {mode === "sign_in" ? "Ingresar con Google" : "Continuar con Google"}
-            </button>
-            <div className="my-4 flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" />
-              <button
-                type="button"
-                onClick={() => setShowOtherMethods(!showOtherMethods)}
-                className="cursor-pointer text-xs font-medium text-content-muted transition-colors duration-150 hover:text-content"
-              >
-                {showOtherMethods
-                  ? "Ocultar acceso con correo"
-                  : mode === "sign_in"
-                    ? "Ingresar con correo"
-                    : "Registrarme con correo"}
-              </button>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <AnimatePresence>
-              {showOtherMethods && (
-                <m.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-3 overflow-hidden"
-                >
-                  <div className="space-y-1">
-                    <label className="text-sm" htmlFor="email">
-                      Correo electrónico
-                    </label>
-                    <input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      autoComplete="email"
-                      placeholder="nombre@empresa.com"
-                      required
-                      className="min-h-11 w-full rounded-md border border-stroke bg-surface px-3 py-2 text-base shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-content-disabled focus:border-stroke-strong focus:ring-2 focus:ring-orange-primary/20 sm:text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm" htmlFor="password">
-                      Contraseña
-                    </label>
-                    <input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
-                      minLength={mode === "sign_up" ? 8 : undefined}
-                      placeholder={mode === "sign_up" ? "Mínimo 8 caracteres" : "Tu contraseña"}
-                      required
-                      className="min-h-11 w-full rounded-md border border-stroke bg-surface px-3 py-2 text-base shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-content-disabled focus:border-stroke-strong focus:ring-2 focus:ring-orange-primary/20 sm:text-sm"
-                    />
-                    {mode === "sign_up" && (
-                      <p className="text-xs text-content-muted">Usá 8 caracteres o más.</p>
-                    )}
-                  </div>
-                  {error && (
-                    <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700">
-                      {error}
-                    </div>
-                  )}
-                  {notice && (
-                    <div role="status" className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800">
-                      {notice}
-                    </div>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-orange-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.32),0_2px_5px_rgba(126,45,0,0.22)] transition-[transform,filter] duration-150 hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {loading ? "Cargando..." : mode === "sign_in" ? "Iniciar sesión" : "Crear mi espacio"}
-                  </button>
-                </m.div>
-              )}
-            </AnimatePresence>
-            {!showOtherMethods && error && (
-              <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-            {!showOtherMethods && notice && (
-              <div role="status" className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800">
-                {notice}
-              </div>
-            )}
-          </form>
+            </Button>
+          <p className="text-center text-xs text-content-muted">
+            <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">
+              Política de privacidad (abre en otra pestaña)
+            </Link>
+          </p>
 
           <div className="text-center text-sm">
             {mode === "sign_in" ? (
@@ -358,7 +334,7 @@ function AuthModalContent({ open, onOpenChange, forcedOpen = false }: AuthModalP
                 }}
                 className="font-medium text-content-secondary underline-offset-4 transition-colors duration-150 hover:text-content hover:underline"
               >
-                ¿Primera vez? Crear mi espacio
+                ¿Primera vez? Crear cuenta
               </button>
             ) : (
               <button

@@ -4,6 +4,15 @@ const HIGH_DEMAND_PATTERNS = [
   "please try again later",
 ];
 
+export class OcrProviderUnavailableError extends Error {
+  readonly code = "OCR_PROVIDER_UNAVAILABLE";
+
+  constructor() {
+    super("El proveedor OCR no esta disponible temporalmente. Intenta de nuevo mas tarde.");
+    this.name = "OcrProviderUnavailableError";
+  }
+}
+
 const HIGH_DEMAND_MESSAGE_ES =
   "Este modelo esta experimentando alta demanda. Los picos de demanda suelen ser temporales. Intenta de nuevo mas tarde.";
 const HIGH_DEMAND_PATTERNS_ES = [

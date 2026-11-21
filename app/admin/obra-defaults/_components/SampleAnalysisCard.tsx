@@ -73,6 +73,8 @@ type AppliedSummary = {
 
 type SampleAnalysisCardProps = {
   onApply: (definitionJson: string) => void;
+  initialSample?: { fileName: string; analysis: SampleAnalysis };
+  allowSampleReplacement?: boolean;
 };
 
 function hasAcceptedExtension(fileName: string) {
@@ -131,16 +133,19 @@ function Segmented<T extends string>({
   );
 }
 
-export function SampleAnalysisCard({ onApply }: SampleAnalysisCardProps) {
-  const [status, setStatus] = useState<Status>("idle");
-  const [fileName, setFileName] = useState("");
-  const [analysis, setAnalysis] = useState<SampleAnalysis | null>(null);
+export function SampleAnalysisCard({ onApply, initialSample, allowSampleReplacement = true }: SampleAnalysisCardProps) {
+  const [status, setStatus] = useState<Status>(initialSample ? "review" : "idle");
+  const [fileName, setFileName] = useState(initialSample?.fileName ?? "");
+  const [analysis, setAnalysis] = useState<SampleAnalysis | null>(initialSample?.analysis ?? null);
   const [selectedFieldKeys, setSelectedFieldKeys] = useState<Set<string>>(
-    new Set(),
+    () => new Set(initialSample?.analysis.fields.map(field => field.fieldKey)),
   );
   const [tableSelections, setTableSelections] = useState<
     Map<string, TableSelection>
-  >(new Map());
+  >(() => new Map(initialSample?.analysis.tables.map(table => [table.label, {
+    enabled: true,
+    columnFieldKeys: new Set(table.columns.map(column => column.fieldKey)),
+  }])));
   const [answers, setAnswers] = useState<SampleAnswers>({});
   const [appliedSummary, setAppliedSummary] = useState<AppliedSummary | null>(
     null,
@@ -502,6 +507,7 @@ export function SampleAnalysisCard({ onApply }: SampleAnalysisCardProps) {
               variant="ghost"
               size="sm"
               onClick={resetToIdle}
+              disabled={!allowSampleReplacement}
             >
               <RefreshCw className="mr-2 size-4" />
               Usar otro ejemplo
@@ -811,6 +817,7 @@ export function SampleAnalysisCard({ onApply }: SampleAnalysisCardProps) {
             variant="ghost"
             size="sm"
             onClick={resetToIdle}
+            disabled={!allowSampleReplacement}
           >
             <RefreshCw className="mr-2 size-4" />
             Usar otro ejemplo
