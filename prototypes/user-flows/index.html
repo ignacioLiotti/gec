@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Síntesis · Laboratorio de recorridos</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../design-system/tokens.css">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#workspace">Ir al recorrido</a>
+  <header class="lab-header">
+    <div><strong class="wordmark">SÍNTESIS<span aria-hidden="true">.</span></strong><span class="lab-label">Laboratorio de recorridos</span></div>
+    <p>Propuestas · datos ficticios · sin conexión a tu empresa</p>
+  </header>
+  <div class="lab-layout">
+    <aside class="experiment-list" aria-label="Experimentos independientes">
+      <p class="eyebrow">01 — Elegí qué probar</p>
+      <h1>Probá los nuevos recorridos.</h1>
+      <p class="muted">Cada interruptor conserva su elección. Desactivarlo muestra el recorrido existente, resumido desde el código.</p>
+      <div id="experiments"></div>
+      <div class="aside-footer"><button id="reset-all" class="quiet">Restablecer laboratorio</button><a href="../../docs/ux/2026-09-simplification.md">Leer investigación completa ↗</a></div>
+    </aside>
+    <main id="workspace" tabindex="-1">
+      <div class="scenario-header"><div><p class="eyebrow" id="scenario-kicker"></p><h2 id="scenario-title"></h2><p id="scenario-goal" class="muted"></p></div><div class="mode-switch" role="group" aria-label="Versión del recorrido"><button id="current-mode" aria-pressed="false">Existente</button><button id="proposal-mode" aria-pressed="true">Propuesta</button></div></div>
+      <div id="comparison" class="comparison"></div>
+      <div class="preview-toolbar"><p id="preview-label"></p><div><label for="fixture">Estado</label><select id="fixture"><option value="normal">Disponible</option><option value="empty">Sin datos</option><option value="loading">Cargando</option><option value="error">Error recuperable</option><option value="readonly">Sin permiso para actuar</option></select><button id="restart">Reiniciar recorrido</button></div></div>
+      <section class="preview-region" aria-label="Vista del recorrido"><div id="preview"></div></section>
+      <section id="evidence" class="evidence" aria-label="Fundamento de la propuesta"></section>
+      <p id="announcement" class="sr-only" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+  <noscript>Activá JavaScript para comparar los prototipos. La investigación está en docs/ux/2026-09-simplification.md.</noscript>
+</body>
+</html>
