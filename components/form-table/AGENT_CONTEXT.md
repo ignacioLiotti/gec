@@ -8,11 +8,28 @@ This is a shared UI engine. Changes here can affect multiple product surfaces, e
 
 ## Main files
 
-- `form-table.tsx`: main `FormTable` implementation plus toolbar, tabs, pagination, required validator, form state, virtualized table, save/delete behavior, sorting/search/filter integration, column visibility, pinned columns, and public subcomponents.
+- `README.md`: direct map from a visible control or behavior to its owning file. Read the matching row before following imports.
+- `form-table.tsx`: public exports, state composition, page coordination, activity feedback and public context. Table markup lives in the visual files below.
+- `form-table-layout.tsx`: default page/embedded surface; custom children still replace it.
+- `form-table-toolbar.tsx`, `form-table-tabs.tsx`, `form-table-pagination.tsx`, `form-table-bulk-edit.tsx`: JSX and styles for those visible regions. Save/add/discard buttons live in pagination.
+- `form-table-content.tsx`: viewport, loading/error/empty states and one row-rendering path shared by virtualized and ordinary tables.
+- `table-header.tsx`: column/group headers, sort buttons/menus and resize handles.
+- `table-editing.ts`: form state, submitted snapshots, dirty index, row/cell writes, add/delete/save/discard.
+- `table-fetch.ts`: default server hydration, fetch lifecycle, refresh events and stale-response rejection.
+- `table-search.ts`, `table-filters.ts`, `table-sorting.ts`, `table-tabs.ts`: state owners for the corresponding controls.
+- `table-row-pipeline.ts`: query evaluation, tab counts and client sort, with a query-scoped cache of immutable rows.
+- `table-row-model.ts`: incremental flat TanStack row model. Read ADR-0036 before changing cache invalidation or upgrading TanStack.
+- `table-columns.ts`: hidden/pinned columns, widths, DOM measurements and resize subscriptions.
+- `table-navigation.ts`: keyboard focus, pointer/hover interactions and drag gestures.
+- `table-bulk-selection.ts`, `table-accordion.ts`: selection/writes and expansion state respectively.
+- `table-export.ts`: clipboard and CSV, including consumer export overrides.
 - `types.ts`: config contract for rows, columns, cell types, filters, server pagination, save/fetch functions, row coloring, accordion rows, and table state.
 - `table-body.tsx`: memoized row rendering, hover/active-cell behavior, row color overlays, accordion rows, delete actions.
 - `table-cell.tsx`: editable/read-only cell behavior, focus handling, context menu, copy/clear/restore, suggestions, date parsing.
-- `cell-renderers.tsx`: display/input rendering by cell type.
+- `cell-renderers.tsx`: display formatting and editor selection by cell type; checkbox/select/link and other compact editors.
+- `cell-buffered-inputs.tsx`: input/textarea drafts, form synchronization and blur commits.
+- `cell-date-editor.tsx`: typed date and calendar editor.
+- `cell-suggestion-prompt.tsx`: suggestion button/popover JSX.
 - `cell-suggestions.ts`: typed suggestions for date/number/currency/math/text/select inputs.
 - `dirty-tracking.ts`: row/cell dirty comparison against initial snapshots.
 - `table-utils.ts`: row creation, search/sort helpers, CSV/copy helpers, shallow equality.
@@ -28,6 +45,8 @@ This is a shared UI engine. Changes here can affect multiple product surfaces, e
 - Treat `types.ts` as a public API. Changing config shapes requires checking all configs/usages.
 - Prefer adding behavior through config options over special-casing one consumer.
 - Preserve virtualization and memoization boundaries; avoid changes that force all cells/rows to re-render on every keystroke.
+- Update rows immutably. Replace predicate/column objects when their meaning changes so query and accessor caches invalidate.
+- Keep small visual helpers beside their owning region; do not add forwarding component or hook layers.
 - Keep cell behavior keyboard-accessible. Existing active-cell, focus, Enter navigation, copy, clear, restore, and context menu behavior are intentional.
 - Dirty tracking must compare against initial snapshots without mutating row objects.
 - Do not introduce domain-specific logic into core table files. Put obras/certificados behavior in `configs/**`.
@@ -46,9 +65,11 @@ This is a shared UI engine. Changes here can affect multiple product surfaces, e
 - `docs/obsidian-brain/06 - Excel View.md`
 - `docs/obsidian-brain/36 - Dynamic Tables Deep Dive.md`
 - `docs/styleguide/README.md`
+- `docs/architecture/form-table-refactor-validation.md`
 
 ## Related ADRs
 
+- `docs/adr/0036-form-table-state-ownership-and-row-reuse.md` for state ownership, row-model reuse and query cache invariants.
 - `docs/adr/0001-stable-lineage-for-extracted-rows.md` when table rows display or preserve extracted-row identity.
 - `docs/adr/0002-macro-table-overrides-bind-to-lineage.md` when table behavior affects macro override sources.
 - `docs/adr/0005-general-tab-layout-owned-by-data-flow.md` only if table config feeds General-tab layout/results.
@@ -61,6 +82,7 @@ Read first:
 
 - `types.ts`
 - `cell-renderers.tsx`
+- `cell-buffered-inputs.tsx` or `cell-date-editor.tsx` when changing those editors
 - `table-cell.tsx`
 - `form-table.tsx` only if table-level config changes
 - `tests/components/form-table/cell-suggestions.test.ts` if suggestions are involved
@@ -74,10 +96,10 @@ Do not read first:
 
 Read first:
 
-- `form-table.tsx`
+- `table-editing.ts`
 - `dirty-tracking.ts`
 - `table-utils.ts`
-- `table-body.tsx`
+- `form-table-pagination.tsx` for save/discard/add button markup; `table-body.tsx` for row delete markup
 - relevant consumer config under `configs/**`
 
 Do not read first:
@@ -89,7 +111,9 @@ Do not read first:
 
 Read first:
 
-- `form-table.tsx`
+- The matching state owner: `table-search.ts`, `table-sorting.ts`, `table-filters.ts`, or `table-tabs.ts`
+- The matching visual owner from `README.md`; `form-table.tsx` for page coordination
+- `table-row-pipeline.ts` for counts or filtering/sorting results
 - `types.ts`
 - `table-utils.ts`
 - `filter-components.tsx`
@@ -120,8 +144,8 @@ Read first:
 
 - `table-cell.tsx`
 - `table-body.tsx`
-- `form-table.tsx`
-- `cell-renderers.tsx` if inputs are involved
+- `table-navigation.ts`
+- `cell-buffered-inputs.tsx` or `cell-date-editor.tsx` if drafts/blur are involved
 
 Do not read first:
 
@@ -153,7 +177,7 @@ Stop exploring when remaining questions are about unrelated table consumers or f
 - Update styleguide docs when changing reusable table, toolbar, filters, loading, empty, error, or cell interaction patterns.
 - Update architecture docs when changing server pagination/fetch/save contract.
 - Update domain docs only when table behavior changes product semantics, not for visual-only table changes.
-- Update ADRs only for table behavior that affects lineage, macro override identity, or data-flow ownership.
+- Update ADRs for lineage, macro override identity, data-flow ownership, or changes to the cache/ownership decisions in ADR-0036.
 
 ## Known risks
 
@@ -176,6 +200,9 @@ Stop exploring when remaining questions are about unrelated table consumers or f
 
 ## Validation
 
+- Core refactor: `npm run test:form-table`, `npm run test:form-table:browser`, `npm run typecheck:form-table`. Browser prerequisites and Chrome selection are in `README.md`.
+- Shared engine change: also run `npm test` and `npx tsc --noEmit` to check downstream TypeScript consumers.
+- Focused lint: `npx eslint components/form-table tests/components/form-table playwright.form-table.config.ts`.
 - General changes: `pnpm lint`.
 - Cell suggestions: `pnpm test -- tests/components/form-table/cell-suggestions.test.ts`.
 - Parsing/formula behavior used by cells: `pnpm test -- tests/lib/tablas.test.ts`.

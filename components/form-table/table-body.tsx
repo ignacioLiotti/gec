@@ -600,6 +600,10 @@ export const MemoizedTableRow = memo(TableRowInner, (prevProps, nextProps) => {
 	return (
 		prevProps.row.id === nextProps.row.id &&
 		prevProps.row.original === nextProps.row.original &&
+		prevProps.columnsById === nextProps.columnsById &&
+		prevProps.rowClassName === nextProps.rowClassName &&
+		prevProps.rowColorInfo === nextProps.rowColorInfo &&
+		prevProps.rowOverlayBadges === nextProps.rowOverlayBadges &&
 		prevProps.rowIndex === nextProps.rowIndex &&
 		prevProps.externalRefreshVersion === nextProps.externalRefreshVersion &&
 		prevProps.tableReadOnly === nextProps.tableReadOnly &&

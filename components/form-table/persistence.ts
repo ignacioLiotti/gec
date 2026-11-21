@@ -39,12 +39,27 @@ export function writePersistedNumber(key: string, value: number) {
 	}
 }
 
+export function readPersistedActiveTab(storageKey: string) {
+	if (typeof window === "undefined") return null;
+	try {
+		const raw = window.localStorage.getItem(storageKey);
+		if (!raw) return null;
+		try {
+			const parsed = JSON.parse(raw) as unknown;
+			return typeof parsed === "string" ? parsed : null;
+		} catch {
+			return raw;
+		}
+	} catch {
+		return null;
+	}
+}
 
-
-
-
-
-
-
-
-
+export function writePersistedActiveTab(storageKey: string, activeTab: string) {
+	if (typeof window === "undefined") return;
+	try {
+		window.localStorage.setItem(storageKey, JSON.stringify(activeTab));
+	} catch {
+		// Ignore storage write failures.
+	}
+}

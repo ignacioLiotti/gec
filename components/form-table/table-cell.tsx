@@ -519,7 +519,7 @@ export const MemoizedTableCell = memo(TableCellInner, (prevProps, nextProps) => 
 			`${nextProps.activeCell?.rowId}:${nextProps.activeCell?.columnId}`);
 	return (
 		prevProps.rowId === nextProps.rowId &&
-		prevProps.column.id === nextProps.column.id &&
+		prevProps.column === nextProps.column &&
 		prevProps.tableReadOnly === nextProps.tableReadOnly &&
 		prevProps.highlightQuery === nextProps.highlightQuery &&
 		prevProps.editMode === nextProps.editMode &&
