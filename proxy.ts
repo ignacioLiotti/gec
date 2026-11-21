@@ -178,6 +178,21 @@ function enforceCsrf(req: NextRequest) {
 
 export async function proxy(req: NextRequest) {
 	const pathname = req.nextUrl.pathname;
+	// Only this local fixture page can opt out of the authenticated app shell.
+	// Never trust a marker supplied by the browser on another route.
+	const requestHeaders = new Headers(req.headers);
+	requestHeaders.delete("x-sintesis-contextual-flow-demo");
+	const isContextualFlowDemo =
+		process.env.NODE_ENV === "development" &&
+		process.env.CONTEXTUAL_FLOW_DEMOS === "1" &&
+		pathname === "/portfolio/previews/contextual-flows" &&
+		(req.method === "GET" || req.method === "HEAD");
+	if (isContextualFlowDemo) {
+		requestHeaders.set("x-sintesis-contextual-flow-demo", "1");
+		const demoResponse = NextResponse.next({ request: { headers: requestHeaders } });
+		demoResponse.headers.set("x-sintesis-allow-same-origin-frame", "1");
+		return attachSecurityHeaders(demoResponse);
+	}
 
 	const csrfFailure = enforceCsrf(req);
 	if (csrfFailure) {
@@ -222,7 +237,7 @@ export async function proxy(req: NextRequest) {
 		}
 	}
 
-	const res = NextResponse.next({ request: { headers: req.headers } });
+	const res = NextResponse.next({ request: { headers: requestHeaders } });
 	if (pathname.startsWith("/portfolio/previews/")) {
 		res.headers.set("x-sintesis-allow-same-origin-frame", "1");
 	}

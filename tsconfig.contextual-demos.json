@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": []
+  },
+  "include": [
+    "next-env.d.ts",
+    "app/portfolio/previews/contextual-flows/**/*.ts",
+    "app/portfolio/previews/contextual-flows/**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
+}
