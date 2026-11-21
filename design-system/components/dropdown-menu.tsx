@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { Check, ChevronRight, Circle } from "lucide-react"
@@ -36,7 +38,7 @@ export const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      "z-dropdown min-w-32 overflow-hidden rounded-md border border-stroke bg-surface p-1 text-content shadow-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "z-modal min-w-32 overflow-hidden rounded-md border border-stroke bg-surface p-1 text-content shadow-card data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -52,8 +54,8 @@ export interface DropdownMenuContentProps extends React.ComponentPropsWithoutRef
 export const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   DropdownMenuContentProps
->(({ className, children, heading = "Actions", hideHeading = false, sideOffset = 6, ...props }, ref) => {
-  const showHeading = !hideHeading && heading !== null && heading !== false
+>(({ className, children, heading, hideHeading = false, sideOffset = 6, ...props }, ref) => {
+  const showHeading = !hideHeading && heading != null && heading !== false
 
   return (
     <DropdownMenuPrimitive.Portal>
@@ -61,7 +63,7 @@ export const DropdownMenuContent = React.forwardRef<
         ref={ref}
         sideOffset={sideOffset}
         className={cn(
-          "z-dropdown min-w-40 overflow-hidden rounded-md border border-stroke bg-surface p-1 text-content shadow-dropdown data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+          "z-modal min-w-40 overflow-hidden rounded-md border border-stroke bg-surface p-1 text-content shadow-dropdown data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           className
         )}
         {...props}
@@ -83,13 +85,14 @@ DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
 
 export const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & { inset?: boolean }
->(({ className, inset, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & { inset?: boolean; variant?: "default" | "destructive" }
+>(({ className, inset, variant = "default", ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm text-content outline-none transition-colors focus:bg-surface-recessed data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-content outline-none transition-colors focus:bg-surface-recessed data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
       inset && "pl-8",
+      variant === "destructive" && "text-destructive focus:bg-destructive/10 focus:text-destructive",
       className
     )}
     {...props}

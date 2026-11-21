@@ -1,6 +1,8 @@
+"use client"
+
 import * as React from "react"
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
-import { Check } from "lucide-react"
+import { Check, Minus } from "lucide-react"
 import { cn } from "../lib/utils"
 
 const checkedControlShadow =
@@ -10,7 +12,7 @@ export type CheckboxSize = "sm" | "md" | "lg"
 
 const checkboxSizes: Record<CheckboxSize, { root: string; icon: string }> = {
   sm: {
-    root: "h-[1.125rem] w-[1.125rem] rounded-[5px]",
+    root: "size-4 rounded-sm",
     icon: "h-3.5 w-3.5"
   },
   md: {
@@ -33,11 +35,12 @@ export type CheckboxProps = Omit<
 export const Checkbox = React.forwardRef<
   React.ElementRef<typeof CheckboxPrimitive.Root>,
   CheckboxProps
->(({ className, size = "md", ...props }, ref) => (
+>(({ className, size = "sm", ...props }, ref) => (
   <CheckboxPrimitive.Root
     ref={ref}
+    data-slot="checkbox"
     className={cn(
-      "peer shrink-0 cursor-pointer border border-stroke bg-surface text-primary-foreground shadow-[inset_0_1px_0_0_#dcdcdc,inset_0_-1px_0_0_#fff,0_0_0_1px_#dcdcdc] transition-[background-color,border-color,box-shadow,color,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-primary/20 active:translate-y-px active:duration-100 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-colors data-[state=checked]:border-orange-primary data-[state=checked]:bg-orange-primary",
+      "peer shrink-0 cursor-pointer border border-stroke bg-surface text-primary-foreground shadow-[inset_0_1px_0_0_#dcdcdc,inset_0_-1px_0_0_#fff,0_0_0_1px_#dcdcdc] transition-[background-color,border-color,box-shadow,color,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-primary/20 active:translate-y-px active:duration-100 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-colors data-[state=checked]:border-orange-primary data-[state=checked]:bg-orange-primary data-[state=indeterminate]:bg-orange-primary data-[state=indeterminate]:border-orange-primary aria-invalid:border-destructive",
       checkboxSizes[size].root,
       checkedControlShadow,
       className
@@ -45,10 +48,10 @@ export const Checkbox = React.forwardRef<
     {...props}
   >
     <CheckboxPrimitive.Indicator
-      forceMount
-      className="flex items-center justify-center text-current opacity-0 scale-90 translate-y-1 transition-[opacity,scale,translate,filter] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none data-[state=checked]:translate-y-0 data-[state=checked]:opacity-100 data-[state=checked]:blur-0 data-[state=checked]:scale-100"
+      className="group grid place-content-center text-current"
     >
-      <Check className={checkboxSizes[size].icon} />
+      <Check className={cn(checkboxSizes[size].icon, "group-data-[state=indeterminate]:hidden")} />
+      <Minus className={cn(checkboxSizes[size].icon, "hidden group-data-[state=indeterminate]:block")} />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ))

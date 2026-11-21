@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Slot, Slottable } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../lib/utils"
 
@@ -14,15 +15,16 @@ export const badgeVariants = cva(
         defaultSolid: cn("border-orange-primary/70 bg-orange-primary text-primary-foreground", solidBadgeShadow),
         secondary: "border-accent-border/70 bg-accent-soft text-orange-primary",
         neutral: "border-stroke-soft bg-surface text-content-secondary",
+        category: "border-category/25 bg-category/10 text-category",
         outline: "border-stroke-soft bg-card text-content-secondary",
-        info: "border-primary/25 bg-primary/10 text-primary",
-        infoSolid: cn("border-primary/70 bg-primary text-primary-foreground", solidBadgeShadow),
+        info: "border-info/25 bg-info/10 text-info",
+        infoSolid: cn("border-info/70 bg-info text-info-foreground", solidBadgeShadow),
         destructive: "border-destructive/30 bg-destructive/10 text-destructive",
         destructiveSolid: cn("border-destructive/70 bg-destructive text-destructive-foreground", solidBadgeShadow),
         success: "border-success/25 bg-success/10 text-success",
         successSolid: cn("border-success/70 bg-success text-success-foreground", solidBadgeShadow),
         warning: "border-warning/35 bg-warning/15 text-warning-foreground",
-        warningSolid: cn("border-warning/70 bg-warning text-warning-foreground", solidBadgeShadow)
+        warningSolid: cn("border-warning/70 bg-warning text-stone-950", solidBadgeShadow)
       },
       size: {
         xs: "h-5 gap-1 rounded-sm px-2 text-[10px]",
@@ -85,7 +87,8 @@ const badgeCountVariants = cva("shrink-0 font-semibold tabular-nums opacity-80",
   }
 })
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {
+  asChild?: boolean
   count?: React.ReactNode
   dot?: boolean
   leadingIcon?: React.ReactNode
@@ -94,6 +97,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, Varian
 
 export function Badge({
   className,
+  asChild = false,
   variant,
   size,
   shape,
@@ -104,24 +108,25 @@ export function Badge({
   children,
   ...props
 }: BadgeProps) {
+  const Comp = asChild ? Slot : "span"
   const hasChildren = children !== undefined && children !== null
   const hasCount = count !== undefined && count !== null
 
   return (
-    <div className={cn(badgeVariants({ variant, size, shape }), className)} {...props}>
+    <Comp data-slot="badge" className={cn(badgeVariants({ variant, size, shape }), className)} {...props}>
       {dot ? <span aria-hidden="true" className={badgeDotVariants({ size })} /> : null}
       {leadingIcon ? (
         <span aria-hidden="true" className={badgeIconVariants({ size })}>
           {leadingIcon}
         </span>
       ) : null}
-      {hasChildren ? <span className="min-w-0 truncate">{children}</span> : null}
+      {asChild ? <Slottable>{children}</Slottable> : hasChildren ? <span className="min-w-0 truncate">{children}</span> : null}
       {hasCount ? <span className={badgeCountVariants({ size })}>{count}</span> : null}
       {trailingIcon ? (
         <span aria-hidden="true" className={badgeIconVariants({ size })}>
           {trailingIcon}
         </span>
       ) : null}
-    </div>
+    </Comp>
   )
 }

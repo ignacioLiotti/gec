@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import "@xyflow/react/dist/style.css";
@@ -37,6 +38,8 @@ const ENABLE_REACT_SCAN =
 	process.env.NODE_ENV === "development" &&
 	process.env.NEXT_PUBLIC_ENABLE_REACT_SCAN !== "false";
 const ENABLE_VERCEL_CLIENT_TELEMETRY = process.env.NODE_ENV === "production";
+const IS_CONTEXTUAL_FLOW_DEMO =
+	process.env.NODE_ENV === "development" && process.env.CONTEXTUAL_FLOW_DEMOS === "1";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -113,6 +116,22 @@ export default async function RootLayout({
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
+	if (
+		IS_CONTEXTUAL_FLOW_DEMO &&
+		(await headers()).get("x-sintesis-contextual-flow-demo") === "1"
+	) {
+		return (
+			<html lang="es">
+				<body className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}>
+					<LazyMotionProvider>
+						{children}
+						<Toaster position="bottom-right" richColors />
+					</LazyMotionProvider>
+				</body>
+			</html>
+		);
+	}
+
 	if (DEBUG_AUTH) {
 		console.log("[LAYOUT] RootLayout rendering...");
 	}
@@ -318,11 +337,13 @@ export default async function RootLayout({
 	return (
 		<html lang="es">
 			<head>
-				{/* eslint-disable-next-line @next/next/no-sync-scripts */}
+				{!IS_CONTEXTUAL_FLOW_DEMO && (
+				// eslint-disable-next-line @next/next/no-sync-scripts
 				<script
 					src="https://cdn.visitors.now/v.js"
 					data-token="da42e150-7fc0-4c6a-bb2f-19519ea78470"
 				></script>
+				)}
 			</head>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}

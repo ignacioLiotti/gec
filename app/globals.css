@@ -74,7 +74,10 @@
 	--text-xs: 0.6875rem; /* 11px — dense labels, badges */
 	--text-sm: 0.8125rem; /* 13px — default UI text */
 
-	--color-orange-primary: #ff5800;
+	--color-orange-primary: hsl(var(--orange-primary));
+	--color-info: hsl(var(--info));
+	--color-category: hsl(var(--category));
+	--color-info-foreground: hsl(var(--info-foreground));
 
 	--z-dropdown: 40;
 	--z-sticky: 50;
@@ -89,10 +92,6 @@
 	--duration-press: 34ms;
 	--ease-standard: cubic-bezier(0.2, 0, 0, 1);
 	--ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
-
-	--shadow-card:
-		0 0 0 1px #ffffff14 inset, 0 0 0 1px #09090b1f,
-		0 0.7px 0.9px -1px #09090b14, 0 3px 4px -2px #09090b24;
 
 	--bg-login-button:
 		radial-gradient(100% 50% at 50% 0, #fff3 0, #fff0 100%),
@@ -328,28 +327,8 @@
 }
 
 :root {
-	--radius: 0.5rem;
-	--background: oklch(0.975 0 106);
 
-	--foreground: oklch(0.145 0 0);
-	--card: #fff;
-	--card-foreground: oklch(0.145 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: #ff5800;
-	--orange-primary: 21 100% 50%;
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.97 0.003 106);
-	--secondary-foreground: oklch(0.205 0 0);
-	--muted: oklch(0.905 0 106);
-	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.96 0.005 106);
-	--accent-foreground: oklch(0.205 0 0);
-	--destructive: oklch(0.577 0.245 27.325);
 	/* --border: oklch(0.922 0 0); */
-	--border: oklch(0.17 0.01 0 / 8%);
-	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
 	/* Sintesis DS — signature tokens */
 	--notch-bg: var(--card);
 	--notch-stroke: var(--border);
@@ -434,24 +413,6 @@
 }
 
 .dark {
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.205 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.205 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.922 0 0);
-	--primary-foreground: oklch(0.205 0 0);
-	--secondary: oklch(0.269 0 0);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.269 0 0);
-	--muted-foreground: oklch(0.708 0 0);
-	--accent: oklch(0.269 0 0);
-	--accent-foreground: oklch(0.985 0 0);
-	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
 	--chart-1: oklch(0.488 0.243 264.376);
 	--chart-2: oklch(0.696 0.17 162.48);
 	--chart-3: oklch(0.769 0.188 70.08);
@@ -472,7 +433,7 @@
 		@apply border-border outline-ring/50;
 	}
 	body {
-		@apply bg-white text-foreground;
+		@apply bg-background text-foreground;
 	}
 }
 
