@@ -625,8 +625,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 						</Select>
 						{closest ? (
 							<Badge
-								variant="outline"
-								className="whitespace-nowrap border-orange-200 bg-orange-50 text-orange-700"
+								variant="default" className="whitespace-nowrap"
 							>
 								Sugerencia: {closest.option.text}
 							</Badge>

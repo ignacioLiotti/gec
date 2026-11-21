@@ -1,6 +1,5 @@
 import { LightButton } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDateAsDmy, formatDateAsIso, parseFlexibleDateValue } from "@/lib/tablas";
 import { cn } from "@/lib/utils";
@@ -59,7 +58,7 @@ export function DateCellEditor<Row extends FormTableRow>({
 
 	return (
 		<div className="children-input-hidden absolute inset-0 flex h-full w-full items-center gap-1 px-2">
-			<Input
+			<input
 				type="text"
 				inputMode="numeric"
 				placeholder="dd/mm/aaaa"
