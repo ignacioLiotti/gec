@@ -51,7 +51,7 @@ Migration `0132` is the additive repair for databases that already applied `0125
 ## Related files
 
 - `supabase/migrations/0125_tenant_scoped_permission_denies.sql`
-- `supabase/migrations/0132_restore_role_permission_denies.sql`
+- `supabase/migrations/0136_restore_role_permission_denies.sql`
 - `lib/route-guard.ts`
 - `lib/route-access.ts`
 - `components/app-sidebar.tsx`

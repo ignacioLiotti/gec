@@ -106,4 +106,4 @@ Las consultas anteriores de FigJam a Product OS y Journeys 03 fueron rechazadas 
 | [Journeys 03 / Documentos y Automatización](https://www.figma.com/board/nnPSyRwgsNseS3cm9BIMTp) | Generación con 0/1/varias plantillas, resultado en revisión, consulta por alcance y fuente, error/vacío/sin permiso. |
 | [Screenshots](https://www.figma.com/board/mC50ck1vEmJzOvrdW9s9AU) | Añadir las capturas de `deliverables/contextual-flow-demos` bajo **demos propuestas**, sin reemplazar capturas actuales de producción. |
 
-Antes de añadir nodos, inspeccionar los existentes. No se conocen sus IDs interiores por el bloqueo de lectura. El [ADR 0037](../adr/0037-development-only-contextual-flow-demos.md) registra el alcance técnico. Los documentos de dominio no cambian porque sus reglas productivas permanecen intactas.
+Antes de añadir nodos, inspeccionar los existentes. No se conocen sus IDs interiores por el bloqueo de lectura. El [ADR 0037](../adr/0046-development-only-contextual-flow-demos.md) registra el alcance técnico. Los documentos de dominio no cambian porque sus reglas productivas permanecen intactas.

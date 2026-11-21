@@ -18,7 +18,7 @@ This folder is the canonical history of Supabase/Postgres schema, RLS, storage b
 ## Local rules
 
 - Create a new numbered migration for schema changes. Do not edit existing applied migrations.
-- Approved historical exception (2026-10-17): `0123_role_permission_denies.sql` adds the nullable `user_permission_overrides.tenant_id` prerequisite needed by its `has_permission` definition. Migration `0125` remains unchanged and completes tenant scoping; `0132_restore_role_permission_denies.sql` restores the final combined precedence. The exception and its limits are recorded in the [migration repair plan](../../plans/2026-10-17-isolated-integration/migration-repair.md).
+- Approved historical exception (2026-10-17): `0123_role_permission_denies.sql` adds the nullable `user_permission_overrides.tenant_id` prerequisite needed by its `has_permission` definition. Migration `0125` remains unchanged and completes tenant scoping; `0136_restore_role_permission_denies.sql` restores the final combined precedence. The exception and its limits are recorded in the [migration repair plan](../../plans/2026-10-17-isolated-integration/migration-repair.md).
 - Use `IF NOT EXISTS`, `DROP POLICY IF EXISTS`, and idempotent patterns where practical.
 - Every tenant-scoped table needs `tenant_id`, indexes for tenant lookups, RLS enabled, and policies based on membership/admin helpers.
 - Every table reached through an obra or tabla FK needs RLS that preserves tenant isolation through the FK chain.

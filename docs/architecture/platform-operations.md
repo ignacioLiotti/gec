@@ -159,4 +159,4 @@ The next data layer needs:
 - deterministic provider pricing, invoice reconciliation, shared-cost allocation, and currency handling.
 - authorized production backup capture, an independent destination, retention, complete Auth and Storage recovery, alerts, and isolated restore drills.
 
-See [ADR 0039](../adr/0039-platform-operations-observed-data.md), the [platform telemetry plan](../../plans/2026-10-17-platform-telemetry/README.md), and the [backup and recovery runbook](../supabase-backup.md).
+See [ADR 0039](../adr/0044-platform-operations-observed-data.md), the [platform telemetry plan](../../plans/2026-10-17-platform-telemetry/README.md), and the [backup and recovery runbook](../supabase-backup.md).

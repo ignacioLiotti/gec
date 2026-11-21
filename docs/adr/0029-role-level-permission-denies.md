@@ -47,7 +47,7 @@ Migration `0125` then replaced `has_permission` without the role-deny branch. Mi
 
 - `supabase/migrations/0123_role_permission_denies.sql`
 - `supabase/migrations/0125_tenant_scoped_permission_denies.sql`
-- `supabase/migrations/0132_restore_role_permission_denies.sql`
+- `supabase/migrations/0136_restore_role_permission_denies.sql`
 - `lib/route-guard.ts`
 - `lib/route-access.ts`
 - `app/admin/roles/permissions-actions.ts`

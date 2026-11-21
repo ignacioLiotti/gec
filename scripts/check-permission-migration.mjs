@@ -12,7 +12,7 @@ export function permissionMigrationSql() {
   const [a, b, user, orphan, grant, deny, capability, grantRole, denyRole, otherRole] = Array.from({ length: 10 }, () => randomUUID());
   const prefix = `migration-${randomUUID()}`;
   const migration125 = readFileSync(join(root, "supabase/migrations/0125_tenant_scoped_permission_denies.sql"), "utf8");
-  const migration132 = readFileSync(join(root, "supabase/migrations/0132_restore_role_permission_denies.sql"), "utf8");
+  const migration132 = readFileSync(join(root, "supabase/migrations/0136_restore_role_permission_denies.sql"), "utf8");
   const check = (condition, message) => `SELECT pg_temp.check_permission_migration((${condition}), '${message}');`;
   const permission = (tenant, key = "role") => `public.has_permission('${tenant}'::uuid, '${prefix}:${key}')`;
   return `\\set ON_ERROR_STOP on
